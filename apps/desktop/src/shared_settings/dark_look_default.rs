@@ -25,6 +25,62 @@ pub fn keep_old_dark_look_once() {
     }
 }
 
+/// Updates an existing settings file still using the 2026-11-22 default theme accent (`#5581a9`
+/// dark / `#8da101` light) to `#95d7f6` / `#0c74a6`, once.
+///
+/// CDXC:Theming 2026-11-24 WHY: Existing users who applied or already saved the default theme have
+/// `themeRoles.dark.accent = "#5581a9"` persisted in `sidebar-settings.json`, so changing the
+/// catalog default alone would leave them on the old darker blue. Behind a one-time marker so any
+/// later manual colour pick is respected.
+pub fn migrate_default_theme_accent_once() {
+    let paths = ghostex_storage_paths();
+    let marker = paths.default_theme_accent_marker_file();
+    if marker.exists() {
+        return;
+    }
+    let settings_file = shared_sidebar_settings_path();
+    let outcome = match ghostex_paths::settings_file::read(&settings_file) {
+        Ok(read) => match read.object {
+            Some(mut object) => {
+                if ghostex_settings_catalog::migrate_default_theme_accent(&mut object) {
+                    let saved = serde_json::to_vec_pretty(&Value::Object(object))
+                        .map_err(std::io::Error::other)
+                        .and_then(|bytes| {
+                            ghostex_paths::settings_file::save(&settings_file, &bytes)
+                        });
+                    match saved {
+                        Ok(problems) => {
+                            for problem in problems {
+                                log::error!("Settings file: {problem}");
+                            }
+                            "existing default theme accent updated"
+                        }
+                        Err(error) => {
+                            eprintln!(
+                                "Ghostex could not save the updated default theme accent: {error}"
+                            );
+                            return;
+                        }
+                    }
+                } else {
+                    "settings do not hold the old default theme accent"
+                }
+            }
+            None => "no settings file, new default theme accent",
+        },
+        Err(error) => {
+            eprintln!(
+                "Ghostex could not read its settings to update the default theme accent: {error}"
+            );
+            return;
+        }
+    };
+    if let Some(parent) = marker.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let _ = fs::write(&marker, format!("{outcome}\n"));
+}
+
 /// One step of `keep_old_dark_look_once`. Returns whether it has run (now or before).
 fn keep_old_look_once(day: &str, old_defaults: &[(&str, ghostex_settings_catalog::J)]) -> bool {
     let paths = ghostex_storage_paths();

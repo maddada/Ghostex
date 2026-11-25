@@ -83,6 +83,7 @@ pub(crate) fn approval_prompt(permission: &Value) -> SessionChatInteractivePromp
                 .unwrap_or_default(),
         ),
         tool_use_id: permission["id"].as_str().map(str::to_string),
+        reason: None,
     }
 }
 
@@ -271,21 +272,57 @@ pub(crate) fn interrupt(id: &str, prompt_id: Option<&str>) -> Result<(), DomainS
         client.session(id, &format!("/form/{prompt_id}"), "DELETE", None)?;
     } else {
         client.session(id, "/interrupt", "POST", None)?;
-        // A shell belongs to the session's project folder, and the service ends it only when the
-        // delete names that folder (client.rs `request_in`); without it the delete answered 204 and
-        // the shell kept running.
-        let directory = client.session(id, "", "GET", None)?["data"]["location"]["directory"]
-            .as_str()
-            .map(str::to_string)
-            .ok_or_else(|| error("OpenCode didn't say where this session runs."))?;
-        for message in client.messages(id)? {
-            if message["type"] == "shell" && message["status"] == "running" {
-                if let Some(shell) = message["shellID"].as_str().filter(|id| safe_id(id)) {
-                    client.request_in("DELETE", &format!("/api/shell/{shell}"), &directory)?;
+        stop_session_shells_with_client(&client, id)?;
+    }
+    invalidate(id);
+    Ok(())
+}
+
+/// Stops any running shells belonging to OpenCode conversation `id` (both `!` shell messages and
+/// tool-started background shells in `/api/shell`).
+pub(crate) fn stop_session_shells(id: &str) -> Result<(), DomainStateError> {
+    if !safe_id(id) {
+        return Err(error("Invalid OpenCode session ID."));
+    }
+    let client = Client::discover()?;
+    stop_session_shells_with_client(&client, id)?;
+    invalidate(id);
+    Ok(())
+}
+
+fn stop_session_shells_with_client(client: &Client, id: &str) -> Result<(), DomainStateError> {
+    // A shell belongs to the session's project folder, and the service ends it only when the
+    // delete names that folder (client.rs `request_in`); without it the delete answered 204 and
+    // the shell kept running.
+    let directory = client.session(id, "", "GET", None)?["data"]["location"]["directory"]
+        .as_str()
+        .map(str::to_string)
+        .ok_or_else(|| error("OpenCode didn't say where this session runs."))?;
+    let mut shell_ids: Vec<String> = Vec::new();
+    for message in client.messages(id)? {
+        if message["type"] == "shell" && message["status"] == "running" {
+            if let Some(shell) = message["shellID"].as_str().filter(|id| safe_id(id)) {
+                if !shell_ids.iter().any(|existing| existing == shell) {
+                    shell_ids.push(shell.to_string());
                 }
             }
         }
     }
-    invalidate(id);
+    if let Ok(shells) = client.request_in("GET", "/api/shell", &directory) {
+        for shell in shells["data"].as_array().into_iter().flatten() {
+            if shell.pointer("/metadata/sessionID").and_then(Value::as_str) == Some(id)
+                && shell["status"] == "running"
+            {
+                if let Some(shell_id) = shell["id"].as_str().filter(|shell_id| safe_id(shell_id)) {
+                    if !shell_ids.iter().any(|existing| existing == shell_id) {
+                        shell_ids.push(shell_id.to_string());
+                    }
+                }
+            }
+        }
+    }
+    for shell in shell_ids {
+        client.request_in("DELETE", &format!("/api/shell/{shell}"), &directory)?;
+    }
     Ok(())
 }

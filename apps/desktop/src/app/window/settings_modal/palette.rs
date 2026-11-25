@@ -77,23 +77,27 @@ impl SettingsPalette {
         Self::derive(modal).with_theme_roles()
     }
 
-    /// The Borders and Grey text theme roles over the derived colours (helpers/theme_roles.rs).
+    /// The theme roles over the derived colours (helpers/theme_roles.rs). Under glass, raised
+    /// surfaces keep their translucent ink washes (`frosted_dialog_washes`) and dropdowns keep
+    /// `lifted_menu_fill` so an opaque `control` role (`base+10%/80%`) never stacks over the
+    /// frosted window into an opaque slab.
     fn with_theme_roles(mut self) -> Self {
-        use crate::app::helpers::theme_role_or_rgba;
+        use crate::app::helpers::{theme_accent_rgba, theme_role_or_rgba};
         let light = self.light;
         self.hairline = theme_role_or_rgba("border", light, self.hairline);
         self.popup_border = theme_role_or_rgba("border", light, self.popup_border);
         self.muted = theme_role_or_rgba("mutedText", light, self.muted);
         self.foreground = theme_role_or_rgba("text", light, self.foreground);
-        self.raised = theme_role_or_rgba("control", light, self.raised);
-        self.raised_hover = theme_role_or_rgba("hover", light, self.raised_hover);
-        self.popup_hover = theme_role_or_rgba("hover", light, self.popup_hover);
-        self.settings_accent = theme_role_or_rgba("accent", light, self.settings_accent);
-        self.primary = theme_role_or_rgba("accent", light, self.primary);
+        if !self.glass {
+            self.raised = self.modal.panel;
+            self.raised_hover = self.modal.raised;
+            self.popup_hover = theme_role_or_rgba("hover", light, self.popup_hover);
+            self.popup_background = theme_role_or_rgba("menu", light, self.popup_background);
+        }
+        self.settings_accent = theme_accent_rgba(light);
         self.focus_border = theme_role_or_rgba("focusRing", light, self.focus_border);
         self.ring = theme_role_or_rgba("focusRing", light, self.ring);
         self.destructive = theme_role_or_rgba("danger", light, self.destructive);
-        self.popup_background = theme_role_or_rgba("menu", light, self.popup_background);
         self.popup_selected = theme_role_or_rgba("selection", light, self.popup_selected);
         self
     }
@@ -101,95 +105,54 @@ impl SettingsPalette {
     fn derive(modal: &ModalPalette) -> Self {
         let modal = *modal;
         let foreground = modal.foreground;
-        if modal.glass && !modal.light {
-            // styles/modals-glass.css (deleted 2026-11-06): every Settings surface is a white wash over the window, at the
-            // dialogs' washes on the popover glass (CDXC:AppModal 2026-10-29 on `frosted_dialog_fill`).
-            let surface = modal.surface;
-            let hairline = modal.hairline;
-            // CDXC:Settings 2026-11-06 DECISION:
-            // The select and searchable dropdown menus drew the theme chrome (`solid_surface`, near-black on the default theme) under glass. The user does not want black fills on the glass design, so they take the lifted themed surface the dialogs inside Settings use (`dialog_surface`), still opaque so the page does not read through an open menu.
-            // CDXC:Theming 2026-11-20: the 5.5% lift (about #1b1b1b) still read as a dark slab on
-            // the glass window, so every Settings menu takes the modal kit's menu lift (10%) at 96%,
-            // which still keeps the page from reading through an open menu (supersedes the opaque
-            // 5.5% fill of CDXC:Settings 2026-11-06 under glass).
+        let ink = rgb(if modal.light { 0x000000 } else { 0xffffff });
+        if modal.glass {
             let popup = modal.lifted_menu_fill();
             return Self {
                 modal,
-                light: false,
+                light: modal.light,
                 glass: true,
-                surface,
+                surface: modal.surface,
                 raised: modal.raised,
                 raised_hover: modal.raised_hover,
-                hairline,
+                hairline: modal.hairline,
                 foreground,
-                muted: rgb(0x9ca2ab),
-                primary: rgb(0xe5e5e5),
+                muted: modal.muted,
+                primary: modal.primary,
                 destructive: modal.destructive,
-                settings_accent: rgb(DEFAULT_GHOSTEX_ACCENT),
-                focus_border: css_mix(foreground, 0.58, hairline),
+                settings_accent: modal.primary,
+                focus_border: css_mix(foreground, 0.58, modal.hairline),
                 popup_background: popup,
-                popup_border: hairline,
-                popup_selected: css_mix(rgb(0xffffff), 0.14, popup),
-                popup_selected_foreground: rgb(0xffffff),
-                popup_hover: css_mix(rgb(0xffffff), 0.085, popup),
-                ring: rgb(0x737373),
+                popup_border: modal.hairline,
+                popup_selected: css_mix(ink, 0.14, popup),
+                popup_selected_foreground: foreground,
+                popup_hover: css_mix(ink, 0.085, popup),
+                ring: modal.focus_border,
             };
         }
-        if modal.light {
-            let hairline = if modal.glass {
-                modal.hairline
-            } else {
-                modal_rgba(0x000000, 0.14)
-            };
-            let (surface, raised, raised_hover) = if modal.glass {
-                (modal.surface, modal.raised, modal.raised_hover)
-            } else {
-                (rgb(0xf5f5f5), rgb(0xffffff), rgb(0xe9e9e9))
-            };
-            return Self {
-                modal,
-                light: true,
-                glass: modal.glass,
-                surface,
-                raised,
-                raised_hover,
-                hairline,
-                foreground: rgb(0x262626),
-                muted: rgb(0x626262),
-                primary: rgb(0x262626),
-                destructive: rgb(0xb91c1c),
-                // The plain-light theme's `--ghostex-accent` is the neutral #262626.
-                settings_accent: css_mix(rgb(0x262626), 0.5, rgb(0x174564)),
-                focus_border: css_mix(rgb(0x262626), 0.58, hairline),
-                popup_background: rgb(0xffffff),
-                popup_border: modal_rgba(0x000000, 0.16),
-                popup_selected: rgb(0xdedede),
-                popup_selected_foreground: rgb(0x171717),
-                popup_hover: rgb(0xe9e9e9),
-                ring: rgb(0x737373),
-            };
-        }
-        let hairline = modal_rgba(0xffffff, 0.08);
+        // Glass off: use the theme's own opaque elevated surface (`modal.solid_surface`) and
+        // stepped panels/controls rather than fixed #0d0d0d / #f5f5f5 slabs.
+        let popup = modal.menu_background;
         Self {
             modal,
-            light: false,
+            light: modal.light,
             glass: false,
-            surface: rgb(0x0d0d0d),
-            raised: rgb(0x161616),
-            raised_hover: rgb(0x1d1d1d),
-            hairline,
+            surface: modal.solid_surface,
+            raised: modal.panel,
+            raised_hover: modal.raised,
+            hairline: modal.hairline,
             foreground,
             muted: modal.muted,
-            primary: rgb(0xe5e5e5),
+            primary: modal.primary,
             destructive: modal.destructive,
-            settings_accent: rgb(DEFAULT_GHOSTEX_ACCENT),
-            focus_border: css_mix(foreground, 0.58, hairline),
-            popup_background: rgb(0x161616),
-            popup_border: modal_rgba(0xffffff, 0.08),
-            popup_selected: rgb(0x2c2c2c),
-            popup_selected_foreground: rgb(0xffffff),
-            popup_hover: rgb(0x232323),
-            ring: rgb(0x737373),
+            settings_accent: modal.primary,
+            focus_border: css_mix(foreground, 0.58, modal.hairline),
+            popup_background: popup,
+            popup_border: modal.menu_border,
+            popup_selected: modal.card_selected_background(),
+            popup_selected_foreground: foreground,
+            popup_hover: modal.raised_hover,
+            ring: modal.focus_border,
         }
     }
 

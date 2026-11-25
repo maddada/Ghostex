@@ -189,15 +189,17 @@ fn replacement(
     snapshot: &Snapshot,
     session: &Value,
     current: Option<&str>,
+    allowed_ids: Option<&[String]>,
 ) -> Option<String> {
     let policy = launch::effective_policy(registry, Provider::Claude, session);
-    super::recovery::ranked(
+    super::recovery::ranked_in_pool(
         registry,
         snapshot,
         Provider::Claude,
         current,
         "",
         policy.priority,
+        allowed_ids,
     )
     .first()
     .map(|account| account.id.clone())
@@ -257,7 +259,14 @@ pub(crate) fn recover(
             "reason": reason, "updatedAt": Utc::now().to_rfc3339()
         })
     };
-    let Some(target) = replacement(&registry, snapshot, &session, current.as_deref()) else {
+    let workspace_pool = super::workspace_pool::session_pool(db, project, &session, provider);
+    let Some(target) = replacement(
+        &registry,
+        snapshot,
+        &session,
+        current.as_deref(),
+        workspace_pool.as_deref(),
+    ) else {
         super::recovery::save(state, repo, &session, attention("This account's organization disabled Claude subscription access, and no other account set to Automatic has usage left. Switch this session's account to continue."))?;
         return Ok(true);
     };
@@ -345,7 +354,15 @@ fn switch_if_disabled(state: &AppState, pid: &str, sid: &str) -> Result<bool, Do
     if let Some(id) = current.as_deref() {
         mark(state, &db, &mut registry, id)?;
     }
-    let Some(target) = replacement(&registry, &snapshot, &session, current.as_deref()) else {
+    let workspace_pool =
+        super::workspace_pool::session_pool(&db, &project, &session, Provider::Claude);
+    let Some(target) = replacement(
+        &registry,
+        &snapshot,
+        &session,
+        current.as_deref(),
+        workspace_pool.as_deref(),
+    ) else {
         return Err(DomainStateError::bad_request(
             "This session's Claude account can no longer be used: its organization disabled Claude subscription access. No other account set to Automatic has usage left, so the message was not sent. Switch the session to another account, or set one to Automatic in Settings > Accounts.",
         ));

@@ -73,6 +73,8 @@ pub enum SessionChatInteractivePrompt {
         summary: Option<String>,
         #[serde(rename = "toolUseId", default, skip_serializing_if = "Option::is_none")]
         tool_use_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
     },
 }
 
@@ -84,6 +86,16 @@ impl SessionChatInteractivePrompt {
         match &mut self {
             SessionChatInteractivePrompt::Question { tool_use_id, .. }
             | SessionChatInteractivePrompt::Approval { tool_use_id, .. } => *tool_use_id = id,
+        }
+        self
+    }
+
+    pub fn with_approval_reason(mut self, approval_reason: Option<String>) -> Self {
+        let approval_reason = approval_reason
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        if let SessionChatInteractivePrompt::Approval { reason, .. } = &mut self {
+            *reason = approval_reason;
         }
         self
     }
@@ -509,6 +521,7 @@ pub fn derive_session_chat_prompt(
             tool: tool_name.to_string(),
             summary: (!summary.is_empty()).then_some(summary),
             tool_use_id: None,
+            reason: None,
         });
     }
     None

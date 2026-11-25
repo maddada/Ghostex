@@ -921,11 +921,15 @@ pub fn resolve_ghostex_history_launch_from_root(root: &Path) -> Option<Launch> {
 
 fn read_agent_accept_all_enabled() -> bool {
     let result = call_gxserver_rpc("/api/readAgentSettings", &json!({}), &Flags::default()).ok();
-    result
+    let db_persisted = result
         .as_ref()
+        .filter(|value| value.get("isPersisted").and_then(Value::as_bool) == Some(true))
         .and_then(|value| value.get("settings"))
         .and_then(|settings| settings.get("agentAcceptAllEnabled"))
-        == Some(&Value::Bool(true))
+        .and_then(Value::as_bool);
+    let paths = crate::paths::get_gxserver_paths(None);
+    let file_value = crate::agents::read_shared_settings_accept_all_enabled(&paths.app_config_dir);
+    crate::agents::resolve_global_accept_all_enabled(file_value, db_persisted)
 }
 
 pub fn resolve_zehn_search_args(args: &[String]) -> Vec<String> {

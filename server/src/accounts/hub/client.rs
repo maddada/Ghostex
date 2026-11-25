@@ -1,10 +1,23 @@
-//! Calls to a CLIProxyAPI hub: the client key check when a hub is added, and the management API
-//! that lists the hub's accounts (`/v0/management/auth-files`) and reads each one's usage through
+//! Calls to a CLIProxyAPI hub: the client key check when a hub is added, and the v8 management
+//! API (with v0 fallback for older hubs) that lists the hub's Claude and Codex accounts
+//! (`/v8/management/credentials` / `/v0/management/auth-files`), reads each one's usage through
 //! the hub (`/v0/management/api-call`, which sends the request with that account's token in place
-//! of `$TOKEN$`, so no token ever reaches Ghostex).
+//! of `$TOKEN$`, so no token ever reaches Ghostex), runs browser OAuth sign-ins for Claude and
+//! Codex (`/v8/management/oauth/...` with `/v0/management/...` fallback), toggles or removes
+//! credentials, resets cooldowns, and reads or enables session affinity (`/v8/management/config`)
+//! for prompt caching.
 //!
 //! CDXC:AgentProviders 2026-11-18 WHY:
-//! Only reads go to the management API. Ghostex never downloads, uploads, deletes or refreshes a hub's credentials, never asks it to sign an account in, and never redeems a Codex reset credit through it: the hub is the user's, and it holds the tokens.
+//! Ghostex stays hands-off with CLIProxyAPI: it never installs, starts or reconfigures CLIProxyAPI
+//! itself, never downloads or copies Claude Swap or Codex Swap logins into a hub, and never
+//! redeems a Codex reset credit through it.
+//!
+//! CDXC:AgentProviders 2026-11-24 DECISION:
+//! Amended for user-triggered OAuth sign-in from Settings > Accounts: Ghostex on this computer
+//! briefly listens on 127.0.0.1:54545 (Claude /callback) or 127.0.0.1:1455 (Codex /auth/callback),
+//! asks the hub's management API for the OAuth URL without starting a listener on the hub, catches
+//! the single redirect, validates state, forwards the code and state to the hub's oauth-callback
+//! endpoint, and polls status until the hub finishes saving the account.
 
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -121,6 +134,51 @@ fn management_get(url: &str, key: &str, path: &str) -> Result<Value, String> {
     management_answer(answer)
 }
 
+fn management_v8_get(url: &str, key: &str, path: &str) -> Result<Answer, String> {
+    answer(
+        agent()
+            .get(format!("{url}/v8/management/{path}"))
+            .header("Authorization", format!("Bearer {key}"))
+            .call(),
+    )
+}
+
+fn management_v8_post(
+    url: &str,
+    key: Option<&str>,
+    path: &str,
+    body: Value,
+) -> Result<Answer, String> {
+    let request = agent().post(format!("{url}/v8/management/{path}"));
+    let request = match key {
+        Some(key) => request.header("Authorization", format!("Bearer {key}")),
+        None => request,
+    };
+    answer(request.send_json(body))
+}
+
+fn management_v8_patch(url: &str, key: &str, path: &str, body: Value) -> Result<Answer, String> {
+    answer(
+        agent()
+            .patch(format!("{url}/v8/management/{path}"))
+            .header("Authorization", format!("Bearer {key}"))
+            .send_json(body),
+    )
+}
+
+fn management_v8_delete(url: &str, key: &str, path: &str) -> Result<Answer, String> {
+    answer(
+        agent()
+            .delete(format!("{url}/v8/management/{path}"))
+            .header("Authorization", format!("Bearer {key}"))
+            .call(),
+    )
+}
+
+fn encode_query(value: &str) -> String {
+    url::form_urlencoded::byte_serialize(value.as_bytes()).collect()
+}
+
 fn management_answer(answer: Answer) -> Result<Value, String> {
     match answer.status {
         200..=299 => Ok(answer.body),
@@ -129,7 +187,10 @@ fn management_answer(answer: Answer) -> Result<Value, String> {
             "The hub's management API refused Ghostex{}. It answers this computer only when remote management is allowed in the hub's config, or when the hub runs here.",
             hub_error(&answer.body).map(|text| format!(" ({text})")).unwrap_or_default()
         )),
-        404 => Err("The hub's management API is turned off. Set a secret-key under remote-management in its config.".to_string()),
+        404 => Err(match hub_error(&answer.body) {
+            Some(text) => format!("The hub returned not found (HTTP 404): {text}."),
+            None => "The hub's management API is turned off or this hub is older than v8. Set a secret-key under management in its config.".to_string(),
+        }),
         status => Err(format!(
             "The hub's management API answered with an error (HTTP {status}){}.",
             hub_error(&answer.body).map(|text| format!(": {text}")).unwrap_or_default()
@@ -137,14 +198,443 @@ fn management_answer(answer: Answer) -> Result<Value, String> {
     }
 }
 
-/// The hub's accounts (`files` of `/v0/management/auth-files`).
+/// True when a v8 endpoint returned a plain route-missing 404 (older v0-only hub) rather than a
+/// structured v8 JSON error such as "credential not found".
+fn is_missing_v8_route(answer: &Answer) -> bool {
+    answer.status == 404 && hub_error(&answer.body).is_none()
+}
+
+/// The hub's accounts (`files` of `/v8/management/credentials`, falling back to `/v0/management/auth-files`).
 pub(crate) fn auth_files(url: &str, key: &str) -> Result<Vec<Value>, String> {
-    let body = management_get(url, key, "auth-files")?;
+    let v8 = management_v8_get(url, key, "credentials")?;
+    let body = if is_missing_v8_route(&v8) {
+        management_get(url, key, "auth-files")?
+    } else {
+        management_answer(v8)?
+    };
     Ok(body
         .get("files")
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default())
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct RoutingInfo {
+    pub session_affinity: Option<bool>,
+    pub strategy: Option<String>,
+}
+
+/// Reads the hub's routing configuration (`routing.session-affinity` and `routing.strategy`) via
+/// `GET /v8/management/config`. Returns `session_affinity: None` only when the hub does not
+/// expose v8 config (404); on a 200 OK without a `routing` block, CLIProxyAPI defaults
+/// `session-affinity` to `false`, so `Some(false)` is returned.
+pub(crate) fn read_routing(url: &str, key: &str) -> Result<RoutingInfo, String> {
+    let response = management_v8_get(url, key, "config")?;
+    if is_missing_v8_route(&response) {
+        return Ok(RoutingInfo::default());
+    }
+    let body = management_answer(response)?;
+    let routing = body.get("routing");
+    let session_affinity = Some(
+        routing
+            .and_then(|r| r.get("session-affinity"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+    );
+    let strategy = routing
+        .and_then(|r| r.get("strategy"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    Ok(RoutingInfo {
+        session_affinity,
+        strategy,
+    })
+}
+
+/// Sets `routing.session-affinity` on the hub (`PATCH /v8/management/config`), retrying once on a
+/// concurrent config change (409 / 412).
+pub(crate) fn set_session_affinity(url: &str, key: &str, enabled: bool) -> Result<(), String> {
+    for attempt in 0..2 {
+        let response = management_v8_patch(
+            url,
+            key,
+            "config",
+            json!({ "routing": { "session-affinity": enabled } }),
+        )?;
+        if matches!(response.status, 409 | 412) && attempt == 0 {
+            continue;
+        }
+        management_answer(response)?;
+        return Ok(());
+    }
+    Err("The hub's config changed while saving session affinity. Try again.".to_string())
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct OAuthStart {
+    pub url: String,
+    pub state: String,
+    pub local_callback: bool,
+}
+
+fn validate_oauth_auth_url(raw: &str) -> Result<String, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed.chars().count() > 2048 || trimmed.chars().any(char::is_control)
+    {
+        return Err("The hub returned an invalid sign-in URL.".to_string());
+    }
+    let parsed = url::Url::parse(trimmed)
+        .map_err(|_| "The hub returned an invalid sign-in URL.".to_string())?;
+    if parsed.scheme() != "https"
+        || parsed.host_str().is_none()
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+    {
+        return Err("The hub returned an invalid sign-in URL.".to_string());
+    }
+    Ok(trimmed.to_string())
+}
+
+fn management_v0_post(url: &str, key: &str, path: &str, body: Value) -> Result<Answer, String> {
+    answer(
+        agent()
+            .post(format!("{url}/v0/management/{path}"))
+            .header("Authorization", format!("Bearer {key}"))
+            .send_json(body),
+    )
+}
+
+fn management_v0_delete(url: &str, key: &str, path: &str) -> Result<Answer, String> {
+    answer(
+        agent()
+            .delete(format!("{url}/v0/management/{path}"))
+            .header("Authorization", format!("Bearer {key}"))
+            .call(),
+    )
+}
+
+/// Starts a browser OAuth sign-in on the hub for `claude` or `codex` without asking the hub to
+/// bind a callback port (`is_webui` is omitted so Ghostex owns the 127.0.0.1 callback listener).
+/// Tries `/v8/management/oauth/auth-url` and falls back to `/v0/management/anthropic-auth-url` or
+/// `/v0/management/codex-auth-url` for older hubs.
+pub(crate) fn oauth_start(
+    url: &str,
+    key: &str,
+    provider: &str,
+    local_callback: bool,
+) -> Result<OAuthStart, String> {
+    let v0_path = match provider {
+        "claude" => "anthropic-auth-url",
+        "codex" => "codex-auth-url",
+        _ => {
+            return Err(
+                "Only Claude and Codex accounts can be added to a CLIProxyAPI hub.".to_string(),
+            );
+        }
+    };
+    let response = management_v8_get(url, key, &format!("oauth/auth-url?provider={provider}"))?;
+    let body = if is_missing_v8_route(&response) {
+        management_get(url, key, v0_path)?
+    } else {
+        management_answer(response)?
+    };
+    if body.get("status").and_then(Value::as_str) == Some("error") {
+        return Err(
+            hub_error(&body).unwrap_or_else(|| "The hub refused to start the sign-in.".to_string())
+        );
+    }
+    let raw_auth_url = body
+        .get("url")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "The hub did not return a sign-in URL.".to_string())?;
+    let auth_url = validate_oauth_auth_url(raw_auth_url)?;
+    let state = body
+        .get("state")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| {
+            !value.is_empty()
+                && value.chars().count() <= 2048
+                && !value.chars().any(char::is_control)
+        })
+        .ok_or_else(|| "The hub did not return an OAuth state.".to_string())?
+        .to_string();
+    if let Ok(parsed) = url::Url::parse(&auth_url) {
+        if let Some((_, url_state)) = parsed.query_pairs().find(|(k, _)| k == "state") {
+            if url_state.as_ref() != state {
+                return Err("The hub returned a mismatched OAuth state.".to_string());
+            }
+        }
+    }
+    Ok(OAuthStart {
+        url: auth_url,
+        state,
+        local_callback,
+    })
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct OAuthStatus {
+    pub status: String,
+    pub error: Option<String>,
+}
+
+/// Polls a pending OAuth login session (`GET /v8/management/oauth/status?state=...`, falling back
+/// to `GET /v0/management/get-auth-status?state=...`).
+pub(crate) fn oauth_status(url: &str, key: &str, state: &str) -> Result<OAuthStatus, String> {
+    let encoded = encode_query(state);
+    let response = management_v8_get(url, key, &format!("oauth/status?state={encoded}"))?;
+    let body = if is_missing_v8_route(&response) {
+        management_get(url, key, &format!("get-auth-status?state={encoded}"))?
+    } else {
+        management_answer(response)?
+    };
+    let status = body
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("error")
+        .to_string();
+    let error = body
+        .get("error")
+        .and_then(Value::as_str)
+        .map(masked)
+        .filter(|value| !value.is_empty());
+    Ok(OAuthStatus { status, error })
+}
+
+fn send_oauth_callback(url: &str, key: &str, provider: &str, v8_body: Value) -> Result<(), String> {
+    let response = management_v8_post(url, Some(key), "oauth/callback", v8_body.clone())?;
+    let body = if is_missing_v8_route(&response) {
+        let mut v0_body = v8_body;
+        if provider == "claude" {
+            if let Some(obj) = v0_body.as_object_mut() {
+                obj.insert("provider".into(), json!("anthropic"));
+            }
+        }
+        management_answer(management_v0_post(url, key, "oauth-callback", v0_body)?)?
+    } else {
+        management_answer(response)?
+    };
+    if body.get("status").and_then(Value::as_str) == Some("error") {
+        return Err(hub_error(&body)
+            .unwrap_or_else(|| "The hub rejected the sign-in callback.".to_string()));
+    }
+    Ok(())
+}
+
+/// Forwards an authorization code captured by Ghostex's local loopback callback listener to the
+/// hub (`/v8/management/oauth/callback` with `/v0/management/oauth-callback` fallback).
+pub(crate) fn oauth_callback_code(
+    url: &str,
+    key: &str,
+    provider: &str,
+    state: &str,
+    code: &str,
+) -> Result<(), String> {
+    if !matches!(provider, "claude" | "codex") {
+        return Err(
+            "Only Claude and Codex accounts can be added to a CLIProxyAPI hub.".to_string(),
+        );
+    }
+    send_oauth_callback(
+        url,
+        key,
+        provider,
+        json!({
+            "provider": provider,
+            "state": state,
+            "code": code,
+        }),
+    )
+}
+
+/// Submits a pasted redirect URL or authorization code to `POST /v8/management/oauth/callback`
+/// (falling back to `POST /v0/management/oauth-callback`).
+pub(crate) fn oauth_callback(
+    url: &str,
+    key: &str,
+    provider: &str,
+    state: &str,
+    input: &str,
+) -> Result<(), String> {
+    if !matches!(provider, "claude" | "codex") {
+        return Err(
+            "Only Claude and Codex accounts can be added to a CLIProxyAPI hub.".to_string(),
+        );
+    }
+    let state = state.trim();
+    if state.is_empty() || state.chars().any(char::is_control) {
+        return Err("Missing or invalid OAuth state.".to_string());
+    }
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Err("Paste the redirect URL or authorization code from your browser.".to_string());
+    }
+    if trimmed.chars().count() > 2048 || trimmed.chars().any(char::is_control) {
+        return Err(
+            "That redirect URL or code is invalid. Paste the URL or code from your browser."
+                .to_string(),
+        );
+    }
+    let body = if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        let parsed = url::Url::parse(trimmed).map_err(|_| {
+            "That isn't a valid redirect URL. Copy the full address from your browser bar."
+                .to_string()
+        })?;
+        if parsed.host_str().is_none()
+            || !parsed.username().is_empty()
+            || parsed.password().is_some()
+        {
+            return Err(
+                "That isn't a valid redirect URL. Copy the full address from your browser bar."
+                    .to_string(),
+            );
+        }
+        let mut has_code_or_error = false;
+        let mut url_state: Option<String> = None;
+        for (k, v) in parsed.query_pairs() {
+            match k.as_ref() {
+                "code" | "error" if !v.trim().is_empty() => has_code_or_error = true,
+                "state" if !v.trim().is_empty() => url_state = Some(v.trim().to_string()),
+                _ => {}
+            }
+        }
+        if !has_code_or_error {
+            return Err(
+                "That redirect URL has no authorization code. Copy the URL after signing in."
+                    .to_string(),
+            );
+        }
+        if let Some(pasted_state) = url_state {
+            if pasted_state != state {
+                return Err(
+                    "That redirect URL belongs to a different sign-in attempt. Paste the URL from the current browser window."
+                        .to_string(),
+                );
+            }
+        }
+        json!({
+            "provider": provider,
+            "state": state,
+            "redirect_url": trimmed,
+        })
+    } else if let Some((code_part, state_part)) = trimmed.split_once('#') {
+        let code = code_part.trim();
+        let pasted_state = state_part.trim();
+        if code.is_empty() || code.chars().any(char::is_whitespace) {
+            return Err(
+                "Paste the redirect URL or authorization code from your browser.".to_string(),
+            );
+        }
+        if !pasted_state.is_empty() && pasted_state != state {
+            return Err(
+                "That code belongs to a different sign-in attempt. Paste the code from the current browser window."
+                    .to_string(),
+            );
+        }
+        json!({
+            "provider": provider,
+            "state": state,
+            "code": code,
+        })
+    } else {
+        if trimmed.chars().any(char::is_whitespace) {
+            return Err("Paste the redirect URL or authorization code without spaces.".to_string());
+        }
+        json!({
+            "provider": provider,
+            "state": state,
+            "code": trimmed,
+        })
+    };
+    send_oauth_callback(url, key, provider, body)
+}
+
+/// Cancels a pending OAuth login session (`DELETE /v8/management/oauth/session?state=...`,
+/// falling back to `DELETE /v0/management/oauth-session?state=...`).
+pub(crate) fn oauth_cancel(url: &str, key: &str, state: &str) -> Result<(), String> {
+    let encoded = encode_query(state);
+    let response = management_v8_delete(url, key, &format!("oauth/session?state={encoded}"))?;
+    if is_missing_v8_route(&response) {
+        let fallback = management_v0_delete(url, key, &format!("oauth-session?state={encoded}"))?;
+        if fallback.status == 404 {
+            return Ok(());
+        }
+        management_answer(fallback)?;
+        return Ok(());
+    }
+    if response.status == 404 {
+        return Ok(());
+    }
+    management_answer(response)?;
+    Ok(())
+}
+
+/// Enables or disables a hub credential (`PATCH /v8/management/credentials/status`, with v0 fallback).
+pub(crate) fn set_account_disabled(
+    url: &str,
+    key: &str,
+    file_name: &str,
+    auth_index: &str,
+    disabled: bool,
+) -> Result<(), String> {
+    let payload = json!({
+        "name": file_name,
+        "auth_index": auth_index,
+        "disabled": disabled,
+    });
+    let response = management_v8_patch(url, key, "credentials/status", payload.clone())?;
+    if is_missing_v8_route(&response) {
+        let fallback = answer(
+            agent()
+                .patch(format!("{url}/v0/management/auth-files/status"))
+                .header("Authorization", format!("Bearer {key}"))
+                .send_json(payload),
+        )?;
+        management_answer(fallback)?;
+        return Ok(());
+    }
+    management_answer(response)?;
+    Ok(())
+}
+
+/// Deletes a credential file from the hub (`DELETE /v8/management/credentials?name=...`, with v0 fallback).
+pub(crate) fn delete_account(url: &str, key: &str, file_name: &str) -> Result<(), String> {
+    let query = format!("name={}", encode_query(file_name));
+    let response = management_v8_delete(url, key, &format!("credentials?{query}"))?;
+    if is_missing_v8_route(&response) {
+        let fallback = answer(
+            agent()
+                .delete(format!("{url}/v0/management/auth-files?{query}"))
+                .header("Authorization", format!("Bearer {key}"))
+                .call(),
+        )?;
+        management_answer(fallback)?;
+        return Ok(());
+    }
+    management_answer(response)?;
+    Ok(())
+}
+
+/// Clears a credential's cooldown state (`POST /v8/management/routing/cooldown/reset`, with v0 fallback).
+pub(crate) fn reset_cooldown(url: &str, key: &str, auth_index: &str) -> Result<(), String> {
+    let payload = json!({ "auth_index": auth_index });
+    let response = management_v8_post(url, Some(key), "routing/cooldown/reset", payload.clone())?;
+    if is_missing_v8_route(&response) {
+        let fallback = answer(
+            agent()
+                .post(format!("{url}/v0/management/reset-quota"))
+                .header("Authorization", format!("Bearer {key}"))
+                .send_json(payload),
+        )?;
+        management_answer(fallback)?;
+        return Ok(());
+    }
+    management_answer(response)?;
+    Ok(())
 }
 
 /// One request the hub makes with an account's token (`POST /v0/management/api-call`): the

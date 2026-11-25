@@ -370,9 +370,18 @@ pub fn model_menu_pill_labels(
     model: Option<&str>,
     model_label: Option<&str>,
     traits: &[ModelMenuTrait],
+    catalog: &AgentModelCatalog,
 ) -> Value {
     let entry = model_menu_entry_for(entries, provider, model);
-    let parts: Vec<String> = traits
+    let has_effort_part = traits.iter().any(|trait_row| {
+        trait_row.id == "effort"
+            && !trait_row.choices.is_empty()
+            && trait_row
+                .value_label
+                .as_deref()
+                .is_some_and(|v| !v.is_empty())
+    });
+    let mut parts: Vec<String> = traits
         .iter()
         .filter(|trait_row| {
             (trait_row.id == "effort" || trait_row.id == "context") && !trait_row.choices.is_empty()
@@ -384,12 +393,45 @@ pub fn model_menu_pill_labels(
                     .iter()
                     .any(|choice| choice.selected && is_long_context_value(&choice.value))
         })
-        .filter_map(|trait_row| trait_row.value_label.clone())
+        .filter_map(|trait_row| {
+            let label = trait_row.value_label.clone()?;
+            if trait_row.id == "effort"
+                && crate::menus::catalog::is_placeholder_effort_value(&label)
+            {
+                None
+            } else {
+                Some(label)
+            }
+        })
         .filter(|value| !value.is_empty())
         .collect();
-    let label = entry
+    let raw_label = entry
+        .filter(|entry| {
+            !crate::menus::catalog::is_placeholder_model_value(&entry.value)
+                && !crate::menus::catalog::is_placeholder_model_label(&entry.label)
+        })
         .map(|entry| entry.label.clone())
-        .or_else(|| model_label.map(str::to_string));
+        .or_else(|| {
+            model_label
+                .filter(|label| !crate::menus::catalog::is_placeholder_model_label(label))
+                .map(str::to_string)
+        })
+        .or_else(|| {
+            provider
+                .and_then(|provider| {
+                    crate::menus::catalog::resolved_default_model(catalog, provider)
+                })
+                .map(|(_, label, _)| label)
+        });
+    let label = raw_label.map(|raw| {
+        let (clean, extracted_effort) = crate::menus::catalog::split_parenthesized_effort(&raw);
+        if let Some(eff) = extracted_effort {
+            if !has_effort_part {
+                parts.insert(0, catalog.effort_label(&eff));
+            }
+        }
+        crate::menus::catalog::humanize_raw_model_slug(clean).unwrap_or_else(|| clean.to_string())
+    });
     let suffix = (!parts.is_empty()).then(|| parts.join(" · "));
     // The pill cuts a long name to its width, so its tooltip carries the whole of it.
     let tooltip = label.as_ref().map(|label| match &suffix {

@@ -35,6 +35,9 @@ const RESTART_WINDOW: Duration = Duration::from_secs(600);
 const TERM_GRACE: Duration = Duration::from_secs(5);
 /// How long a slept session's processes get to end before the leftovers are killed.
 const SLEEP_GRACE: Duration = Duration::from_secs(2);
+/// Minimum interval between repeated Warning logs and process-tree scans when memory pressure
+/// oscillates between Normal and Warning; Critical pressure always logs and acts without delay.
+const WARN_COOLDOWN: Duration = Duration::from_secs(60);
 
 /// What the guard remembers between ticks.
 #[derive(Default)]
@@ -43,12 +46,19 @@ struct Book {
     critical_since: Option<Instant>,
     /// The warning (or critical) stretch was logged with the sessions' sizes.
     warned: bool,
+    /// When `memoryGuardWarning` was last logged (survives brief dips back to Normal so flapping
+    /// pressure does not re-scan every process and flood gxserver.jsonl).
+    last_warned: Option<Instant>,
     /// Nothing big enough to stop was logged for this stretch.
     reported_nothing: bool,
     last_step: Option<Instant>,
     /// Sessions the guard already acted on in this stretch: the next step on one is a stop.
     acted: HashSet<Key>,
     restarted: HashMap<Key, Instant>,
+    /// Sessions known to carry a `memoryGuardStopped` runtime record, seeded once from SQLite so
+    /// the 5-second tick does not full-scan the `sessions` table when no session is guard-stopped.
+    stopped_records_seeded: bool,
+    stopped_records: HashSet<Key>,
 }
 
 static BOOK: std::sync::LazyLock<Mutex<Book>> = std::sync::LazyLock::new(Default::default);
@@ -186,7 +196,14 @@ fn plan(state: &AppState) -> Option<Plan> {
     clear_records_of_woken_sessions(state);
     let settings = crate::shared_settings_file::read_shared_settings(&state.paths);
     if !guard::setting_on(settings.as_ref(), guard::ENABLED_SETTING) {
-        *book() = Book::default();
+        let mut book = book();
+        let stopped_records_seeded = book.stopped_records_seeded;
+        let stopped_records = std::mem::take(&mut book.stopped_records);
+        *book = Book {
+            stopped_records_seeded,
+            stopped_records,
+            ..Book::default()
+        };
         return None;
     }
     let level = guard::read_pressure_level()?;
@@ -202,20 +219,36 @@ fn plan(state: &AppState) -> Option<Plan> {
             );
         }
         let restarted = std::mem::take(&mut book.restarted);
+        let last_warned = book.last_warned;
+        let stopped_records_seeded = book.stopped_records_seeded;
+        let stopped_records = std::mem::take(&mut book.stopped_records);
         *book = Book {
+            last_warned,
             restarted: restarted
                 .into_iter()
                 .filter(|(_, at)| now.duration_since(*at) < RESTART_WINDOW)
                 .collect(),
+            stopped_records_seeded,
+            stopped_records,
             ..Book::default()
         };
         return None;
     }
-    let (first_sight, hold_over, settled) = {
+    let (should_log, hold_over, settled) = {
         let mut book = book();
-        let first_sight =
-            !book.warned || (level == PressureLevel::Critical && book.critical_since.is_none());
-        book.warned = true;
+        let critical_first_sight =
+            level == PressureLevel::Critical && book.critical_since.is_none();
+        let warning_due = !book.warned
+            && book
+                .last_warned
+                .is_none_or(|at| now.duration_since(at) >= WARN_COOLDOWN);
+        let should_log = critical_first_sight || warning_due;
+        if should_log {
+            book.warned = true;
+            if level == PressureLevel::Warning {
+                book.last_warned = Some(now);
+            }
+        }
         if level == PressureLevel::Critical {
             book.critical_since.get_or_insert(now);
         } else {
@@ -227,9 +260,9 @@ fn plan(state: &AppState) -> Option<Plan> {
         let settled = book
             .last_step
             .is_none_or(|at| now.duration_since(at) >= SETTLE);
-        (first_sight, hold_over, settled)
+        (should_log, hold_over, settled)
     };
-    if first_sight {
+    if should_log {
         let candidates = measure(state);
         log(
             state,
@@ -511,6 +544,7 @@ fn store_stop_record(state: &AppState, key: &Key, record: Option<Value>) -> bool
         .as_object()
         .cloned()
         .unwrap_or_default();
+    let has_record = record.is_some();
     match record {
         Some(record) => runtime.insert(guard::STOP_RECORD.to_string(), record),
         None => runtime.remove(guard::STOP_RECORD),
@@ -525,6 +559,14 @@ fn store_stop_record(state: &AppState, key: &Key, record: Option<Value>) -> bool
     {
         return false;
     }
+    {
+        let mut book = book();
+        if has_record {
+            book.stopped_records.insert(key.clone());
+        } else {
+            book.stopped_records.remove(key);
+        }
+    }
     let _ =
         crate::server::schedule_presentation_session_delta(state, &db, &repository, &key.0, &key.1);
     true
@@ -533,26 +575,72 @@ fn store_stop_record(state: &AppState, key: &Key, record: Option<Value>) -> bool
 /// Clears the stop record of every session that runs again, however it was woken, so its red dot
 /// goes and a later sleep is not taken for the guard's. BLOCKING.
 fn clear_records_of_woken_sessions(state: &AppState) {
+    let tracked: Vec<Key> = {
+        let guard_book = book();
+        if !guard_book.stopped_records_seeded {
+            drop(guard_book);
+            let Ok(db) = open_gxserver_database(&state.paths) else {
+                return;
+            };
+            let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+            let Ok(stopped) = repository.list_sessions_with_runtime_object(guard::STOP_RECORD)
+            else {
+                return;
+            };
+            let keys: Vec<Key> = stopped
+                .iter()
+                .filter_map(|session| {
+                    Some((
+                        text_field(session, "projectId")?,
+                        text_field(session, "sessionId")?,
+                    ))
+                })
+                .collect();
+            let mut guard_book = book();
+            guard_book.stopped_records_seeded = true;
+            guard_book.stopped_records.extend(keys);
+            guard_book.stopped_records.iter().cloned().collect()
+        } else if guard_book.stopped_records.is_empty() {
+            return;
+        } else {
+            guard_book.stopped_records.iter().cloned().collect()
+        }
+    };
+    if tracked.is_empty() {
+        return;
+    }
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return;
     };
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-    let Ok(stopped) = repository.list_sessions_with_runtime_object(guard::STOP_RECORD) else {
-        return;
-    };
+    let mut to_clear = Vec::new();
+    let mut gone = Vec::new();
+    for key in tracked {
+        match repository.get_session(&key.0, &key.1) {
+            Ok(Some(session)) => {
+                if session
+                    .pointer(&format!("/runtimeSettings/{}", guard::STOP_RECORD))
+                    .is_none_or(|value| !value.is_object())
+                {
+                    gone.push(key);
+                } else if crate::presentation::effective_lifecycle_state(&session) != "sleeping" {
+                    to_clear.push(key);
+                }
+            }
+            Ok(None) => gone.push(key),
+            Err(_) => {}
+        }
+    }
     drop(repository);
     drop(db);
-    for session in stopped {
-        if crate::presentation::effective_lifecycle_state(&session) == "sleeping" {
-            continue;
+    if !gone.is_empty() {
+        let mut book = book();
+        for key in gone {
+            book.stopped_records.remove(&key);
         }
-        let (Some(project_id), Some(session_id)) = (
-            text_field(&session, "projectId"),
-            text_field(&session, "sessionId"),
-        ) else {
-            continue;
-        };
-        store_stop_record(state, &(project_id, session_id), None);
+    }
+    for key in to_clear {
+        store_stop_record(state, &key, None);
     }
 }
 

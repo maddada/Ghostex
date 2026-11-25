@@ -380,6 +380,7 @@ impl NativeChatView {
                 .into_iter()
                 .collect(),
             "chatToolbar" => self.folded_toolbar_rows(),
+            "switchToNative" => self.switch_to_native_menu_row().into_iter().collect(),
             "view" => vec![self.view_modes_row()],
             "stopReading" => self.stop_reading_row().map(named).into_iter().collect(),
             "branches" => self.branches_row().into_iter().collect(),
@@ -424,6 +425,37 @@ impl NativeChatView {
         }
     }
 
+    /// Manual "Switch to Native" (or "Cancel Switch to Native" while queued) row in `•••`
+    /// (`Q4768`, `Q4770`, `Q4771`, `Q4772`): stays available even after the strip chip is
+    /// dismissed or on coordinator threads, and hides quietly on older remote servers.
+    fn switch_to_native_menu_row(&self) -> Option<Value> {
+        let offer = self.native_switch_offer()?;
+        if offer["showMenuItem"] != true {
+            return None;
+        }
+        if offer["queued"] == true {
+            return Some(json!({
+                "label": "Cancel Switch to Native",
+                "iconPath": "titlebar/clock.svg",
+                "detail": "When this reply ends",
+                "command": { "type": "host", "action": "cancelSwitchToNative" },
+            }));
+        }
+        Some(json!({
+            "label": "Switch to Native",
+            "iconPath": "titlebar/bolt.svg",
+            "command": {
+                "type": "host",
+                "action": "switchToNative",
+                "family": offer["family"],
+                "agentName": offer["agentName"],
+                "nativeDefault": offer["nativeDefault"],
+                "working": self.snapshot["working"] == true,
+                "source": "more_menu",
+            },
+        }))
+    }
+
     fn host_action(&self, id: &str) -> Option<&Value> {
         self.snapshot["hostActions"]
             .as_array()
@@ -444,6 +476,8 @@ impl NativeChatView {
             {
                 let (label, icon) = if id == "maximize" && self.maximized_window.is_some() {
                     ("Exit maximize", "titlebar/minimize.svg")
+                } else if id == "terminal" && self.snapshot["nonCliMode"] == true {
+                    ("Switch to Terminal-based", icon)
                 } else {
                     (label, icon)
                 };

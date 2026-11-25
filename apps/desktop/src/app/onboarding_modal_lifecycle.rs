@@ -514,6 +514,9 @@ impl GhostexGpuiApp {
                 })
                 .detach();
             }
+            OnboardingCommand::TelemetryStep(step) => {
+                record_gpui_onboarding_step_telemetry(step);
+            }
         }
     }
 

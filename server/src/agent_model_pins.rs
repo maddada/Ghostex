@@ -125,32 +125,63 @@ pub(crate) fn init(paths: &crate::paths::GxserverPaths) {
 /// GitHub #422: with Cursor on Auto with the Balance setting, its footer says "Auto Balance", a name the model catalog does not list, so the screen reading kept the name itself as the model and Ghostex pinned it: every new Cursor session ran `cursor-agent --model "Auto Balance"`, which exits with "Cannot use this model: Auto Balance. Available models: auto, …", and the next session that did start re-learned the name. Cursor's model ids (`--list-models`) are lowercase words without spaces (`auto`, `grok-4.7`, `claude-opus-4-8[context=1m]`); its names have capitals and spaces ("Auto Balance", "Grok 4.7  High Fast" with zero-width spaces). Only an id is pinned. A name is not translated: `auto-smart`, the id `cli-config.json` keeps for Auto Balance, is refused by `--model` too (2026.10.22 and 2026.11.05), `--model auto` would drop the Balance setting, and any `--model` launch rewrites Cursor's saved default (`cli-config.json` `model`, measured 2026-11-05). Without a pin Cursor starts on that saved default, which is the model the user last used, so nothing is lost.
 /// Claude and Codex readings already map to their CLI values, so they keep every pin.
 pub(crate) fn launchable_model(family: &str, model: &str) -> bool {
+    let trimmed = model.trim();
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("default") {
+        return false;
+    }
     match family {
-        "cursor" => {
-            !model.is_empty()
-                && model
-                    .chars()
-                    .all(|ch| ch.is_ascii_graphic() && !ch.is_ascii_uppercase())
-        }
-        _ => !model.trim().is_empty(),
+        "cursor" => trimmed
+            .chars()
+            .all(|ch| ch.is_ascii_graphic() && !ch.is_ascii_uppercase()),
+        _ => !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(trimmed),
     }
 }
 
-/// Drops remembered models the agent's CLI refuses, so a pin learned before
-/// [`launchable_model`] (an "Auto Balance" default) stops breaking every launch. Answers whether
-/// anything was dropped.
+/// Clears any poisoned placeholder model label (such as `"Default (recommended)"`) on `pin`.
+/// Returns true if the pin was modified.
+fn sanitize_pin(pin: &mut ModelPin) -> bool {
+    if pin
+        .model_label
+        .as_deref()
+        .is_some_and(ghostex_gx_chat_core::menus::catalog::is_placeholder_model_label)
+    {
+        pin.model_label = None;
+        return true;
+    }
+    false
+}
+
+/// Drops remembered models the agent's CLI refuses, and strips poisoned placeholder labels
+/// (such as `"Default (recommended)"`), so a pin learned before [`launchable_model`] or from an
+/// unresolved ACP alias stops poisoning launches or labels. Answers whether anything changed.
 fn drop_unlaunchable_pins(file: &mut PinFile) -> bool {
     let defaults = file.defaults.len();
     let sessions = file.sessions.len();
-    file.defaults
-        .retain(|family, default| launchable_model(family, &default.pin.model));
-    file.sessions.retain(|_, reading| {
-        reading.family.is_empty() || launchable_model(&reading.family, &reading.pin.model)
-    });
     let coordinators = file.coordinators.len();
-    file.coordinators
-        .retain(|family, pin| launchable_model(family, &pin.model));
-    file.defaults.len() != defaults
+    let mut sanitized = false;
+    file.defaults.retain(|family, default| {
+        if !launchable_model(family, &default.pin.model) {
+            return false;
+        }
+        sanitized |= sanitize_pin(&mut default.pin);
+        true
+    });
+    file.sessions.retain(|_, reading| {
+        if !reading.family.is_empty() && !launchable_model(&reading.family, &reading.pin.model) {
+            return false;
+        }
+        sanitized |= sanitize_pin(&mut reading.pin);
+        true
+    });
+    file.coordinators.retain(|family, pin| {
+        if !launchable_model(family, &pin.model) {
+            return false;
+        }
+        sanitized |= sanitize_pin(pin);
+        true
+    });
+    sanitized
+        || file.defaults.len() != defaults
         || file.sessions.len() != sessions
         || file.coordinators.len() != coordinators
 }
@@ -198,12 +229,130 @@ pub(crate) fn set_synced_default(family: &str, pin: Option<&Value>) {
 
 /// The agent families whose launch Ghostex pins.
 pub(crate) fn pin_family(family: &str) -> Option<&'static str> {
-    match family {
-        "claude" => Some("claude"),
-        "codex" => Some("codex"),
-        "cursor" => Some("cursor"),
+    match family.trim().to_ascii_lowercase().as_str() {
+        "claude" | "claude-code" => Some("claude"),
+        "codex" | "codex-cli" => Some("codex"),
+        "antigravity" | "antigravity-cli" | "agy" => Some("antigravity"),
+        "cursor" | "cursor-cli" | "cursor-agent" => Some("cursor"),
+        "grok" | "grok-build" => Some("grok"),
+        "copilot" => Some("copilot"),
+        "pi" => Some("pi"),
+        "omp" => Some("omp"),
+        "hermes" | "hermes-agent" => Some("hermes-agent"),
         _ => None,
     }
+}
+
+/// Settings key for per-agent explicit default model overrides (`{ "<family>": "<modelValue>" }`).
+pub(crate) const AGENT_DEFAULT_MODELS_SETTING_KEY: &str = "agentDefaultModels";
+
+fn read_explicit_model_from_map(settings: &Map<String, Value>, family: &str) -> Option<String> {
+    let map = settings
+        .get(AGENT_DEFAULT_MODELS_SETTING_KEY)
+        .and_then(Value::as_object)?;
+    let canonical = ghostex_gx_chat_core::menus::catalog::canonical_model_family(family);
+    map.get(canonical)
+        .or_else(|| map.get(family))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| {
+            !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(value)
+                && launchable_model(family, value)
+        })
+        .map(str::to_string)
+}
+
+/// Explicit per-agent default model set in Settings > Agents (`agentDefaultModels.<family>`).
+/// Wins over the last-used chat pick and over the catalog's newest default.
+pub(crate) fn explicit_settings_default_model(
+    family: &str,
+    settings: Option<&Map<String, Value>>,
+) -> Option<String> {
+    if let Some(found) = settings.and_then(|map| read_explicit_model_from_map(map, family)) {
+        return Some(found);
+    }
+    if cfg!(test) {
+        return None;
+    }
+    let paths = crate::paths::get_gxserver_paths(None);
+    crate::shared_settings_file::read_shared_settings(&paths)
+        .as_ref()
+        .and_then(Value::as_object)
+        .and_then(|map| read_explicit_model_from_map(map, family))
+}
+
+/// Resolves the concrete launch default `(model, effort, label)` for a new session or thread of
+/// `family`, in priority order:
+/// - For Cursor:
+///   1. User's own concrete default in Cursor's `cli-config.json` (returns `None` so Ghostex
+///      does not override Cursor's config with `--model` and lets `cursor-agent` start on it)
+///   2. Explicit Settings > Agents default (`agentDefaultModels.cursor`)
+///   3. Remembered "last used" choice picked in a chat (`launch_default("cursor")`)
+///   4. Otherwise `None` (never forces a hard-coded fallback at launch; `resolve_acp_model`
+///      uses Composer 2.5 only if `cursor-agent` also reports no concrete model).
+/// - For other families:
+///   1. Explicit per-agent Settings > Agents choice (`agentDefaultModels.<family>`)
+///   2. Remembered "last used" choice picked in a chat (`launch_default(family)`)
+///   3. Concrete default from the agent's live model list (`preferred_default_model`).
+pub(crate) fn resolve_launch_default(
+    family: &str,
+    settings: Option<&Map<String, Value>>,
+) -> Option<ModelPin> {
+    let family = pin_family(family)?;
+    if family == "cursor" {
+        // Cursor's own configured default outranks Settings > Agents and never gets overridden
+        // with `--model` (which would also rewrite `~/.cursor/cli-config.json`).
+        if cursor_config_default_model().is_some() {
+            return None;
+        }
+    }
+    if let Some(model) = explicit_settings_default_model(family, settings) {
+        let entry = crate::agent_model_catalog::catalog_model(family, &model);
+        let label = entry
+            .as_ref()
+            .and_then(|row| row.get("label").and_then(Value::as_str))
+            .filter(|l| !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_label(l))
+            .map(str::to_string);
+        let effort = entry
+            .as_ref()
+            .and_then(|row| row.get("defaultEffort").and_then(Value::as_str))
+            .map(|e| e.to_ascii_lowercase())
+            .or_else(|| {
+                crate::agent_model_catalog::catalog_agent(family).and_then(|a| {
+                    a.get("defaultEffort")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                })
+            });
+        return Some(ModelPin {
+            model,
+            effort,
+            model_label: label,
+            effort_label: None,
+        });
+    }
+    if let Some(pin) = launch_default(family) {
+        if !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(&pin.model) {
+            return Some(pin);
+        }
+    }
+    // Cursor's `--model` flag rewrites `~/.cursor/cli-config.json` and rejects non-CLI names
+    // (CDXC:AgentProviders 2026-11-05), so never force a hard-coded fallback at launch.
+    if family == "cursor" {
+        return None;
+    }
+    // Wait until pins are initialized in production so unit tests that don't seed pins keep their
+    // minimal command assertions unless they test Claude/Codex/Antigravity explicit launches.
+    let (model, label, effort) = crate::agent_model_catalog::preferred_default_model(family)?;
+    if !launchable_model(family, &model) {
+        return None;
+    }
+    Some(ModelPin {
+        model,
+        effort,
+        model_label: Some(label),
+        effort_label: None,
+    })
 }
 
 fn session_key(project_id: &str, session_id: &str) -> String {
@@ -332,12 +481,15 @@ pub(crate) fn carry_session_choice(from: (&str, &str), to: (&str, &str)) {
 }
 
 /// The label the agent itself shows for this model, so a launch value reads exactly like the
-/// report that later confirms it.
+/// report that later confirms it. Never returns a placeholder ("Default", "Auto", etc.).
 pub(crate) fn remembered_model_label(family: &str, model: &str) -> Option<String> {
     remembered_label(family, |pin| {
         (pin.model == model)
             .then(|| pin.model_label.clone())
             .flatten()
+            .filter(|label| {
+                !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_label(label)
+            })
     })
 }
 
@@ -391,9 +543,12 @@ pub(crate) fn record_default(family: &str, pin: ModelPin) {
 
 /// Keep labels a pick does not carry when the choice itself is unchanged.
 fn with_known_labels(mut pin: ModelPin, old: Option<&ModelPin>) -> ModelPin {
+    sanitize_pin(&mut pin);
     if let Some(old) = old {
         if pin.model_label.is_none() && old.model == pin.model {
-            pin.model_label = old.model_label.clone();
+            pin.model_label = old.model_label.clone().filter(|label| {
+                !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_label(label)
+            });
         }
         if pin.effort_label.is_none() && old.effort == pin.effort {
             pin.effort_label = old.effort_label.clone();
@@ -764,7 +919,10 @@ fn live_pin(
     Some(ModelPin {
         model: model.value.clone(),
         effort: effort.map(|choice| choice.value.clone()),
-        model_label: Some(model.label.clone()).filter(|label| !label.is_empty()),
+        model_label: Some(model.label.clone()).filter(|label| {
+            !label.is_empty()
+                && !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_label(label)
+        }),
         effort_label: effort
             .map(|choice| choice.label.clone())
             .filter(|label| !label.is_empty()),
@@ -786,7 +944,85 @@ fn prune_sessions(sessions: &mut BTreeMap<String, SessionReading>) {
 
 /// The model-related values of the agent's own settings, compared only to notice a change made
 /// outside Ghostex (never shown).
-pub(crate) fn settings_snapshot(family: &str) -> Value {
+pub(crate) fn cursor_cli_config_path() -> PathBuf {
+    if let Ok(dir) = std::env::var("CURSOR_CONFIG_DIR") {
+        let trimmed = dir.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed).join("cli-config.json");
+        }
+    }
+    if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+        let trimmed = xdg.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed)
+                .join("cursor")
+                .join("cli-config.json");
+        }
+    }
+    crate::resume_lookup::home_dir()
+        .join(".cursor")
+        .join("cli-config.json")
+}
+
+fn parse_cursor_cli_config_default(config: &Value) -> Option<(String, Option<String>)> {
+    let selected_id = config
+        .pointer("/selectedModel/modelId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let model_id = selected_id.or_else(|| {
+        config
+            .pointer("/model/modelId")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+    })?;
+    let base = model_id.split_once('[').map_or(model_id, |(b, _)| b.trim());
+    if base.is_empty()
+        || base.eq_ignore_ascii_case("auto-smart")
+        || ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(base)
+        || !launchable_model("cursor", model_id)
+    {
+        return None;
+    }
+    let params = selected_id
+        .and_then(|_| config.pointer("/selectedModel/parameters"))
+        .or_else(|| config.pointer(&format!("/modelParameters/{base}")))
+        .and_then(Value::as_array);
+    let effort = params.and_then(|entries| {
+        entries.iter().find_map(|entry| {
+            let key = entry.get("id").and_then(Value::as_str)?.trim();
+            if matches!(
+                key.to_ascii_lowercase().as_str(),
+                "effort" | "reasoning" | "reasoning_effort" | "thought_level"
+            ) {
+                entry
+                    .get("value")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|v| !v.is_empty())
+                    .map(|v| v.to_ascii_lowercase())
+            } else {
+                None
+            }
+        })
+    });
+    Some((model_id.to_string(), effort))
+}
+
+/// Concrete default `(model, effort)` configured in Cursor's own `cli-config.json`, or `None`
+/// when Cursor has no config file or is set to a placeholder (`auto`, `default`, `auto-smart`).
+pub(crate) fn cursor_config_default_model() -> Option<(String, Option<String>)> {
+    if cfg!(test) {
+        return None;
+    }
+    let config = fs::read_to_string(cursor_cli_config_path())
+        .ok()
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok())?;
+    parse_cursor_cli_config_default(&config)
+}
+
+fn settings_snapshot(family: &str) -> Value {
     let home = crate::accounts::launch::home().ok();
     let dir = |variable: &str, folder: &str| {
         std::env::var_os(variable)
@@ -836,18 +1072,22 @@ pub(crate) fn settings_snapshot(family: &str) -> Value {
             })
         }
         "cursor" => {
-            let config = home
-                .as_ref()
-                .and_then(|home| fs::read_to_string(home.join(".cursor/cli-config.json")).ok())
+            let config = fs::read_to_string(cursor_cli_config_path())
+                .ok()
                 .and_then(|text| serde_json::from_str::<Value>(&text).ok())
                 .unwrap_or(Value::Null);
             let model = config
-                .pointer("/model/modelId")
+                .pointer("/selectedModel/modelId")
+                .or_else(|| config.pointer("/model/modelId"))
                 .cloned()
                 .unwrap_or(Value::Null);
-            let parameters = model
-                .as_str()
-                .and_then(|id| config.pointer(&format!("/modelParameters/{id}")))
+            let parameters = config
+                .pointer("/selectedModel/parameters")
+                .or_else(|| {
+                    model
+                        .as_str()
+                        .and_then(|id| config.pointer(&format!("/modelParameters/{id}")))
+                })
                 .cloned()
                 .unwrap_or(Value::Null);
             json!({ "model": model, "parameters": parameters })

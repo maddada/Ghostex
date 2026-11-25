@@ -39,7 +39,7 @@ use crate::workspace_groups::{SessionGroupOp, SessionGroupRequest};
 /// others' buttons pair devices, install updates or write settings for real.
 /// SEE-ALSO: apps/desktop/src/app/sidebar_rail/intro.rs (`open_sidebar_rail_intro_preview`),
 /// server/src/ghostex_cli/debug.rs.
-pub const DEBUG_SHOW_MODALS: [&str; 1] = ["rail-intro"];
+pub const DEBUG_SHOW_MODALS: [&str; 2] = ["rail-intro", "native-mode-intro"];
 
 /// The tabs `ghostex settings open --tab` may name, each a `SettingsTabId` id
 /// (apps/desktop/src/app/window/settings_modal/model.rs). Keep in lockstep with
@@ -497,6 +497,15 @@ pub fn settings_patch_value_allowed(key: &str, value: &Value) -> bool {
                 && modes.iter().all(|(family, mode)| {
                     !family.trim().is_empty()
                         && matches!(mode.as_str(), Some("agent-cli" | "non-cli"))
+                })
+        }
+        Value::Object(models) if key == "agentDefaultModels" => {
+            models.len() <= SETTINGS_PATCH_MAX_AGENT_OVERRIDES
+                && models.iter().all(|(family, model)| {
+                    !family.trim().is_empty()
+                        && model
+                            .as_str()
+                            .is_some_and(|value| !value.trim().is_empty() && value.len() <= 200)
                 })
         }
         Value::Object(overrides) if key == "preferredAgentInterfaceOverrides" => {

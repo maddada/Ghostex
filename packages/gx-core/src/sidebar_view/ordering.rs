@@ -114,6 +114,9 @@ pub(crate) fn section_of(
     if enable_parking && row.is_parked {
         return SectionId::Parked;
     }
+    if row.is_autopilot_supervisor {
+        return SectionId::Autopilot;
+    }
     if is_draft_section_session(row) {
         return SectionId::Drafts;
     }
@@ -201,6 +204,7 @@ fn order_kind(
     now_ms: u64,
 ) -> Vec<usize> {
     let mut pinned: Vec<usize> = Vec::new();
+    let mut autopilot: Vec<usize> = Vec::new();
     let mut drafts: Vec<usize> = Vec::new();
     let mut working: Vec<usize> = Vec::new();
     let mut new_sessions: Vec<usize> = Vec::new();
@@ -213,6 +217,8 @@ fn order_kind(
             snoozed.push(*index);
         } else if enable_parking && row.is_parked {
             parked.push(*index);
+        } else if !row.is_browser && row.is_autopilot_supervisor {
+            autopilot.push(*index);
         } else if !row.is_browser && is_draft_section_session(row) {
             drafts.push(*index);
         } else if row.is_pinned {
@@ -237,6 +243,7 @@ fn order_kind(
     drafts.sort_by(by_created_desc);
     new_sessions.sort_by(by_created_desc);
     sort_pinned(rows, &mut pinned, pinned_order);
+    sort_autopilot(rows, &mut autopilot);
     if sort_by_last_activity {
         sort_by_activity(rows, &mut working);
         sort_by_activity(rows, &mut other);
@@ -244,6 +251,7 @@ fn order_kind(
     sort_parked_by_last_activity(rows, &mut parked);
 
     let mut ordered = pinned;
+    ordered.extend(autopilot);
     ordered.extend(drafts);
     ordered.extend(working);
     ordered.extend(new_sessions);
@@ -251,6 +259,28 @@ fn order_kind(
     ordered.extend(parked);
     ordered.extend(snoozed);
     ordered
+}
+
+/// Autopilot supervisors in Main Hub: this computer's first, then the other computers' newest
+/// active first.
+fn sort_autopilot(rows: &[std::sync::Arc<SessionRow>], autopilot: &mut [usize]) {
+    autopilot.sort_by(|left, right| {
+        let is_local = |index: &usize| {
+            rows[*index]
+                .key
+                .as_ref()
+                .is_some_and(|key| key.machine.is_local())
+        };
+        let time = |index: &usize| rows[*index].timing.last_interaction_ms.unwrap_or(0);
+        is_local(right)
+            .cmp(&is_local(left))
+            .then_with(|| time(right).cmp(&time(left)))
+            .then_with(|| {
+                rows[*left]
+                    .sidebar_session_id
+                    .cmp(&rows[*right].sidebar_session_id)
+            })
+    });
 }
 
 /// The Pinned section's order (CDXC:Sidebar 2026-11-07 DECISION in inputs.rs, Pinned order).

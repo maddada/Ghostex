@@ -117,6 +117,9 @@ impl CefBrowser {
         same fallible "not yet" that callers already retry on their next pass.
         */
         if !context_initialized() {
+            if init_permanently_failed() {
+                return Err("CEF runtime failed to initialize".into());
+            }
             request_runtime();
             return Err("CEF runtime is not initialized yet".into());
         }
@@ -921,6 +924,9 @@ pub(crate) fn cef_root_cache_path() -> Result<PathBuf> {
 }
 
 pub(crate) fn cef_request_context_for_profile(profile: &str) -> Result<cef::RequestContext> {
+    if !context_initialized() {
+        anyhow::bail!("CEF runtime is not initialized");
+    }
     if profile.starts_with("remote-") {
         return super::remote_browser::remote_browser_request_context(profile);
     }

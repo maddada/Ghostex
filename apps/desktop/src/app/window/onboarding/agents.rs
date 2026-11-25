@@ -10,7 +10,6 @@ use super::model::{
 use super::primitives::*;
 use super::scan_log::{ExtraTone, ScanExtra, ScanLog};
 use super::stage::*;
-use super::welcome::foot_actions;
 use super::{GpuiOnboardingWindow, OnboardingCommand};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -81,7 +80,7 @@ type Phase = &'static str;
 
 impl GpuiOnboardingWindow {
     fn agents_mounted(&self) -> bool {
-        self.panel == 3
+        self.panel == 1
     }
 
     fn add_extra(&mut self, id: String, text: String, tone: ExtraTone) {
@@ -311,7 +310,7 @@ impl GpuiOnboardingWindow {
             (true, None) => self.agents_panel.connected_since = Some(now),
             (true, Some(since)) if now.saturating_duration_since(since) >= CONNECTED_HOLD => {
                 self.agents_panel.connected_since = None;
-                self.go(4, cx);
+                self.go(2, cx);
             }
             (false, Some(_)) => self.agents_panel.connected_since = None,
             _ => {}
@@ -344,7 +343,7 @@ impl GpuiOnboardingWindow {
             .map(|agent| agent.agent_id.clone())
             .collect();
         if self.agents_connected() || installed.is_empty() {
-            self.go(4, cx);
+            self.go(2, cx);
             return;
         }
         self.set_right_tab(RightTab::Scan);
@@ -419,7 +418,7 @@ impl GpuiOnboardingWindow {
         };
 
         let mut out = Vec::new();
-        out.push(eyebrow(s, 48.0, 120.0, None, "Agents").into_any_element());
+        out.push(eyebrow(s, 48.0, 120.0, None, "Step 1 · Agents").into_any_element());
         out.push(
             heading(
                 s,
@@ -571,11 +570,21 @@ impl GpuiOnboardingWindow {
                 div()
                     .flex_1()
                     .min_w_0()
-                    .child(nm(s, 17.0, 500.0).child(if other_missing.is_empty() {
-                        "Other agents".to_string()
-                    } else {
-                        format!("Other agents (+{})", other_missing.len())
-                    }))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(s.px(8.0))
+                            .child(nm(s, 17.0, 500.0).child("Other agents"))
+                            .when(!other_missing.is_empty(), |row| {
+                                row.child(crate::app::element::count_badge_sized(
+                                    other_missing.len().to_string(),
+                                    white(1.0),
+                                    20.0 * s.0,
+                                    12.0 * s.0,
+                                ))
+                            }),
+                    )
                     .child(ss(s, 12.5).child(if other_names.is_empty() {
                         "Pi Agent, OpenCode, Copilot, and more.".to_string()
                     } else {
@@ -677,7 +686,7 @@ impl GpuiOnboardingWindow {
         };
         out.extend(self.render_sign_in_line(s, now, cx));
         out.push(
-            foot_actions(s, 3)
+            foot_actions(s, 1)
                 .child({
                     let next = cta(
                         s,

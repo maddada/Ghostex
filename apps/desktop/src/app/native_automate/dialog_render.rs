@@ -271,8 +271,8 @@ impl AutomationDialog {
         // offers, and a run's new session starts on them through create-agent's launch flags.
         let launch_choice = self.shows_launch_choice().then(|| {
             Self::grid(vec![
-                self.select_field("Model", DialogSelect::Model, "Agent default", false, cx),
-                self.select_field("Effort", DialogSelect::Effort, "Agent default", false, cx),
+                self.select_field("Model", DialogSelect::Model, "", false, cx),
+                self.select_field("Effort", DialogSelect::Effort, "", false, cx),
             ])
         });
         v_flex()

@@ -45,8 +45,9 @@ pub struct OpenQuestions {
     /// How many forms and question pages are unanswered and not put off For later; the ? pill shows
     /// while this is above zero.
     pub count: u32,
-    /// What the ? pill counts and shows for: the unanswered questions the dock above the chat box
-    /// cannot show (older than the loaded rows), so a question is counted in one place only.
+    /// What the ? pill counts and shows for: any unanswered questions the dock above the chat box
+    /// cannot show, so a question is counted in one place only (0 for forms and pages, which all
+    /// dock above the chat box whether loaded or older than the loaded rows).
     #[serde(default)]
     pub pill_count: u32,
     /// The pill's text: "Previous question ↑".
@@ -268,7 +269,13 @@ pub fn pick_filter(state: &mut ChatState, filter: &str) {
 /// The forms and question pages still waiting on the reader, oldest first, less those put off For
 /// later (`questions/later.rs`).
 pub fn unanswered(state: &ChatState) -> Vec<&Asker> {
-    let later = crate::questions::later::later_ids(state);
+    unanswered_at(state, 0)
+}
+
+/// [`unanswered`] read at `now_ms` (0 when the caller has no clock), excluding timed snoozes whose
+/// end has passed from `later_ids_at`.
+pub(crate) fn unanswered_at(state: &ChatState, now_ms: i64) -> Vec<&Asker> {
+    let later = crate::questions::later::later_ids_at(state, now_ms);
     waiting(state)
         .into_iter()
         .filter(|asker| !later.contains(&asker.id))
@@ -322,11 +329,41 @@ fn settled_by_index(
 /// The forms and pages put off For later that still wait: their cards say For later
 /// (the document's `laterQuestions`).
 pub fn later_waiting(state: &ChatState) -> Vec<String> {
-    let later = crate::questions::later::later_ids(state);
+    later_waiting_at(state, 0)
+}
+
+/// [`later_waiting`] evaluated at `now_ms` so timed snoozes whose end has passed leave
+/// `laterQuestions` immediately.
+pub fn later_waiting_at(state: &ChatState, now_ms: i64) -> Vec<String> {
+    let later = crate::questions::later::later_ids_at(state, now_ms);
     waiting(state)
         .into_iter()
         .filter(|asker| later.contains(&asker.id))
         .map(|asker| asker.id.clone())
+        .collect()
+}
+
+/// How many open questions each Live page still asks, by page id: every waiting question page
+/// that asks questions (not `seen_only`, not retired, not answered on the way). Used by the
+/// compact Live page row in Summary view (desktop `page_card.rs`, phone `PageCard.tsx`).
+pub fn page_open_question_counts(state: &ChatState) -> std::collections::BTreeMap<String, usize> {
+    let on_the_way: Vec<String> = answers_on_the_way(state)
+        .into_iter()
+        .map(|answers| answers.page_id)
+        .collect();
+    waiting(state)
+        .into_iter()
+        .filter(|asker| {
+            asker.kind == AskerKind::Page
+                && !asker.seen_only
+                && !state
+                    .session
+                    .retired_page_ids
+                    .iter()
+                    .any(|id| id == &asker.id)
+                && !on_the_way.iter().any(|id| id == &asker.id)
+        })
+        .map(|asker| (asker.id.clone(), asker.waiting(None)))
         .collect()
 }
 
@@ -426,10 +463,89 @@ fn indexed_status(
     .to_string()
 }
 
+/// An older waiting form or page from the session's resource index as an [`Asker`], so the dock,
+/// Work panel and question actions handle it the same way as a loaded row.
+fn asker_from_entry(entry: &ResourceEntry) -> Asker {
+    let kind = match entry.kind.as_str() {
+        "form" => AskerKind::Form,
+        _ => AskerKind::Page,
+    };
+    let seen_only = kind == AskerKind::Page && (entry.awaits_seen || entry.tags.is_empty());
+    Asker {
+        id: entry.id.clone(),
+        kind,
+        message_id: String::new(),
+        tags: entry.tags.clone(),
+        answered: false,
+        obsolete: false,
+        withdrawn: Vec::new(),
+        keys: Vec::new(),
+        skipped: Vec::new(),
+        superseded: Vec::new(),
+        inherited: false,
+        said: Vec::new(),
+        title: entry.title.clone(),
+        at: entry.at_ms,
+        seen_only,
+        source: entry.source.clone(),
+        replaced: false,
+        prints: Vec::new(),
+        rounds: Vec::new(),
+        outside_answerers: Vec::new(),
+        outside_answered_at: None,
+    }
+}
+
+/// Every form and question page waiting on the reader across the whole conversation (older index
+/// entries plus loaded transcript rows), excluding those put off For later at `now_ms`, oldest
+/// first; timed snoozes whose end has passed return automatically.
+pub(crate) fn all_unanswered_at(state: &ChatState, now_ms: i64) -> Vec<Asker> {
+    let entries = indexed_entries(state);
+    let mut out: Vec<Asker> = indexed_waiting_at(state, &entries, now_ms)
+        .into_iter()
+        .filter(|entry| matches!(entry.kind.as_str(), "form" | "page"))
+        .map(asker_from_entry)
+        .collect();
+    out.extend(unanswered_at(state, now_ms).into_iter().cloned());
+    out
+}
+
+/// Every waiting form or question page across the whole conversation, including those put off For
+/// later or snoozed (older index entries plus loaded transcript rows), oldest first.
+pub(crate) fn all_waiting(state: &ChatState) -> Vec<Asker> {
+    let later = crate::questions::later::later_ids(state);
+    let removed = crate::questions::later::removed_ids(state);
+    let cards = crate::extras::work_cards::card_tags(state);
+    let on_the_way: Vec<String> = answers_on_the_way(state)
+        .into_iter()
+        .map(|answers| answers.page_id)
+        .collect();
+    let entries = indexed_entries(state);
+    let mut out: Vec<Asker> = index_only(state, &entries)
+        .into_iter()
+        .filter(|entry| entry.thread.is_none())
+        .filter(|entry| matches!(entry.kind.as_str(), "form" | "page"))
+        .filter(|entry| {
+            matches!(
+                indexed_status(entry, &later, &removed, &cards).as_str(),
+                "waiting" | "later"
+            )
+        })
+        .filter(|entry| !on_the_way.contains(&entry.id))
+        .map(asker_from_entry)
+        .collect();
+    out.extend(waiting(state).into_iter().cloned());
+    out
+}
+
 /// How many forms and question pages the index says wait on the reader that the loaded rows do not
 /// hold, not counting the ones put off For later or removed.
-fn indexed_waiting<'a>(state: &ChatState, entries: &'a [ResourceEntry]) -> Vec<&'a ResourceEntry> {
-    let later = crate::questions::later::later_ids(state);
+fn indexed_waiting_at<'a>(
+    state: &ChatState,
+    entries: &'a [ResourceEntry],
+    now_ms: i64,
+) -> Vec<&'a ResourceEntry> {
+    let later = crate::questions::later::later_ids_at(state, now_ms);
     let removed = crate::questions::later::removed_ids(state);
     let cards = crate::extras::work_cards::card_tags(state);
     let on_the_way: Vec<String> = answers_on_the_way(state)
@@ -502,7 +618,7 @@ pub fn list(state: &ChatState, context: &ChatContext) -> Vec<QuestionListSection
 /// `list`, with each row's time fields only when `labels` asks for them.
 fn list_rows(state: &ChatState, context: &ChatContext, labels: bool) -> Vec<QuestionListSection> {
     let waiting = waiting(state);
-    let later = crate::questions::later::later_ids(state);
+    let later = crate::questions::later::later_ids_at(state, context.now_millis());
     let removed = crate::questions::later::removed_ids(state);
     let on_the_way: Vec<String> = answers_on_the_way(state)
         .into_iter()
@@ -686,6 +802,8 @@ pub fn answers_on_the_way(state: &ChatState) -> Vec<PageAnswers> {
                 title: String::new(),
                 answers: answers.clone(),
                 tags: Vec::new(),
+                by: None,
+                outside: false,
             })
         })
         .collect();
@@ -728,14 +846,28 @@ pub struct ListInputs {
     queue_prompts: Stamped<Option<Vec<serde_json::Value>>>,
     resource_index: Stamped<crate::questions::resource_index::ResourceIndex>,
     later_question_ids: Stamped<Vec<String>>,
+    later_question_until: std::collections::BTreeMap<String, i64>,
+    expired_snoozes: usize,
     removed_question_ids: Stamped<Vec<String>>,
     /// The tags work items ask, which take a question off the list (`waiting`); read from the
     /// coordinator threads, so a work item that starts or stops asking a tag lists the rows again.
     card_tags: crate::questions::forms::CardTags,
 }
 
+fn expired_snoozes_at(state: &ChatState, now_ms: i64) -> usize {
+    if now_ms <= 0 {
+        return 0;
+    }
+    state
+        .session
+        .later_question_until
+        .values()
+        .filter(|until| **until <= now_ms)
+        .count()
+}
+
 impl ListInputs {
-    fn of(state: &ChatState) -> Self {
+    fn of(state: &ChatState, now_ms: i64) -> Self {
         Self {
             askers: state.transcript_view.askers.clone(),
             questions: crate::questions::forms::QuestionsInputs::of(&state.questions),
@@ -743,13 +875,15 @@ impl ListInputs {
             queue_prompts: state.session.queue_prompts.clone(),
             resource_index: state.session.resource_index.clone(),
             later_question_ids: state.session.later_question_ids.clone(),
+            later_question_until: state.session.later_question_until.clone(),
+            expired_snoozes: expired_snoozes_at(state, now_ms),
             removed_question_ids: state.session.removed_question_ids.clone(),
             card_tags: crate::questions::forms::CardTags::of(state),
         }
     }
 
     /// By stamp where it can, by value where a stamp moved ([`Stamped::same_as`]).
-    fn matches(&mut self, state: &ChatState) -> bool {
+    fn matches(&mut self, state: &ChatState, now_ms: i64) -> bool {
         // CDXC:SessionChat 2026-11-11 WHY: every input is named (no `..`), so one added to this
         // struct fails the build here until it is compared below too: a kept part checked on fewer
         // inputs than it was built from would serve a stale value.
@@ -760,6 +894,8 @@ impl ListInputs {
             queue_prompts,
             resource_index,
             later_question_ids,
+            later_question_until,
+            expired_snoozes,
             removed_question_ids,
             card_tags,
         } = self;
@@ -770,6 +906,8 @@ impl ListInputs {
             && queue_prompts.same_as(&state.session.queue_prompts)
             && resource_index.same_as(&state.session.resource_index)
             && later_question_ids.same_as(&state.session.later_question_ids)
+            && *later_question_until == state.session.later_question_until
+            && *expired_snoozes == expired_snoozes_at(state, now_ms)
             && removed_question_ids.same_as(&state.session.removed_question_ids)
     }
 }
@@ -794,29 +932,37 @@ pub fn project_with(
     kept: &mut Option<KeptList>,
     asks: &[crate::extras::work_cards::OpenAsk],
 ) -> OpenQuestions {
-    let open = unanswered(state);
+    let now_ms = context.now_millis();
+    let open = unanswered_at(state, now_ms);
     // The loaded rows' unanswered questions, plus the ones older than what the chat has loaded,
     // plus the coordinator's open asks.
-    let older = indexed_waiting(state, &indexed_entries(state)).len();
+    let entries = indexed_entries(state);
+    let older_entries = indexed_waiting_at(state, &entries, now_ms);
+    let older = older_entries.len();
     let count = (open.len() + older + asks.len()) as u32;
-    // The unanswered forms and pages in the loaded rows and the coordinator's open asks wait in the
-    // dock above the chat box (`extras::work_cards::dock`): the ? pill shows and counts only what
-    // the dock cannot show, the questions older than the loaded rows, so nothing is counted in two
-    // places (the user's "This is a mess man ... wtf is this?", 2026-11-10).
-    let pill_count = older as u32;
+    // Every unanswered form and page (loaded or older than the loaded rows) and every coordinator
+    // open ask waits in the dock above the chat box (`extras::work_cards::dock`), so the ? pill
+    // counts only anything the dock cannot show (none for forms and pages), and nothing is counted
+    // in two places (the user's "This is a mess man ... wtf is this?", 2026-11-10).
+    let pill_count = older_entries
+        .iter()
+        .filter(|entry| !matches!(entry.kind.as_str(), "form" | "page"))
+        .count() as u32;
     let filter = state.questions.open_questions.filter.as_str();
     /*
     CDXC:SessionChat 2026-11-04 WHY:
     This runs on every chat event (each streamed token) to learn whether the document changed, and it listed every form, page and chart with its time labels and copied each row twice to keep the first page: on a coordinator chat with hundreds of them that was the chat worker's main cost while a visible chat streamed (issues-1027/macos-perf). Rows are listed without their time fields, moved rather than copied, and only the rows on the page get their time fields (`label_row`), which reads them exactly as listing them would.
     */
-    let reused = kept
-        .as_mut()
-        .and_then(|(inputs, all)| inputs.matches(state).then(|| std::sync::Arc::clone(all)));
+    let reused = kept.as_mut().and_then(|(inputs, all)| {
+        inputs
+            .matches(state, now_ms)
+            .then(|| std::sync::Arc::clone(all))
+    });
     let all = match reused {
         Some(all) => all,
         None => {
             let all = std::sync::Arc::new(list_rows(state, context, false));
-            *kept = Some((ListInputs::of(state), std::sync::Arc::clone(&all)));
+            *kept = Some((ListInputs::of(state, now_ms), std::sync::Arc::clone(&all)));
             all
         }
     };
@@ -924,14 +1070,23 @@ pub fn project_with(
             _ => format!("{count} unanswered questions: go to the previous one"),
         },
         newest: {
-            let form = open.last();
+            let form = open
+                .last()
+                .map(|asker| (asker.at, asker.id.as_str()))
+                .or_else(|| {
+                    older_entries
+                        .iter()
+                        .max_by_key(|entry| entry.at_ms.unwrap_or(i64::MIN))
+                        .map(|entry| (entry.at_ms, entry.id.as_str()))
+                });
             let ask = asks.last();
             match (form, ask) {
-                (Some(form), Some(ask)) if form.at.is_some_and(|at| at > ask.at) => {
-                    Some(form.id.clone())
+                (Some((at, id)), Some(ask)) if at.is_some_and(|at| at > ask.at) => {
+                    Some(id.to_string())
                 }
                 (_, Some(ask)) => Some(ask.key.clone()),
-                (form, None) => form.map(|asker| asker.id.clone()),
+                (Some((_, id)), None) => Some(id.to_string()),
+                (None, None) => None,
             }
         },
         jump: state.questions.open_questions.jump.clone(),
@@ -956,7 +1111,7 @@ pub fn project_with(
 /// CDXC:SessionChat 2026-10-14 WHY:
 /// Starting again from the newest whenever the reader sat at the bottom was tried and dropped: the newest question usually sits at the bottom, so the second click landed on it again instead of stepping back.
 pub fn previous(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
-    let open: Vec<Asker> = unanswered(state).into_iter().cloned().collect();
+    let open = all_unanswered_at(state, context.now_millis());
     // A coordinator's open work item asks are stops too, in time order among the forms and pages:
     // each is shown in the Work panel, the chat staying where it is.
     let asks = crate::extras::work_cards::open_asks(state, context);
@@ -967,17 +1122,7 @@ pub fn previous(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
         .chain(asks.iter().map(|ask| (ask.at, ask.key.clone(), true)))
         .collect();
     if stops.is_empty() {
-        // The only questions waiting are older than the loaded rows (the pill counts them): the
-        // newest of them opens in the popup, read back from the transcript.
-        let entries = indexed_entries(state);
-        let newest = indexed_waiting(state, &entries)
-            .into_iter()
-            .max_by_key(|entry| entry.at_ms.unwrap_or(i64::MIN))
-            .map(|entry| entry.id.clone());
-        return match newest {
-            Some(id) => show(state, context, &id),
-            None => Vec::new(),
-        };
+        return Vec::new();
     }
     stops.sort_by_key(|stop| stop.0);
     let last = state.questions.open_questions.last.as_deref();
@@ -1250,6 +1395,8 @@ mod tests {
             replaced: false,
             prints: Vec::new(),
             rounds: Vec::new(),
+            outside_answerers: Vec::new(),
+            outside_answered_at: None,
             said: Vec::new(),
             title: format!("About {id}"),
             at,
@@ -2198,6 +2345,8 @@ mod paged_labels_tests {
                 replaced: false,
                 prints: Vec::new(),
                 rounds: Vec::new(),
+                outside_answerers: Vec::new(),
+                outside_answered_at: None,
                 said: Vec::new(),
                 title: format!("Asked {n}"),
                 at: Some(now - n * 60_000),

@@ -196,6 +196,8 @@ pub(crate) struct QuickAccessOption {
     pub(crate) value: String,
     pub(crate) label: String,
     #[serde(default)]
+    pub(crate) count: Option<usize>,
+    #[serde(default)]
     pub(crate) detail: String,
     #[serde(default)]
     pub(crate) color: String,
@@ -214,6 +216,8 @@ pub(crate) struct QuickAccessOption {
 pub(crate) struct QuickAccessSelect {
     #[serde(default)]
     pub(crate) label: String,
+    #[serde(default)]
+    pub(crate) count: Option<usize>,
     #[serde(default)]
     pub(crate) detail: String,
     #[serde(default)]

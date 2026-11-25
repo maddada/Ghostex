@@ -83,8 +83,25 @@ fn non_persistent_heading(heading: &str, include_unsynced: bool) -> String {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+fn web_safe_heading(text: String) -> String {
+    // Bundled web fonts (Inter, IBM Plex Sans, Lilex, JetBrains Mono, Noto Emoji) have no glyph
+    // for U+2217 (`∗`, Mathematical Asterisk Operator), so `gpui-web` would draw a missing-glyph
+    // box before unsynced/placeholder titles. ASCII `*` renders cleanly in Inter.
+    text.replace(TERMINAL_TITLE_MARKER, "*")
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn web_safe_heading(text: String) -> String {
+    text
+}
+
 /// `formatSessionHeadingText`.
 pub(crate) fn session_heading(input: &TitleInput<'_>, include_unsynced: bool) -> String {
+    web_safe_heading(session_heading_raw(input, include_unsynced))
+}
+
+fn session_heading_raw(input: &TitleInput<'_>, include_unsynced: bool) -> String {
     if let Some(display_title) = normalized_non_empty(input.display_title) {
         return if include_unsynced {
             normalized_non_empty(input.display_title_tooltip).unwrap_or(display_title)
@@ -157,7 +174,7 @@ pub(crate) fn session_tooltip(
         };
         lines.push(if input.pending_question_count > 0 {
             format!(
-                "{prefix}Answer requested ({})",
+                "{prefix}Answer requested · {}",
                 input.pending_question_count
             )
         } else {
@@ -557,7 +574,10 @@ pub(crate) fn next_label_deadline(
                 deadline - ((remaining - 1) / 1000) * 1000
             }
         });
-    let countdown = [second_countdown, quota_countdown].into_iter().flatten().min();
+    let countdown = [second_countdown, quota_countdown]
+        .into_iter()
+        .flatten()
+        .min();
     if let Some(countdown) = countdown {
         return Some(LabelDeadline::Countdown(countdown.max(now + 1) as u64));
     }

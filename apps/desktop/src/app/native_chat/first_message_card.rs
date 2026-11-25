@@ -28,6 +28,9 @@ impl NativeChatView {
     ) -> Option<AnyElement> {
         let card = self.snapshot["firstMessageCard"].clone();
         if !card.is_object() {
+            if self.draft_coordinator_mode && !self.pending_send && self.worktree_tray_shown() {
+                return Some(self.render_draft_coordinator_card(p));
+            }
             return None;
         }
         let s = p.scale;
@@ -224,5 +227,81 @@ impl NativeChatView {
                 .child(confirm)
                 .into_any_element(),
         )
+    }
+
+    /// The coordinator first-message and explainer card shown inside the composer while the draft's
+    /// "Coordinator" toggle pill is turned on (reusing the coordinator's existing guide line and
+    /// benefits text verbatim).
+    fn render_draft_coordinator_card(&self, p: &ChatAppearance) -> AnyElement {
+        let s = p.scale;
+        let guide_line = ghostex_gx_chat_core::composer::skill_invocation::COORDINATOR_GUIDE_LINE;
+        let benefits = ghostex_gx_core::NEW_ORCHESTRATOR_BENEFITS;
+        div()
+            .id("draft-coordinator-card")
+            .role(gpui::Role::Group)
+            .aria_label("Coordinator first message")
+            .flex()
+            .flex_col()
+            .min_w_0()
+            .gap(px(4.0 * s))
+            .mb(px(6.0 * s))
+            .pl(px(12.0 * s))
+            .pr(px(10.0 * s))
+            .py(px(8.0 * s))
+            .rounded(px(12.0 * s))
+            .border_1()
+            .border_color(p.border.opacity(0.58))
+            .bg(p.card_row)
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .min_w_0()
+                    .gap(px(6.0 * s))
+                    .text_size(px(12.0 * s))
+                    .line_height(px(18.0 * s))
+                    .child(
+                        gpui::svg()
+                            .path("titlebar/coordinator-crown.svg")
+                            .flex_shrink_0()
+                            .size(px(13.0 * s))
+                            .text_color(p.muted),
+                    )
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(p.foreground)
+                            .child("First message"),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .text_ellipsis()
+                            .text_color(p.muted)
+                            .child("· Coordinator"),
+                    ),
+            )
+            .child(
+                div()
+                    .id("draft-coordinator-guide-line")
+                    .min_w_0()
+                    .text_size(px(13.0 * s))
+                    .line_height(px(19.0 * s))
+                    .text_color(p.primary)
+                    .child(guide_line),
+            )
+            .child(
+                div()
+                    .id("draft-coordinator-benefits")
+                    .min_w_0()
+                    .pt(px(2.0 * s))
+                    .text_size(px(12.0 * s))
+                    .line_height(px(17.0 * s))
+                    .text_color(p.muted)
+                    .child(benefits),
+            )
+            .into_any_element()
     }
 }

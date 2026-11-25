@@ -64,9 +64,10 @@ fn cef_phase_rank(phase: &str) -> u8 {
         "loadLibraryDone" => 2,
         "executeProcessDone" => 3,
         "initializeStart" => 4,
-        "initializeDone" => 5,
-        "messageLoopStart" => 6,
-        "contextInitialized" => 7,
+        "initializeFailed" => 5,
+        "initializeDone" => 6,
+        "messageLoopStart" => 7,
+        "contextInitialized" => 8,
         _ => 0,
     }
 }

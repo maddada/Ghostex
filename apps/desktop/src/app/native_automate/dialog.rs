@@ -273,8 +273,59 @@ impl AutomationDialog {
                 || !self.draft.effort.trim().is_empty())
     }
 
-    /// The Model picker's values after "Agent default" (an empty value): the catalog's models,
-    /// plus the saved one when the catalog does not list it, so an edit never drops it.
+    /// Concrete default model `(value, label)` for the chosen agent from the catalog.
+    pub(crate) fn resolved_default_model(&self) -> Option<(String, String)> {
+        let agent = self.catalog_agent()?;
+        let family = self
+            .state
+            .agent(&self.draft.agent_id)
+            .and_then(|a| a.icon.as_deref())
+            .unwrap_or(&self.draft.agent_id);
+        ghostex_gx_chat_core::menus::catalog::preferred_default_model(family, agent)
+            .map(|m| (m.value.clone(), m.label.clone()))
+    }
+
+    /// Concrete default model label shown when no explicit override is picked yet.
+    pub(crate) fn default_model_label(&self) -> String {
+        self.resolved_default_model()
+            .map(|(_, label)| label)
+            .unwrap_or_else(|| "Model".to_string())
+    }
+
+    /// Concrete default effort label shown when no explicit effort override is picked yet.
+    pub(crate) fn default_effort_label(&self) -> String {
+        let Some(agent) = self.catalog_agent() else {
+            return "Medium".to_string();
+        };
+        let family = self
+            .state
+            .agent(&self.draft.agent_id)
+            .and_then(|a| a.icon.as_deref())
+            .unwrap_or(&self.draft.agent_id);
+        let model_val = self.draft.model.trim();
+        let model = if model_val.is_empty() {
+            ghostex_gx_chat_core::menus::catalog::preferred_default_model(family, agent)
+        } else {
+            agent.model(model_val)
+        };
+        let effort = model
+            .and_then(|m| {
+                ghostex_gx_chat_core::menus::catalog::preferred_default_effort(family, agent, m)
+            })
+            .or_else(|| agent.default_effort.clone())
+            .or_else(|| agent.efforts.first().cloned());
+        match effort {
+            Some(eff) => self
+                .catalog
+                .as_ref()
+                .map(|c| c.effort_label(&eff))
+                .unwrap_or(eff),
+            None => "Medium".to_string(),
+        }
+    }
+
+    /// The Model picker's concrete models (never "Agent default" or "Auto"), plus any saved one
+    /// not listed by the catalog so an edit never drops it.
     fn model_values(&self) -> Vec<(String, String)> {
         let mut values = self
             .catalog_agent()
@@ -282,6 +333,13 @@ impl AutomationDialog {
                 agent
                     .models
                     .iter()
+                    .filter(|model| {
+                        !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(
+                            &model.value,
+                        ) && !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_label(
+                            &model.label,
+                        )
+                    })
                     .map(|model| (model.value.clone(), model.label.clone()))
                     .collect::<Vec<_>>()
             })
@@ -293,8 +351,8 @@ impl AutomationDialog {
         values
     }
 
-    /// The Effort picker's values after "Agent default": the chosen model's efforts (every effort
-    /// the agent knows while no model is chosen), plus the saved one when it is not among them.
+    /// The Effort picker's concrete values: the chosen model's efforts (or the default model's
+    /// efforts while no model override is saved), plus any saved one not among them.
     fn effort_values(&self) -> Vec<(String, String)> {
         let label = |effort: &str| {
             self.catalog
@@ -307,7 +365,11 @@ impl AutomationDialog {
             .map(|agent| {
                 let model = self.draft.model.trim();
                 if model.is_empty() {
-                    agent.efforts.clone()
+                    if let Some((default_val, _)) = self.resolved_default_model() {
+                        agent.efforts_for_model(&default_val)
+                    } else {
+                        agent.efforts.clone()
+                    }
                 } else {
                     agent.efforts_for_model(model)
                 }
@@ -327,12 +389,10 @@ impl AutomationDialog {
     }
 
     fn launch_values(&self, kind: DialogSelect) -> Vec<(String, String)> {
-        let mut values = vec![(String::new(), "Agent default".to_string())];
-        values.extend(match kind {
+        match kind {
             DialogSelect::Model => self.model_values(),
             _ => self.effort_values(),
-        });
-        values
+        }
     }
 
     pub(crate) fn items(&self, kind: DialogSelect) -> Vec<String> {
@@ -384,14 +444,28 @@ impl AutomationDialog {
                 .agents
                 .iter()
                 .position(|agent| agent.agent_id == draft.agent_id),
-            DialogSelect::Model => self
-                .launch_values(kind)
-                .iter()
-                .position(|(value, _)| value == draft.model.trim()),
-            DialogSelect::Effort => self
-                .launch_values(kind)
-                .iter()
-                .position(|(value, _)| value == draft.effort.trim()),
+            DialogSelect::Model => {
+                let target = if draft.model.trim().is_empty() {
+                    self.resolved_default_model()
+                        .map(|(value, _)| value)
+                        .unwrap_or_default()
+                } else {
+                    draft.model.trim().to_string()
+                };
+                self.launch_values(kind)
+                    .iter()
+                    .position(|(value, _)| *value == target)
+            }
+            DialogSelect::Effort => {
+                let values = self.launch_values(kind);
+                let target = draft.effort.trim();
+                if target.is_empty() {
+                    let default_label = self.default_effort_label();
+                    values.iter().position(|(_, label)| *label == default_label)
+                } else {
+                    values.iter().position(|(value, _)| value == target)
+                }
+            }
             DialogSelect::Repeat => SCHEDULE_PRESETS
                 .iter()
                 .position(|preset| *preset == draft.schedule_preset),
@@ -409,6 +483,11 @@ impl AutomationDialog {
     pub(crate) fn selected_label(&self, kind: DialogSelect) -> Option<String> {
         self.selected_index(kind)
             .and_then(|index| self.items(kind).get(index).cloned())
+            .or_else(|| match kind {
+                DialogSelect::Model => Some(self.default_model_label()),
+                DialogSelect::Effort => Some(self.default_effort_label()),
+                _ => None,
+            })
     }
 
     pub(crate) fn toggle_select(&mut self, kind: DialogSelect, cx: &mut Context<Self>) {

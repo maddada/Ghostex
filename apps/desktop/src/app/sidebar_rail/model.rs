@@ -107,16 +107,24 @@ pub(crate) fn note_sidebar_layout(settings: &serde_json::Map<String, serde_json:
     );
 }
 
-/// The pinned items' keys, top to bottom: rail items' keys and links' `link:<id>`.
-pub(crate) fn sidebar_rail_pins() -> Vec<String> {
+/// The pinned items split into top and bottom sections.
+pub(crate) fn sidebar_rail_layout() -> ghostex_gx_core::sidebar_rail::RailLayout {
     let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
-    ghostex_gx_core::sidebar_rail::rail_pins(settings.object())
+    ghostex_gx_core::sidebar_rail::rail_layout(settings.object())
+}
+
+/// The pinned items' keys, top to bottom across both sections: rail items' keys, links'
+/// `link:<id>`, and separators' `sep:<id>`.
+#[allow(dead_code)]
+pub(crate) fn sidebar_rail_pins() -> Vec<String> {
+    sidebar_rail_layout().all()
 }
 
 /// The artwork of the item `key`.
 pub(crate) fn rail_item_icon(key: &str) -> &'static str {
     match key {
         "search" => "titlebar/search.svg",
+        "findPrompts" => "titlebar/file-search.svg",
         "mainHub" => crate::app::native_sidebar::chief_row_view::FLOWER_ICON,
         "agentsHub" => "titlebar/users-group.svg",
         "allAutomations" => "titlebar/clock.svg",
@@ -191,6 +199,13 @@ pub(crate) struct RailButtonFace {
 pub(crate) enum RailDragArtwork {
     Button(RailButtonFace),
     Separator,
+}
+
+/// A drop position on the rail: before `index` in `section` (or at the end when `index >= len`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct RailDropTarget {
+    pub(crate) section: ghostex_gx_core::sidebar_rail::RailSection,
+    pub(crate) index: usize,
 }
 
 /// A pinned icon or separator being dragged along the rail.

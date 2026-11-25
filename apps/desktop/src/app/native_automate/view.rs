@@ -19,6 +19,12 @@ const AUTO_REFRESH_INTERVAL: Duration = Duration::from_millis(8_000);
 /// session list; the app hands matching responses back through `receive_sessions_response`.
 pub(crate) const NATIVE_AUTOMATE_SESSIONS_REQUEST_PREFIX: &str = "native-automate-sessions:";
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct RunsFilter {
+    pub(crate) automation_id: String,
+    pub(crate) unread_only: bool,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum AutomateTab {
     Automations,
@@ -78,6 +84,8 @@ pub(crate) struct NativeAutomateView {
     /// The automation to select once the next scope's data loads (a GBot routine card's Edit).
     focus_request: Option<String>,
     pub(crate) selected_run_id: Option<String>,
+    /// Active filter on the Runs tab (set by clicking an automation's "N unread" badge).
+    pub(crate) run_filter: Option<RunsFilter>,
     pub(crate) sessions: Vec<AutomationSessionOption>,
     pub(crate) dialog: Option<OpenAutomationDialog>,
     pub(crate) list_scroll: ScrollHandle,
@@ -117,6 +125,7 @@ impl NativeAutomateView {
             selected_automation_id: None,
             focus_request: None,
             selected_run_id: None,
+            run_filter: None,
             sessions: Vec::new(),
             dialog: None,
             list_scroll: ScrollHandle::new(),
@@ -177,6 +186,7 @@ impl NativeAutomateView {
         self.busy_id = None;
         self.selected_automation_id = self.focus_request.take();
         self.selected_run_id = None;
+        self.run_filter = None;
         self.sessions.clear();
         self.loading = false;
         if load {
@@ -416,6 +426,41 @@ impl NativeAutomateView {
 
     pub(crate) fn set_tab(&mut self, tab: AutomateTab, cx: &mut Context<Self>) {
         self.tab = tab;
+        self.run_filter = None;
+        cx.notify();
+    }
+
+    /// Switches to the Runs tab filtered to `automation_id`'s unread runs, selecting the newest one.
+    pub(crate) fn open_unread_runs_for_automation(
+        &mut self,
+        automation_id: &str,
+        cx: &mut Context<Self>,
+    ) {
+        self.selected_automation_id = Some(automation_id.to_string());
+        self.run_filter = Some(RunsFilter {
+            automation_id: automation_id.to_string(),
+            unread_only: true,
+        });
+        self.selected_run_id = self.state.as_ref().and_then(|state| {
+            state
+                .visible_runs()
+                .find(|run| run.automation_id == automation_id && run.is_unread)
+                .map(|run| run.id.clone())
+        });
+        self.tab = AutomateTab::Runs;
+        cx.notify();
+    }
+
+    /// Opens a specific run in the Runs tab, clearing any filter that might hide it.
+    pub(crate) fn open_run_in_runs_tab(&mut self, run_id: &str, cx: &mut Context<Self>) {
+        self.run_filter = None;
+        self.selected_run_id = Some(run_id.to_string());
+        self.tab = AutomateTab::Runs;
+        cx.notify();
+    }
+
+    pub(crate) fn clear_run_filter(&mut self, cx: &mut Context<Self>) {
+        self.run_filter = None;
         cx.notify();
     }
 

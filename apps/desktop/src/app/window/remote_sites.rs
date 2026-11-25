@@ -210,6 +210,7 @@ impl RemoteSitesPanel {
     }
 
     fn refresh_local(&mut self, cx: &mut gpui::Context<Self>) {
+        crate::app::window::share_link_popover::refresh_active_shares_cache(cx);
         let Some(group) = self.groups.iter_mut().find(|group| group.local) else {
             return;
         };
@@ -597,6 +598,65 @@ impl RemoteSitesPanel {
                 cx.notify();
             })),
         );
+        let share_slot = group.local.then(|| {
+            let port = site.port;
+            let share_title = site.label();
+            if let Some(reason) = crate::app::window::share_link_popover::is_port_share_blocked(
+                port,
+                site.process.as_deref(),
+            ) {
+                site_action_slot().child(
+                    resource_square_button(format!("share-blocked-{key}"))
+                        .opacity(0.45)
+                        .cursor_default()
+                        .child(
+                            site_icon("titlebar/lock.svg", 12.0)
+                                .text_color(chrome_ink().opacity(0.65)),
+                        )
+                        .tooltip(move |window, cx| {
+                            Tooltip::new(format!("Protected port: {reason}")).build(window, cx)
+                        }),
+                )
+            } else {
+                let shared = crate::app::window::share_link_popover::is_port_shared(port);
+                let icon_color = if shared {
+                    chrome_color(0x7acb9d, 0x287a48)
+                } else {
+                    chrome_ink().opacity(0.90)
+                };
+                site_action_slot().child(
+                    resource_square_button(format!("share-{key}"))
+                        .child(
+                            svg()
+                                .path(if shared {
+                                    "titlebar/world.svg"
+                                } else {
+                                    "titlebar/link.svg"
+                                })
+                                .size(px(12.0))
+                                .text_color(icon_color),
+                        )
+                        .tooltip(move |window, cx| {
+                            Tooltip::new(if shared {
+                                "Shared · Manage link…"
+                            } else {
+                                "Share link…"
+                            })
+                            .build(window, cx)
+                        })
+                        .on_click(cx.listener(move |_, _, _, cx| {
+                            crate::app::window::share_link_popover::open_share_link_popover(
+                                crate::app::window::share_link_popover::ShareLinkTarget::Port {
+                                    port,
+                                    title: share_title.clone(),
+                                },
+                                None,
+                                cx,
+                            );
+                        })),
+                )
+            }
+        });
         let status = match site.status_label() {
             "Login required" => "Login",
             "Certificate issue" => "Certificate",
@@ -605,7 +665,7 @@ impl RemoteSitesPanel {
         };
         let status_detail = site.status_label();
         resource_row_frame().flex_shrink_0()
-            .child(resource_row_content().child(identity).child(primary).child(secondary)
+            .child(resource_row_content().child(identity).child(primary).child(secondary).children(share_slot)
                 .child(h_flex().flex_shrink_0().w(px(200.0)).gap(px(8.0))
                     .child(resource_metric(86.0).id(format!("status-{key}"))
                         .child(status_dot(color)).child(status)

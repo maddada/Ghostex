@@ -121,9 +121,19 @@ pub fn side_state_moves(
         || side.retired_async_question_ids.is_some()
         || side.later_question_ids.is_some()
         || side
+            .agent_restarted_at
+            .as_ref()
+            .is_some_and(|times| &session.agent_restarted_at != times)
+        || side
             .unavailable_modes
             .as_ref()
             .is_some_and(|modes| &session.unavailable_modes != modes)
+        || side
+            .non_cli_mode
+            .is_some_and(|mode| session.non_cli_mode != mode)
+        || side
+            .switch_to_native_queued
+            .is_some_and(|queued| session.switch_to_native_queued != queued)
         || side.removed_question_ids.is_some()
         || side.retired_page_ids.is_some()
         || side.starred_page_ids.is_some()

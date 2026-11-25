@@ -159,9 +159,23 @@ fn session_pool_exhausted_inner(
     {
         return false;
     }
+    let workspace_pool = session["projectId"]
+        .as_str()
+        .and_then(|pid| {
+            DomainRepository::new(&db, &state.metadata.server_id)
+                .get_project(pid)
+                .ok()
+                .flatten()
+        })
+        .and_then(|project| super::workspace_pool::session_pool(&db, &project, session, provider));
     let model = session_model(session);
-    if super::autopilot::provider_has_eligible_room_for_model(&registry, &snapshot, provider, model)
-    {
+    if super::autopilot::provider_has_eligible_room_for_model_in_pool(
+        &registry,
+        &snapshot,
+        provider,
+        model,
+        workspace_pool.as_deref(),
+    ) {
         return false;
     }
     let now = chrono::Utc::now();
@@ -181,7 +195,11 @@ fn session_pool_exhausted_inner(
     registry
         .accounts
         .iter()
-        .filter(|account| account.provider == provider && account.auto_switchable())
+        .filter(|account| {
+            account.provider == provider
+                && account.auto_switchable()
+                && super::workspace_pool::in_pool(&account.id, workspace_pool.as_deref())
+        })
         .any(|saved| {
             snapshot.accounts.iter().any(|discovered| {
                 super::endpoint::account_id(discovered) == saved.id

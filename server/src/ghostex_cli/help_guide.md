@@ -167,6 +167,13 @@ they ask for one.
 
 ## Rules
 
+- Never ask the user to copy, paste or run a `ghostex` command you can run
+  yourself (setup, sign-in, connect, `ghostex settings open`). Run it yourself
+  and tell the user only the part that needs their hands (Touch ID or
+  fingerprint, clicking Approve, signing in on the browser page that opened,
+  scanning a QR code, or filling in a private secret card). Never approve
+  permission, Keychain, consent, pairing or sign-in prompts for the user, and
+  never type passwords or 2FA.
 - Confirm before changing more than one setting at once, before changing a
   setting the user only asked about, and before anything under Advanced or
   Debugging.

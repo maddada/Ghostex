@@ -738,8 +738,9 @@ pub(super) async fn resume(
             != Some(CloudProviderConnectionState::Connected)
     {
         return Err(params::not_connected(format!(
-            "{} isn't connected. Connect it again in Settings › Cloud Boxes to wake {}.",
+            "{} isn't connected. Run `ghostex cloud connect {}` (or `ghostex settings open --tab cloudBoxes`) and let the user finish signing in to wake {}.",
             row.provider.label(),
+            row.provider.as_str(),
             row.name
         )));
     }

@@ -282,14 +282,24 @@ pub(super) async fn route_chat_http(
             })
         }
         "/api/answerSessionChatPrompt" => {
+            let caller = caller.clone();
             let mut response = crate::session_chat_send_requests::send_once(
                 &state,
                 endpoint.path,
                 request_id.clone(),
                 &body_json,
-                |state, endpoint_path, request_id, body| async move {
-                    handle_answer_session_chat_prompt_http(&state, endpoint_path, request_id, &body)
+                move |state, endpoint_path, request_id, body| {
+                    let caller = caller.clone();
+                    async move {
+                        handle_answer_session_chat_prompt_http(
+                            &state,
+                            Some(&caller),
+                            endpoint_path,
+                            request_id,
+                            &body,
+                        )
                         .await
+                    }
                 },
             )
             .await;
@@ -323,6 +333,7 @@ pub(super) async fn route_chat_http(
         "/api/selectSessionChatModel" => {
             crate::session_chat_codex_picker::handle_select_session_chat_model_http(
                 &state,
+                &caller,
                 endpoint.path,
                 request_id,
                 &body_json,
@@ -563,10 +574,24 @@ pub(super) async fn route_chat_http(
                     repository,
                     &read_project_id(params)?,
                     &read_session_id(params)?,
+                    // `next-tag` takes the tag it prints; `visual check` only reads.
+                    params.get("reserve").and_then(Value::as_bool) == Some(true),
                 )
             },
         ),
         "/api/switchSessionAcpToCli" => {
+            if !caller.is_user_device() {
+                return Ok(domain_error_response(
+                    endpoint.path,
+                    request_id,
+                    DomainStateError {
+                        code: "forbidden",
+                        message:
+                            "Only your own devices can switch a session between Native and Terminal mode."
+                                .to_string(),
+                    },
+                ));
+            }
             let params = match read_domain_rpc_params(&body_json) {
                 Ok(params) => params,
                 Err(error) => return Ok(domain_error_response(endpoint.path, request_id, error)),
@@ -583,8 +608,155 @@ pub(super) async fn route_chat_http(
                 .get("interrupt")
                 .and_then(Value::as_bool)
                 .unwrap_or(true);
-            match crate::acp::channel::switch_to_cli(&state, &project_id, &session_id, interrupt)
+            let telemetry_source = params
+                .get("source")
+                .and_then(Value::as_str)
+                .and_then(|value| {
+                    crate::telemetry::taxonomy::match_enum(
+                        crate::telemetry::taxonomy::SESSION_MODE_SWITCH_SOURCES,
+                        value,
+                    )
+                })
+                .unwrap_or("more_menu");
+            let telemetry_client = params
+                .get("client")
+                .and_then(Value::as_str)
+                .and_then(|value| {
+                    crate::telemetry::taxonomy::match_enum(
+                        crate::telemetry::taxonomy::SESSION_MODE_CLIENTS,
+                        value,
+                    )
+                })
+                .unwrap_or("server");
+            match crate::acp::channel::switch_to_cli(
+                &state,
+                &project_id,
+                &session_id,
+                interrupt,
+                telemetry_source,
+                telemetry_client,
+            )
+            .await
+            {
+                Ok(result) => routed_json(
+                    Some(endpoint.path),
+                    StatusCode::OK,
+                    rpc_success(request_id, result),
+                ),
+                Err(error) => domain_error_response(endpoint.path, request_id, error),
+            }
+        }
+        "/api/switchSessionCliToAcp" => {
+            if !caller.is_user_device() {
+                return Ok(domain_error_response(
+                    endpoint.path,
+                    request_id,
+                    DomainStateError {
+                        code: "forbidden",
+                        message:
+                            "Only your own devices can switch a session between Native and Terminal mode."
+                                .to_string(),
+                    },
+                ));
+            }
+            let params = match read_domain_rpc_params(&body_json) {
+                Ok(params) => params,
+                Err(error) => return Ok(domain_error_response(endpoint.path, request_id, error)),
+            };
+            let project_id = match read_project_id(&params) {
+                Ok(id) => id,
+                Err(error) => return Ok(domain_error_response(endpoint.path, request_id, error)),
+            };
+            let session_id = match read_session_id(&params) {
+                Ok(id) => id,
+                Err(error) => return Ok(domain_error_response(endpoint.path, request_id, error)),
+            };
+            let cancel = params
+                .get("cancel")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let telemetry_source = params
+                .get("source")
+                .and_then(Value::as_str)
+                .and_then(|value| {
+                    crate::telemetry::taxonomy::match_enum(
+                        crate::telemetry::taxonomy::SESSION_MODE_SWITCH_SOURCES,
+                        value,
+                    )
+                })
+                .unwrap_or("unknown");
+            let telemetry_client = params
+                .get("client")
+                .and_then(Value::as_str)
+                .and_then(|value| {
+                    crate::telemetry::taxonomy::match_enum(
+                        crate::telemetry::taxonomy::SESSION_MODE_CLIENTS,
+                        value,
+                    )
+                })
+                .unwrap_or("server");
+            let outcome = if cancel {
+                crate::acp::channel::cancel_switch_to_acp(&state, &project_id, &session_id).await
+            } else {
+                crate::acp::channel::switch_to_acp(
+                    &state,
+                    &project_id,
+                    &session_id,
+                    caller.is_user_device(),
+                    telemetry_source,
+                    telemetry_client,
+                )
                 .await
+            };
+            match outcome {
+                Ok(result) => routed_json(
+                    Some(endpoint.path),
+                    StatusCode::OK,
+                    rpc_success(request_id, result),
+                ),
+                Err(error) => domain_error_response(endpoint.path, request_id, error),
+            }
+        }
+        "/api/switchEligibleSessionsToAcp" => {
+            if !caller.is_user_device() {
+                return Ok(domain_error_response(
+                    endpoint.path,
+                    request_id,
+                    DomainStateError {
+                        code: "forbidden",
+                        message: "Only your own devices can bulk-switch sessions to Native mode."
+                            .to_string(),
+                    },
+                ));
+            }
+            let params = read_domain_rpc_params(&body_json).unwrap_or_default();
+            let telemetry_source = params
+                .get("source")
+                .and_then(Value::as_str)
+                .and_then(|value| {
+                    crate::telemetry::taxonomy::match_enum(
+                        crate::telemetry::taxonomy::SESSION_MODE_SWITCH_SOURCES,
+                        value,
+                    )
+                })
+                .unwrap_or("bulk_modal");
+            let telemetry_client = params
+                .get("client")
+                .and_then(Value::as_str)
+                .and_then(|value| {
+                    crate::telemetry::taxonomy::match_enum(
+                        crate::telemetry::taxonomy::SESSION_MODE_CLIENTS,
+                        value,
+                    )
+                })
+                .unwrap_or("server");
+            match crate::acp::channel::switch_eligible_sessions_to_acp(
+                &state,
+                caller.is_user_device(),
+                telemetry_source,
+                telemetry_client,
+            )
+            .await
             {
                 Ok(result) => routed_json(
                     Some(endpoint.path),

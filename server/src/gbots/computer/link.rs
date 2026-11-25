@@ -23,7 +23,7 @@ fn away(message: String) -> DomainStateError {
 pub(crate) fn reach(server_id: &str, name: &str) -> Result<ConnectedComputer, DomainStateError> {
     let computer = crate::connected_computers::find(server_id).ok_or_else(|| {
         away(format!(
-            "{name} isn't connected to this computer now. Connect it in Settings > Remote > Remote machines, then try again."
+            "{name} isn't connected to this computer now. Open Settings > Remote > Remote machines (`ghostex settings open --tab remote`) so the user can connect it, then try again."
         ))
     })?;
     if !computer.agent_access {

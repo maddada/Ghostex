@@ -48,10 +48,13 @@ const NOTIFICATION_BELL_ICON: &str = "titlebar/bell.svg";
 const NOTIFICATION_BELL_ICON_SIZE: f32 = 15.0;
 /// The app-wide attention blue (`--attention-dot` in the shared theme).
 pub(crate) const NOTIFICATION_ATTENTION_BLUE: u32 = 0x95d7f6;
+/// Matching darker same-hue attention blue for light backgrounds (~5.0:1 on light chrome, ~5.2:1
+/// against white badge text), used when a neutral light theme sets no accent of its own.
+pub(crate) const NOTIFICATION_ATTENTION_BLUE_LIGHT: u32 = 0x0c74a6;
 /// CDXC:Notifications 2026-09-16 DECISION:
 /// User: make the "Project · Finished" meta line more visible in light mode.
-/// The fill/border accent stays #95d7f6 (unless the theme sets its own accent, CDXC:Theming 2026-11-17 below); this darker same-hue ink is only for unread meta text on pale unread cards.
-pub(crate) const NOTIFICATION_ATTENTION_BLUE_TEXT_LIGHT: u32 = 0x0d7eab;
+/// The fill/border accent stays #95d7f6 in dark mode (#0c74a6 in light mode, unless the theme sets its own accent, CDXC:Theming 2026-11-17 below); this darker same-hue ink is only for unread meta text on pale unread cards.
+pub(crate) const NOTIFICATION_ATTENTION_BLUE_TEXT_LIGHT: u32 = 0x0c74a6;
 /// CDXC:Notifications 2026-10-05 DECISION:
 /// User: banked reset expiry warnings are notified "using red color". Urgent rows swap the attention blue for this red on the card, and the bell's badge turns red while one is unread.
 pub(crate) const NOTIFICATION_URGENT_RED: u32 = 0xf87171;
@@ -62,7 +65,58 @@ pub(crate) const NOTIFICATION_URGENT_RED_TEXT_LIGHT: u32 = 0xc42b2b;
 ///
 /// CDXC:Theming 2026-11-17 DECISION: User, through the coordinator: "The notification dropdown stays blue after a theme is applied ... make it follow the applied theme (accent, surfaces, text, borders) like the rest of the app", and on 2026-11-17 (Q183) chose that a tinted preset with no Accent role moves the notifications off blue too, "using the preset's own accent". The attention blue (CDXC:Notifications 2026-09-11) takes the theme's own accent whenever the theme sets one: the Accent theme role, else the accent of a tint with a hue (`theme_own_accent_for_variant`). Only a neutral grey tint with no Accent role keeps the blue. The Danger role replaces the urgent red, laid over the work area as the accent is (`theme_role_over_work_area`); the sidebar's approval red is the sidebar's status colour and stays.
 pub(crate) fn notification_attention_color(light: bool) -> u32 {
-    theme_own_accent(light).unwrap_or(NOTIFICATION_ATTENTION_BLUE)
+    theme_own_accent(light).unwrap_or(if light {
+        NOTIFICATION_ATTENTION_BLUE_LIGHT
+    } else {
+        NOTIFICATION_ATTENTION_BLUE
+    })
+}
+
+fn srgb_channel_luminance(channel: f64) -> f64 {
+    if channel <= 0.03928 {
+        channel / 12.92
+    } else {
+        ((channel + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+fn relative_luminance_channels(r: f64, g: f64, b: f64) -> f64 {
+    0.2126 * srgb_channel_luminance(r)
+        + 0.7152 * srgb_channel_luminance(g)
+        + 0.0722 * srgb_channel_luminance(b)
+}
+
+fn relative_luminance_rgb(hex: u32) -> f64 {
+    relative_luminance_channels(
+        f64::from((hex >> 16) & 0xff) / 255.0,
+        f64::from((hex >> 8) & 0xff) / 255.0,
+        f64::from(hex & 0xff) / 255.0,
+    )
+}
+
+/// Readable ink for the bell's unread count over `badge_color`: picks dark ink (the dark chrome in
+/// dark mode, `#111622` in light mode) or white, whichever yields higher WCAG contrast against
+/// `badge_color`, so `#95d7f6` keeps crisp dark digits (~12:1) and darker fills like `#0c74a6` in
+/// light mode keep crisp white digits (~5.2:1).
+fn notification_badge_text_color(badge_color: u32, light: bool) -> gpui::Hsla {
+    let badge_lum = relative_luminance_rgb(badge_color);
+    let dark_ink = if light {
+        gpui::Hsla::from(rgb(0x111622))
+    } else {
+        titlebar_background()
+    };
+    let dark_rgba = gpui::Rgba::from(dark_ink);
+    let dark_lum = relative_luminance_channels(
+        f64::from(dark_rgba.r),
+        f64::from(dark_rgba.g),
+        f64::from(dark_rgba.b),
+    );
+    let contrast = |a: f64, b: f64| (a.max(b) + 0.05) / (a.min(b) + 0.05);
+    if contrast(badge_lum, dark_lum) >= contrast(badge_lum, 1.0) {
+        dark_ink
+    } else {
+        rgb(0xffffff).into()
+    }
 }
 
 fn theme_own_accent(light: bool) -> Option<u32> {
@@ -113,6 +167,20 @@ impl GpuiNotificationFeedKind {
             "resetRedeemed" => Some(Self::ResetRedeemed),
             "security" => Some(Self::Security),
             _ => None,
+        }
+    }
+
+    pub(crate) fn wire_name(self) -> &'static str {
+        match self {
+            Self::Finished => "finished",
+            Self::NeedsInput => "needsInput",
+            Self::Bell => "bell",
+            Self::Custom => "custom",
+            Self::SendFailed => "sendFailed",
+            Self::Failed => "failed",
+            Self::ResetExpiring => "resetExpiring",
+            Self::ResetRedeemed => "resetRedeemed",
+            Self::Security => "security",
         }
     }
 
@@ -199,6 +267,8 @@ pub(crate) struct GpuiNotificationFeedItem {
     pub(crate) created_at: String,
     pub(crate) created_at_epoch_secs: Option<i64>,
     pub(crate) read: bool,
+    /// Whether the bell panel has already shown this row (badge cleared), even while still unread.
+    pub(crate) seen: bool,
     pub(crate) awaiting_approval: bool,
     /// The session a click opens when it is not the row's own: a coordinator's thread's approval
     /// opens the coordinator, where the card is relayed (`openProjectId`, `openSessionId`;
@@ -246,6 +316,15 @@ impl GpuiNotificationFeedItem {
                 .filter(|id| !id.is_empty())
                 .map(str::to_string),
             read: value.get("read")?.as_bool()?,
+            seen: value
+                .get("seen")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or_else(|| {
+                    value
+                        .get("read")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(false)
+                }),
             awaiting_approval: value
                 .get("awaitingApproval")
                 .and_then(serde_json::Value::as_bool)
@@ -270,10 +349,14 @@ impl GpuiNotificationFeedItem {
 /// newest first (gx-core `merged_notification_feed_message`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiNotificationFeedState {
-    /// Every online computer's unread rows: the bell's badge and the All tab.
+    /// Every online computer's unread rows.
     pub(crate) unread_count: usize,
     pub(crate) local_unread_count: usize,
     pub(crate) remote_unread_count: usize,
+    /// Unread rows not yet seen in the bell panel: drives the bell's badge count.
+    pub(crate) unseen_count: usize,
+    pub(crate) local_unseen_count: usize,
+    pub(crate) remote_unseen_count: usize,
     pub(crate) next_unread_id: Option<String>,
     pub(crate) next_unread_machine: ghostex_gx_core::MachineId,
     pub(crate) items: Vec<GpuiNotificationFeedItem>,
@@ -287,6 +370,9 @@ impl Default for GpuiNotificationFeedState {
             unread_count: 0,
             local_unread_count: 0,
             remote_unread_count: 0,
+            unseen_count: 0,
+            local_unseen_count: 0,
+            remote_unseen_count: 0,
             next_unread_id: None,
             next_unread_machine: ghostex_gx_core::MachineId::Local,
             items: Vec::new(),
@@ -296,6 +382,47 @@ impl Default for GpuiNotificationFeedState {
 }
 
 impl GpuiNotificationFeedState {
+    /// Recomputes unread/unseen totals and clears a stale jump target from `self.items`.
+    pub(crate) fn recount_from_items(&mut self) {
+        let count_unread = |local: bool| {
+            self.items
+                .iter()
+                .filter(|item| item.machine.is_local() == local && !item.read)
+                .count()
+        };
+        let count_unseen = |local: bool| {
+            self.items
+                .iter()
+                .filter(|item| item.machine.is_local() == local && !item.read && !item.seen)
+                .count()
+        };
+        self.local_unread_count = count_unread(true);
+        self.remote_unread_count = count_unread(false);
+        self.unread_count = self.local_unread_count + self.remote_unread_count;
+        self.local_unseen_count = count_unseen(true);
+        self.remote_unseen_count = count_unseen(false);
+        self.unseen_count = self.local_unseen_count + self.remote_unseen_count;
+        let next_still_unread = self.items.iter().any(|item| {
+            !item.read
+                && item.machine == self.next_unread_machine
+                && self.next_unread_id.as_deref() == Some(item.id.as_str())
+        });
+        if !next_still_unread {
+            self.next_unread_id = None;
+        }
+    }
+
+    /// Marks every row seen optimistically so the bell badge clears on the frame the panel opens
+    /// while every unread row keeps its highlight.
+    pub(crate) fn mark_all_seen_optimistically(&mut self) {
+        for item in &mut self.items {
+            item.seen = true;
+        }
+        self.unseen_count = 0;
+        self.local_unseen_count = 0;
+        self.remote_unseen_count = 0;
+    }
+
     /// Takes one row's unread count off the totals, as an optimistic edit does.
     pub(crate) fn note_read(&mut self, machine: &ghostex_gx_core::MachineId) {
         self.unread_count = self.unread_count.saturating_sub(1);
@@ -304,6 +431,7 @@ impl GpuiNotificationFeedState {
         } else {
             self.remote_unread_count = self.remote_unread_count.saturating_sub(1);
         }
+        self.recount_from_items();
     }
 
     /// Puts one row's unread count back on the totals.
@@ -314,6 +442,7 @@ impl GpuiNotificationFeedState {
         } else {
             self.remote_unread_count += 1;
         }
+        self.recount_from_items();
     }
 }
 
@@ -336,6 +465,31 @@ impl GpuiNotificationFeedState {
             .iter()
             .map(GpuiNotificationFeedItem::from_bridge_value)
             .collect::<Option<Vec<_>>>()?;
+        let unseen_count = message
+            .get("unseenCount")
+            .and_then(serde_json::Value::as_u64)
+            .map(|value| value as usize)
+            .unwrap_or_else(|| items.iter().filter(|item| !item.read && !item.seen).count());
+        let local_unseen_count = message
+            .get("localUnseenCount")
+            .and_then(serde_json::Value::as_u64)
+            .map(|value| value as usize)
+            .unwrap_or_else(|| {
+                items
+                    .iter()
+                    .filter(|item| item.machine.is_local() && !item.read && !item.seen)
+                    .count()
+            });
+        let remote_unseen_count = message
+            .get("remoteUnseenCount")
+            .and_then(serde_json::Value::as_u64)
+            .map(|value| value as usize)
+            .unwrap_or_else(|| {
+                items
+                    .iter()
+                    .filter(|item| !item.machine.is_local() && !item.read && !item.seen)
+                    .count()
+            });
         let next_unread_id = match message.get("nextUnreadId") {
             None | Some(serde_json::Value::Null) => None,
             Some(value) => Some(value.as_str()?.to_string()),
@@ -344,6 +498,9 @@ impl GpuiNotificationFeedState {
             unread_count,
             local_unread_count: count("localUnreadCount"),
             remote_unread_count: count("remoteUnreadCount"),
+            unseen_count,
+            local_unseen_count,
+            remote_unseen_count,
             next_unread_id,
             next_unread_machine: match message
                 .get("nextUnreadMachineId")
@@ -498,22 +655,55 @@ impl GhostexGpuiApp {
         message: &serde_json::Value,
         cx: &mut gpui::Context<Self>,
     ) {
-        let Some(state) = GpuiNotificationFeedState::from_bridge_message(message) else {
+        let Some(mut state) = GpuiNotificationFeedState::from_bridge_message(message) else {
             return;
         };
+        let notifications_open =
+            self.titlebar_popup_menu_open(GpuiTitlebarPopupKind::Notifications);
+        let mut unseen_machines: Vec<ghostex_gx_core::MachineId> = Vec::new();
+        let mut seen_rows: Vec<(ghostex_gx_core::MachineId, String, &'static str)> = Vec::new();
+        if notifications_open {
+            let mut marked_seen_locally = false;
+            for item in &mut state.items {
+                let key = item.key();
+                if !item.read && !item.seen && !self.notifications_panel_kept_unread.contains(&key)
+                {
+                    // Keep newly arrived rows optimistically seen while the panel is open so
+                    // closing the panel before `markAllSeen` returns never flashes the badge.
+                    item.seen = true;
+                    marked_seen_locally = true;
+                    seen_rows.push((item.machine.clone(), item.id.clone(), item.kind.wire_name()));
+                    if self.notifications_panel_seen_attempted.insert(key)
+                        && !unseen_machines.contains(&item.machine)
+                    {
+                        unseen_machines.push(item.machine.clone());
+                    }
+                }
+            }
+            if marked_seen_locally {
+                state.recount_from_items();
+            }
+        }
+        for (machine, id, kind) in seen_rows {
+            self.gx_store_mark_notification_item_seen(&machine, id, kind);
+        }
         if self.notification_feed_state == state {
+            if notifications_open && !unseen_machines.is_empty() {
+                self.gx_store_mark_machines_notifications_seen(unseen_machines, cx);
+            }
             return;
         }
         self.notification_feed_state = state.clone();
         self.deliver_reset_expiry_banners(&state, cx);
-        if self.titlebar_popup_menu_open(GpuiTitlebarPopupKind::Notifications)
-            && let Some(handle) = self.titlebar_popup_window
-        {
+        if notifications_open && let Some(handle) = self.titlebar_popup_window {
             let state = self.notification_feed_for_panel(state);
             let _ = handle.update(cx, |popup, window, cx| {
                 popup.update_notifications_feed(state, cx);
                 window.refresh();
             });
+            if !unseen_machines.is_empty() {
+                self.gx_store_mark_machines_notifications_seen(unseen_machines, cx);
+            }
         }
         cx.notify();
     }
@@ -611,16 +801,20 @@ impl GhostexGpuiApp {
     ) -> AnyElement {
         let scale = appearance.scale;
         let open = self.titlebar_popup_menu_open(GpuiTitlebarPopupKind::Notifications);
-        let unread_count = self.notification_feed_state.unread_count;
-        let unread = || {
+        let badge_count = if open {
+            0
+        } else {
+            self.notification_feed_state.unseen_count
+        };
+        let unseen = || {
             self.notification_feed_state
                 .items
                 .iter()
-                .filter(|item| !item.read)
+                .filter(|item| !item.read && !item.seen)
         };
-        let badge_color = if unread().any(|item| item.awaiting_approval) {
+        let badge_color = if unseen().any(|item| item.awaiting_approval) {
             crate::app::native_sidebar::status::APPROVAL_COLOR
-        } else if unread().any(|item| item.kind.urgent()) {
+        } else if unseen().any(|item| item.kind.urgent()) {
             notification_urgent_color(appearance.light)
         } else {
             notification_attention_color(appearance.light)
@@ -641,6 +835,9 @@ impl GhostexGpuiApp {
 
         div()
             .id("ghostex-gpui-sidebar-notifications-bell")
+            .role(gpui::Role::Button)
+            .aria_label("Notifications")
+            .aria_expanded(open)
             // Windows: the sidebar's top row is a Drag region (native_sidebar/navigation.rs).
             .when(cfg!(target_os = "windows"), |this| this.occlude())
             .relative()
@@ -738,7 +935,7 @@ impl GhostexGpuiApp {
                 NOTIFICATION_BELL_ICON_SIZE * scale,
                 icon_color,
             ))
-            .when(unread_count > 0, |this| {
+            .when(badge_count > 0, |this| {
                 this.child(
                     div()
                         .absolute()
@@ -757,8 +954,8 @@ impl GhostexGpuiApp {
                         .text_size(px(9.0 * scale))
                         .line_height(px(12.0 * scale))
                         .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(titlebar_background())
-                        .child(notification_feed_badge_label(unread_count)),
+                        .text_color(notification_badge_text_color(badge_color, appearance.light))
+                        .child(notification_feed_badge_label(badge_count)),
                 )
             })
             .into_any_element()

@@ -30,7 +30,7 @@ pub(super) fn normalized_stored_sidebar_agents(
             accept_all_mode: item
                 .get("acceptAllMode")
                 .and_then(Value::as_str)
-                .filter(|mode| matches!(*mode, "inherit" | "enabled" | "disabled"))
+                .filter(|mode| matches!(*mode, "inherit" | "enabled" | "disabled" | "auto"))
                 .map(str::to_string),
             agent_id: agent_id.to_string(),
             command: command.to_string(),
@@ -273,9 +273,13 @@ pub(super) fn sidebar_agent_accept_all_mode_update(
         Some(Value::String(value)) if value == "inherit" => {
             Ok(SidebarAgentAcceptAllModeUpdate::Set(None))
         }
-        Some(Value::String(value)) if value == "enabled" || value == "disabled" => Ok(
-            SidebarAgentAcceptAllModeUpdate::Set(Some(value.to_string())),
-        ),
+        Some(Value::String(value))
+            if value == "enabled" || value == "disabled" || value == "auto" =>
+        {
+            Ok(SidebarAgentAcceptAllModeUpdate::Set(Some(
+                value.to_string(),
+            )))
+        }
         _ => Err(DomainStateError::bad_request(
             "Unsupported sidebar agent accept-all mode.",
         )),

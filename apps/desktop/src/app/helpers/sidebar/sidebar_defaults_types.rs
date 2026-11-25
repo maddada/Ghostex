@@ -217,7 +217,7 @@ pub(crate) const GPUI_DEFAULT_SIDEBAR_AGENTS: &[GpuiDefaultSidebarAgent] = &[
     GpuiDefaultSidebarAgent {
         agent_id: "antigravity",
         icon: "antigravity-cli",
-        name: "Antigravity CLI",
+        name: "Antigravity",
     },
     GpuiDefaultSidebarAgent {
         agent_id: "amp",

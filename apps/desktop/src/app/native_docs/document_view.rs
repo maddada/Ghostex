@@ -18,7 +18,7 @@ use super::sidebar::DocsSidebarLayout;
 use super::state::{DocsDocumentLoad, DocsFileKind, DocsMarkdownMode};
 use crate::GhostexGpuiApp;
 use crate::app::consts::{WORKAREA_HEADER_EDGE_PADDING, WORKAREA_HEADER_TITLE_TEXT_SIZE};
-use crate::app::helpers::{titlebar_svg_icon, titlebar_tooltip};
+use crate::app::helpers::{titlebar_svg_icon, titlebar_tooltip, titlebar_tooltip_label};
 
 thread_local! {
     /// The document header's bounds, so the selection toolbar flips below the text instead of
@@ -65,7 +65,59 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    /// The document header: the title (which copies itself), the meta strip and the actions.
+    fn render_native_docs_history_buttons(
+        &self,
+        p: &DocsPalette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let can_go_back = self.native_docs.history.can_go_back();
+        let can_go_forward = self.native_docs.history.can_go_forward();
+        let nav_button = |id: &'static str,
+                          icon: &'static str,
+                          back: bool,
+                          enabled: bool,
+                          tooltip: SharedString,
+                          cx: &mut Context<Self>| {
+            let color = if enabled {
+                p.toolbar_icon
+            } else {
+                p.toolbar_disabled
+            };
+            header_tile(id, titlebar_svg_icon(icon, 16.0, color), false, !enabled, p)
+                .w(px(26.0))
+                .tooltip(move |window, cx| titlebar_tooltip(tooltip.clone(), window, cx))
+                .when(enabled, |button| {
+                    button.on_click(cx.listener(move |this, _, _, cx| {
+                        this.native_docs_navigate_history(back, cx);
+                    }))
+                })
+        };
+        div()
+            .flex()
+            .flex_none()
+            .items_center()
+            .gap(px(2.0))
+            .child(nav_button(
+                "native-docs-nav-back",
+                "titlebar/chevron-left.svg",
+                true,
+                can_go_back,
+                titlebar_tooltip_label("Back", "navigateFilesBack"),
+                cx,
+            ))
+            .child(nav_button(
+                "native-docs-nav-forward",
+                "titlebar/chevron-right.svg",
+                false,
+                can_go_forward,
+                titlebar_tooltip_label("Forward", "navigateFilesForward"),
+                cx,
+            ))
+            .into_any_element()
+    }
+
+    /// The document header: the Back/Forward buttons, the title (which copies itself), the meta
+    /// strip and the actions.
     ///
     /// CDXC:Docs 2026-09-21 DECISION:
     /// User: make the buttons on the top right of the Docs view match the look, gap, and right-edge alignment of the native view tab strip buttons above them: 32px by 27px tiles, 7px radius, 2px gap, 18px stroke-2 icons, and a 9px right inset.
@@ -76,12 +128,20 @@ impl GhostexGpuiApp {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let Some(document) = self.native_docs.active_document() else {
+            let has_history =
+                self.native_docs.history.can_go_back() || self.native_docs.history.can_go_forward();
             return div()
+                .flex()
                 .flex_none()
+                .items_center()
+                .pl(px(6.0))
                 .h(px(ROW_STRIP_HEIGHT))
                 .border_b_1()
                 .border_color(p.border)
                 .bg(p.chrome)
+                .when(has_history, |bar| {
+                    bar.child(self.render_native_docs_history_buttons(p, cx))
+                })
                 .into_any_element();
         };
         let now = Instant::now();
@@ -156,6 +216,7 @@ impl GhostexGpuiApp {
         } else {
             Vec::new()
         };
+        let history_buttons = self.render_native_docs_history_buttons(p, cx);
         let data_tiles = self.render_native_docs_data_tiles(p, cx);
         let picture_tiles = self.render_native_docs_picture_tiles(p, cx);
         div()
@@ -164,7 +225,7 @@ impl GhostexGpuiApp {
             .items_center()
             .gap(px(9.0))
             .h(px(ROW_STRIP_HEIGHT))
-            .pl(px(13.0))
+            .pl(px(6.0))
             .pr(px(WORKAREA_HEADER_EDGE_PADDING))
             .border_b_1()
             .border_color(p.border)
@@ -177,6 +238,7 @@ impl GhostexGpuiApp {
                 .absolute()
                 .size_full(),
             )
+            .child(history_buttons)
             .child(
                 // CDXC:Docs 2026-09-07 DECISION:
                 // User: clicking the file name in the Docs top bar copies it and shows a tooltip. Copy the displayed name or path, including the readable name of mounted folders.

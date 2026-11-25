@@ -12,6 +12,7 @@ pub(super) fn program_status_transition(
         "working" => ActivityState {
             activity: "working".to_string(),
             agent_name: previous.agent_name.clone(),
+            attention_suppressed_until: None,
             has_seen_working: Some(true),
             is_acknowledged: Some(false),
             last_changed_at: Some(if previous_activity == "working" {
@@ -23,6 +24,7 @@ pub(super) fn program_status_transition(
                 input.now_iso.clone()
             }),
             last_meaningful_activity_at: previous.last_meaningful_activity_at.clone(),
+            user_interrupted: None,
             working_source: Some("explicit".to_string()),
             working_started_at: Some(if previous_activity == "working" {
                 previous
@@ -35,6 +37,21 @@ pub(super) fn program_status_transition(
             ..ActivityState::default()
         },
         "attention" => {
+            // A finished-turn report (`done`/`finished`) for a turn the user interrupted must
+            // settle to idle without raising attention (no blue dot, bell, push, toast or sound).
+            if previous.user_interrupted == Some(true)
+                && input.attention_source.as_deref() == Some(TURN_COMPLETE_ATTENTION_SOURCE)
+            {
+                let mut next = previous.clone();
+                next.activity = "idle".to_string();
+                next.attention_event_id = None;
+                next.attention_source = None;
+                next.is_acknowledged = Some(true);
+                next.last_changed_at = Some(input.now_iso.clone());
+                next.working_source = None;
+                next.working_started_at = None;
+                return next;
+            }
             if previous_activity == "attention" {
                 let mut next = previous.clone();
                 next.attention_source = input.attention_source.clone();

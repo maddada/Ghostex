@@ -11,8 +11,25 @@ use crate::GhostexGpuiApp;
 const MISSING_FILE_MESSAGE: &str = "This file no longer exists.";
 
 impl GhostexGpuiApp {
-    /// Opens `path` (or selects it when it is already open) and closes a narrow view's drawer.
+    /// Opens `path` (or selects it when it is already open), pushes a stop onto the Files view
+    /// history, and closes a narrow view's drawer.
     pub(crate) fn native_docs_open(
+        &mut self,
+        path: &str,
+        display_path: &str,
+        cx: &mut Context<Self>,
+    ) {
+        if DocsFileKind::for_path(path) == DocsFileKind::SystemApp {
+            self.native_docs_open_with_system_app(path, cx);
+            return;
+        }
+        self.native_docs_record_history_visit(path, cx);
+        self.native_docs_open_without_history(path, display_path, cx);
+    }
+
+    /// Opens `path` (or selects it when it is already open) without modifying navigation history;
+    /// used by `native_docs_open` after pushing history and by Back/Forward navigation.
+    pub(crate) fn native_docs_open_without_history(
         &mut self,
         path: &str,
         display_path: &str,
@@ -383,6 +400,7 @@ impl GhostexGpuiApp {
                 if let Some(document) = self.native_docs.document_mut(&path) {
                     document.dirty = draft.as_ref().is_some_and(|draft| *draft != text);
                 }
+                self.native_docs_restore_document_scroll(&path, cx);
                 continue;
             }
             let line_numbers = self.native_docs.line_numbers;
@@ -433,6 +451,7 @@ impl GhostexGpuiApp {
                 document.editor = Some(editor);
                 document._editor_subscription = Some(subscription);
             }
+            self.native_docs_restore_document_scroll(&path, cx);
         }
     }
 
@@ -594,6 +613,7 @@ impl GhostexGpuiApp {
 
     /// Closes without asking and drops the document's draft.
     pub(crate) fn native_docs_close(&mut self, path: &str, cx: &mut Context<Self>) {
+        let closed_scroll = self.native_docs_capture_scroll(path, cx);
         let Some(index) = self
             .native_docs
             .documents
@@ -613,6 +633,10 @@ impl GhostexGpuiApp {
                 .get(next)
                 .map(|document| document.path.to_string());
         }
+        let next_active = self.native_docs.active.clone();
+        self.native_docs
+            .history
+            .on_close(path, closed_scroll, next_active.as_deref());
         self.native_docs_persist_open_files(cx);
         self.native_docs_notify(cx);
     }

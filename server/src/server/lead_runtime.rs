@@ -573,7 +573,8 @@ fn report_text(report: &LeadReport, linked_ref: &str) -> String {
             report_body(&ThreadReport::Waiting { prompt: summary }, linked_ref)
         }
         LeadReport::Quiet { since, minutes } => format!(
-            "Ghostex thread report: no new output for {minutes} minutes (quiet since {}). Ghostex did not nudge it. Read where it is with: ghostex read-session-chat {linked_ref} --last 2 --format text",
+            "Ghostex thread report: no new output for {} (quiet since {}). Ghostex did not nudge it. Read where it is with: ghostex read-session-chat {linked_ref} --last 2 --format text",
+            ghostex_gx_protocol::plural(*minutes, "minute", "minutes"),
             crate::network_status::local_clock(*since),
         ),
         LeadReport::Ended => "Ghostex thread report: it was made a coordinator (or a coordinator's thread), so it no longer reports to you and its link to you ended.".to_string(),

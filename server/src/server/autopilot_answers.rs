@@ -503,6 +503,7 @@ fn verdict(config: &AutopilotConfig, class: Class, read_only: bool, reads: bool)
 fn plan_exit(
     config: &AutopilotConfig,
     read_only: bool,
+    is_acp: bool,
     dialog: Option<&crate::session_chat_terminal_dialog::TerminalDialog>,
     waited: i64,
 ) -> PromptAct {
@@ -534,6 +535,12 @@ fn plan_exit(
             message: KEEP_PLANNING_MESSAGE.to_string(),
             note: KEEP_PLANNING_DID.to_string(),
             did: Some(KEEP_PLANNING_DID.to_string()),
+        };
+    }
+    if is_acp && dialog.is_none() {
+        return PromptAct::Answer {
+            params: json!({ "kind": "approval", "approvalSend": "1" }),
+            did: "Approved its plan: it leaves plan mode, because \"Let read-only threads leave plan mode\" is on.".to_string(),
         };
     }
     // Never "use auto mode" or "bypass permissions": they would let the agent past Autopilot's
@@ -775,13 +782,13 @@ pub(super) fn decide_prompt(
                     .collect::<Vec<_>>()
                     .join("\n");
                 let saw = format!(
-                    "It asked {} and you didn't answer for {} minutes.",
+                    "It asked {} and you didn't answer for {}.",
                     if questions.len() == 1 {
                         "a question".to_string()
                     } else {
                         format!("{} questions", questions.len())
                     },
-                    config.answer_after_minutes
+                    ghostex_gx_protocol::plural(config.answer_after_minutes, "minute", "minutes")
                 );
                 if picks.iter().all(Option::is_some) && !questions.is_empty() {
                     let labels: Vec<String> = questions
@@ -813,8 +820,8 @@ pub(super) fn decide_prompt(
                     saw,
                     PromptAct::Judge {
                         why: format!(
-                            "It asked a question with no recommended choice, and the user didn't answer for {} minutes.",
-                            config.answer_after_minutes
+                            "It asked a question with no recommended choice, and the user didn't answer for {}.",
+                            ghostex_gx_protocol::plural(config.answer_after_minutes, "minute", "minutes")
                         ),
                         detail: format!("Its question:\n{asked}"),
                     },
@@ -824,12 +831,19 @@ pub(super) fn decide_prompt(
                 tool,
                 summary,
                 tool_use_id,
+                ..
             } => {
                 let text = summary.clone().unwrap_or_default();
                 let saw = format!("It asked to run {tool}: {}", short(&text, 160));
                 let plan = tool == "ExitPlanMode";
                 if plan && read_only_thread {
-                    return match plan_exit(config, read_only, plan_dialog, waited) {
+                    return match plan_exit(
+                        config,
+                        read_only,
+                        crate::acp::session_is_acp(session),
+                        plan_dialog,
+                        waited,
+                    ) {
                         PromptAct::Wait => wait(),
                         PromptAct::Hold { after_ms } => hold(after_ms),
                         act => decision("approval", saw, act),
@@ -970,7 +984,13 @@ pub(super) fn decide_prompt(
     // A read-only thread's "Ready to code?" with no card stored by the hooks.
     if read_only_thread && plan_dialog.is_some() {
         let saw = "It asked to leave plan mode and start on its plan (Ready to code?).".to_string();
-        return match plan_exit(config, read_only, plan_dialog, waited) {
+        return match plan_exit(
+            config,
+            read_only,
+            crate::acp::session_is_acp(session),
+            plan_dialog,
+            waited,
+        ) {
             PromptAct::Wait => wait(),
             PromptAct::Hold { after_ms } => hold(after_ms),
             act => decision("approval", saw, act),
@@ -985,13 +1005,13 @@ pub(super) fn decide_prompt(
         return decision(
             "question",
             format!(
-                "Its chat asks {} and you didn't answer for {} minutes.",
+                "Its chat asks {} and you didn't answer for {}.",
                 if open_forms == 1 {
                     "a question".to_string()
                 } else {
                     format!("{open_forms} questions")
                 },
-                config.answer_after_minutes
+                ghostex_gx_protocol::plural(config.answer_after_minutes, "minute", "minutes")
             ),
             PromptAct::Forms,
         );

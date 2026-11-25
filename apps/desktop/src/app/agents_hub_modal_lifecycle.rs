@@ -182,10 +182,20 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
-            AgentsHubModalCommand::RequestSyncPlan { scope } => {
+            AgentsHubModalCommand::RequestSyncPlan {
+                scope,
+                seed_main_from,
+                pointer_policy,
+            } => {
                 self.run_gpui_agents_hub_task(
                     target,
-                    move || SyncPlan::from_json(gpui_agent_sync_plan_message(scope)),
+                    move || {
+                        SyncPlan::from_json(gpui_agent_sync_plan_message(
+                            scope,
+                            seed_main_from,
+                            pointer_policy,
+                        ))
+                    },
                     |modal, plan, _window, cx| {
                         if let Some(plan) = plan {
                             modal.receive_sync_plan(plan, cx);
@@ -194,11 +204,21 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
-            AgentsHubModalCommand::ApplySyncPlan { scope, groups } => {
+            AgentsHubModalCommand::ApplySyncPlan {
+                scope,
+                groups,
+                seed_main_from,
+                pointer_policy,
+            } => {
                 self.run_gpui_agents_hub_task(
                     target,
                     move || {
-                        SyncApplyResult::from_json(gpui_agent_sync_apply_message(scope, groups))
+                        SyncApplyResult::from_json(gpui_agent_sync_apply_message(
+                            scope,
+                            groups,
+                            seed_main_from,
+                            pointer_policy,
+                        ))
                     },
                     |modal, result, _window, cx| {
                         if let Some(result) = result {

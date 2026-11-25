@@ -213,6 +213,7 @@ impl NativeChatView {
             styled_segments(line.segments),
             line.expanded,
             line.expandable,
+            None,
             line.actions,
             p,
             cx,
@@ -249,6 +250,7 @@ impl NativeChatView {
             styled_segments(segments),
             edit.expanded,
             true,
+            None,
             Vec::new(),
             p,
             cx,
@@ -266,6 +268,7 @@ impl NativeChatView {
         label: StyledText,
         expanded: bool,
         expandable: bool,
+        open_inner: Option<String>,
         actions: Vec<Value>,
         p: &ChatAppearance,
         cx: &Context<Self>,
@@ -303,7 +306,7 @@ impl NativeChatView {
                     .chat_cursor_pointer()
                     .hover(|style| style.text_color(p.muted))
                     .on_click(cx.listener(move |this, _, _, cx| {
-                        this.toggle_quiet_line(&key, expanded, &actions, cx);
+                        this.toggle_quiet_line(&key, expanded, open_inner.as_deref(), &actions, cx);
                     }))
             });
         div()
@@ -314,12 +317,14 @@ impl NativeChatView {
             .into_any_element()
     }
 
-    /// Open or close a quiet line, recording the close against a default that opened it (Detailed)
-    /// and sending its reads as it opens.
+    /// Open or close a quiet line, recording the close against a default that opened it (Detailed),
+    /// opening its last inner group on the expanding click (`QuietStretch::open_inner`), and
+    /// sending its reads as it opens.
     pub(super) fn toggle_quiet_line(
         &mut self,
         key: &str,
         expanded: bool,
+        open_inner: Option<&str>,
         actions: &[Value],
         cx: &mut Context<Self>,
     ) {
@@ -331,6 +336,11 @@ impl NativeChatView {
         } else {
             self.collapsed.remove(key);
             self.expanded.insert(key.to_string());
+            if let Some(inner) = open_inner {
+                self.collapsed.remove(inner);
+                self.expanded.insert(inner.to_string());
+                self.disclosure_motion.borrow_mut().forget_key(inner);
+            }
             for action in actions {
                 self.invoke(action.clone(), cx);
             }

@@ -56,16 +56,18 @@ pub(crate) fn run_zmx_start_command(
 ) -> ZmxEndpointResult<ZmxStartOutcome> {
     /*
     CDXC:Zmx 2026-09-01:
-    This platform's start is a plain detached `zmx run`, so a zero exit means
-    the command was accepted, NOT that the session is registered. Report no
-    observation; the caller keeps its authoritative probe.
+    Linux's start is a plain detached `zmx run`, so a zero exit means the
+    command was accepted, NOT that the session is registered. Windows's
+    `wmx start-encoded` waits until its own loopback `ping` succeeds
+    (`START_READY_TIMEOUT` in .dependencies/wmx/src/client.rs), so exit 0
+    already observed the session alive.
     */
     let options = ZmxCommandOptions {
         timeout_ms: Some(ZMX_START_COMMAND_TIMEOUT_MS),
         ..ZmxCommandOptions::default()
     };
     run_zmx_interaction_command(script, options).map(|result| ZmxStartOutcome {
-        observed_alive: false,
+        observed_alive: cfg!(windows),
         result,
     })
 }
@@ -117,6 +119,7 @@ pub(crate) fn run_zmx_start_command(
     if !bootstrap.success {
         if macos_zmx_session_exists(session_name, zmx_executable_path) {
             job.remove_private_launch_script();
+            super::unregister_session_host_for_zmx(Path::new(zmx_executable_path));
             return Ok(zmx_start_observed_success());
         }
         domain = macos_zmx_retry_domain(
@@ -173,6 +176,7 @@ pub(crate) fn run_zmx_start_command(
     let deadline = Instant::now() + Duration::from_millis(ZMX_LIFECYCLE_COMMAND_TIMEOUT_MS);
     while Instant::now() < deadline {
         if macos_zmx_session_exists(session_name, zmx_executable_path) {
+            super::unregister_session_host_for_zmx(Path::new(zmx_executable_path));
             return Ok(zmx_start_observed_success());
         }
         thread::sleep(Duration::from_millis(poll_backoff_ms));

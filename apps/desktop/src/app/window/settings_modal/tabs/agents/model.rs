@@ -5,7 +5,7 @@
 //!
 //! CDXC:AgentProviders 2026-09-28 SEE-ALSO:
 //! Ported from packages/shared/sidebar-agents.ts (deleted 2026-10-01) (`getDefaultSidebarAgentById` / `ByIcon`), packages/shared/sidebar-agent-accept-all.ts (deleted 2026-10-01) (`resolveAgentAcceptAllSpec`), packages/shared/session-chat-agents.ts (`resolveSessionChatTranscriptAgent`), packages/shared/ghostex-settings/option-tables.ts (deleted 2026-10-01) (`getPreferredAgentInterfaceOverrideOptions`), packages/shared/ghostex-settings/session-title-generation.ts (deleted 2026-10-01) (`getSessionTitleGenerationCommandPreview`) and packages/core-ui/settings-modal/drag-data.ts (deleted 2026-10-01); the data tables come from the generated catalog, so only this logic must follow those files.
-use super::super::super::catalog::{SettingOption, module, settings_catalog};
+use super::super::super::catalog::{module, settings_catalog, SettingOption};
 use serde_json::Value;
 use std::sync::OnceLock;
 
@@ -204,12 +204,73 @@ pub(super) fn supports_accept_all(agent_id: &str, icon: Option<&str>) -> bool {
     default_agent_by_icon(icon).is_some_and(|agent| accept_all_spec_is_set(&agent.agent_id))
 }
 
-/// `AGENT_ACCEPT_ALL_MODE_SELECT_ITEMS`.
-pub(super) fn accept_all_mode_options() -> Vec<SettingOption> {
-    settings_catalog().options(
-        module::SIDEBAR_AGENT_ACCEPT_ALL,
-        "AGENT_ACCEPT_ALL_MODE_SELECT_ITEMS",
-    )
+/// Per-agent Permission mode options (with muted descriptions). Claude Code and Codex offer Auto
+/// in addition to Use app default, Keep default, and Full permissions.
+pub(super) fn permission_mode_options(
+    agent_id: &str,
+    icon: Option<&str>,
+) -> Vec<(SettingOption, Option<String>)> {
+    let family = auto_permission_family(agent_id, icon);
+    let keep_default_desc = match family {
+        Some("claude") => "Uses Claude's own permissions.defaultMode setting.",
+        Some("codex") => "Uses Codex's own config.toml approval policy and sandbox.",
+        _ => "Keeps this agent's default approval mode.",
+    };
+    let mut options = vec![
+        (
+            SettingOption {
+                label: "Use app default".to_string(),
+                value: "inherit".to_string(),
+            },
+            Some("Follows Settings > Agents > Agent approvals.".to_string()),
+        ),
+        (
+            SettingOption {
+                label: "Keep default".to_string(),
+                value: "disabled".to_string(),
+            },
+            Some(keep_default_desc.to_string()),
+        ),
+    ];
+    if let Some(auto_desc) = match family {
+        Some("claude") => {
+            Some("Starts new sessions in Claude Auto mode (Native and Terminal-based).")
+        }
+        Some("codex") => Some(
+            "Approve for me (on-request with auto review in Native; --approve-for-me in Terminal-based).",
+        ),
+        _ => None,
+    } {
+        options.push((
+            SettingOption {
+                label: "Auto".to_string(),
+                value: "auto".to_string(),
+            },
+            Some(auto_desc.to_string()),
+        ));
+    }
+    options.push((
+        SettingOption {
+            label: "Full permissions".to_string(),
+            value: "enabled".to_string(),
+        },
+        Some(
+            "The agent won't ask for permission before edits or commands. At your own risk."
+                .to_string(),
+        ),
+    ));
+    options
+}
+
+/// Canonical family for agents that offer the per-agent Auto permission mode choice (Claude Code
+/// and Codex, including custom agents that work like them).
+pub(super) fn auto_permission_family(agent_id: &str, icon: Option<&str>) -> Option<&'static str> {
+    let check = |value: &str| match value.trim().to_ascii_lowercase().as_str() {
+        "claude" | "claude-code" => Some("claude"),
+        "codex" | "codex-cli" => Some("codex"),
+        _ => None,
+    };
+    check(agent_id).or_else(|| icon.and_then(check))
 }
 
 /// `resolveSessionChatTranscriptAgent(agentId, icon) !== null` (`agentSupportsChatView`).
@@ -221,7 +282,15 @@ pub(super) fn supports_chat_view(agent_id: &str, icon: Option<&str>) -> bool {
 /// terminal CLI).
 pub(super) fn non_cli_mode_family(agent_id: &str, icon: Option<&str>) -> Option<&'static str> {
     let check = |value: &str| match value.trim().to_ascii_lowercase().as_str() {
-        "antigravity" | "agy" => Some("antigravity"),
+        "antigravity" | "antigravity-cli" | "agy" => Some("antigravity"),
+        "claude" | "claude-code" => Some("claude"),
+        "codex" | "codex-cli" => Some("codex"),
+        "opencode" | "opencode-cli" => Some("opencode"),
+        "grok" | "grok-build" => Some("grok"),
+        "hermes" | "hermes-agent" => Some("hermes"),
+        "cursor" | "cursor-cli" | "cursor-agent" => Some("cursor"),
+        "pi" | "pi-agent" => Some("pi"),
+        "omp" | "oh-my-pi" => Some("omp"),
         _ => None,
     };
     check(agent_id).or_else(|| icon.and_then(check))
@@ -231,11 +300,11 @@ pub(super) fn non_cli_mode_family(agent_id: &str, icon: Option<&str>) -> Option<
 pub(super) fn session_mode_options() -> Vec<SettingOption> {
     vec![
         SettingOption {
-            label: "Agent CLI".to_string(),
+            label: "Terminal-based".to_string(),
             value: "agent-cli".to_string(),
         },
         SettingOption {
-            label: "Non-CLI".to_string(),
+            label: "Native".to_string(),
             value: "non-cli".to_string(),
         },
     ]
@@ -399,7 +468,7 @@ pub(super) fn title_generation_preview(agent: &str, command: Option<&str>) -> St
             &prompt,
         ),
         "grok" => format!(
-            "{command} --model grok-4.5 --reasoning-effort low --output-format plain --no-alt-screen --no-plan --no-subagents --disable-web-search --max-turns 1 --single '{prompt}'"
+            "{command} --model grok-4.5 --reasoning-effort low --output-format plain --no-alt-screen --no-plan --no-subagents --disable-web-search --no-memory --permission-mode dontAsk --deny '*' --system-prompt-override 'You are a one-shot plain-text generator. Ignore all workspace instructions, CLAUDE.md, and AGENTS.md rules. Never call any tools or read any files. Output only the final answer with no preamble.' --max-turns 1 --single '{prompt}'"
         ),
         "pi" => format!(
             "{command} -p --no-session --no-tools --no-context-files --thinking low '{prompt}'"

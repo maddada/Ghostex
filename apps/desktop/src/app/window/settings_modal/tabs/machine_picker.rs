@@ -285,7 +285,7 @@ fn picker_card<V: SettingsPage>(
         p,
         "settings-machine-picker-row",
         RowSpec {
-            label: "Machine".into(),
+            label: "Editing settings for".into(),
             subtitle: Some(description.into()),
             ..RowSpec::default()
         },

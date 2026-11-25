@@ -10,6 +10,12 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | --- | --- | --- | --- | --- | --- | --- |
 | Scroll Chat to Bottom | `ctrl+shift+down` | `cmd+shift+down` | none |  | Scroll chat to the bottom, including while typing in the composer. | `scrollChatToBottom` |
 | Focus Chat Box | unassigned |  | none |  | Move the keyboard to the chat box of the chat session you are in. | `focusChatComposer` |
+| Focus Session Inbox | `cmd+shift+i` |  | none |  | Move the keyboard to the Session Inbox above the chat box, expanding it if folded. | `focusSessionInbox` |
+| Inbox: Next Item | `down` |  | none |  | While the Session Inbox has keyboard focus, move to the next item. | `inboxNextItem` |
+| Inbox: Previous Item | `up` |  | none |  | While the Session Inbox has keyboard focus, move to the previous item. | `inboxPreviousItem` |
+| Inbox: Open Item | `enter` |  | none |  | While the Session Inbox has keyboard focus, open the highlighted item. | `inboxOpenItem` |
+| Inbox: Archive / Dismiss | `e` |  | none |  | While the Session Inbox has keyboard focus, archive or dismiss the highlighted item. | `inboxMarkRead` |
+| Inbox: Snooze Item | `s` |  | none |  | While the Session Inbox has keyboard focus, open the Snooze menu for the highlighted item. | `inboxSnooze` |
 | Copy Last Code Block | `cmd+shift+;` |  | none |  | Copy the last code block the agent wrote in the chat session you are in. | `copyLastChatCodeBlock` |
 | Copy Last Reply | `cmd+shift+c` |  | none |  | Copy the agent's last reply in the chat session you are in. | `copyLastChatReply` |
 | Toggle Summary Mode | `ctrl+alt+s` | `cmd+alt+shift+s` | none |  | Turn Summary view on in the chat session you are in, or off again to Normal view. | `toggleChatSummaryMode` |
@@ -19,19 +25,19 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | New Chat: Computer | `alt+m` |  | none |  | While a new chat's message box has focus, open the computers that have the project, in the bar above it. It takes Option+M from the message box on a Mac (no µ there): if your keyboard types a letter with Option+M, pick another key. | `newChatPickComputer` |
 | New Chat: Where It Runs | `alt+w` |  | none |  | While a new chat's message box has focus, open where it runs (This folder, New worktree, Existing, Cloud Box) in the bar above it; 1 to 4 pick. It takes Option+W from the message box on a Mac (no ∑ there): if your keyboard types a letter with Option+W, pick another key. | `newChatPickWhere` |
 | New Chat: Branch | `alt+b` |  | none |  | While a new chat's message box has focus, open the last part of the bar above it: This folder's branch, a new worktree's base branch, the existing worktree, or the Cloud Box pick. It takes Option+B from the message box on a Mac (no ∫ there): if your keyboard types a letter with Option+B, pick another key. | `newChatPickBranch` |
+| New Chat: Agent | `alt+a` |  | none |  | While a new chat's message box has focus, open the agent list in the bar above it. It takes Option+A from the message box on a Mac (no å there): if your keyboard types a letter with Option+A, pick another key. | `newChatPickAgent` |
 | Toggle Voice Agent | `ctrl+alt+v` | `cmd+alt+shift+v` | `ctrl+alt+v` | `cmd+alt+shift+v` | Start a spoken conversation with the voice agent, or end the one that is running. | `toggleVoiceAgent` |
 | Session: Voice Call | unassigned |  | unassigned |  | Start a voice call about the session you are looking at, or move the open call to it. | `voiceCallAboutSession` |
 | Hold to Talk | unassigned |  | unassigned |  | During a voice call, hold to talk to the voice agent and let go to send; in a muted Regular call, hold to unmute. Works even while you're typing. | `holdToTalk` |
 | Dictate | `ctrl+alt+space` |  | none |  | Dictate into the chat box of the chat session you are in. Tap to start and tap again to stop, or hold it and it stops when you let go (Settings > Voice > Hotkey mode). | `toggleDictation` |
 | Read Last Reply Aloud | unassigned |  | none |  | Read the agent's newest reply in the chat you are looking at aloud, from the start. | `readAloudLastReply` |
 | Stop Reading | unassigned |  | unassigned |  | Stop Read aloud, whichever reply it is reading. | `readAloudStop` |
-| New Agent Session | `cmd+shift+o` |  | `cmd+shift+o` | `cmd+shift+d` | Start your last-used agent in the active project, in your default interface. | `createAgentSession` |
+| New Session | `cmd+n` |  | `cmd+n` | `cmd+shift+d` | Start a new chat draft in the active project (or Main Hub). | `createAgentSession` |
 | New Terminal | `cmd+shift+t` |  | `cmd+shift+t` |  | Create a terminal session. | `createSession` |
 | Open Quick Access: Commands | `cmd+shift+p` |  | `cmd+shift+p` |  | Open Ghostex Quick Access on Commands. | `openCommandPalette` |
 | Open Quick Access: Recent Sessions | `cmd+p` |  | `cmd+p` | `cmd+alt+shift+p` | Open Ghostex Quick Access on Recent Sessions. | `openSessionSearchPalette` |
 | Open Quick Access: Recent Projects | `cmd+alt+shift+o` |  | `cmd+alt+shift+o` |  | Open Ghostex Quick Access on Recent Projects. | `openProjectSearchPalette` |
 | Open Quick Access: Files | `cmd+o` |  | `cmd+o` | `cmd+shift+y` | Open Ghostex Quick Access on Files to find a file in your projects and open it. | `openQuickAccessFiles` |
-| New Thread in Active Project | `cmd+n` |  | `cmd+n` | `cmd+alt+shift+n` | Pick an agent, Coordinator, Browser, or Terminal to start in the active project. Press it again in the picker to choose another project. | `openNewThreadPalette` |
 | Open Commands Panel | `cmd+j` | `f12` | `cmd+j` | `f12` | Open the project command terminal panel (F12 always works too). When the pane is already focused, hide it; press again to show it. | `openCommandsPanel` |
 | Open Commands Panel (Second Key) | `shift+escape` |  | `shift+escape` |  | A second key that opens or hides the Commands panel, like Open Commands Panel. | `openCommandsPanelSecondKey` |
 | Open Settings | `cmd+,` |  | `cmd+,` |  | Open app settings. | `openSettings` |
@@ -78,6 +84,8 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | Toggle Chat View | `alt+g` |  | `alt+g` |  | Toggle between the terminal and chat view for the focused agent session. | `toggleChatView` |
 | Find Prompts | `cmd+shift+f` |  | `cmd+shift+f` | `cmd+alt+h` | Search every prompt you have sent to an agent, then resume or fork it. | `openFindPrompts` |
 | Search in Files | `cmd+shift+f` |  | none |  | While the Files view has focus, search the text of every file in the project, like VS Code's Search. Elsewhere the same keys open Find Prompts. | `searchProjectFiles` |
+| Back in Files | `cmd+[` |  | none |  | While the Files view has focus, go back to the previous file at its scroll position. Elsewhere the same keys go back to the previous session or project. | `navigateFilesBack` |
+| Forward in Files | `cmd+]` |  | none |  | While the Files view has focus, go forward to the next file at its scroll position. Elsewhere the same keys go forward in session and project history. | `navigateFilesForward` |
 | Scroll Terminal to Top | unassigned |  | unassigned |  | Scroll the focused terminal to the top. | `scrollTerminalToTop` |
 | Scroll Terminal to Bottom | unassigned |  | unassigned |  | Scroll the focused terminal to the bottom. | `scrollTerminalToBottom` |
 | Split Right | `alt+shift+d` |  | `alt+shift+d` |  | Move the focused session into a pane to the right. | `splitSessionRight` |
@@ -165,3 +173,5 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | Unfocus Terminal | terminal only |  | `cmd+shift+m` |  | Take the keyboard out of the terminal, so the hotkeys that apply outside a terminal work next. | `unfocusTerminal` |
 | Focus Last Terminal | `cmd+shift+m` |  | none |  | Put the keyboard back in the terminal that had it last, bringing its session forward if it is not on screen. | `focusLastTerminal` |
 | Focus Sidebar | `cmd+shift+j` |  | `cmd+shift+j` |  | Move the keyboard to the sidebar's session list, showing the sidebar if it is hidden: arrow keys move through the sessions and Enter opens one. Escape or the same key gives the keyboard back. | `focusSidebar` |
+| Accept Switch Request Toast | `cmd+shift+j` |  | `cmd+shift+j` |  | Accept the visible switch-request toast (Switch or Open) when an agent asks to change what you are looking at. | `acceptSwitchRequestToast` |
+| Open Switch Request Externally | `cmd+shift+e` |  | `cmd+shift+e` |  | Open a visible browser switch-request toast in your default external browser instead of Ghostex's built-in Browser. | `openSwitchRequestExternal` |

@@ -22,17 +22,35 @@ pub(crate) fn spawn_telemetry_tasks(
     state: &Arc<AppState>,
     install_created_at: String,
 ) -> TelemetryTasks {
-    crate::telemetry::init(state.paths.clone(), state.metadata.server_id.as_str());
+    crate::telemetry::init(state.paths.clone());
+    let startup_settings = crate::shared_settings_file::read_shared_settings(&state.paths);
+    crate::telemetry::session_mode_state(
+        "app_start",
+        "server",
+        crate::telemetry::resolve_install_session_modes(startup_settings.as_ref()),
+    );
     let flush = crate::telemetry::spawn_flush_task(state.shutdown_tx.subscribe());
     let heartbeat_state = state.clone();
     let snapshot_state = state.clone();
+    let live_modes_state = state.clone();
     let heartbeat = crate::telemetry::spawn_heartbeat_task(
         state.paths.clone(),
         state.shutdown_tx.subscribe(),
         move || collect_heartbeat_snapshot(&heartbeat_state, &install_created_at),
-        move || collect_settings_snapshot_facts(&snapshot_state),
+        move || collect_settings_snapshot_facts(&snapshot_state, true),
+        move || collect_live_session_mode_counts(&live_modes_state),
     );
     TelemetryTasks { flush, heartbeat }
+}
+
+fn collect_live_session_mode_counts(
+    state: &Arc<AppState>,
+) -> crate::telemetry::LiveSessionModeCounts {
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return crate::telemetry::LiveSessionModeCounts::default();
+    };
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    crate::telemetry::heartbeat::collect_live_session_mode_counts(&repository)
 }
 
 /*
@@ -42,7 +60,7 @@ skipped heartbeat rather than a partial one: a snapshot missing half its counts
 would be worse than no data point at all, because it would silently drag every
 average down.
 */
-fn collect_heartbeat_snapshot(
+pub(crate) fn collect_heartbeat_snapshot(
     state: &Arc<AppState>,
     install_created_at: &str,
 ) -> Option<crate::telemetry::heartbeat::HeartbeatSnapshot> {
@@ -71,7 +89,6 @@ fn collect_heartbeat_snapshot(
         session_count: counts.session_count,
         running_session_count: counts.running_session_count,
         agents_used: counts.agents_used,
-        custom_agent_executables: counts.custom_agent_executables,
         default_agent: crate::telemetry::heartbeat::default_agent_from_settings(
             agent_settings.as_ref(),
         ),
@@ -88,19 +105,15 @@ fn collect_heartbeat_snapshot(
 CDXC:Telemetry 2026-11-20:
 What the daily `settings.snapshot` reports beyond the settings file
 (telemetry/settings_snapshot.rs). Runs on the heartbeat's blocking worker, only
-when the heartbeat is due. A part that cannot be read is left out of the event
-(`None`), never reported as zero.
-
-Accounts come from the snapshot gxserver already keeps for Settings > Accounts
-and the sidebar meters (`accounts::runtime::current_snapshot`); it is read, not
-refreshed, so the snapshot never runs Claude Swap or Codex Swap itself. When no
-client has listed the accounts since gxserver started there is nothing to read,
-and the account fields are left out.
+when the heartbeat is due, and in read-only mode (`persist_cache = false`) for
+`POST /api/telemetryPreview`. A part that cannot be read is left out of the
+event (`None`), never reported as zero.
 */
-fn collect_settings_snapshot_facts(
+pub(crate) fn collect_settings_snapshot_facts(
     state: &Arc<AppState>,
+    persist_cache: bool,
 ) -> crate::telemetry::settings_snapshot::SnapshotFacts {
-    use crate::telemetry::settings_snapshot::{AccountsReport, SnapshotFacts};
+    use crate::telemetry::settings_snapshot::SnapshotFacts;
     let settings = crate::shared_settings_file::read_shared_settings(&state.paths);
     let remote_machine_count = settings
         .as_ref()
@@ -108,32 +121,33 @@ fn collect_settings_snapshot_facts(
         .and_then(Value::as_array)
         .map(Vec::len)
         .unwrap_or(0);
-    let workspace_count = open_gxserver_database(&state.paths)
-        .ok()
-        .and_then(|db| crate::workspaces::read_sidebar_workspaces(&db).ok())
+    let db = open_gxserver_database(&state.paths).ok();
+    let workspace_count = db
+        .as_ref()
+        .and_then(|db| crate::workspaces::read_sidebar_workspaces(db).ok())
         .and_then(|value| value.get("workspaces")?.as_object().map(|map| map.len()));
     let discovered = crate::accounts::runtime::current_snapshot();
-    let accounts = discovered.fetched_at.map(|_| {
-        let mut report = AccountsReport::default();
-        for account in &discovered.accounts {
-            *report.counts.entry(account.provider.id()).or_default() += 1;
-            let plans = match account.provider {
-                crate::accounts::model::Provider::Claude => &mut report.claude_plans,
-                crate::accounts::model::Provider::Codex => &mut report.codex_plans,
-            };
-            if let Some(plan) = account.plan {
-                if !plans.contains(&plan) {
-                    plans.push(plan);
+    let live_accounts = crate::telemetry::settings_snapshot::accounts_report_from_discovered(
+        &state.paths,
+        &discovered,
+    );
+    let accounts = match live_accounts {
+        Some(report) => {
+            if persist_cache {
+                if let Some(db) = db.as_ref() {
+                    if crate::telemetry::is_enabled(&state.paths)
+                        && !crate::telemetry::is_onboarding_held(&state.paths)
+                    {
+                        crate::telemetry::state::write_cached_accounts(db, &report);
+                    }
                 }
             }
+            Some(report)
         }
-        report.claude_plans.sort_unstable();
-        report.codex_plans.sort_unstable();
-        if let Some(counts) = crate::accounts::usage_only::provider_counts(&state.paths) {
-            report.counts.extend(counts);
-        }
-        report
-    });
+        None => db
+            .as_ref()
+            .and_then(|db| crate::telemetry::state::read_cached_accounts(db)),
+    };
     crate::telemetry::extensions::load_official_store_ids(&state.paths.extensions_dir);
     let mut store_extensions = Vec::new();
     let mut custom_extensions_installed = 0;

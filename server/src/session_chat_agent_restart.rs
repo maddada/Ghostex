@@ -109,18 +109,20 @@ pub(crate) async fn restart(
         let exited =
             classify_session_chat_terminal_notice(agent.as_deref(), &screen.text).is_some_and(
                 |notice| notice.kind == SESSION_CHAT_NOTICE_AGENT_EXITED || notice.missing_login(),
-            ) || crate::session_chat_start_failure::agent_start_failure(
-                &repository,
-                &target.project_id,
-                &target.session_id,
-                &screen.text,
-            )
-            .is_some();
+            ) || crate::acp::startup_error::get(&target.project_id, &target.session_id).is_some()
+                || crate::session_chat_start_failure::agent_start_failure(
+                    &repository,
+                    &target.project_id,
+                    &target.session_id,
+                    &screen.text,
+                )
+                .is_some();
         if !exited {
             return Err(invalid(
                 "The agent is running in this terminal again, so it was not restarted.",
             ));
         }
+        crate::acp::startup_error::clear(&target.project_id, &target.session_id);
         // Start fresh on "Couldn't find this chat's conversation": the wake starts a new
         // conversation instead of looking the old one up again (`forget_conversation`).
         if start_fresh {
@@ -403,6 +405,23 @@ pub(crate) async fn heal_failed_start(
             );
         }
         return None;
+    }
+    if crate::acp::session_is_acp(&target.session) {
+        if crate::acp::channel::live(project_id, session_id, "send").is_some() {
+            return None;
+        }
+        let zmx_name = target.zmx_name.clone();
+        let host_running =
+            tokio::task::spawn_blocking(move || crate::acp::host_process_running(&zmx_name))
+                .await
+                .unwrap_or(true);
+        if host_running {
+            return None;
+        }
+        return crate::session_chat_queue_runtime::restart_agent_for_send(state, &target, false)
+            .await
+            .err()
+            .filter(|reason| crate::session_chat_queue_runtime::restart_refusal_is_final(reason));
     }
     let composer = crate::session_chat_options::cached_session_chat_composer_readiness(
         state, project_id, session_id,

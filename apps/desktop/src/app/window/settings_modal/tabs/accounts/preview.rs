@@ -68,6 +68,38 @@ impl AccountsTab {
             "accounts-editor" => self.pane = Some(Pane::Account("claude-1".into())),
             "accounts-gemini" => self.pane = Some(Pane::Account("gemini-1".into())),
             "accounts-hubs" => self.pane = Some(Pane::Hub("hub-preview".into())),
+            "accounts-hub-add-account" => {
+                self.pane = Some(Pane::Hub("hub-preview".into()));
+                self.cliproxy_card_collapsed = true;
+                self.hub_drafts.insert(
+                    "hub-preview".into(),
+                    super::hubs::HubDraft {
+                        url: "http://127.0.0.1:8317".into(),
+                        label: "Home hub".into(),
+                        pick_add_account: true,
+                        ..Default::default()
+                    },
+                );
+            }
+            "accounts-hub-oauth" => {
+                self.pane = Some(Pane::Hub("hub-preview".into()));
+                self.cliproxy_card_collapsed = true;
+                self.hub_oauth = Some(super::hubs::HubOAuthFlow {
+                    id: 1,
+                    hub_id: "hub-preview".into(),
+                    provider: "claude",
+                    url: "https://claude.ai/oauth/authorize?client_id=cliproxy&state=preview-state"
+                        .into(),
+                    state: "preview-state".into(),
+                    is_local: true,
+                    status: "waiting".into(),
+                    error: None,
+                    input: String::new(),
+                    submitting: false,
+                    poll: None,
+                });
+            }
+            "accounts-cliproxy-guide" => self.open_cliproxy_guide(window, cx),
             "accounts-hub-account" => self.pane = Some(Pane::HubAccount("hub-preview:a1".into())),
             "accounts-hub-add" => self.pane = Some(Pane::AddHub),
             "accounts-editor-actions" | "accounts-advanced" => {

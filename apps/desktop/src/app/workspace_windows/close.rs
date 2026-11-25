@@ -139,7 +139,6 @@ impl GhostexGpuiApp {
             self.app_modal_window.map(Into::into),
             self.app_toast_window.map(Into::into),
             self.titlebar_popup_window.map(Into::into),
-            self.new_thread_picker_window.map(Into::into),
             self.native_app_modal
                 .as_ref()
                 .map(|modal| modal.window.into()),

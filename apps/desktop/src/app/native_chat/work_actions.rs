@@ -25,17 +25,18 @@ use serde_json::{Value, json};
 
 /// The button an ask's answers fold into when they do not fit on one line (`answers_dropdown`).
 pub(super) const CHOOSE_ANSWER: &str = "Choices";
-/// The one icon of a Needs you row's Details, whatever it opens (a question's panel, a form, a
-/// Live page).
-pub(super) const DETAILS_ICON: &str = "titlebar/file-text.svg";
-/// A Needs you row's Jump to context: the icon Show in chat has in the row's panel.
-pub(super) const CONTEXT_ICON: &str = "titlebar/focus-2.svg";
-/// A Needs you row's Mark as read: an open envelope (`dock_mark_read_icon`).
-pub(super) const MARK_READ_ICON: &str = "titlebar/mail-opened.svg";
-/// Whether a dock row carries a question the reader must answer, so it has no Mark as read: an ask
-/// with answers, a one-click question, a form or a page with open questions, an approval with
+/// The icon of a Needs you row's Details button when opening a question or form popup.
+pub(super) const DETAILS_ICON: &str = "titlebar/message-question.svg";
+/// The icon of a Needs you row's Open button when opening a Live page.
+pub(super) const PAGE_OPEN_ICON: &str = "titlebar/external-link.svg";
+/// A Needs you row's Jump to context: matches Show in chat.
+pub(super) const CONTEXT_ICON: &str = "titlebar/message-share.svg";
+/// A Needs you row's Archive action: a check mark (`dock_mark_read_icon`).
+pub(super) const MARK_READ_ICON: &str = "titlebar/check.svg";
+/// Whether a dock row carries a question the reader must answer, so it has no Archive button: an
+/// ask with answers, a one-click question, a form or a page with open questions, an approval with
 /// buttons, a to-do that offers its own choices. A page that only waits to be seen (its dismiss
-/// reads "Mark as read"), a to-do with only Done, a blocked line of work and a notice with no
+/// reads "Archive"), a to-do with only Done, a blocked line of work and a notice with no
 /// answers ask nothing. The phone has the same rule (workItemParts.tsx `rowAsksQuestion`).
 ///
 /// CDXC:Coordinators 2026-11-21 DECISION:
@@ -48,7 +49,8 @@ pub(super) fn row_asks_question(row: &Value) -> bool {
         return true;
     }
     if key.starts_with("dock-questions:") {
-        return text(row, "dismissLabel") != "Mark as read";
+        let label = text(row, "dismissLabel");
+        return !matches!(label.as_str(), "Archive" | "Done" | "Mark as read");
     }
     // A to-do with no choices of its own has only Done.
     let only_done =
@@ -148,6 +150,8 @@ impl NativeChatView {
                 } else {
                     None
                 };
+                let show_draft_dot =
+                    reply.is_object() && !picked && !locked && self.has_reply_draft();
                 self.dock_tone_button(
                     gpui::SharedString::from(format!("work-answer:{key}:{index}")),
                     &label,
@@ -157,6 +161,11 @@ impl NativeChatView {
                     (busy || locked) && !picked,
                     p,
                 )
+                .when(show_draft_dot, |button| {
+                    button
+                        .relative()
+                        .child(super::reply_popover::reply_draft_dot(p))
+                })
                 // An approval's answer in the agent's long words keeps to the row's width.
                 .when(key.starts_with("approval:"), |button| button.max_w_full())
                 // A short answer's full words (an approval's "Yes" is "Yes, proceed", gx-chat-core
@@ -266,7 +275,10 @@ impl NativeChatView {
             locked,
             p,
         )
-        .aria_label(format!("{CHOOSE_ANSWER}, {} answers", rows.len()))
+        .aria_label(format!(
+            "{CHOOSE_ANSWER}, {}",
+            ghostex_gx_protocol::plural(rows.len(), "answer", "answers")
+        ))
         .child(
             svg()
                 .path("titlebar/chevron-down.svg")
@@ -336,6 +348,60 @@ impl NativeChatView {
         })
     }
 
+    /// Quiet neutral "Details" button beside a folded row's answer buttons, opening the full
+    /// floating details panel (`open_dock_ask_modal`).
+    ///
+    /// CDXC:Coordinators 2026-11-24 DECISION:
+    /// User (ask-details-page, Q1 C "Answers on row + button to open details", Q2 "Details"):
+    /// keep answer buttons visible on the folded row and put a quiet neutral "Details" button
+    /// beside them to open the full details panel, rather than hiding answers behind an icon.
+    pub(super) fn dock_details_button(
+        &self,
+        key: &str,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let (button_height, button_radius) = super::tone_card::button_metrics();
+        let shown = key.to_string();
+        let rest = p.foreground.opacity(if p.light { 0.04 } else { 0.05 });
+        let hover = p.foreground.opacity(if p.light { 0.09 } else { 0.10 });
+        let active = p.foreground.opacity(if p.light { 0.13 } else { 0.15 });
+        let border = p.foreground.opacity(if p.light { 0.14 } else { 0.12 });
+        let hover_text = p.foreground;
+        div()
+            .id(gpui::SharedString::from(format!("work-row-details:{key}")))
+            .role(gpui::Role::Button)
+            .aria_label("Details")
+            .h(px(button_height * s))
+            .px(px(11.0 * s))
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(px(button_radius * s))
+            .border_1()
+            .border_color(border)
+            .bg(rest)
+            .text_size(px(PROSE_SIZE * s))
+            .font_weight(gpui::FontWeight::NORMAL)
+            .text_color(p.card_muted)
+            .chat_cursor_pointer()
+            .hover(move |style| style.bg(hover).text_color(hover_text))
+            .active(move |style| style.bg(active).text_color(hover_text))
+            .tooltip(|window, cx| {
+                gpui_component::tooltip::Tooltip::new("Details")
+                    .keys(super::composer::hotkey_chord(Some("inboxOpenItem")))
+                    .build(window, cx)
+            })
+            .child("Details")
+            .on_click(cx.listener(move |this, _, window, cx| {
+                cx.stop_propagation();
+                this.open_dock_ask_modal(&shown, window, cx);
+            }))
+            .into_any_element()
+    }
+
     /// A dock row's (or a Work panel Needs you card's) one action in its answers' place, as an
     /// icon button: Details for anything that opens something (a question with details, which
     /// opens its panel; a form or page, which opens itself), one icon for all of them, or Reply
@@ -354,14 +420,25 @@ impl NativeChatView {
         let open = row["open"].clone();
         if row["details"] == true || open.is_object() {
             let shown = key.to_string();
+            let is_page = row["page"] == true && open.is_object();
+            let (label, icon) = if is_page {
+                ("Open page", PAGE_OPEN_ICON)
+            } else {
+                ("Details", DETAILS_ICON)
+            };
             return Some(
                 self.tone_square_icon_button(
                     gpui::SharedString::from(format!("work-row-details:{key}")),
-                    "Details",
-                    DETAILS_ICON,
+                    label,
+                    icon,
                     false,
                     p,
                 )
+                .tooltip(move |window, cx| {
+                    gpui_component::tooltip::Tooltip::new(label)
+                        .keys(super::composer::hotkey_chord(Some("inboxOpenItem")))
+                        .build(window, cx)
+                })
                 .on_click(cx.listener(move |this, _, window, cx| {
                     cx.stop_propagation();
                     if open.is_object() {
@@ -417,18 +494,18 @@ impl NativeChatView {
         )
     }
 
-    /// Mark as read as an icon button, left of a dock row's other buttons: runs the row's own
-    /// `dismiss`, the command its ⋯ and right-click menus' Dismiss / Mark as read run (a page's
+    /// Done as an icon button, left of a dock row's other buttons: runs the row's own
+    /// `dismiss`, the command its ⋯ and right-click menus' Dismiss / Done run (a page's
     /// `cancelQuestion`, an ask's cancel, a to-do's `coordinatorBoardAnswer` cancel, a terminal
     /// notice's `dismissNotice`), so the agent is told exactly what it is told today: nothing at
     /// the time, the dismissal with its next message. `None` for a row with no dismiss, for a
-    /// finished row, whose hover check in the age's place already is its Mark as read, and for a
+    /// finished row, whose hover check in the age's place already is its Done button, and for a
     /// row that asks a question (`row_asks_question`).
     ///
-    /// CDXC:Coordinators 2026-11-21 DECISION:
-    /// User, of two Needs you rows (a page and an ask) with Details and Reply: "all these dont
-    /// have any questions. can we add the message open icon to mark as read to be to the left of
-    /// the current 2 buttons that are there?"
+    /// CDXC:Coordinators 2026-11-24 DECISION:
+    /// Opening a page already marks it read, so the Inbox row's clear button means "I'm done with
+    /// this one": renamed to "Done" with a check-mark icon (`titlebar/check.svg`), superseding the
+    /// 2026-11-21 open-envelope "Mark as read" wording and icon.
     pub(super) fn dock_mark_read_icon(
         &self,
         key: &str,
@@ -443,11 +520,16 @@ impl NativeChatView {
         Some(
             self.tone_square_icon_button(
                 gpui::SharedString::from(format!("work-row-read:{key}")),
-                "Mark as read",
+                "Archive",
                 MARK_READ_ICON,
                 false,
                 p,
             )
+            .tooltip(|window, cx| {
+                gpui_component::tooltip::Tooltip::new("Archive")
+                    .keys(super::composer::hotkey_chord(Some("inboxMarkRead")))
+                    .build(window, cx)
+            })
             .on_click(cx.listener(move |this, _, _, cx| {
                 cx.stop_propagation();
                 this.close_board_card_menu(cx);
@@ -557,6 +639,7 @@ impl NativeChatView {
         } else {
             return None;
         };
+        let show_draft_dot = !open.is_object() && reply.is_object() && self.has_reply_draft();
         Some(
             self.dock_tone_button(
                 gpui::SharedString::from(id),
@@ -567,6 +650,11 @@ impl NativeChatView {
                 false,
                 p,
             )
+            .when(show_draft_dot, |button| {
+                button
+                    .relative()
+                    .child(super::reply_popover::reply_draft_dot(p))
+            })
             .on_click(
                 cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
                     cx.stop_propagation();
@@ -646,7 +734,10 @@ impl NativeChatView {
                         "work-answers-choose-compact:{key}"
                     )))
                     .role(gpui::Role::Button)
-                    .aria_label(format!("{CHOOSE_ANSWER}, {} answers", rows.len()))
+                    .aria_label(format!(
+                        "{CHOOSE_ANSWER}, {}",
+                        ghostex_gx_protocol::plural(rows.len(), "answer", "answers")
+                    ))
                     .h(px(24.0 * s))
                     .px(px(8.0 * s))
                     .flex_shrink_0()
@@ -847,16 +938,20 @@ impl NativeChatView {
                 )),
             );
         }
-        // Dismiss reads Mark as read on one that asks no question (gx-chat-core's `dismissLabel`).
-        let dismiss_label: &'static str = if actions["dismissLabel"] == "Mark as read" {
-            "Mark as read"
+        // Dismiss reads Archive on one that asks no question (gx-chat-core's `dismissLabel`).
+        let is_archive = matches!(
+            actions["dismissLabel"].as_str(),
+            Some("Archive" | "Archive all" | "Done" | "Mark all done" | "Mark as read")
+        );
+        let (dismiss_icon, dismiss_label): (&'static str, &'static str) = if is_archive {
+            ("titlebar/check.svg", "Archive")
         } else {
-            "Dismiss"
+            ("titlebar/x.svg", "Dismiss")
         };
         for (field, icon, label) in [
-            ("open", "titlebar/arrow-up-right.svg", "Open"),
-            ("showInChat", "titlebar/focus-2.svg", "Show in chat"),
-            ("dismiss", "titlebar/x.svg", dismiss_label),
+            ("open", "titlebar/external-link.svg", "Open"),
+            ("showInChat", "titlebar/message-share.svg", "Show in chat"),
+            ("dismiss", dismiss_icon, dismiss_label),
         ] {
             let command = actions[field].clone();
             if command.is_object() {
@@ -889,7 +984,7 @@ impl NativeChatView {
             row = row.child(
                 self.work_icon_button(
                     format!("work-snooze:{key}"),
-                    "titlebar/alarm.svg",
+                    "modals/settings/moon.svg",
                     "Snooze",
                     false,
                     p,

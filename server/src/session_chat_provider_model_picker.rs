@@ -983,7 +983,7 @@ impl PickerDriver<'_> {
                 .await?;
             match refused {
                 Some(reason) => Err(unsupported_selection(format!(
-                    "Antigravity CLI refused the model: {reason}."
+                    "Antigravity refused the model: {reason}."
                 ))),
                 None => Ok(()),
             }
@@ -1177,10 +1177,28 @@ pub(crate) async fn run_provider_model_picker_job(
     let outcome = match plan.provider.as_str() {
         // Hermes 0.22 switches through its gateway's `session.mutate`; the typed `/model` stays for
         // Hermes 0.21 and older (CDXC:HermesGateway 2026-11-05 in hermes_gateway.rs).
-        "hermes" => match hermes_gateway_pick(project_id, session_id, &plan).await {
-            Some(outcome) => outcome,
-            None => driver.drive_hermes(&plan).await,
-        },
+        "hermes" => {
+            if crate::acp::channel::live(project_id, session_id, "model").is_some() {
+                async {
+                    if !plan.model.is_empty() || !plan.effort.is_empty() {
+                        crate::acp::channel::set_model(
+                            project_id,
+                            session_id,
+                            &plan.model,
+                            &plan.effort,
+                        )
+                        .await?;
+                    }
+                    Ok(())
+                }
+                .await
+            } else {
+                match hermes_gateway_pick(project_id, session_id, &plan).await {
+                    Some(outcome) => outcome,
+                    None => driver.drive_hermes(&plan).await,
+                }
+            }
+        }
         // A Pi or OMP with Ghostex's chat channel open switches through its own API; the screen
         // drivers stay for one still running an older extension (CDXC:PiChatChannel 2026-11-05).
         "pi" | "omp" => match pi_channel_pick(project_id, session_id, &plan).await {
@@ -1195,7 +1213,7 @@ pub(crate) async fn run_provider_model_picker_job(
             Some(outcome) => outcome,
             None => driver.drive_dsh(&plan).await,
         },
-        "antigravity" => {
+        "antigravity" | "cursor" => {
             if crate::acp::channel::live(project_id, session_id, "model").is_some() {
                 async {
                     if !plan.model.is_empty() || !plan.effort.is_empty() {
@@ -1207,13 +1225,10 @@ pub(crate) async fn run_provider_model_picker_job(
                         )
                         .await?;
                     }
-                    if let Some(mode) = plan.options.mode.as_deref().filter(|m| !m.is_empty()) {
-                        crate::acp::channel::set_mode(project_id, session_id, mode).await?;
-                    }
                     Ok(())
                 }
                 .await
-            } else {
+            } else if plan.provider == "antigravity" {
                 async {
                     if !plan.model.is_empty() {
                         driver.drive_provider(&plan).await?;
@@ -1223,7 +1238,24 @@ pub(crate) async fn run_provider_model_picker_job(
                         .await
                 }
                 .await
+            } else {
+                driver.drive_provider(&plan).await
             }
+        }
+        _ if crate::acp::channel::live(project_id, session_id, "model").is_some() => {
+            async {
+                if !plan.model.is_empty() || !plan.effort.is_empty() {
+                    crate::acp::channel::set_model(
+                        project_id,
+                        session_id,
+                        &plan.model,
+                        &plan.effort,
+                    )
+                    .await?;
+                }
+                Ok(())
+            }
+            .await
         }
         _ => driver.drive_provider(&plan).await,
     };

@@ -382,6 +382,26 @@ pub(crate) fn request_cef_runtime_in_every_window(cx: &mut App) {
     }
 }
 
+/// Refreshes web-runtime prompts and modals in every other open workspace window (for example
+/// after CEF initialization fails permanently in this process). Skips `skip` to avoid re-entrantly
+/// updating the window already inside an entity update.
+pub(crate) fn refresh_web_runtime_views_in_other_windows(skip: gpui::EntityId, cx: &mut App) {
+    let apps = WORKSPACE_WINDOWS.with(|windows| {
+        windows
+            .borrow()
+            .iter()
+            .filter(|entry| entry.app.entity_id() != skip)
+            .map(|entry| entry.app.clone())
+            .collect::<Vec<_>>()
+    });
+    for app in apps {
+        let _ = app.update(cx, |app, cx| {
+            app.cef_runtime_requested = false;
+            app.refresh_web_runtime_views(cx);
+        });
+    }
+}
+
 /// Names the window after its project, so Mission Control, the Dock menu and the Window menu
 /// tell the windows apart. Called while the window draws, so the title is set on the next turn
 /// rather than inside the draw; costs a comparison when nothing changed.
@@ -507,8 +527,6 @@ impl GhostexGpuiApp {
             self.app_modal_window.map(|handle| handle.window_id()),
             self.app_toast_window.map(|handle| handle.window_id()),
             self.titlebar_popup_window.map(|handle| handle.window_id()),
-            self.new_thread_picker_window
-                .map(|handle| handle.window_id()),
             self.native_app_modal
                 .as_ref()
                 .map(|modal| modal.window.window_id()),

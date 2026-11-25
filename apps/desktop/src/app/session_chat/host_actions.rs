@@ -165,6 +165,38 @@ impl GhostexGpuiApp {
             }
             return;
         }
+        if message.get("type").and_then(serde_json::Value::as_str) == Some("shareVisualPage") {
+            if let Some(page_id) = message
+                .get("pageId")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|id| !id.is_empty())
+            {
+                let title = message
+                    .get("title")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::trim)
+                    .filter(|t| !t.is_empty())
+                    .unwrap_or("Live page")
+                    .to_string();
+                let remote = self
+                    .remote_project_for_terminal_target(GpuiEngineTerminalEventTarget::Agents(
+                        session_id,
+                    ))
+                    .and_then(|proj| {
+                        self.gpui_remote_gxserver_request_target(&proj.remote_machine_id)
+                    });
+                crate::app::window::share_link_popover::open_share_link_popover(
+                    crate::app::window::share_link_popover::ShareLinkTarget::Page {
+                        page_id: page_id.to_string(),
+                        title,
+                    },
+                    remote,
+                    cx,
+                );
+            }
+            return;
+        }
         if message.get("type").and_then(serde_json::Value::as_str) == Some("open")
             && message.get("modal").and_then(serde_json::Value::as_str) == Some("visualPage")
         {
@@ -174,7 +206,7 @@ impl GhostexGpuiApp {
         if message.get("type").and_then(serde_json::Value::as_str) == Some("open")
             && matches!(
                 message.get("modal").and_then(serde_json::Value::as_str),
-                Some("settings" | "mermaidDiagram" | "markdownTable")
+                Some("settings" | "mermaidDiagram" | "markdownTable" | "findPrompts")
             )
         {
             self.receive_app_modal_host_bridge_event(
@@ -233,6 +265,49 @@ impl GhostexGpuiApp {
                 }),
                 cx,
             );
+            return;
+        }
+        // "Switch to Native" strip chip & `•••` menu actions (`Q4768`–`Q4772`).
+        if action == "switchToNative" {
+            let family = message
+                .get("family")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            let agent_name = message
+                .get("agentName")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("this agent")
+                .to_string();
+            let native_default = message
+                .get("nativeDefault")
+                .and_then(serde_json::Value::as_bool)
+                == Some(true);
+            let working = message.get("working").and_then(serde_json::Value::as_bool) == Some(true);
+            let source = match message.get("source").and_then(serde_json::Value::as_str) {
+                Some("pill") => "pill",
+                Some("more_menu") => "more_menu",
+                _ => "unknown",
+            };
+            self.ask_and_switch_session_to_native(
+                session_id,
+                family,
+                agent_name,
+                native_default,
+                working,
+                source,
+                cx,
+            );
+            return;
+        }
+        if action == "cancelSwitchToNative" {
+            self.cancel_switch_session_to_native(session_id, cx);
+            return;
+        }
+        if action == "dismissNativeSwitchOffer" {
+            if let Some(family) = message.get("family").and_then(serde_json::Value::as_str) {
+                self.dismiss_native_switch_offer(session_id, family.to_string(), cx);
+            }
             return;
         }
         // The coordinator board's view switch (native_chat/coordinator_board.rs): the Board pill

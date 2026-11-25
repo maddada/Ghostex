@@ -69,6 +69,7 @@ impl GhostexGpuiApp {
                 self.native_docs.documents.push(document);
             }
         }
+        self.native_docs_record_history_visit(&path, cx);
         self.native_docs.active = Some(path);
         self.native_docs_close_drawer(cx);
         self.native_docs_notify(cx);

@@ -52,6 +52,10 @@ pub struct WorkingCard {
     /// empty for any other label (extras/working_card_label.rs).
     #[serde(default)]
     pub label_parts: Vec<crate::extras::working_card_label::WorkingCardLabelPart>,
+    /// Optional segments for a worked turn summary so renderers truncate item titles before wait
+    /// reasons when horizontal space is tight (extras/work_cards.rs `turn_summary_parts`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub label_segments: Vec<crate::extras::working_card_label::WorkingCardSegment>,
     /// Status line in the chat draws this line as the transcript's last row instead of the
     /// capsule above the chat box: the setting is on and the transcript has a row to end with.
     /// An empty chat keeps the capsule, so the status still shows (`transcript/chat_look.rs`).
@@ -254,4 +258,22 @@ pub struct AccountStatus {
     pub busy: bool,
     #[serde(flatten)]
     pub extra: serde_json::Map<String, Value>,
+}
+
+/// The "Switch to Native" strip chip and `•••` menu offer (`extras/native_switch.rs`, `Q4768`–`Q4772`).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeSwitchOffer {
+    /// Canonical agent family: `"antigravity"`, `"claude"`, or `"codex"`.
+    pub family: String,
+    /// User-facing agent display name: `"Antigravity"`, `"Claude Code"`, or `"Codex"`.
+    pub agent_name: String,
+    /// Whether the chip shows in the composer's pill strip.
+    pub show_chip: bool,
+    /// Whether a mid-reply switch is currently queued on gxserver.
+    pub queued: bool,
+    /// Whether Native mode is already enabled as the default for this agent.
+    pub native_default: bool,
+    /// Whether the manual "Switch to Native" / "Cancel Switch to Native" row shows in `•••`.
+    pub show_menu_item: bool,
 }

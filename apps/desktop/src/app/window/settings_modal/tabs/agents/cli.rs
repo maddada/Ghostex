@@ -255,9 +255,19 @@ impl CliState {
         self.job.as_ref().is_some_and(CliJobInfo::active)
     }
 
-    /// An update Ghostex can run now: not one mise holds back.
+    /// An update Ghostex can run now: not one mise holds back, and its method has a command to run.
     fn update_offered(&self) -> bool {
-        self.update_available && self.update_held_back.is_none()
+        if !self.update_available || self.update_held_back.is_some() {
+            return false;
+        }
+        let Some(detected) = self.detected_method_id.as_deref() else {
+            return false;
+        };
+        self.methods.iter().any(|method| {
+            method.id == detected
+                && !method.command.trim().is_empty()
+                && method.unavailable_reason.is_none()
+        })
     }
 
     /// What the newer release is called: its version, else the CLI's own words.
@@ -1204,9 +1214,9 @@ impl AgentsTab {
                 || loading
                 || !connected
                 || method.is_none()
-                || method
-                    .as_ref()
-                    .is_some_and(|method| method.unavailable_reason.is_some());
+                || method.as_ref().is_some_and(|method| {
+                    method.unavailable_reason.is_some() || method.command.trim().is_empty()
+                });
             let start_agent = agent_id.to_string();
             let start_method = method.as_ref().map(|method| method.id.clone());
             let start_title = method.as_ref().map(CliMethod::tooltip);
@@ -1272,8 +1282,8 @@ impl AgentsTab {
                     ),
             );
             if let Some(method) = &method {
-                // A CLI that updates itself (Antigravity) has no command to show, only why.
-                if !method.command.is_empty() {
+                // A method with no command has nothing to show here, only its reason.
+                if !method.command.trim().is_empty() {
                     body = body.child(
                         div()
                             .w_full()

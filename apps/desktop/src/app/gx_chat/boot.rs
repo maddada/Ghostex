@@ -242,6 +242,48 @@ pub(super) fn chat_settings() -> ChatSettings {
                     ghostex_gx_chat_core::composer::compact_prompt::DEFAULT_COMPACT_CHATS_ABOVE,
                 )
         }),
+        preferred_agent_interface: (!object.is_empty()).then(|| {
+            object
+                .get("preferredAgentInterface")
+                .and_then(Value::as_str)
+                .unwrap_or("chat")
+                .to_string()
+        }),
+        preferred_agent_interface_overrides: (!object.is_empty()).then(|| {
+            object
+                .get("preferredAgentInterfaceOverrides")
+                .and_then(Value::as_object)
+                .map(|map| {
+                    map.iter()
+                        .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                        .collect()
+                })
+                .unwrap_or_default()
+        }),
+        agent_session_mode: (!object.is_empty()).then(|| {
+            object
+                .get("agentSessionMode")
+                .and_then(Value::as_object)
+                .map(|map| {
+                    map.iter()
+                        .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                        .collect()
+                })
+                .unwrap_or_default()
+        }),
+        native_switch_dismissed_agents: (!object.is_empty()).then(|| {
+            object
+                .get("nativeSwitchOfferDismissedAgents")
+                .and_then(Value::as_str)
+                .map(|raw| {
+                    raw.split(',')
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)
+                        .collect()
+                })
+                .unwrap_or_default()
+        }),
     }
 }
 

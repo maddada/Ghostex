@@ -1,9 +1,10 @@
 //! Boosts in the chat (gx-chat-core `extras/boosts.rs` has the user's decisions and the rules): the
 //! Boost pill at the right of the pill strip; its menu, one 460px list in Show, Actions, Work and
-//! Custom sections with section chips and Edit at its bottom, and a preview card beside it; the one-time callout bubble
-//! above the pill on a new chat; the Boost pills' hover and double click; and Save as
-//! Boost. Editing is Settings > Boosts (window/settings_modal/tabs/boosts.rs), which the menu's
-//! Edit button, a pill's double click and Save as Boost open.
+//! Custom sections with section chips and Edit at its bottom, and a preview card beside it; the
+//! one-time hint chip inside the composer's top-right corner on a new chat; the Boost pills' hover
+//! and double click; and Save as Boost. Editing is Settings > Boosts
+//! (window/settings_modal/tabs/boosts.rs), which the menu's Edit button, a pill's double click and
+//! Save as Boost open.
 //!
 //! The core's `boosts` document key holds it all; `null` (an older gxserver, no answer yet, or
 //! Boosts switched off) draws none of it.
@@ -13,8 +14,10 @@
 //! entry and opens row menus only for the pills it knows. The pill sits after the panel pills,
 //! before Links, and never folds into "+N" (it is the one way in). The preview is a panel of the
 //! menu one level down (option_menu's side panel, as the model menu's lists are), so it opens beside
-//! the menu on the side with room; the callout is a frosted window of its own
-//! (frosted_overlay_window.rs), which floats over the transcript without taking the keyboard.
+//! the menu on the side with room.
+//! CDXC:Boosts 2026-11-24 DECISION:
+//! The one-time Boost hint sits inside the composer at its top-right corner as a small dismissible
+//! chip with an x (`boost_hint_chip`), superseding the floating frosted callout window.
 //! SEE-ALSO: packages/gx-chat-core/src/extras/boosts.rs, server/src/boosts.rs.
 
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
@@ -50,9 +53,6 @@ const ROW_GAP: f32 = 2.0;
 const FOOTER_HEIGHT: f32 = 40.0;
 /// The tallest the list gets before it scrolls, so the menu never stands taller than this.
 const MENU_MAX_HEIGHT: f32 = 420.0;
-/// The callout bubble's size (unscaled).
-const CALLOUT_WIDTH: f32 = 372.0;
-const CALLOUT_HEIGHT: f32 = 54.0;
 
 /// The Boosts' accent: gold.
 /// CDXC:Boosts 2026-11-20 DECISION: User: "make Boost gold please, and make the colour of a Boost
@@ -163,9 +163,15 @@ impl NativeChatView {
         cx.emit(super::state::NativeChatEvent::Host(open));
     }
 
-    /// The Boost pill: the sparkles and "Boost" in the accent, a fill while the message has a
-    /// Boost or its menu is open. A click opens the menu against it. Its paint also places the
-    /// one-time callout above it.
+    /// The Boost pill: the sparkles and "Boost" in the neutral style of the other strip pills,
+    /// with a subtle neutral fill while the message has a Boost or its menu is open. A click opens
+    /// the menu against it.
+    ///
+    /// CDXC:Boosts 2026-11-24 DECISION:
+    /// User: "please color this like the other pills, pill shouldn't be yellow". The strip pill
+    /// uses the exact same neutral fill, border, text and icon colours as the panel pills beside
+    /// it (`chat_pills.rs` `chat_pill`), across dark, light and all built-in themes. Supersedes
+    /// the gold accent on the strip pill from 2026-11-20; Boost chips inside messages keep gold.
     pub(super) fn boost_strip_pill(
         &self,
         p: &ChatAppearance,
@@ -174,23 +180,10 @@ impl NativeChatView {
         let boosts = self.boosts()?;
         let pill = &boosts["pill"];
         let s = p.scale;
-        let tone = accent(p.light);
         let open = self.chat_menu_is_open(BOOST_TRIGGER);
         let active = pill["active"] == true;
         let bounds: Rc<Cell<Bounds<Pixels>>> = self.boost_pill_bounds.clone();
         let measured = bounds.clone();
-        // The callout, while it has not been seen, this chat has no messages sent yet, carries
-        // visible copy, no compact prompt sits above the composer, and nothing covers the pane.
-        let hint_wanted = self.list.item_count() == 0
-            && !self.pending_send
-            && boost_hint_visible(&boosts["hint"])
-            && !self.compact_prompt_open()
-            && !self.frosted_overlay_covered(
-                super::frosted_overlay_window::FrostedOverlay::BoostHint,
-                cx,
-            );
-        let above_top = self.composer_above_top.clone();
-        let chat = cx.weak_entity();
         Some(
             div()
                 .id(BOOST_TRIGGER)
@@ -202,22 +195,23 @@ impl NativeChatView {
                 .items_center()
                 .flex_shrink_0()
                 .gap(px(5.0 * s))
+                .h(px(super::chat_pills::PILL_HEIGHT * s))
                 .px(px(8.0 * s))
                 .py(px(2.0 * s))
                 .rounded_full()
                 .border(px(s))
-                .border_color(tone.opacity(if active { 0.6 } else { 0.4 }))
+                .border_color(p.foreground.opacity(0.1))
                 .text_size(px(13.0 * s))
                 .line_height(px(19.0 * s))
                 .whitespace_nowrap()
-                .text_color(tone)
+                .text_color(p.card_muted)
                 .chat_cursor_pointer()
-                .when(active || open, |pill| pill.bg(tone.opacity(0.14)))
-                .hover(|style| style.bg(tone.opacity(0.1)))
+                .when(active || open, |pill| pill.bg(p.foreground.opacity(0.08)))
+                .hover(|style| style.bg(p.foreground.opacity(0.06)))
                 .when(!open, |pill| {
                     pill.tooltip(|window, cx| {
                         gpui_component::tooltip::Tooltip::new(
-                            "Boosts: the agent answers with a page, a chart, a browser run and more",
+                            "Boosts (*): ask for a Live page, chart, diagram, or browser run in one click",
                         )
                         .build(window, cx)
                     })
@@ -227,7 +221,7 @@ impl NativeChatView {
                         .path("titlebar/sparkles.svg")
                         .size(px(14.0 * s))
                         .flex_shrink_0()
-                        .text_color(tone),
+                        .text_color(p.card_muted),
                 )
                 .child(text(pill, "label"))
                 .on_click(cx.listener(move |this, _, window, cx| {
@@ -236,25 +230,8 @@ impl NativeChatView {
                 }))
                 .child(
                     canvas(
-                        move |bounds, window, cx| {
+                        move |bounds, _, _| {
                             measured.set(bounds);
-                            let anchor_top = match above_top.get() {
-                                Some(top) if top < bounds.top() => top,
-                                _ => bounds.top(),
-                            };
-                            let frame = (hint_wanted
-                                && super::child_window::bounds_inside_content_mask(window, bounds))
-                            .then(|| callout_frame(bounds, anchor_top, s));
-                            let chat = chat.clone();
-                            cx.defer(move |cx| {
-                                let _ = chat.update(cx, |chat, cx| {
-                                    chat.place_frosted_overlay(
-                                        super::frosted_overlay_window::FrostedOverlay::BoostHint,
-                                        frame,
-                                        cx,
-                                    );
-                                });
-                            });
                         },
                         |_, _, _, _| {},
                     )
@@ -265,15 +242,144 @@ impl NativeChatView {
         )
     }
 
+    /// The one-time Boost suggestion chip inside the composer's top-right corner: small gold pill
+    /// with sparkles, label, and an x. Clicking the chip opens Boosts and dismisses it; clicking
+    /// the x dismisses it. Reuses `boosts.hint` and `dismissBoostHint`.
+    pub(super) fn boost_hint_chip(
+        &self,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        if self.collab_guest() || self.list.item_count() > 0 || self.pending_send {
+            return None;
+        }
+        let boosts = self.boosts()?;
+        let hint = &boosts["hint"];
+        if !boost_hint_visible(hint) {
+            return None;
+        }
+        let s = p.scale;
+        let tone = accent(p.light);
+        let title = text(hint, "title");
+        let body = text(hint, "text");
+        let label = if !title.trim().is_empty() {
+            title.clone()
+        } else {
+            "Try Boosts".to_string()
+        };
+        let aria = if !body.trim().is_empty() {
+            format!("{label}. {body}")
+        } else {
+            label.clone()
+        };
+        let tip = if !body.trim().is_empty() {
+            body
+        } else {
+            "Open Boosts".to_string()
+        };
+        let chip_bounds: Rc<Cell<Bounds<Pixels>>> = Rc::new(Cell::new(Bounds::default()));
+        let measured = chip_bounds.clone();
+        let pill_bounds = self.boost_pill_bounds.clone();
+        Some(
+            div()
+                .id("boost-hint-chip")
+                .relative()
+                .role(gpui::Role::Button)
+                .aria_label(aria)
+                .flex()
+                .items_center()
+                .flex_shrink_0()
+                .h(px(24.0 * s))
+                .gap(px(5.0 * s))
+                .pl(px(8.0 * s))
+                .pr(px(4.0 * s))
+                .rounded_full()
+                .border_1()
+                .border_color(tone.opacity(0.38))
+                .bg(tone.opacity(0.1))
+                .text_size(px(12.0 * s))
+                .line_height(px(16.0 * s))
+                .font_weight(FontWeight::MEDIUM)
+                .whitespace_nowrap()
+                .text_color(tone)
+                .chat_cursor_pointer()
+                .hover(move |style| {
+                    style
+                        .bg(tone.opacity(0.16))
+                        .border_color(tone.opacity(0.55))
+                })
+                .tooltip(move |window, cx| {
+                    gpui_component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
+                })
+                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| {
+                    cx.stop_propagation();
+                })
+                .child(
+                    svg()
+                        .path("titlebar/sparkles.svg")
+                        .size(px(13.0 * s))
+                        .flex_shrink_0()
+                        .text_color(tone),
+                )
+                .child(label)
+                .child(
+                    div()
+                        .id("boost-hint-chip-dismiss")
+                        .role(gpui::Role::Button)
+                        .aria_label("Dismiss Boosts hint")
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .size(px(18.0 * s))
+                        .rounded_full()
+                        .text_color(tone.opacity(0.75))
+                        .hover(move |style| style.bg(tone.opacity(0.2)).text_color(tone))
+                        .child(
+                            svg()
+                                .path("titlebar/x.svg")
+                                .size(px(11.0 * s))
+                                .text_color(tone.opacity(0.8)),
+                        )
+                        .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| {
+                            cx.stop_propagation();
+                        })
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            cx.stop_propagation();
+                            this.invoke(json!({"type": "dismissBoostHint"}), cx);
+                        })),
+                )
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    cx.stop_propagation();
+                    let pill = pill_bounds.get();
+                    let anchor = if pill.size.width > px(0.0) {
+                        pill
+                    } else {
+                        chip_bounds.get()
+                    };
+                    this.open_boost_menu(anchor, window, cx);
+                }))
+                .child(
+                    canvas(
+                        move |bounds, _, _| {
+                            measured.set(bounds);
+                        },
+                        |_, _, _, _| {},
+                    )
+                    .absolute()
+                    .inset_0(),
+                )
+                .into_any_element(),
+        )
+    }
+
     /// Opens (or shuts) the Boost menu against the pill, and reads the Boosts again: Settings may
-    /// have changed them since this chat opened. Opening it is what the callout asked for.
+    /// have changed them since this chat opened. Opening it also dismisses the first-time hint.
     pub(super) fn open_boost_menu(
         &mut self,
         pill: Bounds<Pixels>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.hide_frosted_overlay(super::frosted_overlay_window::FrostedOverlay::BoostHint, cx);
         if self
             .boosts()
             .is_some_and(|boosts| boost_hint_visible(&boosts["hint"]))
@@ -283,29 +389,6 @@ impl NativeChatView {
         self.boost_preview = None;
         self.invoke(json!({"type": "refreshBoosts"}), cx);
         self.toggle_pill_menu(BOOST_MENU, pill, window, cx);
-    }
-
-    /// The callout's Show me, from its own window: the menu opens on the chat's next frame, which
-    /// has the chat's window.
-    pub(super) fn request_boost_menu(&mut self, cx: &mut Context<Self>) {
-        self.hide_frosted_overlay(super::frosted_overlay_window::FrostedOverlay::BoostHint, cx);
-        self.invoke(json!({"type": "dismissBoostHint"}), cx);
-        self.boost_menu_requested = true;
-        cx.notify();
-    }
-
-    /// Opens the menu a callout asked for, now that this frame has the chat's window.
-    pub(super) fn open_requested_boost_menu(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if std::mem::take(&mut self.boost_menu_requested) {
-            let pill = self.boost_pill_bounds.get();
-            self.boost_preview = None;
-            self.invoke(json!({"type": "refreshBoosts"}), cx);
-            self.toggle_pill_menu(BOOST_MENU, pill, window, cx);
-        }
     }
 
     /// The menu's content height (unscaled): every section's header and rows, up to
@@ -795,142 +878,10 @@ impl NativeChatView {
     }
 }
 
-/// Where the callout bubble goes for the pill painted at `pill`: right-aligned with the pill,
-/// above `anchor_top` (the pill's top, or the top of any card/bar stacked above the chat box so it
-/// never overlaps them).
-fn callout_frame(pill: Bounds<Pixels>, anchor_top: Pixels, s: f32) -> Bounds<Pixels> {
-    let size = gpui::size(px(CALLOUT_WIDTH * s), px(CALLOUT_HEIGHT * s));
-    let origin = gpui::point(
-        (pill.right() - size.width).max(px(8.0 * s)),
-        (anchor_top - size.height - px(10.0 * s)).max(px(8.0 * s)),
-    );
-    Bounds::new(origin, size)
-}
-
-/// Whether `hint` carries visible copy (`title` or `text`). Never draw an empty callout.
+/// Whether `hint` carries visible copy (`title` or `text`). Never draw an empty hint chip.
 pub(super) fn boost_hint_visible(hint: &Value) -> bool {
     hint.is_object()
         && (!text(hint, "title").trim().is_empty() || !text(hint, "text").trim().is_empty())
-}
-
-/// The callout bubble, drawn in its own frosted window (frosted_overlay_window.rs): the sparkles,
-/// "New: Boosts" and one line, Show me and an x.
-pub(super) fn boost_callout(
-    chat: gpui::WeakEntity<NativeChatView>,
-    hint: &Value,
-    p: &ChatAppearance,
-) -> AnyElement {
-    if !boost_hint_visible(hint) {
-        return div().into_any_element();
-    }
-    let s = p.scale;
-    let tone = accent(p.light);
-    let title = text(hint, "title");
-    let body = text(hint, "text");
-    let fill = if p.window_glass && !cfg!(ghostex_web) {
-        p.menu_surface()
-    } else {
-        p.over_content_fill(p.menu_opaque())
-    };
-    let show = chat.clone();
-    let close = chat;
-    div()
-        .id("boost-callout")
-        .role(gpui::Role::Status)
-        .aria_label(format!("{title}. {body}"))
-        .size_full()
-        .flex()
-        .items_center()
-        .gap(px(10.0 * s))
-        .px(px(12.0 * s))
-        .rounded(px(12.0 * s))
-        .border(px(s))
-        .border_color(p.foreground.opacity(0.12))
-        .bg(fill)
-        .font_family(p.font.clone())
-        .child(
-            svg()
-                .path("titlebar/sparkles.svg")
-                .size(px(18.0 * s))
-                .flex_shrink_0()
-                .text_color(tone),
-        )
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .flex_1()
-                .min_w_0()
-                .when(!title.trim().is_empty(), |col| {
-                    col.child(
-                        div()
-                            .text_size(px(13.0 * s))
-                            .line_height(px(17.0 * s))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(p.foreground)
-                            .child(title),
-                    )
-                })
-                .when(!body.trim().is_empty(), |col| {
-                    col.child(
-                        div()
-                            .truncate()
-                            .text_size(px(12.0 * s))
-                            .line_height(px(16.0 * s))
-                            .text_color(p.card_muted)
-                            .child(body),
-                    )
-                }),
-        )
-        .child(
-            div()
-                .id("boost-callout-show")
-                .role(gpui::Role::Button)
-                .aria_label("Show me")
-                .flex_shrink_0()
-                .px(px(10.0 * s))
-                .py(px(4.0 * s))
-                .rounded_full()
-                .bg(tone.opacity(0.18))
-                .text_size(px(12.5 * s))
-                .text_color(tone)
-                .chat_cursor_pointer()
-                .hover(|style| style.bg(tone.opacity(0.26)))
-                .child("Show me")
-                .on_click(move |_, _, cx| {
-                    let _ = show.update(cx, |chat, cx| chat.request_boost_menu(cx));
-                }),
-        )
-        .child(
-            div()
-                .id("boost-callout-close")
-                .role(gpui::Role::Button)
-                .aria_label("Close")
-                .flex_shrink_0()
-                .size(px(22.0 * s))
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded_full()
-                .chat_cursor_pointer()
-                .hover(|style| style.bg(p.foreground.opacity(0.08)))
-                .child(
-                    svg()
-                        .path("titlebar/x.svg")
-                        .size(px(13.0 * s))
-                        .text_color(p.card_muted),
-                )
-                .on_click(move |_, _, cx| {
-                    let _ = close.update(cx, |chat, cx| {
-                        chat.hide_frosted_overlay(
-                            super::frosted_overlay_window::FrostedOverlay::BoostHint,
-                            cx,
-                        );
-                        chat.invoke(json!({"type": "dismissBoostHint"}), cx);
-                    });
-                }),
-        )
-        .into_any_element()
 }
 
 /// A small picture of what a Boost sends back, in the chat's own colours: shapes only, no words but
@@ -1293,8 +1244,8 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
                 }),
             )
             .into_any_element(),
-        // Inbox it! and Schedule it: the card each leaves, as the dock and All Automations show it.
-        "inbox" | "schedule" => div()
+        // Triage messages, Add to Pings, Inbox it! and Schedule it: the cards each leaves.
+        "triage-messages" | "needs-you" | "inbox" | "schedule" => div()
             .size_full()
             .flex()
             .flex_col()
@@ -1303,6 +1254,15 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
             .p(px(8.0 * s))
             .children(
                 match kind {
+                    "triage-messages" => vec![
+                        ("DM: Launch timeline", "Urgent · suggested reply", "Reply"),
+                        ("@you: Review copy", "Today · unanswered ask", "Reply"),
+                    ],
+                    "needs-you" => vec![(
+                        "Check billing on mobile",
+                        "Verify totals before release",
+                        "Done",
+                    )],
                     "inbox" => vec![(
                         "Why does CI fail on main?",
                         "A race in the token refresh",
@@ -1328,14 +1288,14 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
                         .border_color(strong)
                         .child(
                             svg()
-                                .path(if kind == "inbox" {
-                                    "titlebar/circle-dot.svg"
-                                } else {
-                                    "titlebar/clock.svg"
+                                .path(match kind {
+                                    "triage-messages" => "titlebar/message-circle.svg",
+                                    "needs-you" | "inbox" => "titlebar/circle-dot.svg",
+                                    _ => "titlebar/clock.svg",
                                 })
                                 .flex_none()
                                 .size(px(12.0 * s))
-                                .text_color(if kind == "inbox" {
+                                .text_color(if matches!(kind, "needs-you" | "inbox") {
                                     gpui::rgb(crate::app::native_sidebar::status::QUESTION_COLOR)
                                         .into()
                                 } else {

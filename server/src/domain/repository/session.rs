@@ -16,11 +16,12 @@ use crate::domain::{
 };
 use crate::ids::{create_session_id, create_zmx_session_name, is_gxserver_project_id};
 
-/// The three session columns usage counts need (`list_session_agent_facts`).
+/// The four session columns usage and Native-mode counts need (`list_session_agent_facts`).
 pub struct SessionAgentFacts {
     pub lifecycle_state: String,
     pub agent_id: Option<String>,
     pub agent_command: Option<String>,
+    pub is_non_cli: bool,
 }
 
 impl<'a> DomainRepository<'a> {
@@ -192,15 +193,25 @@ impl<'a> DomainRepository<'a> {
             )
             .map_err(sql_error)?;
         self.record_id_allocation("session", &project_id, &session_id, &timestamp)?;
+        let is_stopped_external_import = session
+            .pointer("/runtimeSettings/externalSession")
+            .and_then(Value::as_bool)
+            == Some(true)
+            && session.get("lifecycleState").and_then(Value::as_str) == Some("stopped");
         // A session created on a known conversation (a fork, a restore, a resume) starts with it.
-        crate::session_identity_log::log_identity_change(
-            &self.server_id,
-            &project_id,
-            &session_id,
-            read_optional_text(session.get("agentId")).as_deref(),
-            &crate::session_identity_log::StoredIdentity::default(),
-            &crate::session_identity_log::StoredIdentity::of_session(&session),
-        );
+        // External history imports (discovered in bulk by `/api/listPreviousSessions`) are stopped
+        // historical snapshots rather than live identity transitions, so skip logging them here
+        // just like telemetry below skips them.
+        if !is_stopped_external_import {
+            crate::session_identity_log::log_identity_change(
+                &self.server_id,
+                &project_id,
+                &session_id,
+                read_optional_text(session.get("agentId")).as_deref(),
+                &crate::session_identity_log::StoredIdentity::default(),
+                &crate::session_identity_log::StoredIdentity::of_session(&session),
+            );
+        }
         /*
         CDXC:Telemetry 2026-08-26:
         The one INSERT INTO sessions in the crate, so every route that creates a
@@ -214,13 +225,7 @@ impl<'a> DomainRepository<'a> {
         (user-authored) agent ids are resolved by the executable of their base
         command inside the emitter, so the id itself never leaves the machine.
         */
-        if read_optional_text(session.get("agentId")).is_some()
-            && !(session
-                .pointer("/runtimeSettings/externalSession")
-                .and_then(Value::as_bool)
-                == Some(true)
-                && session.get("lifecycleState").and_then(Value::as_str) == Some("stopped"))
-        {
+        if read_optional_text(session.get("agentId")).is_some() && !is_stopped_external_import {
             crate::telemetry::session_started(&session);
         }
         Ok(session)
@@ -638,8 +643,8 @@ impl<'a> DomainRepository<'a> {
             .collect()
     }
 
-    /// Every row's `lifecycleState`, `agentId` and string `runtimeSettings.agentCommand`, the
-    /// values a hydrated row carries for those keys, read without hydrating any row.
+    /// Every row's `lifecycleState`, `agentId`, string `runtimeSettings.agentCommand`, and
+    /// effective Native-mode flag (`nonCliMode` else `acpMode`), read without hydrating any row.
     pub fn list_session_agent_facts(&self) -> DomainResult<Vec<SessionAgentFacts>> {
         let mut statement = self
             .db
@@ -647,7 +652,11 @@ impl<'a> DomainRepository<'a> {
                 r#"
                 SELECT lifecycleState, agentId,
                        CASE WHEN json_type(runtimeSettingsJson, '$.agentCommand') = 'text'
-                            THEN json_extract(runtimeSettingsJson, '$.agentCommand') END
+                            THEN json_extract(runtimeSettingsJson, '$.agentCommand') END,
+                       CASE WHEN json_type(runtimeSettingsJson, '$.nonCliMode') IN ('true', 'false')
+                            THEN json_type(runtimeSettingsJson, '$.nonCliMode') = 'true'
+                            ELSE json_type(runtimeSettingsJson, '$.acpMode') = 'true'
+                       END
                 FROM sessions
                 "#,
             )
@@ -658,6 +667,7 @@ impl<'a> DomainRepository<'a> {
                     lifecycle_state: row.get(0)?,
                     agent_id: row.get(1)?,
                     agent_command: row.get(2)?,
+                    is_non_cli: row.get::<_, bool>(3)?,
                 })
             })
             .map_err(sql_error)?

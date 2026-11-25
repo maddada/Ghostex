@@ -431,16 +431,194 @@ pub(crate) struct RemoteNotice {
     pub notice: String,
 }
 
-/// Drops what is held for sessions that were closed (stopped) or removed, and holds a "not
+/// Drops what is held for `project_id:session_id` when it is closed, suppressing notices when
+/// `close_actor` says the sender or its coordinator closed/resolved it (or when the target thread
+/// is already resolved), and coalescing multiple held notes per sender into ONE compact notice.
+fn drop_held_for_closed_target(
+    db: &rusqlite::Connection,
+    server_id: &str,
+    project_id: &str,
+    session_id: &str,
+    session: Option<&Value>,
+    close_actor: Option<&crate::session_chat_queue_undelivered::CloseActor>,
+) -> (Vec<DroppedHeldNote>, Vec<RemoteNotice>) {
+    use ghostex_gx_chat_core::transcript::delivery_notice::{
+        format_delivery_notice, short_first_line, DELIVERY_NOTICE_PREVIEW_MAX_CHARS,
+    };
+
+    let held = {
+        let _lock = lock();
+        let current = read_held(db, project_id, session_id);
+        if current.is_empty() || write_held(db, project_id, session_id, &[]).is_err() {
+            return (Vec::new(), Vec::new());
+        }
+        current
+    };
+
+    let mut dropped = Vec::new();
+    let mut remote = Vec::new();
+    let title = session
+        .and_then(|session| session["title"].as_str())
+        .map(|title| one_line(title, 80))
+        .unwrap_or_default();
+    let target_ref = if server_id.is_empty() {
+        session_id.to_string()
+    } else {
+        crate::ids::create_global_session_ref(server_id, project_id, session_id)
+    };
+    let target_thread = crate::coordinators::read_thread(db, project_id, session_id)
+        .ok()
+        .flatten();
+
+    struct HeldGroup {
+        count: usize,
+        preview: String,
+    }
+    let mut local_groups: std::collections::BTreeMap<(String, String), HeldGroup> =
+        std::collections::BTreeMap::new();
+    let mut remote_groups: std::collections::BTreeMap<(String, String, String), HeldGroup> =
+        std::collections::BTreeMap::new();
+
+    for note in held {
+        let remote_sender = from_field(&note, "serverId")
+            .zip(from_field(&note, "projectId"))
+            .zip(from_field(&note, "sessionId"))
+            .map(|((server, project), session)| (server, (project, session)));
+        let local_sender = note_sender(&note);
+        if local_sender.is_none() && remote_sender.is_none() {
+            continue;
+        }
+        let words = note["body"]
+            .as_str()
+            .or_else(|| note["text"].as_str())
+            .unwrap_or_default();
+        let preview = short_first_line(words, DELIVERY_NOTICE_PREVIEW_MAX_CHARS);
+        let request_id = note["sendRequestId"].as_str().map(str::to_string);
+
+        if let Some(sender) = local_sender {
+            dropped.push(DroppedHeldNote {
+                sender: sender.clone(),
+                send_request_id: request_id,
+            });
+            let suppressed = if let Some(actor) = close_actor {
+                !server_id.is_empty()
+                    && crate::session_chat_queue_undelivered::should_suppress_close_notice(
+                        db,
+                        server_id,
+                        (project_id, session_id),
+                        (&sender.0, &sender.1),
+                        actor,
+                    )
+            } else {
+                // Fallback sweep: if this target thread was resolved, its coordinator or sibling
+                // threads don't need a "session was closed" notice.
+                target_thread.as_ref().is_some_and(|thread| {
+                    thread.is_resolved()
+                        && ((thread.coordinator_project_id == sender.0
+                            && thread.coordinator_session_id == sender.1)
+                            || crate::coordinators::read_thread(db, &sender.0, &sender.1)
+                                .ok()
+                                .flatten()
+                                .is_some_and(|sender_thread| {
+                                    sender_thread.coordinator_project_id
+                                        == thread.coordinator_project_id
+                                        && sender_thread.coordinator_session_id
+                                            == thread.coordinator_session_id
+                                }))
+                })
+            };
+            if suppressed {
+                continue;
+            }
+            let group = local_groups.entry(sender).or_insert_with(|| HeldGroup {
+                count: 0,
+                preview: preview.clone(),
+            });
+            group.count += 1;
+            if group.preview.is_empty() {
+                group.preview = preview;
+            }
+        } else if let Some((remote_server, sender)) = remote_sender {
+            let remote_ref =
+                crate::ids::create_global_session_ref(&remote_server, &sender.0, &sender.1);
+            if close_actor
+                .is_some_and(|actor| actor.closed_by_ref.as_deref() == Some(remote_ref.as_str()))
+            {
+                continue;
+            }
+            let group = remote_groups
+                .entry((remote_server, sender.0, sender.1))
+                .or_insert_with(|| HeldGroup {
+                    count: 0,
+                    preview: preview.clone(),
+                });
+            group.count += 1;
+            if group.preview.is_empty() {
+                group.preview = preview;
+            }
+        }
+    }
+
+    for (sender, group) in local_groups {
+        let notice = crate::coordinators::without_foreign_agent_blocks(
+            &ghostex_gx_chat_core::session::appended_notes::neutralised_held_note(
+                &format_delivery_notice(
+                    &target_ref,
+                    &title,
+                    group.count,
+                    "the session was closed",
+                    &group.preview,
+                    &[],
+                ),
+            ),
+        );
+        let _ = hold(
+            db,
+            &sender.0,
+            &sender.1,
+            HeldMessage {
+                text: &notice,
+                body: None,
+                request_id: None,
+                from: None,
+                system: true,
+            },
+        );
+    }
+    for ((remote_server, sender_project, sender_session), group) in remote_groups {
+        let notice = crate::coordinators::without_foreign_agent_blocks(
+            &ghostex_gx_chat_core::session::appended_notes::neutralised_held_note(
+                &format_delivery_notice(
+                    &target_ref,
+                    &title,
+                    group.count,
+                    "the session was closed",
+                    &group.preview,
+                    &[],
+                ),
+            ),
+        );
+        remote.push(RemoteNotice {
+            server_id: remote_server,
+            sender: (sender_project, sender_session),
+            notice,
+        });
+    }
+
+    (dropped, remote)
+}
+
+/// Drops what is held for sessions that were closed (stopped) or removed, and holds a compact "not
 /// delivered" note for each sending session that is still open, so it learns with its own next
 /// message. Returns the dropped messages that came from a session, for their chat cards.
 pub(crate) fn drop_held_for_closed_sessions(
     db: &rusqlite::Connection,
+    server_id: &str,
 ) -> (Vec<DroppedHeldNote>, Vec<RemoteNotice>) {
     let mut dropped = Vec::new();
     let mut remote = Vec::new();
-    let repository = DomainRepository::new(db, "");
-    for ((project_id, session_id), held) in {
+    let repository = DomainRepository::new(db, server_id);
+    for ((project_id, session_id), _) in {
         let _lock = lock();
         read_all_held(db)
     } {
@@ -454,72 +632,16 @@ pub(crate) fn drop_held_for_closed_sessions(
         if !closed {
             continue;
         }
-        {
-            let _lock = lock();
-            // Read again under the lock: a restore may have moved them on since.
-            if read_held(db, &project_id, &session_id).is_empty()
-                || write_held(db, &project_id, &session_id, &[]).is_err()
-            {
-                continue;
-            }
-        }
-        let title = session
-            .as_ref()
-            .and_then(|session| session["title"].as_str())
-            .map(|title| one_line(title, 80))
-            .filter(|title| !title.is_empty())
-            .map(|title| format!("\u{201c}{title}\u{201d} ({session_id})"))
-            .unwrap_or_else(|| session_id.clone());
-        for note in held {
-            let remote_sender = from_field(&note, "serverId")
-                .zip(from_field(&note, "projectId"))
-                .zip(from_field(&note, "sessionId"))
-                .map(|((server, project), session)| (server, (project, session)));
-            if note_sender(&note).is_none() && remote_sender.is_none() {
-                continue;
-            }
-            let words = note["body"]
-                .as_str()
-                .or_else(|| note["text"].as_str())
-                .unwrap_or_default();
-            let start = one_line(words, 160);
-            let request_id = note["sendRequestId"].as_str().map(str::to_string);
-            let notice = crate::coordinators::without_foreign_agent_blocks(
-                &ghostex_gx_chat_core::session::appended_notes::neutralised_held_note(&format!(
-                    "Not delivered: the message you sent with --with-next to {title}{} was dropped, because that session was closed before its next message. It began: \u{201c}{start}\u{201d}",
-                    request_id
-                        .as_deref()
-                        .map(|id| format!(" (request id {})", one_line(id, 64)))
-                        .unwrap_or_default()
-                )),
-            );
-            let Some(sender) = note_sender(&note) else {
-                if let Some((server_id, sender)) = remote_sender {
-                    remote.push(RemoteNotice {
-                        server_id,
-                        sender,
-                        notice,
-                    });
-                }
-                continue;
-            };
-            let _ = hold(
-                db,
-                &sender.0,
-                &sender.1,
-                HeldMessage {
-                    text: &notice,
-                    body: None,
-                    request_id: None,
-                    from: None,
-                    system: true,
-                },
-            );
-            dropped.push(DroppedHeldNote {
-                sender,
-                send_request_id: request_id,
-            });
-        }
+        let (target_dropped, target_remote) = drop_held_for_closed_target(
+            db,
+            server_id,
+            &project_id,
+            &session_id,
+            session.as_ref(),
+            None,
+        );
+        dropped.extend(target_dropped);
+        remote.extend(target_remote);
     }
     (dropped, remote)
 }
@@ -595,14 +717,13 @@ fn settle_card(
     )
 }
 
-/// [`drop_held_for_closed_sessions`], with each dropped message's card marked not delivered.
-/// Returns the senders whose chat must be republished, and the notices for senders on other
-/// computers.
-pub(crate) fn settle_held_for_closed_sessions(
+/// Settles each dropped message's delivery card and returns the senders whose chat must be
+/// republished.
+fn settle_dropped_cards(
     db: &rusqlite::Connection,
-) -> (Vec<(String, String)>, Vec<RemoteNotice>) {
+    dropped: Vec<DroppedHeldNote>,
+) -> Vec<(String, String)> {
     let mut republish = Vec::new();
-    let (dropped, remote) = drop_held_for_closed_sessions(db);
     for dropped in dropped {
         let Some(id) = dropped.send_request_id.as_deref() else {
             continue;
@@ -619,7 +740,43 @@ pub(crate) fn settle_held_for_closed_sessions(
             republish.push(dropped.sender);
         }
     }
-    (republish, remote)
+    republish
+}
+
+/// Drops `--with-next` notes held for a session right as it closes, respecting `close_actor` so
+/// self-close and coordinator-close send no notice back.
+pub(crate) fn settle_held_for_closed_session_with_actor(
+    db: &rusqlite::Connection,
+    server_id: &str,
+    project_id: &str,
+    session_id: &str,
+    close_actor: &crate::session_chat_queue_undelivered::CloseActor,
+) -> (Vec<(String, String)>, Vec<RemoteNotice>) {
+    let repository = DomainRepository::new(db, server_id);
+    let session = repository
+        .get_session(project_id, session_id)
+        .ok()
+        .flatten();
+    let (dropped, remote) = drop_held_for_closed_target(
+        db,
+        server_id,
+        project_id,
+        session_id,
+        session.as_ref(),
+        Some(close_actor),
+    );
+    (settle_dropped_cards(db, dropped), remote)
+}
+
+/// [`drop_held_for_closed_sessions`], with each dropped message's card marked not delivered.
+/// Returns the senders whose chat must be republished, and the notices for senders on other
+/// computers.
+pub(crate) fn settle_held_for_closed_sessions(
+    db: &rusqlite::Connection,
+    server_id: &str,
+) -> (Vec<(String, String)>, Vec<RemoteNotice>) {
+    let (dropped, remote) = drop_held_for_closed_sessions(db, server_id);
+    (settle_dropped_cards(db, dropped), remote)
 }
 
 fn param<'a>(body: &'a Value, field: &str) -> Option<&'a str> {

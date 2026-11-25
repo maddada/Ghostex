@@ -17,6 +17,7 @@
 //! glass (the user's standing rule: no black fills on glass).
 
 use super::chat_text_look::{PROSE_LINE_HEIGHT, PROSE_SIZE};
+use super::pills_strip::STRIP_PAD_X;
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;
@@ -29,6 +30,15 @@ use serde_json::{Value, json};
 /// A status's glyph and colour, the board's (coordinator_board.rs `group_look`), so a card reads as
 /// its row in the Work panel does.
 pub(super) fn status_look(status: &str, p: &ChatAppearance) -> (&'static str, gpui::Hsla) {
+    if status == "approved" {
+        return ("titlebar/shield-check.svg", gpui::rgb(0x2fa865).into());
+    }
+    if status == "denied" {
+        return (
+            "titlebar/shield-x.svg",
+            gpui::rgb(crate::app::native_sidebar::status::APPROVAL_COLOR).into(),
+        );
+    }
     let group = match status {
         "waiting" => "hold",
         "finished" => "done",
@@ -105,23 +115,34 @@ fn page_row_menu(row: &Value) -> Vec<Value> {
     let mut rows = Vec::new();
     // A snoozed row's Unsnooze (gx-chat-core `dock_with`'s `snoozed`): back under Needs you now.
     if row["unsnooze"].is_object() {
-        rows.push(json!({ "label": "Unsnooze", "iconPath": "titlebar/alarm.svg", "command": row["unsnooze"] }));
+        rows.push(json!({ "label": "Unsnooze", "iconPath": "titlebar/alarm-off.svg", "command": row["unsnooze"] }));
     }
     if row["showInChat"].is_object() {
-        rows.push(json!({ "label": "Show in chat", "iconPath": "titlebar/message.svg", "command": row["showInChat"] }));
+        rows.push(json!({ "label": "Show in chat", "iconPath": "titlebar/message-share.svg", "command": row["showInChat"] }));
     }
     // Mark answered, beside Dismiss: one answered in the chat box closes by hand
     // (gx-chat-core `questions::later::mark_answered`).
     if row["markAnswered"].is_object() {
         rows.push(json!({ "label": "Mark answered", "iconPath": "titlebar/circle-check.svg", "command": row["markAnswered"] }));
     }
-    // Dismiss, or Mark as read on a row that asks no question (a Needs you to-do, a page that only
+    // Dismiss, or Archive on a row that asks no question (a to-do, a page that only
     // waits to be seen): gx-chat-core's `dismissLabel`. Both send the agent nothing.
     if row["dismiss"].is_object() {
         let label = row["dismissLabel"].as_str().unwrap_or("Dismiss");
-        rows.push(
-            json!({ "label": label, "iconPath": "titlebar/x.svg", "command": row["dismiss"] }),
-        );
+        let icon = if matches!(
+            label,
+            "Archive" | "Archive all" | "Done" | "Mark all done" | "Mark as read"
+        ) {
+            "titlebar/check.svg"
+        } else {
+            "titlebar/x.svg"
+        };
+        rows.push(json!({
+            "label": label,
+            "iconPath": icon,
+            "hotkeyAction": "inboxMarkRead",
+            "command": row["dismiss"],
+        }));
     }
     let snooze: Vec<Value> = row["snooze"]
         .as_array()
@@ -130,9 +151,12 @@ fn page_row_menu(row: &Value) -> Vec<Value> {
         .map(|choice| json!({ "label": text(choice, "label"), "command": choice["command"] }))
         .collect();
     if !snooze.is_empty() {
-        rows.push(
-            json!({ "label": "Snooze", "iconPath": "titlebar/clock.svg", "children": snooze }),
-        );
+        rows.push(json!({
+            "label": "Snooze",
+            "iconPath": "modals/settings/moon.svg",
+            "hotkeyAction": "inboxSnooze",
+            "children": snooze,
+        }));
     }
     rows
 }
@@ -252,11 +276,12 @@ fn row_markdown(row: &Value, forms: &Value) -> String {
 /// (without html written there in the icon) but colored pink". A question keeps its circle.
 pub(super) fn row_mark(row: &Value, p: &ChatAppearance) -> (&'static str, gpui::Hsla) {
     let status = text(row, "status");
+    let kind = text(row, "kind");
     let (icon, color) = status_look(&status, p);
-    if text(row, "kind") == "threadWait" {
+    if kind == "threadWait" {
         return match text(row, "waitKind").as_str() {
             "approval" => (
-                "titlebar/shield-check.svg",
+                "titlebar/shield-alert.svg",
                 gpui::rgb(crate::app::native_sidebar::status::APPROVAL_COLOR).into(),
             ),
             "signIn" | "usageLimit" => (
@@ -264,11 +289,33 @@ pub(super) fn row_mark(row: &Value, p: &ChatAppearance) -> (&'static str, gpui::
                 gpui::rgb(crate::app::native_sidebar::status::WORKING_COLOR).into(),
             ),
             _ if row["needsApproval"] == true => (
-                "titlebar/shield-check.svg",
+                "titlebar/shield-alert.svg",
                 gpui::rgb(crate::app::native_sidebar::status::APPROVAL_COLOR).into(),
             ),
             _ => (icon, color),
         };
+    }
+    if kind == "approval" {
+        return (
+            "titlebar/shield-alert.svg",
+            gpui::rgb(crate::app::native_sidebar::status::APPROVAL_COLOR).into(),
+        );
+    }
+    if kind == "approvalSettled" {
+        return if status == "denied" || status == "dropped" {
+            (
+                "titlebar/shield-x.svg",
+                gpui::rgb(crate::app::native_sidebar::status::APPROVAL_COLOR).into(),
+            )
+        } else {
+            ("titlebar/shield-check.svg", gpui::rgb(0x2fa865).into())
+        };
+    }
+    if kind == "pageBundle" {
+        return (
+            "titlebar/stack.svg",
+            gpui::rgb(crate::app::native_sidebar::status::QUESTION_COLOR).into(),
+        );
     }
     if row["page"] == true && status == "needs" {
         return ("titlebar/file.svg", color);
@@ -279,8 +326,16 @@ pub(super) fn row_mark(row: &Value, p: &ChatAppearance) -> (&'static str, gpui::
     // CDXC:Coordinators 2026-11-12 DECISION:
     // User, of a form's row that showed the question ring: "use this icon for this one when it's
     // a question form (keep pink color)". Work item asks and pages keep theirs.
-    if text(row, "kind") == "form" && row["page"] != true && status == "needs" {
+    if kind == "form" && row["page"] != true && status == "needs" {
         return ("titlebar/list-check.svg", color);
+    }
+    // Q4761 all-literal left type icons: to-dos get a checkbox, questions get a help-circle.
+    if status == "needs" && (row["needsYou"] == true || text(row, "key").starts_with("needs-you:"))
+    {
+        return ("titlebar/checkbox.svg", color);
+    }
+    if status == "needs" {
+        return ("titlebar/help-circle.svg", color);
     }
     (icon, color)
 }
@@ -328,6 +383,8 @@ pub(super) struct DockRowLook {
     pub buttons: Option<AnyElement>,
     /// What an ⌥-click puts in the chat box (a Work panel card's `reference`), "" for none.
     pub reference: String,
+    /// Keyboard-focused row in Session Inbox triage mode (Q4687).
+    pub focused: bool,
 }
 
 /// How wide `label` is in the chat's font at `size` (both unscaled).
@@ -465,6 +522,11 @@ const DOCK_MOTION_KEY: &str = "work-dock:rows";
 const DOCK_ALL_ROWS: &str = "dock-rows:all";
 /// `NativeChatView::expanded`'s key for the dock's Snoozed row opened (`work_dock_snoozed`).
 const DOCK_SNOOZED_ROWS: &str = "dock-rows:snoozed";
+/// `NativeChatView::expanded`'s key for the dock's Recent drawer opened (`work_dock_recent`).
+const DOCK_RECENT_ROWS: &str = "dock-rows:recent";
+/// Legacy keys from before Done and Handled merged into Recent; migrated on read and toggle.
+const DOCK_LEGACY_DONE_ROWS: &str = "dock-rows:done";
+const DOCK_LEGACY_ANSWERED_ROWS: &str = "dock-rows:answered";
 /// The dock's cards fold by themselves while the draft is longer than this.
 const DOCK_FOLDS_PAST_CHARS: usize = 280;
 
@@ -616,12 +678,17 @@ impl NativeChatView {
     }
 
     pub(super) fn render_work_dock(
-        &self,
+        &mut self,
         p: &ChatAppearance,
         window_height: f32,
+        error_shown: bool,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         self.board.dock_top.set(None);
+        if !error_shown {
+            self.board.dock_peek_over_error = false;
+        }
+        self.board.dock_error_active = error_shown;
         let dock = &self.snapshot["workDock"];
         let board = &self.snapshot["coordinatorBoard"];
         let rows: Vec<Value> = dock["rows"].as_array().cloned().unwrap_or_default();
@@ -629,14 +696,36 @@ impl NativeChatView {
             rows.iter()
                 .any(|row| row["key"].as_str() == Some(key.as_str()))
         });
-        // The snoozed asks, forms and pages, folded under one Snoozed row (`work_dock_snoozed`).
+        // The snoozed asks, forms, pages and to-dos, folded under one Snoozed row (`work_dock_snoozed`).
         let snoozed: Vec<Value> = dock["snoozed"].as_array().cloned().unwrap_or_default();
-        if rows.is_empty() && snoozed.is_empty() && !board.is_object() {
+        // Combined Recent drawer (recently handled asks/approvals/to-dos + finished work items),
+        // falling back to answered + done for older chat cores.
+        let recent: Vec<Value> = if let Some(list) = dock["recent"].as_array() {
+            list.clone()
+        } else {
+            let mut merged = dock["answered"].as_array().cloned().unwrap_or_default();
+            merged.extend(dock["done"].as_array().cloned().unwrap_or_default());
+            merged
+        };
+        let recent_archive_all = dock["recentArchiveAll"]["command"]
+            .is_object()
+            .then(|| dock["recentArchiveAll"]["command"].clone())
+            .or_else(|| {
+                dock["doneArchiveAll"]["command"]
+                    .is_object()
+                    .then(|| dock["doneArchiveAll"]["command"].clone())
+            });
+        let undo = dock["undoMarkAllRead"]
+            .is_object()
+            .then(|| dock["undoMarkAllRead"].clone());
+        let has_dock_content =
+            !rows.is_empty() || !snoozed.is_empty() || !recent.is_empty() || undo.is_some();
+        if !has_dock_content && !board.is_object() {
             return None;
         }
         // An ordinary session's bar stays away until it has an item (the user's "Nothing in
         // progress" bar is a coordinator's).
-        if rows.is_empty() && snoozed.is_empty() && board["own"] == true && board["empty"] == true {
+        if !has_dock_content && board["own"] == true && board["empty"] == true {
             return None;
         }
         let long_draft = self
@@ -651,9 +740,12 @@ impl NativeChatView {
         }
         let s = p.scale;
         // The core's `hidden` (hideWorkDock) is the collapsed bar here; it opens by itself when a
-        // row that was not there when it collapsed arrives.
-        let collapsible = !rows.is_empty() || !snoozed.is_empty();
-        let open = collapsible && dock["hidden"] != true;
+        // row that was not there when it collapsed arrives. While an error banner sits above the
+        // dock, fold to the header row until the error clears or the user expands it manually.
+        let collapsible = has_dock_content;
+        let hidden_in_core = dock["hidden"] == true;
+        let open =
+            collapsible && !hidden_in_core && (!error_shown || self.board.dock_peek_over_error);
         // Collapsing or opening, the rows ease their height and fade as the chat's other folds do
         // (disclosure_motion.rs, its timing and the reduced motion setting), the chevron turning
         // with them; the bar and the chat box under the dock follow its height.
@@ -663,7 +755,16 @@ impl NativeChatView {
         // collapsed".
         let motion = self.disclosure_frame(DOCK_MOTION_KEY, open, cx);
         let turned = motion.map_or(if open { 1.0 } else { 0.0 }, |frame| frame.log);
-        let header = self.work_dock_header(&rows, collapsible, open, turned, p, cx);
+        let header = self.work_dock_header(
+            &rows,
+            collapsible,
+            open,
+            hidden_in_core,
+            error_shown,
+            turned,
+            p,
+            cx,
+        );
         let mut surface = div()
             .relative()
             .w_full()
@@ -674,17 +775,13 @@ impl NativeChatView {
             .bg(p.card_panel)
             .text_size(px(PROSE_SIZE * s))
             .line_height(px(PROSE_LINE_HEIGHT * s))
+            .when_some(self.board.inbox_focus_handle.as_ref(), |surface, handle| {
+                surface.track_focus(handle)
+            })
             .child(header);
         if open || motion.is_some() {
             let limit = dock["limit"].as_u64().unwrap_or(4) as usize;
             let hidden = rows.len().saturating_sub(limit);
-            // "N more need you" opens the rest here, under the first rows, and "Show fewer" folds
-            // them back; past `DOCK_MAX_HEIGHT` the rows scroll inside the dock. The header's work
-            // items button stays the way to the whole list.
-            //
-            // CDXC:Coordinators 2026-11-10 DECISION:
-            // User: the more line opens the rest of the rows in place, inside the dock, instead of
-            // the Work panel at Needs you, with a way to fold them back.
             let all = hidden > 0 && self.expanded.contains(DOCK_ALL_ROWS);
             let mut list = div()
                 .id("work-dock-rows")
@@ -698,52 +795,103 @@ impl NativeChatView {
                 .flex()
                 .flex_col()
                 .p(px(4.0 * s));
-            for row in rows.iter().take(if all { rows.len() } else { limit }) {
-                list = list.child(self.dock_row(row, p, cx));
+            for (idx, row) in rows
+                .iter()
+                .take(if all { rows.len() } else { limit })
+                .enumerate()
+            {
+                let focused = self.board.inbox_focus == Some(idx);
+                list = list.child(self.dock_row_at(row, focused, p, cx));
             }
-            // Mark all read (gx-chat-core `dock_with`), in the more line's quiet words, at its
-            // right.
+            // Archive all (Q4685 A / Q4758): breakdown summary on left + "Archive all" + count badge on right.
+            let mark_all_summary = text(&dock["markAllSeen"], "summary");
             let mark_all_seen = dock["markAllSeen"]["command"].is_object().then(|| {
                 let command = dock["markAllSeen"]["command"].clone();
                 let label = dock["markAllSeen"]["label"]
                     .as_str()
-                    .unwrap_or("Mark all read")
+                    .unwrap_or("Archive all")
                     .to_string();
+                let count = dock["markAllSeen"]["count"].as_u64().filter(|n| *n > 0);
+                let aria = match count {
+                    Some(n) => format!("{label}, {n}"),
+                    None => label.clone(),
+                };
                 div()
                     .id("work-dock-mark-all-seen")
                     .role(gpui::Role::Button)
-                    .ml_auto()
+                    .aria_label(aria)
                     .flex_shrink_0()
-                    .pl(px(8.0 * s))
-                    .pr(px(8.0 * s))
-                    .pt(px(2.0 * s))
-                    .pb(px(6.0 * s))
-                    .text_color(p.muted)
+                    .flex()
+                    .items_center()
+                    .gap(px(6.0 * s))
+                    .pl(px(9.0 * s))
+                    .pr(px(if count.is_some() { 6.0 } else { 9.0 } * s))
+                    .py(px(3.0 * s))
+                    .rounded(px(6.0 * s))
+                    .border_1()
+                    .border_color(p.foreground.opacity(0.10))
+                    .bg(p.foreground.opacity(0.04))
+                    .text_size(px(PROSE_SIZE * 0.92 * s))
+                    .text_color(p.foreground)
                     .chat_cursor_pointer()
-                    .hover(|style| style.text_color(p.foreground))
+                    .hover(|style| style.bg(p.foreground.opacity(0.09)))
+                    .tooltip(|window, cx| {
+                        gpui_component::tooltip::Tooltip::new("Archive all pages and plain to-dos")
+                            .build(window, cx)
+                    })
                     .child(label)
+                    .when_some(count, |btn, n| {
+                        btn.child(crate::app::element::count_badge(
+                            n.to_string(),
+                            p.foreground,
+                            s,
+                        ))
+                    })
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.invoke(command.clone(), cx);
                     }))
             });
             if hidden == 0 {
                 if let Some(button) = mark_all_seen {
-                    list = list.child(div().w_full().flex().child(button));
+                    list = list.child(
+                        div()
+                            .w_full()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .gap(px(8.0 * s))
+                            .px(px(DOCK_ROW_PAD_X * s))
+                            .pt(px(5.0 * s))
+                            .pb(px(4.0 * s))
+                            .mt(px(2.0 * s))
+                            .border_t_1()
+                            .border_color(p.foreground.opacity(0.06))
+                            .child(
+                                div()
+                                    .min_w_0()
+                                    .truncate()
+                                    .text_size(px(PROSE_SIZE * 0.90 * s))
+                                    .text_color(p.muted)
+                                    .child(mark_all_summary),
+                            )
+                            .child(button),
+                    );
                 }
             } else {
                 list = list.child(
                     div()
                         .w_full()
                         .flex()
-                        .items_start()
+                        .items_center()
+                        .gap(px(8.0 * s))
+                        .px(px(DOCK_ROW_PAD_X * s))
+                        .pt(px(4.0 * s))
+                        .pb(px(5.0 * s))
                         .child(
                             div()
                                 .id("work-dock-more")
                                 .role(gpui::Role::Button)
-                                .pl(px(31.0 * s))
-                                .pr(px(8.0 * s))
-                                .pt(px(2.0 * s))
-                                .pb(px(6.0 * s))
+                                .pl(px(23.0 * s))
                                 .text_color(p.muted)
                                 .chat_cursor_pointer()
                                 .hover(|style| style.text_color(p.foreground))
@@ -751,7 +899,6 @@ impl NativeChatView {
                                 .child(if all {
                                     "Show fewer".to_string()
                                 } else {
-                                    // "3 more done", "2 more need you \u{b7} 1 more done": by what is hidden.
                                     ghostex_gx_chat_core::extras::work_cards::dock_more_label(
                                         &rows[limit.min(rows.len())..],
                                     )
@@ -763,11 +910,39 @@ impl NativeChatView {
                                     cx.notify();
                                 })),
                         )
+                        .child(div().flex_1().min_w_0())
+                        .when(
+                            !mark_all_summary.is_empty() && mark_all_seen.is_some(),
+                            |row| {
+                                row.child(
+                                    div()
+                                        .min_w_0()
+                                        .truncate()
+                                        .text_size(px(PROSE_SIZE * 0.90 * s))
+                                        .text_color(p.muted)
+                                        .child(mark_all_summary),
+                                )
+                            },
+                        )
                         .children(mark_all_seen),
                 );
             }
+            if let Some(undo_bar) = undo {
+                list = list.child(self.work_dock_undo_bar(&undo_bar, p, cx));
+            }
+            // CDXC:Coordinators 2026-11-24 DECISION:
+            // User: combine Handled and Done into one Recent drawer ordered after Snoozed,
+            // newest first, with Archive all inside and the same row left inset for all drawers.
             if !snoozed.is_empty() {
                 list = list.children(self.work_dock_snoozed(&snoozed, p, cx));
+            }
+            if !recent.is_empty() {
+                list = list.children(self.work_dock_recent(
+                    &recent,
+                    recent_archive_all.as_ref(),
+                    p,
+                    cx,
+                ));
             }
             surface = surface.child(self.disclosure_body_motion(
                 DOCK_MOTION_KEY,
@@ -808,10 +983,96 @@ impl NativeChatView {
         )
     }
 
-    /// The dock's Snoozed row under the others (gx-chat-core `dock_with`'s `snoozed`, which holds the
-    /// user's decision): "Snoozed (N)" with a clock and a chevron, folded until clicked; open, the
-    /// snoozed rows follow it, dimmed, each a dock row with when it is back in its age's place and
-    /// Unsnooze first in its ⋯ and right-click menu (`page_row_menu`).
+    /// The inline Undo bar shown right after Mark all read (Q4685 A): restores cleared pages,
+    /// plain to-dos, and finished rows.
+    fn work_dock_undo_bar(
+        &self,
+        undo: &Value,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let label = text(undo, "label");
+        let command = undo["command"].clone();
+        let dismiss = undo["dismiss"].clone();
+        div()
+            .id("work-dock-undo-bar")
+            .w_full()
+            .min_w_0()
+            .mt(px(3.0 * s))
+            .px(px(DOCK_ROW_PAD_X * s))
+            .py(px(5.0 * s))
+            .rounded(px(8.0 * s))
+            .border_1()
+            .border_color(p.foreground.opacity(0.08))
+            .bg(p.foreground.opacity(0.04))
+            .flex()
+            .items_center()
+            .gap(px(8.0 * s))
+            .child(
+                svg()
+                    .path("titlebar/archive.svg")
+                    .flex_shrink_0()
+                    .size(px(13.0 * s))
+                    .text_color(p.muted),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .truncate()
+                    .text_color(p.foreground)
+                    .child(label),
+            )
+            .child(
+                div()
+                    .id("work-dock-undo-button")
+                    .role(gpui::Role::Button)
+                    .flex_shrink_0()
+                    .px(px(8.0 * s))
+                    .py(px(2.0 * s))
+                    .rounded(px(6.0 * s))
+                    .border_1()
+                    .border_color(p.foreground.opacity(0.12))
+                    .bg(p.foreground.opacity(0.06))
+                    .text_color(p.foreground)
+                    .font_weight(FontWeight::MEDIUM)
+                    .chat_cursor_pointer()
+                    .hover(|style| style.bg(p.foreground.opacity(0.12)))
+                    .child("Undo")
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.invoke(command.clone(), cx);
+                    })),
+            )
+            .child(
+                div()
+                    .id("work-dock-undo-dismiss")
+                    .role(gpui::Role::Button)
+                    .aria_label("Dismiss")
+                    .flex_shrink_0()
+                    .size(px(20.0 * s))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(5.0 * s))
+                    .text_color(p.muted)
+                    .chat_cursor_pointer()
+                    .hover(|style| {
+                        style
+                            .bg(p.foreground.opacity(0.08))
+                            .text_color(p.foreground)
+                    })
+                    .child(svg().path("titlebar/x.svg").size(px(12.0 * s)))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.invoke(dismiss.clone(), cx);
+                    })),
+            )
+            .into_any_element()
+    }
+
+    /// The dock's Snoozed row under the others (Q4686 A): "Snoozed" and its count badge with a
+    /// moon icon and chevron, folded until clicked; open, snoozed asks, forms, pages and to-dos
+    /// follow dimmed.
     fn work_dock_snoozed(
         &self,
         snoozed: &[Value],
@@ -823,6 +1084,7 @@ impl NativeChatView {
         let line = div()
             .id("work-dock-snoozed")
             .role(gpui::Role::Button)
+            .aria_label(format!("Snoozed, {}", snoozed.len()))
             .aria_expanded(open)
             .w_full()
             .min_w_0()
@@ -841,7 +1103,7 @@ impl NativeChatView {
             })
             .child(
                 svg()
-                    .path("titlebar/clock.svg")
+                    .path("modals/settings/moon.svg")
                     .flex_shrink_0()
                     .size(px(13.0 * s))
                     .text_color(p.card_muted),
@@ -850,8 +1112,15 @@ impl NativeChatView {
                 div()
                     .flex_1()
                     .min_w_0()
-                    .truncate()
-                    .child(format!("Snoozed ({})", snoozed.len())),
+                    .flex()
+                    .items_center()
+                    .gap(px(6.0 * s))
+                    .child("Snoozed")
+                    .child(crate::app::element::count_badge(
+                        snoozed.len().to_string(),
+                        p.foreground,
+                        s,
+                    )),
             )
             .child(
                 svg()
@@ -884,23 +1153,228 @@ impl NativeChatView {
         out
     }
 
-    /// The dock's header: the counts as marks and numbers, then the work items button and, while
-    /// there are rows to show, the chevron (down while open, up while collapsed, as the question
-    /// card on the chat box). A click anywhere on it collapses or opens the dock.
+    /// The collapsible Recent drawer below Snoozed: combines recently handled asks/approvals/to-dos
+    /// and work finished in the latest turn, newest first, with the Done check icon, "Recent",
+    /// count badge, "Archive all" on the expanded header, and chevron. Collapsed by default;
+    /// migrates legacy Done/Handled open state on read and toggle.
+    fn work_dock_recent(
+        &self,
+        recent: &[Value],
+        archive_all: Option<&Value>,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
+        let s = p.scale;
+        let open = self.expanded.contains(DOCK_RECENT_ROWS)
+            || self.expanded.contains(DOCK_LEGACY_DONE_ROWS)
+            || self.expanded.contains(DOCK_LEGACY_ANSWERED_ROWS);
+        let (done_icon, done_color) = status_look("finished", p);
+        let green: gpui::Hsla = gpui::rgb(0x2fa865).into();
+        let red: gpui::Hsla = gpui::rgb(crate::app::native_sidebar::status::APPROVAL_COLOR).into();
+        let archive_all_cmd = archive_all.cloned();
+        let line = div()
+            .id("work-dock-recent")
+            .role(gpui::Role::Button)
+            .aria_label(format!("Recent, {}", recent.len()))
+            .aria_expanded(open)
+            .w_full()
+            .min_w_0()
+            .flex()
+            .items_center()
+            .gap(px(DOCK_GAP * s))
+            .px(px(DOCK_ROW_PAD_X * s))
+            .py(px(5.0 * s))
+            .rounded(px(8.0 * s))
+            .text_color(p.muted)
+            .chat_cursor_pointer()
+            .hover(|style| {
+                style
+                    .bg(p.foreground.opacity(0.04))
+                    .text_color(p.foreground)
+            })
+            .child(
+                svg()
+                    .path(done_icon)
+                    .flex_shrink_0()
+                    .size(px(13.0 * s))
+                    .text_color(done_color),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.0 * s))
+                    .child("Recent")
+                    .child(crate::app::element::count_badge(
+                        recent.len().to_string(),
+                        p.foreground,
+                        s,
+                    )),
+            )
+            .when_some(archive_all_cmd.filter(|_| open), |row, command| {
+                row.child(
+                    div()
+                        .id("work-dock-recent-archive-all")
+                        .role(gpui::Role::Button)
+                        .aria_label(format!("Archive all, {}", recent.len()))
+                        .flex_shrink_0()
+                        .px(px(8.0 * s))
+                        .py(px(1.0 * s))
+                        .rounded(px(6.0 * s))
+                        .border_1()
+                        .border_color(p.foreground.opacity(0.10))
+                        .bg(p.foreground.opacity(0.04))
+                        .text_size(px(PROSE_SIZE * 0.90 * s))
+                        .line_height(px((PROSE_LINE_HEIGHT - 4.0) * s))
+                        .text_color(p.foreground)
+                        .chat_cursor_pointer()
+                        .hover(|style| style.bg(p.foreground.opacity(0.09)))
+                        .tooltip(|window, cx| {
+                            gpui_component::tooltip::Tooltip::new("Archive all recent items")
+                                .build(window, cx)
+                        })
+                        .child("Archive all")
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            cx.stop_propagation();
+                            this.invoke(command.clone(), cx);
+                        })),
+                )
+            })
+            .child(
+                svg()
+                    .path("titlebar/chevron-down.svg")
+                    .flex_shrink_0()
+                    .size(px(12.0 * s))
+                    .text_color(p.card_muted)
+                    .when(open, |icon| {
+                        icon.with_transformation(gpui::Transformation::rotate(gpui::radians(
+                            std::f32::consts::PI,
+                        )))
+                    }),
+            )
+            .on_click(cx.listener(|this, _, _, cx| {
+                let was_open = this.expanded.remove(DOCK_RECENT_ROWS)
+                    | this.expanded.remove(DOCK_LEGACY_DONE_ROWS)
+                    | this.expanded.remove(DOCK_LEGACY_ANSWERED_ROWS);
+                if !was_open {
+                    this.expanded.insert(DOCK_RECENT_ROWS.to_string());
+                }
+                cx.notify();
+            }));
+        let mut out = vec![line.into_any_element()];
+        if open {
+            for (idx, row) in recent.iter().enumerate() {
+                if text(row, "kind") == "finished" {
+                    out.push(
+                        div()
+                            .w_full()
+                            .opacity(0.72)
+                            .child(self.dock_row(row, p, cx))
+                            .into_any_element(),
+                    );
+                    continue;
+                }
+                let key = text(row, "key");
+                let title = text(row, "title");
+                let outcome = text(row, "outcome");
+                let age = text(row, "age");
+                let show_in_chat = row["showInChat"].clone();
+                let clickable = show_in_chat.is_object();
+                let (icon_path, icon_color) = match text(row, "status").as_str() {
+                    "approved" => ("titlebar/shield-check.svg", green),
+                    "denied" | "dropped" => ("titlebar/shield-x.svg", red),
+                    _ => ("titlebar/message-circle-check.svg", green.opacity(0.85)),
+                };
+                out.push(
+                    div()
+                        .id(gpui::SharedString::from(format!("dock-recent:{key}:{idx}")))
+                        .w_full()
+                        .min_w_0()
+                        .opacity(0.72)
+                        .px(px(DOCK_ROW_PAD_X * s))
+                        .py(px(5.0 * s))
+                        .rounded(px(8.0 * s))
+                        .flex()
+                        .items_center()
+                        .gap(px(DOCK_GAP * s))
+                        .when(clickable, |el| {
+                            el.role(gpui::Role::Button)
+                                .chat_cursor_pointer()
+                                .hover(|style| style.bg(p.foreground.opacity(0.04)))
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.invoke(show_in_chat.clone(), cx);
+                                }))
+                        })
+                        .child(
+                            svg()
+                                .path(icon_path)
+                                .flex_shrink_0()
+                                .size(px(13.0 * s))
+                                .text_color(icon_color),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
+                                .text_color(p.card_muted)
+                                .child(title),
+                        )
+                        .when(
+                            !outcome.is_empty()
+                                && !outcome.eq_ignore_ascii_case("answered")
+                                && !outcome.eq_ignore_ascii_case("handled")
+                                && !outcome.eq_ignore_ascii_case("done"),
+                            |el| {
+                                el.child(
+                                    div()
+                                        .flex_shrink_0()
+                                        .max_w(px(180.0 * s))
+                                        .truncate()
+                                        .px(px(6.0 * s))
+                                        .py(px(1.0 * s))
+                                        .rounded(px(5.0 * s))
+                                        .bg(p.foreground.opacity(0.05))
+                                        .text_size(px(PROSE_SIZE * 0.88 * s))
+                                        .text_color(p.muted)
+                                        .child(outcome),
+                                )
+                            },
+                        )
+                        .when(!age.is_empty(), |el| {
+                            el.child(div().flex_shrink_0().text_color(p.muted).child(age))
+                        })
+                        .into_any_element(),
+                );
+            }
+        }
+        out
+    }
+
+    /// The Inbox header (Q4680 B + E): `[inbox icon] Inbox [ghost count chips]` and chevron.
+    /// Count chips sit clean at rest (no dotted underline); hovering a count chip lights up only
+    /// that chip (pill background, subtle border, brighter label) and never lights up the collapse
+    /// bar behind it.
+    #[allow(clippy::too_many_arguments)]
     fn work_dock_header(
         &self,
         rows: &[Value],
         collapsible: bool,
         open: bool,
+        hidden_in_core: bool,
+        error_shown: bool,
         turned: f32,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        use ghostex_gx_chat_core::extras::work_panel::{
+            ASKS_GROUP_NAME, ASKS_GROUP_PLURAL, ASKS_GROUP_SINGULAR, INBOX_FULL_NAME, INBOX_NAME,
+        };
         let s = p.scale;
         let board = &self.snapshot["coordinatorBoard"];
-        // The Work panel's own counts when the chat has one (the same numbers its groups show),
-        // else the rows' own: questions from replies need him, a stuck line of work is blocked.
-        let counts: Vec<(&str, u64)> = if board.is_object() {
+        let counts: Vec<(&'static str, u64)> = if board.is_object() {
             let count_of = |id: &str| {
                 board["pillCounts"]
                     .as_array()
@@ -915,8 +1389,6 @@ impl NativeChatView {
                 .map(|id| (id, count_of(id)))
                 .collect()
         } else {
-            // An opened page that waits only to be seen keeps its row but not its count
-            // (gx-chat-core `questions/later.rs` `seen_on_open`).
             let needs = rows
                 .iter()
                 .filter(|row| row["needs"] == true && row["opened"] != true)
@@ -924,20 +1396,14 @@ impl NativeChatView {
             let blocked = rows.iter().filter(|row| row["kind"] == "blocked").count() as u64;
             vec![("needs", needs), ("blocked", blocked)]
         };
-        let counts: Vec<(&str, u64)> = counts.into_iter().filter(|(_, count)| *count > 0).collect();
-        // Its words agree with its count: "1 needs you", "2 need you".
+        let counts: Vec<(&'static str, u64)> =
+            counts.into_iter().filter(|(_, count)| *count > 0).collect();
         let name_of = |group: &str, count: u64| match group {
-            "needs" if count == 1 => "needs you",
-            "needs" => "need you",
+            "needs" if count == 1 => ASKS_GROUP_SINGULAR,
+            "needs" => ASKS_GROUP_PLURAL,
             "blocked" => "blocked",
             _ => "in progress",
         };
-        // Each mark takes its name after its count when the header has room for all of them, and
-        // none does when it has not; the tooltips stay either way.
-        //
-        // CDXC:Coordinators 2026-11-11 DECISION:
-        // User, of the header's marks: "make the icons on the left show name of each when there's
-        // space and not show name when no space". All switch together, never one named alone.
         let room = match self.board.dock_width.get() {
             width if width > 0.0 => width,
             _ => DOCK_ROW_WIDTH_GUESS,
@@ -946,58 +1412,87 @@ impl NativeChatView {
             - 8.0
             - if collapsible { 24.0 + 6.0 } else { 0.0 };
         let bar_font = crate::assets::chat_working::VISUAL.font_size;
+        let inbox_label_width = 14.0 + 5.0 + dock_text_width(INBOX_NAME, bar_font, p, cx) + 10.0;
         let named_width: f32 = counts
             .iter()
             .map(|(group, count)| {
-                14.0 + 5.0
+                12.0 + 13.0
+                    + 5.0
                     + dock_text_width(&count.to_string(), bar_font, p, cx)
                     + 4.0
                     + dock_text_width(name_of(group, *count), bar_font, p, cx)
             })
             .sum::<f32>()
-            + 12.0 * counts.len().saturating_sub(1) as f32;
-        // The agent's status rides at the bar's left (`dock_status_card`): the marks give up their
-        // names before it is cut, and it is cut at its end before anything overlaps.
-        //
-        // CDXC:Coordinators 2026-11-11 DECISION:
-        // User, picking on the chat box bars page: "A. The status joins the dock's quiet line",
-        // the status first at the left and the count at the right ("B"), and of the drawing where
-        // it dropped under the rows: "it should always be on same row ok? not sometimes below in
-        // separate bar like u show here". So it is always on this bar while the chat has a dock.
+            + 6.0 * counts.len().saturating_sub(1) as f32;
         let status_card = self.dock_status_card();
         let status_width = status_card.as_ref().map_or(0.0, |card| {
             24.0 + dock_text_width(card["label"].as_str().unwrap_or_default(), bar_font, p, cx)
                 + 12.0
         });
-        let named = named_width + status_width <= room;
+        let show_inbox_text =
+            status_card.is_none() || (inbox_label_width + named_width + status_width <= room);
+        let named = (if show_inbox_text {
+            inbox_label_width
+        } else {
+            24.0
+        }) + named_width
+            + status_width
+            <= room;
+        let chip_hover_bg = p.foreground.opacity(if p.light { 0.075 } else { 0.105 });
+        let chip_active_bg = p.foreground.opacity(if p.light { 0.13 } else { 0.16 });
+        let chip_hover_border = p.foreground.opacity(0.10);
         let marks: Vec<AnyElement> = counts
             .into_iter()
             .map(|(group, count)| {
                 let (icon, color) = super::coordinator_board::group_look(group);
                 let color = color.map_or(p.muted, |color| gpui::rgb(color).into());
-                let tip = match group {
-                    "needs" if count == 1 => "Needs you",
-                    "needs" => "Need you",
+                let group_title = match group {
+                    "needs" => ASKS_GROUP_NAME,
                     "blocked" => "Blocked",
                     _ => "In progress",
                 };
-                // A count opens the Work panel at its group, as the header's Work button opens it
-                // (docked where there is room, else under that button); only a chat with a Work
-                // panel has one to open.
+                let tip = format!("Open {group_title} in Work");
                 let opens = board.is_object();
+                let is_hovered = self.board.dock_count_hovered == Some(group);
+                let count_label = if named {
+                    format!("{count} {}", name_of(group, count))
+                } else {
+                    count.to_string()
+                };
                 div()
                     .id(gpui::SharedString::from(format!("work-dock-count:{group}")))
                     .flex()
                     .items_center()
                     .gap(px(5.0 * s))
+                    .px(px(6.0 * s))
+                    .py(px(2.0 * s))
+                    .rounded(px(6.0 * s))
+                    .border_1()
+                    .border_color(if is_hovered && opens {
+                        chip_hover_border
+                    } else {
+                        gpui::transparent_black()
+                    })
+                    .when(is_hovered && opens, |chip| chip.bg(chip_hover_bg))
                     .flex_shrink_0()
                     .tooltip(move |window, cx| {
-                        gpui_component::tooltip::Tooltip::new(tip).build(window, cx)
+                        gpui_component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
                     })
                     .when(opens, |mark| {
                         mark.role(gpui::Role::Button)
-                            .aria_label(tip)
+                            .aria_label(format!("Open {group_title} in Work"))
                             .chat_cursor_pointer()
+                            .active(move |style| {
+                                style.bg(chip_active_bg).border_color(chip_hover_border)
+                            })
+                            .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
+                                if *hovered {
+                                    this.board.dock_count_hovered = Some(group);
+                                } else if this.board.dock_count_hovered == Some(group) {
+                                    this.board.dock_count_hovered = None;
+                                }
+                                cx.notify();
+                            }))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 cx.stop_propagation();
                                 this.invoke(
@@ -1010,23 +1505,69 @@ impl NativeChatView {
                         svg()
                             .path(icon)
                             .size(px(13.0 * s))
-                            .mr(px(s))
                             .flex_shrink_0()
                             .text_color(color),
                     )
                     .child(
                         div()
-                            .text_color(p.foreground)
-                            .font_features(gpui::FontFeatures(vec![("tnum".into(), 1)].into()))
-                            .child(count.to_string()),
+                            .flex()
+                            .items_center()
+                            .gap(px(4.0 * s))
+                            .child(
+                                div()
+                                    .text_color(p.foreground)
+                                    .font_features(gpui::FontFeatures(
+                                        vec![("tnum".into(), 1)].into(),
+                                    ))
+                                    .child(count.to_string()),
+                            )
+                            .when(named, |wrap| {
+                                wrap.child(
+                                    div()
+                                        .text_color(if is_hovered {
+                                            p.foreground
+                                        } else {
+                                            p.card_muted
+                                        })
+                                        .child(name_of(group, count)),
+                                )
+                            }),
                     )
-                    .when(named, |mark| {
-                        mark.child(div().ml(px(-1.0 * s)).child(name_of(group, count)))
-                    })
+                    .when(false, |mark| mark.child(count_label))
                     .into_any_element()
             })
             .collect();
         let quiet = marks.is_empty();
+        let inbox_badge = div()
+            .id("work-dock-inbox-label")
+            .flex()
+            .items_center()
+            .gap(px(5.0 * s))
+            .when(!quiet || (!collapsible && status_card.is_none()), |badge| {
+                badge.mr(px(6.0 * s))
+            })
+            .flex_shrink_0()
+            .tooltip(|window, cx| {
+                gpui_component::tooltip::Tooltip::new(INBOX_FULL_NAME)
+                    .keys(super::composer::hotkey_chord(Some("focusSessionInbox")))
+                    .build(window, cx)
+            })
+            .child(
+                svg()
+                    .path("titlebar/inbox.svg")
+                    .size(px(14.0 * s))
+                    .flex_shrink_0()
+                    .text_color(p.foreground.opacity(0.85)),
+            )
+            .when(show_inbox_text, |badge| {
+                badge.child(
+                    div()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(p.foreground)
+                        .child(INBOX_NAME),
+                )
+            });
+        let chip_hovered = self.board.dock_count_hovered.is_some();
         let mut head = div()
             .id("work-dock-head")
             .w_full()
@@ -1035,14 +1576,25 @@ impl NativeChatView {
             .items_center()
             .gap(px(6.0 * s))
             .pl(px(12.0 * s))
-            .pr(px(5.0 * s))
+            // CDXC:Coordinators 2026-11-25 DECISION:
+            // User, of the Inbox label sitting almost on the bar's right edge, above the chat box
+            // whose last pill (Boost) sits further in: "please make it shifted like the pill below
+            // (have same space from the right edge)". The bar's last content ends as far from its
+            // border as the pills strip's last pill does (`STRIP_PAD_X`). With the chevron button
+            // (24px box, 14px glyph) its own 5px inset makes up the rest of that gap.
+            .pr(px((STRIP_PAD_X
+                - if collapsible {
+                    (24.0 - 14.0) / 2.0
+                } else {
+                    0.0
+                })
+                * s))
             .text_size(px(bar_font * s))
             .line_height(px(19.0 * s))
             .whitespace_nowrap()
             .text_color(p.card_muted)
             .map(|head| {
                 if open {
-                    // The open header is the band over the rows, as the pills row on the chat box.
                     head.h(px(34.0 * s + 1.0))
                         .border_b_1()
                         .border_color(p.input_border)
@@ -1070,10 +1622,10 @@ impl NativeChatView {
                     .when(status_card.is_some(), |summary| summary.flex_shrink_0())
                     .flex()
                     .items_center()
-                    .gap(px(12.0 * s))
+                    .gap(px(4.0 * s))
                     .overflow_hidden()
+                    .child(inbox_badge)
                     .children(marks)
-                    // Nothing counted and nothing to show: one quiet word, so the bar is not blank.
                     .when(quiet && !collapsible && status_card.is_none(), |summary| {
                         summary.child(div().text_color(p.muted).child("Nothing in progress"))
                     }),
@@ -1081,17 +1633,19 @@ impl NativeChatView {
             .when(status_card.is_none(), |head| {
                 head.child(div().flex_1().min_w(px(8.0 * s)))
             });
-        // CDXC:Coordinators 2026-11-18 DECISION:
-        // User, after the header's Work button came (layout B): remove the Work items button this
-        // bar had, so the Work panel has one opener (render/workarea_header/work_button.rs). The
-        // bar's counts still open the panel at their group.
         if collapsible {
             head = head
                 .role(gpui::Role::Button)
-                .aria_label(if open { "Collapse" } else { "Expand" })
+                .aria_label(if open {
+                    "Collapse Inbox"
+                } else {
+                    "Expand Inbox"
+                })
                 .aria_expanded(open)
                 .chat_cursor_pointer()
-                .hover(|style| style.bg(p.foreground.opacity(0.055)))
+                .when(!chip_hovered, |head| {
+                    head.hover(|style| style.bg(p.foreground.opacity(0.055)))
+                })
                 .child(
                     div()
                         .size(px(24.0 * s))
@@ -1100,7 +1654,6 @@ impl NativeChatView {
                         .justify_center()
                         .flex_shrink_0()
                         .rounded(px(6.0 * s))
-                        // Down while open, up while collapsed, turning between them.
                         .child(
                             svg()
                                 .path("titlebar/chevron-down.svg")
@@ -1113,8 +1666,18 @@ impl NativeChatView {
                         ),
                 )
                 .on_click(cx.listener(move |this, _, _, cx| {
-                    let kind = if open { "hideWorkDock" } else { "showWorkDock" };
-                    this.invoke(json!({ "type": kind }), cx);
+                    if open {
+                        this.board.dock_peek_over_error = false;
+                        this.invoke(json!({ "type": "hideWorkDock" }), cx);
+                        return;
+                    }
+                    if error_shown {
+                        this.board.dock_peek_over_error = true;
+                    }
+                    if hidden_in_core {
+                        this.invoke(json!({ "type": "showWorkDock" }), cx);
+                    }
+                    cx.notify();
                 }));
         }
         head.into_any_element()
@@ -1132,9 +1695,19 @@ impl NativeChatView {
     /// row card (2026-11-11 and 2026-11-12 decisions, now on the modal in dock_ask_modal.rs) and
     /// its scrolling into view past the dock's height cap.
     fn dock_row(&self, row: &Value, p: &ChatAppearance, cx: &mut Context<Self>) -> AnyElement {
-        // An approval: when it first appeared (its answers wait a moment before taking clicks,
-        // work_actions.rs `approval_armed`), and its answers on their own line under the title, so
-        // the agent's full words fit before they fold into a dropdown.
+        self.dock_row_at(row, false, p, cx)
+    }
+
+    fn dock_row_at(
+        &self,
+        row: &Value,
+        focused: bool,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        if text(row, "kind") == "pageBundle" {
+            return self.dock_page_bundle_row(row, focused, p, cx);
+        }
         if text(row, "kind") == "collab" {
             self.board
                 .approval_seen
@@ -1152,13 +1725,212 @@ impl NativeChatView {
                 row,
                 DockRowLook {
                     wrap: true,
+                    focused,
                     ..DockRowLook::default()
                 },
                 p,
                 cx,
             );
         }
-        self.dock_row_look(row, DockRowLook::default(), p, cx)
+        self.dock_row_look(
+            row,
+            DockRowLook {
+                focused,
+                ..DockRowLook::default()
+            },
+            p,
+            cx,
+        )
+    }
+
+    /// A bundled same-turn page burst row (Q4683 A): stack icon, "N pages from last turn", Expand
+    /// and Read all buttons, and indented sub-rows for each page when expanded.
+    fn dock_page_bundle_row(
+        &self,
+        row: &Value,
+        focused: bool,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let key = text(row, "key");
+        let title = text(row, "title");
+        let age = text(row, "age");
+        let unread = row["unread"] == true;
+        let bundle_key = format!("dock-bundle:{key}");
+        let open = self.expanded.contains(&bundle_key);
+        let dismiss = row["dismiss"].clone();
+        let pages: Vec<Value> = row["bundlePages"].as_array().cloned().unwrap_or_default();
+        let pink: gpui::Hsla = gpui::rgb(crate::app::native_sidebar::status::QUESTION_COLOR).into();
+        let toggle_key_btn = bundle_key.clone();
+        let toggle_key_row = bundle_key.clone();
+        let line = div()
+            .w_full()
+            .min_w_0()
+            .flex()
+            .items_center()
+            .gap(px(DOCK_GAP * s))
+            .child(
+                div()
+                    .h(px(PROSE_LINE_HEIGHT * s))
+                    .flex()
+                    .items_center()
+                    .flex_shrink_0()
+                    .child(
+                        svg()
+                            .path("titlebar/stack.svg")
+                            .size(px(13.0 * s))
+                            .text_color(pink),
+                    ),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .truncate()
+                    .text_color(if unread { p.foreground } else { p.card_muted })
+                    .child(title),
+            )
+            .child(
+                div()
+                    .flex_shrink_0()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.0 * s))
+                    .child(
+                        div()
+                            .id(gpui::SharedString::from(format!(
+                                "dock-bundle-expand:{key}"
+                            )))
+                            .role(gpui::Role::Button)
+                            .px(px(8.0 * s))
+                            .py(px(2.0 * s))
+                            .rounded(px(6.0 * s))
+                            .border_1()
+                            .border_color(p.foreground.opacity(0.10))
+                            .bg(p.foreground.opacity(0.04))
+                            .text_size(px(PROSE_SIZE * 0.90 * s))
+                            .text_color(p.foreground)
+                            .chat_cursor_pointer()
+                            .hover(|style| style.bg(p.foreground.opacity(0.09)))
+                            .child(if open { "Collapse" } else { "Expand" })
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                cx.stop_propagation();
+                                if !this.expanded.remove(&toggle_key_btn) {
+                                    this.expanded.insert(toggle_key_btn.clone());
+                                }
+                                cx.notify();
+                            })),
+                    )
+                    .when(dismiss.is_object(), |controls| {
+                        controls.child(
+                            div()
+                                .id(gpui::SharedString::from(format!(
+                                    "dock-bundle-read-all:{key}"
+                                )))
+                                .role(gpui::Role::Button)
+                                .px(px(8.0 * s))
+                                .py(px(2.0 * s))
+                                .rounded(px(6.0 * s))
+                                .border_1()
+                                .border_color(p.foreground.opacity(0.10))
+                                .bg(p.foreground.opacity(0.04))
+                                .text_size(px(PROSE_SIZE * 0.90 * s))
+                                .text_color(p.foreground)
+                                .chat_cursor_pointer()
+                                .hover(|style| style.bg(p.foreground.opacity(0.09)))
+                                .tooltip(|window, cx| {
+                                    gpui_component::tooltip::Tooltip::new("Archive all pages")
+                                        .keys(super::composer::hotkey_chord(Some("inboxMarkRead")))
+                                        .build(window, cx)
+                                })
+                                .child("Archive all")
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    cx.stop_propagation();
+                                    this.invoke(dismiss.clone(), cx);
+                                })),
+                        )
+                    }),
+            )
+            .when(!age.is_empty(), |row_el| {
+                row_el.child(div().flex_shrink_0().text_color(p.muted).child(age))
+            });
+        let press = Self::dock_row_press(&key, line, p)
+            .when(focused, |el| {
+                el.bg(pink.opacity(if p.light { 0.10 } else { 0.14 }))
+                    .border_l_2()
+                    .border_color(pink)
+            })
+            .on_click(cx.listener(move |this, _, _, cx| {
+                if !this.expanded.remove(&toggle_key_row) {
+                    this.expanded.insert(toggle_key_row.clone());
+                }
+                cx.notify();
+            }));
+        let mut wrap = div().w_full().flex().flex_col().child(press);
+        if open {
+            let mut sub = div()
+                .w_full()
+                .pl(px(22.0 * s))
+                .pr(px(4.0 * s))
+                .pb(px(4.0 * s))
+                .flex()
+                .flex_col()
+                .gap(px(2.0 * s));
+            for (idx, page) in pages.iter().enumerate() {
+                let page_key = text(page, "key");
+                let page_title = text(page, "title");
+                let page_age = text(page, "age");
+                let opened = page["opened"] == true;
+                let page_open = page["open"].clone();
+                sub = sub.child(
+                    div()
+                        .id(gpui::SharedString::from(format!(
+                            "dock-bundle-page:{page_key}:{idx}"
+                        )))
+                        .role(gpui::Role::Button)
+                        .w_full()
+                        .min_w_0()
+                        .pl(px(10.0 * s))
+                        .pr(px(DOCK_ROW_PAD_X * s))
+                        .py(px(4.0 * s))
+                        .rounded(px(6.0 * s))
+                        .border_l_2()
+                        .border_color(p.foreground.opacity(0.10))
+                        .flex()
+                        .items_center()
+                        .gap(px(8.0 * s))
+                        .chat_cursor_pointer()
+                        .hover(|style| style.bg(p.foreground.opacity(0.04)))
+                        .child(
+                            svg()
+                                .path("titlebar/file.svg")
+                                .flex_shrink_0()
+                                .size(px(12.0 * s))
+                                .text_color(pink),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
+                                .text_color(if opened { p.card_muted } else { p.foreground })
+                                .child(page_title),
+                        )
+                        .when(!page_age.is_empty(), |el| {
+                            el.child(div().flex_shrink_0().text_color(p.muted).child(page_age))
+                        })
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            cx.stop_propagation();
+                            if page_open.is_object() {
+                                this.open_work_target(page_open.clone(), window, cx);
+                            }
+                        })),
+                );
+            }
+            wrap = wrap.child(sub);
+        }
+        wrap.into_any_element()
     }
 
     /// A dock row drawn as `look` says: in the dock (one line), or as a Work panel Needs you card
@@ -1214,9 +1986,24 @@ impl NativeChatView {
         // The answers, the look every place shares (work_actions.rs); a row with none shows what
         // it asks for in their place (Open or Reply).
         let answers: Vec<Value> = row["buttons"].as_array().cloned().unwrap_or_default();
-        // A question with details shows Details in its answers' place: they wait in its panel,
-        // under what the reader needs to read first.
-        let action = if row["details"] == true || (answers.is_empty() && row["needs"] == true) {
+        // CDXC:Coordinators 2026-11-24 DECISION (ask-details-page, Layout C + "Details"):
+        // Keep the answer buttons visible on the folded row and show a quiet neutral "Details"
+        // button beside them to open the full floating panel. Live pages and forms (`row["open"]`)
+        // still use their direct icon action when they have no inline answers.
+        //
+        // CDXC:Coordinators 2026-11-25 DECISION:
+        // User's "please only show the title line for all these work items in inbox" removed the
+        // Inbox row's second line, which was the only place a short detail (`details` false,
+        // gx-chat-core `details_fields`) showed. So an Inbox row (`look.age` is `None`) with any
+        // detail (`hasDetail`) gets Details too, its answers staying beside it. A Work panel
+        // Needs you card still draws that short detail as its preview line, so it keeps its
+        // buttons.
+        let has_details_button = (row["details"] == true
+            || (look.age.is_none() && row["hasDetail"] == true))
+            && !row["open"].is_object()
+            && !settled
+            && look.buttons.is_none();
+        let action = if answers.is_empty() && row["needs"] == true && !has_details_button {
             dock_row_action(row)
         } else {
             None
@@ -1228,6 +2015,7 @@ impl NativeChatView {
         // CDXC:Coordinators 2026-11-12 DECISION:
         // User, of a form's row with only Open: "i can't reply to this or mention it :> pls fix".
         let reply_answer = ((!answers.is_empty()
+            || has_details_button
             || matches!(action, Some("Open" | "Answer" | "Details")))
             && row["reply"].is_object())
         .then(|| Self::reply_answer(&row["reply"], &text(row, "replied"), busy));
@@ -1250,7 +2038,7 @@ impl NativeChatView {
         } else {
             row_width - DOCK_LEAD - age_width - row_width / 2.0
         };
-        // Details (and Reply) are icon buttons, as wide as they are tall.
+        // Open and Reply are icon buttons, as wide as they are tall.
         let icon_width = Self::tone_button_height();
         let widths: Vec<f32> = match &action {
             Some(_) => vec![icon_width],
@@ -1270,6 +2058,13 @@ impl NativeChatView {
         // Reply always shows: it is the one answer that takes anything, so a row keeps it one
         // click away.
         let reply_width = reply_answer.as_ref().map_or(0.0, |_| icon_width + 6.0);
+        // Quiet "Details" button beside the answers when the question has longer details.
+        let details_width = if has_details_button {
+            dock_button_width("Details", false, false, p, cx) + 6.0
+        } else {
+            0.0
+        };
+        let reply_width = reply_width + details_width;
         // Jump to context before Reply, on a row whose asking message is in another chat (gx-chat-core
         // `work_cards::context_of`).
         let context_button = if look.buttons.is_some() || settled {
@@ -1316,6 +2111,9 @@ impl NativeChatView {
             None if fold => vec![self.answers_dropdown(&key, &answers, busy, p, cx)],
             None => self.work_answer_buttons(&key, &answers, busy, p, cx),
         });
+        if has_details_button {
+            buttons.push(self.dock_details_button(&key, p, cx));
+        }
         // Reply is always the rightmost button, whatever stands before it (answers, Details, Jump
         // to context), so it never shifts between rows.
         //
@@ -1342,27 +2140,143 @@ impl NativeChatView {
                 .text_color(p.card_muted)
                 .child(count.to_string())
         });
+        let in_dock = look.age.is_none();
+        let unread = in_dock && row["unread"] == true;
+        let duplicates: Vec<Value> = if in_dock {
+            row["duplicates"].as_array().cloned().unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        let dupes_key = format!("dock-dupes:{key}");
+        let dupes_open = !duplicates.is_empty() && self.expanded.contains(&dupes_key);
+        let sources_chip = (!duplicates.is_empty()).then(|| {
+            let sources_count = row["sourcesCount"]
+                .as_u64()
+                .unwrap_or((duplicates.len() + 1) as u64);
+            let toggle_key = dupes_key.clone();
+            div()
+                .id(gpui::SharedString::from(format!("dock-row-sources:{key}")))
+                .role(gpui::Role::Button)
+                .aria_expanded(dupes_open)
+                .flex_shrink_0()
+                .px(px(6.0 * s))
+                .py(px(1.0 * s))
+                .rounded_full()
+                .border_1()
+                .border_color(p.foreground.opacity(0.10))
+                .bg(p.foreground.opacity(0.05))
+                .flex()
+                .items_center()
+                .gap(px(3.0 * s))
+                .text_size(px(PROSE_SIZE * 0.84 * s))
+                .line_height(px(16.0 * s))
+                .text_color(p.card_muted)
+                .chat_cursor_pointer()
+                .hover(|style| {
+                    style
+                        .bg(p.foreground.opacity(0.10))
+                        .text_color(p.foreground)
+                })
+                .child(format!("{sources_count} sources"))
+                .child(
+                    svg()
+                        .path("titlebar/chevron-down.svg")
+                        .size(px(10.0 * s))
+                        .text_color(p.muted)
+                        .when(dupes_open, |chevron| {
+                            chevron.with_transformation(gpui::Transformation::rotate(
+                                gpui::radians(std::f32::consts::PI),
+                            ))
+                        }),
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    cx.stop_propagation();
+                    if !this.expanded.remove(&toggle_key) {
+                        this.expanded.insert(toggle_key.clone());
+                    }
+                    cx.notify();
+                }))
+        });
+        let title_color = if settled {
+            p.card_muted
+        } else if in_dock {
+            if unread { p.foreground } else { p.card_muted }
+        } else {
+            body
+        };
+        let answered_by = text(row, "answeredBy");
+        let answered_by_chip = (!answered_by.is_empty()).then(|| {
+            let green: gpui::Hsla = gpui::rgb(if p.light { 0x168049 } else { 0x34d399 }).into();
+            let open_page = row["open"].clone();
+            let has_open = open_page.is_object();
+            div()
+                .id(gpui::SharedString::from(format!(
+                    "dock-row-answered-by:{key}"
+                )))
+                .flex_shrink_0()
+                .px(px(7.0 * s))
+                .py(px(1.5 * s))
+                .rounded_full()
+                .bg(green.opacity(if p.light { 0.12 } else { 0.16 }))
+                .border_1()
+                .border_color(green.opacity(0.32))
+                .flex()
+                .items_center()
+                .gap(px(4.0 * s))
+                .text_size(px(PROSE_SIZE * 0.84 * s))
+                .line_height(px(16.0 * s))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(green)
+                .when(has_open, |chip| {
+                    chip.role(gpui::Role::Button)
+                        .chat_cursor_pointer()
+                        .hover(move |style| {
+                            style
+                                .bg(green.opacity(if p.light { 0.20 } else { 0.26 }))
+                                .border_color(green.opacity(0.55))
+                        })
+                        .tooltip(|window, cx| {
+                            gpui_component::tooltip::Tooltip::new(
+                                "Open Live page to preview their answers",
+                            )
+                            .build(window, cx)
+                        })
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            cx.stop_propagation();
+                            this.open_work_target(open_page.clone(), window, cx);
+                        }))
+                })
+                .child(
+                    svg()
+                        .path("titlebar/user.svg")
+                        .size(px(11.0 * s))
+                        .text_color(green),
+                )
+                .child(answered_by)
+        });
         let question = div()
             .flex_1()
             .min_w_0()
-            .child(self.ask_title(
+            .flex()
+            .items_center()
+            .gap(px(6.0 * s))
+            .child(div().flex_1().min_w_0().child(self.ask_title_weighted(
                 &key,
                 &title,
                 &row["titleRuns"],
                 !wrap,
-                body,
+                FontWeight::NORMAL,
+                title_color,
                 PROSE_SIZE,
                 PROSE_LINE_HEIGHT,
                 p,
                 cx,
-            ))
+            )))
+            .children(answered_by_chip)
+            .children(sources_chip)
             .into_any_element();
-        // The title is one line, so the mark, the title, the answers (taller than a line) and the
-        // ⋯ over the age share the row's middle.
-        //
-        // CDXC:Coordinators 2026-11-14 DECISION:
-        // User, of the ⋯ More actions at a row's right end sitting lower than its title: center it
-        // vertically in that header row.
+        let pink_dot: gpui::Hsla =
+            gpui::rgb(crate::app::native_sidebar::status::QUESTION_COLOR).into();
         let mut head = div()
             .w_full()
             .min_w_0()
@@ -1417,19 +2331,21 @@ impl NativeChatView {
         // expanded)". The answers and Reply get its room.
         let hover = gpui::SharedString::from(format!("{}dock-row-hover:{key}", look.scope));
         // A Work panel card keeps its own age, ⋯ and right-click menu (`look.age`).
-        let in_dock = look.age.is_none();
         let age_menu = match look.age {
             Some(age) => age,
             None => self.row_age_menu(&key, &age, &hover, row, p, cx),
         };
         let right_row = row.clone();
         let line = head.child(age_menu);
-        // Wrapped (a Work panel card), a question with details shows their first line under its
-        // title, cut at one line, so the card says what Details holds (gx-chat-core
-        // `details_fields`). A short description that is not Details is the row's second line
-        // everywhere, its answers still on the row (`details_fields`' 2026-11-20 decision).
+        // CDXC:Coordinators 2026-11-25 DECISION:
+        // User, of Inbox rows above the composer drawing a second, dimmer preview line under the
+        // title: "sir showing 2 lines here is NOT A THING. please only show the title line for all
+        // these work items in inbox!!!!" Supersedes the 2026-11-20 and 2026-11-24 Inbox preview
+        // line: Inbox rows (`in_dock`) show only the title line with their buttons and time, while
+        // the full detail text stays reachable through Details / the row modal. Work panel Needs
+        // you cards (`!in_dock`) keep their one-line preview under the title.
         let preview = text(row, "preview");
-        let preview = ((wrap || row["details"] != true) && !preview.is_empty()).then(|| {
+        let preview = (!in_dock && !preview.is_empty()).then(|| {
             div()
                 .min_w_0()
                 .pl(px(DOCK_LEAD * s))
@@ -1492,6 +2408,12 @@ impl NativeChatView {
             // Named after its row, so accessibility clients (cua-driver, VoiceOver) can find it.
             .aria_label(text(row, "title"))
             .group(hover.clone())
+            .when(look.focused, |press| {
+                press
+                    .bg(pink_dot.opacity(if p.light { 0.10 } else { 0.14 }))
+                    .border_l_2()
+                    .border_color(pink_dot)
+            })
             .when(in_dock, |press| {
                 press.on_mouse_down(
                     gpui::MouseButton::Right,
@@ -1502,6 +2424,75 @@ impl NativeChatView {
                     }),
                 )
             });
+        let dupe_subrows = (dupes_open && !duplicates.is_empty()).then(|| {
+            let mut sub = div()
+                .w_full()
+                .pl(px(22.0 * s))
+                .pr(px(4.0 * s))
+                .pb(px(4.0 * s))
+                .flex()
+                .flex_col()
+                .gap(px(2.0 * s));
+            for (idx, dupe) in duplicates.iter().enumerate() {
+                let dupe_key = text(dupe, "key");
+                let (d_icon, d_color) = row_mark(dupe, p);
+                let source_label = text(dupe, "sourceLabel");
+                let label = if source_label.is_empty() {
+                    text(dupe, "title")
+                } else {
+                    source_label
+                };
+                let d_age = text(dupe, "age");
+                let d_open = dupe["open"].clone();
+                let d_modal = dupe_key.clone();
+                sub = sub.child(
+                    div()
+                        .id(gpui::SharedString::from(format!(
+                            "dock-dupe-sub:{dupe_key}:{idx}"
+                        )))
+                        .role(gpui::Role::Button)
+                        .w_full()
+                        .min_w_0()
+                        .pl(px(10.0 * s))
+                        .pr(px(DOCK_ROW_PAD_X * s))
+                        .py(px(4.0 * s))
+                        .rounded(px(6.0 * s))
+                        .border_l_2()
+                        .border_color(p.foreground.opacity(0.10))
+                        .flex()
+                        .items_center()
+                        .gap(px(8.0 * s))
+                        .text_size(px(PROSE_SIZE * 0.92 * s))
+                        .text_color(p.card_muted)
+                        .chat_cursor_pointer()
+                        .hover(|style| {
+                            style
+                                .bg(p.foreground.opacity(0.04))
+                                .text_color(p.foreground)
+                        })
+                        .child(
+                            svg()
+                                .path(d_icon)
+                                .flex_shrink_0()
+                                .size(px(12.0 * s))
+                                .text_color(d_color),
+                        )
+                        .child(div().flex_1().min_w_0().truncate().child(label))
+                        .when(!d_age.is_empty(), |el| {
+                            el.child(div().flex_shrink_0().text_color(p.muted).child(d_age))
+                        })
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            cx.stop_propagation();
+                            if d_open.is_object() {
+                                this.open_work_target(d_open.clone(), window, cx);
+                            } else if !d_modal.is_empty() {
+                                this.open_dock_ask_modal(&d_modal, window, cx);
+                            }
+                        })),
+                );
+            }
+            sub
+        });
         // A Work panel card opens what it points to (`BoardRow::go`); ⌥-click mentions it, as
         // every board card does. A drag of the card, or a drag that selects, opens nothing.
         if let Some(go) = look.click {
@@ -1542,10 +2533,15 @@ impl NativeChatView {
                     // Straight to the page (`open_work_target`, CDXC:Coordinators 2026-11-18).
                     this.open_work_target(page.clone(), window, cx);
                 })))
+                .children(dupe_subrows)
                 .into_any_element();
         }
         if settled {
-            return div().w_full().child(press).into_any_element();
+            return div()
+                .w_full()
+                .child(press)
+                .children(dupe_subrows)
+                .into_any_element();
         }
         let shown = key.clone();
         div()
@@ -1561,6 +2557,7 @@ impl NativeChatView {
                     .pr(px(DOCK_ROW_PAD_X * s))
                     .pb(px(6.0 * s))
             }))
+            .children(dupe_subrows)
             .into_any_element()
     }
 
@@ -1576,7 +2573,7 @@ impl NativeChatView {
         if row["commandLines"] == true {
             return self.dock_command_block(key, row, p, cx);
         }
-        self.dock_command_chip(key, &text(row, "command"), p, cx)
+        self.dock_command_strip(key, row, p, cx)
     }
 
     /// An approval's command (gx-chat-core extras/dock_approvals.rs): its first lines, wrapped, never
@@ -1707,6 +2704,453 @@ impl NativeChatView {
         )
     }
 
+    /// A Needs you to-do's command strip on a dock row: copy-only chip for non-runnable commands,
+    /// or the neutral command strip with Copy + "Run it" (and live status while running).
+    fn dock_command_strip(
+        &self,
+        key: &str,
+        row: &Value,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let strip = self.needs_you_command_strip(key, row, true, p, cx)?;
+        let s = p.scale;
+        Some(
+            div()
+                .pl(px((DOCK_ROW_PAD_X + DOCK_LEAD) * s))
+                .pr(px(DOCK_ROW_PAD_X * s))
+                .pb(px(6.0 * s))
+                .w_full()
+                .min_w_0()
+                .child(strip)
+                .into_any_element(),
+        )
+    }
+
+    /// Layout A ("Command strip with button") for a Needs you to-do or coordinator ask.
+    ///
+    /// Renders either the quiet Copy-only chip (when the command is outside the Ghostex allowlist),
+    /// the ready command strip with Copy + "Run it", or live status (running, waiting for Touch ID /
+    /// password / sign-in / approval, done automatically, or failed/stopped with Retry).
+    pub(super) fn needs_you_command_strip(
+        &self,
+        key: &str,
+        row: &Value,
+        compact: bool,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let raw_command = text(row, "command");
+        let trimmed = raw_command.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        let run_action = row["runCommand"].clone();
+        let stop_action = row["stopCommand"].clone();
+        let run = &row["commandRun"];
+        let run_state = text(run, "state");
+        let can_run = run_action.is_object();
+        let s = p.scale;
+
+        // Non-allowlisted commands stay as the quiet Copy-only chip.
+        if !can_run && run_state.is_empty() {
+            return self.dock_command_chip(key, trimmed, p, cx);
+        }
+
+        let display_cmd = ghostex_gx_chat_core::extras::needs_you_command::display_command(trimmed);
+        let run_cmd = {
+            let from_run = text(run, "command");
+            if from_run.trim().is_empty() {
+                display_cmd.clone()
+            } else {
+                from_run
+            }
+        };
+        let copied = display_cmd.clone();
+        let prefix = if compact { "dock-cmd" } else { "modal-cmd" };
+
+        let quiet_btn = |id: String, label: String, icon: Option<&'static str>| {
+            div()
+                .id(gpui::SharedString::from(id))
+                .role(gpui::Role::Button)
+                .chat_cursor_pointer()
+                .flex_shrink_0()
+                .flex()
+                .items_center()
+                .gap(px(4.0 * s))
+                .px(px(if compact { 6.0 } else { 7.0 } * s))
+                .py(px(if compact { 3.0 } else { 4.0 } * s))
+                .rounded(px(6.0 * s))
+                .text_size(px(12.0 * s))
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(p.card_muted)
+                .hover(|style| {
+                    style
+                        .bg(p.foreground.opacity(0.07))
+                        .text_color(p.foreground)
+                })
+                .when_some(icon, |btn, path| {
+                    btn.child(
+                        svg()
+                            .path(path)
+                            .flex_shrink_0()
+                            .size(px(11.0 * s))
+                            .text_color(p.card_muted),
+                    )
+                })
+                .child(label)
+        };
+
+        let neutral_btn = |id: String, label: String, icon: &'static str| {
+            div()
+                .id(gpui::SharedString::from(id))
+                .role(gpui::Role::Button)
+                .chat_cursor_pointer()
+                .flex_shrink_0()
+                .flex()
+                .items_center()
+                .gap(px(5.0 * s))
+                .px(px(if compact { 8.0 } else { 10.0 } * s))
+                .py(px(if compact { 3.0 } else { 4.0 } * s))
+                .rounded(px(6.0 * s))
+                .bg(p.foreground.opacity(0.08))
+                .border_1()
+                .border_color(p.foreground.opacity(0.14))
+                .text_size(px(12.0 * s))
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(p.strengthened(p.prose))
+                .hover(|style| style.bg(p.foreground.opacity(0.14)))
+                .child(
+                    svg()
+                        .path(icon)
+                        .flex_shrink_0()
+                        .size(px(10.0 * s))
+                        .text_color(p.strengthened(p.prose)),
+                )
+                .child(label)
+        };
+
+        // Ready state: quiet rounded bar with monospace command, Copy, and neutral "Run it".
+        if run_state.is_empty() {
+            let copy_text = copied.clone();
+            let copy_btn = quiet_btn(
+                format!("{prefix}-copy:{key}"),
+                "Copy".to_string(),
+                Some("titlebar/copy.svg"),
+            )
+            .tooltip(|window, cx| {
+                gpui_component::tooltip::Tooltip::new("Copy command").build(window, cx)
+            })
+            .on_click(cx.listener(move |_, _, _, cx| {
+                cx.stop_propagation();
+                crate::app::helpers::gpui_copy_to_clipboard(
+                    gpui::ClipboardItem::new_string(copy_text.clone()),
+                    cx,
+                );
+            }));
+
+            let run_btn = neutral_btn(
+                format!("{prefix}-run:{key}"),
+                "Run it".to_string(),
+                "titlebar/player-play.svg",
+            )
+            .on_click(cx.listener(move |this, _, _, cx| {
+                cx.stop_propagation();
+                this.invoke(run_action.clone(), cx);
+            }));
+
+            return Some(
+                div()
+                    .w_full()
+                    .min_w_0()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap(px(8.0 * s))
+                    .px(px(if compact { 8.0 } else { 10.0 } * s))
+                    .py(px(if compact { 5.0 } else { 7.0 } * s))
+                    .rounded(px(if compact { 8.0 } else { 10.0 } * s))
+                    .bg(p.foreground.opacity(0.05))
+                    .border_1()
+                    .border_color(p.foreground.opacity(0.09))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .when(compact, |el| el.truncate())
+                            .when(!compact, |el| el.whitespace_normal())
+                            .font_family(super::fonts::CHAT_MONO)
+                            .text_size(px(PROSE_SIZE * 0.9 * s))
+                            .text_color(p.strengthened(p.prose))
+                            .child(display_cmd),
+                    )
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .flex()
+                            .items_center()
+                            .gap(px(4.0 * s))
+                            .child(copy_btn)
+                            .child(run_btn),
+                    )
+                    .into_any_element(),
+            );
+        }
+
+        // Live / finished states: running, waiting (Touch ID / password / sign-in), succeeded, failed/stopped.
+        let output = text(run, "output");
+        let hint_title = text(run, "hintTitle");
+        let hint_body = text(run, "hint");
+        let error_text = text(run, "error");
+        let out_key = format!("command-run-output:{key}");
+        let output_open = !output.trim().is_empty() && self.expanded.contains(&out_key);
+
+        let (dot_color, status_label, default_hint, show_stop, show_retry) = match run_state
+            .as_str()
+        {
+            "running" => (
+                p.card_muted.opacity(0.8),
+                format!("Running {run_cmd}\u{2026}"),
+                "Started on this computer. Output stays tucked away unless you open it."
+                    .to_string(),
+                true,
+                false,
+            ),
+            "waiting" => (
+                gpui::Hsla::from(gpui::rgb(0xe5a00d)),
+                if hint_title.is_empty() {
+                    "Waiting for Touch ID or your password".to_string()
+                } else {
+                    hint_title.clone()
+                },
+                if hint_body.is_empty() {
+                    "Use Touch ID or enter your password on this computer to approve. Ghostex will finish automatically once you approve.".to_string()
+                } else {
+                    hint_body.clone()
+                },
+                true,
+                false,
+            ),
+            "succeeded" => (
+                gpui::Hsla::from(gpui::rgb(0x30a46c)),
+                "Done automatically".to_string(),
+                "The command succeeded and your agent was told Done.".to_string(),
+                false,
+                false,
+            ),
+            "stopped" => (
+                p.card_muted,
+                if error_text.is_empty() {
+                    "Stopped before it finished.".to_string()
+                } else {
+                    error_text.clone()
+                },
+                String::new(),
+                false,
+                can_run,
+            ),
+            _ => (
+                gpui::Hsla::from(gpui::rgb(0xe5484d)),
+                if error_text.is_empty() {
+                    "Command did not finish cleanly.".to_string()
+                } else {
+                    error_text.clone()
+                },
+                String::new(),
+                false,
+                can_run,
+            ),
+        };
+
+        let mut actions: Vec<AnyElement> = Vec::new();
+        if !output.trim().is_empty() {
+            let toggle_label = if output_open {
+                "Hide output".to_string()
+            } else if run_state == "succeeded" {
+                "View output".to_string()
+            } else {
+                "Show output".to_string()
+            };
+            let toggle_key = out_key.clone();
+            actions.push(
+                quiet_btn(format!("{prefix}-out:{key}"), toggle_label, None)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        if !this.expanded.remove(&toggle_key) {
+                            this.expanded.insert(toggle_key.clone());
+                        }
+                        cx.notify();
+                    }))
+                    .into_any_element(),
+            );
+        }
+        if show_stop && stop_action.is_object() {
+            actions.push(
+                quiet_btn(format!("{prefix}-stop:{key}"), "Stop".to_string(), None)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.invoke(stop_action.clone(), cx);
+                    }))
+                    .into_any_element(),
+            );
+        }
+        if show_retry {
+            let copy_text = copied.clone();
+            actions.push(
+                quiet_btn(
+                    format!("{prefix}-copy-err:{key}"),
+                    "Copy".to_string(),
+                    Some("titlebar/copy.svg"),
+                )
+                .on_click(cx.listener(move |_, _, _, cx| {
+                    cx.stop_propagation();
+                    crate::app::helpers::gpui_copy_to_clipboard(
+                        gpui::ClipboardItem::new_string(copy_text.clone()),
+                        cx,
+                    );
+                }))
+                .into_any_element(),
+            );
+            actions.push(
+                neutral_btn(
+                    format!("{prefix}-retry:{key}"),
+                    "Retry".to_string(),
+                    "titlebar/refresh.svg",
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    cx.stop_propagation();
+                    this.invoke(run_action.clone(), cx);
+                }))
+                .into_any_element(),
+            );
+        }
+
+        let status_indicator = if run_state == "succeeded" {
+            svg()
+                .path("titlebar/check.svg")
+                .flex_shrink_0()
+                .size(px(12.0 * s))
+                .text_color(dot_color)
+                .into_any_element()
+        } else {
+            div()
+                .flex_shrink_0()
+                .size(px(8.0 * s))
+                .rounded_full()
+                .bg(dot_color)
+                .into_any_element()
+        };
+
+        let show_hint = !default_hint.is_empty() && (!compact || run_state == "waiting");
+
+        Some(
+            div()
+                .w_full()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(px(5.0 * s))
+                .px(px(if compact { 8.0 } else { 11.0 } * s))
+                .py(px(if compact { 6.0 } else { 8.0 } * s))
+                .rounded(px(if compact { 8.0 } else { 10.0 } * s))
+                .bg(p.foreground.opacity(0.05))
+                .border_1()
+                .border_color(p.foreground.opacity(0.09))
+                .child(
+                    div()
+                        .w_full()
+                        .min_w_0()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap(px(8.0 * s))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .flex()
+                                .items_center()
+                                .gap(px(7.0 * s))
+                                .child(status_indicator)
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .when(compact, |el| el.truncate())
+                                        .when(!compact, |el| el.whitespace_normal())
+                                        .text_size(px(12.5 * s))
+                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                        .text_color(p.strengthened(p.prose))
+                                        .child(status_label),
+                                ),
+                        )
+                        .when(!actions.is_empty(), |row| {
+                            row.child(
+                                div()
+                                    .flex_shrink_0()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(4.0 * s))
+                                    .children(actions),
+                            )
+                        }),
+                )
+                .when(show_hint, |box_el| {
+                    box_el.child(
+                        div()
+                            .w_full()
+                            .min_w_0()
+                            .whitespace_normal()
+                            .text_size(px(12.0 * s))
+                            .line_height(px(17.0 * s))
+                            .text_color(p.card_muted)
+                            .child(default_hint),
+                    )
+                })
+                .when(output_open, |box_el| {
+                    box_el.child(
+                        div()
+                            .w_full()
+                            .min_w_0()
+                            .max_h(px(160.0 * s))
+                            .overflow_hidden()
+                            .px(px(8.0 * s))
+                            .py(px(6.0 * s))
+                            .rounded(px(7.0 * s))
+                            .bg(p.foreground.opacity(0.04))
+                            .border_1()
+                            .border_color(p.foreground.opacity(0.08))
+                            .font_family(super::fonts::CHAT_MONO)
+                            .text_size(px(11.5 * s))
+                            .line_height(px(16.0 * s))
+                            .text_color(p.card_muted)
+                            .flex()
+                            .flex_col()
+                            .children(
+                                output
+                                    .trim_end()
+                                    .lines()
+                                    .rev()
+                                    .take(12)
+                                    .collect::<Vec<_>>()
+                                    .into_iter()
+                                    .rev()
+                                    .map(|line| {
+                                        div().min_w_0().whitespace_normal().child(
+                                            if line.is_empty() {
+                                                " ".to_string()
+                                            } else {
+                                                line.to_string()
+                                            },
+                                        )
+                                    }),
+                            ),
+                    )
+                })
+                .into_any_element(),
+        )
+    }
+
     /// A Needs you to-do's command (`ghostex needs-you add --command`) under its title, as one
     /// quiet chip in the chat's monospace that copies it on a click; `None` for a row with none.
     /// Its own click target beside the row's, never over it (gx-chat-core `extras::needs_you`).
@@ -1725,9 +3169,6 @@ impl NativeChatView {
         let copied = command.to_string();
         Some(
             div()
-                .pl(px((DOCK_ROW_PAD_X + DOCK_LEAD) * s))
-                .pr(px(DOCK_ROW_PAD_X * s))
-                .pb(px(6.0 * s))
                 .flex()
                 .min_w_0()
                 .child(
@@ -2135,12 +3576,41 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        self.ask_title_weighted(
+            key,
+            title,
+            runs,
+            one_line,
+            FontWeight::NORMAL,
+            color,
+            size,
+            line_height,
+            p,
+            cx,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn ask_title_weighted(
+        &self,
+        key: &str,
+        title: &str,
+        runs: &Value,
+        one_line: bool,
+        weight: FontWeight,
+        color: gpui::Hsla,
+        size: f32,
+        line_height: f32,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let s = p.scale;
         if !runs.is_array() {
             return div()
                 .min_w_0()
                 .text_size(px(size * s))
                 .line_height(px(line_height * s))
+                .font_weight(weight)
                 .text_color(color)
                 .when(one_line, |title| title.truncate())
                 .when(!one_line, |title| title.whitespace_normal())
@@ -2154,7 +3624,7 @@ impl NativeChatView {
                 runs,
                 size,
                 line_height,
-                weight: FontWeight::NORMAL,
+                weight,
                 color,
             },
             p,
@@ -2260,7 +3730,7 @@ impl NativeChatView {
         let (button_id, label, icon) = if mark_read {
             (
                 format!("dock-row-read:{key}"),
-                "Mark as read",
+                "Archive",
                 "titlebar/check.svg",
             )
         } else {
@@ -2464,16 +3934,15 @@ impl NativeChatView {
                     .child(right),
             );
         }
-        // A finished card in the dock goes away with its × (gx-chat-core `dock`). It asks no
-        // question, so the × reads Mark as read, as the dock's finished row does (the rule since
-        // the Quiet Dismiss work: Mark as read when there's no question); it sends nothing.
+        // A finished card in the dock goes away with its check (gx-chat-core `dock`). It asks no
+        // question, so it reads Archive, as the dock's finished row does; it sends nothing.
         let dismiss = card["dismiss"].clone();
         if dismiss.is_object() {
             top = top.child(
                 div()
                     .id(gpui::SharedString::from(format!("work-dismiss:{key}")))
                     .role(gpui::Role::Button)
-                    .aria_label("Mark as read")
+                    .aria_label("Archive")
                     .flex_shrink_0()
                     .size(px(20.0 * s))
                     .flex()
@@ -2483,11 +3952,11 @@ impl NativeChatView {
                     .chat_cursor_pointer()
                     .hover(|style| style.bg(p.foreground.opacity(0.08)))
                     .tooltip(|window, cx| {
-                        gpui_component::tooltip::Tooltip::new("Mark as read").build(window, cx)
+                        gpui_component::tooltip::Tooltip::new("Archive").build(window, cx)
                     })
                     .child(
                         svg()
-                            .path("titlebar/x.svg")
+                            .path("titlebar/check.svg")
                             .size(px(12.0 * s))
                             .text_color(p.muted),
                     )

@@ -702,11 +702,11 @@ pub(crate) async fn cycle_session_explained(
         .response;
         let ok = response.status().is_success();
         crate::session_chat_options::forget_session_chat_options(state, project_id, session_id);
+        let answer = axum::body::to_bytes(response.into_body(), 256 * 1024)
+            .await
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok());
         if !ok {
-            let answer = axum::body::to_bytes(response.into_body(), 256 * 1024)
-                .await
-                .ok()
-                .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok());
             return Err(CycleFailure {
                 step: if path == "/api/sleepSession" {
                     "the session could not be put to sleep"
@@ -720,8 +720,64 @@ pub(crate) async fn cycle_session_explained(
                     .map(str::to_string),
             });
         }
+        // `/api/wakeSession` can answer HTTP 200 with `restoreBlocked` (e.g. missing cwd) and a
+        // still-sleeping session; treat that as a failed wake so callers roll back cleanly.
+        if path == "/api/wakeSession" {
+            if let Some(answer) = answer.as_ref() {
+                let blocked_reason = answer
+                    .pointer("/result/attach/restoreBlocked/reason")
+                    .and_then(Value::as_str);
+                let lifecycle = answer
+                    .pointer("/result/session/lifecycleState")
+                    .and_then(Value::as_str);
+                let provider_missing = answer
+                    .pointer("/result/session/providerState/lifecycleState")
+                    .and_then(Value::as_str)
+                    == Some("missing");
+                if blocked_reason.is_some()
+                    || (lifecycle.is_some() && lifecycle != Some("running"))
+                    || provider_missing
+                {
+                    let reason = blocked_reason
+                        .map(|r| format!("restore blocked: {r}"))
+                        .or_else(|| {
+                            lifecycle
+                                .filter(|l| *l != "running")
+                                .map(|l| format!("session remained {l} after wake"))
+                        })
+                        .or_else(|| {
+                            provider_missing
+                                .then(|| "session provider remained missing after wake".to_string())
+                        });
+                    return Err(CycleFailure {
+                        step: "the session could not be started again",
+                        reason,
+                    });
+                }
+            }
+        }
     }
     Ok(())
+}
+
+/// Best-effort `/api/wakeSession` after a failed cycle rollback so a session whose `zmx` PTY was
+/// already put to sleep is brought back alive in Terminal instead of left sleeping.
+pub(crate) async fn wake_session_best_effort(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> bool {
+    let body = json!({ "params": { "projectId": project_id, "sessionId": session_id } });
+    let response = crate::server::handle_zmx_lifecycle_http(
+        state,
+        "/api/wakeSession".to_string(),
+        uuid::Uuid::new_v4().to_string(),
+        &body,
+    )
+    .await
+    .response;
+    crate::session_chat_options::forget_session_chat_options(state, project_id, session_id);
+    response.status().is_success()
 }
 
 /// Whether a wake brings the agent back on this session's conversation. Claude and Pi need only
@@ -765,21 +821,32 @@ pub(crate) async fn can_start_on_its_conversation(state: &AppState, session: &Va
     if has_conversation_to_resume(session).await {
         return true;
     }
-    let Some(project_id) = session.get("projectId").and_then(Value::as_str) else {
+    let Some(project_id) = session
+        .get("projectId")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+    else {
         return false;
     };
-    let Ok(db) = open_gxserver_database(&state.paths) else {
-        return false;
-    };
-    let settings = crate::agents::read_agent_settings(&db)
-        .unwrap_or_else(|_| crate::agents::normalize_agent_settings(None));
-    let project = DomainRepository::new(&db, state.metadata.server_id.as_str())
-        .get_project(project_id)
-        .ok()
-        .flatten();
-    project.is_some_and(|project| {
-        crate::agents::agent_conversation_written(&project, session, &settings) == Some(false)
+    let paths = state.paths.clone();
+    let server_id = state.metadata.server_id.clone();
+    let session = session.clone();
+    tokio::task::spawn_blocking(move || {
+        let Ok(db) = open_gxserver_database(&paths) else {
+            return false;
+        };
+        let settings = crate::agents::read_agent_settings(&db)
+            .unwrap_or_else(|_| crate::agents::normalize_agent_settings(None));
+        let project = DomainRepository::new(&db, server_id.as_str())
+            .get_project(&project_id)
+            .ok()
+            .flatten();
+        project.is_some_and(|project| {
+            crate::agents::agent_conversation_written(&project, &session, &settings) == Some(false)
+        })
     })
+    .await
+    .unwrap_or(false)
 }
 
 /// CDXC:SessionChat 2026-10-10 WHY:
@@ -788,14 +855,21 @@ pub(crate) async fn work_a_restart_would_end(
     state: &AppState,
     target: &crate::session_chat_send::SessionChatSendTarget,
 ) -> Option<&'static str> {
-    let coordinating = open_gxserver_database(&state.paths).ok().is_some_and(|db| {
-        crate::coordinators::read_coordinator(&db, &target.project_id, &target.session_id)
-            .ok()
-            .flatten()
-            .is_some()
-            || crate::coordinators::list_threads_for(&db, &target.project_id, &target.session_id)
-                .is_ok_and(|threads| threads.iter().any(|thread| !thread.is_resolved()))
-    });
+    let paths = state.paths.clone();
+    let project_id = target.project_id.clone();
+    let session_id = target.session_id.clone();
+    let coordinating = tokio::task::spawn_blocking(move || {
+        open_gxserver_database(&paths).ok().is_some_and(|db| {
+            crate::coordinators::read_coordinator(&db, &project_id, &session_id)
+                .ok()
+                .flatten()
+                .is_some()
+                || crate::coordinators::list_threads_for(&db, &project_id, &session_id)
+                    .is_ok_and(|threads| threads.iter().any(|thread| !thread.is_resolved()))
+        })
+    })
+    .await
+    .unwrap_or(true);
     if coordinating {
         return Some("the agent coordinates threads, and a restart would end its background work");
     }
@@ -805,6 +879,25 @@ pub(crate) async fn work_a_restart_would_end(
     }
     if !transcript_background_jobs(&target.session).await.is_empty() {
         return Some("the agent's transcript shows background jobs still running");
+    }
+    None
+}
+
+/// Like [`work_a_restart_would_end`], but does not block coordinators with active threads from
+/// switching to Native mode. A coordinator's threads run in their own sessions and their reports
+/// queue through `sendSessionChatMessage`, so switching a coordinator between turns never disrupts
+/// its threads. Only live in-process background shells/monitors on screen or in the transcript
+/// defer the switch.
+pub(crate) async fn background_work_a_restart_would_end(
+    _state: &AppState,
+    target: &crate::session_chat_send::SessionChatSendTarget,
+) -> Option<&'static str> {
+    let screen = crate::session_chat_send::capture_session_terminal_text(&target.zmx_name).await;
+    if screen.as_deref().is_some_and(shows_claude_background_tasks) {
+        return Some("background tasks are still running");
+    }
+    if !transcript_background_jobs(&target.session).await.is_empty() {
+        return Some("background jobs are still running");
     }
     None
 }

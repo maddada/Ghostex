@@ -485,7 +485,7 @@ impl GhostexGpuiApp {
     ) -> gpui::Task<Result<(), String>> {
         let group_id = group_id
             .map(str::to_string)
-            .or_else(|| self.gx_store_active_group_id());
+            .or_else(|| self.gx_store_new_session_default_group_id());
         let remote = group_id
             .as_deref()
             .and_then(ProjectKey::parse_sidebar_group_id)
@@ -571,6 +571,11 @@ impl GhostexGpuiApp {
         } else {
             self.gx_store_preferred_interface(&agent.agent_id)
         };
+        let track_untouched = preferred_interface == "chat"
+            && first_input_draft.is_none_or(|draft| draft.trim().is_empty())
+            && draft_move
+                .as_ref()
+                .is_none_or(|moved| moved.text.trim().is_empty());
         cx.spawn(async move |this, cx| {
             let result = gx_rpc(None, "/api/createAgentSession", params).await;
             let failure = result.as_ref().err().and_then(|error| {
@@ -584,8 +589,15 @@ impl GhostexGpuiApp {
                     else {
                         return;
                     };
+                    let created_project_id = created_project.as_deref().unwrap_or(&project_id);
+                    if track_untouched {
+                        this.gx_store_track_untouched_draft(SessionKey::local(
+                            created_project_id,
+                            session_id.as_str(),
+                        ));
+                    }
                     this.gx_store_focus_created_session(
-                        created_project.as_deref().unwrap_or(&project_id),
+                        created_project_id,
                         &session_id,
                         true,
                         Some(&preferred_interface),
@@ -676,6 +688,10 @@ impl GhostexGpuiApp {
         );
         let chat = !is_agentbox_run_location(run_location)
             && self.gx_store_preferred_interface(&normalized) == "chat";
+        let track_untouched = chat
+            && draft_move
+                .as_ref()
+                .is_none_or(|moved| moved.text.trim().is_empty());
         let task = self.start_gpui_remote_sidebar_rpc(
             &machine_id,
             "/api/createAgentSession",
@@ -715,6 +731,9 @@ impl GhostexGpuiApp {
                     created_project.clone(),
                     session_id.clone(),
                 );
+                if track_untouched {
+                    this.gx_store_track_untouched_draft(session.clone());
+                }
                 let payload = open_remote_session_terminal(
                     &session.to_sidebar_session_id(),
                     true,

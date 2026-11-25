@@ -3,6 +3,8 @@
 //!
 //! CDXC:Onboarding 2026-11-11 DECISION:
 //! User (first-run page, step 14): "show friendly tips about ghostex that teach about it below the what should we build with X thing (should be a card which shows a different tip every time you open and has ability to click next prev and has TONS of nice things about ghostex explained there. image icon with title next to it then subtitle text below max 2 lines." The first ones a new user sees are how to report a bug with "Collect more data with an agent" on, dragging a session from the sidebar to split, coordinators and Connect a Device (the tips with `first`). Step 19: "let's remove tips and tricks modal from the whole app, we should the help on new chats instead and user can go through them and if he marks any as read we don't show it again ever". The rest walk in an order shuffled once a day, so Next and Previous stay put while a new chat opens on the next one.
+//! CDXC:Onboarding 2026-11-24 DECISION:
+//! User: macOS hotkey glyphs in tip text (like `^⌥L`) are hard to read, and tips should not mention hotkeys at all when the feature can be reached in the UI (e.g. "Open More actions (⋯) > Files and links to see every picture, file and link this session used."). The few hotkey-only tips keep `{key:<hotkey id>}` and render it in plain words (`Cmd+F`, `Ctrl+F`) via [`format_new_chat_tip_key_words`] instead of glyphs.
 //! SEE-ALSO: apps/desktop/src/app/native_chat/new_chat_tips.rs (the card), the phone's new chat screen (not built yet: it can read this same file through the WebAssembly core).
 
 use std::sync::OnceLock;
@@ -105,6 +107,86 @@ pub fn fill_new_chat_tip_keys(
     }
     out.push_str(rest);
     Some(out)
+}
+
+/// A stored hotkey chord (or space-separated sequence, e.g. `cmd+shift+j`, `cmd+ctrl+f`) in plain
+/// words joined with `+`, never macOS modifier glyphs: `Cmd+Shift+J` on macOS, `Ctrl+Shift+J` on
+/// Windows and Linux. Used for the few hotkey-only tips that have no other UI entry point.
+pub fn format_new_chat_tip_key_words(hotkey: &str, mac: bool) -> String {
+    hotkey
+        .split(' ')
+        .filter(|chord| !chord.is_empty())
+        .map(|chord| format_chord_words(chord, mac))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn format_chord_words(chord: &str, mac: bool) -> String {
+    let parts = chord
+        .split('+')
+        .map(|part| part.trim().to_ascii_lowercase())
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>();
+    let has_primary_modifier = parts
+        .iter()
+        .any(|part| matches!(part.as_str(), "cmd" | "command" | "meta"));
+    let has_option_modifier = parts
+        .iter()
+        .any(|part| matches!(part.as_str(), "alt" | "opt" | "option"));
+    let mut labels = Vec::with_capacity(parts.len());
+    for part in parts {
+        let label = match part.as_str() {
+            "cmd" | "command" | "meta" => {
+                if mac {
+                    "Cmd".to_string()
+                } else {
+                    "Ctrl".to_string()
+                }
+            }
+            "ctrl" | "control" => {
+                if !mac && has_primary_modifier {
+                    "Alt".to_string()
+                } else {
+                    "Ctrl".to_string()
+                }
+            }
+            "alt" | "opt" | "option" => {
+                if mac {
+                    "Option".to_string()
+                } else {
+                    "Alt".to_string()
+                }
+            }
+            "shift" => "Shift".to_string(),
+            "up" | "arrowup" => "Up".to_string(),
+            "right" | "arrowright" => "Right".to_string(),
+            "down" | "arrowdown" => "Down".to_string(),
+            "left" | "arrowleft" => "Left".to_string(),
+            "tab" => "Tab".to_string(),
+            "enter" | "return" => "Enter".to_string(),
+            "escape" | "esc" => "Esc".to_string(),
+            "ß" if has_option_modifier => "S".to_string(),
+            value if value.chars().count() == 1 => value.to_uppercase(),
+            value
+                if value.len() >= 2
+                    && value.starts_with('f')
+                    && value[1..].bytes().all(|byte| byte.is_ascii_digit()) =>
+            {
+                value.to_uppercase()
+            }
+            value => {
+                let mut characters = value.chars();
+                match characters.next() {
+                    Some(first) => first.to_uppercase().chain(characters).collect(),
+                    None => String::new(),
+                }
+            }
+        };
+        if !label.is_empty() && labels.last() != Some(&label) {
+            labels.push(label);
+        }
+    }
+    labels.join("+")
 }
 
 fn splitmix64(state: &mut u64) -> u64 {

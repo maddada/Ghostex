@@ -338,7 +338,20 @@ pub(crate) fn build_zmx_run_command(input: ZmxRunCommandInput) -> String {
         input.prompt_editor.as_deref(),
         &input.zmx_executable_path,
     );
-    let startup = format!("{}\n{}", prompt_editor_setup, startup_command);
+    let has_acp_secret = input
+        .coordinator_environment
+        .iter()
+        .any(|(key, _)| *key == crate::acp::channel::ACP_CHANNEL_SECRET_ENV);
+    let startup = if has_acp_secret {
+        format!(
+            "{}\n{}\nunset {}",
+            prompt_editor_setup,
+            startup_command,
+            crate::acp::channel::ACP_CHANNEL_SECRET_ENV
+        )
+    } else {
+        format!("{}\n{}", prompt_editor_setup, startup_command)
+    };
     let login_shell = user_login_shell_path();
     let login_shell_name = std::path::Path::new(&login_shell)
         .file_name()

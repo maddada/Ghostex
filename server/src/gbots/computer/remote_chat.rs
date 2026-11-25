@@ -215,6 +215,10 @@ pub(crate) fn start_on_computer(
                 "botId": bot.bot_id,
                 "name": bot.name,
                 "openedBy": opening.opened_by,
+                // Carries the home computer's configured GBot approval (`ask`, `edits`, `auto`,
+                // `full`) over the authenticated paired-computer channel (`Principal::Peer`);
+                // non-user-device callers have `gbotHome` stripped by `guard_create_session_params`.
+                "approval": approval,
                 // That computer starts it without the screen tools unless this is on
                 // (agents/gbot_computer_use.rs there).
                 "computerUse": computer.computer_use,

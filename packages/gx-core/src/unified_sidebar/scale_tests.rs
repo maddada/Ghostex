@@ -63,6 +63,7 @@ fn group(project: &str, origin: &str, sessions: Vec<SessionRow>) -> GroupView {
                     is_visible: false,
                     is_multi_selected: false,
                     nesting: Default::default(),
+                    machine_fold: None,
                 })
                 .collect(),
             remote_machine: None,

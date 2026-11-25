@@ -20,7 +20,7 @@
 //! User: "If we have Art selected, the background of these Live pages should be that art, but more blurred (like we do to the wallpaper)." Art themes (built-in artworks and Your image, `window_art.rs`) paint in an opaque GPUI window without a platform wallpaper snapshot, and Animated (`window_glass_live.rs`) previously returned `None`, leaving every Live page on Art or Animated with the flat dusk/dawn fill. `page_glass` now checks Art first (softening `window_art_snapshot` by `PICTURE_BLUR_POINTS` on top of `windowArtBlur` and combining `windowArtDim` with the work area tint in `art_tint`), then Animated (softening a frame of the active style in the current theme's colours from `live_backdrop.rs`), before falling through to Window transparency's Wallpaper / Custom image / Desktop snapshot.
 //! SEE-ALSO: .dependencies/zed/crates/gpui_macos/src/window_wallpaper.rs (`jpeg`), app/helpers/window_art.rs (`window_art_snapshot`), server/src/visual_pages/theme.rs (`data-gx-glass`, `--gx-glass-tint-dark` / `-light`, `--gx-backdrop-top`).
 
-use super::{GpuiVisualPageModalWindow, TOP_BAND_HEIGHT};
+use super::{CONTROL_INSET, GpuiVisualPageModalWindow, TOP_BAND_HEIGHT, controls_side_attr};
 use base64::Engine as _;
 use gpui::{App, Bounds, Context, Pixels, Point, Rgba, Size, Window, point, px, size};
 use std::{sync::Arc, time::Duration};
@@ -59,6 +59,8 @@ pub(super) struct PageGlass {
     pub(super) backdrop: Option<Backdrop>,
     /// The app's theme as of the last check, which picks the header's colour without a picture.
     pub(super) light: bool,
+    /// Whether the window's controls sat on the left at the last check (`close_buttons_on_left`).
+    controls_on_left: bool,
 }
 
 /// The picture behind the header: the page's own, at the same place, under the same tint.
@@ -83,6 +85,7 @@ impl PageGlass {
     pub(super) fn new(light: bool) -> Self {
         Self {
             light,
+            controls_on_left: crate::app::window::round_close_button::close_buttons_on_left(),
             ..Self::default()
         }
     }
@@ -118,6 +121,7 @@ impl GpuiVisualPageModalWindow {
             return;
         };
         let light = crate::app::helpers::chrome_uses_light_appearance();
+        let controls_on_left = crate::app::window::round_close_button::close_buttons_on_left();
         let glass = page_glass(window, cx);
         let jpeg = glass
             .as_ref()
@@ -132,6 +136,7 @@ impl GpuiVisualPageModalWindow {
         }
         let look = look_script(
             if light { "light" } else { "dark" },
+            controls_on_left,
             glass.as_ref().map(|glass| (glass.rect, glass.tint)),
         );
         if keep && self.glass.kept_look.as_ref() != Some(&look) {
@@ -159,7 +164,8 @@ impl GpuiVisualPageModalWindow {
             }
             (None, None) => false,
             _ => true,
-        } || self.glass.light != light;
+        } || self.glass.light != light
+            || self.glass.controls_on_left != controls_on_left;
         let replaced_image = match (&self.glass.backdrop, &backdrop) {
             (Some(old), Some(new)) if !Arc::ptr_eq(&old.image, &new.image) => {
                 Some(old.image.clone())
@@ -169,6 +175,7 @@ impl GpuiVisualPageModalWindow {
         };
         self.glass.backdrop = backdrop;
         self.glass.light = light;
+        self.glass.controls_on_left = controls_on_left;
         if let Some(old_image) = replaced_image {
             let _ = window.drop_image(old_image);
         }
@@ -739,10 +746,17 @@ d.style.setProperty(\"--gx-glass-picture\",'url(\"data:image/jpeg;base64,{pictur
 }
 
 /// The app's theme (unless the reader or the page itself chose one, `data-gx-theme-from`, kit.rs),
-/// and with a picture where it lies (`rect`, in the window's coordinates; the page starts under the
-/// header) and the tint for that theme; the other theme's tint is left to the page's default.
-fn look_script(theme: &str, glass: Option<(Bounds<Pixels>, Rgba)>) -> String {
+/// which side of the band holds the window controls and their inset (`CONTROL_INSET`), and with a
+/// picture where it lies (`rect`, in the window's coordinates; the page starts under the header)
+/// and the tint for that theme; the other theme's tint is left to the page's default.
+fn look_script(
+    theme: &str,
+    controls_on_left: bool,
+    glass: Option<(Bounds<Pixels>, Rgba)>,
+) -> String {
     let other = if theme == "light" { "dark" } else { "light" };
+    let controls = controls_side_attr(controls_on_left);
+    let controls_inset = css_px(px(CONTROL_INSET));
     let glass = match glass {
         Some((rect, tint)) => format!(
             "s.setProperty(\"--gx-glass-size\",\"{}px {}px\");s.setProperty(\"--gx-glass-position\",\"{}px {}px\");\
@@ -757,7 +771,8 @@ s.setProperty(\"--gx-glass-tint-{theme}\",\"{}\");s.removeProperty(\"--gx-glass-
             .to_string(),
     };
     on_root(&format!(
-        "var s=d.style;{glass}\
+        "var s=d.style;d.setAttribute(\"data-gx-controls\",\"{controls}\");\
+s.setProperty(\"--gx-controls-inset\",\"{controls_inset}px\");{glass}\
 if(d.hasAttribute(\"data-gx-theme-from\")||d.getAttribute(\"data-gx-theme\")===\"{theme}\")return;\
 d.setAttribute(\"data-gx-theme\",\"{theme}\");\
 Array.prototype.forEach.call(document.querySelectorAll(\".gx-theme-switch [data-gx-set-theme]\"),function(b){{\
@@ -818,6 +833,7 @@ mod tests {
     fn the_page_is_told_its_part_of_the_window_picture() {
         let look = look_script(
             "dark",
+            false,
             Some((
                 Bounds::new(point(px(-400.0), px(-150.0)), size(px(1728.0), px(1117.0))),
                 Rgba {
@@ -956,7 +972,7 @@ mod tests {
         for script in [
             picture_script(b"jpeg"),
             picture_script(&[]),
-            look_script("light", None),
+            look_script("light", true, None),
         ] {
             assert!(script.contains("var d=document.documentElement;if(d){run(d);return;}"));
             assert!(script.contains("new MutationObserver"));

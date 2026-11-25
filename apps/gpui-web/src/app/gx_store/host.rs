@@ -20,6 +20,9 @@ pub(crate) struct GxStoreHost {
     pub(crate) core: Core,
     /// The close a close confirmation holds while it is open (`sidebar_close_confirm.rs`).
     pub(crate) pending_session_close: Option<super::sidebar_close_confirm::PendingSessionClose>,
+    /// The action a checkbox confirmation dialog holds while it is open (`sidebar_close_confirm.rs`).
+    pub(crate) pending_session_confirm_checkbox:
+        Option<super::sidebar_close_confirm::PendingSessionConfirmWithCheckbox>,
     /// Set while a confirmed close runs, so the same close does not ask again.
     pub(crate) session_close_confirmed: bool,
     pub(crate) endpoint: Option<GxserverEndpoint>,
@@ -380,6 +383,9 @@ impl GhostexGpuiApp {
                 | ghostex_gx_core::Effect::DomainProjectChanged { .. }) => {
                     self.gx_store_perform_hud_effect(effect, cx)
                 }
+                ghostex_gx_core::Effect::SwitchRequest { machine, request } => {
+                    self.show_gpui_switch_request_toast(machine, *request, cx);
+                }
                 _ => {}
             }
         }
@@ -412,12 +418,6 @@ impl GhostexGpuiApp {
         // The page has no machine tabs: it streams only its own computer.
         crate::app::gx_chat::session_directory::publish(self.gx_store.core.presentation(), &[]);
         let now_ms = now_ms();
-        // Autopilot's project starts hidden, once (gx-core `SidebarUiStore::hide_once`).
-        let autopilot =
-            ghostex_gx_core::autopilot_project_group_ids(self.gx_store.core.presentation());
-        if !autopilot.is_empty() && self.gx_store.sidebar_ui.hide_once(&autopilot) {
-            self.gx_store_persist_sidebar_ui();
-        }
         let store = &mut self.gx_store;
         let ui = store.sidebar_ui.state().clone();
         let hud = store.runtime_facts.hud_value();
@@ -439,6 +439,9 @@ impl GhostexGpuiApp {
             // servers, Extensions): they are the desktop's own windows.
             menu_panels: false,
             agentbox_locations: store.agentbox_locations.clone(),
+            browser_view_tab_hidden: hud["settings"]["browserViewTabHidden"]
+                .as_bool()
+                .unwrap_or(false),
         };
         store.sidebar_list.last_inputs.host.project_diff_stats = store
             .runtime_facts

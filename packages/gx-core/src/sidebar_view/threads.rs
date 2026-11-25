@@ -119,7 +119,7 @@ pub(crate) fn tally_threads<'a>(
         if let Some(key) = row.key.as_ref() {
             parents.insert(key, parent);
         }
-        if row.awaiting_approval {
+        if row.thread_state.as_deref() != Some("done") && row.awaiting_approval {
             approvals.push(parent);
         }
         let tally = tallies.entry(parent.clone()).or_default();
@@ -311,9 +311,6 @@ pub(crate) fn nest_threads(
             !session.is_focused && !session.is_visible && !is_recent_thread(&session.row, now_ms)
         })
         .collect();
-    for list in children.values_mut() {
-        list.sort_by_key(|child| is_older[*child]);
-    }
     let shows_older: Vec<bool> = sessions
         .iter()
         .map(|session| older_shown.contains(&session.row.sidebar_session_id))
@@ -339,6 +336,12 @@ pub(crate) fn nest_threads(
     let hidden = |parent: usize, child: usize| {
         !lead_parent[parent] && !shows_older[parent] && is_older[child]
     };
+    // Only move children hidden behind "N older threads" after the drawn ones so `lay_out_tree`
+    // marks the last drawn child cleanly; leads and coordinators with older threads shown hide
+    // nothing, so clicking a row never jumps it to the top of its group (#725).
+    for (&parent, list) in children.iter_mut() {
+        list.sort_by_key(|child| hidden(parent, *child));
+    }
     let threads_of = |index: usize| {
         let list = children.get(&index).cloned().unwrap_or_default();
         let drawn = list.iter().filter(|child| !hidden(index, **child)).count();
@@ -396,14 +399,16 @@ pub(crate) fn nest_threads(
         }
     }
 
-    // A coordinator's team stack, folded or not: its own status and every thread under it.
+    // A coordinator's team stack, folded or not: its own status and every unresolved thread under it.
     let team_status: HashMap<usize, FoldedStatus> = (0..sessions.len())
         .filter(|index| children.contains_key(index))
         .map(|index| {
             let mut status = FoldedStatus::default();
             let mut stack = vec![index];
             while let Some(next) = stack.pop() {
-                status.add(&sessions[next].row);
+                if next == index || sessions[next].row.thread_state.as_deref() != Some("done") {
+                    status.add(&sessions[next].row);
+                }
                 stack.extend(children.get(&next).into_iter().flatten().copied());
             }
             (index, status)
@@ -527,6 +532,7 @@ mod tests {
             is_visible: false,
             is_multi_selected: false,
             nesting: RowNesting::default(),
+            machine_fold: None,
         }
     }
 
@@ -576,7 +582,7 @@ mod tests {
             lead.nesting.folded_status,
             FoldedStatus {
                 working: true,
-                attention: true,
+                attention: false,
                 background_work: false,
                 question: true,
                 approval: false,

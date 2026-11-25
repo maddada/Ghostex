@@ -63,7 +63,7 @@ const IGNORED_PLACEHOLDER_SESSION_TITLES: &[&str] = &[
 
 /// The distinct values of `DEFAULT_SESSION_AGENT_TITLE_NAMES`, in first-seen order.
 const DEFAULT_SESSION_AGENT_TITLE_NAMES: &[&str] = &[
-    "Antigravity CLI",
+    "Antigravity",
     "Amp CLI",
     "Claude",
     "CodeBuddy",

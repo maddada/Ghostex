@@ -784,6 +784,7 @@ fn infer_agent_id_from_process_executable(
     if executable_name == "cli"
         && tokens
             .get(executable_index)?
+            .replace('\\', "/")
             .ends_with("/@oh-my-pi/pi-coding-agent/dist/cli.js")
     {
         return Some("omp".to_string());
@@ -1011,7 +1012,7 @@ fn normalize_process_executable_name(token: Option<&str>) -> Option<String> {
         .next()
         .unwrap_or(normalized.as_str())
         .to_string();
-    for extension in [".cjs", ".cmd", ".exe", ".js", ".mjs", ".ts"] {
+    for extension in [".bat", ".cjs", ".cmd", ".exe", ".js", ".mjs", ".ps1", ".ts"] {
         if let Some(stripped) = basename.strip_suffix(extension) {
             return (!stripped.is_empty()).then(|| stripped.to_string());
         }

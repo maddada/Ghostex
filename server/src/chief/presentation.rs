@@ -25,33 +25,17 @@ fn mark(session: &mut Value) {
     }
 }
 
-/// While Main Hub is off nothing of Chief of Staff shows: its current and earlier chats are left
-/// out of every list (CDXC:Chief 2026-11-08 in packages/settings-catalog/src/data/
-/// official_extensions.rs).
-fn hide(session: &mut Value) {
-    if let Some(object) = session.as_object_mut() {
-        object.insert("visibleInSidebarByDefault".to_string(), json!(false));
-        // The phone's summary drops these rows by this flag (ghostex_cli/sessions/mobile_summary.rs).
-        object.insert("mainHubHidden".to_string(), json!(true));
-        object.remove("isChief");
-    }
-}
-
-/// Flags Chief's earlier chats in a presentation snapshot, or hides all its chats while Main Hub
-/// is off.
+/// Flags Chief's earlier chats in a presentation snapshot.
 pub(crate) fn insert_chief_presentation_payload(snapshot: &mut Value, db: &Connection) {
     let Some(record) = read_record(db) else {
         return;
     };
-    let shown = super::chief_shown();
     let Some(sessions) = snapshot.get_mut("sessions").and_then(Value::as_array_mut) else {
         return;
     };
     for session in sessions {
         let key = key_of(session);
-        if !shown && record.owns(&key) {
-            hide(session);
-        } else if key != record.key() && record.owns(&key) {
+        if key != record.key() && record.owns(&key) {
             mark(session);
         }
     }
@@ -63,9 +47,7 @@ pub(crate) fn insert_chief_session_projection(session: &mut Value, db: &Connecti
     let Some(record) = read_record(db).filter(|record| record.owns(&key)) else {
         return;
     };
-    if !super::chief_shown() {
-        hide(session);
-    } else if key != record.key() {
+    if key != record.key() {
         mark(session);
     }
 }

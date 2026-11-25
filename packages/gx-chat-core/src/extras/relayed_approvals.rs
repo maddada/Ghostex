@@ -53,7 +53,7 @@ pub(crate) struct Choice {
     pub(crate) answer: Value,
 }
 
-fn tone_of(label: &str, first: bool) -> &'static str {
+pub(crate) fn tone_of(label: &str, first: bool) -> &'static str {
     let trimmed = label.trim_start();
     if trimmed.starts_with("No") || trimmed.starts_with("Deny") || trimmed.starts_with("Don't") {
         "deny"
@@ -162,6 +162,7 @@ pub(crate) fn choices(card: &Value) -> Vec<Choice> {
         tool,
         summary,
         tool_use_id,
+        ..
     }) = prompt
     {
         let mut allow = json!({ "kind": "approval", "approvalSend": "1", "promptTool": tool });
@@ -263,7 +264,12 @@ pub(crate) fn body(card: &Value) -> (String, String, String, String, String, Val
                     "Command".to_string(),
                     Value::Null,
                 ),
-                (_, Some(InteractivePrompt::Approval { tool, summary, .. })) => (
+                (_, Some(InteractivePrompt::Approval {
+                    tool,
+                    summary,
+                    reason,
+                    ..
+                })) => (
                     "Permission".to_string(),
                     crate::questions::notice_tone::approval_title(
                         Some(text(card, "agent")).filter(|agent| !agent.is_empty()),
@@ -272,7 +278,12 @@ pub(crate) fn body(card: &Value) -> (String, String, String, String, String, Val
                     tool.clone(),
                     summary.clone().unwrap_or_default(),
                     "Command".to_string(),
-                    Value::Null,
+                    reason
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|text| !text.is_empty())
+                        .map(|text| json!({ "tone": "warning", "text": text }))
+                        .unwrap_or(Value::Null),
                 ),
                 _ => (
                     "Permission".to_string(),

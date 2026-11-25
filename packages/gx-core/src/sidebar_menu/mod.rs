@@ -54,6 +54,7 @@ pub use group::MenuGroup;
 pub(crate) use header::account_provider;
 pub use header::{
     agent_launcher_items, agent_launcher_items_with_accounts, project_header_actions,
+    NEW_ORCHESTRATOR_BENEFITS,
 };
 pub use host::{HeaderCommand, LauncherAgent, MenuHost, MenuOpenTarget};
 pub use hover::{
@@ -71,7 +72,7 @@ pub use menus::SidebarMenus;
 pub use navigation::{
     ADD_PROJECT_ACTION, COLLAPSE_ALL_ICON, COMMANDS_ACTION, EXPAND_ALL_ICON,
     MENU_PANEL_DEV_SERVERS, MENU_PANEL_EXTENSIONS, MENU_PANEL_HELP, MENU_PANEL_MESSAGE_TYPE,
-    MENU_PANEL_RESOURCES, UNIFIED_TOGGLE_GROUPS_ACTION,
+    MENU_PANEL_RESOURCES, NEW_COORDINATOR_ACTION, UNIFIED_TOGGLE_GROUPS_ACTION,
 };
 pub use project::{unified_delete_worktree_menu, without_project_rename};
 pub(crate) use run_in_box::{run_in_box_agents_page, run_in_box_locations_page};

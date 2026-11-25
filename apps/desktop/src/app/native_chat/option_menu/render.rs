@@ -509,11 +509,18 @@ impl Render for ChatOptionMenuPanel {
                             |shift| ((color >> shift & 255u32) as f32 * 0.42).round() as u32;
                         channel(16) << 16 | channel(8) << 8 | channel(0)
                     });
+                let agent_icon_color = row["iconPath"]
+                    .is_null()
+                    .then(|| row["icon"].as_str())
+                    .flatten()
+                    .map(|icon| super::super::option_pills::agent_accent(icon, &appearance));
                 let ink = if row["danger"] == true {
                     gpui::Hsla::from(crate::app::helpers::chrome_palette::chrome_color(
                         0xff7b72, 0xd32f2f,
                     ))
                 } else if let Some(color) = tag_color {
+                    gpui::Hsla::from(gpui::rgb(color))
+                } else if let Some(color) = agent_icon_color {
                     gpui::Hsla::from(gpui::rgb(color))
                 } else {
                     gpui::Hsla::from(foreground)

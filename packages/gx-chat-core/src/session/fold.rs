@@ -208,6 +208,10 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
         .later_question_ids
         .clone()
         .or_else(|| previous_side.and_then(|state| state.later_question_ids.clone()));
+    folded.result.state.agent_restarted_at = side
+        .agent_restarted_at
+        .clone()
+        .or_else(|| previous_side.and_then(|state| state.agent_restarted_at.clone()));
     folded.result.state.removed_question_ids = side
         .removed_question_ids
         .clone()
@@ -233,6 +237,12 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
         .unavailable_modes
         .clone()
         .or_else(|| previous_side.and_then(|state| state.unavailable_modes.clone()));
+    folded.result.state.non_cli_mode = side
+        .non_cli_mode
+        .or_else(|| previous_side.and_then(|state| state.non_cli_mode));
+    folded.result.state.switch_to_native_queued = side
+        .switch_to_native_queued
+        .or_else(|| previous_side.and_then(|state| state.switch_to_native_queued));
 
     folded.result.state.resource_index = carried(
         side.resource_index.as_ref(),
@@ -690,6 +700,11 @@ fn empty_result() -> ReadSessionChatResult {
         status_line_pins: None,
         offer_compact_before_sending: None,
         compact_chats_above: None,
+        native_mode_switch_capable: None,
+        native_default_for_agent: None,
+        native_switch_dismissed: None,
+        preferred_chat_first: None,
+        is_coordinator_thread: None,
         fork_info: None,
         subagent: None,
         error: None,

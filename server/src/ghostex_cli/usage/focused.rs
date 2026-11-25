@@ -314,7 +314,7 @@ Behavior:
   Without --agent, the bead assignee is matched case-insensitively against configured agents,
   falling back to the default prompt agent. An --agent turned off in Settings > Agents is refused
   unless --allow-hidden is passed.
-  --model and --effort start a new Claude, Codex, Pi, OMP, Copilot, Grok Build, Hermes Agent, Empryo or Antigravity CLI worker
+  --model and --effort start a new Claude, Codex, Pi, OMP, Copilot, Grok Build, Hermes Agent, Empryo or Antigravity worker
   on that model and effort for this session only (a Pi, OMP or Empryo model is <provider>/<model>, a Pi or OMP effort a
   thinking level; Cursor CLI takes --model only); your default
   model is unchanged, and a resumed worker keeps them. A reused worker keeps
@@ -949,17 +949,22 @@ pub fn needs_you_usage() -> String {
   ghostex needs-you done Q<n> [--session <alias|id|title>]
   ghostex needs-you drop Q<n> [--session <alias|id|title>]
 
-add: when a step can only be done by the user (a sudo command, a tap on their phone, a sign-in,
-a check by eye), put it above this session's chat box as a to-do with a Done button, without
-being asked. It takes the session's next Q tag and stays until the user presses Done or you
-clear it, even if the chat is cleared. The user reads it with nothing else on screen, often in
-another chat: its title names what it is about ("Run the signing setup on this computer"), never
-"it", "this" or "that" without the thing. --command shows as a chip the user clicks to copy.
---detail says what it is about and why, always: one short line (about 90 characters) shows under
-the title with Done or the answers still on the row; a longer one shows Details, and its Done or
-answers wait under it. --answer (repeated) offers choices such as "Works" and
-"Something's off" instead of a single Done. Also list it under Needs you in your
-reply. The user's answer arrives as a message: "Q61: Done" (or the answer they picked, or their
+add: when a step can only be done by the user (an owner-only command, a phone tap, a browser
+sign-in, a check by eye), put it above this session's chat box as a to-do with a Done button,
+without being asked. Never ask the user to run or paste a `ghostex` command you can run yourself:
+run setup, sign-in, connect and `ghostex settings open` commands yourself first and ask only for
+the part that needs their hands (Touch ID or fingerprint, clicking Approve, signing in in the
+browser window that opened). It takes the session's next Q tag and stays until the user presses
+Done or you clear it, even if the chat is cleared. The user reads it with nothing else on screen,
+often in another chat: its title names what it is about ("Run the signing setup on this computer"),
+never "it", "this" or "that" without the thing. --command shows as a chip the user clicks to copy.
+--detail says what it is about and why, always, and holds everything the user needs to do it: the
+text to paste or post (in a ``` block, which gets a Copy button), the link, the code, the steps.
+The row above the chat shows the title only; the detail is in Details. A to-do whose title starts
+with paste, post, copy, send, reply, run, type, enter, sign in or open is refused until --detail
+holds a ``` block, a link or `code`, or --command is set. --answer (repeated) offers choices such
+as "Works" and "Something's off" instead of a single Done. Also name it (its tag and title, never
+its content) under Needs you in your reply. The user's answer arrives as a message: "Q61: Done" (or the answer they picked, or their
 own words). Inside a coordinator's thread the to-do goes to the coordinator's Needs you list,
 and the user's answer still reaches you.
 list: the open to-dos (--all adds the ones settled lately and how).

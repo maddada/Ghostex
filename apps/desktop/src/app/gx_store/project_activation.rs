@@ -171,6 +171,7 @@ impl GhostexGpuiApp {
                             true => GpuiPreferredAgentInterface::Chat,
                             false => GpuiPreferredAgentInterface::Terminal,
                         }),
+                        ..RowFocusOptions::default()
                     },
                     cx,
                 );

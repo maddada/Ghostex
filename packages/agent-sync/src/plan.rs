@@ -18,11 +18,12 @@
 //! leftover `<name>.pre-sync-*.bak` folders out of agents' skills folders into the backup folder
 //! (`MoveBackups`): "Move, never delete, for other users."
 
-use crate::catalog::source_root;
+use crate::catalog::{source_root, InstructionKind};
 use crate::fsx;
 use crate::pointer::{self, InstructionState};
 use crate::scan::{
-    AgentReport, HooksState, LockLinkState, SkillDirState, SkillEntryState, SyncReport,
+    AgentReport, HooksState, LockLinkState, MainMdSeedCandidate, SkillDirState, SkillEntryState,
+    SyncReport,
 };
 use crate::SyncScope;
 use serde::Serialize;
@@ -43,6 +44,7 @@ pub enum PlanVerb {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Hash, PartialOrd, Ord)]
 #[serde(rename_all = "camelCase")]
 pub enum PlanGroupKind {
+    SeedMainMd,
     RemoveDangling,
     RemoveRedundantLinks,
     MoveBackups,
@@ -54,7 +56,8 @@ pub enum PlanGroupKind {
 }
 
 impl PlanGroupKind {
-    pub const ALL: [PlanGroupKind; 8] = [
+    pub const ALL: [PlanGroupKind; 9] = [
+        PlanGroupKind::SeedMainMd,
         PlanGroupKind::RemoveDangling,
         PlanGroupKind::RemoveRedundantLinks,
         PlanGroupKind::MoveBackups,
@@ -67,6 +70,7 @@ impl PlanGroupKind {
 
     pub fn parse(value: &str) -> Option<PlanGroupKind> {
         match value.trim() {
+            "seedMainMd" | "seed-main-md" | "seed-main" | "seed" => Some(PlanGroupKind::SeedMainMd),
             "removeDangling" | "remove-dangling" | "dangling" => {
                 Some(PlanGroupKind::RemoveDangling)
             }
@@ -91,6 +95,7 @@ impl PlanGroupKind {
 
     pub fn id(self) -> &'static str {
         match self {
+            PlanGroupKind::SeedMainMd => "seedMainMd",
             PlanGroupKind::RemoveDangling => "removeDangling",
             PlanGroupKind::RemoveRedundantLinks => "removeRedundantLinks",
             PlanGroupKind::MoveBackups => "moveBackups",
@@ -104,6 +109,7 @@ impl PlanGroupKind {
 
     fn title(self) -> &'static str {
         match self {
+            PlanGroupKind::SeedMainMd => "Create ~/.agents/main.md",
             PlanGroupKind::RemoveDangling => "Remove dangling links",
             PlanGroupKind::RemoveRedundantLinks => {
                 "Remove links agents that read ~/.agents/skills do not need"
@@ -176,6 +182,19 @@ pub struct SyncPlan {
     pub stamp: String,
     /// Display path of the folder this plan's backups go to (`~/.../<stamp>`).
     pub backup_dir: String,
+    pub pointer_policy: PointerPolicy,
+    /// True when `~/.agents/main.md` is missing or empty and no seed step is planned,
+    /// so pointer file writes were skipped.
+    pub main_md_blocked: bool,
+    /// Richest existing non-pointer instruction file offered to seed `~/.agents/main.md`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seed_recommendation: Option<MainMdSeedCandidate>,
+    /// All existing non-pointer instruction files that can seed `~/.agents/main.md`, richest first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub seed_candidates: Vec<MainMdSeedCandidate>,
+    /// Clear warnings shown before anything is replaced or when `main.md` blocks pointer writes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
     pub groups: Vec<PlanGroup>,
     pub summary: PlanSummary,
 }
@@ -185,10 +204,31 @@ pub struct SyncPlan {
 pub enum PointerPolicy {
     /// Back the file up and write only the pointer (the user's default, DECISION 2B).
     Replace,
-    /// Keep the agent's own lines under the pointer.
+    /// Back the file up and prepend the pointer above the agent's own lines.
     Prepend,
-    /// Report only.
+    /// Leave existing instruction files alone; only create missing ones.
     LeaveAlone,
+}
+
+impl PointerPolicy {
+    pub fn parse(value: &str) -> Option<PointerPolicy> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "replace" => Some(PointerPolicy::Replace),
+            "prepend" => Some(PointerPolicy::Prepend),
+            "leave-alone" | "leavealone" | "leave_alone" | "keep" => {
+                Some(PointerPolicy::LeaveAlone)
+            }
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PointerPolicy::Replace => "replace",
+            PointerPolicy::Prepend => "prepend",
+            PointerPolicy::LeaveAlone => "leave-alone",
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -198,6 +238,9 @@ pub struct PlanOptions {
     /// Backups go to `<backup_root>/<stamp>/...`.
     pub backup_root: PathBuf,
     pub pointer_policy: PointerPolicy,
+    /// Optional agent id, alias (e.g. `claude`, `codex`), `richest`, or file path to seed
+    /// `~/.agents/main.md` from when it is missing or empty.
+    pub seed_main_from: Option<String>,
     pub link_hooks: bool,
     pub link_lock: bool,
 }
@@ -209,10 +252,195 @@ impl Default for PlanOptions {
             stamp: crate::now_backup_stamp(),
             backup_root: fsx::default_backup_root(),
             pointer_policy: PointerPolicy::Replace,
+            seed_main_from: None,
             link_hooks: true,
             link_lock: true,
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct ResolvedSeed {
+    pub agent_id: Option<String>,
+    pub label: String,
+    pub abs_path: PathBuf,
+    pub display_path: String,
+    pub body: String,
+    pub bytes: usize,
+}
+
+fn format_seed_candidates_hint(candidates: &[MainMdSeedCandidate]) -> String {
+    if candidates.is_empty() {
+        return "No existing non-pointer instruction files were found to seed from. Create ~/.agents/main.md by hand first."
+            .to_string();
+    }
+    let list = candidates
+        .iter()
+        .map(|candidate| {
+            format!(
+                "{} ({}, {} bytes)",
+                candidate.agent_id, candidate.path, candidate.bytes
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("Available seed sources: {list}.")
+}
+
+fn canonical_agent_alias(selector: &str) -> &str {
+    match selector {
+        "claude" => "claude-code",
+        "copilot" => "github-copilot",
+        "kiro" => "kiro-cli",
+        "factory" | "factory-droid" => "droid",
+        "qwen" => "qwen-code",
+        "roo-code" => "roo",
+        "kilo-code" => "kilo",
+        other => other,
+    }
+}
+
+/// Resolve a `--seed-main-from` selector (agent id, short alias like `claude`, `richest`, or a
+/// file path) into the content that will be written to `~/.agents/main.md`.
+/// Refuses to overwrite an existing non-empty `~/.agents/main.md` or seed from a pointer file.
+pub fn resolve_seed_source(
+    home: &Path,
+    report: &SyncReport,
+    selector: &str,
+) -> Result<ResolvedSeed, String> {
+    if report.source.main_md_ready() {
+        return Err(
+            "~/.agents/main.md already exists and has content; refusing to overwrite it. Remove --seed-main-from to sync pointer files."
+                .to_string(),
+        );
+    }
+    let main_md_path = source_root(home).join("main.md");
+    if fsx::is_symlink(&main_md_path) && !main_md_path.is_file() {
+        return Err(
+            "~/.agents/main.md is a broken symlink; remove or fix it before seeding.".to_string(),
+        );
+    }
+    let trimmed = selector.trim();
+    if trimmed.is_empty() {
+        return Err(format!(
+            "Seed source cannot be empty. {}",
+            format_seed_candidates_hint(&report.source.main_md_seed_candidates)
+        ));
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    if matches!(lower.as_str(), "richest" | "auto") {
+        let Some(best) = report.source.main_md_seed_candidates.first() else {
+            return Err(format_seed_candidates_hint(
+                &report.source.main_md_seed_candidates,
+            ));
+        };
+        return resolve_seed_source(home, report, &best.agent_id);
+    }
+    let aliased = canonical_agent_alias(&lower);
+    let matched_agent = report.agents.iter().find(|agent| {
+        agent.id.eq_ignore_ascii_case(trimmed)
+            || agent.id.eq_ignore_ascii_case(aliased)
+            || agent
+                .icon
+                .as_deref()
+                .is_some_and(|icon| icon.eq_ignore_ascii_case(&lower))
+            || agent.display_name.eq_ignore_ascii_case(trimmed)
+    });
+    if let Some(agent) = matched_agent {
+        let Some(spec) = &agent.spec else {
+            return Err(format!(
+                "Agent `{}` has no catalog specification.",
+                agent.id
+            ));
+        };
+        let Some(path) = &spec.instruction_file else {
+            return Err(format!(
+                "{} does not have a global instruction file. {}",
+                agent.display_name,
+                format_seed_candidates_hint(&report.source.main_md_seed_candidates)
+            ));
+        };
+        let display_path = fsx::display_path(path, home);
+        let raw_state = pointer::classify(path, spec.instruction_kind);
+        if raw_state != InstructionState::OtherContent {
+            let why = match raw_state {
+                InstructionState::Missing => "does not exist",
+                InstructionState::Pointer
+                | InstructionState::DanglingPointer
+                | InstructionState::LegacyPointer => "is already a pointer to ~/.agents/main.md",
+                InstructionState::Symlink => "is a symlink",
+                InstructionState::NotAFile => "is not a regular file",
+                InstructionState::OtherContent => unreachable!(),
+            };
+            return Err(format!(
+                "Cannot seed ~/.agents/main.md from {} ({display_path}): file {why}. {}",
+                agent.display_name,
+                format_seed_candidates_hint(&report.source.main_md_seed_candidates)
+            ));
+        }
+        let raw = std::fs::read_to_string(path)
+            .map_err(|error| format!("Could not read {display_path}: {error}"))?;
+        let body = pointer::seed_body(&raw, spec.instruction_kind);
+        if body.trim().is_empty() {
+            return Err(format!(
+                "Cannot seed ~/.agents/main.md from {} ({display_path}): file is empty. {}",
+                agent.display_name,
+                format_seed_candidates_hint(&report.source.main_md_seed_candidates)
+            ));
+        }
+        let bytes = body.len();
+        return Ok(ResolvedSeed {
+            agent_id: Some(agent.id.clone()),
+            label: agent.display_name.clone(),
+            abs_path: path.clone(),
+            display_path,
+            body,
+            bytes,
+        });
+    }
+
+    // Fall back to an explicit file path (supports `~/...` and OS-native absolute/relative paths).
+    let candidate_path = abs_from_display(home, trimmed);
+    if candidate_path.is_file() {
+        let kind = if candidate_path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("mdc"))
+        {
+            InstructionKind::Mdc
+        } else {
+            InstructionKind::Plain
+        };
+        let display_path = fsx::display_path(&candidate_path, home);
+        let raw_state = pointer::classify(&candidate_path, kind);
+        if raw_state != InstructionState::OtherContent {
+            return Err(format!(
+                "Cannot seed ~/.agents/main.md from {display_path}: file is already a pointer or not a regular instruction file."
+            ));
+        }
+        let raw = std::fs::read_to_string(&candidate_path)
+            .map_err(|error| format!("Could not read {display_path}: {error}"))?;
+        let body = pointer::seed_body(&raw, kind);
+        if body.trim().is_empty() {
+            return Err(format!(
+                "Cannot seed ~/.agents/main.md from {display_path}: file is empty."
+            ));
+        }
+        let bytes = body.len();
+        return Ok(ResolvedSeed {
+            agent_id: None,
+            label: display_path.clone(),
+            abs_path: candidate_path,
+            display_path,
+            body,
+            bytes,
+        });
+    }
+
+    Err(format!(
+        "Unknown seed source `{trimmed}`. {}",
+        format_seed_candidates_hint(&report.source.main_md_seed_candidates)
+    ))
 }
 
 struct Builder<'a> {
@@ -273,14 +501,26 @@ impl<'a> Builder<'a> {
 }
 
 fn abs_from_display(home: &Path, display: &str) -> PathBuf {
-    match display.strip_prefix("~/") {
-        Some(rest) => home.join(rest),
+    match display
+        .strip_prefix("~/")
+        .or_else(|| display.strip_prefix("~\\"))
+    {
+        Some(rest) => rest
+            .split(['/', '\\'])
+            .filter(|part| !part.is_empty())
+            .fold(home.to_path_buf(), |path, part| path.join(part)),
         None if display == "~" => home.to_path_buf(),
         None => PathBuf::from(display),
     }
 }
 
-fn plan_agent(b: &mut Builder<'_>, agent: &AgentReport, options: &PlanOptions) {
+fn plan_agent(
+    b: &mut Builder<'_>,
+    agent: &AgentReport,
+    options: &PlanOptions,
+    will_have_main_md: bool,
+    main_md_empty: bool,
+) {
     let Some(spec) = &agent.spec else {
         return;
     };
@@ -423,66 +663,134 @@ fn plan_agent(b: &mut Builder<'_>, agent: &AgentReport, options: &PlanOptions) {
 
     if let (Some(instructions), Some(path)) = (&agent.instructions, spec.instruction_file.as_ref())
     {
-        let content = pointer::pointer_content(spec.instruction_kind);
-        match instructions.state {
-            InstructionState::Pointer => {
-                let op = b.keep_op(path.clone(), Some(agent_id), "already the pointer");
-                b.push(PlanGroupKind::PointerFiles, op);
-            }
-            InstructionState::Missing => {
-                let mut op = b.op(PlanVerb::Write, path.clone(), Some(agent_id));
-                op.content = Some(content);
-                op.note = Some("pointer to ~/.agents/main.md".to_string());
-                b.push(PlanGroupKind::PointerFiles, op);
-            }
-            InstructionState::LegacyPointer | InstructionState::OtherContent => {
-                match options.pointer_policy {
-                    PointerPolicy::Replace => {
-                        let note = if instructions.state == InstructionState::LegacyPointer {
-                            "older pointer wording"
-                        } else {
-                            "has content of its own"
-                        };
-                        b.push(
-                            PlanGroupKind::PointerFiles,
-                            b.backup_op(path.clone(), Some(agent_id), note),
-                        );
-                        let mut op = b.op(PlanVerb::Write, path.clone(), Some(agent_id));
-                        op.content = Some(content);
-                        b.push(PlanGroupKind::PointerFiles, op);
-                    }
-                    PointerPolicy::Prepend => {
-                        let existing = std::fs::read_to_string(path).unwrap_or_default();
-                        let mut op = b.op(PlanVerb::Write, path.clone(), Some(agent_id));
-                        op.content = Some(format!("{content}\n{existing}"));
-                        op.note = Some("pointer prepended above the existing content".to_string());
-                        b.push(PlanGroupKind::PointerFiles, op);
-                    }
-                    PointerPolicy::LeaveAlone => {
-                        let op = b.keep_op(
-                            path.clone(),
-                            Some(agent_id),
-                            "has other content; left alone",
-                        );
-                        b.push(PlanGroupKind::PointerFiles, op);
+        if !will_have_main_md {
+            let reason = if main_md_empty {
+                "~/.agents/main.md is empty"
+            } else {
+                "~/.agents/main.md does not exist"
+            };
+            let note = match instructions.state {
+                InstructionState::DanglingPointer => {
+                    format!("dangling pointer: {reason}; create main.md or restore from backup")
+                }
+                InstructionState::Symlink => "is a symlink; review it by hand".to_string(),
+                InstructionState::NotAFile => "not a file; review it by hand".to_string(),
+                _ => format!("skipped: {reason}; create main.md first"),
+            };
+            let op = b.keep_op(path.clone(), Some(agent_id), &note);
+            b.push(PlanGroupKind::PointerFiles, op);
+        } else {
+            let content = pointer::pointer_content(spec.instruction_kind);
+            let effective_state = if instructions.state == InstructionState::DanglingPointer {
+                pointer::classify(path, spec.instruction_kind)
+            } else {
+                instructions.state
+            };
+            match effective_state {
+                InstructionState::Pointer => {
+                    let note = if instructions.state == InstructionState::DanglingPointer {
+                        "pointer becomes valid once ~/.agents/main.md is created"
+                    } else {
+                        "already points to ~/.agents/main.md"
+                    };
+                    let op = b.keep_op(path.clone(), Some(agent_id), note);
+                    b.push(PlanGroupKind::PointerFiles, op);
+                }
+                InstructionState::Missing => {
+                    let mut op = b.op(PlanVerb::Write, path.clone(), Some(agent_id));
+                    op.content = Some(content);
+                    op.note = Some("pointer to ~/.agents/main.md".to_string());
+                    b.push(PlanGroupKind::PointerFiles, op);
+                }
+                InstructionState::LegacyPointer | InstructionState::OtherContent => {
+                    match options.pointer_policy {
+                        PointerPolicy::Replace => {
+                            let note = if effective_state == InstructionState::LegacyPointer {
+                                "older pointer wording; will be replaced"
+                            } else {
+                                "has content of its own; will be replaced by pointer"
+                            };
+                            b.push(
+                                PlanGroupKind::PointerFiles,
+                                b.backup_op(path.clone(), Some(agent_id), note),
+                            );
+                            let mut op = b.op(PlanVerb::Write, path.clone(), Some(agent_id));
+                            op.content = Some(content);
+                            op.note = Some(
+                                "replaces existing file with pointer to ~/.agents/main.md"
+                                    .to_string(),
+                            );
+                            b.push(PlanGroupKind::PointerFiles, op);
+                        }
+                        PointerPolicy::Prepend => {
+                            if effective_state == InstructionState::LegacyPointer {
+                                b.push(
+                                    PlanGroupKind::PointerFiles,
+                                    b.backup_op(
+                                        path.clone(),
+                                        Some(agent_id),
+                                        "older pointer wording; upgraded to current pointer",
+                                    ),
+                                );
+                                let mut op = b.op(PlanVerb::Write, path.clone(), Some(agent_id));
+                                op.content = Some(content);
+                                op.note = Some("pointer to ~/.agents/main.md".to_string());
+                                b.push(PlanGroupKind::PointerFiles, op);
+                            } else {
+                                let existing = std::fs::read_to_string(path).unwrap_or_default();
+                                b.push(
+                                    PlanGroupKind::PointerFiles,
+                                    b.backup_op(
+                                        path.clone(),
+                                        Some(agent_id),
+                                        "backed up before prepending pointer",
+                                    ),
+                                );
+                                let mut op = b.op(PlanVerb::Write, path.clone(), Some(agent_id));
+                                op.content = Some(pointer::prepend_pointer(
+                                    &existing,
+                                    spec.instruction_kind,
+                                ));
+                                op.note = Some(
+                                    "pointer prepended above the existing content".to_string(),
+                                );
+                                b.push(PlanGroupKind::PointerFiles, op);
+                            }
+                        }
+                        PointerPolicy::LeaveAlone => {
+                            let op = b.keep_op(
+                                path.clone(),
+                                Some(agent_id),
+                                "has other content; left alone by pointer policy",
+                            );
+                            b.push(PlanGroupKind::PointerFiles, op);
+                        }
                     }
                 }
-            }
-            InstructionState::Symlink => {
-                let op = b.keep_op(
-                    path.clone(),
-                    Some(agent_id),
-                    "is a symlink; review it by hand",
-                );
-                b.push(PlanGroupKind::PointerFiles, op);
-            }
-            InstructionState::NotAFile => {
-                let op = b.keep_op(
-                    path.clone(),
-                    Some(agent_id),
-                    "not a file; review it by hand",
-                );
-                b.push(PlanGroupKind::PointerFiles, op);
+                InstructionState::DanglingPointer => {
+                    let op = b.keep_op(
+                        path.clone(),
+                        Some(agent_id),
+                        "pointer becomes valid once ~/.agents/main.md is created",
+                    );
+                    b.push(PlanGroupKind::PointerFiles, op);
+                }
+                InstructionState::Symlink => {
+                    let op = b.keep_op(
+                        path.clone(),
+                        Some(agent_id),
+                        "is a symlink; review it by hand",
+                    );
+                    b.push(PlanGroupKind::PointerFiles, op);
+                }
+                InstructionState::NotAFile => {
+                    let op = b.keep_op(
+                        path.clone(),
+                        Some(agent_id),
+                        "not a file; review it by hand",
+                    );
+                    b.push(PlanGroupKind::PointerFiles, op);
+                }
             }
         }
     }
@@ -557,6 +865,11 @@ fn plan_agent(b: &mut Builder<'_>, agent: &AgentReport, options: &PlanOptions) {
 /// Build the plan for `report`. `scope` limits agent work to one agent; the
 /// source-level groups (broken source links, lock pruning) are included only
 /// for the `all` scope.
+///
+/// CDXC:AgentSync 2026-11-24 WHY:
+/// Never plan pointer writes while `~/.agents/main.md` is missing or empty unless the caller
+/// explicitly seeds `main.md` as the first step (`SeedMainMd`), so agents never lose their
+/// existing instructions to a dangling pointer (GitHub #735).
 pub fn build_plan(home: &Path, report: &SyncReport, options: &PlanOptions) -> SyncPlan {
     let mut builder = Builder {
         home,
@@ -564,6 +877,33 @@ pub fn build_plan(home: &Path, report: &SyncReport, options: &PlanOptions) -> Sy
         backup_root: &options.backup_root,
         groups: vec![Vec::new(); PlanGroupKind::ALL.len()],
     };
+    let mut warnings = Vec::new();
+    let main_md_ready = report.source.main_md_ready();
+    let mut will_have_main_md = main_md_ready;
+    let mut seed_group_title: Option<String> = None;
+
+    if let Some(selector) = options.seed_main_from.as_deref() {
+        match resolve_seed_source(home, report, selector) {
+            Ok(seed) => {
+                let main_md_path = source_root(home).join("main.md");
+                let mut op = builder.with_target(
+                    builder.op(PlanVerb::Write, main_md_path, seed.agent_id.as_deref()),
+                    seed.abs_path,
+                );
+                op.content = Some(seed.body);
+                op.note = Some(format!(
+                    "seeded from {} ({}, {} bytes)",
+                    seed.label, seed.display_path, seed.bytes
+                ));
+                seed_group_title = Some(format!("Create ~/.agents/main.md from {}", seed.label));
+                builder.push(PlanGroupKind::SeedMainMd, op);
+                will_have_main_md = true;
+            }
+            Err(error) => {
+                warnings.push(error);
+            }
+        }
+    }
 
     if options.scope == SyncScope::All {
         for skill in report.source.skills.iter().filter(|s| s.broken) {
@@ -574,6 +914,7 @@ pub fn build_plan(home: &Path, report: &SyncReport, options: &PlanOptions) -> Sy
         }
     }
 
+    let mut any_in_scope_instructions = false;
     for agent in &report.agents {
         match &options.scope {
             SyncScope::All => {}
@@ -581,7 +922,16 @@ pub fn build_plan(home: &Path, report: &SyncReport, options: &PlanOptions) -> Sy
             SyncScope::Agent(_) => continue,
         }
         if agent.detected {
-            plan_agent(&mut builder, agent, options);
+            if agent.instructions.is_some() {
+                any_in_scope_instructions = true;
+            }
+            plan_agent(
+                &mut builder,
+                agent,
+                options,
+                will_have_main_md,
+                report.source.main_md_empty,
+            );
         } else if let (Some(skills), Some(spec)) = (&agent.skills, &agent.spec) {
             // Leftover folders of agents that were never installed: only remove their dangling links.
             if let Some(dir) = spec.skills_dir.as_ref() {
@@ -617,6 +967,81 @@ pub fn build_plan(home: &Path, report: &SyncReport, options: &PlanOptions) -> Sy
         }
     }
 
+    let backup_dir = fsx::display_path(&options.backup_root.join(&options.stamp), home);
+    let main_md_blocked = !will_have_main_md && any_in_scope_instructions;
+    let seed_candidates = if main_md_ready {
+        Vec::new()
+    } else {
+        report.source.main_md_seed_candidates.clone()
+    };
+    let seed_recommendation = seed_candidates.first().cloned();
+
+    if main_md_blocked {
+        let reason = if report.source.main_md_empty {
+            "~/.agents/main.md is empty"
+        } else {
+            "~/.agents/main.md does not exist"
+        };
+        if let Some(best) = &seed_recommendation {
+            warnings.push(format!(
+                "{reason}. Pointer files will not be written until main.md has content. First step: create main.md from {} ({}, {} bytes).",
+                best.display_name, best.path, best.bytes
+            ));
+        } else {
+            warnings.push(format!(
+                "{reason}. Pointer files will not be written until main.md has content. Create ~/.agents/main.md with your shared instructions (or restore originals from backup) first."
+            ));
+        }
+    }
+
+    let pointer_backups: Vec<String> = builder.groups[PlanGroupKind::PointerFiles as usize]
+        .iter()
+        .filter(|op| op.verb == PlanVerb::Backup)
+        .map(|op| op.path.clone())
+        .collect();
+    if !pointer_backups.is_empty() {
+        let listed = pointer_backups.join(", ");
+        let noun = if pointer_backups.len() == 1 {
+            "existing instruction file"
+        } else {
+            "existing instruction files"
+        };
+        match options.pointer_policy {
+            PointerPolicy::Replace => {
+                warnings.push(format!(
+                    "Replacing {} {noun} with the one-line pointer to ~/.agents/main.md ({listed}). Originals are backed up to {backup_dir} first.",
+                    pointer_backups.len()
+                ));
+            }
+            PointerPolicy::Prepend => {
+                warnings.push(format!(
+                    "Modifying {} {noun} to prepend the pointer to ~/.agents/main.md ({listed}). Originals are backed up to {backup_dir} first.",
+                    pointer_backups.len()
+                ));
+            }
+            PointerPolicy::LeaveAlone => {}
+        }
+    }
+
+    let other_replacements: Vec<String> = [PlanGroupKind::PerSkillLinks, PlanGroupKind::Hooks]
+        .iter()
+        .flat_map(|kind| builder.groups[*kind as usize].iter())
+        .filter(|op| op.verb == PlanVerb::Backup)
+        .map(|op| op.path.clone())
+        .collect();
+    if !other_replacements.is_empty() {
+        let noun = if other_replacements.len() == 1 {
+            "existing item"
+        } else {
+            "existing items"
+        };
+        warnings.push(format!(
+            "Replacing {} {noun} with symlinks ({}). Originals are backed up to {backup_dir} first.",
+            other_replacements.len(),
+            other_replacements.join(", ")
+        ));
+    }
+
     let mut summary = PlanSummary::default();
     let groups: Vec<PlanGroup> = PlanGroupKind::ALL
         .iter()
@@ -640,9 +1065,16 @@ pub fn build_plan(home: &Path, report: &SyncReport, options: &PlanOptions) -> Sy
             if kind.enabled_by_default() {
                 summary.default_changes += change_count;
             }
+            let title = if *kind == PlanGroupKind::SeedMainMd {
+                seed_group_title
+                    .clone()
+                    .unwrap_or_else(|| kind.title().to_string())
+            } else {
+                kind.title().to_string()
+            };
             PlanGroup {
                 kind: *kind,
-                title: kind.title().to_string(),
+                title,
                 enabled_by_default: kind.enabled_by_default(),
                 ops,
                 change_count,
@@ -654,7 +1086,12 @@ pub fn build_plan(home: &Path, report: &SyncReport, options: &PlanOptions) -> Sy
         generated_at: crate::now_iso8601(),
         scope: options.scope.as_str(),
         stamp: options.stamp.clone(),
-        backup_dir: fsx::display_path(&options.backup_root.join(&options.stamp), home),
+        backup_dir,
+        pointer_policy: options.pointer_policy,
+        main_md_blocked,
+        seed_recommendation,
+        seed_candidates,
+        warnings,
         groups,
         summary,
     }

@@ -60,8 +60,9 @@ pub(super) fn provider_key(
         .filter(|stored| stored.row.state == CloudProviderConnectionState::Connected)
         .ok_or_else(|| {
             super::params::not_connected(format!(
-                "{} isn't connected. Connect it in Settings › Cloud Boxes.",
-                provider.label()
+                "{} isn't connected. Run `ghostex cloud connect {}` (or open Settings › Cloud Boxes with `ghostex settings open --tab cloudBoxes`) and let the user finish signing in.",
+                provider.label(),
+                provider.as_str()
             ))
         })?;
     let sealed = stored.key_sealed.ok_or_else(|| {
@@ -408,7 +409,9 @@ fn read_callback(mut stream: TcpStream, expected_state: &str) -> Option<Result<S
             "<h3>Ghostex couldn't connect Instabox.</h3><p>Go back to Ghostex to try again.</p>"
         }
     };
-    let body = format!("<!doctype html><meta charset=utf-8><title>Ghostex</title><body style=\"font-family:system-ui;padding:40px\">{page}</body>");
+    let body = format!(
+        "<!doctype html><meta charset=utf-8><title>Ghostex</title><body style=\"font-family:system-ui;padding:40px\">{page}</body>"
+    );
     let _ = stream.write_all(
         format!(
             "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -475,12 +478,12 @@ async fn start_boat(
                             Some(email.clone()),
                         )
                         .map_err(|error| error.message)
-                    })
+                    });
                 }
                 Ok(boat::ClaimPoll::Pending) => {}
                 Ok(boat::ClaimPoll::SlowDown) => interval += 5,
                 Ok(boat::ClaimPoll::Expired) => {
-                    break Err("The Boat code expired. Start the sign-in again.".to_string())
+                    break Err("The Boat code expired. Start the sign-in again.".to_string());
                 }
                 // A dropped connection is retried on the next tick.
                 Err(error) if error.retryable => {}

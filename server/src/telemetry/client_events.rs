@@ -21,8 +21,9 @@ use super::{
     capture::{self, ClientPlatform},
     extensions::{self, ExtensionRef},
     taxonomy::{
-        self, EVENT_APP_LAUNCHED, EVENT_CLIENT_CONNECTED, EVENT_RAIL_INTRO_ANSWERED,
-        EVENT_RAIL_INTRO_SHOWN, EVENT_SIDEBAR_LAYOUT_CHANGED, EVENT_SURFACE_OPENED,
+        self, EVENT_APP_LAUNCHED, EVENT_CLIENT_CONNECTED, EVENT_ONBOARDING_STEP,
+        EVENT_RAIL_INTRO_ANSWERED, EVENT_RAIL_INTRO_SHOWN, EVENT_RELIABILITY_ERROR,
+        EVENT_SESSION_MODE_SWITCHED, EVENT_SIDEBAR_LAYOUT_CHANGED, EVENT_SURFACE_OPENED,
     },
 };
 
@@ -64,6 +65,39 @@ pub fn record_client_event(body: &Value) {
         EVENT_RAIL_INTRO_ANSWERED => {
             if let Some(chose) = enum_property(properties, "chose", taxonomy::SIDEBAR_LAYOUTS) {
                 capture::rail_intro_answered(chose);
+            }
+        }
+        EVENT_ONBOARDING_STEP => {
+            if let Some(step) = enum_property(properties, "step", taxonomy::ONBOARDING_STEPS) {
+                capture::onboarding_step(step);
+            }
+        }
+        EVENT_RELIABILITY_ERROR => {
+            if let Some(category) = enum_property(
+                properties,
+                "category",
+                taxonomy::RELIABILITY_ERROR_CATEGORIES,
+            ) {
+                let agent_id = properties
+                    .and_then(|properties| properties.get("agent_id"))
+                    .and_then(Value::as_str)
+                    .filter(|value| !value.trim().is_empty())
+                    .map(|value| taxonomy::normalize_agent_id(Some(value)));
+                capture::reliability_error(category, agent_id);
+            }
+        }
+        EVENT_SESSION_MODE_SWITCHED => {
+            let agent = enum_property(properties, "agent", taxonomy::NATIVE_AGENT_FAMILIES);
+            let direction = enum_property(
+                properties,
+                "direction",
+                taxonomy::SESSION_MODE_SWITCH_DIRECTIONS,
+            );
+            let source = enum_property(properties, "source", taxonomy::SESSION_MODE_SWITCH_SOURCES);
+            let client = enum_property(properties, "client", taxonomy::SESSION_MODE_CLIENTS)
+                .unwrap_or("desktop");
+            if let (Some(agent), Some(direction), Some(source)) = (agent, direction, source) {
+                capture::session_mode_switched(agent, direction, source, client);
             }
         }
         _ => {}
@@ -114,6 +148,11 @@ fn record_app_launched(properties: Option<&Value>) {
         text("linux_desktop").and_then(super::settings_snapshot::linux_desktop),
         text("linux_session").and_then(super::settings_snapshot::linux_session),
     );
+    if let Some(telemetry) = super::queue::handle() {
+        let settings = crate::shared_settings_file::read_shared_settings(telemetry.paths());
+        let modes = capture::resolve_install_session_modes(settings.as_ref());
+        capture::session_mode_state("app_start", "desktop", modes);
+    }
 }
 
 fn record_surface_opened(properties: Option<&Value>) {
@@ -213,4 +252,11 @@ fn record_client_connected(properties: Option<&Value>) {
             app_version: version("client_app_version"),
         },
     );
+    if client == "mobile" {
+        if let Some(telemetry) = super::queue::handle() {
+            let settings = crate::shared_settings_file::read_shared_settings(telemetry.paths());
+            let modes = capture::resolve_install_session_modes(settings.as_ref());
+            capture::session_mode_state_throttled("app_start", "mobile", modes);
+        }
+    }
 }

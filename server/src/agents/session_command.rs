@@ -9,17 +9,23 @@ pub(crate) fn command_word(command: &str, from: usize) -> Option<(usize, usize, 
     let mut word = String::new();
     let mut quote = None;
     let mut escaped = false;
-    for (relative, ch) in command[start..].char_indices() {
+    let mut chars = command[start..].char_indices().peekable();
+    while let Some((relative, ch)) = chars.next() {
         if escaped {
             word.push(ch);
             escaped = false;
             continue;
         }
-        if ch == '\\' && quote != Some('\'') {
+        if ch == '\\' && quote != Some('\'') && !cfg!(windows) {
             escaped = true;
             continue;
         }
         if quote == Some(ch) {
+            if cfg!(windows) && ch == '\'' && chars.peek().is_some_and(|&(_, next)| next == '\'') {
+                chars.next();
+                word.push('\'');
+                continue;
+            }
             quote = None;
             continue;
         }
@@ -380,21 +386,23 @@ pub(crate) fn with_agent_model_options(
         let (remove, takes_value) = match (agent, word.as_str()) {
             _ if !is_flag => (false, false),
             (
-                "claude" | "codex" | "cursor" | "antigravity" | "copilot" | "grok" | "hermes-agent",
+                "claude" | "codex" | "cursor" | "antigravity" | "copilot" | "grok" | "hermes"
+                | "hermes-agent",
                 "--model",
             )
-            | ("codex" | "grok" | "hermes-agent", "-m")
+            | ("codex" | "grok" | "hermes" | "hermes-agent", "-m")
                 if model.is_some() =>
             {
                 (true, true)
             }
             (
-                "claude" | "codex" | "cursor" | "antigravity" | "copilot" | "grok" | "hermes-agent",
+                "claude" | "codex" | "cursor" | "antigravity" | "copilot" | "grok" | "hermes"
+                | "hermes-agent",
                 value,
             ) if model.is_some() && value.starts_with("--model=") => (true, false),
             ("claude" | "antigravity" | "grok", "--effort")
             | ("copilot" | "grok", "--reasoning-effort")
-            | ("hermes-agent", "--reasoning")
+            | ("hermes" | "hermes-agent", "--reasoning")
                 if effort.is_some() =>
             {
                 (true, true)
@@ -409,7 +417,9 @@ pub(crate) fn with_agent_model_options(
             {
                 (true, false)
             }
-            ("hermes-agent", value) if effort.is_some() && value.starts_with("--reasoning=") => {
+            ("hermes" | "hermes-agent", value)
+                if effort.is_some() && value.starts_with("--reasoning=") =>
+            {
                 (true, false)
             }
             // Ghostex's Pi model is `provider/id`, so a pinned `--provider` goes with the old model.
@@ -464,7 +474,12 @@ pub(crate) fn with_agent_model_options(
     }
     let mut result = result.trim().to_string();
     if let Some(model) = model {
-        result.push_str(&format!(" --model {}", shell_word(model)));
+        let cli_model = if matches!(agent, "hermes" | "hermes-agent") {
+            crate::acp::hermes::strip_hermes_provider_prefix(model)
+        } else {
+            model
+        };
+        result.push_str(&format!(" --model {}", shell_word(cli_model)));
     }
     if let Some(effort) = effort {
         match agent {
@@ -476,7 +491,11 @@ pub(crate) fn with_agent_model_options(
             "copilot" | "grok" => {
                 result.push_str(&format!(" --reasoning-effort {}", shell_word(effort)))
             }
-            "hermes-agent" => result.push_str(&format!(" --reasoning {}", shell_word(effort))),
+            "hermes" | "hermes-agent" => {
+                if !effort.eq_ignore_ascii_case("default") {
+                    result.push_str(&format!(" --reasoning {}", shell_word(effort)));
+                }
+            }
             // Cursor takes no effort flag; the launch plan refuses an effort for it before here.
             "cursor" => {}
             _ => result.push_str(&format!(" --effort {}", shell_word(effort))),
@@ -548,8 +567,8 @@ fn validate_model_option_command(command: &str) -> Result<(), DomainStateError> 
     let mut quote = None;
     let mut escaped = false;
     let mut word_start = true;
-    let mut chars = command.chars().peekable();
-    while let Some(ch) = chars.next() {
+    let mut chars = command.char_indices().peekable();
+    while let Some((index, ch)) = chars.next() {
         if escaped {
             if matches!(ch, '\n' | '\r') {
                 return Err(unsupported_command());
@@ -563,12 +582,30 @@ fn validate_model_option_command(command: &str) -> Result<(), DomainStateError> 
             }
             continue;
         }
-        if ch == '\\' {
+        if ch == '\\' && !cfg!(windows) {
             escaped = true;
             word_start = false;
             continue;
         }
-        let shell_expansion = ch == '`' || (ch == '$' && chars.peek() == Some(&'('));
+        // Ghostex's own PowerShell 5.1/7 native-argument expression (`powershell_native_arg`) is a
+        // single literal argument, not an arbitrary command substitution.
+        if cfg!(windows) && quote.is_none() && ch == '$' {
+            if let Some((_, len)) =
+                crate::platform::shell::read_powershell_native_arg(&command[index..])
+            {
+                let end = index + len;
+                while chars
+                    .peek()
+                    .is_some_and(|&(next_index, _)| next_index < end)
+                {
+                    chars.next();
+                }
+                word_start = false;
+                continue;
+            }
+        }
+        let shell_expansion =
+            ch == '`' || (ch == '$' && chars.peek().is_some_and(|&(_, next)| next == '('));
         let shell_boundary = quote.is_none()
             && (matches!(ch, ';' | '&' | '|' | '<' | '>' | '(' | ')' | '\n' | '\r')
                 || (ch == '#' && word_start));

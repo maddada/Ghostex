@@ -50,8 +50,8 @@ const HELP_TAIL: &str = "
   Icons are Ghostex icon names (robot, search, pencil, …). Only you and Ghostex AI add, change
   and remove GBots and departments; adding a GBot from a terminal asks for your approval first.
   Ghostex AI and a department's lead hand a GBot work, and a lead changes its own members'
-  instructions; any other GBot or coordinator may only ask it a question. Turn on Main Hub and
-  GBots in Settings > Extensions. Add --computer <name> to run a command on another computer.
+  instructions; any other GBot or coordinator may only ask it a question. Turn on GBots in
+  Settings > Extensions. Add --computer <name> to run a command on another computer.
 ";
 
 fn help() -> String {
@@ -296,11 +296,15 @@ fn print_answer(verb: &str, answer: &Value) {
                     ""
                 };
                 println!(
-                    "{}\t{}\t{}\t{} open chats{lead}",
+                    "{}\t{}\t{}\t{}{lead}",
                     text(bot, "name"),
                     text(bot, "botId"),
                     text(bot, "title"),
-                    bot["openChats"].as_u64().unwrap_or(0)
+                    ghostex_gx_protocol::plural(
+                        bot["openChats"].as_u64().unwrap_or(0),
+                        "open chat",
+                        "open chats"
+                    )
                 );
             };
             // The GBots of no department first, then each department's, its lead first (the
@@ -491,9 +495,13 @@ fn print_answer(verb: &str, answer: &Value) {
                 )
             };
             println!(
-                "Removed the GBot {}: closed {} chats, {folder}.",
+                "Removed the GBot {}: closed {}, {folder}.",
                 text(bot, "name"),
-                answer["closedChats"].as_u64().unwrap_or(0)
+                ghostex_gx_protocol::plural(
+                    answer["closedChats"].as_u64().unwrap_or(0),
+                    "chat",
+                    "chats"
+                )
             );
         }
         "new-chat" => {

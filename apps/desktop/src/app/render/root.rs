@@ -214,6 +214,8 @@ impl Render for GhostexGpuiApp {
         self.check_native_sidebar_keyboard_entry(cx);
         // Meet the rail, once, for someone who had Ghostex before the rail (app/sidebar_rail/intro.rs).
         self.maybe_open_sidebar_rail_intro(cx);
+        // Native mode announcement, once after updating on desktop (app/native_mode_intro.rs).
+        self.maybe_open_native_mode_intro(cx);
         crate::app::workspace_windows::sync_workspace_window_title(window, &self.project_name, cx);
         self.sync_main_window_glass(window, cx);
         crate::app::window::frosted_host::sync_frosted_tooltip_presenter(window, cx);

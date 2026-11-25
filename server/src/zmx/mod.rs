@@ -18,7 +18,7 @@ pub mod probe_cache;
 mod process_context;
 pub mod process_identity;
 #[cfg(target_os = "macos")]
-mod process_table_macos;
+pub(crate) mod process_table_macos;
 pub mod provider;
 mod read_text_suggestion;
 pub mod screen_capture;
@@ -41,6 +41,8 @@ pub(crate) use lost_folder_access::{
 };
 pub(crate) use session_tree::{read_zmx_session_tree, SessionTree};
 mod session_host;
+#[cfg(target_os = "macos")]
+pub(crate) use session_host::unregister_session_host_for_zmx;
 pub(crate) use session_host::{remove_unused_session_hosts, session_daemon_zmx};
 #[cfg(unix)]
 mod stranded_daemons;

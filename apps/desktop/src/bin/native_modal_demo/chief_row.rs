@@ -166,7 +166,7 @@ impl Render for ChiefRowPreview {
         };
         let bots = state == "bots";
         let unified = state == "unified";
-        let shown = chief_row_shown(true, bots);
+        let shown = chief_row_shown(bots);
         // A stand-in for the Unified header (unified/header.rs): its 36px search row.
         let unified_header = div().h(px(36.0)).px(px(12.0)).flex().items_center().child(
             div()

@@ -567,19 +567,18 @@ impl ChatOptionMenuPanel {
     ) -> AnyElement {
         let scale = appearance.scale;
         let open = legacy.get("open") == Some(&Value::Bool(true));
-        let label = format!(
-            "{} ({})",
-            legacy
-                .get("label")
-                .and_then(Value::as_str)
-                .unwrap_or_default(),
-            legacy.get("count").and_then(Value::as_u64).unwrap_or(0)
-        );
+        let title = legacy
+            .get("label")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        let count = legacy.get("count").and_then(Value::as_u64).unwrap_or(0);
+        let aria = format!("{title}, {count}");
         let hover = palette.ink(0.06);
         div()
             .id("model-menu-legacy")
             .role(gpui::Role::Button)
-            .aria_label(label.clone())
+            .aria_label(aria)
             .flex_shrink_0()
             // Shut, it sits under the list and lines up with its rows; open, it is a row of the
             // list (which pads its rows itself) and fills a model row's height.
@@ -620,7 +619,12 @@ impl ChatOptionMenuPanel {
                     .size(px(12.0 * scale))
                     .text_color(palette.muted),
             )
-            .child(label)
+            .child(title)
+            .child(crate::app::element::count_badge(
+                count.to_string(),
+                palette.text,
+                scale,
+            ))
             .into_any_element()
     }
 

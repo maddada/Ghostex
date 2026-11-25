@@ -1,9 +1,9 @@
 //! Ask Ghostex AI's welcome card (`chiefWelcome`, packages/gx-chat-core/src/extras/chief_welcome.rs):
 //! the clipboard ghost, then First steps for a new user or the live status and prompts once they
-//! are set up. A step, chip or prompt fills the chat box; the white ask button only focuses it.
-//! Sizes and colours are the approved spec's (cos-welcome-card-v3): the chat's own palette, its 4%
-//! wash and 8% hairline, and only the white ask button, the amber "needs you" dot and the ghost's
-//! own colours added.
+//! are set up. A step, chip or prompt fills the chat box; the ask card only focuses it.
+//! Sizes and colours use the chat's own palette: its 4% wash and 8% hairline on the prompt cards,
+//! one small step brighter on the ask card, plus the amber "needs you" dot and the ghost's own
+//! colours.
 //!
 //! The ghost floats, waves and blinks from layered pictures (assets/modals/chief-ghost/), and holds
 //! still under Reduce Motion.
@@ -419,7 +419,8 @@ impl NativeChatView {
             .into_any_element()
     }
 
-    /// The one white button: it puts the cursor in the chat box.
+    /// The main ask card: same translucent style and hairline border as the prompt cards below,
+    /// one small step brighter so it reads as the primary action; clicking it focuses the chat box.
     fn chief_welcome_ask(
         &mut self,
         welcome: &ChiefWelcome,
@@ -428,10 +429,20 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
-        let ink: Hsla = if p.light {
-            rgb(0x27272a).into()
+        let (rest_bg, hover_bg, active_bg, border) = if p.light {
+            (
+                p.foreground.opacity(0.08),
+                p.foreground.opacity(0.12),
+                p.foreground.opacity(0.16),
+                p.foreground.opacity(0.13),
+            )
         } else {
-            rgb(0x0d0d0d).into()
+            (
+                p.foreground.opacity(0.10),
+                p.foreground.opacity(0.14),
+                p.foreground.opacity(0.18),
+                p.foreground.opacity(0.14),
+            )
         };
         div()
             .id("chief-welcome-ask")
@@ -442,19 +453,14 @@ impl NativeChatView {
             .px(px(14.0 * s))
             .py(px(12.0 * s))
             .rounded(px(14.0 * s))
-            .bg(if p.light {
-                gpui::white()
-            } else {
-                rgb(0xfcfcfc).into()
-            })
-            .when(p.light, |this| {
-                this.border_1()
-                    .border_color(rgb(0x27272a).opacity(0.10))
-                    .shadow_sm()
-            })
-            .text_color(ink)
+            .bg(rest_bg)
+            .border_1()
+            .border_color(border)
+            .text_color(p.foreground)
             .chat_cursor_pointer()
-            .child(icon("message-circle", 18.0 * s, ink))
+            .hover(move |style| style.bg(hover_bg))
+            .active(move |style| style.bg(active_bg))
+            .child(icon("message-circle", 18.0 * s, p.foreground.opacity(0.85)))
             .child(
                 div()
                     .flex_1()
@@ -473,11 +479,11 @@ impl NativeChatView {
                             .mt(px(1.0 * s))
                             .text_size(px(12.0 * s))
                             .line_height(px(16.0 * s))
-                            .text_color(ink.opacity(0.62))
+                            .text_color(p.muted)
                             .child(welcome.ask_detail.clone()),
                     ),
             )
-            .child(icon("chevron-right", 15.0 * s, ink.opacity(0.55)))
+            .child(icon("chevron-right", 15.0 * s, p.foreground.opacity(0.55)))
             .on_click(cx.listener(|this, _, _, cx| {
                 this.focus_requested = true;
                 cx.notify();

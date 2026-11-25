@@ -1082,7 +1082,8 @@ fn gpui_spawn_local_gxserver_launchd_job(
     note(
         steps,
         format!(
-            "bootstrap after {bootstrap_attempts} attempt(s): {}",
+            "bootstrap after {}: {}",
+            ghostex_gx_protocol::plural(bootstrap_attempts, "attempt", "attempts"),
             gpui_describe_launchctl_result(&bootstrap)
         ),
     );

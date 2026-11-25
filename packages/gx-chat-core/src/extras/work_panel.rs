@@ -21,11 +21,37 @@
 
 use serde_json::{json, Map, Value};
 
-use crate::extras::work_cards::{owner_words, waits_line};
+use crate::extras::work_cards::{owner_words, waits_line_in};
+
+/// One constant for the group name of items waiting on the user.
+pub const ASKS_GROUP_NAME: &str = "Pings";
+pub const ASKS_GROUP_SINGULAR: &str = "ping";
+pub const ASKS_GROUP_PLURAL: &str = "pings";
+/// Dock header label and full name for tooltips and notifications.
+pub const INBOX_NAME: &str = "Inbox";
+pub const INBOX_FULL_NAME: &str = "Session Inbox";
+
+/// Count label for the Pings group: "1 ping", "2 pings".
+pub fn asks_count_label(count: usize) -> String {
+    if count == 1 {
+        format!("1 {ASKS_GROUP_SINGULAR}")
+    } else {
+        format!("{count} {ASKS_GROUP_PLURAL}")
+    }
+}
+
+/// Overflow count label for hidden rows needing the user: "1 more ping", "2 more pings".
+pub fn asks_more_label(count: usize) -> String {
+    if count == 1 {
+        format!("1 more {ASKS_GROUP_SINGULAR}")
+    } else {
+        format!("{count} more {ASKS_GROUP_PLURAL}")
+    }
+}
 
 /// The groups, in the order the panel lists them: the board's ids, the Work panel's titles.
 pub const WORK_GROUPS: [(&str, &str); 7] = [
-    ("needs", "Needs you"),
+    ("needs", ASKS_GROUP_NAME),
     ("blocked", "Blocked"),
     // CDXC:Coordinators 2026-11-10 DECISION:
     // User: "Please don't say Moving say In Progress. Moving isn't clear to me" (and on 2026-11-07, of
@@ -70,7 +96,7 @@ fn group_of(status: &str) -> &'static str {
 /// An item's own chips after the board's: usage-limit reset pill (when paused on a limit), who
 /// has the ball, its steps, what it asks of the user (its open asks not snoozed at `now_ms`: a
 /// snoozed one waits in Later, so it is not "for you").
-fn item_chips(item: &Value, status: &str, now_ms: i64) -> Vec<Value> {
+fn item_chips(all_items: &[&Value], item: &Value, status: &str, now_ms: i64) -> Vec<Value> {
     let mut chips = Vec::new();
     if !matches!(status, "finished" | "dropped") {
         if let Some(thread) = crate::extras::work_cards::usage_limit_thread(item) {
@@ -93,7 +119,7 @@ fn item_chips(item: &Value, status: &str, now_ms: i64) -> Vec<Value> {
         }
     }
     let owner = owner_words(item);
-    let waiting_says = status == "waiting" && !waits_line(item).is_empty();
+    let waiting_says = status == "waiting" && !waits_line_in(item, all_items).is_empty();
     // Only a thread is worth naming: "You" and "Coordinator" are what the group already says
     // (Q2167).
     if !owner.is_empty()
@@ -107,7 +133,11 @@ fn item_chips(item: &Value, status: &str, now_ms: i64) -> Vec<Value> {
     if total > 0 {
         chips.push(json!({
             "kind": "steps",
-            "label": format!("{} of {total} steps", item["steps"]["done"].as_u64().unwrap_or(0)),
+            "label": format!(
+                "{} of {}",
+                item["steps"]["done"].as_u64().unwrap_or(0),
+                ghostex_gx_protocol::plural(total, "step", "steps")
+            ),
             "tone": "",
         }));
     }
@@ -126,15 +156,17 @@ fn item_chips(item: &Value, status: &str, now_ms: i64) -> Vec<Value> {
 }
 
 /// An item's row, in the shape of a board item row.
-fn item_row(item: &Value, group: &str, status: &str, now_ms: i64) -> Value {
+fn item_row(all_items: &[&Value], item: &Value, group: &str, status: &str, now_ms: i64) -> Value {
     let reference = text(item, "ref");
     let waiting_thread = crate::extras::work_cards::waiting_user_thread(item);
     let mut title = text(item, "title").to_string();
     let mut line = text(item, "now").to_string();
     if status == "waiting" {
-        let waits = waits_line(item);
+        let waits = crate::extras::work_cards::waits_targets_line_in(item, all_items);
         if !waits.is_empty() {
             line = waits;
+        } else if !line.is_empty() {
+            line = crate::extras::work_cards::strip_waiting_prefix_cap(&line);
         }
     }
     let thread_wait = status == "needs" && waiting_thread.is_some();
@@ -155,19 +187,21 @@ fn item_row(item: &Value, group: &str, status: &str, now_ms: i64) -> Value {
         "group": group,
         "title": title,
         "detail": line,
-        // A row with nothing to say yet says who has it, never the board's "No links yet".
+        // A row with nothing to say yet says who has it, never repeating its group header
+        // (Q4784 A: no "Finished" under Finished today, no "Nobody is on it" under Not being
+        // worked on, no "Waiting on " prefix under Waiting).
         "note": if line.is_empty() {
             match status {
                 "later" => "Nobody is on it yet".to_string(),
-                "idle" => "Nobody is on it".to_string(),
-                "finished" => "Finished".to_string(),
+                "idle" | "finished" => String::new(),
+                "waiting" => crate::extras::work_cards::strip_waiting_prefix_cap(&owner_words(item)),
                 _ => owner_words(item),
             }
         } else {
             line.clone()
         },
         "at": text(item, "at"),
-        "workChips": item_chips(item, status, now_ms),
+        "workChips": item_chips(all_items, item, status, now_ms),
     });
     if thread_wait {
         row["threadWait"] = json!(true);
@@ -240,9 +274,6 @@ fn ask_row(items: &[&Value], item: &Value, ask: &Value, now_ms: i64) -> Value {
         _ => json!([{ "label": "Done", "recommended": false }]),
     };
     let mut detail = text(item, "title").to_string();
-    if holds {
-        detail.push_str(" \u{b7} Holds it up");
-    }
     let steps = text(ask, "steps");
     // Snoozed: under Later, quietly saying until when (work.rs `snooze`).
     let snoozed = if snoozed_at(ask, now_ms) {
@@ -282,8 +313,8 @@ fn thread_row(item: &Value, group: &str, now_ms: i64) -> Value {
     let thread = item["threads"].get(0).cloned().unwrap_or(Value::Null);
     let mut title = text(item, "title").to_string();
     let mut detail = text(item, "now").to_string();
-    let thread_wait = group == "needs"
-        && crate::extras::work_cards::waiting_user_thread(item).is_some();
+    let thread_wait =
+        group == "needs" && crate::extras::work_cards::waiting_user_thread(item).is_some();
     let mut open_label = String::new();
     let mut wait_kind_str = String::new();
     if thread_wait {
@@ -441,7 +472,7 @@ pub fn work_board_at(work: &Value, now_ms: i64) -> Value {
                 .flatten()
                 .any(crate::extras::work_cards::thread_wait_needs_user);
         if !only_asking {
-            push(group, item_row(item, group, status, now_ms));
+            push(group, item_row(&all_items, item, group, status, now_ms));
         }
     }
     let groups: Vec<Value> = WORK_GROUPS

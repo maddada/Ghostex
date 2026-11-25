@@ -141,9 +141,10 @@ fn stat_icon(kind: &str) -> &'static str {
         "question" => "titlebar/help-circle.svg",
         "signIn" => "titlebar/alert-triangle.svg",
         "usageLimit" => "titlebar/clock.svg",
-        "stalled" => "titlebar/clock.svg",
+        "stalled" => "titlebar/alert-circle.svg",
         "untested" => "titlebar/flask.svg",
-        "delivered" | "finished" => "titlebar/circle-check.svg",
+        "delivered" => "titlebar/mail-check.svg",
+        "finished" => "titlebar/circle-check.svg",
         "files" => "titlebar/pencil.svg",
         _ => "titlebar/tool.svg",
     }
@@ -276,6 +277,7 @@ impl NativeChatView {
                 .aria_label(match step {
                     0 => "Show fewer workers".to_string(),
                     1 => "Show recent workers".to_string(),
+                    _ if more == "1 more" => "Show 1 more worker".to_string(),
                     _ => format!("Show {more} workers"),
                 })
                 .h(px(super::chat_pills::MENU_FOOTER_HEIGHT * s))
@@ -380,7 +382,7 @@ impl NativeChatView {
             "approval" => dot(APPROVAL_COLOR),
             "question" => dot(QUESTION_COLOR),
             "paused" => gpui::svg()
-                .path("titlebar/clock.svg")
+                .path("titlebar/player-pause.svg")
                 .size(px(12.0 * s))
                 .text_color(rgb(HOLD_COLOR))
                 .into_any_element(),
@@ -641,6 +643,12 @@ fn stats_line(row: &Value, p: &ChatAppearance) -> AnyElement {
         .text_size(px(12.0 * s));
     for (index, stat) in row["stats"].as_array().into_iter().flatten().enumerate() {
         let phase = index == 0;
+        let kind = text(stat, "kind");
+        let icon_color: gpui::Hsla = match kind.as_str() {
+            "stalled" => rgb(WORKING_COLOR).into(),
+            "delivered" => rgb(0x2fa865).into(),
+            _ => p.muted,
+        };
         line = line.child(
             div()
                 .flex()
@@ -651,10 +659,10 @@ fn stats_line(row: &Value, p: &ChatAppearance) -> AnyElement {
                 .text_color(if phase { p.card_muted } else { p.muted })
                 .child(
                     gpui::svg()
-                        .path(stat_icon(&text(stat, "kind")))
+                        .path(stat_icon(&kind))
                         .size(px(12.0 * s))
                         .flex_shrink_0()
-                        .text_color(p.muted),
+                        .text_color(icon_color),
                 )
                 .child(div().min_w_0().truncate().child(text(stat, "label"))),
         );

@@ -84,6 +84,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::ImportPageAnswers
         | ActionKind::ExportPage
         | ActionKind::QuestionRemove
+        | ActionKind::QuestionRestore
         | ActionKind::PageStar
         | ActionKind::SnoozeQuestion
         | ActionKind::CancelQuestion
@@ -211,9 +212,14 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::JumpToWorkCard
         | ActionKind::LoadPageQuestionCounts
         | ActionKind::DismissWorkDockCard
+        | ActionKind::MarkAllInboxRead
+        | ActionKind::UndoMarkAllInboxRead
+        | ActionKind::DismissMarkAllReadUndo
         | ActionKind::SnoozeWorkAsk
         | ActionKind::SetWorkTopic
         | ActionKind::UnsnoozeWorkAsk
+        | ActionKind::RunNeedsYouCommand
+        | ActionKind::StopNeedsYouCommand
         | ActionKind::ShowInChat
         | ActionKind::HideWorkDock
         | ActionKind::ShowWorkDock
@@ -225,6 +231,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::RefreshBoosts
         | ActionKind::SaveAsBoost
         | ActionKind::DismissBoostHint
+        | ActionKind::DismissNativeSwitchOffer
         | ActionKind::DismissCoordinatorQuality
         | ActionKind::SetCollabGuest
         | ActionKind::ResolveCollabMessage
@@ -405,9 +412,14 @@ fn clears_error(kind: &ActionKind) -> bool {
         | ActionKind::JumpToWorkCard
         | ActionKind::LoadPageQuestionCounts
         | ActionKind::DismissWorkDockCard
+        | ActionKind::MarkAllInboxRead
+        | ActionKind::UndoMarkAllInboxRead
+        | ActionKind::DismissMarkAllReadUndo
         | ActionKind::SnoozeWorkAsk
         | ActionKind::SetWorkTopic
         | ActionKind::UnsnoozeWorkAsk
+        | ActionKind::RunNeedsYouCommand
+        | ActionKind::StopNeedsYouCommand
         | ActionKind::ShowInChat
         | ActionKind::HideWorkDock
         | ActionKind::ShowWorkDock
@@ -419,6 +431,7 @@ fn clears_error(kind: &ActionKind) -> bool {
         | ActionKind::RefreshBoosts
         | ActionKind::SaveAsBoost
         | ActionKind::DismissBoostHint
+        | ActionKind::DismissNativeSwitchOffer
         | ActionKind::DismissCoordinatorQuality
         | ActionKind::SetCollabGuest
         | ActionKind::ResolveCollabMessage
@@ -491,6 +504,8 @@ fn publishes_at_once(kind: &ActionKind) -> bool {
             | ActionKind::SnoozeWorkAsk
             | ActionKind::SetWorkTopic
             | ActionKind::UnsnoozeWorkAsk
+            | ActionKind::RunNeedsYouCommand
+            | ActionKind::StopNeedsYouCommand
             | ActionKind::ShowInChat
             | ActionKind::HideWorkDock
             | ActionKind::ShowWorkDock
@@ -502,6 +517,7 @@ fn publishes_at_once(kind: &ActionKind) -> bool {
             | ActionKind::RefreshBoosts
             | ActionKind::SaveAsBoost
             | ActionKind::DismissBoostHint
+            | ActionKind::DismissNativeSwitchOffer
             | ActionKind::DismissCoordinatorQuality
             | ActionKind::SetCollabGuest
             | ActionKind::ResolveCollabMessage

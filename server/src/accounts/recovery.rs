@@ -118,9 +118,16 @@ fn pause_after_restart(repo: &DomainRepository<'_>, session: &Value, recovery: &
                 .and_then(|project| launch::provider(&project, session))
                 .map(|provider| provider.id().to_string())
         });
+    let prior_pool_key = recovery
+        .pointer("/accountWait/poolKey")
+        .and_then(Value::as_str)
+        .map(str::to_string);
     let mut wait = json!({ "mode": "afterRestart", "since": now });
     if let Some(provider) = prior_provider {
         wait["provider"] = json!(provider);
+    }
+    if let Some(pool_key) = prior_pool_key {
+        wait["poolKey"] = json!(pool_key);
     }
     if crate::carry_on_compaction::compact_command(session).is_some() {
         let tokens = crate::carry_on_compaction::context_tokens(repo, session);
@@ -988,12 +995,16 @@ pub(crate) fn plan_session(
             .and_then(|s| s.model.as_ref())
             .map(|m| m.label.as_str()),
     );
+    // A workspace that pins one or more Claude accounts keeps automatic usage-limit moves inside
+    // that workspace's pool (never crossing into another workspace's accounts); GBot API chats
+    // and Help chats stay outside workspace pools.
+    let workspace_pool = super::workspace_pool::session_pool(db, &project, &session, provider);
     // A session on its own login keeps waiting for its limit to reset instead of moving to an account (CDXC:AgentProviders 2026-10-09 in launch.rs).
     let target = if notice.kind == "usageLimit"
         && policy.at_limit == LimitAction::Switch
         && !launch::session_uses_own_login(provider, &session)
     {
-        switch_target(
+        switch_target_in_pool(
             &registry,
             snapshot,
             provider,
@@ -1001,6 +1012,7 @@ pub(crate) fn plan_session(
             &model,
             policy.priority,
             &session,
+            workspace_pool.as_deref(),
         )
     } else {
         SwitchTarget::None
@@ -1018,7 +1030,7 @@ pub(crate) fn plan_session(
         && policy.at_limit == LimitAction::Switch
         && !launch::session_uses_own_login(provider, &session))
     .then(|| {
-        super::model_fallback::alternative(
+        super::model_fallback::alternative_in_pool(
             &registry,
             snapshot,
             provider,
@@ -1027,6 +1039,7 @@ pub(crate) fn plan_session(
             &effort,
             policy.priority,
             &session,
+            workspace_pool.as_deref(),
         )
     })
     .flatten();
@@ -1188,7 +1201,11 @@ pub(crate) fn plan_session(
                 let candidates: Vec<Value> = registry
                     .accounts
                     .iter()
-                    .filter(|a| a.provider == provider && a.auto_switchable())
+                    .filter(|a| {
+                        a.provider == provider
+                            && a.auto_switchable()
+                            && super::workspace_pool::in_pool(&a.id, workspace_pool.as_deref())
+                    })
                     .map(|a| {
                         let found = snapshot
                             .accounts
@@ -1231,7 +1248,7 @@ pub(crate) fn plan_session(
             if current_id.is_some() {
                 // Not the every-account-full card: an account has room, it only needs a newer reading.
                 if policy.at_limit == LimitAction::Switch && held_back.is_none() {
-                    let wait = super::limit_wait::describe(
+                    let wait = super::limit_wait::describe_in_pool(
                         &registry,
                         snapshot,
                         provider,
@@ -1239,9 +1256,18 @@ pub(crate) fn plan_session(
                         &model,
                         model_label.as_deref(),
                         alternative.as_ref(),
+                        workspace_pool.as_deref(),
                         now,
                     );
-                    super::limit_wait::enter(state, repo, &session, &mut recovery, wait, provider);
+                    super::limit_wait::enter_in_pool(
+                        state,
+                        repo,
+                        &session,
+                        &mut recovery,
+                        wait,
+                        provider,
+                        workspace_pool.as_deref(),
+                    );
                 }
                 save(state, repo, &session, recovery)?;
                 return Ok(None);
@@ -1431,6 +1457,7 @@ pub(super) fn left_account(session: &Value) -> Option<(&str, DateTime<Utc>)> {
     Some((progress["fromAccountId"].as_str()?, at))
 }
 /// The account a usage-limit switch moves `session` to. An account this session automatically left counts again only once a reading taken after it left says so: candidates no longer need a fresh reading (see `trusted_room`), and an older one would bounce the session straight back to the account whose limit it just hit.
+#[allow(dead_code)]
 pub(super) fn switch_target(
     registry: &Registry,
     snapshot: &Snapshot,
@@ -1440,9 +1467,35 @@ pub(super) fn switch_target(
     priority: Priority,
     session: &Value,
 ) -> SwitchTarget {
+    switch_target_in_pool(
+        registry, snapshot, provider, current, model, priority, session, None,
+    )
+}
+
+/// Like [`switch_target`], restricted to `allowed_ids` when the session's workspace pins a Claude
+/// account pool so automatic limit moves never cross workspaces.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn switch_target_in_pool(
+    registry: &Registry,
+    snapshot: &Snapshot,
+    provider: Provider,
+    current: Option<&str>,
+    model: &str,
+    priority: Priority,
+    session: &Value,
+    allowed_ids: Option<&[String]>,
+) -> SwitchTarget {
     let left = left_account(session);
     let mut held_back = SwitchTarget::None;
-    for account in ranked(registry, snapshot, provider, current, model, priority) {
+    for account in ranked_in_pool(
+        registry,
+        snapshot,
+        provider,
+        current,
+        model,
+        priority,
+        allowed_ids,
+    ) {
         let Some((from, at)) = left.filter(|(from, _)| *from == account.id) else {
             return SwitchTarget::Move(account.id.clone());
         };
@@ -1463,6 +1516,7 @@ pub(super) fn switch_target(
     }
     held_back
 }
+#[allow(dead_code)]
 pub(super) fn ranked<'a>(
     registry: &'a Registry,
     snapshot: &Snapshot,
@@ -1471,10 +1525,26 @@ pub(super) fn ranked<'a>(
     model: &str,
     priority: Priority,
 ) -> Vec<&'a SavedAccount> {
+    ranked_in_pool(registry, snapshot, provider, current, model, priority, None)
+}
+pub(super) fn ranked_in_pool<'a>(
+    registry: &'a Registry,
+    snapshot: &Snapshot,
+    provider: Provider,
+    current: Option<&str>,
+    model: &str,
+    priority: Priority,
+    allowed_ids: Option<&[String]>,
+) -> Vec<&'a SavedAccount> {
     let mut rows: Vec<_> = registry
         .accounts
         .iter()
-        .filter(|a| a.provider == provider && a.auto_switchable() && Some(a.id.as_str()) != current)
+        .filter(|a| {
+            a.provider == provider
+                && a.auto_switchable()
+                && Some(a.id.as_str()) != current
+                && super::workspace_pool::in_pool(&a.id, allowed_ids)
+        })
         .filter_map(|a| {
             snapshot
                 .accounts

@@ -28,6 +28,10 @@ pub struct SelectionOptions {
     /// Codex's permission mode, one of `CODEX_PERMISSION_MODES`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub permissions: Option<String>,
+    /// Internal server-stamped marker: whether an owner device requested the queued mode change.
+    /// Stripped from client input in `read_options` so callers can never forge it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) owner_approved: Option<bool>,
 }
 
 impl SelectionOptions {
@@ -38,21 +42,55 @@ impl SelectionOptions {
 
 pub(crate) fn read_options(
     provider: &str,
+    is_acp: bool,
     params: &Map<String, Value>,
 ) -> Result<SelectionOptions, DomainStateError> {
-    let options: SelectionOptions =
-        serde_json::from_value(params.get("options").cloned().unwrap_or_else(|| json!({})))
-            .map_err(|_| DomainStateError {
-                code: "invalidParams",
-                message: "Invalid chat option selection.".into(),
-            })?;
-    let valid_mode = options.mode.as_deref().is_none_or(|mode| match provider {
-        "opencode" => !mode.trim().is_empty() && mode.len() <= 160,
-        "codex" => matches!(mode, "plan" | "default"),
-        "claude" => matches!(mode, "bypass" | "auto" | "manual" | "accept-edits" | "plan"),
-        "antigravity" => matches!(mode, "default" | "accept-edits" | "auto" | "plan"),
-        _ => false,
-    });
+    let mut raw_options = params.get("options").cloned().unwrap_or_else(|| json!({}));
+    if let Some(obj) = raw_options.as_object_mut() {
+        // Never accept client-supplied `ownerApproved`.
+        obj.remove("ownerApproved");
+    }
+    let mut options: SelectionOptions =
+        serde_json::from_value(raw_options).map_err(|_| DomainStateError {
+            code: "invalidParams",
+            message: "Invalid chat option selection.".into(),
+        })?;
+    options.owner_approved = None;
+    if is_acp {
+        // CDXC:SessionChat 2026-11-24 WHY: `--permissions` types Codex's own `/permissions` into its terminal, which a Native chat does not have, so on a Native session it answered ok and changed nothing (found testing Native Codex on Linux). A Native chat's permissions are its approval level, so the Codex profile names map onto it (`approve-for-me` is Native's Auto: on-request with auto review), and it then goes through the same owner check as a Mode pick. Read-only has no Native level and is refused.
+        if let Some(permissions) = options.permissions.take() {
+            let level = match permissions.trim() {
+                "ask-for-approval" => "ask",
+                "approve-for-me" => "auto",
+                "full-access" | "danger-full-access" => "full-access",
+                _ => {
+                    return Err(DomainStateError {
+                        code: "invalidParams",
+                        message: "Native chats take Ask, Auto-edits, Auto or Full permissions; Read-only needs Terminal-based mode.".into(),
+                    })
+                }
+            };
+            if options.mode.is_none() {
+                options.mode = Some(level.to_string());
+            }
+        }
+        if let Some(mode) = options.mode.as_deref() {
+            let level =
+                crate::acp::AcpApprovalLevel::parse(mode).ok_or_else(|| DomainStateError {
+                    code: "invalidParams",
+                    message: "That approval level is not available for this agent.".into(),
+                })?;
+            options.mode = Some(level.as_str().to_string());
+        }
+    }
+    let valid_mode = is_acp
+        || options.mode.as_deref().is_none_or(|mode| match provider {
+            "opencode" => !mode.trim().is_empty() && mode.len() <= 160,
+            "codex" => matches!(mode, "plan" | "default"),
+            "claude" => matches!(mode, "bypass" | "auto" | "manual" | "accept-edits" | "plan"),
+            "antigravity" => matches!(mode, "default" | "accept-edits" | "auto" | "plan"),
+            _ => false,
+        });
     let valid_permissions = options.permissions.as_deref().is_none_or(|value| {
         provider == "codex"
             && crate::session_chat_options::codex_permissions_command(value).is_some()
@@ -157,11 +195,58 @@ pub fn read_pending(
     ).optional().ok().flatten()
 }
 
+/// Read the session's pending or failed model selection, if any.
+pub(crate) fn read_pending_for_state(
+    state: &AppState,
+    project: &str,
+    session: &str,
+) -> Option<PendingModelSelection> {
+    let db = open_gxserver_database(&state.paths).ok()?;
+    read_pending(&db, project, session)
+}
+
 /// Whether a model or option change is waiting, applying or failed for this session; a new chat
 /// message then waits behind it.
 pub(crate) fn has_pending_selection(state: &AppState, project: &str, session: &str) -> bool {
-    open_gxserver_database(&state.paths)
-        .is_ok_and(|db| read_pending(&db, project, session).is_some())
+    read_pending_for_state(state, project, session).is_some()
+}
+
+/// Delete a `state = 'failed'` pending selection row (leaving any active `queued`/`applying` row
+/// untouched), clear its failure alert, and broadcast updated queue state. Returns `true` when a
+/// failed row was cleared.
+pub(crate) fn clear_failed_selection(state: &AppState, project: &str, session: &str) -> bool {
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return false;
+    };
+    let cleared = rusqlite::Transaction::new_unchecked(&db, rusqlite::TransactionBehavior::Immediate)
+        .ok()
+        .and_then(|tx| {
+            let existing = read_pending(&tx, project, session)?;
+            if existing.state != "failed" {
+                return None;
+            }
+            let count = tx
+                .execute(
+                    "DELETE FROM session_chat_model_selections WHERE projectId = ?1 AND sessionId = ?2 AND selectionId = ?3 AND state = 'failed'",
+                    params![project, session, existing.id],
+                )
+                .ok()?;
+            if count == 0 {
+                return None;
+            }
+            let _ = crate::session_chat_queue::bump_queue_version(&tx, project, session);
+            tx.commit().ok()?;
+            Some(existing.id)
+        });
+    let Some(selection_id) = cleared else {
+        return false;
+    };
+    forget_busy_run(&selection_id);
+    crate::session_chat_model_selection_alert::clear_model_selection_failure(
+        state, project, session,
+    );
+    crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(state, project, session);
+    true
 }
 
 /// The published catalog can grow without rebuilding gxserver; the terminal is the authority on availability.
@@ -254,7 +339,15 @@ pub(crate) fn enqueue(
     state: &AppState,
     params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
-    enqueue_selection(state, params, false)
+    enqueue_selection(state, params, false, true)
+}
+
+pub(crate) fn enqueue_for_caller(
+    state: &AppState,
+    params: &Map<String, Value>,
+    is_user_device: bool,
+) -> Result<Value, DomainStateError> {
+    enqueue_selection(state, params, false, is_user_device)
 }
 
 /// Queues a change Ghostex makes on its own, unless a pick is already waiting or applying: the
@@ -263,13 +356,14 @@ pub(crate) fn enqueue_unless_pending(
     state: &AppState,
     params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
-    enqueue_selection(state, params, true)
+    enqueue_selection(state, params, true, true)
 }
 
 fn enqueue_selection(
     state: &AppState,
     params: &Map<String, Value>,
     unless_pending: bool,
+    is_user_device: bool,
 ) -> Result<Value, DomainStateError> {
     let project = params
         .get("projectId")
@@ -295,8 +389,9 @@ fn enqueue_selection(
             code: "notFound",
             message: "The session no longer exists.".into(),
         })?;
-    let provider =
-        crate::session_chat_follower::session_chat_agent_for_session(&session).unwrap_or_default();
+    let provider = crate::acp::session_acp_family(&session)
+        .or_else(|| crate::session_chat_follower::session_chat_agent_for_session(&session))
+        .unwrap_or_default();
     let model = params
         .get("model")
         .and_then(Value::as_str)
@@ -305,19 +400,38 @@ fn enqueue_selection(
         .get("effort")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let incoming_options = read_options(&provider, params)?;
+    let is_acp = crate::acp::session_is_acp(&session);
+    let incoming_options = read_options(&provider, is_acp, params)?;
     let scope = read_scope(&provider, params)?;
+    if params
+        .get("scope")
+        .and_then(Value::as_str)
+        .is_some_and(|s| s.trim() == SCOPE_SESSION)
+        && model.is_empty()
+    {
+        return Err(DomainStateError {
+            code: "invalidParams",
+            message: "A session-only change needs the model to apply in this session.".into(),
+        });
+    }
     if !model.is_empty() || incoming_options.is_empty() {
         validate_selection(&provider, model, effort)?;
-    } else if !matches!(
-        provider.as_str(),
-        "codex" | "claude" | "opencode" | "antigravity"
-    ) || !effort.is_empty()
+    } else if (!is_acp
+        && !matches!(
+            provider.as_str(),
+            "codex" | "claude" | "opencode" | "antigravity"
+        ))
+        || !effort.is_empty()
     {
         return Err(DomainStateError {
             code: "invalidParams",
             message: "An effort change requires its model.".into(),
         });
+    }
+    if let Some(refusal) = foreign_model_refusal(&provider, model) {
+        return Err(crate::session_chat_codex_picker::unsupported_selection(
+            refusal,
+        ));
     }
     // Merge under the write lock so independent controls cannot overwrite each other's pending choice.
     let transaction =
@@ -357,6 +471,7 @@ fn enqueue_selection(
         .unwrap_or_default();
     if incoming_options.mode.is_some() {
         options.mode = incoming_options.mode;
+        options.owner_approved = Some(is_user_device);
     }
     if incoming_options.permissions.is_some() {
         options.permissions = incoming_options.permissions;
@@ -778,9 +893,11 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
                 &state, &project, &session,
             )
             .await;
+            let owner_approved = pending.options.owner_approved.unwrap_or(false);
             let result = crate::session_chat_codex_picker::select_session_chat_model(
                 &state,
                 params.as_object().unwrap(),
+                owner_approved,
             )
             .await;
             if let Some(guard) = first_message {
@@ -885,6 +1002,7 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
             });
             let final_failure = result.as_ref().is_err_and(|error| {
                 error.code == crate::session_chat_codex_picker::UNSUPPORTED_SELECTION_CODE
+                    || error.code == "forbidden"
             });
             if result.is_ok() || final_failure {
                 if let Ok(mut attempts) = unconfirmed_attempts().lock() {
@@ -899,13 +1017,22 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
                 forget_busy_run(&pending.id);
             }
             let refused_mode = result.as_ref().err().is_some_and(mode_was_refused);
+            // A forbidden pick (e.g. non-owner approval raise) or an options-only final failure
+            // (no model change requested) must never stay in `state = 'failed'` blocking later
+            // messages in the queue.
+            let drop_failed_without_hold = refused_mode
+                || result
+                    .as_ref()
+                    .err()
+                    .is_some_and(|error| error.code == "forbidden")
+                || (final_failure && pending.model.is_empty());
             if let Ok(db) = open_gxserver_database(&state.paths) {
                 if let Ok(tx) = rusqlite::Transaction::new_unchecked(
                     &db,
                     rusqlite::TransactionBehavior::Immediate,
                 ) {
                     let updated = match &result {
-                        Err(_) if refused_mode => tx.execute(
+                        Err(_) if drop_failed_without_hold => tx.execute(
                             "DELETE FROM session_chat_model_selections WHERE projectId = ?1 AND sessionId = ?2 AND selectionId = ?3",
                             params![project, session, pending.id],
                         ),
@@ -947,13 +1074,15 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
                 ),
                 // The refusal is remembered, so the mode menu greys it and says why; nothing is left
                 // to raise or hold (the 2026-10-31 DECISION on `note_model_selection_failure`).
-                Err(error) if refused_mode => {
-                    crate::session_chat_mode_availability::remember_refusal(
-                        &state,
-                        &project,
-                        &session,
-                        &error.message,
-                    );
+                Err(error) if drop_failed_without_hold => {
+                    if refused_mode {
+                        crate::session_chat_mode_availability::remember_refusal(
+                            &state,
+                            &project,
+                            &session,
+                            &error.message,
+                        );
+                    }
                     crate::session_chat_send_diagnostics::record_send_recovery(
                         &state,
                         "sessionChatModeRefused",
@@ -965,6 +1094,7 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
                     crate::session_chat_model_selection_alert::clear_model_selection_failure(
                         &state, &project, &session,
                     );
+                    crate::session_chat_queue_runtime::kick_session_chat_queue();
                 }
                 Err(error) => {
                     crate::session_chat_model_selection_alert::note_model_selection_failure(

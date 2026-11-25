@@ -107,13 +107,23 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
             ),
             _ => String::new(),
         },
+        approval_reason: match prompt.as_ref() {
+            Some(InteractivePrompt::Approval { reason, .. }) => reason
+                .as_deref()
+                .map(str::trim)
+                .unwrap_or_default()
+                .to_string(),
+            _ => String::new(),
+        },
     };
 
     // `questionForms` is assembled beside this family (`document::assemble`), from a kept copy
     // while its inputs hold (`forms::project_kept`).
     // `openQuestions` is assembled beside this family too (`open_questions::project_with`).
     into.resource_modal = crate::questions::resource_modal::project(state, context);
-    into.later_questions = crate::questions::open_questions::later_waiting(state);
+    into.later_questions =
+        crate::questions::open_questions::later_waiting_at(state, context.now_millis());
+    into.page_open_questions = crate::questions::open_questions::page_open_question_counts(state);
     into.starred_pages = crate::questions::later::starred_page_ids(state)
         .into_iter()
         .collect();

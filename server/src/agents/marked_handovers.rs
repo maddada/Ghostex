@@ -96,11 +96,29 @@ pub(crate) fn coordinator_marks_replies(paths: &GxserverPaths) -> bool {
 ///
 /// CDXC:Extensions 2026-11-16 WHY:
 /// A coordinator made since 2026-10-17 takes its role from the skill and has no system prompt flag of its own, so it took this note like any session; the lines extensions add (`agentNote`, extensions/agent_notes.rs) are for ordinary sessions only (Q3430), so a `coordinator` launch gets the note without them, from a file of its own so the two never overwrite each other between launches.
+/// Identifies a session's workspace when attaching per-workspace agent instructions.
+#[derive(Clone, Debug)]
+pub(crate) struct WorkspaceNoteContext {
+    pub(crate) workspace_id: String,
+    pub(crate) workspace_name: String,
+}
+
+#[allow(dead_code)]
 pub(crate) fn with_launch_notes(
     agent_id: &str,
     icon: Option<&str>,
     command: &str,
     coordinator: bool,
+) -> String {
+    with_launch_notes_for_workspace(agent_id, icon, command, coordinator, None)
+}
+
+pub(crate) fn with_launch_notes_for_workspace(
+    agent_id: &str,
+    icon: Option<&str>,
+    command: &str,
+    coordinator: bool,
+    workspace: Option<&WorkspaceNoteContext>,
 ) -> String {
     if command.trim().is_empty() {
         return command.to_string();
@@ -132,10 +150,62 @@ pub(crate) fn with_launch_notes(
             return command.to_string();
         }
     }
-    let Some(text) = super::current_launch_note_text(&paths, !coordinator) else {
+    // Never place workspace instruction text on a shell command line. Only file-based launch-flag
+    // agents carry workspace instructions here (Claude, Droid, Pi, OMP, Copilot CLI). Codex gets
+    // workspace instructions via its SessionStart hook (agents/activity.rs), and Grok Build's
+    // `--rules` accepts inline text only so it skips workspace instructions.
+    let supports_workspace_file = matches!(
+        family.as_str(),
+        "claude" | "droid" | "pi" | "omp" | "copilot"
+    );
+    let workspace_instructions = if cfg!(test) || !supports_workspace_file {
+        None
+    } else {
+        workspace.and_then(|ws| {
+            crate::workspaces::read_workspace_instructions_note(
+                &paths,
+                &ws.workspace_id,
+                &ws.workspace_name,
+            )
+        })
+    };
+    // A coordinator thread's saved command already carries Ghostex's marked-handovers flag; when its
+    // workspace also has instructions, combine both into a per-workspace thread note file so
+    // threads follow workspace rules without clobbering user-supplied flags.
+    if let (Some(ws), Some(ws_note)) = (workspace, workspace_instructions.as_deref()) {
+        let safe_id = crate::workspaces::safe_workspace_file_stem(&ws.workspace_id);
+        let thread_note_file = paths.root_dir.join("marked-handovers").join("note.md");
+        let thread_note_quoted = quote_shell_arg(&thread_note_file.to_string_lossy());
+        if matches!(family.as_str(), "claude" | "droid" | "pi" | "omp")
+            && command.contains(&thread_note_quoted)
+        {
+            let combined = format!("{MARKED_HANDOVERS_NOTE}\n\n{ws_note}");
+            let combined_path = paths
+                .root_dir
+                .join("agent-note")
+                .join(format!("thread-workspace-{safe_id}.md"));
+            if write_note_file(&combined_path, &combined).is_ok() {
+                let replacement = quote_shell_arg(&combined_path.to_string_lossy());
+                return command.replacen(&thread_note_quoted, &replacement, 1);
+            }
+        }
+    }
+    let Some(text) = super::current_launch_note_text_for_workspace(
+        &paths,
+        !coordinator,
+        workspace_instructions.as_deref(),
+    ) else {
         return command.to_string();
     };
-    let path = if coordinator && text != MARKED_HANDOVERS_NOTE {
+    let path = if let (Some(ws), true) = (workspace, workspace_instructions.is_some()) {
+        let safe_id = crate::workspaces::safe_workspace_file_stem(&ws.workspace_id);
+        let filename = if coordinator {
+            format!("coordinator-workspace-{safe_id}.md")
+        } else {
+            format!("workspace-{safe_id}.md")
+        };
+        paths.root_dir.join("agent-note").join(filename)
+    } else if coordinator && text != MARKED_HANDOVERS_NOTE {
         paths
             .root_dir
             .join("agent-note")
@@ -144,6 +214,80 @@ pub(crate) fn with_launch_notes(
         note_file_path(&paths, &text)
     };
     with_note_at(&family, command, &text, &path)
+}
+
+/// Server-side Ghostex launch note / marked-handovers / workspace-instructions prompt for Non-CLI
+/// sessions, returning `(prompt_file, codex_inline_developer_instructions)` without scraping any
+/// command string. Never places workspace instruction text inline on a shell command line: both
+/// Claude and Codex receive workspace instructions via a generated per-workspace note file
+/// (`driver_claude` passes `--append-system-prompt-file <path>`; `driver_codex` reads the file
+/// in-memory and sends it over JSON-RPC `developerInstructions`), while Antigravity receives
+/// workspace instructions via its SessionStart hook (`agents/activity.rs`).
+pub(crate) fn acp_launch_note(
+    family: &str,
+    coordinator: bool,
+    thread_marked_handovers: bool,
+    workspace: Option<&WorkspaceNoteContext>,
+) -> (Option<String>, Option<String>) {
+    if cfg!(test) {
+        return (None, None);
+    }
+    let paths = get_gxserver_paths(None);
+    let workspace_instructions = if matches!(family, "claude" | "codex") {
+        workspace.and_then(|ws| {
+            crate::workspaces::read_workspace_instructions_note(
+                &paths,
+                &ws.workspace_id,
+                &ws.workspace_name,
+            )
+        })
+    } else {
+        None
+    };
+    let text = if thread_marked_handovers {
+        match workspace_instructions.as_deref() {
+            Some(ws_note) => Some(format!("{MARKED_HANDOVERS_NOTE}\n\n{ws_note}")),
+            None => Some(MARKED_HANDOVERS_NOTE.to_string()),
+        }
+    } else {
+        super::current_launch_note_text_for_workspace(
+            &paths,
+            !coordinator,
+            workspace_instructions.as_deref(),
+        )
+    };
+    let Some(text) = text else {
+        return (None, None);
+    };
+    let write_workspace_or_note_file = || -> Option<String> {
+        let path = if let (Some(ws), true) = (workspace, workspace_instructions.is_some()) {
+            let safe_id = crate::workspaces::safe_workspace_file_stem(&ws.workspace_id);
+            let filename = if thread_marked_handovers {
+                format!("thread-workspace-{safe_id}.md")
+            } else if coordinator {
+                format!("coordinator-workspace-{safe_id}.md")
+            } else {
+                format!("workspace-{safe_id}.md")
+            };
+            paths.root_dir.join("agent-note").join(filename)
+        } else if coordinator && text != MARKED_HANDOVERS_NOTE {
+            paths
+                .root_dir
+                .join("agent-note")
+                .join("coordinator-note.md")
+        } else {
+            note_file_path(&paths, &text)
+        };
+        write_note_file(&path, &text)
+            .ok()
+            .map(|()| path.to_string_lossy().to_string())
+    };
+    match family {
+        "claude" => (write_workspace_or_note_file(), None),
+        "codex" if workspace_instructions.is_some() => (write_workspace_or_note_file(), None),
+        "codex" => (None, Some(text)),
+        _ => (None, None),
+    }
 }
 
 /// A thread's base command at creation, with the note saved in it, so the thread marks its
@@ -170,24 +314,16 @@ fn with_note_at(family: &str, command: &str, text: &str, path: &std::path::Path)
             "--append-system-prompt-file"
         }
         "droid" if !command.contains("--append-system-prompt") => "--append-system-prompt-file",
-        // Pi reads a file named by `--append-system-prompt` (it takes text or a file).
-        "pi" if !command.contains("--append-system-prompt") => "--append-system-prompt",
+        // Pi and OMP read a file named by `--append-system-prompt` (both accept a file path).
+        "pi" | "omp" if !command.contains("--append-system-prompt") => "--append-system-prompt",
         "codex" if !command.contains("developer_instructions=") => {
             return format!("{} {}", command.trim_end(), codex_note_arg(text));
         }
-        // CDXC:AgentGuide 2026-11-21 WHY: Grok Build (1.0.93) and OMP (19.0.0) had no note though
-        // each has a flag that appends to the system prompt. Grok's `--rules` takes text only (a
-        // path reached the model as a path, tested live), so both get the text itself; OMP's takes
-        // text or a file like Pi's.
+        // CDXC:AgentGuide 2026-11-21 WHY: Grok Build (1.0.93) has `--rules` which takes text only
+        // (a path reached the model as a path, tested live). Only Ghostex's built-in short note
+        // uses it; workspace instructions never go on a shell command line.
         "grok" if !command.contains("--rules") => {
             return format!("{} --rules {}", command.trim_end(), quote_shell_arg(text));
-        }
-        "omp" if !command.contains("--append-system-prompt") => {
-            return format!(
-                "{} --append-system-prompt {}",
-                command.trim_end(),
-                quote_shell_arg(text)
-            );
         }
         "copilot" if !command.contains(COPILOT_INSTRUCTIONS_DIRS) => {
             return with_copilot_note(command, text, path);

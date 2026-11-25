@@ -199,7 +199,7 @@ class GhostexChatChannel {
       const dialog = this.dialogs.find((open) => !kind || open.kind === kind);
       if (!found || !dialog) {
         if (answered === 0) throw new ChatUnsupported("no __CHAT_LABEL__ dialog is open");
-        throw new Error(`__CHAT_LABEL__ did not open the next dialog after ${answered} answer(s)`);
+        throw new Error(`__CHAT_LABEL__ did not open the next dialog after ${answered} ${answered === 1 ? "answer" : "answers"}`);
       }
       return dialog;
     };

@@ -8,6 +8,30 @@ use super::records::{
 };
 use crate::domain::DomainStateError;
 
+/// The `/model` line a new ZCode or OpenCode orchestrator's chosen model goes in ahead of its first
+/// message: `/model <model>` for ZCode, `/model <provider/model> [<variant>]` for OpenCode (its send
+/// path sets both for that session only through OpenCode's server,
+/// `session_chat_opencode::Client::send`). `coordinator start-thread` queues an OpenCode thread's
+/// the same way ahead of its brief (GitHub #747, ghostex_cli/coordinator/threads.rs).
+pub fn coordinator_model_line(family: &str, params: &Map<String, Value>) -> Option<String> {
+    let text = |key: &str| {
+        params
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    };
+    let model = text("agentModel")?;
+    match family {
+        "zcode" => Some(format!("/model {model}")),
+        "opencode" => Some(match text("agentEffort") {
+            Some(effort) => format!("/model {model} {effort}"),
+            None => format!("/model {model}"),
+        }),
+        _ => None,
+    }
+}
+
 /// The `coordinator` object of a create request: `{ goal?, instructions?, firstRequest? }`.
 /// `firstRequest` follows the skill line in the orchestrator's first message
 /// (`orchestrator_first_message`); a client that queues its first request itself instead (the
@@ -193,7 +217,11 @@ pub fn coordinator_create_params(launch: CoordinatorLaunch<'_>) -> Value {
         params["agentEffort"] = Value::String(effort);
     }
     let model = launch.model.or_else(|| {
-        (family == Some("claude")).then(|| DEFAULT_CLAUDE_COORDINATOR_MODEL.to_string())
+        family.and_then(|fam| {
+            crate::agent_model_catalog::preferred_default_model(fam)
+                .map(|(value, _, _)| value)
+                .or_else(|| (fam == "claude").then(|| DEFAULT_CLAUDE_COORDINATOR_MODEL.to_string()))
+        })
     });
     if let Some(model) = model {
         params["agentModel"] = Value::String(model);

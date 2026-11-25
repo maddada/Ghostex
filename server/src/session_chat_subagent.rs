@@ -243,11 +243,12 @@ pub(crate) async fn handle_read_subagent(
                         | SessionChatTranscriptAgent::Claude
                         | SessionChatTranscriptAgent::OpenCode
                         | SessionChatTranscriptAgent::Hermes
+                        | SessionChatTranscriptAgent::Grok
                 ) || (omp && *a == SessionChatTranscriptAgent::Pi)
             })
             .ok_or_else(|| {
                 anyhow::anyhow!(
-                    "Subagent transcripts are supported for Codex, Claude, OpenCode, Hermes and OMP."
+                    "Subagent transcripts are supported for Codex, Claude, OpenCode, Hermes, Grok and OMP."
                 )
             })?;
         let root_id = read_runtime_text(&session, "agentSessionId")
@@ -268,10 +269,29 @@ pub(crate) async fn handle_read_subagent(
         };
         let child = match family {
             SessionChatTranscriptAgent::OpenCode => {
-                let info=crate::session_chat_opencode::child(&root_id,&selector).map_err(|e|anyhow::anyhow!(e.message))?;
-                ChildTranscript {id:selector.clone(), name:info["title"].as_str().unwrap_or(&selector).into(),
-                    path:crate::session_chat_opencode::resolve_transcript(&selector).ok_or_else(||anyhow::anyhow!("OpenCode child is unavailable."))?,
-                    agent_type:info["agent"].as_str().map(str::to_string)}
+                if crate::acp::driver_opencode::is_mirror_path(&root) {
+                    let (path, name, agent_type) =
+                        crate::acp::driver_opencode::resolve_subagent_mirror(&root_id, &selector)
+                            .ok_or_else(|| {
+                                anyhow::anyhow!("OpenCode subagent transcript is not available yet.")
+                            })?;
+                    ChildTranscript {
+                        id: selector.clone(),
+                        name,
+                        path,
+                        agent_type,
+                    }
+                } else {
+                    let info = crate::session_chat_opencode::child(&root_id, &selector)
+                        .map_err(|e| anyhow::anyhow!(e.message))?;
+                    ChildTranscript {
+                        id: selector.clone(),
+                        name: info["title"].as_str().unwrap_or(&selector).into(),
+                        path: crate::session_chat_opencode::resolve_transcript(&selector)
+                            .ok_or_else(|| anyhow::anyhow!("OpenCode child is unavailable."))?,
+                        agent_type: info["agent"].as_str().map(str::to_string),
+                    }
+                }
             },
             SessionChatTranscriptAgent::Codex => codex_child(&root, &root_id, &selector)?,
             SessionChatTranscriptAgent::Hermes => ChildTranscript {
@@ -279,6 +299,17 @@ pub(crate) async fn handle_read_subagent(
                 path: crate::session_chat_hermes::resolve_hermes_chat_transcript_path(&selector)
                     .ok_or_else(|| anyhow::anyhow!("This subagent's transcript is not available yet."))?,
                 id: selector.clone(),
+                agent_type: None,
+            },
+            SessionChatTranscriptAgent::Grok => ChildTranscript {
+                path: resolve_session_chat_transcript_path(
+                    SessionChatTranscriptAgent::Grok,
+                    Some(&selector),
+                    None,
+                )
+                .ok_or_else(|| anyhow::anyhow!("This subagent's transcript is not available yet."))?,
+                id: selector.clone(),
+                name: selector.clone(),
                 agent_type: None,
             },
             SessionChatTranscriptAgent::Pi => ChildTranscript {
@@ -313,7 +344,7 @@ pub(crate) async fn handle_read_subagent(
                     "status": if messages.is_empty() { "empty" } else { "ready" },
                     "messages": messages, "hasMore": has_more, "beforeOffset": before_offset,
                     "epoch": 0, "seq": 0,
-                    "agent": match family { SessionChatTranscriptAgent::OpenCode => "opencode", SessionChatTranscriptAgent::Codex => "codex", SessionChatTranscriptAgent::Hermes => "hermes", SessionChatTranscriptAgent::Pi => "omp", _ => "claude" },
+                    "agent": match family { SessionChatTranscriptAgent::OpenCode => "opencode", SessionChatTranscriptAgent::Codex => "codex", SessionChatTranscriptAgent::Hermes => "hermes", SessionChatTranscriptAgent::Grok => "grok", SessionChatTranscriptAgent::Pi => "omp", _ => "claude" },
                     "agentSessionId": child.id, "subagent": details,
                 });
                 // A Pi turn ends on a closing reply, but an OMP child's run can end on its final

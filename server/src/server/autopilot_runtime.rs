@@ -579,6 +579,9 @@ fn requeue_after(key: SessionKey, after_ms: i64) {
 /// CDXC:Autopilot 2026-11-07 WHY:
 /// The brief's real stops include Codex's update prompt, which a bot had to get past by hand; a reloaded Codex shows it again on start (seen live on the test server), so the carry-on Autopilot sent sat behind it.
 fn shows_update_prompt(session: &Value) -> bool {
+    if crate::acp::session_is_acp(session) {
+        return false;
+    }
     if crate::session_chat_follower::session_chat_agent_for_session(session).as_deref()
         != Some("codex")
     {
@@ -1275,6 +1278,7 @@ pub(super) async fn answer(
     params["sessionId"] = json!(key.1);
     let routed = crate::session_chat_send::handle_answer_session_chat_prompt_http(
         state,
+        None,
         "/api/answerSessionChatPrompt".to_string(),
         Uuid::new_v4().to_string(),
         &json!({ "params": params }),

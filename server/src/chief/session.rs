@@ -207,7 +207,7 @@ pub(super) fn replace_chief(
     )?;
     move_coordinator(&db, &old.key(), &record.key())?;
     if old_alive {
-        retitle_earlier(state, &db, &repository, &old);
+        retire_earlier(state, &db, &repository, &old);
         let mut params = Map::new();
         params.insert("projectId".into(), json!(old.project_id));
         params.insert("sessionId".into(), json!(old.session_id));
@@ -285,44 +285,52 @@ pub(super) fn earlier_chats(repository: &DomainRepository<'_>, db: &Connection) 
     chats
 }
 
-/// An earlier chat still titled "Chief of Staff" is renamed after the day it started ("Chief of
-/// Staff · 8 Nov, 13:30"), so the rows under the header tell the chats apart. A title the user gave
-/// it stays.
-fn retitle_earlier(
+/// Retires an earlier Chief chat: unpins it (if it had `isPinned` written while it was Chief) so
+/// it moves out of Pinned into Chats unless the user pins it themselves later, and renames a chat
+/// still titled "Ask Ghostex AI" after the day it started ("Ask Ghostex AI · 8 Nov, 13:30"). A
+/// title the user gave it stays.
+fn retire_earlier(
     state: &AppState,
     db: &Connection,
     repository: &DomainRepository<'_>,
     old: &ChiefRecord,
 ) {
-    let titled_chief = repository
+    let Some(session) = repository
         .get_session(&old.project_id, &old.session_id)
         .ok()
         .flatten()
-        .is_some_and(|session| {
-            matches!(
-                session.get("title").and_then(Value::as_str),
-                Some(title) if title == super::CHIEF_TITLE || super::OLD_CHIEF_TITLES.contains(&title)
-            )
-        });
-    if !titled_chief {
+    else {
+        return;
+    };
+    let was_pinned = session.get("isPinned").and_then(Value::as_bool) == Some(true);
+    let titled_chief = matches!(
+        session.get("title").and_then(Value::as_str),
+        Some(title) if title == super::CHIEF_TITLE || super::OLD_CHIEF_TITLES.contains(&title)
+    );
+    if !was_pinned && !titled_chief {
         return;
     }
-    let started = chrono::DateTime::parse_from_rfc3339(&old.created_at)
-        .map(|at| {
-            at.with_timezone(&chrono::Local)
-                .format("%-d %b, %H:%M")
-                .to_string()
-        })
-        .unwrap_or_default();
-    let title = if started.is_empty() {
-        super::CHIEF_TITLE.to_string()
-    } else {
-        format!("{} \u{b7} {started}", super::CHIEF_TITLE)
-    };
     let mut params = Map::new();
     params.insert("projectId".into(), json!(old.project_id));
     params.insert("sessionId".into(), json!(old.session_id));
-    params.insert("title".into(), json!(title));
+    if was_pinned {
+        params.insert("isPinned".into(), json!(false));
+    }
+    if titled_chief {
+        let started = chrono::DateTime::parse_from_rfc3339(&old.created_at)
+            .map(|at| {
+                at.with_timezone(&chrono::Local)
+                    .format("%-d %b, %H:%M")
+                    .to_string()
+            })
+            .unwrap_or_default();
+        let title = if started.is_empty() {
+            super::CHIEF_TITLE.to_string()
+        } else {
+            format!("{} \u{b7} {started}", super::CHIEF_TITLE)
+        };
+        params.insert("title".into(), json!(title));
+    }
     if repository.update_session(&params).is_ok() {
         let _ = schedule_presentation_session_delta(
             state,

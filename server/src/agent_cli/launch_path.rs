@@ -15,6 +15,7 @@ pub(crate) fn rewrite_program(
 ) -> String {
     let mut offset = 0;
     let mut in_powershell_assignment = false;
+    let mut has_call_operator = false;
     while let Some((start, end, word)) = crate::agents::command_word(command, offset) {
         offset = end;
         if in_powershell_assignment {
@@ -28,7 +29,11 @@ pub(crate) fn rewrite_program(
             in_powershell_assignment = !word.ends_with(';');
             continue;
         }
-        if word == "env" || word == "&" || is_assignment(&word) {
+        if word == "&" {
+            has_call_operator = true;
+            continue;
+        }
+        if word == "env" || is_assignment(&word) {
             continue;
         }
         let raw = &command[start..end];
@@ -42,9 +47,48 @@ pub(crate) fn rewrite_program(
             return command.to_string();
         }
         return match resolve(&word) {
-            Some(program) => format!("{}{program}{}", &command[..start], &command[end..]),
+            Some(program) => {
+                let program = if has_call_operator {
+                    program.strip_prefix("& ").unwrap_or(&program)
+                } else {
+                    program.as_str()
+                };
+                format!("{}{program}{}", &command[..start], &command[end..])
+            }
             None => command.to_string(),
         };
+    }
+    command.to_string()
+}
+
+/// `command` with its PowerShell native-argument expressions made right for a batch program when
+/// the program it runs is a `.cmd` or `.bat` file (`platform/shell.rs`,
+/// `powershell_native_args_for_batch`, GitHub #737).
+#[cfg(windows)]
+pub(crate) fn with_batch_native_args(command: &str) -> String {
+    let mut offset = 0;
+    let mut in_powershell_assignment = false;
+    while let Some((_, end, word)) = crate::agents::command_word(command, offset) {
+        offset = end;
+        if in_powershell_assignment {
+            in_powershell_assignment = !word.ends_with(';');
+            continue;
+        }
+        if word
+            .get(..5)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("$env:"))
+        {
+            in_powershell_assignment = !word.ends_with(';');
+            continue;
+        }
+        if word == "&" {
+            continue;
+        }
+        let word = word.to_ascii_lowercase();
+        if word.ends_with(".cmd") || word.ends_with(".bat") {
+            return crate::platform::shell::powershell_native_args_for_batch(command);
+        }
+        break;
     }
     command.to_string()
 }
@@ -111,11 +155,56 @@ fn session_shell_finds(name: &str, home: &Path) -> bool {
     crate::platform::live_path::find_in(name, &directories).is_some()
 }
 
-/// What runs `name` in a new session when its shell cannot find it but mise can.
-fn mise_launch_program(name: &str, home: &Path) -> Option<String> {
+/// How a launch runs an executable found outside the session shell's PATH.
+pub(crate) fn direct_program(path: &str) -> String {
+    if cfg!(windows) {
+        // PowerShell runs a quoted path only through the call operator.
+        format!(
+            "& {}",
+            crate::platform::shell::powershell_single_quote(path)
+        )
+    } else {
+        crate::agents::quote_shell_arg(path)
+    }
+}
+
+/// What runs `name` in a new session when its shell cannot find it: first through mise, otherwise
+/// directly from an official catalog install folder (or, on Windows, gxserver's live process PATH).
+///
+/// CDXC:AgentLauncher 2026-11-24 WHY:
+/// Onboarding and pre-launch checks (`agent_hooks/probing.rs`, `agents/cli_missing.rs`) report an
+/// agent CLI as installed when it sits in an official `install_dirs` folder (`~/.local/bin` for
+/// Claude, `~/.opencode/bin` for OpenCode, `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin` for Codex,
+/// `%LOCALAPPDATA%\agy\bin` for Antigravity), even when that folder is missing from the Windows
+/// registry PATH. Previously `with_reachable_program` fell back only to mise, so launching Native
+/// Chat immediately failed with PowerShell `CommandNotFoundException`.
+fn reachable_launch_program(name: &str, home: &Path) -> Option<String> {
     if session_shell_finds(name, home) {
         return None;
     }
+    if let Some(program) = mise_launch_program(name, home) {
+        return Some(program);
+    }
+    let install_dirs: Vec<PathBuf> = super::catalog::CATALOG
+        .iter()
+        .find(|definition| definition.binary == name)
+        .map(|definition| definition.install_dirs(home))
+        .unwrap_or_default();
+    let candidate = crate::platform::live_path::find_in(name, &install_dirs)
+        .or_else(|| {
+            if cfg!(windows) {
+                crate::platform::live_path::find(name, &[])
+            } else {
+                None
+            }
+        })
+        .map(|path| path.to_string_lossy().into_owned())?;
+    let resolved = crate::agent_hooks::on_demand::probe_target(&candidate, name, home)?;
+    Some(direct_program(&resolved))
+}
+
+/// What runs `name` in a new session when mise provides it.
+fn mise_launch_program(name: &str, home: &Path) -> Option<String> {
     let mise = super::process::resolve("mise", home);
     let shim = mise_data_dir(home).join("shims").join(name);
     let shim = (!cfg!(windows) && shim.is_file()).then_some(shim);
@@ -127,14 +216,18 @@ fn mise_launch_program(name: &str, home: &Path) -> Option<String> {
     mise_program(name, shim.as_deref(), mise.as_deref())
 }
 
-/// `command` with a program the session's shell cannot find replaced by mise's way of running it.
+/// `command` with a program the session's shell cannot find replaced by a reachable launcher
+/// (mise or its resolved install path).
 pub(crate) fn with_reachable_program(command: &str) -> String {
     // Unit tests assert exact commands, which must not depend on the CLIs installed on the machine.
     if cfg!(test) {
         return command.to_string();
     }
     let home = crate::resume_lookup::home_dir();
-    rewrite_program(command, |name| mise_launch_program(name, &home))
+    let command = rewrite_program(command, |name| reachable_launch_program(name, &home));
+    #[cfg(windows)]
+    let command = with_batch_native_args(&command);
+    command
 }
 
 #[cfg(test)]

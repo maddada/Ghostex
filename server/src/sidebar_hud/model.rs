@@ -175,7 +175,7 @@ pub(super) const DEFAULT_SIDEBAR_AGENTS: &[DefaultSidebarAgent] = &[
         command: "agy",
         hidden_by_default: false,
         icon: "antigravity-cli",
-        name: "Antigravity CLI",
+        name: "Antigravity",
     },
     DefaultSidebarAgent {
         agent_id: "amp",

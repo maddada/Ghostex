@@ -323,6 +323,41 @@ pub fn add_hub_secret_folders(settings: &mut serde_json::Map<String, serde_json:
     changed
 }
 
+/// The built-in views that became opt-in for new installs on 2026-11-24 (VS Code, Beads, Automate),
+/// with the default each had before so existing users keep their enabled views on upgrade.
+pub const OPT_IN_HEAVY_VIEWS_2026_11_24_OLD_DEFAULTS: &[(&str, J)] = &[
+    ("codeViewTabHidden", J::Bool(false)),
+    ("kanbanViewTabHidden", J::Bool(false)),
+    ("automateViewTabHidden", J::Bool(false)),
+];
+
+/// Writes the old default (`false`, visible) for any of `codeViewTabHidden`, `kanbanViewTabHidden`
+/// or `automateViewTabHidden` missing from an existing user's settings file, while preserving any
+/// explicit choice they already saved. Returns whether it changed anything.
+///
+/// CDXC:Extensions 2026-11-24 WHY:
+/// Stored settings omit keys that were never changed from their default, so an existing user who
+/// relied on VS Code, Beads or Automate being on by default would otherwise lose them on update.
+/// The desktop runs this once at start-up, behind a marker file, only when a settings file already
+/// exists from a finished setup (`keep_old_heavy_views_once` in
+/// apps/desktop/src/shared_settings/heavy_views_default.rs); new installs get the opt-in defaults.
+pub fn keep_old_heavy_views_for_existing_settings(
+    settings: &mut serde_json::Map<String, serde_json::Value>,
+) -> bool {
+    let mut changed = false;
+    for (key, old_default) in OPT_IN_HEAVY_VIEWS_2026_11_24_OLD_DEFAULTS {
+        if settings.contains_key(*key) {
+            continue;
+        }
+        settings.insert(
+            (*key).to_string(),
+            serde_json::Value::Bool(*old_default == J::Bool(true)),
+        );
+        changed = true;
+    }
+    changed
+}
+
 /// Switches someone who already had a settings file to the rail when it became the default, and
 /// marks their one-time "Meet the rail" pop-up as pending. Returns whether it changed anything; a
 /// layout they chose themselves is left alone.
@@ -343,6 +378,115 @@ pub fn switch_existing_settings_to_rail(
     );
     settings.insert(
         "sidebarRailIntro".to_string(),
+        serde_json::Value::String("pending".to_string()),
+    );
+    true
+}
+
+/// Agent families that currently support Native mode (`agentSessionMode = "non-cli"`).
+pub const NATIVE_MODE_FAMILIES: [&str; 9] = [
+    "antigravity",
+    "claude",
+    "codex",
+    "opencode",
+    "grok",
+    "hermes",
+    "cursor",
+    "pi",
+    "omp",
+];
+
+/// True when `preferredAgentInterface` selects Chat (or is absent, since Chat is the default).
+pub fn preferred_interface_is_chat(settings: &serde_json::Map<String, serde_json::Value>) -> bool {
+    !matches!(
+        settings
+            .get("preferredAgentInterface")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim),
+        Some(value) if value.eq_ignore_ascii_case("terminal")
+    )
+}
+
+/// Applies the fresh-install Native default: when `preferredAgentInterface` is Chat (not Terminal),
+/// sets `agentSessionMode.<family> = "non-cli"` for every Native-capable family that does not
+/// already have an explicit `agentSessionMode` or legacy `agentAcpMode` entry. Returns `true` if
+/// `settings` changed.
+pub fn apply_fresh_install_native_defaults(
+    settings: &mut serde_json::Map<String, serde_json::Value>,
+) -> bool {
+    if !preferred_interface_is_chat(settings) {
+        return false;
+    }
+    let legacy = settings
+        .get("agentAcpMode")
+        .and_then(serde_json::Value::as_object)
+        .cloned();
+    let mut modes = settings
+        .get("agentSessionMode")
+        .and_then(serde_json::Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let mut changed = false;
+    for family in NATIVE_MODE_FAMILIES {
+        let has_explicit = modes
+            .get(family)
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|v| !v.trim().is_empty());
+        let has_legacy = legacy
+            .as_ref()
+            .and_then(|map| map.get(family))
+            .and_then(serde_json::Value::as_bool)
+            .is_some();
+        if !has_explicit && !has_legacy {
+            modes.insert(
+                family.to_string(),
+                serde_json::Value::String("non-cli".to_string()),
+            );
+            changed = true;
+        }
+    }
+    if changed {
+        settings.insert(
+            "agentSessionMode".to_string(),
+            serde_json::Value::Object(modes),
+        );
+    }
+    changed
+}
+
+/// Marks an existing desktop install's settings so the one-time Native mode announcement modal
+/// opens once after updating. Returns `false` if the modal was already queued/shown or if Native
+/// mode is already on for Antigravity, Claude Code, and Codex.
+pub fn mark_existing_settings_for_native_mode_intro(
+    settings: &mut serde_json::Map<String, serde_json::Value>,
+) -> bool {
+    if settings
+        .get("nativeModeIntro")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|value| !value.is_empty())
+    {
+        return false;
+    }
+    let already_all_native = settings
+        .get("agentSessionMode")
+        .and_then(serde_json::Value::as_object)
+        .is_some_and(|modes| {
+            NATIVE_MODE_FAMILIES.iter().all(|family| {
+                modes
+                    .get(*family)
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|v| v.eq_ignore_ascii_case("non-cli"))
+            })
+        });
+    if already_all_native {
+        settings.insert(
+            "nativeModeIntro".to_string(),
+            serde_json::Value::String("done".to_string()),
+        );
+        return true;
+    }
+    settings.insert(
+        "nativeModeIntro".to_string(),
         serde_json::Value::String("pending".to_string()),
     );
     true
@@ -463,7 +607,7 @@ pub const DARK_LOOK_2026_11_22_OLD_DEFAULTS: &[(&str, J)] = &[
             (
                 "dark",
                 J::Obj(&[
-                    ("accent", J::Str("#5581a9")),
+                    ("accent", J::Str("#95d7f6")),
                     ("focusRing", J::Str("#5581a9")),
                     ("border", J::Str("8%")),
                     ("divider", J::Str("6%")),
@@ -486,7 +630,7 @@ pub const DARK_LOOK_2026_11_22_OLD_DEFAULTS: &[(&str, J)] = &[
                 J::Obj(&[
                     ("text", J::Str("#5c6a72")),
                     ("mutedText", J::Str("#939f91")),
-                    ("accent", J::Str("#8da101")),
+                    ("accent", J::Str("#0c74a6")),
                     ("focusRing", J::Str("#8da101")),
                     ("link", J::Str("#3a94c5")),
                     ("success", J::Str("#8da101")),
@@ -578,6 +722,61 @@ pub fn keep_old_look_for_existing_settings(
         settings.insert((*key).to_string(), value);
         changed = true;
     }
+    changed
+}
+
+/// Updates a saved default theme's `accent` role from the 2026-11-22 defaults (`#5581a9` dark,
+/// `#8da101` light) to `#95d7f6` (dark) and `#0c74a6` (light), only when that appearance still
+/// matches the built-in default preset and tint. Returns whether anything changed.
+///
+/// CDXC:Theming 2026-11-24 DECISION: User: the default theme's notification bell blue (`#5581a9`)
+/// is too dark; everyone using the default theme moves to `#95d7f6` (and matching `#0c74a6` in
+/// light mode). Run once at startup behind a marker file (`migrate_default_theme_accent_once` in
+/// apps/desktop/src/shared_settings/dark_look_default.rs) so any later manual choice is preserved.
+pub fn migrate_default_theme_accent(
+    settings: &mut serde_json::Map<String, serde_json::Value>,
+) -> bool {
+    let matches_str = |key: &str, expected: &str| {
+        settings
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .is_none_or(|value| value.trim().eq_ignore_ascii_case(expected))
+    };
+    let dark_default = matches_str("darkThemePreset", "custom")
+        && matches_str("customSidebarTitlebarBackgroundTintColor", "#404e78");
+    let light_default = matches_str("lightThemePreset", "custom")
+        && matches_str("customSidebarTitlebarLightBackgroundTintColor", "#fcf3da");
+    let Some(roles) = settings
+        .get_mut(theme_roles::THEME_ROLES_SETTING)
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return false;
+    };
+    let mut changed = false;
+    let mut upgrade = |appearance: &str, allowed: bool, old: &str, new: &str| {
+        if !allowed {
+            return;
+        }
+        let Some(mode) = roles
+            .get_mut(appearance)
+            .and_then(serde_json::Value::as_object_mut)
+        else {
+            return;
+        };
+        if mode
+            .get("accent")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|value| value.trim().eq_ignore_ascii_case(old))
+        {
+            mode.insert(
+                "accent".to_string(),
+                serde_json::Value::String(new.to_string()),
+            );
+            changed = true;
+        }
+    };
+    upgrade("dark", dark_default, "#5581a9", "#95d7f6");
+    upgrade("light", light_default, "#8da101", "#0c74a6");
     changed
 }
 

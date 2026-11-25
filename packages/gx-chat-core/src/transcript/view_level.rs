@@ -39,6 +39,16 @@ pub fn parse(level: &str) -> &'static str {
     }
 }
 
+/// Whether Live page cards start folded to a single compact row in the transcript: on in Summary
+/// view, off in Normal and Detailed views.
+///
+/// CDXC:SessionChat 2026-11-24 SEE-ALSO:
+/// Rendered by apps/desktop/src/app/native_chat/page_card.rs (desktop and gpui-web) and
+/// apps/mobile/app/src/chat/native/transcript/PageCard.tsx (phone).
+pub fn collapse_page_cards(view: &TranscriptViewState) -> bool {
+    view_level(view) == SUMMARY
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

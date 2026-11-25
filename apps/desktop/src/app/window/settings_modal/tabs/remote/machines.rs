@@ -1283,7 +1283,7 @@ pub(super) fn machine_dialog(
         );
     }
     if let Some(machine_id) = machine_id.clone().filter(|_| !this_computer) {
-        // CDXC:RemoteMachines 2026-06-23-08:30: the gxserver install action reuses the reconnect flow, so native opens the approval modal only after SSH proves gxserver is missing, and otherwise connects the existing remote daemon.
+        // CDXC:RemoteMachines 2026-11-24 WHY: GitHub #745. When gxserver is already installed, Update gxserver passes `reinstall: true` so the connect replaces the remote managed package from this app's bundled or sealed on-demand release (instead of reusing the running daemon when no local unpacked package exists to compare build identities against) and reports why if the install cannot run. When gxserver is not installed, `reinstall` stays omitted so native still opens the approval modal after SSH proves gxserver is missing.
         let installed = install.as_ref().is_some_and(|install| install.installed);
         let version_text = install
             .as_ref()
@@ -1322,8 +1322,9 @@ pub(super) fn machine_dialog(
                         .text_color(hsla(colors.muted))
                         .child(text);
                     match version_full {
-                        Some(full) => full_value_tooltip(line, format!("gxserver {full}"))
-                            .into_any_element(),
+                        Some(full) => {
+                            full_value_tooltip(line, format!("gxserver {full}")).into_any_element()
+                        }
                         None => line.into_any_element(),
                     }
                 }))
@@ -1335,7 +1336,11 @@ pub(super) fn machine_dialog(
                     } else {
                         "Install / Connect gxserver"
                     },
-                    Some(if installed { ICON_REFRESH } else { icon::DOWNLOAD }),
+                    Some(if installed {
+                        ICON_REFRESH
+                    } else {
+                        icon::DOWNLOAD
+                    }),
                     ButtonVariant::Secondary,
                     ButtonSize::Default,
                     !has_endpoint,
@@ -1348,10 +1353,14 @@ pub(super) fn machine_dialog(
                         .into(),
                     ),
                     move |tab: &mut RemoteTab, _window, cx| {
-                        tab.post(
-                            json!({ "remoteMachineId": machine_id, "type": "reconnectRemoteMachine" }),
-                            cx,
-                        );
+                        let mut message = json!({
+                            "remoteMachineId": machine_id,
+                            "type": "reconnectRemoteMachine",
+                        });
+                        if installed {
+                            message["reinstall"] = json!(true);
+                        }
+                        tab.post(message, cx);
                     },
                     cx,
                 )),

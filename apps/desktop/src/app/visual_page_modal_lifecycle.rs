@@ -371,6 +371,10 @@ impl GhostexGpuiApp {
             self.notify_minimized_page_chats(cx);
             return;
         }
+        if let VisualPageModalCommand::PictureStalePage { url, remote } = command {
+            self.picture_stale_opened_page(&url, remote, cx);
+            return;
+        }
         // Also from a page window being hidden, so before the shown-page check below.
         if let VisualPageModalCommand::DismissContextMenu {
             window: page_window,
@@ -383,7 +387,8 @@ impl GhostexGpuiApp {
             return;
         }
         let url = match command {
-            VisualPageModalCommand::TabChanged => return,
+            VisualPageModalCommand::TabChanged
+            | VisualPageModalCommand::PictureStalePage { .. } => return,
             VisualPageModalCommand::Hide => {
                 self.hide_visual_page_modal(cx);
                 return;

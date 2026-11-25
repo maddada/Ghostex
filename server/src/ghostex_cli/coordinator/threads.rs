@@ -343,6 +343,33 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
             ))
         })?;
     }
+    // An OpenCode thread's `--model`/`--effort` reach it as a `/model provider/model [variant]`
+    // line ahead of the brief, set for this session only, as a coordinator create does (GitHub
+    // #747; the create above already checked them, agents/launch_plan.rs).
+    let model_line = agent_rows
+        .first()
+        .and_then(crate::coordinators::coordinator_launcher_family)
+        .filter(|family| *family == "opencode")
+        .and_then(|family| {
+            create
+                .as_object()
+                .and_then(|create| crate::coordinators::coordinator_model_line(family, create))
+        });
+    if let Some(line) = model_line {
+        call_gxserver_rpc(
+            "/api/queueSessionChatPrompt",
+            &json!({
+                "globalRef": reference, "projectId": project_id, "sessionId": session_id,
+                "text": line, "startupSend": true,
+            }),
+            &flags,
+        )
+        .map_err(|error| {
+            CliError::Other(format!(
+                "Started thread {reference}, but its model was not set ({error}), so its task was not sent. Resolve it with ghostex coordinator resolve {reference} and start it again."
+            ))
+        })?;
+    }
     let queued = call_gxserver_rpc(
         "/api/queueSessionChatPrompt",
         &json!({
@@ -548,7 +575,16 @@ pub(super) fn set_resolved(parsed: &ParsedArgs, resolved: bool) -> CliResult<()>
             &remote.session_id,
             if resolved { "resolve" } else { "reopen" },
         )?;
-        let session = json!({ "projectId": remote.project_id, "sessionId": remote.session_id });
+        let mut session = json!({ "projectId": remote.project_id, "sessionId": remote.session_id });
+        if close_session {
+            if let Some(map) = session.as_object_mut() {
+                crate::ghostex_cli::wait::insert_close_source(
+                    map,
+                    &parsed.flags,
+                    "cli.coordinatorResolve",
+                );
+            }
+        }
         // Its own computer closes or wakes the session, as for a thread here; while it is away
         // only the link here changes.
         let session_result = match (&remote.flags, close_session, resolved) {
@@ -591,27 +627,31 @@ pub(super) fn set_resolved(parsed: &ParsedArgs, resolved: bool) -> CliResult<()>
     let close_session = resolved && !parsed.flags.truthy("keepOpen");
     // gxserver wakes a thread it reopens and closes one it marks done
     // (server/src/server/coordinator_resolve.rs), the same for every client.
-    let result = call_gxserver_rpc(
-        "/api/resolveCoordinatorThread",
-        &json!({
-            "projectId": thread["projectId"],
-            "sessionId": thread["sessionId"],
-            "resolved": resolved,
-            "keepOpen": !close_session,
-        }),
-        &flags,
-    )
-    .map_err(|error| match (resolved, &error) {
-        (true, CliError::Rpc { response, .. })
-            if response.get("error").and_then(Value::as_str) == Some("sessionNotClosed") =>
-        {
-            CliError::Other(format!(
-                "{error} Close it with ghostex agents close {global_ref}."
-            ))
-        }
-        (true, _) => error,
-        (false, _) => CliError::Other(format!("Could not reopen {global_ref}: {error}")),
-    })?;
+    let mut resolve_params = json!({
+        "projectId": thread["projectId"],
+        "sessionId": thread["sessionId"],
+        "resolved": resolved,
+        "keepOpen": !close_session,
+    });
+    if let Some(caller) = std::env::var("GHOSTEX_GLOBAL_SESSION_REF")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        resolve_params[crate::session_close_log::CLOSED_BY_PARAM] = json!(caller);
+    }
+    let result = call_gxserver_rpc("/api/resolveCoordinatorThread", &resolve_params, &flags)
+        .map_err(|error| match (resolved, &error) {
+            (true, CliError::Rpc { response, .. })
+                if response.get("error").and_then(Value::as_str) == Some("sessionNotClosed") =>
+            {
+                CliError::Other(format!(
+                    "{error} Close it with ghostex agents close {global_ref}."
+                ))
+            }
+            (true, _) => error,
+            (false, _) => CliError::Other(format!("Could not reopen {global_ref}: {error}")),
+        })?;
     let resumed = result["sessionResumed"].as_bool() == Some(true);
     if parsed.flags.truthy("json") {
         print_json(&result);
@@ -700,6 +740,39 @@ pub(super) fn rename_self(parsed: &ParsedArgs) -> CliResult<()> {
         );
     } else {
         println!("This thread is already called \"{title}\".");
+    }
+    Ok(())
+}
+
+/// `note` is a thread sending its coordinator a short push/progress note right after a push
+/// (`server/src/server/coordinator_runtime.rs` `/api/sendCoordinatorThreadNote`).
+pub(super) fn send_note(parsed: &ParsedArgs) -> CliResult<()> {
+    let note = parsed.rest.join(" ");
+    let note = note.trim();
+    if note.is_empty() {
+        return Err(CliError::Other(
+            "Usage: ghostex coordinator note \"<commit> <one line>\" [--json]".into(),
+        ));
+    }
+    let caller = agents::caller()?;
+    let global_ref = agents::text(&caller, "globalRef").to_string();
+    let flags = agents::inventory_flags(&server_flags(&parsed.flags), &global_ref)?;
+    let result = call_gxserver_rpc(
+        "/api/sendCoordinatorThreadNote",
+        &json!({
+            "projectId": caller["projectId"],
+            "sessionId": caller["sessionId"],
+            "note": note,
+        }),
+        &flags,
+    )?;
+    if parsed.flags.truthy("json") {
+        print_json(&result);
+    } else {
+        println!(
+            "Sent note to coordinator: {}",
+            agents::text(&result, "note")
+        );
     }
     Ok(())
 }

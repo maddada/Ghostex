@@ -15,9 +15,9 @@ use crate::state::ChatState;
 use crate::wire::ChatRpcMethod;
 
 /// The switch row's label.
-pub const RESTART_LABEL: &str = "Restart in Bypass when idle";
+pub const RESTART_LABEL: &str = "Restart in Full permissions when idle";
 /// What the mode pill adds while the restart waits.
-pub const PILL_SUFFIX: &str = "Bypass when idle";
+pub const PILL_SUFFIX: &str = "Full permissions when idle";
 
 /// The switch for a greyed mode, when gxserver offers one.
 pub fn restart_row(mode: &UnavailableMode) -> Option<NativeChatMenuItem> {

@@ -39,7 +39,17 @@ impl GhostexGpuiApp {
             initial_snapshot: None,
             initial_presentation: self.initial_web_chat_presentation(session),
         };
-        let view = cx.new(|cx| NativeChatView::new(config, cx));
+        let draft_coordinator_mode = self
+            .gx_store
+            .unified_sidebar
+            .carry_coordinator_draft
+            .replace(false);
+        let view = cx.new(|cx| {
+            let mut view = NativeChatView::new(config, cx);
+            view.draft_coordinator_mode = draft_coordinator_mode;
+            view.draft_setup_changed = draft_coordinator_mode;
+            view
+        });
         let key = session.clone();
         let subscription =
             cx.subscribe(
@@ -60,6 +70,98 @@ impl GhostexGpuiApp {
         self.native_chats
             .insert(session.clone(), (shell_session_id, view.clone()));
         view
+    }
+
+    /// Single-frame follow into a pending target project on `gpui-web` (Q4849 `"follow"` + Q4850
+    /// `"keep-space"`): moves the existing `Entity<NativeChatView>` in `self.native_chats` under
+    /// the new `SessionKey` and rebinds its runtime in place with zero remount flash.
+    pub(crate) fn follow_moved_draft_chat(
+        &mut self,
+        view: Entity<NativeChatView>,
+        send: super::state::PendingDraftSend,
+        target_machine_id: String,
+        target_project_id: String,
+        target_session_id: String,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let old_machine = if send.from_machine_id == crate::app::gx_chat::LOCAL_MACHINE_ID {
+            ghostex_gx_core::MachineId::Local
+        } else {
+            ghostex_gx_core::MachineId::Remote(send.from_machine_id.clone())
+        };
+        let old_key = SessionKey {
+            machine: old_machine,
+            project_id: send.from_project_id.clone(),
+            session_id: send.from_session_id.clone(),
+        };
+        let shell_session_id = self
+            .native_chats
+            .remove(&old_key)
+            .map(|(id, _)| id)
+            .unwrap_or(send.from_shell_session_id);
+        let new_machine = if target_machine_id == crate::app::gx_chat::LOCAL_MACHINE_ID {
+            ghostex_gx_core::MachineId::Local
+        } else {
+            ghostex_gx_core::MachineId::Remote(target_machine_id.clone())
+        };
+        let new_key = SessionKey {
+            machine: new_machine,
+            project_id: target_project_id.clone(),
+            session_id: target_session_id.clone(),
+        };
+        let remote = crate::app::gx_store::cloud_box_request_target(&target_machine_id);
+        let config = NativeChatConfig {
+            machine_id: target_machine_id,
+            project_id: target_project_id.clone(),
+            session_id: target_session_id.clone(),
+            sidebar_session_id: format!(
+                "combined-session:{target_project_id}:{target_session_id}"
+            ),
+            shell_session_id,
+            app: Some(cx.weak_entity()),
+            parent_native_view: std::ptr::null_mut(),
+            client_id: format!(
+                "gpui-web-{}",
+                crate::app::helpers::gpui_random_uuid_string().unwrap_or_default()
+            ),
+            remote,
+            initial_snapshot: None,
+            initial_presentation: self.initial_web_chat_presentation(&new_key),
+        };
+        let key_for_sub = new_key.clone();
+        let subscription =
+            cx.subscribe(
+                &view,
+                move |this, _view, event: &NativeChatEvent, cx| match event {
+                    NativeChatEvent::Broker(message) => {
+                        this.web_relay_chat_broker(&key_for_sub, message)
+                    }
+                    NativeChatEvent::Host(message) => {
+                        this.web_chat_host_action(&key_for_sub, message, cx)
+                    }
+                    NativeChatEvent::ComposerFocused | NativeChatEvent::DraftState(_) => {}
+                    NativeChatEvent::SessionDetailsRing | NativeChatEvent::WorkButton => {
+                        cx.notify()
+                    }
+                    NativeChatEvent::WherePillProject => cx.notify(),
+                },
+            );
+        view.update(cx, |chat, cx| {
+            chat.subscriptions.clear();
+            chat.subscriptions.push(subscription);
+            chat.rebind_moved_session(
+                config,
+                send.pending_worktree_action,
+                Some(send.submission),
+                cx,
+            );
+        });
+        self.native_chats
+            .insert(new_key.clone(), (shell_session_id, view));
+        self.open_session = Some(new_key.clone());
+        self.show_terminal = false;
+        self.gx_store_select_opened_session(&new_key, cx);
+        cx.notify();
     }
 
     /// The cached presentation plus the session's folder (its cwd, else its project's), as the

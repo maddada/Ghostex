@@ -180,7 +180,8 @@ impl GpuiAgentsHubModalWindow {
         }
 
         let skills_card = self.skills_part_card(hp, agent, &skills_groups, cx);
-        let instructions_card = self.instructions_part_card(hp, agent, &instruction_groups, cx);
+        let instructions_card =
+            self.instructions_part_card(hp, report, agent, &instruction_groups, cx);
         let hooks_card = self.hooks_part_card(hp, agent, &hooks_groups, cx);
         body.child(
             v_flex()
@@ -369,6 +370,8 @@ impl GpuiAgentsHubModalWindow {
             "agents-hub-sync-skill-list",
             if show {
                 "Hide the skill list".to_string()
+            } else if skills.entries.len() == 1 {
+                "Show 1 skill".to_string()
             } else {
                 format!("Show all {} skills", skills.entries.len())
             },
@@ -404,19 +407,26 @@ impl GpuiAgentsHubModalWindow {
                 // `.agents-hub-sync-group-label`: no hairline above the rows it labels.
                 let first = rows.is_empty();
                 rows.push(
-                    div()
+                    h_flex()
                         .w_full()
+                        .items_center()
+                        .gap(px(6.0))
                         .when(!first, |this| this.border_t_1().border_color(line_color))
                         .px(px(14.0))
                         .pt(px(8.8))
                         .pb(px(4.0))
                         .text_size(px(12.0))
                         .text_color(hsla(hp.muted))
-                        .child(format!(
-                            "{label} ({}{})",
-                            entries.len(),
-                            sub.map(|sub| format!(", {sub}")).unwrap_or_default()
+                        .child(*label)
+                        .child(crate::app::element::count_badge_sized(
+                            entries.len().to_string(),
+                            hsla(hp.foreground),
+                            17.0,
+                            10.5,
                         ))
+                        .when_some(*sub, |row, sub| {
+                            row.child(div().text_color(hsla(hp.muted)).child(format!("· {sub}")))
+                        })
                         .into_any_element(),
                 );
                 for (index, entry) in entries.iter().take(visible).enumerate() {
@@ -526,15 +536,25 @@ impl GpuiAgentsHubModalWindow {
     fn instructions_part_card(
         &self,
         hp: &HubPalette,
+        report: &SyncReport,
         agent: &SyncAgentReport,
         groups: &[&'static str],
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let name = &agent.display_name;
         let instructions = agent.instructions.as_ref();
+        let main_md_ready = report.source.main_md_ready();
+        let main_md_reason = if report.source.main_md_empty {
+            "empty"
+        } else {
+            "missing"
+        };
         let state = match instructions.map(|value| value.state.as_str()) {
             None => format!("{name} has no instruction file that Agent Sync manages."),
             Some("pointer") => format!("{name} reads your shared main.md."),
+            Some("danglingPointer") => format!(
+                "{name}'s instruction file points at ~/.agents/main.md, which is {main_md_reason}."
+            ),
             Some("missing") => {
                 format!("{name} has no instruction file, so it does not read your shared main.md.")
             }
@@ -544,8 +564,40 @@ impl GpuiAgentsHubModalWindow {
             Some("otherContent") => "The instruction file has content of its own and does not mention your shared main.md.".to_string(),
             Some(_) => "The instruction file is a link or a folder, which Agent Sync leaves alone.".to_string(),
         };
+        let best_seed = report
+            .source
+            .main_md_seed_candidates
+            .iter()
+            .find(|c| c.agent_id == agent.id)
+            .or_else(|| report.source.main_md_seed_candidates.first())
+            .cloned();
         let lines = match instructions {
             None => Vec::new(),
+            Some(value) if value.state == "danglingPointer" => {
+                let fix_hint = match &best_seed {
+                    Some(best) => format!(
+                        "Create ~/.agents/main.md from {} ({}) first, or restore the original from Ghostex's backup folder.",
+                        best.display_name, best.path
+                    ),
+                    None => "Create ~/.agents/main.md with your shared instructions, or restore the original from Ghostex's backup folder.".to_string(),
+                };
+                vec![
+                    line(ICON_ALERT, value.path.clone(), Some(SyncTone::Err)),
+                    line(ICON_FILE_TEXT, fix_hint, None),
+                ]
+            }
+            Some(value) if !main_md_ready => {
+                let fix_hint = match &best_seed {
+                    Some(best) => format!(
+                        "~/.agents/main.md is {main_md_reason}. Sync will not replace {} until main.md is created (seed from {}).",
+                        value.path, best.display_name
+                    ),
+                    None => format!(
+                        "~/.agents/main.md is {main_md_reason}. Create ~/.agents/main.md before writing pointer files."
+                    ),
+                };
+                vec![line(ICON_FILE_TEXT, fix_hint, Some(SyncTone::Warn))]
+            }
             Some(value) if value.state == "missing" => vec![line(
                 ICON_FILE_TEXT,
                 format!("A one-line file will be created at {}", value.path),
@@ -555,7 +607,7 @@ impl GpuiAgentsHubModalWindow {
                 vec![line(
                     ICON_FILE_TEXT,
                     format!(
-                        "{} is backed up next to the original, then replaced with the one-line file",
+                        "{} is backed up to Ghostex's backup folder, then replaced with the one-line file (or choose Prepend / Leave alone in the plan)",
                         value.path
                     ),
                     None,
@@ -564,7 +616,13 @@ impl GpuiAgentsHubModalWindow {
             Some(value) => vec![line(ICON_FILE_TEXT, value.path.clone(), None)],
         };
         let scope = agent.id.clone();
-        let fix_groups: Vec<String> = groups.iter().map(|group| group.to_string()).collect();
+        let mut fix_groups: Vec<String> = groups.iter().map(|group| group.to_string()).collect();
+        let seed_id = (!main_md_ready)
+            .then(|| best_seed.map(|c| c.agent_id))
+            .flatten();
+        if seed_id.is_some() && !fix_groups.iter().any(|group| group == "seedMainMd") {
+            fix_groups.insert(0, "seedMainMd".to_string());
+        }
         part_card(
             hp,
             "instructions",
@@ -577,7 +635,12 @@ impl GpuiAgentsHubModalWindow {
             lines,
             None,
             move |this: &mut Self, cx| {
-                this.open_sync_plan(scope.clone(), Some(fix_groups.clone()), cx)
+                this.open_sync_plan_with_seed(
+                    scope.clone(),
+                    Some(fix_groups.clone()),
+                    seed_id.clone(),
+                    cx,
+                )
             },
             cx,
         )

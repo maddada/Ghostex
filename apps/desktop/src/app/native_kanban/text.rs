@@ -416,7 +416,7 @@ fn remote_migrate_gate_notice(message: &str, project_path: &str) -> Option<Kanba
         (Some(current), Some(latest)) => format!(
             "Schema v{current} to v{latest}{}",
             pending
-                .map(|pending| format!(" ({pending} pending)"))
+                .map(|pending| format!(" · {pending} pending"))
                 .unwrap_or_default()
         ),
         _ => "A schema migration is pending.".to_string(),

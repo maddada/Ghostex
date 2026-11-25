@@ -4,7 +4,7 @@ Usage:
                         [--thread <session-ref>]... [--link <url|path>] [--release <name>] [--json]
   ghostex work item now <W7> "<where it stands>" [--thread <session-ref>]... [--json]
   ghostex work item step <W7> "<step>" [--done] [--chore] [--json]
-  ghostex work item ask <W7> "<title>" [--detail "<the rest>"]
+  ghostex work item ask <W7> "<title>" [--detail "<the rest>"] [--command "<ghostex ...>"]
                         [--answers "A,B" | --answer "A" --answer "B"] [--recommended B]
                         [--holds] [--steps <file|url>] [--tag Q12] [--json]
   ghostex work item ask <W7> (--done <Q12> | --withdraw <Q12>) [--json]
@@ -44,7 +44,7 @@ ask puts a question or a task before the user with a question tag: a short
 plain title, the rest in --detail (only when it is needed to decide: the row
 then shows Details), one-click answers with --answers and
 --recommended, --holds when the work stops until they answer. next-tag prints
-the next free tag. wait says what it waits on: another item, a question, an
+the next free tag and takes it, so no one else gets it. wait says what it waits on: another item, a question, an
 event or words. done finishes it with the one line worth keeping; drop takes
 it off (restore brings it back for 7 days).
 --thread names another session working on it (one you lead with ghostex

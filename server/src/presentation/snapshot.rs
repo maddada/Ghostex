@@ -448,6 +448,13 @@ pub fn presentation_capabilities(sidebar_v2_selected: bool) -> Value {
         projects instead of failing the call on an older daemon.
         */
         "worktreeSessions": true,
+        /*
+        CDXC:AgentProviders 2026-11-24 WHY:
+        `nativeModeSwitch` promises `/api/switchSessionCliToAcp` (with mid-reply queueing and
+        cancellation) exists on this computer, so clients hide the Switch to Native offer and phone
+        Native announcement on older remote servers instead of offering a switch they cannot run.
+        */
+        "nativeModeSwitch": true,
     })
 }
 

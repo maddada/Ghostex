@@ -76,6 +76,11 @@ pub(in crate::server) async fn route_http(
         return crate::visual_pages::read_draft(state.clone(), path).await;
     }
 
+    // `GET /visual/<id>/mentions` lists Boosts, agents and skills for `*`, `+`, `/` and `$` menus.
+    if method == Method::GET && crate::visual_pages::is_mentions_route(&path) {
+        return crate::visual_pages::read_page_mentions(state.clone(), path).await;
+    }
+
     // `GET /visual/<id>/image?path=…` is a picture the page's boxes refer to (images.rs `read`).
     if method == Method::GET && crate::visual_pages::is_image_route(&path) {
         let query = parts.uri.query().map(str::to_string);
@@ -374,7 +379,7 @@ pub(in crate::server) async fn route_http(
     .then(|| bearer_token(&parts.headers).and_then(crate::collab_shim::registry::authorize_token))
     .flatten();
     // A session's own `gxs_` token or the desktop's `gxo_` owner session (crate::security).
-    // Chief's own token is the head for this request while its extension is on (chief/head.rs).
+    // Chief's own token is the head for this request (chief/head.rs).
     // A door session (the app's, for pairing codes and approvals) only on the door's routes
     // (review M2 in security/policy.rs); everywhere else it is no token at all.
     let token_principal = bearer_token(&parts.headers)
@@ -555,14 +560,29 @@ pub(in crate::server) async fn route_http(
             .await;
     }
     // The exchange needs to know which computer's token asked, which no area handler sees.
+    // Only your own devices (owner, paired phones, local CLI, paired computers) may sync settings;
+    // agents' session tokens, guests, extensions, and anonymous callers are refused.
     if endpoint.path == crate::settings_sync::EXCHANGE_ENDPOINT {
+        if !caller.is_user_device() {
+            return routed_json(
+                Some(endpoint.path),
+                StatusCode::FORBIDDEN,
+                rpc_error(
+                    "forbidden",
+                    "Only your own devices can sync settings.",
+                    Some(request_id),
+                ),
+            );
+        }
         let peer_server_id = match &peer {
             Some(PeerAuthorization::Allowed { server_id, .. }) => Some(server_id.clone()),
             _ => None,
         };
+        let caller_is_phone = matches!(caller, Principal::Device { .. });
         return crate::settings_sync::handle_settings_sync_exchange(
             state,
             peer_server_id,
+            caller_is_phone,
             body_json,
             request_id,
         )

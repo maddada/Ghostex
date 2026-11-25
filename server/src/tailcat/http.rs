@@ -237,7 +237,7 @@ fn easy_connect_audit_action(
         } => Action::new(
             "easyConnect.allowList",
             format!(
-                "Changed who may connect through Easy Connect ({} allowed)",
+                "Changed who may connect through Easy Connect · {} allowed",
                 allowed_client_keys.len()
             ),
         ),

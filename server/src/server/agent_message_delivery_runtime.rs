@@ -77,7 +77,10 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<SessionKey> {
     let mut republish = expire_unwatched_sends(&db);
     // What `--with-next` held for a session that was closed is dropped, and each sender told
     // (session_chat_send/with_next.rs).
-    let (senders, remote) = crate::session_chat_send::settle_held_for_closed_sessions(&db);
+    let (senders, remote) = crate::session_chat_send::settle_held_for_closed_sessions(
+        &db,
+        state.metadata.server_id.as_str(),
+    );
     for sender in senders {
         if !republish.contains(&sender) {
             republish.push(sender);

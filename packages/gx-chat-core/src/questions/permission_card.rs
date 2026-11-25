@@ -114,8 +114,12 @@ pub fn presentation(request: &Value, notice_title: &str) -> Option<Value> {
         "code": content,
         "codePreview": folded.as_ref().map(|(preview, _)| preview.clone()),
         "codeMore": folded.map(|(_, more)| more),
-        "codeCut": (hidden_by_server > 0)
-            .then(|| format!("{hidden_by_server} more lines in the terminal")),
+        "codeCut": (hidden_by_server > 0).then(|| {
+            format!(
+                "{} in the terminal",
+                ghostex_gx_protocol::plural(hidden_by_server, "more line", "more lines")
+            )
+        }),
         "reason": reason,
     }))
 }

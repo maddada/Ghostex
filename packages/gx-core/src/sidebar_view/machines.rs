@@ -77,21 +77,53 @@ pub(crate) fn machine_tab_summary(
     };
     let collection_id_by_project =
         hidden_collection_lookup(machine, parked, ui, collections, &section_key, &drawn);
+    let home_project = machine.loaded().and_then(|loaded| {
+        loaded
+            .projects()
+            .iter()
+            .find(|project| project.is_home && !project.is_help_home)
+            .map(|project| {
+                (
+                    project.project_id.as_str(),
+                    ProjectKey {
+                        machine: machine_id.clone(),
+                        project_id: project.project_id.clone(),
+                    }
+                    .to_sidebar_group_id(),
+                )
+            })
+    });
     for project_id in drawn {
+        // Autopilot's supervisor project is never drawn on its own; its sessions live in Main Hub
+        // while Main Hub is on and stay out of the counts while Main Hub is off.
+        let is_autopilot = machine
+            .loaded()
+            .and_then(|loaded| loaded.project(project_id))
+            .is_some_and(|project| project.autopilot_supervisor_project);
+        let (counted_project_id, group_id) = if is_autopilot {
+            let Some((home_id, home_group_id)) = home_project.as_ref() else {
+                continue;
+            };
+            (*home_id, home_group_id.clone())
+        } else {
+            (
+                project_id,
+                ProjectKey {
+                    machine: machine_id.clone(),
+                    project_id: project_id.to_string(),
+                }
+                .to_sidebar_group_id(),
+            )
+        };
         // A project the user hid, or one filed in a collection the user hid, adds nothing to the
         // tab's dots (`assemble::counts_toward_dots`).
-        let group_id = ProjectKey {
-            machine: machine_id.clone(),
-            project_id: project_id.to_string(),
-        }
-        .to_sidebar_group_id();
         if !super::assemble::counts_toward_dots(
             ui,
             &section_key,
             &group_id,
             collection_id_by_project
                 .as_ref()
-                .and_then(|lookup| lookup.get(project_id))
+                .and_then(|lookup| lookup.get(counted_project_id))
                 .map(String::as_str),
         ) {
             continue;

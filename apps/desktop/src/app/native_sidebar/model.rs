@@ -34,10 +34,6 @@ pub(crate) struct NativeSidebarSnapshot {
     pub(crate) collections: Vec<NativeSidebarCollection>,
     pub(crate) order: Vec<NativeSidebarOrderItem>,
     pub(crate) more_menu: Value,
-    /// The Chief built-in extension is on (`mainHubHidden`, Main Hub), so its row is drawn under the Spaces
-    /// bar (native_sidebar/chief.rs).
-    #[serde(default)]
-    pub(crate) chief_enabled: bool,
     /// Each computer's Chief: the selected machine's, or with computers combined this computer's
     /// first (gx-core `SidebarView::chiefs`).
     #[serde(default)]
@@ -75,6 +71,10 @@ pub(crate) struct NativeSidebarGroup {
     pub(crate) sections: Vec<NativeSidebarSection>,
     pub(crate) title: String,
     pub(crate) is_active: bool,
+    /// The home project (Main Hub): its "Sessions" section reads "Chats" and ends with the quiet
+    /// "New chat" row.
+    #[serde(default)]
+    pub(crate) is_home: bool,
     #[serde(default)]
     pub(crate) is_stale: bool,
     /// The project a user-made session group belongs to (gx-core `owner_project_group_id`); the
@@ -128,6 +128,9 @@ pub(crate) struct NativeSidebarSession {
     /// with New Chat, Change Agent and its editors (native_sidebar/chief.rs).
     #[serde(default)]
     pub(crate) is_chief: bool,
+    /// A thread started by a coordinator (`SessionRow::coordinator_parent.is_some() && !row.lead_linked`).
+    #[serde(default)]
+    pub(crate) is_coordinator_thread: bool,
     pub(crate) display_title: Option<String>,
     pub(crate) alias: String,
     pub(crate) activity: String,

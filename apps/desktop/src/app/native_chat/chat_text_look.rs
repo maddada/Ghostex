@@ -12,6 +12,12 @@
 use gpui::{Hsla, rgb};
 use std::sync::LazyLock;
 
+/// Default chat body font: `.SystemUIFont` on Linux (so CJK fallback resolves cleanly through
+/// the system font stack instead of falling back from pure-Latin DM Sans), and `DM Sans` on
+/// macOS and Windows.
+#[cfg(target_os = "linux")]
+pub(crate) const CHAT_BODY_FONT: &str = ".SystemUIFont";
+#[cfg(not(target_os = "linux"))]
 pub(crate) const CHAT_BODY_FONT: &str = "DM Sans";
 pub(crate) const CHAT_MONO_FONT: &str = "JetBrainsMono Nerd Font";
 

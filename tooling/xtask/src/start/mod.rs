@@ -82,22 +82,24 @@ pub fn run(args: &[String]) -> Res<i32> {
 
     if let Some(config) = &isolated {
         isolated::prepare(config)?;
+        // Apply isolated GHOSTEX_HOME before taking the start lock so an isolated start locks its
+        // own state directory instead of blocking the canonical Ghostex install.
+        for (key, value) in &config.environment {
+            std::env::set_var(key, value);
+        }
     }
     // The desktop-session install a session-0 start hands off to runs while that start holds the lock and has already checked the sources.
     let desktop_handoff = is_windows && env_trimmed(windows::DESKTOP_HANDOFF_ENV).is_some();
     std::env::remove_var(windows::DESKTOP_HANDOFF_ENV);
-    let _lock = if desktop_handoff {
+    let parent_holds_lock = env_trimmed(util::START_LOCK_HELD_ENV).is_some();
+    std::env::remove_var(util::START_LOCK_HELD_ENV);
+    let _lock = if desktop_handoff || parent_holds_lock {
         None
     } else {
         Some(acquire_start_lock("start")?)
     };
     if !desktop_handoff {
         check_client_storage()?;
-    }
-    if let Some(config) = &isolated {
-        for (key, value) in &config.environment {
-            std::env::set_var(key, value);
-        }
     }
     util::remove_color_disabling_environment();
     util::remove_powershell7_module_paths();

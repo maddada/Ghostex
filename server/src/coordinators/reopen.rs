@@ -108,6 +108,15 @@ pub fn apply_reopen(
         Some(thread) if reopenable(&thread, plan.send_ms) => {
             set_thread_resolved(db, project_id, session_id, false)?;
             set_parked(repository, &plan.thread_key, false)?;
+            // Drop any old "Not delivered" rows retired when the thread closed (or created before
+            // it was resolved) so they never resurface alongside the new task's message.
+            let _ = crate::session_chat_queue::purge_stale_failed_prompts_in(
+                db,
+                project_id,
+                session_id,
+                thread.close_stamp(),
+                crate::session_chat_send_wake::CLOSED_SESSION_RETIRE_REASON,
+            );
             if let Some((message, send_id, sent_ms)) = watch {
                 let mut excerpt = super::delivery::pending_message_excerpt(message);
                 // A message with no text (images only) is watched too, found in the transcript

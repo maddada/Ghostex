@@ -5,8 +5,8 @@ use crate::ghostex_cli::output::print_json;
 use crate::ghostex_cli::rpc::{CliError, CliResult};
 use crate::paths::get_gxserver_paths;
 use ghostex_agent_sync::{
-    apply, build_plan, scan, AgentStatus, PlanGroupKind, PlanOptions, PlanVerb, SyncPlan,
-    SyncReport, SyncScope,
+    apply, build_plan, resolve_seed_source, scan, AgentStatus, PlanGroupKind, PlanOptions,
+    PlanVerb, PointerPolicy, SyncPlan, SyncReport, SyncScope,
 };
 
 /*
@@ -21,8 +21,8 @@ pub fn agent_sync_usage() -> String {
 
 Usage:
   gx agent-sync status [--json]
-  gx agent-sync plan [--agent <id>] [--group <group>...] [--prune-lock] [--json]
-  gx agent-sync apply --yes [--agent <id>] [--group <group>...] [--prune-lock] [--json]
+  gx agent-sync plan [--agent <id>] [--group <group>...] [--prune-lock] [--seed-main-from <agent|path>] [--pointer-policy <policy>] [--json]
+  gx agent-sync apply --yes [--agent <id>] [--group <group>...] [--prune-lock] [--seed-main-from <agent|path>] [--pointer-policy <policy>] [--json]
   gx agent-sync agents [--json]
 
 What it does:
@@ -31,15 +31,19 @@ What it does:
   every agent's global skills folder, converts whole-folder links into folders
   of per-skill links, writes the one-line instruction pointer file each agent
   reads, and links the hooks folder and lock file into Claude Code and Codex.
+  Pointer files are never written while ~/.agents/main.md is missing or empty;
+  pass --seed-main-from <agent|path> (e.g. --seed-main-from claude) to create
+  main.md from an existing instruction file as the first step.
   Agents that read ~/.agents/skills themselves (Codex, GitHub Copilot, Pi,
   Cursor, OpenCode, Amp) get no links, and links already in their
   folders are removed so they do not load each skill twice.
-  Nothing is deleted: anything in the way of a link, and any leftover
+  Nothing is deleted: anything in the way of a link or pointer, and any leftover
   <name>.pre-sync-<stamp>.bak folder in a skills folder, is moved to Ghostex's
   state folder (agent-sync-backups/<stamp>/, same path as under HOME), and
   dangling links are removed.
 
 Groups (all on by default except prune-lock):
+  seed-main-md           Create ~/.agents/main.md from --seed-main-from
   remove-dangling        Remove symlinks whose target is gone
   remove-redundant-links Remove links into ~/.agents/skills from agents that
                          read that folder themselves
@@ -51,12 +55,17 @@ Groups (all on by default except prune-lock):
   prune-lock             Drop lock entries that have no skill folder (opt-in)
 
 Options:
-  --agent <id>           One agent (see `gx agent-sync agents`), default all
-  --group <group>        Run only these groups (repeatable); default: every group
-                         that is on by default
-  --prune-lock           Also run the prune-lock group
-  --yes                  Required by apply
-  --json                 Print JSON
+  --agent <id>                One agent (see `gx agent-sync agents`), default all
+  --group <group>             Run only these groups (repeatable); default: every group
+                              that is on by default
+  --prune-lock                Also run the prune-lock group
+  --seed-main-from <source>   Seed ~/.agents/main.md from an existing instruction file
+                              (agent id, alias like `claude`, `richest`, or file path)
+  --pointer-policy <policy>   How to handle existing instruction files:
+                              replace (default, backup first), prepend (backup first,
+                              keep existing lines below pointer), or leave-alone
+  --yes                       Required by apply
+  --json                      Print JSON
 "
     .to_string()
 }
@@ -76,7 +85,22 @@ fn home_dir() -> CliResult<std::path::PathBuf> {
     Ok(home)
 }
 
-fn parse_groups(args: &[String], flags_prune: bool) -> CliResult<Vec<PlanGroupKind>> {
+fn parse_pointer_policy(value: Option<&str>) -> CliResult<PointerPolicy> {
+    match value {
+        None => Ok(PointerPolicy::Replace),
+        Some(raw) => PointerPolicy::parse(raw).ok_or_else(|| {
+            CliError::Other(format!(
+                "Unknown --pointer-policy `{raw}`. Use replace, prepend, or leave-alone."
+            ))
+        }),
+    }
+}
+
+fn parse_groups(
+    args: &[String],
+    flags_prune: bool,
+    has_seed: bool,
+) -> CliResult<Vec<PlanGroupKind>> {
     let mut groups: Vec<PlanGroupKind> = Vec::new();
     let mut index = 0;
     while index < args.len() {
@@ -106,6 +130,8 @@ fn parse_groups(args: &[String], flags_prune: bool) -> CliResult<Vec<PlanGroupKi
             .copied()
             .filter(|kind| *kind != PlanGroupKind::PruneLock)
             .collect();
+    } else if has_seed && !groups.contains(&PlanGroupKind::SeedMainMd) {
+        groups.insert(0, PlanGroupKind::SeedMainMd);
     }
     if flags_prune && !groups.contains(&PlanGroupKind::PruneLock) {
         groups.push(PlanGroupKind::PruneLock);
@@ -124,6 +150,11 @@ pub fn agent_sync_command(args: &[String]) -> CliResult<()> {
     let json = parsed.flags.truthy("json");
     let home = home_dir()?;
     let scope = SyncScope::parse(parsed.flags.text("agent").as_deref());
+    let pointer_policy = parse_pointer_policy(parsed.flags.string_value("pointerPolicy"))?;
+    let seed_main_from = parsed
+        .flags
+        .string_value("seedMainFrom")
+        .map(str::to_string);
     match verb {
         "status" => {
             let report = scan(&home);
@@ -168,12 +199,21 @@ pub fn agent_sync_command(args: &[String]) -> CliResult<()> {
         }
         "plan" => {
             let report = scan(&home);
+            if let Some(selector) = seed_main_from.as_deref() {
+                resolve_seed_source(&home, &report, selector).map_err(CliError::Other)?;
+            }
             let options = PlanOptions {
                 scope,
+                pointer_policy,
+                seed_main_from: seed_main_from.clone(),
                 ..PlanOptions::default()
             };
             let plan = build_plan(&home, &report, &options);
-            let groups = parse_groups(&rest, parsed.flags.truthy("pruneLock"))?;
+            let groups = parse_groups(
+                &rest,
+                parsed.flags.truthy("pruneLock"),
+                seed_main_from.is_some(),
+            )?;
             if json {
                 print_json(
                     &serde_json::to_value(&plan)
@@ -185,23 +225,28 @@ pub fn agent_sync_command(args: &[String]) -> CliResult<()> {
             Ok(())
         }
         "apply" => {
-            let groups = parse_groups(&rest, parsed.flags.truthy("pruneLock"))?;
+            let groups = parse_groups(
+                &rest,
+                parsed.flags.truthy("pruneLock"),
+                seed_main_from.is_some(),
+            )?;
+            let report = scan(&home);
+            if let Some(selector) = seed_main_from.as_deref() {
+                resolve_seed_source(&home, &report, selector).map_err(CliError::Other)?;
+            }
+            let options = PlanOptions {
+                scope,
+                pointer_policy,
+                seed_main_from,
+                ..PlanOptions::default()
+            };
             if !parsed.flags.truthy("yes") {
-                let report = scan(&home);
-                let options = PlanOptions {
-                    scope,
-                    ..PlanOptions::default()
-                };
                 let plan = build_plan(&home, &report, &options);
                 print_plan(&plan, &groups);
                 return Err(CliError::Other(
                     "Nothing was changed. Re-run with --yes to apply this plan.".to_string(),
                 ));
             }
-            let options = PlanOptions {
-                scope,
-                ..PlanOptions::default()
-            };
             let result = apply(&home, &options, &groups);
             if json {
                 print_json(
@@ -210,8 +255,8 @@ pub fn agent_sync_command(args: &[String]) -> CliResult<()> {
                 );
             } else {
                 println!(
-                    "Applied {} operation(s), {} failed, {} already correct.",
-                    result.done.len(),
+                    "Applied {}, {} failed, {} already correct.",
+                    ghostex_gx_protocol::plural(result.done.len(), "operation", "operations"),
                     result.failed.len(),
                     result.skipped_keeps
                 );
@@ -228,8 +273,8 @@ pub fn agent_sync_command(args: &[String]) -> CliResult<()> {
                 Ok(())
             } else {
                 Err(CliError::Other(format!(
-                    "{} operation(s) failed.",
-                    result.failed.len()
+                    "{} failed.",
+                    ghostex_gx_protocol::plural(result.failed.len(), "operation", "operations")
                 )))
             }
         }
@@ -262,22 +307,35 @@ fn verb_label(verb: PlanVerb) -> &'static str {
 
 fn print_status(report: &SyncReport) {
     let source = &report.source;
+    let main_md_status = if !source.main_md_exists {
+        "missing"
+    } else if source.main_md_empty {
+        "empty"
+    } else {
+        "ok"
+    };
     println!(
-        "Source {}: {} skills, {} md files, {} hook scripts, lock {} entries, git {:?}",
+        "Source {}: {}, {} (main.md {}), {}, lock {}, git {:?}",
         source.path,
-        source.skills.len(),
-        source.md_files.len(),
-        source.hook_script_count,
-        source.lock.entry_count,
+        ghostex_gx_protocol::plural(source.skills.len(), "skill", "skills"),
+        ghostex_gx_protocol::plural(source.md_files.len(), "md file", "md files"),
+        main_md_status,
+        ghostex_gx_protocol::plural(source.hook_script_count, "hook script", "hook scripts"),
+        ghostex_gx_protocol::plural(source.lock.entry_count, "entry", "entries"),
         source.git
     );
     let summary = &report.summary;
     println!(
-        "Agents: {} detected, {} linked, {} need attention. Dangling links {}, copied folders {}, whole-folder links {}, missing pointers {}, stale lock entries {}, unneeded links {}, backup folders {}.",
+        "Agents: {} detected, {} linked, {}. Dangling links {}, dangling pointers {}, copied folders {}, whole-folder links {}, missing pointers {}, stale lock entries {}, unneeded links {}, backup folders {}.",
         summary.agents_detected,
         summary.agents_linked,
-        summary.agents_attention,
+        ghostex_gx_protocol::plural(
+            summary.agents_attention,
+            "needs attention",
+            "need attention"
+        ),
         summary.dangling_links,
+        summary.dangling_pointers,
         summary.copied_skill_folders,
         summary.whole_folder_links,
         summary.missing_pointers,
@@ -326,22 +384,66 @@ fn print_status(report: &SyncReport) {
         println!();
         for problem in &report.problems {
             println!("- {}", problem.title);
+            if !problem.detail.is_empty() {
+                println!("  {}", problem.detail);
+            }
         }
     }
 }
 
 fn print_plan(plan: &SyncPlan, enabled: &[PlanGroupKind]) {
     println!(
-        "Plan ({}): {} links, {} writes, {} backups, {} unlinks, {} lock drops; backups go to {}",
+        "Plan ({}, pointer policy {}): {}, {}, {}, {}, {}; backups go to {}",
         plan.scope,
-        plan.summary.links,
-        plan.summary.writes,
-        plan.summary.backups,
-        plan.summary.unlinks,
-        plan.summary.drops,
+        plan.pointer_policy.as_str(),
+        ghostex_gx_protocol::plural(plan.summary.links, "link", "links"),
+        ghostex_gx_protocol::plural(plan.summary.writes, "write", "writes"),
+        ghostex_gx_protocol::plural(plan.summary.backups, "backup", "backups"),
+        ghostex_gx_protocol::plural(plan.summary.unlinks, "unlink", "unlinks"),
+        ghostex_gx_protocol::plural(plan.summary.drops, "lock drop", "lock drops"),
         plan.backup_dir
     );
+    if !plan.warnings.is_empty() {
+        println!();
+        for warning in &plan.warnings {
+            println!("WARNING: {warning}");
+        }
+    }
+    if plan.main_md_blocked {
+        println!();
+        if let Some(best) = &plan.seed_recommendation {
+            println!(
+                "First step: create ~/.agents/main.md from {} ({}, {} bytes):",
+                best.display_name, best.path, best.bytes
+            );
+            println!(
+                "  ghostex agent-sync plan --seed-main-from {}",
+                best.agent_id
+            );
+            println!(
+                "  ghostex agent-sync apply --yes --seed-main-from {}",
+                best.agent_id
+            );
+            if plan.seed_candidates.len() > 1 {
+                let others = plan
+                    .seed_candidates
+                    .iter()
+                    .skip(1)
+                    .map(|c| format!("{} ({}, {} bytes)", c.agent_id, c.path, c.bytes))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                println!("  Other seed sources: {others}");
+            }
+        } else {
+            println!(
+                "First step: create ~/.agents/main.md with your shared instructions, then re-run Agent Sync."
+            );
+        }
+    }
     for group in &plan.groups {
+        if group.kind == PlanGroupKind::SeedMainMd && group.ops.is_empty() {
+            continue;
+        }
         let on = enabled.contains(&group.kind);
         println!();
         println!(

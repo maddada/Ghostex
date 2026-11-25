@@ -55,6 +55,21 @@ impl AgentsTab {
                                 .is_some_and(|agent| agent.enabled != *enabled)
                         });
                         page.roster = Some(roster);
+                        if let Some(pins) = answer
+                            .get("agentModelPins")
+                            .and_then(Value::as_object)
+                        {
+                            page.agent_model_pins = pins
+                                .iter()
+                                .filter_map(|(family, pin)| {
+                                    let model = pin.get("model").and_then(Value::as_str)?;
+                                    (!ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(
+                                        model,
+                                    ))
+                                    .then(|| (family.clone(), model.to_string()))
+                                })
+                                .collect();
+                        }
                         cx.notify();
                     }
                 });

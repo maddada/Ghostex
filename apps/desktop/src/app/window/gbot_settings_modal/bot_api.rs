@@ -313,11 +313,12 @@ impl GpuiGbotSettingsModalWindow {
             let key = &api["key"];
             let mut used = vec![format!("Made {}", when(text(key, "createdAt")))];
             match key["lastUsedAt"].as_str() {
-                Some(at) => used.push(format!(
-                    "last used {} ({} calls)",
-                    when(at),
-                    key["uses"].as_i64().unwrap_or(0)
-                )),
+                Some(at) => {
+                    let uses = key["uses"].as_i64().unwrap_or(0);
+                    let noun = if uses == 1 { "call" } else { "calls" };
+                    used.push(format!("last used {}", when(at)));
+                    used.push(format!("{uses} {noun}"));
+                }
                 None => used.push("not used yet".to_string()),
             }
             let shared = key["shareMemory"] == true;

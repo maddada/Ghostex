@@ -56,16 +56,6 @@ pub(crate) async fn handle_chief_http(
             },
         );
     }
-    if changes && !super::chief_on(&state.paths) {
-        return error_response(
-            endpoint_path,
-            request_id,
-            DomainStateError {
-                code: "turnedOff",
-                message: super::chief_off_message(),
-            },
-        );
-    }
     if op == "prompt" {
         return match prompt_chief(state, &params).await {
             Ok(result) => routed_json(
@@ -96,8 +86,8 @@ pub(crate) async fn handle_chief_http(
     }
 }
 
-/// Chief's own refusals carry their HTTP status (403 for a caller that may not, 409 while it is
-/// off or before its agent is picked); everything else is a domain error as usual.
+/// Chief's own refusals carry their HTTP status (403 for a caller that may not, 409 before its
+/// agent is picked); everything else is a domain error as usual.
 fn error_response(
     endpoint_path: String,
     request_id: String,
@@ -105,7 +95,7 @@ fn error_response(
 ) -> RoutedResponse {
     let status = match error.code {
         "forbidden" => StatusCode::FORBIDDEN,
-        "turnedOff" | "chiefNeedsAgent" => StatusCode::CONFLICT,
+        "chiefNeedsAgent" => StatusCode::CONFLICT,
         _ => return domain_error_response(endpoint_path, request_id, error),
     };
     routed_json(
@@ -240,7 +230,7 @@ fn status(state: &AppState) -> Result<Value, DomainStateError> {
         })
         .collect();
     Ok(json!({
-        "enabled": super::chief_on(&state.paths),
+        "enabled": true,
         "title": super::CHIEF_TITLE,
         "serverId": state.metadata.server_id.as_str(),
         "chief": record,

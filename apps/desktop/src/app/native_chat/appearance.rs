@@ -46,6 +46,9 @@ pub(crate) struct ChatAppearance {
     /// The Normal look (Simple renamed), which Summary shows too: tool runs and file edits fold
     /// behind one-line labels.
     pub(crate) simple: bool,
+    /// Live page cards start folded to a single compact row: on in Summary view
+    /// (`collapsePageCards`, gx-chat-core `transcript::view_level::collapse_page_cards`).
+    pub(crate) collapse_page_cards: bool,
     /// The folds under each agent message (a reply's tool calls, a thought's tools, a finished
     /// turn's "Worked" log) start open: in Detailed view.
     ///
@@ -424,6 +427,7 @@ impl ChatAppearance {
             font: CHAT_BODY_FONT.to_string(),
             light,
             simple,
+            collapse_page_cards: state["collapsePageCards"] == true,
             work_open: !simple,
             tool_lines: enabled("chatToolCallLines"),
             file_previews: enabled("sessionChatFileEditPreviews"),

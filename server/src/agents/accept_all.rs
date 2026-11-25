@@ -126,6 +126,61 @@ pub(crate) fn apply_accept_all_spec(
     }
 }
 
+/// Apply the per-agent Auto permission mode to a Terminal-based launch command (`acceptAllMode: "auto"`):
+/// Claude gets `--permission-mode auto`, Codex gets `--approve-for-me`, unless the command already
+/// specifies an explicit permission/approval flag. Other agents are returned unchanged.
+pub(crate) fn apply_auto_permission_mode(
+    command: &str,
+    agent_id: &str,
+    icon: Option<&str>,
+) -> String {
+    let trimmed = command.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let resolved = match agent_id {
+        "claude" | "openclaude" | "codex" => Some(agent_id),
+        _ => icon.and_then(default_agent_icon_to_id),
+    };
+    let tokens: Vec<&str> = trimmed.split_whitespace().collect();
+    match resolved {
+        Some("claude" | "openclaude") => {
+            let names_mode = tokens.iter().any(|token| {
+                *token == "--permission-mode"
+                    || token.starts_with("--permission-mode=")
+                    || *token == "--dangerously-skip-permissions"
+            });
+            if names_mode {
+                trimmed.to_string()
+            } else {
+                format!("{trimmed} --permission-mode auto")
+            }
+        }
+        Some("codex") => {
+            let names_mode = tokens.iter().any(|token| {
+                matches!(
+                    *token,
+                    "--approve-for-me"
+                        | "--yolo"
+                        | "--dangerously-bypass-approvals-and-sandbox"
+                        | "--full-auto"
+                        | "-a"
+                        | "--ask-for-approval"
+                        | "-s"
+                        | "--sandbox"
+                ) || token.starts_with("--ask-for-approval=")
+                    || token.starts_with("--sandbox=")
+            });
+            if names_mode {
+                trimmed.to_string()
+            } else {
+                format!("{trimmed} --approve-for-me")
+            }
+        }
+        _ => trimmed.to_string(),
+    }
+}
+
 /// CDXC:AgentProviders 2026-10-17 WHY:
 /// Accept-all for OpenCode used to be `OPENCODE_CONFIG_CONTENT='{"permission":"allow"}'` in front of the command. OpenCode 2's TUI talks to one shared background service, so the variable is ignored, or, when that TUI starts the service, can be inherited by it and allow everything in every OpenCode session on the computer. OpenCode 2's own switch is `--auto`, which only auto-approves in that TUI, so saved commands lose the old variable.
 fn strip_retired_opencode_accept_all(command: &str) -> String {

@@ -187,7 +187,9 @@ export function ComposerEditorPanelView({
             <button type='button' aria-label='Next match' onClick={() => find()}>
               ↓
             </button>
-            <span aria-live='polite'>{searchError || `${matches.length} matches`}</span>
+            <span aria-live='polite'>
+              {searchError || (matches.length === 1 ? '1 match' : `${matches.length} matches`)}
+            </span>
           </div>
           {mode === 'replace' ? (
             <div className='ghostex-chat-editor-panel-row'>

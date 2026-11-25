@@ -323,6 +323,7 @@ pub struct TurnLifecycle {
 /// | `starredPageIds` | UNCHANGED (a daemon before 2026-11-16 never writes it) |
 /// | `laterQuestionUntil` | UNCHANGED (a daemon before 2026-11-16 never writes it) |
 /// | `resourceIndex` | UNCHANGED (a daemon before 2026-10-30 never writes it) |
+/// | `agentRestartedAt` | UNCHANGED (a daemon before 2026-11-24 never writes it) |
 ///
 /// Payload shapes are kept loose (`Value`) until the native chat needs each one typed; every one
 /// has a TypeScript interface in `packages/shared/session-chat.ts`.
@@ -440,6 +441,11 @@ pub struct ChatSideState {
     /// questions its transcript carries from before then were asked in the parent.
     #[serde(default, skip_serializing_if = "Tri::is_absent")]
     pub forked_at: Tri<i64>,
+    /// When gxserver restarted this session's agent because its Native host died in the middle of
+    /// a turn, in epoch ms, oldest first (server/src/session_chat_agent_restarts.rs): the chat
+    /// marks the turn each one cut off. Absent means unchanged (an older gxserver never sends it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_restarted_at: Option<Vec<i64>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retired_async_question_ids: Option<Vec<String>>,
     /// The question forms and pages the user put off "For later" (form or page ids,
@@ -451,6 +457,15 @@ pub struct ChatSideState {
     /// them on. Absent means unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unavailable_modes: Option<Vec<UnavailableMode>>,
+    /// True while this session runs through a Non-CLI host (e.g. ACP), so the chat box's Mode
+    /// button offers the four approval levels instead of the agent CLI's Shift+Tab modes.
+    /// Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub non_cli_mode: Option<bool>,
+    /// True while a Terminal -> Native switch is queued until the active reply finishes (`Q4771`).
+    /// Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub switch_to_native_queued: Option<bool>,
     /// The question forms and pages the user removed without answering (form or page ids,
     /// server/src/session_chat_open_questions.rs): no longer counted as waiting. Absent means
     /// unchanged.
@@ -735,6 +750,22 @@ pub struct ReadSessionChatResult {
     /// The "Compact chats above" token threshold (`claudeIdleCompactAbove`), the same way; absent on older daemons.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compact_chats_above: Option<u64>,
+    /// True when this computer's gxserver supports Terminal -> Native switching with mid-reply queueing (`Q4772`).
+    /// Absent on older daemons, which hides the offer quietly on remote computers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_mode_switch_capable: Option<bool>,
+    /// True when this computer's `agentSessionMode` already enables Native for this session's agent (`Q4770`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_default_for_agent: Option<bool>,
+    /// True when the user dismissed the "Switch to Native" strip chip for this session's agent (`Q4770`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_switch_dismissed: Option<bool>,
+    /// True when this session's agent opens in Chat by default on this computer (`Q4768`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preferred_chat_first: Option<bool>,
+    /// True when this session is a coordinator worker thread (`Q4772`: hides the strip chip).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is_coordinator_thread: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fork_info: Option<ChatForkInfo>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

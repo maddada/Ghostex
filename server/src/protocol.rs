@@ -413,7 +413,10 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/collabGuestPageAnswers"
         // Installing Collab (with the owner's signed approval), updating and uninstalling it,
         // from the desktop, a desktop connected to this computer, or the phone.
-        | "/api/extensionComponents" => remote_allowed(path),
+        | "/api/extensionComponents"
+        // Built-in tunnel sharing for Live pages and localhost ports (server/src/sharing/http.rs);
+        // gated to the owner's computer and paired phones (`is_owner_device`).
+        | "/api/sharing" => remote_allowed(path),
         // The Collab component's calls (server/src/collab_shim/http.rs): no gxserver token, only
         // the host token gxserver handed the component on its stdin, checked by the handler.
         "/api/collabHost" => descriptor(
@@ -467,6 +470,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         / session / agent ids the daemon itself published.
         */
         | "/api/switchDraftAgent"
+        | "/api/moveDraftSession"
         // CDXC:AgentBox 2026-10-01 WHY: same reasoning as switchDraftAgent above; where a draft
         // runs is decided by the daemon that owns the row and runs its CLI.
         | "/api/draftRunLocation"
@@ -606,6 +610,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/unlinkCoordinatorThread"
         | "/api/setCoordinatorThreadResolved"
         | "/api/renameCoordinatorThread"
+        | "/api/sendCoordinatorThreadNote"
         | "/api/coordinatorThreadTitleReminder"
         | "/api/checkAgentSessionWrite"
         // The coordinator's board (coordinators/board.rs): its items carry ids and bounded text.
@@ -731,6 +736,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         // CDXC:SessionChat 2026-11-11 WHY: a chat's view pick is kept by the computer that runs the session (session_chat_view.rs), so a client looking at a remote machine sets it there; it carries project/session ids and four booleans with their times.
         | "/api/setSessionChatView"
         | "/api/switchSessionAcpToCli"
+        | "/api/switchSessionCliToAcp"
+        | "/api/switchEligibleSessionsToAcp"
         /*
         CDXC:TranscriptExport 2026-08-20:
         Exporting a transcript is remote-allowed for the same reason reading a
@@ -971,6 +978,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/createWorkspace"
         | "/api/updateWorkspace"
         | "/api/deleteWorkspace"
+        | "/api/readWorkspaceInstructions"
+        | "/api/writeWorkspaceInstructions"
         | "/api/moveProjectToWorkspace"
         | "/api/moveMachineToWorkspace"
         | "/api/moveRemoteProjectToWorkspace" => remote_allowed(path),
@@ -1122,6 +1131,12 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
             false,
             Transport::Http,
         ),
+        /*
+        CDXC:Telemetry 2026-11-24 (privacy overhaul, Q22):
+        Read-only local preview of the exact sanitized telemetry payloads for
+        Settings > About ("View what's sent"). Local-only and owner-device gated.
+        */
+        "/api/telemetryPreview" => full_local(path),
         /*
         CDXC:AgentHooks 2026-11-07 WHY:
         Hook read/install/uninstall inspect or write the agent CLIs' own config files, so they need auth and the protocol-version gate. They are remote-allowed (superseding the 2026-06-19 full-local contract) because a headless computer has no other way to get Ghostex's hooks: the desktop's Settings > Agents with that computer picked and `ghostex agent-hooks --computer` reach them from another computer (issue #431, connected_computers/scope.rs).

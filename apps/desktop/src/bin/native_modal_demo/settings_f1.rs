@@ -337,13 +337,14 @@ fn accounts_rpc(state: &str, params: &Value) -> Answer {
         data["cliproxyHubs"] = json!([{
             "id": "hub-preview", "label": "Home hub", "customLabel": "Home hub",
             "url": "http://127.0.0.1:8317", "host": "127.0.0.1:8317", "hasManagementKey": true,
+            "sessionAffinity": true, "routingStrategy": "fill-first",
             "status": "ready", "error": null, "updatedAt": chrono::Utc::now().to_rfc3339(),
             "accounts": [
-                { "id": "hub-preview:a1", "provider": "claude", "name": "sam@example.com", "plan": null, "status": "ready",
+                { "id": "hub-preview:a1", "authIndex": "a1", "fileName": "claude-sam.json", "canManage": true, "provider": "claude", "name": "sam@example.com", "plan": null, "status": "ready",
                   "usage": [window("fiveHour", "5h", 90.0, 18_000, 70), window("sevenDay", "7d", 41.0, 604_800, 5_000)] },
-                { "id": "hub-preview:a2", "provider": "claude", "name": "alex@example.com", "plan": null, "status": "ready",
+                { "id": "hub-preview:a2", "authIndex": "a2", "fileName": "claude-alex.json", "canManage": true, "provider": "claude", "name": "alex@example.com", "plan": null, "status": "ready",
                   "usage": [window("fiveHour", "5h", 12.0, 18_000, 200), window("sevenDay", "7d", 33.0, 604_800, 7_000)] },
-                { "id": "hub-preview:a3", "provider": "codex", "name": "kim@example.com", "plan": "plus", "status": "coolingDown",
+                { "id": "hub-preview:a3", "authIndex": "a3", "fileName": "codex-kim.json", "canManage": true, "provider": "codex", "name": "kim@example.com", "plan": "plus", "status": "coolingDown",
                   "statusMessage": "quota exhausted", "nextRetryAfter": (chrono::Utc::now() + chrono::Duration::minutes(70)).to_rfc3339(),
                   "usage": [window("primary", "5h", 100.0, 18_000, 70)] }
             ]

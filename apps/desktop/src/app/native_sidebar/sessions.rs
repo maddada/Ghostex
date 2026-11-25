@@ -92,8 +92,38 @@ impl GhostexGpuiApp {
         let scale = appearance.scale;
         let card_height =
             session_card_height(session, self.native_session_has_second_line(session));
-        // The row's left padding before its icon: the card inset plus its depth in a coordinator's tree.
-        let indent = 5.0 + super::threads::thread_depth(session) * super::threads::THREAD_INDENT;
+        // Main Hub's per-computer fold (gx-core `MachineFold`, CDXC:Chief 2026-11-24): this
+        // computer's Ask Ghostex AI / Autopilot supervisor row carries a neutral `+N` chip, and
+        // unfolded other-computer rows sit indented underneath showing their computer icon & name.
+        let machine_fold = session.details.get("machineFold");
+        let machine_fold_lead = machine_fold
+            .filter(|fold| fold.get("role").and_then(Value::as_str) == Some("lead"))
+            .and_then(|fold| {
+                Some((
+                    fold.get("key")?.as_str()?.to_owned(),
+                    fold.get("count")?.as_u64()?,
+                    fold.get("expanded").and_then(Value::as_bool) == Some(true),
+                    fold.get("containsActive").and_then(Value::as_bool) == Some(true),
+                ))
+            });
+        let machine_fold_child = machine_fold
+            .filter(|fold| fold.get("role").and_then(Value::as_str) == Some("child"))
+            .and_then(|fold| {
+                Some((
+                    fold.get("machineLabel")?.as_str()?.to_owned(),
+                    fold.get("machineId")?.as_str()?.to_owned(),
+                ))
+            });
+        // The row's left padding before its icon: the card inset plus its depth in a coordinator's
+        // tree (plus one level for an unfolded other-computer row under Main Hub's lead row).
+        let indent = 5.0
+            + (super::threads::thread_depth(session)
+                + if machine_fold_child.is_some() {
+                    1.0
+                } else {
+                    0.0
+                })
+                * super::threads::THREAD_INDENT;
         let hovered = self.native_sidebar.hovered_session.as_deref() == Some(&session_id);
         // CDXC:Sessions 2026-10-28 DECISION: User: "if i disable all buttons for the session card in the sidebar please let the sidebar sessions not change when i hover over one of them". `hovered` alone still draws the row's hover fill; everything hover swaps (time, badges, status dots, icon, dimming, the button strip) follows `buttons_shown`, which is false when the strip has no button.
         // A Unified thread's strip opens and closes with every Unified card's (`unifiedHoverExpand`,
@@ -117,8 +147,13 @@ impl GhostexGpuiApp {
             session.is_focused,
             session.is_visible,
         );
-        // A folded coordinator carries the active fill for the focused thread it hides.
-        let highlighted = focused || super::threads::coordinator_holds_active(session);
+        // A folded coordinator (or folded Main Hub per-computer lead) carries the active fill for
+        // the focused row it hides.
+        let highlighted = focused
+            || super::threads::coordinator_holds_active(session)
+            || machine_fold_lead
+                .as_ref()
+                .is_some_and(|(_, _, _, contains_active)| *contains_active);
         let stale = group.is_stale && !session.is_browser();
         // A coordinator's thread drawn here from another computer (`computerName`, threads.rs).
         let borrowed_thread = session.details.get("computerName").is_some();
@@ -127,7 +162,19 @@ impl GhostexGpuiApp {
         let dim_sleeping = sleeping
             && !buttons_shown
             && hud["settings"]["dimSleepingSessions"].as_bool() == Some(true);
-        let icon = super::icons::session_icon(session, hud, appearance, buttons_shown, hovered);
+        let icon = if let Some((_, ref machine_id)) = machine_fold_child {
+            let asset = self
+                .sidebar_machine_icon_asset(machine_id)
+                .unwrap_or("titlebar/device-desktop.svg");
+            let color = if super::computer_mark::computer_offline(session) {
+                gpui::rgb(0xff9494).into()
+            } else {
+                appearance.muted
+            };
+            titlebar_svg_icon(asset, 13.0 * scale, color).into_any_element()
+        } else {
+            super::icons::session_icon(session, hud, appearance, buttons_shown, hovered)
+        };
         let clock_fold = super::threads::unified_clock_owns_fold(session);
         let double_click_rename = hud["settings"]["renameSessionOnDoubleClick"].as_bool()
             == Some(true)
@@ -224,9 +271,12 @@ impl GhostexGpuiApp {
         // thread's sits between the row text and the muted ink; a selected or visible row keeps its
         // bright title. Sidebar & Sessions > Session Cards > Bold coordinator title (off by default)
         // bolds the coordinator's title. The phone's SessionRow.tsx does the same.
-        let coordinator_title = super::threads::is_coordinator(session);
+        let coordinator_title =
+            machine_fold_child.is_none() && super::threads::is_coordinator(session);
         let title_color = if visible || highlighted {
             None
+        } else if machine_fold_child.is_some() {
+            Some(appearance.foreground.blend(appearance.muted.opacity(0.45)))
         } else if coordinator_title {
             Some(gpui::Hsla::from(chrome_color(0xd8d8d8, 0x292929)))
         } else if super::threads::thread_depth(session) > 0.0 {
@@ -236,6 +286,14 @@ impl GhostexGpuiApp {
         };
         let bold_title = coordinator_title
             && hud["settings"]["sessionsBoldCoordinatorTitle"].as_bool() == Some(true);
+        let display_label = match &machine_fold_child {
+            Some((label, _)) => label.clone(),
+            None => session.title().to_owned(),
+        };
+        let row_aria_label = match &machine_fold_child {
+            Some((label, _)) => format!("{} on {label}", session.title()),
+            None => session.title().to_owned(),
+        };
         let timer = session.details.get("timerLabel").and_then(Value::as_str);
         let show_time = hud
             .get("settings")
@@ -252,12 +310,70 @@ impl GhostexGpuiApp {
             .unwrap_or("")
             .to_owned();
         let hide_computer_icon = super::computer_mark::hide_computer_icon_until_hover(hud);
-        let computer_badge = (!buttons_shown || hide_computer_icon)
+        let computer_badge = (machine_fold_child.is_none()
+            && machine_fold_lead.is_none()
+            && (!buttons_shown || hide_computer_icon))
             .then(|| {
                 self.session_computer_badge(session, appearance, !hide_computer_icon || hovered)
             })
             .flatten();
         let has_computer_badge = !buttons_shown && computer_badge.is_some();
+        // Neutral `+N` chip on Main Hub's per-computer lead rows (Ask Ghostex AI, Autopilot
+        // supervisor); stays visible on hover so clicking it never misses when hover actions open.
+        let machine_fold_chip = machine_fold_lead.map(|(fold_key, count, expanded, _)| {
+            let tip = if expanded {
+                "Hide other computers".to_string()
+            } else if count == 1 {
+                "Show 1 other computer".to_string()
+            } else {
+                format!("Show {count} other computers")
+            };
+            let chip_id = format!("native-machine-fold-{session_id}");
+            let mut chip = div()
+                .id(chip_id)
+                .role(gpui::Role::Button)
+                .aria_label(tip.clone())
+                .aria_expanded(expanded)
+                .flex_shrink_0()
+                .flex()
+                .items_center()
+                .h(px(17.0 * scale))
+                .px(px(5.0 * scale))
+                .rounded(px(5.0 * scale))
+                .border_1()
+                .border_color(chrome_ink().opacity(if expanded { 0.20 } else { 0.12 }))
+                .when(expanded, |chip| chip.bg(chrome_ink().opacity(0.08)))
+                .hover(|chip| chip.bg(chrome_ink().opacity(0.12)))
+                .text_size(px(11.0 * scale))
+                .text_color(if expanded {
+                    appearance.foreground.opacity(0.85)
+                } else {
+                    appearance.muted
+                })
+                .cursor_pointer()
+                .child(format!("+{count}"))
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .on_click(cx.listener(move |app, _, _, cx| {
+                    cx.stop_propagation();
+                    app.dispatch_native_sidebar_ui(
+                        json!({"type": "toggleMachineFold", "key": fold_key}),
+                        cx,
+                    );
+                }));
+            if self.native_sidebar.pointer_inside
+                && self.native_sidebar.menu.is_none()
+                && !cx.has_active_drag()
+            {
+                chip = chip.managed_discrete_tooltip_with_placement(
+                    gpui_component::tooltip::ManagedTooltipPlacement::BelowLeft,
+                    appearance.tooltip_delay,
+                    move |window, cx| {
+                        super::tooltips::sidebar_style_tooltip(tip.clone(), window, cx)
+                    },
+                );
+            }
+            chip.into_any_element()
+        });
         // What follows the computer's icon: the status dot or the last-active age, then a question,
         // approval or folded dots.
         let mut trailing: Vec<AnyElement> = Vec::new();
@@ -339,7 +455,7 @@ impl GhostexGpuiApp {
             .child(div()
                 .id(format!("native-sidebar-session-{session_id}"))
                 .role(gpui::Role::TreeItem)
-                .aria_label(session.title().to_owned())
+                .aria_label(row_aria_label)
                 .aria_description(a11y_description)
                 .aria_selected(focused)
                 .relative().h(px(card_height * scale)).w_full().min_w_0().flex().flex_col().rounded(px(5.0 * scale))
@@ -364,7 +480,7 @@ impl GhostexGpuiApp {
                 // decorations above keep their tops because it starts at the card's top.
                 .child(h_flex().h(px(SESSION_HEIGHT * scale)).flex_shrink_0().w_full().min_w_0().pl(px(indent * scale)).pr(px(6.0 * scale)).gap(px(6.0 * scale))
                 .child(self.render_native_session_identity(session, icon, hovered, appearance, cx))
-                .child(div().id(format!("native-session-title-{session_id}")).flex_1().min_w_0().h_full().flex().items_center().child(title_with_rename_shake(div().min_w_0().truncate().when_some(title_color, |title, color| title.text_color(color)).when(bold_title, |title| title.font_weight(gpui::FontWeight::SEMIBOLD)).child(session.title().to_owned()), &session_id, session.rename_failed_at.as_deref(), scale)).when(session_tooltips && self.native_sidebar.pointer_inside && self.native_sidebar.menu.is_none() && !cx.has_active_drag(), |row| row.managed_discrete_tooltip_with_placement(tooltip_span.placement(), appearance.tooltip_delay, move |window, cx| super::tooltips::sidebar_tooltip(tooltip.clone(), tooltip_span, scale, window, cx))))
+                .child(div().id(format!("native-session-title-{session_id}")).flex_1().min_w_0().h_full().flex().items_center().child(title_with_rename_shake(div().min_w_0().truncate().when_some(title_color, |title, color| title.text_color(color)).when(bold_title, |title| title.font_weight(gpui::FontWeight::SEMIBOLD)).child(display_label), &session_id, session.rename_failed_at.as_deref(), scale)).when(session_tooltips && self.native_sidebar.pointer_inside && self.native_sidebar.menu.is_none() && !cx.has_active_drag(), |row| row.managed_discrete_tooltip_with_placement(tooltip_span.placement(), appearance.tooltip_delay, move |window, cx| super::tooltips::sidebar_tooltip(tooltip.clone(), tooltip_span, scale, window, cx))))
                 // CDXC:Sidebar 2026-10-29 DECISION: User: "please swap the order of these 2 things (the threads one for orchestrator with the link tag)". The links badge comes before a coordinator's workers badge; the phone's SessionRow.tsx follows.
                 .when(!buttons_shown, |row| row.children(self.render_native_session_links_badge(session, appearance)))
                 .when(!buttons_shown && !clock_fold, |row| row.children(super::threads::coordinator_badge(session, appearance)))
@@ -375,6 +491,7 @@ impl GhostexGpuiApp {
                 .when(!buttons_shown, |row| row.children(self.render_voice_call_badge(&session.session_id, appearance)))
                 .when(!buttons_shown, |row| row.children(super::agentbox::agentbox_badge(session, appearance, tooltip_span, self.native_sidebar.pointer_inside && self.native_sidebar.menu.is_none() && !cx.has_active_drag())))
                 .when(!buttons_shown, |row| row.children(super::cloud_box::cloud_box_badge(session, appearance, tooltip_span, self.native_sidebar.pointer_inside && self.native_sidebar.menu.is_none() && !cx.has_active_drag())))
+                .children(machine_fold_chip)
                 // The computer's icon comes last before the trailing slot, which keeps one width while it
                 // is drawn so the icons line up down the list (CDXC:RemoteMachines 2026-11-12 in status.rs).
                 // When hideComputerIconUntilHover is on, it still renders before the hover strip on hover

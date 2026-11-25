@@ -74,12 +74,16 @@ export type NotificationFeedItem = {
   /** ISO timestamp. */
   createdAt: string;
   read: boolean;
+  /** Whether the bell panel has already shown this row (badge cleared), even while still unread. */
+  seen?: boolean;
 };
 
 export type NotificationFeedState = {
   /** Newest first. */
   items: NotificationFeedItem[];
   unreadCount: number;
+  /** Unread rows not yet seen in the bell panel; drives the bell badge count. */
+  unseenCount?: number;
   /**
    * The row a "jump to latest unread" key should open: the newest unread row, except that rows pushed back with deferUnread come last, oldest deferral first.
    * The daemon computes it so every client jumps in the same order.
@@ -92,6 +96,7 @@ export type NotificationFeedState = {
 export const EMPTY_NOTIFICATION_FEED_STATE: NotificationFeedState = {
   items: [],
   unreadCount: 0,
+  unseenCount: 0,
 };
 
 /**
@@ -100,7 +105,9 @@ export const EMPTY_NOTIFICATION_FEED_STATE: NotificationFeedState = {
  * markSessionRead takes `sessionId` and reads every row of that session.
  * deferUnread takes `sessionId`: the session's newest row becomes unread and moves to the back of the unread queue, so a jump lands on it last.
  * markAllRead and clearAll take nothing.
- * markFinishedSeen takes nothing: it reads the "finished" rows (not deferred ones) without acknowledging their sessions; a client sends it when its bell panel opens.
+ * markAllSeen takes nothing: marks unseen rows seen when the bell panel opens so the badge clears across devices while rows keep their unread highlight.
+ * markShownRead takes `notificationIds`: marks the rows shown in the bell panel read when the panel closes, without acknowledging their sessions.
+ * markFinishedSeen is a legacy action kept for older clients.
  */
 export type NotificationFeedUpdateAction =
   | 'markRead'
@@ -109,12 +116,15 @@ export type NotificationFeedUpdateAction =
   | 'markSessionRead'
   | 'deferUnread'
   | 'markAllRead'
+  | 'markAllSeen'
+  | 'markShownRead'
   | 'markFinishedSeen'
   | 'clearAll';
 
 export type NotificationFeedUpdateParams = {
   action: NotificationFeedUpdateAction;
   notificationId?: string;
+  notificationIds?: string[];
   sessionId?: string;
 };
 
@@ -155,6 +165,7 @@ export function normalizeNotificationFeedItem(value: unknown): NotificationFeedI
     kind,
     projectId,
     read: raw.read === true,
+    ...(typeof raw.seen === 'boolean' ? { seen: raw.seen } : {}),
     ...(typeof raw.securityEntry === 'number' ? { securityEntry: raw.securityEntry } : {}),
     sessionId,
     subtitle: readString(raw.subtitle) ?? '',
@@ -173,9 +184,15 @@ export function normalizeNotificationFeedState(value: unknown): NotificationFeed
   // The count is the unread rows kept here, never the daemon's number, so a row a client cannot
   // show never lights the bell (gx-core notification_feed.rs, 2026-11-08).
   const unread = items.filter((item) => !item.read);
+  const unseen = unread.filter((item) => item.seen !== true);
   const nextUnreadId = readString(raw.nextUnreadId);
   const nextIsListed = nextUnreadId !== undefined && unread.some((item) => item.id === nextUnreadId);
-  return { ...(nextIsListed ? { nextUnreadId } : {}), items, unreadCount: unread.length };
+  return {
+    ...(nextIsListed ? { nextUnreadId } : {}),
+    items,
+    unreadCount: unread.length,
+    unseenCount: unseen.length,
+  };
 }
 
 /** Human label for a kind, shared by every surface that lists the feed. */

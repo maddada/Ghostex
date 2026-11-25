@@ -134,7 +134,13 @@ fn poll(state: &AppState, observers: &mut Observers, compare: bool, drive: bool)
         if let Ok(db) = open_gxserver_database(&state.paths) {
             let repository = DomainRepository::new(&db, &state.metadata.server_id);
             if let Ok(sessions) = repository.list_sessions_with_lifecycle_state("running") {
-                observers.sessions = sessions;
+                // Non-CLI (ACP / SDK) sessions report authoritative working/attention/idle and
+                // approval/question cards directly from `ghostex acp-host`; the CLI hook-free
+                // rollout/screen watchers must never supersede or clobber them.
+                observers.sessions = sessions
+                    .into_iter()
+                    .filter(|session| !crate::acp::session_is_acp(session))
+                    .collect();
             }
         }
         observers.sessions_read_at = Some(Instant::now());

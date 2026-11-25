@@ -1481,6 +1481,7 @@ pub(crate) async fn run_claude_model_picker_job(
 
 pub(crate) async fn handle_select_session_chat_model_http(
     state: &AppState,
+    caller: &crate::security::Principal,
     endpoint_path: String,
     request_id: String,
     body: &Value,
@@ -1489,10 +1490,88 @@ pub(crate) async fn handle_select_session_chat_model_http(
         Ok(params) => params,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
-    let result = if params.get("defer").and_then(Value::as_bool) == Some(true) {
-        crate::session_chat_model_selection::enqueue(state, &params)
+    let is_user_device = caller.is_user_device();
+    let defer = params.get("defer").and_then(Value::as_bool) == Some(true);
+    let project_id = read_trimmed(&params, "projectId");
+    let session_id = read_trimmed(&params, "sessionId");
+    // Validate options and enforce user-device gating BEFORE either deferred enqueue or immediate
+    // execution so an agent (`Principal::Session`) cannot queue or apply an ACP approval level
+    // raise via either `--mode` or `--permissions`, and invalid options fail right away instead of
+    // exiting 0 "queued" and failing silently later.
+    if !project_id.is_empty() && !session_id.is_empty() {
+        let session = match crate::storage::open_gxserver_database(&state.paths)
+            .map_err(|error| DomainStateError {
+                code: "internalError",
+                message: format!("SQLite gxserver state error: {error}"),
+            })
+            .and_then(|db| {
+                let repository =
+                    crate::domain::DomainRepository::new(&db, state.metadata.server_id.as_str());
+                repository
+                    .get_session(&project_id, &session_id)?
+                    .ok_or_else(|| DomainStateError {
+                        code: "notFound",
+                        message: "The session no longer exists.".to_string(),
+                    })
+            }) {
+            Ok(session) => session,
+            Err(error) => return domain_error_response(endpoint_path, request_id, error),
+        };
+        let is_acp = crate::acp::session_is_acp(&session);
+        let provider = crate::session_chat_follower::session_chat_agent_for_session(&session)
+            .unwrap_or_default();
+        let parsed_options =
+            match crate::session_chat_model_selection::read_options(&provider, is_acp, &params) {
+                Ok(opts) => opts,
+                Err(error) => return domain_error_response(endpoint_path, request_id, error),
+            };
+        if !is_user_device && is_acp {
+            if let Some(raw_mode) = parsed_options
+                .mode
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                let level = match crate::acp::AcpApprovalLevel::parse(raw_mode) {
+                    Some(level) => level,
+                    None => {
+                        return domain_error_response(
+                            endpoint_path,
+                            request_id,
+                            invalid_params(format!("Unsupported approval level: {raw_mode}")),
+                        );
+                    }
+                };
+                if let Err(error) = crate::acp::channel::check_approval_level_change_allowed(
+                    state,
+                    &project_id,
+                    &session_id,
+                    level,
+                    false,
+                )
+                .await
+                {
+                    return domain_error_response(endpoint_path, request_id, error);
+                }
+            }
+        }
+    }
+    let result = if defer {
+        crate::session_chat_model_selection::enqueue_for_caller(state, &params, is_user_device)
     } else {
-        select_session_chat_model(state, &params).await
+        let immediate = select_session_chat_model(state, &params, is_user_device).await;
+        if immediate.is_ok() && !project_id.is_empty() && !session_id.is_empty() {
+            // A successful non-deferred pick also clears any earlier failed deferred pick so the
+            // session's queue is not left blocked behind it.
+            if crate::session_chat_model_selection::clear_failed_selection(
+                state,
+                &project_id,
+                &session_id,
+            ) {
+                crate::session_chat_queue_runtime::kick_session_chat_queue();
+            }
+        }
+        immediate
     };
     if let Err(error) = &result {
         // A pick the queue is not carrying (`ghostex select-session-chat-model`): the queued ones
@@ -1542,9 +1621,10 @@ fn persist_session_chat_model_resume(
     effort: &str,
     session_only: bool,
 ) -> Result<(), DomainStateError> {
-    let agent = crate::session_chat_follower::session_chat_agent_for_session(&target.session)
+    let agent = crate::acp::session_acp_family(&target.session)
+        .or_else(|| crate::session_chat_follower::session_chat_agent_for_session(&target.session))
         .unwrap_or_default();
-    if !matches!(agent.as_str(), "claude" | "codex" | "cursor") || model.is_empty() {
+    if crate::agent_model_pins::pin_family(&agent).is_none() || model.is_empty() {
         return Ok(());
     }
     // CDXC:AgentProviders 2026-10-07: a pick saved as the default is what new sessions start on;
@@ -1627,6 +1707,7 @@ fn persist_session_chat_model_resume(
 pub(crate) async fn select_session_chat_model(
     state: &AppState,
     params: &Map<String, Value>,
+    is_user_device: bool,
 ) -> Result<Value, DomainStateError> {
     let model = read_trimmed(params, "model");
     let effort = read_trimmed(params, "effort");
@@ -1635,6 +1716,119 @@ pub(crate) async fn select_session_chat_model(
     }
     let target = resolve_session_chat_send_target(state, params, "selectSessionChatModel")?;
     let agent = crate::session_chat_follower::session_chat_agent_for_session(&target.session);
+    // ACP (Non-CLI) sessions apply approval level and model switches directly over the structured
+    // host channel without typing into the PTY, taking effect on the next permission request with
+    // no restart and persisting the approval level per session. Checked before agent-name gates so
+    // any future ACP adapter works without silent rejection.
+    if crate::acp::session_is_acp(&target.session) {
+        let acp_agent = crate::acp::session_acp_family(&target.session).or_else(|| agent.clone());
+        let options = crate::session_chat_model_selection::read_options(
+            acp_agent.as_deref().unwrap_or_default(),
+            true,
+            params,
+        )?;
+        let scope = crate::session_chat_model_selection::read_scope(
+            acp_agent.as_deref().unwrap_or_default(),
+            params,
+        )?;
+        let session_only = scope == crate::session_chat_model_selection::SCOPE_SESSION;
+        if session_only && model.is_empty() {
+            return Err(invalid_params(
+                "A session-only change needs the model to apply in this session.",
+            ));
+        }
+        if !model.is_empty() || options.is_empty() {
+            crate::session_chat_model_selection::validate_selection(
+                acp_agent.as_deref().unwrap_or_default(),
+                &model,
+                &effort,
+            )?;
+        }
+        if let Some(refusal) = crate::session_chat_model_selection::foreign_model_refusal(
+            acp_agent.as_deref().unwrap_or_default(),
+            &model,
+        ) {
+            return Err(unsupported_selection(refusal));
+        }
+        let model_change = !model.is_empty() || !effort.is_empty();
+        if model_change
+            && crate::presentation::effective_lifecycle_state(&target.session) != "running"
+        {
+            return Err(session_not_running(
+                "Waiting for the session to be running before applying the selection.",
+            ));
+        }
+        if model_change {
+            crate::acp::channel::set_model(&target.project_id, &target.session_id, &model, &effort)
+                .await?;
+            if agent.as_deref() == Some("opencode") && !session_only && !model.is_empty() {
+                if let Some((provider, name)) = model
+                    .split_once('/')
+                    .filter(|(p, n)| !p.is_empty() && !n.is_empty())
+                {
+                    let mut saved = json!({ "providerID": provider, "model": name });
+                    if !effort.is_empty() {
+                        saved["variant"] = json!(effort);
+                    }
+                    let _ = crate::session_chat_opencode::save_default_model(saved);
+                }
+            }
+            // Remember the pick as this session's choice and (unless session-only) as the agent's
+            // default for new chats and threads, matching Terminal mode.
+            if let Err(error) =
+                persist_session_chat_model_resume(state, &target, &model, &effort, session_only)
+            {
+                log_picker(
+                    LogLevel::Warn,
+                    "sessionChatModelResumeCommandUnchanged",
+                    json!({
+                        "projectId": target.project_id,
+                        "sessionId": target.session_id,
+                        "model": model,
+                        "effort": effort,
+                    }),
+                    Some(error.message),
+                );
+            }
+            crate::agent_model_pins::record_coordinator_pick(
+                &target.session,
+                acp_agent.as_deref().unwrap_or_default(),
+                &model,
+                &effort,
+            );
+            crate::chief::remember_hand_pick(
+                &state.paths,
+                &target.project_id,
+                &target.session_id,
+                acp_agent.as_deref().unwrap_or_default(),
+                &model,
+                &effort,
+            );
+        }
+        if let Some(mode) = options.mode.as_deref().filter(|m| !m.is_empty()) {
+            crate::acp::channel::set_approval_level(
+                state,
+                &target.project_id,
+                &target.session_id,
+                mode,
+                is_user_device,
+            )
+            .await?;
+        }
+        if let Ok(mut cache) = state.session_chat_option_cache.lock() {
+            cache.remove(&crate::server::session_observer_key(
+                &target.project_id,
+                &target.session_id,
+            ));
+        }
+        crate::session_chat_options::schedule_session_chat_option_redetect(
+            state,
+            &target.project_id,
+            &target.session_id,
+            agent.as_deref(),
+        );
+        return Ok(json!({ "ok": true, "model": model, "effort": effort, "scope": scope }));
+    }
     if agent.as_deref() == Some("opencode") {
         // A chat's model can be picked before its first message, so the conversation may not exist yet.
         let conversation = crate::session_chat_opencode::chat_conversation(
@@ -1690,6 +1884,7 @@ pub(crate) async fn select_session_chat_model(
     }
     let options = crate::session_chat_model_selection::read_options(
         agent.as_deref().unwrap_or_default(),
+        false,
         params,
     )?;
     let scope = crate::session_chat_model_selection::read_scope(

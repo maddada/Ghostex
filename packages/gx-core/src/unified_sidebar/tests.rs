@@ -43,6 +43,7 @@ fn view_of(row: SessionRow) -> SessionView {
         is_visible: false,
         is_multi_selected: false,
         nesting: Default::default(),
+        machine_fold: None,
     }
 }
 

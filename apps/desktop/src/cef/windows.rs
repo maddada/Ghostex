@@ -202,6 +202,9 @@ pub(super) fn install_message_pump(_cx: &gpui::App) {
 /// Runs CEF's start now: the external pump installed before it drives CEF here. Only macOS defers
 /// it into Chromium's own message loop.
 pub(super) fn start_cef(start: Box<dyn FnOnce() -> anyhow::Result<()>>) -> anyhow::Result<()> {
+    if super::shell::init_permanently_failed() {
+        anyhow::bail!("CEF initialization already failed in this process");
+    }
     start()
 }
 
@@ -854,6 +857,9 @@ fn run_scheduled_message_pump_work() {
 }
 
 fn perform_message_loop_work() -> bool {
+    if super::shell::init_permanently_failed() {
+        return false;
+    }
     if PUMP_WORK_ACTIVE.load(Ordering::SeqCst) {
         PUMP_REENTRANCY_DETECTED.store(true, Ordering::SeqCst);
         return false;

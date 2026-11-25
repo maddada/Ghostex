@@ -143,9 +143,12 @@ pub fn settle(state: &mut ChatState, request_id: u64, outcome: &RpcOutcome) -> O
                     result.get("agentMessages").and_then(Value::as_u64),
                     result.get("rows").and_then(Value::as_u64),
                 ) {
-                    (Some(1), _) => Some("1 agent message".to_string()),
-                    (Some(count), _) if count > 0 => Some(format!("{count} agent messages")),
-                    (None, Some(rows)) if rows > 0 => Some(format!("{rows} messages")),
+                    (Some(count), _) if count > 0 => {
+                        Some(ghostex_gx_protocol::plural(count, "agent message", "agent messages"))
+                    }
+                    (None, Some(rows)) if rows > 0 => {
+                        Some(ghostex_gx_protocol::plural(rows, "message", "messages"))
+                    }
                     _ => None,
                 };
             }

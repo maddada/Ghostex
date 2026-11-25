@@ -250,6 +250,7 @@ pub(crate) fn session_chat_watchdog_state_reader(
 /// screen whose composer verdict is worthless has worthless pills too) would be
 /// splitting an entry that is only ever written whole.
 pub(crate) fn forget_session_chat_options(state: &AppState, project_id: &str, session_id: &str) {
+    let mut writing = crate::session_chat_compacting::lock_screen_approval_marker_writes();
     if let Ok(mut cache) = state.session_chat_option_cache.lock() {
         cache.remove(&session_observer_key(project_id, session_id));
     }
@@ -264,6 +265,13 @@ pub(crate) fn forget_session_chat_options(state: &AppState, project_id: &str, se
         .publish_fleet(project_id, session_id, None);
     crate::session_chat_compacting::SessionChatCompactingPublisher::new(state)
         .publish_monitor(project_id, session_id, None);
+    crate::session_chat_compacting::clear_screen_approval_marker(
+        &mut writing,
+        state,
+        project_id,
+        session_id,
+    );
+    drop(writing);
     crate::session_chat_mode_availability::forget_for_agent_restart(
         &crate::session_chat_compacting::SessionChatCompactingPublisher::new(state),
         project_id,

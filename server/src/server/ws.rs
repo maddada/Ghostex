@@ -157,6 +157,7 @@ fn notification_event_matches(event: &Value) -> bool {
         Some(
             crate::notification_feed::NOTIFICATION_FEED_CHANGED_EVENT_TYPE
                 | crate::server::security_http::APPROVALS_CHANGED_EVENT_TYPE
+                | ghostex_gx_protocol::SWITCH_REQUEST_EVENT_TYPE
                 | "serverStarted"
                 | "serverStopping"
         )

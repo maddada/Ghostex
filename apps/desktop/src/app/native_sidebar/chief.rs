@@ -28,16 +28,6 @@ use super::model::{NativeSidebarChief, NativeSidebarSnapshot};
 use crate::GhostexGpuiApp;
 use crate::app::helpers::*;
 
-/// Whether the Chief built-in extension is on in this computer's settings.
-pub(crate) fn chief_on() -> bool {
-    let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
-    let settings = settings.object();
-    ghostex_settings_catalog::built_in_extensions::on_with(
-        ghostex_settings_catalog::built_in_extensions::CHIEF,
-        |key| settings.get(key).and_then(Value::as_bool),
-    )
-}
-
 /// gx-core's Chief row as the renderer reads it.
 pub(crate) fn native_chief(view: &ghostex_gx_core::ChiefRowView) -> NativeSidebarChief {
     let row = &view.row;
@@ -111,8 +101,7 @@ fn chief_command(op: &str, machine_id: &str) -> Value {
 }
 
 impl GhostexGpuiApp {
-    /// Chief's row (and the other computers' rows while unfolded), or `None` while the extension
-    /// is off.
+    /// Chief's row (and the other computers' rows while unfolded), or `None` in Bots mode.
     pub(crate) fn render_native_sidebar_chief(
         &self,
         snapshot: &NativeSidebarSnapshot,
@@ -120,7 +109,7 @@ impl GhostexGpuiApp {
         unified: bool,
         cx: &mut gpui::Context<Self>,
     ) -> Option<AnyElement> {
-        if !chief_row_shown(snapshot.chief_enabled, snapshot.bots_mode) {
+        if !chief_row_shown(snapshot.bots_mode) {
             return None;
         }
         // A computer with a home draws its Chief as the home's header in the list; the Unified
@@ -364,7 +353,7 @@ impl GhostexGpuiApp {
             .home_headers
             .iter()
             .find(|home| home.group_id == group.group_id)?;
-        if home.chief.is_some() || !chief_row_shown(snapshot.chief_enabled, snapshot.bots_mode) {
+        if home.chief.is_some() || !chief_row_shown(snapshot.bots_mode) {
             return None;
         }
         let scale = appearance.scale;
@@ -441,7 +430,7 @@ impl GhostexGpuiApp {
     /// User: "Please don't make Main Hub a thread AND a project header ... Let's just always pin 1 thread to the top of Main Hub called Chief of Staff, and we can have general sessions there too". Main Hub's header is only the home project's: a click folds it, its menu is the project's with Main Hub's settings on top, and its card stays. Chief of Staff is a session row pinned first under it whose own menu has New Chat, Change Agent and its editors (`native_sidebar_session_menu_with_chief`); before the first open a "Pick an agent" row stands in its place (rows.rs). Supersedes the header that opened Chief's chat.
     pub(crate) fn native_sidebar_home_menu(&self, machine_id: &str) -> Value {
         let mut items = Vec::new();
-        if chief_on() && self.native_sidebar_chief_of(machine_id).is_none() {
+        if self.native_sidebar_chief_of(machine_id).is_none() {
             items.push(json!({ "label": format!("Start {}", super::chief_row_view::CHIEF_NAME), "icon": "plus", "command": chief_command("open", machine_id) }));
         }
         // The first GBot has no GBots heading to add it from yet (native_sidebar/gbots_rows.rs).
@@ -465,18 +454,14 @@ impl GhostexGpuiApp {
                 "checked": on(SHOW_ON_ALL_SPACES_SETTING, false),
                 "command": { "type": "chief", "op": "toggleSetting", "key": SHOW_ON_ALL_SPACES_SETTING },
             }));
-            // While Main Hub is off its header is Ask Ghostex AI's project, which has no Chief of
-            // Staff and is not the home folder (CDXC:Chief 2026-11-19 in server/src/chief/home.rs).
-            if chief_on() {
-                items.push(json!({
-                    "label": "Ask Before New Chat",
-                    "icon": "help-circle",
-                    "checked": on(CONFIRM_NEW_CHAT_SETTING, true),
-                    "command": { "type": "chief", "op": "toggleSetting", "key": CONFIRM_NEW_CHAT_SETTING },
-                }));
-                if cfg!(not(ghostex_web)) {
-                    items.push(json!({ "label": "Folders Agents Can't Read…", "icon": "lock", "command": chief_command("homeSettings", machine_id) }));
-                }
+            items.push(json!({
+                "label": "Ask Before New Chat",
+                "icon": "help-circle",
+                "checked": on(CONFIRM_NEW_CHAT_SETTING, true),
+                "command": { "type": "chief", "op": "toggleSetting", "key": CONFIRM_NEW_CHAT_SETTING },
+            }));
+            if cfg!(not(ghostex_web)) {
+                items.push(json!({ "label": "Folders Agents Can't Read…", "icon": "lock", "command": chief_command("homeSettings", machine_id) }));
             }
         }
         json!(items)
@@ -534,7 +519,6 @@ impl GhostexGpuiApp {
             })
             .collect();
         let has_chief = self.native_sidebar_chief_of(&machine).is_some();
-        let this_computer = machine == ghostex_gx_core::LOCAL_MACHINE_ID;
         let mut items = vec![
             json!({ "label": "New Chat", "icon": "plus", "disabled": !has_chief, "command": chief_command("newChat", &machine) }),
         ];
@@ -546,11 +530,6 @@ impl GhostexGpuiApp {
         items.push(json!({ "label": "Earlier Chats…", "icon": "history", "command": chief_command("earlier", &machine) }));
         items.push(json!({ "label": "Goal & Instructions…", "icon": "target", "disabled": !has_chief, "command": chief_command("goal", &machine) }));
         items.push(json!({ "label": "Memory…", "icon": "brain", "disabled": !has_chief, "command": chief_command("memory", &machine) }));
-        // The page has no settings file of its own to turn the extension off in.
-        if cfg!(not(ghostex_web)) && this_computer {
-            items.push(json!({ "separator": true }));
-            items.push(json!({ "label": "Turn Off Main Hub", "icon": "power", "command": chief_command("disable", &machine) }));
-        }
         json!(items)
     }
 
@@ -610,7 +589,6 @@ impl GhostexGpuiApp {
                 }
             }
             "earlier" => self.show_native_sidebar_chief_earlier(&machine, window, cx),
-            "disable" => self.set_native_sidebar_chief_enabled(false, cx),
             "toggleSetting" => {
                 if let Some(key @ (SHOW_ON_ALL_SPACES_SETTING | CONFIRM_NEW_CHAT_SETTING)) =
                     command.get("key").and_then(Value::as_str)
@@ -1100,32 +1078,5 @@ impl GhostexGpuiApp {
             });
         })
         .detach();
-    }
-
-    /// Disable Extension (and its Undo): flips `mainHubHidden` in this computer's settings, the way
-    /// the extension's switch in Settings > Extensions does.
-    pub(crate) fn set_native_sidebar_chief_enabled(
-        &mut self,
-        enabled: bool,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        #[cfg(not(ghostex_web))]
-        {
-            self.handle_gpui_app_modal_update_settings_patch_message(
-                &json!({
-                    "patch": { "mainHubHidden": !enabled },
-                    "source": "sidebar:chief",
-                    "type": "updateSettingsPatch",
-                }),
-                cx,
-            );
-            if !enabled {
-                self.show_chief_disabled_toast(cx);
-            }
-        }
-        #[cfg(ghostex_web)]
-        {
-            let _ = (enabled, cx);
-        }
     }
 }

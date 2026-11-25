@@ -1032,7 +1032,8 @@ impl Render for SessionLinksList {
             .count();
         let summary = [
             Some(format!("{open} open")),
-            (failing > 0).then(|| format!("{failing} failing checks")),
+            (failing > 0)
+                .then(|| ghostex_gx_protocol::plural(failing, "failing check", "failing checks")),
         ]
         .into_iter()
         .flatten()

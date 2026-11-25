@@ -108,6 +108,7 @@ pub async fn run_gxserver_foreground(
     }
     let storage = initialize_gxserver_storage(&paths)?;
     crate::storage::hold_gxserver_database_open(&paths)?;
+    crate::native_mode_default::seed_fresh_install_native_mode_once(&paths);
     let config = read_gxserver_config(&paths)?;
     let identity = ensure_gxserver_identity(&paths)?;
     // A project folder move a crash interrupted is finished or forgotten before anything is served.
@@ -169,6 +170,9 @@ pub async fn run_gxserver_foreground(
             details: Some(moved),
         });
     }
+    // Sweep any leftover one-shot ACP channel secret files or account-switch scripts from an
+    // interrupted switch before accepting traffic.
+    crate::acp::channel::sweep_stale_channel_secret_files(&paths);
     // A GBot chat's first message still waiting in its queue names `ghostex gbots guide` instead of
     // the retired skill (gbots/session.rs `rewrite_queued_gbots_first_lines`).
     if let Ok(db) = crate::storage::open_gxserver_database(&paths) {
@@ -259,6 +263,21 @@ pub async fn run_gxserver_foreground(
         version: version.clone(),
     };
     let migration = create_gxserver_migration_status(&storage);
+    // Before any Native host can reconnect and be handed its saved level (approval_migration.rs).
+    if let Some((cleared, resolved)) =
+        crate::acp::approval_migration::clear_automatic_ask_once(&paths, &metadata.server_id)
+    {
+        let _ = logger.log(GxserverLogInput {
+            level: crate::logging::LogLevel::Warn,
+            event: "nativeAutomaticAskCleared".to_string(),
+            server_id: None,
+            request_id: None,
+            client: None,
+            duration_ms: None,
+            error: None,
+            details: Some(json!({ "cleared": cleared, "givenSettingsLevel": resolved })),
+        });
+    }
     let event_hub = GxserverEventHub::new(metadata.server_id.clone());
     crate::agent_model_catalog::start(
         paths.clone(),
@@ -338,6 +357,10 @@ pub async fn run_gxserver_foreground(
         repository_clone_jobs: RepositoryCloneJobManager::default(),
         session_chat_followers: Arc::new(Mutex::new(HashMap::new())),
         session_chat_option_cache: Arc::new(Mutex::new(HashMap::new())),
+        share_manager: Arc::new(crate::sharing::ShareManager::new(
+            paths.root_dir.clone(),
+            local_port,
+        )),
         shutdown_tx: shutdown_tx.clone(),
         stale_activity_timers: Arc::new(Mutex::new(HashMap::new())),
         tailcat_runtime: TailcatRuntime::with_logger(logger.clone()),
@@ -521,6 +544,8 @@ pub async fn run_gxserver_foreground(
     super::security_http::start_security_events(state.clone());
     bot_sync::start_bot_project_sync(state.clone());
     close_after_done_runtime::start_close_after_done_runtime(state.clone());
+    // Queued Terminal -> Native switches waiting for an active reply to finish (Q4771).
+    crate::acp::pending_switch::start_pending_switch_runtime(state.clone());
     // The Mode menu's "Restart in Bypass when idle" switches that were on when gxserver stopped.
     crate::session_chat_mode_restart::resume_waiting_restarts(&state);
     coordinator_runtime::start_coordinator_runtime(state.clone());
@@ -535,6 +560,7 @@ pub async fn run_gxserver_foreground(
         .restore_waiting(&state.security);
     crate::collab_shim::http::approvals::start(state.clone());
     crate::collab_shim::sidecar::start_supervisor(state.clone());
+    crate::sharing::ShareManager::start_runtime(state.clone(), shutdown_tx.subscribe());
     coordinator_remote_runtime::start_coordinator_remote_runtime(state.clone());
     tokio::spawn(peer_http::start_peer_listener(state.clone()));
     // A sidebar extension's own server runs while it is on (CDXC:Extensions in extensions/sidebar.rs).

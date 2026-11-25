@@ -59,8 +59,8 @@ pub(super) fn sleep_inactive_threads(parsed: &ParsedArgs) -> CliResult<()> {
         );
     } else {
         println!(
-            "Slept {} inactive thread(s) of {}{}.",
-            slept.len(),
+            "Slept {} of {}{}.",
+            ghostex_gx_protocol::plural(slept.len(), "inactive thread", "inactive threads"),
             agents::text(&coordinator, "title"),
             if failed.is_empty() {
                 String::new()

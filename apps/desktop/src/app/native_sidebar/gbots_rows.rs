@@ -110,13 +110,13 @@ pub(crate) fn opened_by_chief_tag(
     )
 }
 
-/// Whether GBots are on in this computer's settings: Main Hub and the GBots switch both on
-/// (server/src/gbots/feature.rs reads the same two).
+/// Whether GBots are on in this computer's settings (server/src/gbots/feature.rs reads the same
+/// switch).
 pub(crate) fn gbots_on() -> bool {
     use ghostex_settings_catalog::built_in_extensions::{GBOTS, on_with};
     let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
     let settings = settings.object();
-    super::chief::chief_on() && on_with(GBOTS, |key| settings.get(key).and_then(Value::as_bool))
+    on_with(GBOTS, |key| settings.get(key).and_then(Value::as_bool))
 }
 
 /// What a folded GBots heading shows of the bots under it.
@@ -291,7 +291,7 @@ impl GhostexGpuiApp {
                 row.mb(px(super::sections::SECTION_HEADING_GAP_BELOW * scale))
             })
             .pl(px(5.0 * scale))
-            .pr(px(4.0 * scale))
+            .pr(px(6.0 * scale))
             .gap(px(5.0 * scale))
             .font_weight(FontWeight::LIGHT)
             .text_color(chrome_color(0xd8d8d8, 0x292929).opacity(0.34))
@@ -312,21 +312,23 @@ impl GhostexGpuiApp {
                     appearance.muted,
                 ))
             })
-            // Folded, the heading carries what the bots' rows would show: their status and how many.
-            .when(collapsed && !hovered && folded.any(), |row| {
-                row.child(super::status::folded_status_indicator(
-                    folded.working,
-                    folded.attention,
-                    folded.background_work,
-                    folded.question,
-                    folded.approval,
-                    scale,
-                    titlebar_background(),
-                ))
-            })
             .child(div().flex_1())
-            .when(collapsed && !hovered, |row| {
-                row.child(super::sessions::section_count_label(folded.bots, scale))
+            // Folded, the heading carries overlapping status dots on the far right (hiding the
+            // count until hover, matching sections.rs), or the count when idle.
+            .when(collapsed, |row| {
+                if !hovered && folded.any() {
+                    row.child(super::status::folded_status_indicator(
+                        folded.working,
+                        folded.attention,
+                        folded.background_work,
+                        folded.question,
+                        folded.approval,
+                        scale,
+                        titlebar_background(),
+                    ))
+                } else {
+                    row.child(super::sessions::section_count_label(folded.bots, scale))
+                }
             })
             .when(hovered, |row| {
                 row.child(

@@ -234,7 +234,8 @@ pub use crate::sidebar_menu::{
     MenuHost, MenuItem, MenuOpenTarget, MenuSecondary, MenuSplit, SessionActions, SidebarMenus,
     ADD_PROJECT_ACTION, CLONE_PROJECT_ON_MACHINE, COLLAPSE_ALL_ICON, COMMANDS_ACTION,
     EXPAND_ALL_ICON, MENU_PANEL_DEV_SERVERS, MENU_PANEL_EXTENSIONS, MENU_PANEL_HELP,
-    MENU_PANEL_MESSAGE_TYPE, MENU_PANEL_RESOURCES, UNIFIED_TOGGLE_GROUPS_ACTION,
+    MENU_PANEL_MESSAGE_TYPE, MENU_PANEL_RESOURCES, NEW_COORDINATOR_ACTION,
+    NEW_ORCHESTRATOR_BENEFITS, UNIFIED_TOGGLE_GROUPS_ACTION,
 };
 /// The one session menu the sidebar row, the chat box ⋯ and the phone's menus all show, and the
 /// project menu built by the same rules (sidebar_menu/layout.rs).
@@ -272,7 +273,7 @@ pub use crate::sidebar_view::{
     BrowserTabInput, CleanupKept, CloseAfterDoneInput, Collection, CollectionView,
     CollectionsState, CoordinatorBadge, CoordinatorBadgeTone, DelayedSendInput, DelayedSendView,
     DropLanding, DropWrites, EmptyState, FocusedRowSpace, FoldedStatus, FoldedWorktree,
-    GroupActionTarget, GroupCore, GroupSummary, GroupView, LabelDeadline, MachineChip,
+    GroupActionTarget, GroupCore, GroupSummary, GroupView, LabelDeadline, MachineChip, MachineFold,
     MachineNotice, MachineSummary, MachineTabInput, MachineTabLayout, MachineTabView, NeedsYou,
     OrderItem, OrderKind, PinnedSessionOrder, ProjectContextView, ProjectCopy, ProjectDiffStats,
     ProjectDropLanding, ProjectDropRow, ProjectSlotPlan, RemoteMachineView, RowNesting,

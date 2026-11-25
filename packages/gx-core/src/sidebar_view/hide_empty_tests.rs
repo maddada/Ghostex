@@ -37,6 +37,7 @@ fn build(project: &str, sessions: usize, is_active: bool, tag_filtered_out: bool
             is_visible: false,
             is_multi_selected: false,
             nesting: Default::default(),
+            machine_fold: None,
         })
         .collect();
     GroupBuild {

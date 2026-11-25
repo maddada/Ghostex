@@ -101,7 +101,7 @@ pub(super) const KIT_STYLE: &str = r#"<style id="ghostex-kit">
 gx-page,gx-questions{display:grid;grid-template-columns:minmax(var(--gx-gutter),1fr) minmax(0,var(--gx-text-width)) minmax(var(--gx-gutter),1fr);row-gap:20px;align-content:start;padding:56px 0 88px;font-size:15px;line-height:1.65;color:var(--gx-text);overflow-wrap:break-word}
 gx-page{display:grid}
 gx-page>*,gx-questions>*{grid-column:2;min-width:0}
-/* The Mark as read footer (SEEN_FOOTER) inside a page's own layout takes the page's width, not gutters of its own. */
+/* The seen-only footer (SEEN_FOOTER) inside a page's own layout takes the page's width, not gutters of its own. */
 gx-page gx-questions[data-gx-seen]{grid-template-columns:0 minmax(0,1fr) 0;padding:36px 0 0}
 gx-page>gx-wide,gx-questions>gx-wide{grid-column:1/-1;justify-self:center;box-sizing:border-box;width:min(100% - 2*var(--gx-gutter),var(--gx-wide-width));display:flex;flex-direction:column;align-items:center;gap:20px}
 gx-page>gx-wide[size=full],gx-questions>gx-wide[size=full]{width:100%}
@@ -267,6 +267,12 @@ html[data-gx-theme=light] .gx-ref{color:#5f9878}
 [data-question][data-choice].gx-picked:not(h1,h2,h3,h4,h5,h6){border-color:color-mix(in srgb,var(--gx-pick) 78%,transparent);box-shadow:0 0 0 5px color-mix(in srgb,var(--gx-pick) 10%,transparent),var(--gx-glass-shadow)}
 .gx-send{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:4px;padding:10px 14px;border:1px solid var(--gx-card-border);border-radius:16px;background:var(--gx-footer);box-shadow:var(--gx-glass-shadow);-webkit-backdrop-filter:blur(22px) saturate(1.15);backdrop-filter:blur(22px) saturate(1.15)}
 .gx-send-button{display:inline-flex;align-items:center;gap:6px;margin-left:auto;height:28px;box-sizing:border-box;padding:0 11px;font:inherit;font-size:13px;font-weight:500;border-radius:8px;border:1px solid var(--gx-control);background:var(--gx-control);color:var(--gx-bg);cursor:pointer}
+.gx-send-button>svg{width:14px;height:14px;flex:none}
+.gx-send-button.gx-send-seen{display:inline-grid;place-items:center}
+.gx-send-button.gx-send-seen>.gx-btn-state{grid-area:1/1;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;max-width:100%}
+.gx-send-button.gx-send-seen>.gx-btn-state>svg{width:14px;height:14px;flex:none}
+.gx-send-button.gx-send-seen>.gx-btn-state>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gx-send-button.gx-send-seen[data-gx-mode=archive]>.gx-btn-send,.gx-send-button.gx-send-seen[data-gx-mode=send]>.gx-btn-archive{visibility:hidden;pointer-events:none}
 .gx-send-button:hover:not(:disabled){opacity:.9}
 .gx-send-button:disabled{opacity:.5;cursor:default}
 .gx-skip-all{display:inline-flex;align-items:center;gap:6px;margin-left:auto;height:28px;box-sizing:border-box;padding:0 11px;font:inherit;font-size:13px;font-weight:500;border-radius:8px;border:1px solid transparent;background:color-mix(in srgb,var(--gx-fg) 9%,transparent);color:var(--gx-text);cursor:pointer}
@@ -371,6 +377,43 @@ gx-question.gx-q-tied>.gx-choices{display:none}
 .gx-rowbar-all{flex:none;font-size:12.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .gx-rowbar>.gx-send-button{margin-left:0}
 .gx-tally.gx-tally-off{visibility:hidden}
+/* Compact mention menu (`*` Boosts, `+` agents, `/` or `$` skills) in any editable box on a Live page. */
+#gx-mention{position:fixed;left:0;top:0;z-index:2147483647;margin:0;inset:auto;display:none;flex-direction:column;gap:2px;box-sizing:border-box;width:min(320px,calc(100vw - 16px));max-height:224px;overflow-y:auto;padding:4px;border-radius:10px;border:1px solid var(--gx-tip-border);background:var(--gx-tip-bg);color:var(--gx-tip-fg);-webkit-backdrop-filter:blur(20px) saturate(1.15);backdrop-filter:blur(20px) saturate(1.15);box-shadow:var(--gx-tip-shadow);font:400 12.5px/1.35 Inter,var(--font-sans);letter-spacing:0;text-align:left}
+#gx-mention.gx-m-on{display:flex}
+#gx-mention .gx-m-head{padding:5px 8px 3px;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:color-mix(in srgb,var(--gx-tip-fg) 52%,transparent)}
+#gx-mention .gx-m-row{display:flex;align-items:center;gap:7px;width:100%;box-sizing:border-box;padding:6px 8px;border:0;border-radius:6px;background:transparent;color:var(--gx-tip-fg);font:inherit;text-align:left;cursor:pointer}
+#gx-mention .gx-m-row:hover,#gx-mention .gx-m-row.gx-m-sel{background:color-mix(in srgb,var(--gx-tip-fg) 10%,transparent)}
+#gx-mention .gx-m-ico{flex:none;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;color:color-mix(in srgb,var(--gx-tip-fg) 68%,transparent)}
+#gx-mention .gx-m-ico svg{width:14px;height:14px;display:block}
+#gx-mention .gx-m-ico.gx-m-boost{color:#d8a344}
+html[data-gx-theme=light] #gx-mention .gx-m-ico.gx-m-boost{color:#a96c00}
+#gx-mention .gx-m-ico.gx-m-main{color:#e2b93b}
+html[data-gx-theme=light] #gx-mention .gx-m-ico.gx-m-main{color:#b08415}
+#gx-mention .gx-m-lbl{flex:none;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+#gx-mention .gx-m-det{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:color-mix(in srgb,var(--gx-tip-fg) 56%,transparent);font-size:12px}
+#gx-mention .gx-m-det.gx-m-work{color:#f5a524}
+#gx-mention .gx-m-empty{padding:6px 8px;color:color-mix(in srgb,var(--gx-tip-fg) 56%,transparent);font-size:12px}
+/* Outside answerer chips and per-person read-only preview (CDXC:Sharing 2026-11-24). */
+.gx-outside-bar{position:fixed;top:14px;right:18px;z-index:25;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px;max-width:min(480px,calc(100vw - 36px))}
+html[data-gx-controls=right] .gx-outside-bar{left:auto;right:var(--gx-controls-inset,18px);justify-content:flex-end;max-width:min(480px,calc(100% - 2*var(--gx-controls-inset,18px)))}
+html[data-gx-controls=left] .gx-outside-bar{left:var(--gx-controls-inset,18px);right:auto;justify-content:flex-start;max-width:min(480px,calc(100% - 2*var(--gx-controls-inset,18px)))}
+@media (max-width:960px){.gx-outside-bar{position:sticky;top:8px;left:auto;right:auto;margin:10px var(--gx-gutter,16px) -6px auto;width:fit-content;max-width:calc(100% - 2*var(--gx-gutter,16px))}html[data-gx-controls=right] .gx-outside-bar{left:auto;right:auto;margin:10px var(--gx-controls-inset,var(--gx-gutter,16px)) -6px auto;justify-content:flex-end;max-width:calc(100% - 2*var(--gx-controls-inset,var(--gx-gutter,16px)))}html[data-gx-controls=left] .gx-outside-bar{left:auto;right:auto;margin:10px auto -6px var(--gx-controls-inset,var(--gx-gutter,16px));justify-content:flex-start;max-width:calc(100% - 2*var(--gx-controls-inset,var(--gx-gutter,16px)))}}
+.gx-outside-chip,.gx-outside-viewing,.gx-outside-back{display:inline-flex;align-items:center;gap:6px;height:30px;box-sizing:border-box;padding:0 11px;border-radius:999px;font:500 12.5px/1 var(--font-sans);white-space:nowrap;-webkit-backdrop-filter:blur(20px) saturate(1.15);backdrop-filter:blur(20px) saturate(1.15);box-shadow:var(--gx-tip-shadow)}
+.gx-outside-chip{border:1px solid color-mix(in srgb,var(--success) 38%,var(--gx-tip-border));background:var(--gx-tip-bg);color:var(--gx-tip-fg);cursor:pointer;transition:border-color .15s,background-color .15s,transform .12s}
+.gx-outside-chip:hover{border-color:color-mix(in srgb,var(--success) 68%,var(--gx-tip-border));background:color-mix(in srgb,var(--success) 14%,var(--gx-tip-bg))}
+.gx-outside-chip:focus-visible,.gx-outside-back:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--success) 35%,transparent),var(--gx-tip-shadow)}
+.gx-outside-dot{width:7px;height:7px;border-radius:50%;background:var(--success);flex:none}
+.gx-outside-viewing{border:1px solid color-mix(in srgb,var(--success) 42%,var(--gx-tip-border));background:color-mix(in srgb,var(--success) 14%,var(--gx-tip-bg));color:var(--success)}
+.gx-outside-viewing svg,.gx-outside-back svg{width:13px;height:13px;flex:none}
+.gx-outside-back{border:1px solid var(--gx-control);background:var(--gx-control);color:var(--gx-bg);font-weight:600;cursor:pointer;padding:0 12px}
+.gx-outside-back:hover{opacity:.9}
+.gx-outside-banner{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:12px;font:500 13px/1.45 var(--font-sans);color:var(--success);background:color-mix(in srgb,var(--success) 10%,var(--gx-card));border:1px solid color-mix(in srgb,var(--success) 34%,transparent);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}
+.gx-outside-banner svg{width:15px;height:15px;flex:none}
+.gx-outside-banner span{flex:1;min-width:0}
+gx-question.gx-outside-preview{border-color:color-mix(in srgb,var(--success) 26%,var(--gx-card-border))}
+gx-question.gx-outside-preview .gx-choice[aria-checked=true]{border-color:color-mix(in srgb,var(--success) 55%,transparent);background:color-mix(in srgb,var(--success) 10%,transparent)}
+gx-question.gx-outside-preview .gx-choice[aria-checked=true] .gx-mark{border-color:var(--success);background:var(--success)}
+[data-gx-preview-hidden]{display:none!important}
 </style>"#;
 
 /// The kit's behaviour: turns the first `<gx-questions>` into a working form once the page has
@@ -651,8 +694,10 @@ function question(qe,index,used,changed){
     var area=el("textarea","gx-text");area.placeholder=qe.getAttribute("placeholder")||"Your answer (optional)";area.setAttribute("aria-labelledby",titleId);
     has=function(){return !!area.value.trim();};area.addEventListener("input",notify);qe.append(area);
     return{el:qe,title:title,key:key,tag:(tag||"").trim(),choices:[],collect:function(out){out[key]=area.value.trim()||SKIPPED;},
-      restore:function(answers){if(typeof answers[key]==="string"&&answers[key]!==SKIPPED)area.value=answers[key];live();},
-      lock:function(){answered(!!area.value.trim());area.readOnly=true;if(!area.value)area.hidden=true;}};
+      restore:function(answers){area.value=(typeof answers[key]==="string"&&answers[key]!==SKIPPED)?answers[key]:"";live();},
+      lock:function(){answered(!!area.value.trim());area.readOnly=true;if(!area.value)area.hidden=true;},
+      lockPreview:function(){qe.classList.remove("gx-answered","gx-unanswered");answered(!!area.value.trim());qe.classList.add("gx-outside-preview");area.readOnly=true;area.hidden=!area.value.trim();},
+      unlock:function(){qe.classList.remove("gx-answered","gx-unanswered","gx-outside-preview");area.readOnly=false;area.hidden=false;live();}};
   }
   var list=el("div","gx-choices"),choices=[];
   list.setAttribute("role",multiple?"group":"radiogroup");list.setAttribute("aria-labelledby",titleId);
@@ -678,8 +723,10 @@ function question(qe,index,used,changed){
       var written=note.value.trim();out[key]=on.length?(multiple?on:on[0]):written?null:SKIPPED;if(written)out[key+" (note)"]=written;},
     restore:function(answers){var v=answers[key],picked=Array.isArray(v)?v:v==null?[]:[v];
       choices.forEach(function(c){c.set(picked.indexOf(c.value)>=0);});
-      if(typeof answers[key+" (note)"]==="string")note.value=answers[key+" (note)"];sync();live();},
-    lock:function(){answered(choices.some(function(c){return c.on();})||!!note.value.trim());choices.forEach(function(c){c.button.disabled=true;});note.readOnly=true;if(!note.value)note.hidden=true;}};
+      note.value=typeof answers[key+" (note)"]==="string"?answers[key+" (note)"]:"";sync();live();},
+    lock:function(){answered(choices.some(function(c){return c.on();})||!!note.value.trim());choices.forEach(function(c){c.button.disabled=true;});note.readOnly=true;if(!note.value)note.hidden=true;},
+    lockPreview:function(){qe.classList.remove("gx-answered","gx-unanswered");answered(choices.some(function(c){return c.on();})||!!note.value.trim());qe.classList.add("gx-outside-preview");choices.forEach(function(c){c.button.disabled=true;});note.readOnly=true;note.hidden=!note.value.trim();},
+    unlock:function(){qe.classList.remove("gx-answered","gx-unanswered","gx-outside-preview");choices.forEach(function(c){c.button.disabled=false;});note.readOnly=false;note.hidden=false;sync();live();}};
 }
 /* The Pick button of one variant: at the right end of its heading's row (or a small head the kit adds when the variant has no heading), it clicks that choice, and shows it picked, here and in the question. `node` carries the picked ring. */
 function attachPick(node,heading,c,q){
@@ -930,24 +977,28 @@ function tidyCards(questions,ties){
   return cards;
 }
 function setup(root){
-  /* A page that asks nothing and waits to be seen (SEEN_FOOTER below): the same footer with no questions, a reply box and Mark as read. */
+  /* A page that asks nothing and waits to be seen (SEEN_FOOTER below): the same footer with no questions, a reply box and Archive (switching live to Send to agent when the box has a reply). */
   var seen=root.hasAttribute("data-gx-seen");
-  var used={},questions=[],options=[];
+  var used={},questions=[],options=[],exported=false,archiveState=null,sendState=null,archiveLabel=null,sendLabel=null;
+  function hasReply(){return !!(seen&&notes&&notes.value.trim());}
   function collect(){var out={};questions.forEach(function(q){q.collect(out);});if(seen)out.seen=true;var t=notes&&notes.value.trim();if(t)out[notesKey]=t;return out;}
   function restore(answers){questions.forEach(function(q){q.restore(answers);});if(notes)notes.value=typeof answers[notesKey]==="string"?answers[notesKey]:"";}
   function syncOptions(){options.forEach(function(o){o.sync();});}
+  function syncSeenButton(){if(!seen||exported||!archiveState||!sendState||button.disabled)return;var sending=hasReply();button.setAttribute("data-gx-mode",sending?"send":"archive");archiveState.setAttribute("aria-hidden",sending?"true":"false");sendState.setAttribute("aria-hidden",sending?"false":"true");button.setAttribute("data-gx-tip",sending?"Send to agent":"Archive");button.setAttribute("aria-label",sending?"Send to agent":"Archive");}
   /* The reader's picks so far are kept on the host (PAGE_API's draft), so closing and reopening the page loses nothing. */
-  function changed(){syncOptions();if(window.ghostex&&ghostex.__saveDraft)ghostex.__saveDraft("kit",collect());}
+  function changed(){syncOptions();syncSeenButton();if(window.ghostex&&ghostex.__saveDraft)ghostex.__saveDraft("kit",collect());}
   addRowChoices(root);
   questions=Array.prototype.map.call(root.querySelectorAll("gx-question"),function(qe,index){return question(qe,index,used,changed);});
   var explicit=bindOptions(questions),rowTies=bindRows(questions,changed),auto=autoTie(questions,explicit.concat(rowTies));
   var repeated=repeatedLists(questions,explicit.concat(rowTies,auto.options).map(function(o){return o.q;})),allRows=rowTies,lists=[];
   allRows.forEach(function(o){if(!lists.some(function(L){return L.q===o.q;}))lists.push(rowList(o.q,allRows.filter(function(x){return x.q===o.q;}),changed));});
   /* A row's note goes with its question's answer as "<key> · <value> (note)", the key the answers card already folds into the question's row (packages/gx-chat-core/src/transcript/page_answers.rs). */
-  allRows.forEach(function(o){var q=o.q,k=q.key+" \u00b7 "+o.value+" (note)",c0=q.collect,r0=q.restore,l0=q.lock;
+  allRows.forEach(function(o){var q=o.q,k=q.key+" \u00b7 "+o.value+" (note)",c0=q.collect,r0=q.restore,l0=q.lock,lp0=q.lockPreview,u0=q.unlock;
     q.collect=function(out){c0(out);var t=o.note.value.trim();if(t)out[k]=t;};
     q.restore=function(a){r0(a);o.note.value=typeof a[k]==="string"?a[k]:"";};
-    q.lock=function(){l0();o.note.readOnly=true;};});
+    q.lock=function(){l0();o.note.readOnly=true;};
+    q.lockPreview=function(){lp0();o.note.readOnly=true;};
+    q.unlock=function(){u0();o.note.readOnly=false;};});
   var cards=tidyCards(questions,explicit.concat(auto.options,rowTies));
   options=explicit.concat(auto.options,allRows,lists,cards);window.__ghostexKit={tied:explicit.length,auto:auto.report.auto,untied:auto.report.untied,rows:rowTies.length,repeated:repeated};syncOptions();
   function refoldAll(){allRows.forEach(function(o){o.refold();});lists.forEach(function(L){L.sync();});}
@@ -974,22 +1025,22 @@ function setup(root){
     var n=a[q.key+" (note)"];r.note=typeof n==="string"?n:null;return r;});
     if(notes&&typeof a[notesKey]==="string")rows.push({tag:null,question:seen?"Reply about this page":"Anything else?",key:notesKey,value:a[notesKey],note:null});return rows;};
   /* "Anything else?": see the SessionChat 2026-11-04 DECISION on KIT_SCRIPT. */
-  var last=questions[questions.length-1],notes=null,notesCard=null,notesKey=seen?"reply":NOTES;
+  var last=questions[questions.length-1],notes=null,notesCard=null,notesTitleEl=null,notesOrigTitle=seen?"Reply about this page":"Anything else?",notesKey=seen?"reply":NOTES;
   for(var copy=2;questions.some(function(q){return q.key===notesKey||q.key+" (note)"===notesKey;});copy++)notesKey=NOTES+" ("+copy+")";
   if(!(last&&!last.choices.length&&OWN_NOTES.test(last.title))){
-    notesCard=el("div","gx-notes");var notesHead=el("div","gx-q-head"),notesTitle=el("div","gx-q-title",seen?"Reply about this page":"Anything else?");notesTitle.id="gx-notes-title";
+    notesCard=el("div","gx-notes");var notesHead=el("div","gx-q-head"),notesTitle=el("div","gx-q-title",notesOrigTitle);notesTitle.id="gx-notes-title";notesTitleEl=notesTitle;
     notes=el("textarea","gx-text");notes.setAttribute("aria-labelledby","gx-notes-title");notes.placeholder=seen?"Write a reply about the page, or paste images (optional)":"Write anything more, or paste images (optional)";notes.__gxThumbs=true;
     notes.addEventListener("input",changed);notesHead.append(notesTitle);notesCard.append(notesHead,notes);
   }
   var bar=el("div","gx-send"),button=el("button","gx-send-button"),label=el("span",null,root.getAttribute("submit")||"Send answers"),status=el("span","gx-send-status"),info=el("button","gx-send-info");
   /* The sentence about blank questions is an (i) icon with the quick tooltip, not a line of text beside the buttons (the SessionChat 2026-10-24 DECISION in apps/desktop/src/app/native_chat/ask_card.rs `ask_info_hint`). Any status message replaces the icon. */
-  var infoText=seen?"The agent is told you saw the page, with your reply if you write one.":"Questions you leave blank are sent as skipped.";info.type="button";info.setAttribute("aria-label",infoText);info.setAttribute("data-gx-tip",infoText);info.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M12 9h.01"/><path d="M11 12h1v4h1"/></svg>';status.append(info);
+  var infoText=seen?"Archives the page when blank, or sends your reply to the agent and archives it.":"Questions you leave blank are sent as skipped.";info.type="button";info.setAttribute("aria-label",infoText);info.setAttribute("data-gx-tip",infoText);info.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M12 9h.01"/><path d="M11 12h1v4h1"/></svg>';status.append(info);
   var mac=/Mac|iPhone|iPad/.test(navigator.platform||"");
   /* The shortcuts show in the kit's tooltip as key caps, the keys this platform uses, not on the buttons. */
-  button.setAttribute("data-gx-tip",seen?"Mark as read":"Send answers");button.setAttribute("data-gx-tip-keys",mac?"⌘ Enter":"Ctrl Enter");
+  button.setAttribute("data-gx-tip",seen?"Archive":"Send answers");button.setAttribute("data-gx-tip-keys",mac?"⌘ Enter":"Ctrl Enter");
   /* Skip all: sends at once with every question as skipped and no notes, whatever is picked or typed (see the SessionChat DECISION on SKIPPED in packages/gx-visual/src/questions.rs). */
   var skipAll=el("button","gx-skip-all");skipAll.type="button";skipAll.append(el("span",null,"Skip all"));skipAll.setAttribute("data-gx-tip","Skip all");skipAll.setAttribute("data-gx-tip-keys",mac?"⌘ ⇧ Enter":"Ctrl Shift Enter");
-  button.type="button";button.append(label);if(seen)bar.append(status,button);else bar.append(status,skipAll,button);if(notesCard)root.append(notesCard);root.append(bar);
+  button.type="button";if(seen){var archiveText=root.getAttribute("submit")||"Archive";button.classList.add("gx-send-seen");button.setAttribute("data-gx-mode","archive");button.setAttribute("aria-label",archiveText);archiveState=el("span","gx-btn-state gx-btn-archive");archiveState.insertAdjacentHTML("afterbegin",'<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>');archiveLabel=el("span",null,archiveText);archiveState.append(archiveLabel);sendState=el("span","gx-btn-state gx-btn-send");sendLabel=el("span",null,"Send to agent");sendState.append(sendLabel);sendState.setAttribute("aria-hidden","true");button.append(archiveState,sendState);bar.append(status,button);}else{button.append(label);bar.append(status,skipAll,button);}if(notesCard)root.append(notesCard);root.append(bar);
   skipAll.addEventListener("click",function(){
     if(button.disabled)return;
     var out={};questions.forEach(function(q){out[q.key]=SKIPPED;});
@@ -997,10 +1048,11 @@ function setup(root){
     send(out,function(){restore({});root.querySelectorAll("textarea").forEach(function(t){t.value="";});});
   });
   var dictStop=null;
-  function lock(){if(dictStop)dictStop();questions.forEach(function(q){q.lock();});if(notes){notes.readOnly=true;notesCard.hidden=!notes.value.trim();}syncOptions();allPills();button.disabled=true;skipAll.remove();label.textContent=seen?"Seen":"Sent";button.removeAttribute("data-gx-tip");button.removeAttribute("data-gx-tip-keys");status.classList.remove("gx-error");status.textContent=seen?"Marked as seen. The agent was told.":"Sent to the agent.";}
+  function lock(){if(dictStop)dictStop();questions.forEach(function(q){q.lock();});var replied=hasReply();if(notes){notes.readOnly=true;notesCard.hidden=!notes.value.trim();}syncOptions();allPills();button.disabled=true;skipAll.remove();if(seen&&archiveState&&sendState){button.setAttribute("data-gx-mode",replied?"send":"archive");archiveState.setAttribute("aria-hidden",replied?"true":"false");sendState.setAttribute("aria-hidden",replied?"false":"true");archiveLabel.textContent="Archived";sendLabel.textContent="Sent";button.setAttribute("aria-label",replied?"Sent":"Archived");}else{label.textContent=seen?"Archived":"Sent";}button.removeAttribute("data-gx-tip");button.removeAttribute("data-gx-tip-keys");status.classList.remove("gx-error");status.textContent=seen?(replied?"Sent to the agent and archived.":"Archived. The agent was told."):"Sent to the agent.";}
   /* CDXC:SessionChat 2026-11-11 DECISION:
      User: "please show number of questions answered so far in bottom right corner always". A page with questions shows "3 of 10 answered" in a small glass pill fixed at the window's bottom right, whatever the scroll, updated as the reader answers. A question counts as answered as the tile's check and Send count it (`gx-has-answer`): a choice picked, or a note or text written; one left blank counts as not answered, also after Skip all. All answered turns it green. (2026-11-12: it stays fully on screen: User, on an Android phone's page sheet where the pill's right end was cut off by the screen's edge: "make questions bottom right not off screen pls". Its margin is the page's own gutter (16px on a phone, 24px otherwise) or the safe area, it shrinks with an ellipsis if the screen is narrower than its text, and the script places it by the visual viewport, so a web view whose layout is wider than the screen cannot push it off.) The page gets room at its end (the gutter plus 34px; measured from the pill since 2026-11-15, below), so scrolled to the bottom the pill sits below the send bar instead of on it. The floating window, a browser tab and the phone's page sheet all get it from here.
      CDXC:SessionChat 2026-11-15 DECISION: User, with a screenshot of a page on their Android foldable where the "1 of 2 answered" pill sat over an option card, among cards that overflowed and overlapped: "Please also make sure inline htmls don't look like this where stuff is over flowing and overlapping." Asked whether the pill should fade whenever content is under it or always show, the user answered "Always show", so the "always" above stands: the pill never hides. It cannot hide a control: clicks and taps go through it (`pointer-events:none`), and the page's room at its end is measured from the pill itself (its margin, its height at the current text size and a 12px gap), so scrolled to the end every card, the send bar and its buttons sit clear above it. Supersedes the fading pill tried the same day. */
+  var ownerTally=null,ownerRowbar=null;
   if(questions.length&&!seen){
     var tally=el("div","gx-tally");tally.setAttribute("role","status");tally.setAttribute("aria-live","polite");
     /* While a list's rows are on screen, a bar takes the pill's place: that list's picks, the page's count and Send (the SessionChat 2026-11-20 DECISION on `bindRows`). `ghostex visual check` treats it as it does the pill. */
@@ -1026,7 +1078,7 @@ function setup(root){
       room.style.height=Math.ceil(gb+Math.max(tally.getBoundingClientRect().height,rowbar?rowbar.offsetHeight:0)+ROOM_GAP)+"px";
     };
     var room=el("div","gx-tally-room"),ROOM_GAP=12;
-    document.body.append(room,tally);if(rowbar){document.body.append(rowbar);addEventListener("scroll",barLater,{passive:true});addEventListener("resize",barLater);}tallied();place();
+    document.body.append(room,tally);if(rowbar){document.body.append(rowbar);addEventListener("scroll",barLater,{passive:true});addEventListener("resize",barLater);}ownerTally=tally;ownerRowbar=rowbar;tallied();place();
     window.addEventListener("resize",place);
     window.addEventListener("load",place);
     if(window.visualViewport){visualViewport.addEventListener("resize",place);visualViewport.addEventListener("scroll",place);}
@@ -1053,12 +1105,136 @@ function setup(root){
     row.hidden=!row.querySelector(".gx-thumb")||area.hidden;
   }
   function allPills(){boxes().forEach(pills);}
+  var previewState=null,outsideBar=null,outsideBanner=null;
+  var USER_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+  var BACK_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>';
+  function setupOutsideAnswers(){
+    if(!window.ghostex||ghostex.shared||ghostex.exported||outsideBar)return;
+    var raw=Array.isArray(ghostex.outsideAnswers)?ghostex.outsideAnswers:[];
+    if(!raw.length)return;
+    /* Keep the latest submission per outside answerer, newest first. */
+    var byName={},list=[];
+    for(var i=raw.length-1;i>=0;i--){
+      var item=raw[i];if(!item||typeof item!=="object")continue;
+      var who=String(item.by||"Visitor").trim()||"Visitor";
+      var key=who.toLowerCase();
+      if(byName[key])continue;
+      byName[key]=true;
+      list.push({by:who,answeredAt:item.answeredAt||"",answers:item.answers&&typeof item.answers==="object"?item.answers:{}});
+    }
+    if(!list.length)return;
+    outsideBar=el("div","gx-outside-bar");
+    outsideBar.setAttribute("role","region");
+    outsideBar.setAttribute("aria-label","Shared link answers");
+    function renderBar(){
+      outsideBar.textContent="";
+      if(previewState){
+        var viewing=el("span","gx-outside-viewing");
+        viewing.innerHTML=USER_ICON;
+        viewing.append(el("span",null,previewState.entry.by+"'s answers"));
+        var back=el("button","gx-outside-back");
+        back.type="button";
+        back.innerHTML=BACK_ICON;
+        back.append(el("span",null,"Back"));
+        back.setAttribute("data-gx-tip","Back to your page");
+        back.addEventListener("click",exitPreview);
+        outsideBar.append(viewing,back);
+      }else{
+        list.forEach(function(entry){
+          var chip=el("button","gx-outside-chip");
+          chip.type="button";
+          chip.setAttribute("data-gx-tip","Preview "+entry.by+"'s answers");
+          chip.append(el("span","gx-outside-dot"),el("span",null,entry.by));
+          chip.addEventListener("click",function(){enterPreview(entry);});
+          outsideBar.append(chip);
+        });
+      }
+    }
+    function setPreviewHidden(node,hide){
+      if(!node)return;
+      if(hide)node.setAttribute("data-gx-preview-hidden","1");
+      else node.removeAttribute("data-gx-preview-hidden");
+    }
+    function enterPreview(entry){
+      if(dictStop)dictStop();
+      if(!previewState){
+        previewState={
+          ownerAnswered:!!ghostex.answered,
+          ownerAnswers:ghostex.answered?(ghostex.answers||{}):collect(),
+          entry:entry
+        };
+      }else{
+        previewState.entry=entry;
+      }
+      if(ghostex.__setPreview)ghostex.__setPreview(true);
+      restore(entry.answers||{});
+      questions.forEach(function(q){q.lockPreview();});
+      if(notes){
+        notes.readOnly=true;
+        if(notesTitleEl)notesTitleEl.textContent=entry.by+"'s note";
+        if(notesCard)notesCard.hidden=!notes.value.trim();
+      }
+      setPreviewHidden(bar,true);
+      setPreviewHidden(ownerTally,true);
+      setPreviewHidden(ownerRowbar,true);
+      setPreviewHidden(document.getElementById("gx-answered"),true);
+      if(!outsideBanner){
+        outsideBanner=el("div","gx-outside-banner");
+        outsideBanner.setAttribute("role","status");
+      }
+      var when="";
+      try{when=entry.answeredAt?" on "+new Date(entry.answeredAt).toLocaleString():"";}catch(e){}
+      outsideBanner.innerHTML=USER_ICON;
+      outsideBanner.append(el("span",null,"Viewing "+entry.by+"'s answers (read-only) \u00b7 submitted via share link"+when+". Press Back to return to your page."));
+      if(!outsideBanner.isConnected){
+        var firstQ=root.querySelector("gx-question");
+        if(firstQ&&firstQ.parentNode)firstQ.parentNode.insertBefore(outsideBanner,firstQ);
+        else root.insertBefore(outsideBanner,root.firstChild);
+      }
+      syncOptions();
+      allPills();
+      renderBar();
+    }
+    function exitPreview(){
+      if(!previewState)return;
+      var snap=previewState;
+      previewState=null;
+      if(outsideBanner&&outsideBanner.isConnected)outsideBanner.remove();
+      if(notesTitleEl)notesTitleEl.textContent=notesOrigTitle;
+      setPreviewHidden(bar,false);
+      setPreviewHidden(ownerTally,false);
+      setPreviewHidden(ownerRowbar,false);
+      setPreviewHidden(document.getElementById("gx-answered"),false);
+      if(snap.ownerAnswered){
+        questions.forEach(function(q){q.unlock();});
+        restore(snap.ownerAnswers||{});
+        lock();
+      }else{
+        questions.forEach(function(q){q.unlock();});
+        if(notes){notes.readOnly=false;if(notesCard)notesCard.hidden=false;}
+        restore(snap.ownerAnswers||{});
+        syncOptions();
+        allPills();
+        syncSeenButton();
+      }
+      if(ghostex.__setPreview)ghostex.__setPreview(false);
+      renderBar();
+    }
+    renderBar();
+    document.body.insertBefore(outsideBar,document.body.firstChild);
+    window.__ghostexPreviewOutside=function(name){
+      if(!name){exitPreview();return;}
+      var target=list.filter(function(x){return x.by.toLowerCase()===String(name).trim().toLowerCase();})[0]||list[0];
+      if(target)enterPreview(target);
+    };
+  }
   if(!window.ghostex){button.disabled=true;skipAll.remove();status.textContent="This Ghostex can't send answers from a page; type them in the chat.";return;}
-  if(ghostex.answered){restore(ghostex.answers||{});lock();return;}
+  if(ghostex.answered){restore(ghostex.answers||{});lock();setupOutsideAnswers();return;}
   /* An exported page has no Ghostex to send to: Send becomes Export answers, which shows the answers to copy or download, and the page stays open for more (exported.rs). */
-  var exported=!!ghostex.exported;
-  if(exported){label.textContent="Export answers";button.setAttribute("data-gx-tip","Export answers");skipAll.remove();infoText=seen?"Exports that you saw the page, with your reply if you write one.":"Questions you leave blank are exported as skipped.";info.setAttribute("aria-label",infoText);info.setAttribute("data-gx-tip",infoText);}
+  exported=!!ghostex.exported;
+  if(exported){if(seen){button.classList.remove("gx-send-seen");button.removeAttribute("data-gx-mode");button.removeAttribute("aria-label");archiveState=sendState=null;button.textContent="";button.append(label);}else{var svg=button.querySelector("svg");if(svg)svg.remove();}label.textContent="Export answers";button.setAttribute("data-gx-tip","Export answers");skipAll.remove();infoText=seen?"Exports that you saw the page, with your reply if you write one.":"Questions you leave blank are exported as skipped.";info.setAttribute("aria-label",infoText);info.setAttribute("data-gx-tip",infoText);}
   var saved=ghostex.__draft&&ghostex.__draft("kit");if(saved&&typeof saved==="object"){restore(saved);syncOptions();}
+  syncSeenButton();
   /* Pasted images: see the Clipboard DECISIONs on KIT_SCRIPT. */
   var pendingImages=0,kept={},keptSize=0,savedThumbs=ghostex.__draft&&ghostex.__draft("thumbs");
   function keepSmall(k,d){if(typeof d==="string"&&/^data:image\//.test(d)&&!kept[k]){small[k]=kept[k]=d;keptSize+=d.length;}}
@@ -1136,14 +1312,16 @@ function setup(root){
     });
   }
   allPills();
+  setupOutsideAnswers();
   /* A newer draft than the one the page was served came after it loaded (PAGE_API's "gx-draft", sent only before the reader changed anything): show it. */
-  document.addEventListener("gx-draft",function(){if(button.disabled)return;var s=ghostex.__draft("kit"),t=ghostex.__draft("thumbs");boxes().forEach(function(b){b.value="";});restore(s&&typeof s==="object"?s:{});if(t&&typeof t==="object")Object.keys(t).forEach(function(k){keepSmall(k,t[k]);});syncOptions();allPills();});
+  document.addEventListener("gx-draft",function(){if(button.disabled||previewState)return;var s=ghostex.__draft("kit"),t=ghostex.__draft("thumbs");boxes().forEach(function(b){b.value="";});restore(s&&typeof s==="object"?s:{});if(t&&typeof t==="object")Object.keys(t).forEach(function(k){keepSmall(k,t[k]);});syncOptions();allPills();syncSeenButton();});
   function send(out,sent){
     if(pendingImages){status.classList.add("gx-error");status.textContent="Wait for the pasted image to finish saving.";return;}
     if(exported){status.classList.remove("gx-error");ghostex.submit(out).then(function(){status.textContent="Answers exported. Send them back to whoever shared this page.";});return;}
-    button.disabled=true;status.classList.remove("gx-error");status.textContent="Sending…";
+    var sendingReply=hasReply();
+    button.disabled=true;status.classList.remove("gx-error");status.textContent=seen&&!sendingReply?"Archiving\u2026":"Sending\u2026";
     /* A send that can't reach Ghostex keeps trying with everything left as typed, and says so (PAGE_API's submit). */
-    ghostex.submit(out,function(message){status.classList.add("gx-error");status.textContent=message;}).then(function(){if(sent)sent();lock();},function(error){button.disabled=false;status.classList.add("gx-error");status.textContent=error&&error.message||"Your answers were not sent.";});
+    ghostex.submit(out,function(message){status.classList.add("gx-error");status.textContent=message;}).then(function(){if(sent)sent();lock();},function(error){button.disabled=false;syncSeenButton();status.classList.add("gx-error");status.textContent=error&&error.message||"Your answers were not sent.";});
   }
   button.addEventListener("click",function(){send(collect());});
   /* Ctrl+Enter (Cmd+Enter on macOS) presses the send button from anywhere on the page, a note box included; with Shift it presses Skip all. */
@@ -1183,9 +1361,287 @@ function setupTabs(){
     var start=0;panes.forEach(function(p,i){if(p.hasAttribute("data-tab-default"))start=i;});show(start);
   });
 }
-/* SEEN_FOOTER: a page that asks nothing, published to wait until the reader has looked at it (`awaitsSeen`, server/src/visual_pages/publish.rs), ends with a reply box and Mark as read, which send `{"seen": true, "reply": …}` as its answers. It goes at the very end of the page, so the reader reaches the end to press it. */
-function seenFooter(){var r=document.createElement("gx-questions");r.setAttribute("data-gx-seen","");r.setAttribute("submit","Mark as read");(document.querySelector("gx-page")||document.body).append(r);setup(r);}
-function init(){followPaint();addThemeSwitch();setupTabs();var root=document.querySelector("gx-questions");if(root)setup(root);else if(window.ghostex&&ghostex.awaitsSeen)seenFooter();}
+/* Mention menus (`*` Boosts, `+` agents, `/` or `$` skills) in every editable box on a Live page:
+   kit note/reply boxes (`.gx-box`) and plain `<textarea>` / text `<input>` elements. Fetches the
+   page's catalog from `GET /visual/<id>/mentions` and inserts the exact composer mention token. */
+var BOOST_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M19 3v4M17 5h4M5 17v4M3 19h4"/></svg>';
+var CROWN_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6l4 6 5-4-2 10H5L3 8l5 4z"/></svg>';
+var AGENT_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 4v4M9 13v2M15 13v2"/></svg>';
+var mentionCatalog=null,mentionFetch=null,mentionFetchedAt=0,mentionBlocked=false,mentionMenu=null,mentionState=null,mentionDismiss=null;
+function canFetchMentions(){return !mentionBlocked&&!window.__gxReadOnly&&!(window.ghostex&&(ghostex.exported||ghostex.answered))&&/^\/visual\/[0-9a-f]{32}$/.test(base);}
+function loadMentions(force){
+  if(!canFetchMentions())return Promise.resolve(null);
+  var fresh=mentionCatalog&&Date.now()-mentionFetchedAt<10000;
+  if(!force&&fresh)return Promise.resolve(mentionCatalog);
+  if(mentionFetch)return mentionFetch;
+  mentionFetch=fetch(base+"/mentions").then(function(r){
+    if(r.status===404||r.status===409){mentionBlocked=true;return null;}
+    return r.ok?r.json():null;
+  }).then(function(j){
+    mentionFetch=null;
+    if(j&&j.ok){mentionCatalog=j;mentionFetchedAt=Date.now();if(mentionState&&mentionState.target===activeEditable())updateMention(mentionState.target,false);}
+    return mentionCatalog;
+  },function(){mentionFetch=null;return mentionCatalog;});
+  return mentionFetch;
+}
+function isMentionTarget(node){
+  if(!node||node.nodeType!==1)return false;
+  if(node.classList&&node.classList.contains("gx-box"))return !!(node.__gxArea&&!node.__gxArea.readOnly&&!node.__gxArea.disabled);
+  if(node.tagName==="TEXTAREA")return !node.classList.contains("gx-src")&&!node.readOnly&&!node.disabled;
+  if(node.tagName==="INPUT"){
+    if(node.classList.contains("gx-row-filter")||node.readOnly||node.disabled)return false;
+    var t=(node.type||"text").toLowerCase();
+    return t==="text"||t==="search"||t==="";
+  }
+  return false;
+}
+function activeEditable(){var a=document.activeElement;return isMentionTarget(a)?a:null;}
+function editableState(target){
+  if(target.classList&&target.classList.contains("gx-box")){
+    var area=target.__gxArea,c=caretIn(target);
+    if(!area||!c)return null;
+    return{text:area.value,start:c.start,end:c.end,box:target,area:area};
+  }
+  var s=typeof target.selectionStart==="number"?target.selectionStart:target.value.length;
+  var e=typeof target.selectionEnd==="number"?target.selectionEnd:s;
+  return{text:target.value||"",start:s,end:e,box:null,area:target};
+}
+function filterBoosts(list,query){
+  var q=(query||"").toLowerCase();
+  return(list||[]).filter(function(b){
+    if(!q)return true;
+    return(b.label||"").toLowerCase().split(/[^a-z0-9]+/).some(function(w){return w&&w.indexOf(q)===0;});
+  });
+}
+function filterSessions(list,query){
+  var q=(query||"").trim().toLowerCase();
+  if(!q)return(list||[]).slice();
+  var words=q.split(/\s+/).filter(Boolean),matched=[];
+  (list||[]).forEach(function(s,idx){
+    var title=(s.title||"").toLowerCase();
+    if(!words.every(function(w){return title.indexOf(w)>=0;}))return;
+    matched.push({later:title.indexOf(q)!==0?1:0,idx:idx,item:s});
+  });
+  matched.sort(function(a,b){return a.later-b.later||a.idx-b.idx;});
+  return matched.map(function(m){return m.item;});
+}
+function filterSkills(list,query){
+  var q=(query||"").trim().toLowerCase();
+  function rank(s){
+    var name=(s.name||"").toLowerCase(),det=(s.detail||"").toLowerCase();
+    if(!q)return 0;
+    if(name===q)return 0;
+    if(name.indexOf(q)===0)return 1;
+    if(name.indexOf(q)>0)return 2;
+    if(det.indexOf(q)>=0)return 3;
+    return -1;
+  }
+  var out=[];
+  (list||[]).forEach(function(s,idx){var r=rank(s);if(r>=0)out.push({cmd:s.command?1:0,r:r,name:(s.name||"").toLowerCase(),idx:idx,item:s});});
+  out.sort(function(a,b){return a.cmd-b.cmd||a.r-b.r||(a.name<b.name?-1:a.name>b.name?1:a.idx-b.idx);});
+  return out.map(function(m){return m.item;});
+}
+function detectMention(text,caret){
+  var before=text.slice(0,caret),lastWs=-1;
+  for(var i=before.length-1;i>=0;i--)if(/\s/.test(before.charAt(i))){lastWs=i;break;}
+  var tokStart=lastWs+1,tok=before.slice(tokStart);
+  if(tok.charAt(0)==="*")return{kind:"boost",start:tokStart,end:caret,query:tok.slice(1)};
+  if(tok.charAt(0)==="$"){var q=tok.slice(1);if(!/\s/.test(q))return{kind:"skill",slash:false,start:tokStart,end:caret,query:q};}
+  if(tok.charAt(0)==="/"){var sq=tok.slice(1);if(sq.indexOf("/")<0)return{kind:"skill",slash:true,start:tokStart,end:caret,query:sq};}
+  /* `+` session trigger: allows spaces in multi-word titles up to 60 chars, matching trigger.rs. */
+  var from=Math.max(0,caret-60);
+  for(var p=caret-1;p>=from;p--){
+    var ch=before.charAt(p);
+    if(ch==="\n"||ch==="\r")break;
+    if(ch==="+"&&(p===0||/\s/.test(before.charAt(p-1)))){
+      var tail=before.slice(p+1);
+      if(tail.length>0&&/^[0-9+\-\s]/.test(tail))continue;
+      if(/\s$/.test(tail)&&tail.trim().length===0)continue;
+      return{kind:"session",start:p,end:caret,query:tail};
+    }
+  }
+  return null;
+}
+function buildMentionPopup(trigger,cat){
+  if(!trigger||!cat)return null;
+  var rows=[],heading="",empty=null;
+  if(trigger.kind==="boost"){
+    var b=filterBoosts(cat.boosts,trigger.query);
+    if(!b.length)return null;
+    var firstB=b[0].section||"Boosts",prev=firstB;
+    heading=firstB;
+    b.forEach(function(item,i){
+      var sec=item.section||"";
+      rows.push({label:item.label,detail:item.description||"",token:item.token,section:i>0&&sec&&sec!==prev?sec:"",spaced:false,kind:"boost"});
+      if(sec)prev=sec;
+    });
+    return{kind:"boost",heading:heading,rows:rows,empty:null,trigger:trigger};
+  }
+  if(trigger.kind==="session"){
+    var ss=filterSessions(cat.sessions,trigger.query);
+    if(!ss.length)return null;
+    heading="Agents in this project";
+    ss.forEach(function(item){
+      rows.push({label:item.title,detail:item.detail||"",token:item.token,section:"",spaced:true,kind:"session",working:!!item.working,coordinator:!!item.coordinator,mainCoordinator:!!item.mainCoordinator});
+    });
+    return{kind:"session",heading:heading,rows:rows,empty:null,trigger:trigger};
+  }
+  if(trigger.kind==="skill"){
+    var sk=filterSkills(cat.skills,trigger.query);
+    if(!sk.length){
+      if(trigger.slash)return null;
+      return{kind:"skill",heading:cat.skillsHeading||"Skills",rows:[],empty:"No skills found",trigger:trigger};
+    }
+    var baseHead=cat.skillsHeading||"Skills",firstCmd=sk[0].command;
+    heading=firstCmd?"Custom commands":baseHead;
+    var sawCmd=firstCmd;
+    sk.forEach(function(item,i){
+      var sec="";
+      if(i>0&&item.command&&!sawCmd){sec="Custom commands";sawCmd=true;}
+      rows.push({label:(trigger.slash?"/":"$")+item.name,detail:item.detail||"",token:item.token,section:sec,spaced:false,kind:"skill"});
+    });
+    return{kind:"skill",heading:heading,rows:rows,empty:null,trigger:trigger};
+  }
+  return null;
+}
+function hideMention(){
+  mentionState=null;
+  if(mentionMenu){
+    mentionMenu.classList.remove("gx-m-on");
+    if(mentionMenu.hidePopover&&mentionMenu.matches(":popover-open"))try{mentionMenu.hidePopover();}catch(x){}
+  }
+}
+function placeMention(target){
+  if(!mentionMenu)return;
+  var r=target.getBoundingClientRect();
+  if(target.classList&&target.classList.contains("gx-box")){
+    var sel=getSelection();
+    if(sel&&sel.rangeCount&&target.contains(sel.anchorNode)){
+      var cr=sel.getRangeAt(0).getBoundingClientRect();
+      if(cr&&(cr.width>0||cr.height>0))r=cr;
+    }
+  }
+  var w=mentionMenu.offsetWidth||300,h=mentionMenu.offsetHeight||180,vw=document.documentElement.clientWidth||innerWidth,vh=innerHeight,m=8,gap=6;
+  var x=Math.min(Math.max(r.left,m),Math.max(m,vw-w-m));
+  var y=r.bottom+gap;
+  if(y+h>vh-m&&r.top-gap-h>=m)y=r.top-gap-h;
+  else if(y+h>vh-m)y=Math.max(m,vh-h-m);
+  mentionMenu.style.left=Math.round(x)+"px";mentionMenu.style.top=Math.round(y)+"px";
+}
+function renderMention(){
+  if(!mentionState){hideMention();return;}
+  if(!mentionMenu){
+    mentionMenu=el("div");mentionMenu.id="gx-mention";mentionMenu.setAttribute("role","listbox");
+    if(mentionMenu.showPopover)mentionMenu.setAttribute("popover","manual");
+    mentionMenu.addEventListener("pointerdown",function(e){e.preventDefault();});
+    mentionMenu.addEventListener("mousedown",function(e){e.preventDefault();});
+  }
+  if(!mentionMenu.isConnected&&document.body)document.body.append(mentionMenu);
+  var pop=mentionState.popup,sel=mentionState.selected;
+  mentionMenu.textContent="";
+  if(pop.heading)mentionMenu.append(el("div","gx-m-head",pop.heading));
+  if(!pop.rows.length&&pop.empty)mentionMenu.append(el("div","gx-m-empty",pop.empty));
+  pop.rows.forEach(function(row,idx){
+    if(row.section)mentionMenu.append(el("div","gx-m-head",row.section));
+    var b=el("button","gx-m-row"+(idx===sel?" gx-m-sel":""));b.type="button";b.setAttribute("role","option");b.setAttribute("aria-selected",idx===sel?"true":"false");
+    if(row.kind==="boost"){var ic=el("span","gx-m-ico gx-m-boost");ic.innerHTML=BOOST_ICON;b.append(ic);}
+    else if(row.kind==="session"){
+      var sic=el("span","gx-m-ico"+(row.coordinator&&row.mainCoordinator?" gx-m-main":""));
+      sic.innerHTML=row.coordinator?CROWN_ICON:AGENT_ICON;b.append(sic);
+    }
+    b.append(el("span","gx-m-lbl",row.label));
+    if(row.detail)b.append(el("span","gx-m-det"+(row.working?" gx-m-work":""),row.detail));
+    b.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();pickMention(idx);});
+    mentionMenu.append(b);
+  });
+  mentionMenu.classList.add("gx-m-on");
+  if(mentionMenu.showPopover&&!mentionMenu.matches(":popover-open"))try{mentionMenu.showPopover();}catch(x){}
+  placeMention(mentionState.target);
+  var active=mentionMenu.querySelector(".gx-m-sel");
+  if(active&&active.scrollIntoView)try{active.scrollIntoView({block:"nearest"});}catch(x){}
+}
+function pickMention(index){
+  if(!mentionState)return;
+  var target=mentionState.target,pop=mentionState.popup,row=pop.rows[index];
+  if(!row){hideMention();return;}
+  var ed=editableState(target);
+  if(!ed){hideMention();return;}
+  var tr=pop.trigger,before=ed.text.slice(0,tr.start),after=ed.text.slice(tr.end);
+  var lead=row.spaced&&before.length>0&&!/\s$/.test(before)?" ":"";
+  var hasSpace=after.charAt(0)===" ";
+  var ins=lead+row.token+(hasSpace?"":" ");
+  var next=before+ins+after,caret=before.length+lead.length+row.token.length+1;
+  mentionDismiss=null;
+  hideMention();
+  if(ed.box){
+    ed.area.value=next;
+    fire(ed.area);
+    renderBox(ed.area);
+    ed.box.focus();
+    setCaret(ed.box,caret);
+  }else{
+    ed.area.value=next;
+    ed.area.focus();
+    try{ed.area.setSelectionRange(caret,caret);}catch(x){}
+    fire(ed.area);
+  }
+}
+function updateMention(target,refreshBoosts){
+  if(!isMentionTarget(target)||!canFetchMentions()){hideMention();return;}
+  var ed=editableState(target);
+  if(!ed||ed.start!==ed.end){hideMention();return;}
+  var tr=detectMention(ed.text,ed.start);
+  if(!tr){mentionDismiss=null;hideMention();return;}
+  if(mentionDismiss&&mentionDismiss.target===target&&mentionDismiss.kind===tr.kind&&mentionDismiss.start===tr.start){hideMention();return;}
+  if(!mentionCatalog){loadMentions(false);mentionState={target:target,popup:{kind:tr.kind,heading:"",rows:[],empty:null,trigger:tr},selected:0};return;}
+  if(refreshBoosts&&tr.kind==="boost"&&Date.now()-mentionFetchedAt>=10000)loadMentions(true);
+  var pop=buildMentionPopup(tr,mentionCatalog);
+  if(!pop){hideMention();return;}
+  var prevSel=mentionState&&mentionState.target===target&&mentionState.popup.kind===pop.kind&&mentionState.popup.trigger.start===tr.start?mentionState.selected:0;
+  mentionState={target:target,popup:pop,selected:pop.rows.length?Math.min(prevSel,pop.rows.length-1):0};
+  renderMention();
+}
+function setupMentions(){
+  if(!canFetchMentions())return;
+  document.addEventListener("focusin",function(e){if(isMentionTarget(e.target))loadMentions(false);},true);
+  document.addEventListener("input",function(e){var t=activeEditable();if(t)updateMention(t,true);},true);
+  document.addEventListener("selectionchange",function(){var t=activeEditable();if(t)updateMention(t,false);});
+  document.addEventListener("focusout",function(){setTimeout(function(){if(!activeEditable())hideMention();},0);},true);
+  document.addEventListener("pointerdown",function(e){
+    if(!mentionState)return;
+    var t=e.target;
+    if(mentionMenu&&t&&mentionMenu.contains(t))return;
+    if(t&&mentionState.target&&(t===mentionState.target||mentionState.target.contains(t)))return;
+    hideMention();
+  },true);
+  document.addEventListener("keydown",function(e){
+    if(!mentionState||!mentionState.popup||!mentionMenu||!mentionMenu.classList.contains("gx-m-on"))return;
+    var t=activeEditable();if(!t||t!==mentionState.target)return;
+    var rows=mentionState.popup.rows;
+    if(e.key==="Escape"){
+      e.preventDefault();e.stopPropagation();
+      mentionDismiss={target:t,kind:mentionState.popup.kind,start:mentionState.popup.trigger.start};
+      hideMention();return;
+    }
+    if(!rows.length)return;
+    if(e.key==="ArrowDown"){
+      e.preventDefault();e.stopPropagation();
+      mentionState.selected=(mentionState.selected+1)%rows.length;renderMention();return;
+    }
+    if(e.key==="ArrowUp"){
+      e.preventDefault();e.stopPropagation();
+      mentionState.selected=(mentionState.selected+rows.length-1)%rows.length;renderMention();return;
+    }
+    if((e.key==="Enter"&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey&&!e.altKey)||e.key==="Tab"){
+      e.preventDefault();e.stopPropagation();
+      pickMention(mentionState.selected);return;
+    }
+  },true);
+  ["scroll","resize"].forEach(function(name){addEventListener(name,function(){if(mentionState&&mentionMenu&&mentionMenu.classList.contains("gx-m-on"))placeMention(mentionState.target);},true);});
+}
+/* SEEN_FOOTER: a page that asks nothing, published to wait until the reader has looked at it (`awaitsSeen`, server/src/visual_pages/publish.rs), ends with a reply box and Archive (which switches live to Send to agent when the reader types a reply), sending `{"seen": true, "reply": …}` as its answers. It goes at the very end of the page, so the reader reaches the end to press it. */
+function seenFooter(){var r=document.createElement("gx-questions");r.setAttribute("data-gx-seen","");r.setAttribute("submit","Archive");(document.querySelector("gx-page")||document.body).append(r);setup(r);}
+function init(){followPaint();addThemeSwitch();setupTabs();var root=document.querySelector("gx-questions");if(root)setup(root);else if(window.ghostex&&ghostex.awaitsSeen)seenFooter();setupMentions();}
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
 addEventListener("load",followPaint);
 })();</script>"#;

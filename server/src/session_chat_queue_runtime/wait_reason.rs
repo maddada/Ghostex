@@ -91,9 +91,9 @@ impl WaitReason {
             Self::StartFailed => "Waiting: the agent couldn't start. Start it again to send this.",
             Self::Starting => "Waiting for the agent to start.",
             Self::Compacting => "Waiting for the agent to finish compacting the conversation.",
-            Self::Working => "Waiting for the agent to finish its turn.",
+            Self::Working => "Delivers when the current reply ends.",
             Self::Answer => "Waiting for you to answer the agent's question.",
-            Self::Settling => "Waiting for the agent to settle after its turn.",
+            Self::Settling => "Delivers once the current reply finishes.",
             Self::InputBox(InputBoxStep::Reading) => {
                 "Waiting: the agent's input box can't be read yet, trying again."
             }
@@ -103,6 +103,31 @@ impl WaitReason {
             Self::InputBox(InputBoxStep::SendingAnyway) | Self::Retrying => {
                 "Waiting: the agent's input box can't be read yet, trying to send anyway."
             }
+        }
+    }
+
+    /// CDXC:SessionChat 2026-11-25 DECISION:
+    /// User (Q4865): the line under a queued message read as more of the user's own text, so the
+    /// row shows a short status chip on its right ("chip"), with "the full text on hovering on
+    /// that status pill" (a tooltip on desktop, a press on the phone). These are the chip's words;
+    /// they sit beside the sentences so the desktop and the phone never word a status apart.
+    pub(super) fn label(&self) -> &'static str {
+        match self {
+            Self::Asleep => "Asleep",
+            Self::Closed => "Closed",
+            Self::ModelChange => "Changing model",
+            Self::ModelChangeFailed => crate::session_chat_queue::MODEL_CHANGE_FAILED_WAIT_LABEL,
+            Self::AccountRecovery => "Account not ready",
+            Self::MissingLogin => "Not signed in",
+            Self::StartFailed => "Didn't start",
+            Self::Starting => "Starting",
+            Self::Compacting => "Compacting",
+            Self::Working => "Agent working",
+            Self::Answer => "Needs your answer",
+            Self::Settling => "Finishing reply",
+            Self::InputBox(InputBoxStep::Reading) => "Reading screen",
+            Self::InputBox(InputBoxStep::Repainting) => "Redrawing screen",
+            Self::InputBox(InputBoxStep::SendingAnyway) | Self::Retrying => "Trying to send",
         }
     }
 
@@ -236,6 +261,9 @@ fn minutes(count: i64) -> String {
     }
 }
 
+/// The status chip's words on a row stuck on the input box ([`stuck_input_box_text`]).
+pub(super) const STUCK_INPUT_BOX_LABEL: &str = "Input box hidden";
+
 /// What a row stuck on the input box says, instead of "trying to send anyway" for good.
 pub(super) fn stuck_input_box_text(waited_minutes: i64, screen_tail: &[String]) -> String {
     let shows = screen_excerpt(screen_tail)
@@ -287,7 +315,7 @@ mod tests {
         assert_eq!(HeadWait::observe(&mut wait, "Q1", &working, at(59)), None);
         assert_eq!(
             HeadWait::observe(&mut wait, "Q1", &working, at(60)),
-            Some("Waiting for the agent to finish its turn.")
+            Some("Delivers when the current reply ends.")
         );
         // The turn ends and the box cannot be read: the words move with the ladder at once.
         let reading = WaitReason::InputBox(InputBoxStep::after(0));

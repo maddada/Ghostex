@@ -45,7 +45,7 @@ fn codex_mode_button_lists_codex_permission_modes_and_checks_the_detected_one() 
         [
             "Ask for approval",
             "Approve for me",
-            "Full Access",
+            "Full permissions",
             "Read Only"
         ]
     );

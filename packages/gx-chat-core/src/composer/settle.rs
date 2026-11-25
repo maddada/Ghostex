@@ -433,6 +433,7 @@ fn request_catalogs(state: &mut ChatState) -> Vec<Effect> {
         &state.composer.suggestions.text,
         state.composer.suggestions.caret,
         state.session.agent.as_deref(),
+        state.session.non_cli_mode,
         state.composer.suggestions.dismissed,
     );
     // `if (matches.skillPickerActive && !this.skillActive) sources.requestSkills();`, then the

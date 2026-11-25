@@ -342,7 +342,7 @@ impl GpuiGbotSettingsModalWindow {
                     .line_height(px(17.5))
                     .text_color(hsla(p.muted))
                     .child(format!(
-                        "{bot_name} may open and drive apps on the computer it works on, on its own virtual display (SpaceO) or in the background (cua-driver). macOS only. Off starts its chats without those tools; a Codex GBot at Full access can still run their command-line tools from a shell."
+                        "{bot_name} may open and drive apps on the computer it works on, on its own virtual display (SpaceO) or in the background (cua-driver). macOS only. Off starts its chats without those tools; a Codex GBot at Full permissions can still run their command-line tools from a shell."
                     )),
             );
         }

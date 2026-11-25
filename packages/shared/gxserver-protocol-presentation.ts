@@ -785,7 +785,10 @@ export interface GxserverSidebarSpacesState {
 /** One workspace (server/src/workspaces/store.rs). `kind` sets its projects' work-mode default. */
 export interface GxserverSidebarWorkspace {
   claudeAccountId?: string;
+  claudeAccountIds?: readonly string[];
   color: string;
+  homeMachineId?: string;
+  homeMachineName?: string;
   kind: 'work' | 'personal';
   letter: string;
   name: string;

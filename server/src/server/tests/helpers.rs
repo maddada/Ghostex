@@ -104,6 +104,7 @@ fn test_app_state_on_with_push(
         ),
     );
     let live_activity = closed_live_activity(&paths, &metadata.server_id);
+    let sharing_root = paths.root_dir.clone();
     Arc::new(AppState {
         accounts: Arc::new(crate::accounts::runtime::AccountRuntime::default()),
         auth_token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
@@ -128,6 +129,7 @@ fn test_app_state_on_with_push(
         repository_clone_jobs: RepositoryCloneJobManager::default(),
         session_chat_followers: Arc::new(Mutex::new(HashMap::new())),
         session_chat_option_cache: Arc::new(Mutex::new(HashMap::new())),
+        share_manager: Arc::new(crate::sharing::ShareManager::new(sharing_root, 58744)),
         shutdown_tx,
         stale_activity_timers: Arc::new(Mutex::new(HashMap::new())),
         tailcat_runtime: crate::tailcat::TailcatRuntime::new(),

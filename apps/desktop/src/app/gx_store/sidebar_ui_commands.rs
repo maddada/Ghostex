@@ -63,6 +63,7 @@ impl GhostexGpuiApp {
             "toggleCoordinatorOlder" => Some(SidebarUiIntent::ToggleCoordinatorOlderThreads {
                 sidebar_session_id: text("sessionId")?,
             }),
+            "toggleMachineFold" => Some(SidebarUiIntent::ToggleMachineFold { key: text("key")? }),
             "selectMachine" => Some(SidebarUiIntent::SelectMachine {
                 machine_id: text("machineId")?,
             }),
@@ -313,6 +314,7 @@ fn section_id(value: &str) -> Option<SectionId> {
     Some(match value {
         "browser" => SectionId::Browser,
         "pinned" => SectionId::Pinned,
+        "autopilot" => SectionId::Autopilot,
         "drafts" => SectionId::Drafts,
         "working" => SectionId::Working,
         "sessions" => SectionId::Sessions,

@@ -206,6 +206,23 @@ pub(crate) fn dispatch_zmx_lifecycle_http_blocking(
             }
             if matches!(
                 endpoint_path.as_str(),
+                "/api/sleepSession" | "/api/killSession" | "/api/transitionSession"
+            ) && matches!(
+                output
+                    .result
+                    .pointer("/session/lifecycleState")
+                    .and_then(Value::as_str),
+                Some("sleeping" | "stopped")
+            ) {
+                if let Ok(lifecycle) = crate::zmx::read_lifecycle_params(&params) {
+                    crate::pi_chat_channel::close_for_session(
+                        &lifecycle.project_id,
+                        &lifecycle.session_id,
+                    );
+                }
+            }
+            if matches!(
+                endpoint_path.as_str(),
                 "/api/killSession" | "/api/transitionSession"
             ) && output
                 .result
@@ -214,11 +231,44 @@ pub(crate) fn dispatch_zmx_lifecycle_http_blocking(
                 == Some("stopped")
             {
                 if let Ok(lifecycle) = crate::zmx::read_lifecycle_params(&params) {
-                    crate::session_chat_send_wake::retire_held_messages_of_closed_session(
+                    let close_actor =
+                        crate::session_chat_queue_undelivered::CloseActor::from_params(&params);
+                    crate::session_chat_send_wake::retire_held_messages_of_closed_session_with_actor(
                         state,
                         &lifecycle.project_id,
                         &lifecycle.session_id,
+                        Some(&close_actor),
                     );
+                    let (settled_senders, remote_notices) =
+                        crate::session_chat_send::settle_held_for_closed_session_with_actor(
+                            &db,
+                            state.metadata.server_id.as_str(),
+                            &lifecycle.project_id,
+                            &lifecycle.session_id,
+                            &close_actor,
+                        );
+                    for (sender_project, sender_session) in settled_senders {
+                        super::coordinator_runtime::republish_session_chat(
+                            state,
+                            &sender_project,
+                            &sender_session,
+                        );
+                    }
+                    for notice in remote_notices {
+                        if let Some(computer) = crate::connected_computers::find(&notice.server_id)
+                        {
+                            let _ = super::coordinator_remote_runtime::remote_rpc(
+                                &computer,
+                                "/api/sendSessionChatMessage",
+                                json!({
+                                    "projectId": notice.sender.0,
+                                    "sessionId": notice.sender.1,
+                                    "text": notice.notice,
+                                    "withNext": true,
+                                }),
+                            );
+                        }
+                    }
                     let closed_threads = super::coordinator_close::close_threads_with_coordinator(
                         state,
                         &db,
@@ -343,6 +393,7 @@ pub(crate) fn kill_all_tracked_zmx_sessions(state: &AppState) -> ZmxStopAllCount
 
 pub(crate) async fn handle_zmx_session_interaction_http(
     state: &AppState,
+    caller: &crate::security::Principal,
     endpoint_path: String,
     request_id: String,
     body: &Value,
@@ -386,6 +437,34 @@ pub(crate) async fn handle_zmx_session_interaction_http(
             Ok(command) => command,
             Err(error) => return zmx_error_response(endpoint_path, request_id, error),
         };
+        if let Some((caller_project_id, caller_session_id)) =
+            crate::switch_requests::caller_agent_session(state, caller)
+        {
+            let switch_request = crate::switch_requests::emit_focus_session_toast(
+                state,
+                caller_project_id,
+                caller_session_id,
+                &session,
+                payload,
+            );
+            return routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(
+                    request_id,
+                    merge_session_with_renderer_result(
+                        session,
+                        json!({
+                            "ok": true,
+                            "shown": false,
+                            "toastShown": true,
+                            "reason": "switchRequestToast",
+                            "switchRequestId": switch_request.id,
+                        }),
+                    ),
+                ),
+            );
+        }
         return match state
             .event_hub
             .dispatch_renderer_command("focusSession".to_string(), payload, 15_000)
@@ -530,6 +609,7 @@ pub(crate) fn zmx_error_response(
 
 pub(crate) async fn handle_renderer_command_http(
     state: &AppState,
+    caller: &crate::security::Principal,
     endpoint_path: String,
     request_id: String,
     body: &Value,
@@ -587,12 +667,19 @@ pub(crate) async fn handle_renderer_command_http(
             ),
         );
     }
-    // Only settings an agent may write pass the API (settings_agent_writable.rs).
+    // Only settings an agent may write pass the API (settings_agent_writable.rs);
+    // owner devices (including paired phones) may also sync owner-only UI toggles
+    // like `analyticsEnabled`.
     if action == "updateSettingsPatch" {
         let refused = payload
             .get("patch")
             .and_then(Value::as_object)
-            .map(crate::settings_agent_writable::refused_keys)
+            .map(|patch| {
+                crate::settings_agent_writable::refused_keys_for_caller(
+                    patch,
+                    caller.is_owner_device(),
+                )
+            })
             .unwrap_or_default();
         if !refused.is_empty() {
             let message = crate::settings_agent_writable::refusal_message(&refused);
@@ -623,6 +710,35 @@ pub(crate) async fn handle_renderer_command_http(
             );
         }
     };
+    if crate::switch_requests::is_agent_switch_request_action(&action) {
+        if let Some((caller_project_id, caller_session_id)) =
+            crate::switch_requests::caller_agent_session(state, caller)
+        {
+            let switch_request = crate::switch_requests::emit_renderer_command_toast(
+                state,
+                caller_project_id,
+                caller_session_id,
+                &action,
+                payload,
+            );
+            return routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(
+                    request_id,
+                    json!({
+                        "accepted": true,
+                        "action": action,
+                        "ok": true,
+                        "shown": false,
+                        "toastShown": true,
+                        "reason": "switchRequestToast",
+                        "switchRequestId": switch_request.id,
+                    }),
+                ),
+            );
+        }
+    }
     let answer = if action == "updateSettingsPatch" {
         save_settings_patch(state, payload, timeout_ms).await
     } else {
@@ -667,7 +783,27 @@ pub(crate) async fn save_settings_patch(
     timeout_ms: u64,
 ) -> Result<Value, SettingsSaveError> {
     let settings_patch = payload.get("patch").and_then(Value::as_object).cloned();
-    match state
+    let patch_source = payload
+        .get("source")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let tracks_settings_switch = patch_source == "mobile:agentSessionMode"
+        || patch_source.starts_with("cli")
+        || patch_source == "settings:cli";
+    let before_modes = if tracks_settings_switch
+        && settings_patch
+            .as_ref()
+            .is_some_and(|p| p.contains_key("agentSessionMode"))
+    {
+        let existing = crate::shared_settings_file::read_shared_settings(&state.paths);
+        Some(crate::telemetry::resolve_install_session_modes(
+            existing.as_ref(),
+        ))
+    } else {
+        None
+    };
+    let result = match state
         .event_hub
         .dispatch_renderer_command("updateSettingsPatch".to_string(), payload, timeout_ms)
         .await
@@ -675,7 +811,7 @@ pub(crate) async fn save_settings_patch(
         Ok(result) => Ok(result),
         Err(error) if error.code == "dependencyUnavailable" && settings_patch.is_some() => {
             let paths = state.paths.clone();
-            let patch = settings_patch.unwrap_or_default();
+            let patch = settings_patch.clone().unwrap_or_default();
             match tokio::task::spawn_blocking(move || {
                 crate::headless_settings::save_settings_patch(&paths, &patch)
             })
@@ -700,7 +836,51 @@ pub(crate) async fn save_settings_patch(
             code: error.code.to_string(),
             message: error.message,
         }),
+    };
+    if result.is_ok() {
+        if settings_patch
+            .as_ref()
+            .and_then(|patch| patch.get("analyticsEnabled"))
+            .and_then(Value::as_bool)
+            == Some(false)
+        {
+            let paths = state.paths.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                crate::telemetry::purge_on_opt_out(&paths);
+            })
+            .await;
+        }
+        if let (Some(before), Some(patch)) = (before_modes, settings_patch.as_ref()) {
+            let mut merged = crate::shared_settings_file::read_shared_settings(&state.paths)
+                .and_then(|value| value.as_object().cloned())
+                .unwrap_or_default();
+            if let Some(modes_patch) = patch.get("agentSessionMode") {
+                merged.insert("agentSessionMode".to_string(), modes_patch.clone());
+            }
+            let after =
+                crate::telemetry::resolve_install_session_modes(Some(&Value::Object(merged)));
+            let client = if patch_source == "mobile:agentSessionMode" {
+                "mobile"
+            } else {
+                "server"
+            };
+            for (family, prev, next) in [
+                ("antigravity", before.antigravity, after.antigravity),
+                ("claude", before.claude, after.claude),
+                ("codex", before.codex, after.codex),
+            ] {
+                if prev != next {
+                    let direction = if next == "native" {
+                        "terminal_to_native"
+                    } else {
+                        "native_to_terminal"
+                    };
+                    crate::telemetry::session_mode_switched(family, direction, "settings", client);
+                }
+            }
+        }
     }
+    result
 }
 
 pub(crate) fn with_renderer_session_target(mut payload: Map<String, Value>) -> Map<String, Value> {

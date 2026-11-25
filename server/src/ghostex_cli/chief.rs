@@ -26,7 +26,7 @@ USAGE
   ghostex chief set-agent <agent-id> [--json]
   ghostex chief send [--computer <name>] \"<text>\"
 
-status says whether Ghostex AI is on, which session it is and which agent runs it.
+status shows which session Ghostex AI is and which agent runs it.
 guide prints the playbook Ghostex AI follows. open starts Ghostex AI (the first time
 only) on --agent, or on your default agent (Settings > Agents) when you name none, with the
 model picked for it; its first message waits for Start in its chat; new-chat starts it fresh, keeping its memory and

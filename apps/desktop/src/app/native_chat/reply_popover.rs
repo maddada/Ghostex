@@ -13,13 +13,13 @@ use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, AppContext as _, Bounds, Context, Entity, FocusHandle, Focusable as _, FontWeight,
-    InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Point, Render,
+    InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Point, Render, ScrollHandle,
     StatefulInteractiveElement as _, Styled as _, Subscription, WeakEntity, Window, WindowBounds,
-    WindowOptions, div, px, size,
+    WindowOptions, div, px, rgb, size,
 };
 use gpui_component::Root;
 use gpui_component::input::{InputEvent, Textarea, TextareaState};
-use serde_json::json;
+use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
@@ -36,6 +36,47 @@ const HEIGHT: f32 = 132.0;
 /// The line that says why the last send failed (`reopen_failed_reply`).
 const ERROR_LINE: f32 = 22.0;
 const RADIUS: f32 = 12.0;
+/// Compact mention menu metrics inside the Reply popover (unscaled).
+const MENTION_ROW_HEIGHT: f32 = 26.0;
+const MENTION_HEADING_HEIGHT: f32 = 18.0;
+const MENTION_PADDING: f32 = 4.0;
+const MENTION_MAX_HEIGHT: f32 = 188.0;
+/// Small white dot at the top-right of an inline Reply button when the session has an unsent reply
+/// draft (`has_reply_draft`). Never shown on Inbox dock Reply buttons, where many sit side by side.
+pub(super) fn reply_draft_dot(p: &ChatAppearance) -> AnyElement {
+    let s = p.scale;
+    let color: gpui::Hsla = if p.light {
+        p.foreground
+    } else {
+        rgb(0xffffff).into()
+    };
+    div()
+        .absolute()
+        .top(px(-2.0 * s))
+        .right(px(-2.0 * s))
+        .size(px(6.0 * s))
+        .rounded_full()
+        .bg(color)
+        .into_any_element()
+}
+
+/// Inset variant of [`reply_draft_dot`] for stacked inline-answer rows clipped by `overflow_hidden`.
+pub(super) fn reply_draft_dot_inset(p: &ChatAppearance) -> AnyElement {
+    let s = p.scale;
+    let color: gpui::Hsla = if p.light {
+        p.foreground
+    } else {
+        rgb(0xffffff).into()
+    };
+    div()
+        .absolute()
+        .top(px(3.0 * s))
+        .right(px(3.0 * s))
+        .size(px(5.5 * s))
+        .rounded_full()
+        .bg(color)
+        .into_any_element()
+}
 /// How long the press on the Reply row still counts as "a press just now" once the card is open:
 /// a little over the 0.3s of `GhostexGpuiPointerPressedRecently`.
 pub(super) const OPENING_PRESS: Duration = Duration::from_millis(350);
@@ -215,6 +256,44 @@ enum ReplyAction {
     Send,
 }
 
+/// Active compact mention menu (`*` Boosts, `+` agents, `/` or `$` skills) inside [`ReplyPopover`].
+struct ReplyMentionMenu {
+    kind: String,
+    trigger_start: usize,
+    heading: String,
+    rows: Vec<Value>,
+    status: Option<String>,
+    selected: usize,
+    scroll: ScrollHandle,
+}
+
+impl ReplyMentionMenu {
+    /// Unscaled height the compact menu takes inside the popover, capped at [`MENTION_MAX_HEIGHT`].
+    fn height(&self) -> f32 {
+        let mut h = MENTION_PADDING * 2.0 + MENTION_HEADING_HEIGHT + 1.0;
+        if self.status.is_some() {
+            h += MENTION_ROW_HEIGHT;
+        }
+        for row in &self.rows {
+            if row["section"].is_string() {
+                h += MENTION_HEADING_HEIGHT;
+            }
+            h += MENTION_ROW_HEIGHT;
+        }
+        h.min(MENTION_MAX_HEIGHT)
+    }
+}
+
+/// Anchor context kept on [`ReplyPopover`] so the card can grow/shrink cleanly when its compact
+/// mention menu opens or closes.
+struct PopoverPlacement {
+    at: Point<Pixels>,
+    within: Bounds<Pixels>,
+    content_origin: Point<Pixels>,
+    parent_view: *mut std::ffi::c_void,
+    width: f32,
+}
+
 struct ReplyPopover {
     chat: WeakEntity<NativeChatView>,
     /// The selection quoted as Add to Chat quotes it (the Reply row's `quote`).
@@ -226,6 +305,9 @@ struct ReplyPopover {
     input: Entity<TextareaState>,
     focus: FocusHandle,
     appearance: ChatAppearance,
+    placement: PopoverPlacement,
+    /// Current unscaled window height, tracked so we only resize when the menu height changes.
+    window_height: f32,
     closed: bool,
     was_active: bool,
     /// True until the press that opened the card has aged out (`OPENING_PRESS`).
@@ -237,9 +319,19 @@ struct ReplyPopover {
     kept: Option<(String, String, bool)>,
     /// The paperclip's file picker is open: the key it takes is not a click away.
     picking: bool,
-    /// The field's pills (its pictures), parsed from the text they were drawn for.
+    /// The field's pills (its pictures, Boosts, sessions, skills), parsed from the text.
     references: Vec<super::composer_references::ComposerReference>,
     reference_draft: Option<String>,
+    /// Active `*` / `+` / `/` / `$` mention menu, or `None` when no trigger matches or dismissed.
+    mention_menu: Option<ReplyMentionMenu>,
+    /// Last `(text, utf16_caret)` queried against `replyMentions`.
+    last_mention_query: Option<(String, usize)>,
+    /// Set when the parent chat notifies (e.g. Boosts or skills finished loading).
+    mentions_dirty: bool,
+    /// Trigger dismissed with Escape: `(kind, trigger_start)`.
+    dismissed_trigger: Option<(String, usize)>,
+    /// Trigger start for which `refreshBoosts` was already asked.
+    last_boosts_refresh: Option<usize>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -351,7 +443,9 @@ impl NativeChatView {
             content
         };
         let width = card_width(question.is_some(), &appearance, window);
-        let bounds = popover_bounds(content.origin + at, within, width, scale, !error.is_empty());
+        let base_height = HEIGHT + if !error.is_empty() { ERROR_LINE } else { 0.0 };
+        let anchor = content.origin + at;
+        let bounds = popover_bounds_sized(anchor, within, width, base_height, scale);
         let parent = super::child_window::window_native_view(window)
             .unwrap_or(self.config.parent_native_view);
         let display_id =
@@ -361,6 +455,13 @@ impl NativeChatView {
             crate::app::window::popup_frame::popup_card_radius(px(RADIUS * scale), glass);
         let chat = cx.weak_entity();
         let quote = quote.to_owned();
+        let placement = PopoverPlacement {
+            at: anchor,
+            within,
+            content_origin: content.origin,
+            parent_view: parent,
+            width,
+        };
         cx.defer(move |cx| {
             let result = cx.open_window(
                 WindowOptions {
@@ -398,7 +499,17 @@ impl NativeChatView {
                         );
                         let popover = cx.new(|cx| {
                             ReplyPopover::new(
-                                chat, quote, question, typed, error, kept, appearance, window, cx,
+                                chat,
+                                quote,
+                                question,
+                                typed,
+                                error,
+                                kept,
+                                appearance,
+                                placement,
+                                base_height,
+                                window,
+                                cx,
                             )
                         });
                         cx.new(|cx| {
@@ -598,12 +709,22 @@ impl NativeChatView {
             .unwrap_or_default()
     }
 
+    /// Whether the session currently has unsent text in its Reply draft, driving the top-right dot
+    /// on inline Reply buttons under questions (never on the Inbox dock's Reply buttons).
+    pub(super) fn has_reply_draft(&self) -> bool {
+        !self.kept_session_reply().trim().is_empty()
+    }
+
     /// Keeps `text` as the session's Reply draft and saves it soon: words or pictures that
     /// arrived for a Reply card (Dictate, a picture being saved) are kept whether or not the card
     /// is still open.
     pub(super) fn keep_session_reply(&mut self, text: &str, cx: &mut Context<Self>) {
+        let had_draft = self.has_reply_draft();
         keep_reply(&self.kept_reply_key(SESSION_REPLY_ROW), text, false);
         self.note_reply_edit(SESSION_REPLY_ROW.to_owned(), cx);
+        if had_draft != self.has_reply_draft() {
+            cx.notify();
+        }
     }
 
     /// A Reply box's words changed on `row`: saved `SAVE_AFTER` after the last edit.
@@ -647,6 +768,7 @@ impl NativeChatView {
 
     /// Drops these rows' drafts, here and on gxserver: sent, or their question is gone.
     fn forget_kept_replies(&mut self, rows: Vec<String>, cx: &mut Context<Self>) {
+        let had_draft = self.has_reply_draft();
         {
             let mut kept = kept_replies();
             for row in &rows {
@@ -660,6 +782,9 @@ impl NativeChatView {
             .queue
             .push_back(json!({ "op": "drop", "rows": rows }));
         self.pump_kept_replies(cx);
+        if had_draft != self.has_reply_draft() {
+            cx.notify();
+        }
     }
 
     /// Sends the next waiting save or drop once the one before it has answered.
@@ -884,28 +1009,37 @@ fn card_width(question: bool, appearance: &ChatAppearance, window: &Window) -> f
 
 /// Where the card opens: its top-left corner at the press, kept inside the chat with a margin, and
 /// above the press when there is no room below it.
-fn popover_bounds(
+fn popover_bounds_sized(
     at: Point<Pixels>,
     within: Bounds<Pixels>,
     width: f32,
+    height: f32,
     scale: f32,
-    error: bool,
 ) -> Bounds<Pixels> {
     let margin = px(12.0 * scale);
     let width = px(width * scale).min(within.size.width - margin * 2.0);
-    // A send that failed says why on a line of its own above the buttons.
-    let height = px((HEIGHT + if error { ERROR_LINE } else { 0.0 }) * scale);
-    let y = if at.y + px(4.0 * scale) + height < within.bottom() - margin {
-        at.y + px(4.0 * scale)
-    } else {
-        at.y - height - px(4.0 * scale)
-    };
+    // A compact parent panel (such as the floating Ask modal, ~200pt tall) must not squash the
+    // popover when its mention menu opens; allow the popover to grow up to its full menu height.
+    let min_allowed = px((HEIGHT + MENTION_MAX_HEIGHT + ERROR_LINE) * scale);
+    let max_height = (within.size.height - margin * 2.0).max(min_allowed);
+    let height = px(height * scale).min(max_height);
     let x =
         at.x.min(within.right() - width - margin)
             .max(within.left() + margin);
-    let y = y
-        .min(within.bottom() - height - margin)
-        .max(within.top() + margin);
+    let y = if within.size.height >= height + margin * 2.0 {
+        let candidate = if at.y + px(4.0 * scale) + height < within.bottom() - margin {
+            at.y + px(4.0 * scale)
+        } else {
+            at.y - height - px(4.0 * scale)
+        };
+        candidate
+            .min(within.bottom() - height - margin)
+            .max(within.top() + margin)
+    } else {
+        // Parent panel is shorter than the expanded popover: keep its top aligned to the panel's
+        // top margin so the mention menu expands downward over the chat cleanly.
+        within.top() + margin
+    };
     Bounds::new(Point::new(x, y), size(width, height))
 }
 
@@ -916,6 +1050,7 @@ pub(super) fn key_loss_closes(settling: bool, user_dismissed: bool, rekeys: u32)
 }
 
 impl ReplyPopover {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         chat: WeakEntity<NativeChatView>,
         quote: String,
@@ -924,6 +1059,8 @@ impl ReplyPopover {
         error: String,
         kept: Option<(String, String, bool)>,
         appearance: ChatAppearance,
+        placement: PopoverPlacement,
+        window_height: f32,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -951,6 +1088,13 @@ impl ReplyPopover {
         // chat box, and Shift+Enter stays a new line.
         let enter = cx.subscribe(&input, |popover: &mut Self, _, event: &InputEvent, cx| {
             if let InputEvent::PressEnter { shift: false, .. } = event {
+                if popover
+                    .mention_menu
+                    .as_ref()
+                    .is_some_and(|menu| !menu.rows.is_empty())
+                {
+                    return;
+                }
                 popover.close(Some(ReplyAction::Send), true, cx);
             }
         });
@@ -959,11 +1103,17 @@ impl ReplyPopover {
             &input,
             |popover: &mut Self, input, event: &InputEvent, cx| {
                 if let (InputEvent::Change, Some((key, row, seen))) = (event, &popover.kept) {
-                    keep_reply(key, &input.read(cx).value(), *seen);
+                    let had = kept_replies().contains_key(key);
+                    let value = input.read(cx).value();
+                    keep_reply(key, &value, *seen);
+                    let has = !value.trim().is_empty();
                     let row = row.clone();
-                    let _ = popover
-                        .chat
-                        .update(cx, |chat, cx| chat.note_reply_edit(row, cx));
+                    let _ = popover.chat.update(cx, |chat, cx| {
+                        chat.note_reply_edit(row, cx);
+                        if had != has {
+                            cx.notify();
+                        }
+                    });
                 }
             },
         );
@@ -1009,7 +1159,8 @@ impl ReplyPopover {
             cx,
             |popover: &mut Self, _, cx| popover.close(None, false, cx),
         );
-        // Dictate and the pictures being saved are the chat's: the card draws them as they change.
+        // Dictate, pictures being saved, and Boosts/skills catalogs are the chat's: the card
+        // redraws as they change.
         let mut observers = Vec::new();
         if let Some(view) = chat.upgrade() {
             view.update(cx, |view, _| {
@@ -1017,7 +1168,10 @@ impl ReplyPopover {
                 view.reply_popover.pending = 0;
                 view.reply_popover.attach_error = None;
             });
-            observers.push(cx.observe(&view, |_, _, cx| cx.notify()));
+            observers.push(cx.observe(&view, |popover: &mut Self, _, cx| {
+                popover.mentions_dirty = true;
+                cx.notify();
+            }));
         }
         Self {
             chat,
@@ -1027,6 +1181,8 @@ impl ReplyPopover {
             input,
             focus,
             appearance,
+            placement,
+            window_height,
             closed: false,
             was_active: window.is_window_active(),
             settling: true,
@@ -1035,6 +1191,11 @@ impl ReplyPopover {
             picking: false,
             references: Vec::new(),
             reference_draft: None,
+            mention_menu: None,
+            last_mention_query: None,
+            mentions_dirty: false,
+            dismissed_trigger: None,
+            last_boosts_refresh: None,
             _subscriptions: [activation, press, enter, keep]
                 .into_iter()
                 .chain(observers)
@@ -1118,14 +1279,16 @@ impl ReplyPopover {
         });
     }
 
-    /// Escape closes the card without touching the chat box (the field lets it through), and
-    /// Option+Enter (Alt+Enter off a Mac, which the field has no binding for) adds the reply to
-    /// the chat box.
+    /// Escape closes the mention menu first (when open), else the card without touching the chat
+    /// box; Option+Enter (Alt+Enter off a Mac) adds the reply to the chat box.
     fn key(&mut self, event: &gpui::KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let key = &event.keystroke;
         if key.key == "escape" {
             cx.stop_propagation();
             window.prevent_default();
+            if self.dismiss_mention_menu(window, cx) {
+                return;
+            }
             self.close(None, true, cx);
         } else if key.key == "enter"
             && key.modifiers.alt
@@ -1137,6 +1300,425 @@ impl ReplyPopover {
             window.prevent_default();
             self.close(Some(ReplyAction::AddToPrompt), true, cx);
         }
+    }
+
+    /// Reads the input's text and UTF-16 caret offset for `replyMentions`.
+    fn input_text_and_caret(&self, cx: &Context<Self>) -> (String, usize) {
+        let input = self.input.read(cx);
+        let text = input.value().to_string();
+        let offset = input.cursor().min(text.len());
+        let caret = text[..offset].encode_utf16().count();
+        (text, caret)
+    }
+
+    /// Recomputes the compact `*` / `+` / `/` / `$` mention menu from `gx-chat-core` whenever the
+    /// text, caret or chat catalogs changed, and resizes the popover window to fit.
+    fn sync_mention_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let (text, caret) = self.input_text_and_caret(cx);
+        let same_query = self
+            .last_mention_query
+            .as_ref()
+            .is_some_and(|(old_text, old_caret)| *old_text == text && *old_caret == caret);
+        if same_query && !self.mentions_dirty {
+            return;
+        }
+        self.mentions_dirty = false;
+        self.last_mention_query = Some((text.clone(), caret));
+
+        let result = self.chat.upgrade().and_then(|chat| {
+            chat.read(cx).runtime.as_ref().and_then(|runtime| {
+                runtime.query(
+                    "replyMentions",
+                    vec![json!(text), json!(caret)],
+                    Duration::from_millis(80),
+                )
+            })
+        });
+
+        let Some(popup) = result.filter(Value::is_object) else {
+            self.mention_menu = None;
+            self.dismissed_trigger = None;
+            self.last_boosts_refresh = None;
+            self.sync_window_height(window, cx);
+            return;
+        };
+
+        let kind = popup["kind"].as_str().unwrap_or_default().to_string();
+        let trigger_start = popup["triggerStart"].as_u64().unwrap_or(0) as usize;
+        if kind == "boost" && self.last_boosts_refresh != Some(trigger_start) {
+            self.last_boosts_refresh = Some(trigger_start);
+            let _ = self.chat.update(cx, |chat, cx| {
+                chat.invoke(json!({"type": "refreshBoosts"}), cx)
+            });
+        }
+        if self
+            .dismissed_trigger
+            .as_ref()
+            .is_some_and(|(d_kind, d_start)| *d_kind == kind && *d_start == trigger_start)
+        {
+            self.mention_menu = None;
+            self.sync_window_height(window, cx);
+            return;
+        }
+        if self
+            .dismissed_trigger
+            .as_ref()
+            .is_some_and(|(d_kind, d_start)| *d_kind != kind || *d_start != trigger_start)
+        {
+            self.dismissed_trigger = None;
+        }
+
+        let rows = popup["rows"].as_array().cloned().unwrap_or_default();
+        let heading = popup["heading"].as_str().unwrap_or_default().to_string();
+        let status = popup["status"].as_str().map(str::to_string);
+        let same_trigger = self.mention_menu.as_ref().is_some_and(|menu| {
+            menu.kind == kind && menu.trigger_start == trigger_start && same_query
+        });
+        let selected = if same_trigger {
+            self.mention_menu
+                .as_ref()
+                .map_or(0, |menu| menu.selected)
+                .min(rows.len().saturating_sub(1))
+        } else {
+            0
+        };
+        let scroll = self
+            .mention_menu
+            .take()
+            .filter(|menu| menu.kind == kind && menu.trigger_start == trigger_start)
+            .map(|menu| menu.scroll)
+            .unwrap_or_default();
+        self.mention_menu = Some(ReplyMentionMenu {
+            kind,
+            trigger_start,
+            heading,
+            rows,
+            status,
+            selected,
+            scroll,
+        });
+        self.sync_window_height(window, cx);
+    }
+
+    fn desired_window_height(&self) -> f32 {
+        let base = HEIGHT
+            + if !self.error.is_empty() {
+                ERROR_LINE
+            } else {
+                0.0
+            };
+        let menu = self
+            .mention_menu
+            .as_ref()
+            .map_or(0.0, ReplyMentionMenu::height);
+        base + menu
+    }
+
+    /// Grows or shrinks the Reply popover window cleanly as the compact mention menu opens, filters
+    /// or closes, keeping the card inside `placement.within`.
+    fn sync_window_height(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let target = self.desired_window_height();
+        if (self.window_height - target).abs() < 0.5 {
+            return;
+        }
+        self.window_height = target;
+        let scale = self.appearance.scale;
+        let next = popover_bounds_sized(
+            self.placement.at,
+            self.placement.within,
+            self.placement.width,
+            target,
+            scale,
+        );
+        let frame_in_parent = Bounds::new(next.origin - self.placement.content_origin, next.size);
+        let moved = super::child_window::move_child_window(
+            window.window_handle(),
+            self.placement.parent_view,
+            frame_in_parent,
+            cx,
+        );
+        if !moved {
+            window.resize(next.size);
+        }
+    }
+
+    fn dismiss_mention_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let Some(menu) = self.mention_menu.take() else {
+            return false;
+        };
+        self.dismissed_trigger = Some((menu.kind, menu.trigger_start));
+        self.sync_window_height(window, cx);
+        cx.notify();
+        true
+    }
+
+    /// Handles `up`, `down`, `enter`, `tab`, `escape` while `"ReplyPopoverMenu"` is active.
+    fn mention_menu_key(
+        &mut self,
+        action: &super::keyboard::ReplyPopoverMenuKey,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(menu) = self.mention_menu.as_mut() else {
+            return;
+        };
+        match action.key.as_str() {
+            "escape" => {
+                cx.stop_propagation();
+                window.prevent_default();
+                self.dismiss_mention_menu(window, cx);
+            }
+            "up" | "down" => {
+                if menu.rows.is_empty() {
+                    return;
+                }
+                cx.stop_propagation();
+                window.prevent_default();
+                let count = menu.rows.len();
+                menu.selected = if action.key == "up" {
+                    (menu.selected + count - 1) % count
+                } else {
+                    (menu.selected + 1) % count
+                };
+                let scroll_index = menu.selected + 1 + usize::from(menu.status.is_some());
+                menu.scroll.scroll_to_item(scroll_index);
+                cx.notify();
+            }
+            "enter" | "tab" => {
+                if menu.rows.is_empty() {
+                    return;
+                }
+                let index = menu.selected;
+                cx.stop_propagation();
+                window.prevent_default();
+                self.pick_mention(index, window, cx);
+            }
+            _ => {}
+        }
+    }
+
+    /// Inserts the picked Boost, agent or skill token (matching the main composer's exact text and
+    /// spacing) into the reply box, restores the caret right after it, and closes the menu.
+    fn pick_mention(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let (text, caret) = self.input_text_and_caret(cx);
+        let completed = self.chat.upgrade().and_then(|chat| {
+            chat.read(cx).runtime.as_ref().and_then(|runtime| {
+                runtime.query_for_gesture(
+                    "completeReplyMention",
+                    vec![json!(text), json!(caret), json!(index)],
+                    Duration::from_millis(200),
+                )
+            })
+        });
+        let Some((next_text, next_caret)) = completed.as_ref().and_then(|result| {
+            Some((
+                result["text"].as_str()?.to_owned(),
+                result["caret"].as_u64()? as usize,
+            ))
+        }) else {
+            return;
+        };
+        let byte_caret = super::form_attachments::utf16_to_byte(&next_text, next_caret);
+        self.input.update(cx, |input, cx| {
+            input.replace_all(next_text.clone(), window, cx);
+            input.set_selected_range(byte_caret..byte_caret, cx);
+            input.focus_handle(cx).focus(window, cx);
+        });
+        if let Some((key, row, seen)) = &self.kept {
+            let had = kept_replies().contains_key(key);
+            keep_reply(key, &next_text, *seen);
+            let has = !next_text.trim().is_empty();
+            let row = row.clone();
+            let _ = self.chat.update(cx, |chat, cx| {
+                chat.note_reply_edit(row, cx);
+                if had != has {
+                    cx.notify();
+                }
+            });
+        }
+        self.mention_menu = None;
+        self.dismissed_trigger = None;
+        self.last_mention_query = Some((next_text, next_caret));
+        self.sync_window_height(window, cx);
+        cx.notify();
+    }
+
+    /// Draws the compact mention menu (`*` Boosts, `+` agents, `/` or `$` skills) inside the Reply
+    /// popover card, reusing the composer suggestions' icons and section headers.
+    fn render_mention_menu(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let menu = self.mention_menu.as_ref()?;
+        let p = &self.appearance;
+        let s = p.scale;
+        let (hover, edge) = menu_ink_washes(p.light);
+        let sessions = menu.kind == "session";
+        let boosts = menu.kind == "boost";
+        let selected = menu.selected;
+        let heading_row = |id: gpui::ElementId, text: String| {
+            div()
+                .id(id)
+                .role(gpui::Role::Heading)
+                .aria_label(text.clone())
+                .h(px(MENTION_HEADING_HEIGHT * s))
+                .px(px(6.0 * s))
+                .flex()
+                .items_center()
+                .text_size(px(10.0 * s))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(p.muted)
+                .child(text.to_uppercase())
+        };
+        let mut list = div()
+            .id("reply-mention-list")
+            .role(gpui::Role::ListBox)
+            .aria_label(match menu.kind.as_str() {
+                "boost" => "Boosts",
+                "session" => "Agents",
+                _ => "Available skills",
+            })
+            .size_full()
+            .overflow_y_scroll()
+            .track_scroll(&menu.scroll)
+            .py(px(MENTION_PADDING * s))
+            .child(heading_row(
+                "reply-mention-heading".into(),
+                menu.heading.clone(),
+            ));
+        if let Some(status) = &menu.status {
+            list = list.child(
+                div()
+                    .id("reply-mention-status")
+                    .h(px(MENTION_ROW_HEIGHT * s))
+                    .px(px(6.0 * s))
+                    .flex()
+                    .items_center()
+                    .text_size(px(12.0 * s))
+                    .text_color(p.muted)
+                    .child(status.clone()),
+            );
+        }
+        for (index, row) in menu.rows.iter().enumerate() {
+            let label = row["label"].as_str().unwrap_or_default().to_owned();
+            let detail = row["detail"].as_str().unwrap_or_default().to_owned();
+            let section = row["section"].as_str().map(str::to_owned);
+            let working = row["working"] == true;
+            let logo = sessions.then(|| {
+                let (logo, color) = super::markdown_links::session_pill_icon(
+                    row["agentIcon"].as_str().unwrap_or_default(),
+                    row["coordinator"] == true,
+                    p,
+                );
+                let color = if row["mainCoordinator"] == true {
+                    rgb(if p.light {
+                        crate::app::native_sidebar::threads::MAIN_COORDINATOR_GOLD_LIGHT
+                    } else {
+                        crate::app::native_sidebar::threads::MAIN_COORDINATOR_GOLD_DARK
+                    })
+                    .into()
+                } else {
+                    color
+                };
+                (logo, color)
+            });
+            let option = div()
+                .id(("reply-mention-row", index))
+                .role(gpui::Role::ListBoxOption)
+                .aria_selected(index == selected)
+                .aria_label(format!("{label} {detail}"))
+                .flex()
+                .items_center()
+                .gap(px(6.0 * s))
+                .w_full()
+                .min_w_0()
+                .h(px(MENTION_ROW_HEIGHT * s))
+                .px(px(6.0 * s))
+                .rounded(px(6.0 * s))
+                .chat_cursor_pointer()
+                .when(index == selected, |el| el.bg(hover))
+                .when(boosts, |el| {
+                    el.child(
+                        gpui::svg()
+                            .path("titlebar/sparkles.svg")
+                            .size(px(13.0 * s))
+                            .flex_shrink_0()
+                            .text_color(super::boosts::accent(p.light)),
+                    )
+                })
+                .when_some(logo, |el, (logo, color)| {
+                    el.child(
+                        gpui::svg()
+                            .path(logo)
+                            .size(px(13.0 * s))
+                            .flex_shrink_0()
+                            .text_color(color),
+                    )
+                })
+                .child(
+                    div()
+                        .min_w_0()
+                        .truncate()
+                        .flex_shrink_0()
+                        .max_w(gpui::relative(0.55))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_size(px(12.5 * s))
+                        .text_color(p.foreground)
+                        .child(label),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .text_size(px(11.5 * s))
+                        .text_color(if working {
+                            rgb(super::chat_pills::ATTENTION_COLOR).into()
+                        } else {
+                            p.muted
+                        })
+                        .child(detail),
+                )
+                .on_mouse_move(cx.listener(move |popover, _, _, cx| {
+                    if let Some(menu) = popover.mention_menu.as_mut()
+                        && menu.selected != index
+                    {
+                        menu.selected = index;
+                        cx.notify();
+                    }
+                }))
+                .on_mouse_down(
+                    gpui::MouseButton::Left,
+                    cx.listener(move |popover, _, window, cx| {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                        popover.pick_mention(index, window, cx);
+                    }),
+                );
+            list = match section {
+                Some(section) => list.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .w_full()
+                        .child(heading_row(
+                            ("reply-mention-section", index).into(),
+                            section,
+                        ))
+                        .child(option),
+                ),
+                None => list.child(option),
+            };
+        }
+        Some(
+            div()
+                .w_full()
+                .min_w_0()
+                .flex_1()
+                .min_h_0()
+                .overflow_hidden()
+                .border_t_1()
+                .border_color(edge)
+                .child(list)
+                .into_any_element(),
+        )
     }
 
     /// The field's picture pills, drawn as the chat box draws them.
@@ -1291,12 +1873,15 @@ impl ReplyPopover {
 }
 
 impl Render for ReplyPopover {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = self.appearance.clone();
         let s = p.scale;
         let (_, edge) = menu_ink_washes(p.light);
         let error_color = p.error();
         self.sync_references(cx);
+        self.sync_mention_menu(window, cx);
+        let menu_open = self.mention_menu.is_some();
+        let mention_menu = self.render_mention_menu(cx);
         let paste = NativeChatView::reply_paste_handler(self.chat.clone(), self.input.clone());
         // Dictate, and the pictures being saved, as the chat holds them (reply_attachments.rs).
         let (dictation, pending, attach_error) = self
@@ -1329,6 +1914,10 @@ impl Render for ReplyPopover {
             .role(gpui::Role::Dialog)
             .aria_label("Reply")
             .track_focus(&self.focus)
+            .when(menu_open, |card| {
+                card.key_context("ReplyPopoverMenu")
+                    .capture_action(cx.listener(Self::mention_menu_key))
+            })
             .size_full()
             .flex()
             .flex_col()
@@ -1343,7 +1932,7 @@ impl Render for ReplyPopover {
             .text_color(p.foreground)
             .on_key_down(cx.listener(Self::key))
             .child(
-                div().px(px(4.0 * s)).pt(px(2.0 * s)).child(
+                div().flex_shrink_0().px(px(4.0 * s)).pt(px(2.0 * s)).child(
                     Textarea::new(&self.input)
                         .on_paste(paste)
                         .appearance(false)
@@ -1352,6 +1941,7 @@ impl Render for ReplyPopover {
                         .text_size(px(13.0 * s)),
                 ),
             )
+            .children(mention_menu)
             .when(!self.error.is_empty(), |card| {
                 card.child(
                     div()
@@ -1376,6 +1966,8 @@ impl Render for ReplyPopover {
                 // `justify_end`: a row wider than the card then spilled out past its left border,
                 // taking the microphone and paperclip with it; now its right end is cut instead.
                 div()
+                    .flex_shrink_0()
+                    .pt(px(4.0 * s))
                     .flex()
                     .min_w_0()
                     .overflow_hidden()

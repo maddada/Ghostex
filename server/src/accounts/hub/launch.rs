@@ -6,10 +6,14 @@
 //! CDXC:AgentProviders 2026-11-18 WHY:
 //! Naming the profile folder in the command is what makes a hub session "uses its own login" (launch.rs `uses_own_login`): it is never wrapped in Claude Swap or Codex Swap, never moved to another account at a limit, and resume and fork keep the folder. The key stays out of the command, the terminal and the session's saved settings: Claude reads it through `apiKeyHelper` from a 0600 file in the folder, Codex from the folder's 0600 `config.toml` (`experimental_bearer_token`). The folders sit where Ghostex already looks for profiles (hooks, transcripts, folder trust, skills), so hub sessions get all of them like any profile.
 
+use std::collections::HashSet;
 use std::fs;
-use std::io::Write as _;
+use std::io::{self, Read as _, Write as _};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard, OnceLock};
+use std::time::{Duration, Instant};
 
+use ghostex_agent_sync::fsx;
 use serde_json::{json, Map, Value};
 
 use crate::accounts::model::{NewSessionAccount, Provider, Registry};
@@ -99,15 +103,817 @@ fn key_helper(key_file: &Path) -> String {
     }
 }
 
+/// Same migration lock filename `cswap --share-history` uses inside `~/.claude`, so Ghostex hub
+/// launches and `cswap` serialize against each other. Never unlinked once created.
+const MIGRATION_LOCK_FILE: &str = ".cswap-history-migration.lock";
+const MIGRATION_LOCK_TIMEOUT: Duration = Duration::from_secs(5);
+const STAGED_LINK_SUFFIX: &str = ".ghostex-link-staging";
+
+struct MigrationLock {
+    _process_guard: MutexGuard<'static, ()>,
+    #[cfg(unix)]
+    file: fs::File,
+    #[cfg(windows)]
+    file: fs::File,
+}
+
+impl MigrationLock {
+    fn acquire(claude_home: &Path) -> io::Result<Self> {
+        static PROCESS_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        let process_guard = PROCESS_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let lock_path = claude_home.join(MIGRATION_LOCK_FILE);
+        let mut options = fs::OpenOptions::new();
+        options.create(true).read(true).write(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let file = options.open(&lock_path)?;
+        let deadline = Instant::now() + MIGRATION_LOCK_TIMEOUT;
+        loop {
+            match try_lock_exclusive(&file) {
+                Ok(true) => {
+                    return Ok(Self {
+                        _process_guard: process_guard,
+                        file,
+                    });
+                }
+                Ok(false) => {
+                    if Instant::now() >= deadline {
+                        return Err(io::Error::new(
+                            io::ErrorKind::WouldBlock,
+                            "timed out waiting for Claude history migration lock",
+                        ));
+                    }
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+}
+
+impl Drop for MigrationLock {
+    fn drop(&mut self) {
+        let _ = unlock_exclusive(&self.file);
+    }
+}
+
+#[cfg(unix)]
+fn try_lock_exclusive(file: &fs::File) -> io::Result<bool> {
+    use std::os::unix::io::AsRawFd;
+    let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+    if rc == 0 {
+        return Ok(true);
+    }
+    let error = io::Error::last_os_error();
+    if error.kind() == io::ErrorKind::WouldBlock
+        || error.raw_os_error() == Some(libc::EWOULDBLOCK)
+        || error.raw_os_error() == Some(libc::EAGAIN)
+    {
+        return Ok(false);
+    }
+    Err(error)
+}
+
+#[cfg(unix)]
+fn unlock_exclusive(file: &fs::File) -> io::Result<()> {
+    use std::os::unix::io::AsRawFd;
+    let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_UN) };
+    if rc == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+#[cfg(windows)]
+fn try_lock_exclusive(file: &fs::File) -> io::Result<bool> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Foundation::ERROR_LOCK_VIOLATION;
+    use windows_sys::Win32::Storage::FileSystem::{
+        LockFileEx, LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY,
+    };
+    let mut overlapped: windows_sys::Win32::System::IO::OVERLAPPED = unsafe { std::mem::zeroed() };
+    let ok = unsafe {
+        LockFileEx(
+            file.as_raw_handle() as _,
+            LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY,
+            0,
+            1,
+            0,
+            &mut overlapped,
+        )
+    };
+    if ok != 0 {
+        return Ok(true);
+    }
+    let error = io::Error::last_os_error();
+    if error.raw_os_error() == Some(ERROR_LOCK_VIOLATION as i32) {
+        return Ok(false);
+    }
+    Err(error)
+}
+
+#[cfg(windows)]
+fn unlock_exclusive(file: &fs::File) -> io::Result<()> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::UnlockFileEx;
+    let mut overlapped: windows_sys::Win32::System::IO::OVERLAPPED = unsafe { std::mem::zeroed() };
+    let ok = unsafe { UnlockFileEx(file.as_raw_handle() as _, 0, 1, 0, &mut overlapped) };
+    if ok != 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+/// True for symlinks on Unix, and for real symlinks and NTFS directory junctions on Windows.
+/// Rust's `file_type().is_symlink()` on Windows checks `IO_REPARSE_TAG_SYMLINK` and
+/// `IO_REPARSE_TAG_MOUNT_POINT` only, never OneDrive cloud placeholders or WOF-compressed files.
+fn is_link(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_ok_and(|meta| meta.file_type().is_symlink())
+}
+
+fn remove_link_only(path: &Path) -> io::Result<()> {
+    if !is_link(path) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "refusing to remove a non-link path",
+        ));
+    }
+    #[cfg(windows)]
+    {
+        if fs::remove_dir(path).is_ok() {
+            return Ok(());
+        }
+    }
+    fs::remove_file(path)
+}
+
+/// Creates a real link (`symlink` on Unix; directory symlink with NTFS junction fallback for
+/// directories on Windows, strict file symlink for files so `history.jsonl` is never silently
+/// copied and forked).
+fn create_strict_link(target: &Path, link: &Path, is_dir: bool) -> io::Result<()> {
+    if is_dir {
+        fsx::create_dir_link(target, link).map(|_| ())
+    } else {
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(target, link)
+        }
+        #[cfg(windows)]
+        {
+            std::os::windows::fs::symlink_file(target, link)
+        }
+    }
+}
+
+fn resolved_link_target(target: &Path) -> PathBuf {
+    if is_link(target) {
+        fs::canonicalize(target).unwrap_or_else(|_| target.to_path_buf())
+    } else {
+        target.to_path_buf()
+    }
+}
+
+/// Stages and verifies the real link beside `profile_item` before any migration moves or removes
+/// the profile's own copy. If linking is unsupported (e.g. standard Windows without file symlink
+/// privilege for `history.jsonl`), this fails early and leaves every profile file untouched.
+fn stage_link(target: &Path, profile_item: &Path, is_dir: bool) -> io::Result<PathBuf> {
+    let name = profile_item
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let staged = profile_item.with_file_name(format!("{name}{STAGED_LINK_SUFFIX}"));
+    if fs::symlink_metadata(&staged).is_ok() {
+        if is_link(&staged) {
+            remove_link_only(&staged)?;
+        } else {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!("staging path {} exists and is not a link", staged.display()),
+            ));
+        }
+    }
+    let link_target = resolved_link_target(target);
+    create_strict_link(&link_target, &staged, is_dir)?;
+    let verified = is_link(&staged)
+        && fs::metadata(&staged).is_ok_and(|meta| {
+            if is_dir {
+                meta.is_dir()
+            } else {
+                meta.is_file()
+            }
+        });
+    if !verified {
+        let _ = remove_link_only(&staged);
+        return Err(io::Error::other(format!(
+            "staged link {} failed verification",
+            staged.display()
+        )));
+    }
+    Ok(staged)
+}
+
+#[cfg(unix)]
+fn is_pid_alive(pid: u32) -> bool {
+    if pid <= 1 {
+        return false;
+    }
+    let rc = unsafe { libc::kill(pid as libc::pid_t, 0) };
+    if rc == 0 {
+        return true;
+    }
+    io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+}
+
+#[cfg(windows)]
+fn is_pid_alive(pid: u32) -> bool {
+    use windows_sys::Win32::Foundation::{CloseHandle, ERROR_ACCESS_DENIED};
+    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+    if pid <= 1 {
+        return false;
+    }
+    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+    if !handle.is_null() {
+        unsafe { CloseHandle(handle) };
+        return true;
+    }
+    io::Error::last_os_error().raw_os_error() == Some(ERROR_ACCESS_DENIED as i32)
+}
+
+fn pid_matches_proc_start(pid: u32, proc_start: Option<&str>) -> bool {
+    let Some(recorded) = proc_start.map(str::trim).filter(|s| !s.is_empty()) else {
+        return true;
+    };
+    #[cfg(target_os = "linux")]
+    if recorded.bytes().all(|b| b.is_ascii_digit()) {
+        if let Ok(stat) = fs::read_to_string(format!("/proc/{pid}/stat")) {
+            if let Some((_, rest)) = stat.rsplit_once(')') {
+                let fields: Vec<&str> = rest.split_whitespace().collect();
+                if let Some(ticks) = fields.get(19) {
+                    if ticks.bytes().all(|b| b.is_ascii_digit()) {
+                        return *ticks == recorded;
+                    }
+                }
+            }
+        }
+    }
+    let _ = (pid, recorded);
+    true
+}
+
+/// Checks Claude Code's `sessions/*.json` PID records inside `profile_dir` (matching `cswap`'s
+/// `profile_is_quiescent`). Fails closed if `sessions/` or any session record cannot be read.
+fn profile_is_quiescent(profile_dir: &Path) -> Result<(), String> {
+    let sessions_dir = profile_dir.join("sessions");
+    let entries = match fs::read_dir(&sessions_dir) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(format!(
+                "could not read {}: {error}",
+                sessions_dir.display()
+            ))
+        }
+    };
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("could not read session entry: {error}"))?;
+        let path = entry.path();
+        let is_json = path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("json"));
+        if !is_json {
+            continue;
+        }
+        let text = fs::read_to_string(&path)
+            .map_err(|error| format!("unreadable session record {}: {error}", path.display()))?;
+        let data: Value = serde_json::from_str(&text)
+            .map_err(|error| format!("malformed session record {}: {error}", path.display()))?;
+        let pid = data
+            .get("pid")
+            .and_then(Value::as_u64)
+            .and_then(|value| u32::try_from(value).ok())
+            .ok_or_else(|| format!("session record {} is missing a valid pid", path.display()))?;
+        if !is_pid_alive(pid) {
+            continue;
+        }
+        let proc_start = data.get("procStart").and_then(Value::as_str);
+        if !pid_matches_proc_start(pid, proc_start) {
+            continue;
+        }
+        return Err(format!(
+            "live Claude session pid {pid} is using this profile"
+        ));
+    }
+    Ok(())
+}
+
+/// Pre-scans `src` against `dst` without following symlinks: rejects any symlink/junction inside
+/// `src`, any non-regular/non-dir entry, and any directory-vs-file type collision against `dst`
+/// before a single file is moved.
+fn validate_projects_tree(src: &Path, dst: &Path) -> io::Result<()> {
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let from = entry.path();
+        if is_link(&from) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "profile projects directory contains a symlink ({}); skipping migration",
+                    from.display()
+                ),
+            ));
+        }
+        let meta = fs::symlink_metadata(&from)?;
+        let to = dst.join(entry.file_name());
+        if meta.is_dir() {
+            match fs::symlink_metadata(&to) {
+                Ok(dst_meta) if is_link(&to) || !dst_meta.is_dir() => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        format!(
+                            "dir-vs-file collision between {} and {}; skipping migration",
+                            from.display(),
+                            to.display()
+                        ),
+                    ));
+                }
+                Ok(_) => validate_projects_tree(&from, &to)?,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                    validate_projects_tree(&from, &to)?;
+                }
+                Err(error) => return Err(error),
+            }
+        } else if !meta.is_file() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("refusing to migrate non-regular entry {}", from.display()),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Moves a regular file `from` to `to`, falling back to a streamed, fsynced temp-file copy + rename
+/// across filesystems and only unlinking `from` after `to` is safely in place.
+fn move_file_safely(from: &Path, to: &Path) -> io::Result<()> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+
+    if let Some(parent) = to.parent() {
+        private_dir(parent)?;
+    }
+    if fs::rename(from, to).is_ok() {
+        return Ok(());
+    }
+    let name = to
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "file".to_string());
+    let temp = to.with_file_name(format!(
+        "{name}.{}-{}.ghostex-tmp",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
+    let copy_result = (|| -> io::Result<()> {
+        let mut src = fs::File::open(from)?;
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut dst = options.open(&temp)?;
+        io::copy(&mut src, &mut dst)?;
+        dst.sync_all()?;
+        Ok(())
+    })();
+    if let Err(error) = copy_result {
+        let _ = fs::remove_file(&temp);
+        return Err(error);
+    }
+    fs::rename(&temp, to).inspect_err(|_| {
+        let _ = fs::remove_file(&temp);
+    })?;
+    fs::remove_file(from)
+}
+
+/// Picks a non-colliding quarantine path right next to `target` (e.g. `MEMORY.md.ghostex-conflict`,
+/// `sess.jsonl.ghostex-conflict`), never overwriting an existing file and only treating
+/// `ErrorKind::NotFound` as unused.
+fn quarantine_path_next_to(target: &Path) -> io::Result<PathBuf> {
+    let base_name = target
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "file".to_string());
+    let first = target.with_file_name(format!("{base_name}.ghostex-conflict"));
+    match fs::symlink_metadata(&first) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(first),
+        Ok(_) => {}
+        Err(error) => return Err(error),
+    }
+    for n in 2.. {
+        let candidate = target.with_file_name(format!("{base_name}.ghostex-conflict.{n}"));
+        match fs::symlink_metadata(&candidate) {
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(candidate),
+            Ok(_) => {}
+            Err(error) => return Err(error),
+        }
+    }
+    unreachable!()
+}
+
+/// Streamed comparison: true when `profile_file` adds no information beyond `shared_file`
+/// (identical bytes, or a `.jsonl` prefix already contained at the start of `shared_file`).
+fn adds_nothing(shared_file: &Path, profile_file: &Path) -> io::Result<bool> {
+    let mut shared = fs::File::open(shared_file)?;
+    let mut profile = fs::File::open(profile_file)?;
+    let shared_len = shared.metadata()?.len();
+    let profile_len = profile.metadata()?.len();
+    let is_jsonl = profile_file
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("jsonl"));
+
+    if profile_len > shared_len {
+        return Ok(false);
+    }
+    if profile_len < shared_len && !is_jsonl {
+        return Ok(false);
+    }
+    if profile_len == 0 {
+        return Ok(shared_len == 0 || is_jsonl);
+    }
+
+    const CHUNK: usize = 64 * 1024;
+    let mut p_buf = [0u8; CHUNK];
+    let mut s_buf = [0u8; CHUNK];
+    let mut remaining = profile_len;
+    let mut last_profile_byte = 0u8;
+
+    while remaining > 0 {
+        let want = (remaining as usize).min(CHUNK);
+        let n = profile.read(&mut p_buf[..want])?;
+        if n == 0 {
+            // File shrank unexpectedly while comparing; fail safe so we don't drop it.
+            return Ok(false);
+        }
+        shared.read_exact(&mut s_buf[..n])?;
+        if p_buf[..n] != s_buf[..n] {
+            return Ok(false);
+        }
+        last_profile_byte = p_buf[n - 1];
+        remaining -= n as u64;
+    }
+
+    if profile_len == shared_len {
+        // Confirm neither file grew past `profile_len` during comparison.
+        let mut extra = [0u8; 1];
+        return Ok(profile.read(&mut extra)? == 0 && shared.read(&mut extra)? == 0);
+    }
+    // `is_jsonl` and `profile_len < shared_len`: prefix must end at a newline boundary.
+    if last_profile_byte == b'\n' {
+        return Ok(true);
+    }
+    let mut next_shared = [0u8; 1];
+    Ok(shared.read(&mut next_shared)? == 1 && next_shared[0] == b'\n')
+}
+
+fn merge_projects_recursive(src: &Path, dst: &Path, quarantined: &mut usize) -> io::Result<()> {
+    private_dir(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let from = entry.path();
+        if is_link(&from) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("refusing to follow symlink {}", from.display()),
+            ));
+        }
+        let meta = fs::symlink_metadata(&from)?;
+        let to = dst.join(entry.file_name());
+        if meta.is_dir() {
+            merge_projects_recursive(&from, &to, quarantined)?;
+        } else if meta.is_file() {
+            match fs::symlink_metadata(&to) {
+                Ok(target_meta) => {
+                    if !is_link(&to) && target_meta.is_file() && adds_nothing(&to, &from)? {
+                        fs::remove_file(&from)?;
+                    } else {
+                        let parked = quarantine_path_next_to(&to)?;
+                        move_file_safely(&from, &parked)?;
+                        *quarantined += 1;
+                        eprintln!(
+                            "[cliproxy-hub] kept colliding project file beside shared copy: {}",
+                            parked.display()
+                        );
+                    }
+                }
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                    move_file_safely(&from, &to)?;
+                }
+                Err(error) => return Err(error),
+            }
+        } else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("refusing to migrate non-regular entry {}", from.display()),
+            ));
+        }
+    }
+    fs::remove_dir(src)
+}
+
+/// Safely merges `profile_projects` into `shared_projects` without following symlinks or losing
+/// colliding files, then removes the emptied `profile_projects`.
+fn merge_projects_dir(profile_projects: &Path, shared_projects: &Path) -> io::Result<usize> {
+    if is_link(profile_projects) || fsx::same_entry(profile_projects, shared_projects) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "profile projects directory already points at shared projects",
+        ));
+    }
+    validate_projects_tree(profile_projects, shared_projects)?;
+    let mut quarantined = 0;
+    merge_projects_recursive(profile_projects, shared_projects, &mut quarantined)?;
+    Ok(quarantined)
+}
+
+/// Ensures `path` exists as a private (`0600` on Unix) file without truncating existing content.
+fn ensure_private_file(path: &Path) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        private_dir(parent)?;
+    }
+    let mut options = fs::OpenOptions::new();
+    options.create_new(true).write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    match options.open(path) {
+        Ok(file) => {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = file.set_permissions(fs::Permissions::from_mode(0o600));
+            }
+            Ok(())
+        }
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
+/// Deduplicates and appends lines from `profile_history` into `shared_history` (fixing any missing
+/// trailing newline, creating `shared_history` as 0600, fsyncing before unlinking `profile_history`).
+fn merge_history_file(profile_history: &Path, shared_history: &Path) -> io::Result<()> {
+    if is_link(profile_history) || fsx::same_entry(profile_history, shared_history) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "profile history.jsonl already points at shared history.jsonl",
+        ));
+    }
+    ensure_private_file(shared_history)?;
+    let profile_text = fs::read_to_string(profile_history)?;
+    let shared_text = match fs::read_to_string(shared_history) {
+        Ok(text) => text,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(error),
+    };
+    let mut seen: HashSet<&str> = shared_text.lines().collect();
+    let mut additions: Vec<&str> = Vec::new();
+    for line in profile_text.lines() {
+        if !line.is_empty() && seen.insert(line) {
+            additions.push(line);
+        }
+    }
+    if !additions.is_empty() {
+        let torn = !shared_text.is_empty() && !shared_text.ends_with('\n');
+        let mut payload = String::new();
+        if torn {
+            payload.push('\n');
+        }
+        payload.push_str(&additions.join("\n"));
+        payload.push('\n');
+
+        let mut options = fs::OpenOptions::new();
+        options.create(true).append(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut target = options.open(shared_history)?;
+        target.write_all(payload.as_bytes())?;
+        target.sync_all()?;
+    }
+    fs::remove_file(profile_history)
+}
+
+fn finalize_staged_link(staged: &Path, shared_target: &Path, profile_item: &Path, is_dir: bool) {
+    if let Err(rename_error) = fs::rename(staged, profile_item) {
+        let target = resolved_link_target(shared_target);
+        if let Err(link_error) = create_strict_link(&target, profile_item, is_dir) {
+            eprintln!(
+                "[cliproxy-hub] merged {} into {}, but placing link failed ({rename_error}; {link_error})",
+                profile_item.display(),
+                shared_target.display()
+            );
+        }
+        let _ = remove_link_only(staged);
+    }
+}
+
+/// Links `profile_dir/<name>` to `claude_home/<name>` like `cswap --share-history`, safely
+/// migrating any pre-existing `projects/` or `history.jsonl` under a lock and quiescence check.
+fn share_claude_home(claude_home: &Path, profile_dir: &Path) {
+    let shared_projects = claude_home.join("projects");
+    let profile_projects = profile_dir.join("projects");
+    let shared_history = claude_home.join("history.jsonl");
+    let profile_history = profile_dir.join("history.jsonl");
+
+    // Fast path: skip the cross-process migration lock when projects/, history.jsonl, and any
+    // present CLAUDE.md / skills/ are already in place, so hub launches never stall behind cswap.
+    let projects_done =
+        is_link(&profile_projects) || fsx::same_entry(&profile_projects, &shared_projects);
+    let history_done =
+        is_link(&profile_history) || fsx::same_entry(&profile_history, &shared_history);
+    let extras_done = ["CLAUDE.md", "skills"].iter().all(|name| {
+        fs::symlink_metadata(claude_home.join(name)).is_err()
+            || fs::symlink_metadata(profile_dir.join(name)).is_ok()
+    });
+    if projects_done && history_done && extras_done {
+        return;
+    }
+
+    if let Err(error) = private_dir(claude_home) {
+        eprintln!(
+            "[cliproxy-hub] could not prepare {}: {error}",
+            claude_home.display()
+        );
+        return;
+    }
+    let _lock = match MigrationLock::acquire(claude_home) {
+        Ok(lock) => lock,
+        Err(error) => {
+            eprintln!(
+                "[cliproxy-hub] skipping Claude shared-history setup for {}: {error}",
+                profile_dir.display()
+            );
+            return;
+        }
+    };
+
+    // 1. projects/ (ensure target exists, migrate safely if profile has its own directory, then link).
+    if let Err(error) = private_dir(&shared_projects) {
+        eprintln!(
+            "[cliproxy-hub] could not prepare {}: {error}",
+            shared_projects.display()
+        );
+    } else if !is_link(&profile_projects) && !fsx::same_entry(&profile_projects, &shared_projects) {
+        match fs::symlink_metadata(&profile_projects) {
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                let target = resolved_link_target(&shared_projects);
+                if let Err(link_error) = create_strict_link(&target, &profile_projects, true) {
+                    eprintln!(
+                        "[cliproxy-hub] could not link {} -> {}: {link_error}",
+                        profile_projects.display(),
+                        target.display()
+                    );
+                }
+            }
+            Ok(meta) if meta.is_dir() => match profile_is_quiescent(profile_dir) {
+                Err(reason) => {
+                    eprintln!(
+                        "[cliproxy-hub] skipping projects/ migration for {}: {reason}",
+                        profile_dir.display()
+                    );
+                }
+                Ok(()) => match stage_link(&shared_projects, &profile_projects, true) {
+                    Err(error) => {
+                        eprintln!(
+                            "[cliproxy-hub] not sharing projects/ for {} (leaving profile files untouched): {error}",
+                            profile_dir.display()
+                        );
+                    }
+                    Ok(staged) => match merge_projects_dir(&profile_projects, &shared_projects) {
+                        Ok(_) => {
+                            finalize_staged_link(&staged, &shared_projects, &profile_projects, true)
+                        }
+                        Err(error) => {
+                            let _ = remove_link_only(&staged);
+                            eprintln!(
+                                "[cliproxy-hub] skipping projects/ migration for {}: {error}",
+                                profile_dir.display()
+                            );
+                        }
+                    },
+                },
+            },
+            Ok(_) => {}
+            Err(error) => {
+                eprintln!(
+                    "[cliproxy-hub] could not inspect {}: {error}",
+                    profile_projects.display()
+                );
+            }
+        }
+    }
+
+    // 2. history.jsonl (create shared file as 0600, migrate safely with dedupe + fsync, then link).
+    if let Err(error) = ensure_private_file(&shared_history) {
+        eprintln!(
+            "[cliproxy-hub] could not prepare {}: {error}",
+            shared_history.display()
+        );
+    } else if !is_link(&profile_history) && !fsx::same_entry(&profile_history, &shared_history) {
+        match fs::symlink_metadata(&profile_history) {
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                let target = resolved_link_target(&shared_history);
+                if let Err(link_error) = create_strict_link(&target, &profile_history, false) {
+                    eprintln!(
+                        "[cliproxy-hub] could not link {} -> {}: {link_error}",
+                        profile_history.display(),
+                        target.display()
+                    );
+                }
+            }
+            Ok(meta) if meta.is_file() => match profile_is_quiescent(profile_dir) {
+                Err(reason) => {
+                    eprintln!(
+                        "[cliproxy-hub] skipping history.jsonl migration for {}: {reason}",
+                        profile_dir.display()
+                    );
+                }
+                Ok(()) => match stage_link(&shared_history, &profile_history, false) {
+                    Err(error) => {
+                        eprintln!(
+                            "[cliproxy-hub] not sharing history.jsonl for {} (leaving profile file untouched): {error}",
+                            profile_dir.display()
+                        );
+                    }
+                    Ok(staged) => match merge_history_file(&profile_history, &shared_history) {
+                        Ok(()) => {
+                            finalize_staged_link(&staged, &shared_history, &profile_history, false)
+                        }
+                        Err(error) => {
+                            let _ = remove_link_only(&staged);
+                            eprintln!(
+                                "[cliproxy-hub] skipping history.jsonl migration for {}: {error}",
+                                profile_dir.display()
+                            );
+                        }
+                    },
+                },
+            },
+            Ok(_) => {}
+            Err(error) => {
+                eprintln!(
+                    "[cliproxy-hub] could not inspect {}: {error}",
+                    profile_history.display()
+                );
+            }
+        }
+    }
+
+    // 3. CLAUDE.md and skills/ (link into hub profile whenever present in ~/.claude and absent in profile).
+    for (name, is_dir) in [("CLAUDE.md", false), ("skills", true)] {
+        let src = claude_home.join(name);
+        let dst = profile_dir.join(name);
+        if fs::symlink_metadata(&src).is_ok() && fs::symlink_metadata(&dst).is_err() {
+            let target = resolved_link_target(&src);
+            if let Err(error) = create_strict_link(&target, &dst, is_dir) {
+                eprintln!(
+                    "[cliproxy-hub] could not link {} -> {}: {error}",
+                    dst.display(),
+                    target.display()
+                );
+            }
+        }
+    }
+}
+
 /// Claude's folder: the key file, `settings.json` with the hub's address and the key helper (the
-/// hooks Ghostex adds there are kept), and `.claude.json` marked as past Claude's first-run steps.
+/// hooks Ghostex adds there are kept), shared `CLAUDE.md`, `skills/`, `projects/` and
+/// `history.jsonl` from `~/.claude`, and `.claude.json` marked as past Claude's first-run steps.
 fn prepare_claude(
+    home: &Path,
     dir: &Path,
     url: &str,
     key: &str,
     statusline: Option<&Path>,
 ) -> std::io::Result<()> {
     private_dir(dir)?;
+    share_claude_home(&home.join(".claude"), dir);
     let key_file = dir.join(KEY_FILE);
     write_private(&key_file, key.as_bytes())?;
     let settings_path = dir.join("settings.json");
@@ -273,6 +1079,7 @@ pub(crate) fn apply(
     let dir = profile_dir(&home, provider, &hub.id);
     match provider {
         Provider::Claude => prepare_claude(
+            &home,
             &dir,
             &hub.url,
             &key,

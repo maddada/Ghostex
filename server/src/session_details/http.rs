@@ -1,6 +1,7 @@
 //! `/api/readSessionDetails` and `/api/stopSessionBackgroundTask`.
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use axum::http::StatusCode;
 use serde_json::{json, Map, Value};
@@ -12,8 +13,12 @@ use crate::server::{
 };
 use crate::storage::open_gxserver_database;
 
+use super::async_cache::{current_revision, wait_for_revision_change, SectionLoad};
 use super::probe::{ProbeMode, ProbeSnapshot, ProbeTarget};
 use super::scan::TranscriptFacts;
+
+/// Maximum time a progressive `afterRevision` request waits for any background section to finish.
+const PROGRESSIVE_WAIT_CAP: Duration = Duration::from_millis(1500);
 
 fn failure(code: &'static str, message: impl Into<String>) -> DomainStateError {
     DomainStateError {
@@ -64,6 +69,9 @@ fn read_session(
 
 /// `/api/readSessionDetails`: everything the Session details panel shows for one session.
 /// `breakdown` is `"auto"` (the panel's own reads) or `"refresh"` (its refresh button).
+/// `progressive` (`true`) returns cached/instant sections immediately (never blocking one section
+/// on another) with `pendingSections` and `revision`; passing `afterRevision` waits up to
+/// [`PROGRESSIVE_WAIT_CAP`] for any pending background section to finish before responding.
 pub(crate) async fn handle_read_session_details_http(
     state: &AppState,
     endpoint_path: String,
@@ -87,10 +95,22 @@ pub(crate) async fn handle_read_session_details_http(
             "refresh" => ProbeMode::Refresh,
             _ => ProbeMode::Auto,
         };
+        let progressive = params
+            .get("progressive")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let after_revision = params.get("afterRevision").and_then(Value::as_u64);
+        if progressive {
+            if let Some(after) = after_revision {
+                wait_for_revision_change(after, PROGRESSIVE_WAIT_CAP).await;
+            }
+        }
         let state = state.clone();
-        tokio::task::spawn_blocking(move || read_details(&state, &project_id, &session_id, mode))
-            .await
-            .map_err(|error| failure("internalError", error.to_string()))?
+        tokio::task::spawn_blocking(move || {
+            read_details(&state, &project_id, &session_id, mode, progressive)
+        })
+        .await
+        .map_err(|error| failure("internalError", error.to_string()))?
     }
     .await;
     match outcome {
@@ -108,6 +128,7 @@ fn read_details(
     project_id: &str,
     session_id: &str,
     mode: ProbeMode,
+    progressive: bool,
 ) -> Result<Value, DomainStateError> {
     let (session, project) = read_session(state, project_id, session_id)?;
     let agent = crate::session_chat_follower::session_chat_display_agent_for_session(&session);
@@ -121,13 +142,126 @@ fn read_details(
         &home,
         agent.as_deref(),
     );
-    // A Cloud Box session's processes run on the box, out of this computer's reach.
-    if crate::agentbox::session_agentbox(&session).is_none() {
-        environment["memoryBytes"] = json!(crate::zmx::provider_zmx_session_name(&session)
-            .ok()
-            .and_then(|name| super::memory::read_session_memory_bytes(&name)));
+    let is_local_active = crate::agentbox::session_agentbox(&session).is_none()
+        && !super::agents::session_is_inactive(&session);
+    let zmx_name = is_local_active
+        .then(|| crate::zmx::provider_zmx_session_name(&session).ok())
+        .flatten();
+
+    if progressive {
+        return read_details_progressive(
+            state,
+            project_id,
+            session_id,
+            &session,
+            agent,
+            claude,
+            folder,
+            home,
+            environment,
+            zmx_name,
+            mode,
+        );
     }
-    let changes = folder.as_deref().and_then(super::changes::read_changes);
+
+    // Legacy / CLI callers: run RAM, Changes and agent/Claude sections in parallel so total
+    // latency is max(probes) rather than sum(probes).
+    let (memory_bytes, changes, agent_or_claude) = std::thread::scope(|scope| {
+        let mem_handle = scope.spawn(|| {
+            zmx_name
+                .as_deref()
+                .and_then(super::memory::read_session_memory_bytes)
+        });
+        let changes_handle =
+            scope.spawn(|| folder.as_deref().and_then(super::changes::read_changes));
+        let body_handle = scope.spawn(|| -> Result<Value, DomainStateError> {
+            let mut extra = json!({});
+            if !claude {
+                let mut ignored_pending = Vec::new();
+                super::agents::read_agent_details(
+                    state,
+                    project_id,
+                    session_id,
+                    &session,
+                    folder.as_deref(),
+                    agent.as_deref().unwrap_or_default(),
+                    false,
+                    &mut extra,
+                    &mut ignored_pending,
+                );
+                return Ok(extra);
+            }
+            read_claude_sections(
+                state,
+                project_id,
+                session_id,
+                &session,
+                folder.as_deref(),
+                &home,
+                mode,
+                false,
+                &mut extra,
+                &mut Vec::new(),
+            )?;
+            Ok(extra)
+        });
+        (
+            mem_handle.join().ok().flatten(),
+            changes_handle.join().ok().flatten(),
+            body_handle.join().unwrap_or_else(|_| {
+                Err(failure("internalError", "session details worker panicked"))
+            }),
+        )
+    });
+    if is_local_active {
+        environment["memoryBytes"] = json!(memory_bytes);
+    }
+    let mut result = json!({
+        "agent": agent,
+        "supported": claude,
+        "environment": environment,
+        "changes": changes,
+        "updatedAt": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+    });
+    if let Value::Object(extra_map) = agent_or_claude? {
+        if let Some(target) = result.as_object_mut() {
+            for (k, v) in extra_map {
+                target.insert(k, v);
+            }
+        }
+    }
+    Ok(result)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn read_details_progressive(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    session: &Value,
+    agent: Option<String>,
+    claude: bool,
+    folder: Option<String>,
+    home: PathBuf,
+    mut environment: Value,
+    zmx_name: Option<String>,
+    mode: ProbeMode,
+) -> Result<Value, DomainStateError> {
+    let mut pending: Vec<&'static str> = Vec::new();
+    if let Some(name) = zmx_name.as_deref() {
+        environment["memoryBytes"] =
+            json!(super::memory::read_session_memory_bytes_progressive(name));
+    }
+    let changes = match folder.as_deref() {
+        Some(folder) => match super::changes::read_changes_progressive(folder) {
+            SectionLoad::Ready(value) => value,
+            SectionLoad::Pending => {
+                pending.push("changes");
+                None
+            }
+        },
+        None => None,
+    };
     let mut result = json!({
         "agent": agent,
         "supported": claude,
@@ -140,13 +274,45 @@ fn read_details(
             state,
             project_id,
             session_id,
-            &session,
+            session,
             folder.as_deref(),
             agent.as_deref().unwrap_or_default(),
+            true,
             &mut result,
+            &mut pending,
         );
-        return Ok(result);
+    } else {
+        read_claude_sections(
+            state,
+            project_id,
+            session_id,
+            session,
+            folder.as_deref(),
+            &home,
+            mode,
+            true,
+            &mut result,
+            &mut pending,
+        )?;
     }
+    result["revision"] = json!(current_revision());
+    result["pendingSections"] = json!(pending);
+    Ok(result)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn read_claude_sections(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    session: &Value,
+    folder: Option<&str>,
+    home: &std::path::Path,
+    mode: ProbeMode,
+    progressive: bool,
+    result: &mut Value,
+    pending: &mut Vec<&'static str>,
+) -> Result<(), DomainStateError> {
     let resolution = crate::session_chat_read::resolve_session_chat_read_state(
         state, project_id, session_id, None,
     )?;
@@ -159,7 +325,7 @@ fn read_details(
         .as_deref()
         .and_then(|path| std::fs::metadata(path).ok())
         .map_or(0, |metadata| metadata.len());
-    let agent_session_id = read_runtime_text(&session, "agentSessionId");
+    let agent_session_id = read_runtime_text(session, "agentSessionId");
     let hook_state =
         crate::agent_hooks::config::HookPaths::from_paths(&state.paths).hook_state_directory;
     let statusline = agent_session_id.as_deref().and_then(|id| {
@@ -200,32 +366,45 @@ fn read_details(
         })
         .and_then(Value::as_str)
         .map(PathBuf::from)
-        .or_else(|| folder.as_deref().map(PathBuf::from));
+        .or_else(|| folder.map(PathBuf::from));
     let probe = match agent_session_id.clone() {
         Some(agent_session_id) => super::probe::request(
             ProbeTarget {
                 agent_session_id,
                 cwd,
-                zmx_name: crate::zmx::provider_zmx_session_name(&session).ok(),
+                zmx_name: crate::zmx::provider_zmx_session_name(session).ok(),
                 model: model.clone(),
                 transcript_len,
                 resumable: facts
                     .as_ref()
                     .is_some_and(|facts| facts.conversation_started),
                 working: resolution.working(),
-                home: home.clone(),
+                home: home.to_path_buf(),
             },
             mode,
         ),
         None => ProbeSnapshot::default(),
     };
-    let connectors = super::connectors::read_connectors(
-        state,
-        project_id,
-        session_id,
-        facts.as_ref(),
-        probe.mcp_status.as_ref(),
-    );
+    let (connectors, connectors_pending) = if progressive {
+        super::connectors::read_connectors_progressive(
+            state,
+            project_id,
+            session_id,
+            facts.as_ref(),
+            probe.mcp_status.as_ref(),
+        )
+    } else {
+        (
+            super::connectors::read_connectors(
+                state,
+                project_id,
+                session_id,
+                facts.as_ref(),
+                probe.mcp_status.as_ref(),
+            ),
+            false,
+        )
+    };
     result["context"] = json!({
         "model": model,
         "live": live,
@@ -235,7 +414,17 @@ fn read_details(
         "breakdownError": probe.error,
         "refreshAt": probe.refresh_at.map(|at| at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
     });
-    result["connectors"] = connectors;
+    if !connectors_pending
+        || connectors["servers"]
+            .as_array()
+            .is_some_and(|servers| !servers.is_empty())
+        || !connectors["workspace"].is_null()
+    {
+        result["connectors"] = connectors;
+    }
+    if connectors_pending && !pending.contains(&"connectors") {
+        pending.push("connectors");
+    }
     let skill_tokens = |name: &str| {
         probe
             .breakdown
@@ -246,21 +435,39 @@ fn read_details(
             .unwrap_or(Value::Null)
     };
     if let Some(facts) = facts.as_ref() {
-        let sources = super::skills::skill_sources(
-            &home,
-            folder.as_deref().map(std::path::Path::new),
-            facts.skills.iter().map(|(name, _)| name.as_str()),
-        );
-        result["skills"] = json!({
-            "used": facts.invoked_skills,
-            "available": facts.skills.iter().map(|(name, description)| json!({
-                "name": name,
-                "description": description,
-                "tokens": skill_tokens(name),
-                "scope": sources.get(name).map(|source| source.scope),
-                "path": sources.get(name).and_then(|source| source.path.clone()),
-            })).collect::<Vec<_>>(),
-        });
+        let sources = if facts.skills.is_empty() {
+            Some(std::collections::HashMap::new())
+        } else if progressive {
+            match super::skills::skill_sources_progressive(
+                home,
+                folder.map(std::path::Path::new),
+                facts.skills.iter().map(|(name, _)| name.as_str()),
+            ) {
+                SectionLoad::Ready(sources) => Some(sources),
+                SectionLoad::Pending => {
+                    pending.push("skills");
+                    None
+                }
+            }
+        } else {
+            Some(super::skills::skill_sources(
+                home,
+                folder.map(std::path::Path::new),
+                facts.skills.iter().map(|(name, _)| name.as_str()),
+            ))
+        };
+        if let Some(sources) = sources {
+            result["skills"] = json!({
+                "used": facts.invoked_skills,
+                "available": facts.skills.iter().map(|(name, description)| json!({
+                    "name": name,
+                    "description": description,
+                    "tokens": skill_tokens(name),
+                    "scope": sources.get(name).map(|source| source.scope),
+                    "path": sources.get(name).and_then(|source| source.path.clone()),
+                })).collect::<Vec<_>>(),
+            });
+        }
         let file_tokens = |path: &str| {
             probe
                 .breakdown
@@ -279,7 +486,7 @@ fn read_details(
                 "tokens": file_tokens(&file.path),
             }))
             .collect::<Vec<_>>());
-        result["background"] = json!({
+        result["background"] = json!( {
             "finished": facts.finished_background().into_iter().map(|run| json!({
                 "id": run.id,
                 "kind": run.kind,
@@ -294,7 +501,7 @@ fn read_details(
             })).collect::<Vec<_>>(),
         });
     }
-    Ok(result)
+    Ok(())
 }
 
 /// `/api/stopSessionBackgroundTask`: ends one background command of a Claude or OpenCode session.

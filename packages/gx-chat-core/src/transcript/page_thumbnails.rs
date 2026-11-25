@@ -35,26 +35,33 @@ fn is_page_id(id: &str) -> bool {
     id.len() == 32 && id.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
-/// `{type: "loadPageThumbnail", pageId, fresh?}`: reads the page's picture, unless a read is already
-/// out. `fresh` (the card just opened its page, which pictures it) starts the waits over.
+/// `{type: "loadPageThumbnail", pageId, theme?, fresh?}`: reads the page's picture, unless a read
+/// is already out for that `(pageId, theme)`. `fresh` (the card just opened its page, which
+/// pictures it) starts the waits over.
 pub fn load(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     let page_id = action
         .param("pageId")
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_ascii_lowercase();
+    let theme = action
+        .param("theme")
+        .and_then(Value::as_str)
+        .filter(|theme| matches!(*theme, "dark" | "light"))
+        .map(str::to_string);
+    let key = (page_id.clone(), theme.clone());
     if action.param("fresh").and_then(Value::as_bool) == Some(true) {
         state
             .transcript_view
             .page_thumbnail_attempts
-            .remove(&page_id);
+            .remove(&key);
     }
     if !is_page_id(&page_id)
         || state
             .transcript_view
             .page_thumbnail_requests
             .values()
-            .any(|asked| *asked == page_id)
+            .any(|asked| *asked == key)
     {
         return Vec::new();
     }
@@ -62,37 +69,43 @@ pub fn load(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     state
         .transcript_view
         .page_thumbnail_requests
-        .insert(request_id, page_id.clone());
+        .insert(request_id, key);
+    let params = match theme {
+        Some(theme) => json!({ "pageId": page_id, "theme": theme }),
+        None => json!({ "pageId": page_id }),
+    };
     vec![Effect::SendRpc {
         request_id,
         method: ChatRpcMethod::ReadVisualPageThumbnail,
-        params: Box::new(json!({ "pageId": page_id })),
+        params: Box::new(params),
     }]
 }
 
 /// The answer to a `load`, as the `pageThumbnail` host action; `None` when `request_id` is not one.
 ///
-/// `{pageId, png, capturedAt, settled, retryInMs, backgroundPicture}`: `png` is base64 or null;
-/// `settled` means this is the page's current picture (or the page is gone) and nothing more will
-/// come, otherwise the renderer asks again after `retryInMs`. `backgroundPicture` (gxserver's own
-/// answer) says the page has no picture and may be pictured without being opened, which the
-/// desktop does for a card it draws (apps/desktop/src/app/visual_page_background_pictures.rs). A refused read (an older gxserver without the call) is
-/// settled with no picture, and never reaches the composer's error line.
+/// `{pageId, png, capturedAt, settled, retryInMs, backgroundPicture, theme, transparent}`: `png`
+/// is base64 or null; `settled` means this is the page's current picture (or the page is gone) and
+/// nothing more will come, otherwise the renderer asks again after `retryInMs`. `backgroundPicture`
+/// (gxserver's own answer) says the page has no picture and may be pictured without being opened,
+/// which the desktop does for a card it draws (apps/desktop/src/app/visual_page_background_pictures.rs).
+/// A refused read (an older gxserver without the call) is settled with no picture, and never
+/// reaches the composer's error line.
 pub fn settle_rpc(
     state: &mut ChatState,
     request_id: u64,
     outcome: &RpcOutcome,
 ) -> Option<Vec<Effect>> {
-    let page_id = state
+    let key = state
         .transcript_view
         .page_thumbnail_requests
         .remove(&request_id)?;
+    let (ref page_id, ref requested_theme) = key;
     state.core.claim_refusal();
     let background_picture = matches!(
         outcome,
         RpcOutcome::Ok { result } if result.get("backgroundPicture").and_then(Value::as_bool) == Some(true)
     );
-    let (png, captured_at, settled) = match outcome {
+    let (png, captured_at, settled, resolved_theme, transparent) = match outcome {
         RpcOutcome::Ok { result } => {
             let png = result
                 .get("png")
@@ -101,25 +114,36 @@ pub fn settle_rpc(
                 .map(str::to_string);
             let stale = result.get("stale").and_then(Value::as_bool) != Some(false);
             let gone = result.get("gone").and_then(Value::as_bool) == Some(true);
+            let resolved_theme = result
+                .get("theme")
+                .and_then(Value::as_str)
+                .filter(|theme| matches!(*theme, "dark" | "light"))
+                .map(str::to_string);
+            let transparent = result
+                .get("transparent")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
             (
                 png.clone(),
                 result.get("capturedAt").cloned().unwrap_or(Value::Null),
                 gone || (png.is_some() && !stale),
+                resolved_theme,
+                transparent,
             )
         }
-        RpcOutcome::Err { .. } => (None, Value::Null, true),
+        RpcOutcome::Err { .. } => (None, Value::Null, true, None, false),
     };
     let retry_in_ms = if settled {
         state
             .transcript_view
             .page_thumbnail_attempts
-            .remove(&page_id);
+            .remove(&key);
         Value::Null
     } else {
         let attempts = state
             .transcript_view
             .page_thumbnail_attempts
-            .entry(page_id.clone())
+            .entry(key.clone())
             .or_insert(0);
         let delays = &VISUAL.retry_delays_ms;
         let delay = delays
@@ -139,6 +163,8 @@ pub fn settle_rpc(
             "settled": settled,
             "retryInMs": retry_in_ms,
             "backgroundPicture": background_picture,
+            "theme": resolved_theme.as_deref().or(requested_theme.as_deref()),
+            "transparent": transparent,
         })),
     }])
 }

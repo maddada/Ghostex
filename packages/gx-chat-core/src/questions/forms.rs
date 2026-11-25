@@ -1525,6 +1525,8 @@ mod canceled_tests {
                 title: String::new(),
                 answers,
                 tags: Vec::new(),
+                by: None,
+                outside: false,
             });
         assert_eq!(project(&state)[&id]["state"], "queued");
         assert_eq!(project(&state)[&id]["canSend"], false);

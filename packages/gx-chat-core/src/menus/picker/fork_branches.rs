@@ -139,7 +139,11 @@ pub fn fork_branch_subtitle(branch: &ForkBranch, now_ms: f64) -> String {
 
 /// `sessionChatForkBranchTooltip`.
 pub fn fork_branch_tooltip(count: usize) -> String {
-    format!("This conversation has {count} branches that share earlier history.")
+    format!(
+        "This conversation has {} that {} earlier history.",
+        ghostex_gx_protocol::plural(count, "branch", "branches"),
+        ghostex_gx_protocol::plural_word(count, "shares", "share")
+    )
 }
 
 /// One projected row.

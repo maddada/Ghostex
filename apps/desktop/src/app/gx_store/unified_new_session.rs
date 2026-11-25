@@ -19,8 +19,12 @@ pub(crate) struct PendingDraftMove {
     pub(crate) from_machine_id: String,
     pub(crate) from_project_id: String,
     pub(crate) from_session_id: String,
-    /// What the composer held, which the new chat opens with.
+    /// What the composer held, which the moved chat opens with.
     pub(crate) text: String,
+    /// The selected model value, kept across the move.
+    pub(crate) agent_model: Option<String>,
+    /// The selected effort value, kept across the move.
+    pub(crate) agent_effort: Option<String>,
 }
 
 pub(crate) fn group_id_of(machine_id: &str, project_id: &str) -> String {
@@ -36,19 +40,87 @@ pub(crate) fn group_id_of(machine_id: &str, project_id: &str) -> String {
     .to_sidebar_group_id()
 }
 
-/// The params of `createAgentSession` with the moved draft's text staged for its chat, the same way
-/// `ghostex create-agent --first-input-draft` does.
+/// The params of `createAgentSession` with the moved draft's text, model and effort staged for
+/// its chat, the same way `ghostex create-agent --first-input-draft` does.
 pub(in crate::app) fn with_moved_draft_text(
     mut params: Value,
     draft: &Option<PendingDraftMove>,
 ) -> Value {
-    if let Some(draft) = draft.as_ref().filter(|draft| !draft.text.trim().is_empty()) {
-        params["runtimeSettings"]["firstUserInputDraft"] = json!(draft.text);
+    if let Some(draft) = draft.as_ref() {
+        if !draft.text.trim().is_empty() {
+            params["runtimeSettings"]["firstUserInputDraft"] = json!(draft.text);
+        }
+        if let Some(model) = draft
+            .agent_model
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+        {
+            params["agentModel"] = json!(model);
+        }
+        if let Some(effort) = draft
+            .agent_effort
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+        {
+            params["agentEffort"] = json!(effort);
+        }
     }
     params
 }
 
 impl GhostexGpuiApp {
+    /// The project a one-click New session (button or Cmd+N) lands in: the open session's project
+    /// when there is one (ignoring Quick Automations and hidden system projects drawn under Main
+    /// Hub), else this computer's Main Hub (`is_home && !is_help_home`), else the active project
+    /// or the first non-hidden local project.
+    pub(crate) fn gx_store_new_session_default_group_id(&self) -> Option<String> {
+        let presentation = self.gx_store.core.presentation();
+        let is_hidden_system_project = |project: &ProjectKey| {
+            project.project_id == ghostex_gx_core::QUICK_AUTOMATIONS_PROJECT_ID
+                || presentation
+                    .loaded(&project.machine)
+                    .and_then(|loaded| loaded.project(&project.project_id))
+                    .is_some_and(|row| {
+                        row.is_help_home
+                            || row.gbots_project
+                            || row.gbots_bot.is_some()
+                            || row.autopilot_supervisor_project
+                    })
+        };
+        if let Some(session) = self.gx_store.core.focus().focused_session.as_ref() {
+            let project = session.project_key();
+            if !is_hidden_system_project(&project) {
+                return Some(project.to_sidebar_group_id());
+            }
+        }
+        if let Some(local) = presentation.loaded(&MachineId::Local) {
+            if let Some(home) = local
+                .projects()
+                .iter()
+                .find(|project| project.is_home && !project.is_help_home)
+            {
+                return Some(ProjectKey::local(home.project_id.clone()).to_sidebar_group_id());
+            }
+        }
+        if let Some(project) = self.gx_store.core.focus().active_project.as_ref()
+            && !is_hidden_system_project(project)
+        {
+            return Some(project.to_sidebar_group_id());
+        }
+        presentation.loaded(&MachineId::Local).and_then(|local| {
+            local
+                .projects()
+                .iter()
+                .find(|project| {
+                    !project.is_help_home
+                        && !project.gbots_project
+                        && project.gbots_bot.is_none()
+                        && !project.autopilot_supervisor_project
+                })
+                .map(|project| ProjectKey::local(project.project_id.clone()).to_sidebar_group_id())
+        })
+    }
+
     /// One row per repository across the machines this app holds, for the tray and the "+" of a
     /// group. It reads the store directly, so it answers with the Project sidebar selected too.
     pub(crate) fn gx_store_project_choices(&self) -> Vec<UnifiedProjectChoice> {
@@ -256,147 +328,7 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// The New thread picker's projects and where it starts: `picker_start` when a "+" set one,
-    /// else `gx_store_new_session_start`. `None` when no machine lists a project.
-    pub(crate) fn gx_store_new_thread_picker_place(
-        &mut self,
-    ) -> Option<crate::app::window::NewThreadPickerPlace> {
-        use crate::app::window::NewThreadPickerPlace;
-        // Recent reads the saved starts, which the Project sidebar never reads on its own.
-        self.gx_store.unified_sidebar.ensure_saved_read();
-        let choices = self.gx_store_project_choices();
-        let start = match self.gx_store.unified_sidebar.picker_start.take() {
-            Some(start) => Some(start),
-            None => self.gx_store_new_session_start(&choices),
-        }?;
-        let mut projects = choices;
-        let project = projects
-            .iter()
-            .position(|project| project.repo_key == start.repo_key)?;
-        let machine = projects[project]
-            .machines
-            .iter()
-            .position(|machine| machine.machine_id == start.machine_id)?;
-        // The start can be a worktree the row doesn't point at; on that machine it is "here".
-        projects[project].machines[machine].project_id = start.project_id.clone();
-        let marks = self.gx_store_new_thread_picker_marks();
-        let icons = self.gx_store_new_thread_picker_icons(&projects);
-        Some(NewThreadPickerPlace {
-            projects,
-            project,
-            machine,
-            hotkey: crate::gpui_configured_hotkey_label("openNewThreadPalette"),
-            marks,
-            icons,
-        })
-    }
-
-    /// Every machine's logo and name as the sidebar draws them, in the sidebar's order: the
-    /// picker's machine columns (CDXC:AgentLauncher 2026-11-15 in
-    /// window/new_thread_picker_place.rs). With only this computer the sidebar draws no mark, so
-    /// its logo is read the same way here: its picked icon, else its system's logo.
-    fn gx_store_new_thread_picker_marks(&self) -> Vec<crate::app::window::NewThreadPickerMark> {
-        let tabs = &self.gx_store.sidebar_list.last_inputs.host.machines;
-        let mut by_id = self.gx_store_computer_marks(tabs);
-        let mut marks: Vec<crate::app::window::NewThreadPickerMark> = tabs
-            .iter()
-            .filter_map(|tab| {
-                let mark = by_id.remove(&tab.machine_id)?;
-                Some(crate::app::window::NewThreadPickerMark {
-                    machine_id: tab.machine_id.clone(),
-                    asset: mark.asset,
-                    name: mark.name,
-                })
-            })
-            .collect();
-        if !marks.iter().any(|mark| mark.machine_id == LOCAL_MACHINE_ID) {
-            let facts =
-                super::computer_icons::computer_icon_facts(LOCAL_MACHINE_ID).unwrap_or_default();
-            let system = facts.platform.as_deref().or(match std::env::consts::OS {
-                "macos" => Some("macos"),
-                "windows" => Some("windows"),
-                _ => Some("linux"),
-            });
-            let asset = ghostex_gx_core::computer_icons::computer_icon_asset(
-                facts.icon.as_deref(),
-                facts.logo.as_deref(),
-                facts.kind.as_deref(),
-                system,
-            );
-            marks.insert(
-                0,
-                crate::app::window::NewThreadPickerMark {
-                    machine_id: LOCAL_MACHINE_ID.to_string(),
-                    asset,
-                    name: crate::host_name::local_computer_name(),
-                },
-            );
-        }
-        marks
-    }
-
-    /// Each project's own icon, as its sidebar row draws it: from the machine it starts on, else
-    /// the first of its machines that has one.
-    fn gx_store_new_thread_picker_icons(
-        &self,
-        projects: &[UnifiedProjectChoice],
-    ) -> std::collections::BTreeMap<String, String> {
-        let presentation = self.gx_store.core.presentation();
-        projects
-            .iter()
-            .filter_map(|project| {
-                let start = project.machines.get(project.selected);
-                let icon =
-                    start
-                        .into_iter()
-                        .chain(project.machines.iter())
-                        .find_map(|machine| {
-                            let id = if machine.machine_id == LOCAL_MACHINE_ID {
-                                MachineId::Local
-                            } else {
-                                MachineId::Remote(machine.machine_id.clone())
-                            };
-                            ghostex_gx_core::project_sidebar_icon_data_url(
-                                presentation.machine(&id)?,
-                                &machine.project_id,
-                            )
-                        })?;
-                Some((project.repo_key.clone(), icon))
-            })
-            .collect()
-    }
-
-    /// A picker command's pick: the group its launch goes to (the launch reads `picker_target`),
-    /// and what a start remembers (`gx_store_new_session_started`).
-    pub(crate) fn gx_store_take_new_thread_picker_target(
-        &mut self,
-        target: Option<crate::app::window::NewThreadPickerTarget>,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let Some(target) = target else {
-            return;
-        };
-        self.gx_store.unified_sidebar.picker_target =
-            Some(group_id_of(&target.machine_id, &target.project_id));
-        self.gx_store_new_session_started(
-            &UnifiedNewSessionTarget {
-                repo_key: target.repo_key,
-                machine_id: target.machine_id,
-                project_id: target.project_id,
-            },
-            cx,
-        );
-    }
-
-    /// The New session row's arrow (native_sidebar/new_session_row.rs) and ⌘N: the New thread
-    /// picker, starting where `gx_store_new_session_start` says. Nothing is activated, so it cannot
-    /// start a default agent (CDXC:Sidebar 2026-10-31 WHY in gx-core unified_sidebar/choices.rs).
-    pub(crate) fn open_unified_new_session(&mut self, cx: &mut gpui::Context<Self>) {
-        self.gx_store.unified_sidebar.picker_start = None;
-        self.open_gpui_new_thread_picker(cx);
-    }
-
-    /// A group's "+" and a filter row's "+": the picker on that project, on that machine.
+    /// Starts a new chat draft in `project_id` on `machine_id` (no picker).
     pub(crate) fn open_new_session_in(
         &mut self,
         machine_id: &str,
@@ -408,18 +340,44 @@ impl GhostexGpuiApp {
         } else {
             MachineId::Remote(machine_id.to_string())
         };
-        let Some(repo_key) = self.gx_store_repo_key_of(&machine, project_id) else {
-            return;
-        };
-        self.gx_store.unified_sidebar.picker_start = Some(UnifiedNewSessionTarget {
-            repo_key,
-            machine_id: machine_id.to_string(),
-            project_id: project_id.to_string(),
-        });
-        self.open_gpui_new_thread_picker(cx);
+        if let Some(repo_key) = self.gx_store_repo_key_of(&machine, project_id) {
+            self.gx_store_new_session_started(
+                &UnifiedNewSessionTarget {
+                    repo_key,
+                    machine_id: machine_id.to_string(),
+                    project_id: project_id.to_string(),
+                },
+                cx,
+            );
+        }
+        let group_id = group_id_of(machine_id, project_id);
+        self.start_new_agent_session_in_group(group_id, cx);
     }
 
-    /// A filter row's "+": the picker on that repository, on the machine it starts on.
+    /// Starts a new draft in `group_id` (or the default group) with Coordinator mode toggled on
+    /// and shows the coordinator toast (no picker or New Coordinator modal).
+    pub(crate) fn start_new_coordinator_draft(
+        &mut self,
+        group_id: Option<String>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.gx_store
+            .unified_sidebar
+            .carry_coordinator_draft
+            .set(true);
+        self.gx_store_create_toast(
+            "info",
+            "Coordinator",
+            Some("Pick a model and effort, then click Send to start this coordinator."),
+            cx,
+        );
+        match group_id {
+            Some(group_id) => self.start_new_agent_session_in_group(group_id, cx),
+            None => self.start_new_agent_session(cx),
+        }
+    }
+
+    /// Starts a new chat draft in `repo_key` on the machine it starts on (no picker).
     pub(crate) fn open_new_session_in_repo(
         &mut self,
         repo_key: &str,
@@ -432,19 +390,235 @@ impl GhostexGpuiApp {
         let Some(machine) = choice.selected_machine() else {
             return;
         };
-        self.gx_store.unified_sidebar.picker_start = Some(UnifiedNewSessionTarget {
-            repo_key: repo_key.to_string(),
-            machine_id: machine.machine_id.clone(),
-            project_id: machine.project_id.clone(),
+        let group_id = group_id_of(&machine.machine_id, &machine.project_id);
+        self.gx_store_new_session_started(
+            &UnifiedNewSessionTarget {
+                repo_key: repo_key.to_string(),
+                machine_id: machine.machine_id.clone(),
+                project_id: machine.project_id.clone(),
+            },
+            cx,
+        );
+        let menu_host = self.gx_store_menu_host();
+        let place = ghostex_gx_core::AgentChoicePlace {
+            project: Some(machine.project_id.clone()),
+            ..Default::default()
+        };
+        let primary_id = menu_host
+            .primary_agent_at(&place)
+            .map(|agent| agent.agent_id.clone());
+        let mut command = json!({
+            "type": "projectAction",
+            "groupId": group_id,
+            "action": "agent",
         });
-        self.open_gpui_new_thread_picker(cx);
+        if let Some(agent_id) = primary_id {
+            command["agentId"] = json!(agent_id);
+        }
+        self.dispatch_native_sidebar_ui(command, cx);
     }
 
-    /// A pick in the tray's project chip: start the same agent as a draft there, with the composer's
-    /// text, open it, then close this draft.
-    ///
-    /// CDXC:Sidebar 2026-10-31 DECISION:
-    /// User (Q847): "Changing the project or machine moves the draft, the same way the tray's move works". A session row can't change project, so like the worktree move this starts the same agent as a new session and closes the empty draft (`/api/draftWorktree {finish, moved}`, which only closes a session still a draft); it happens on the pick rather than on send, because the new chat has to be the one whose tray offers that project's worktrees. It reaches any machine through the launch's machine-scoped group id. If the launch fails the draft stays open with its text.
+    /// The merged header chevron menu for a Unified project group (`agent_launcher_items`).
+    pub(crate) fn gx_store_unified_project_launcher_menu(
+        &mut self,
+        repo_key: &str,
+    ) -> Option<Value> {
+        let choices = self.gx_store_project_choices();
+        let choice = choices.iter().find(|choice| choice.repo_key == repo_key)?;
+        let machine = choice.selected_machine()?;
+        let group_id = group_id_of(&machine.machine_id, &machine.project_id);
+        let menu_host = self.gx_store_menu_host();
+        let place = ghostex_gx_core::AgentChoicePlace {
+            project: Some(machine.project_id.clone()),
+            ..Default::default()
+        };
+        let items = ghostex_gx_core::agent_launcher_items(&group_id, &place, &menu_host);
+        Some(ghostex_gx_core::menu_to_json(&items))
+    }
+
+    /// Whether `(machine_id, project_id)` is a computer's Main Hub project (`is_home && !is_help_home`).
+    pub(crate) fn gx_store_is_main_hub_project(&self, machine_id: &str, project_id: &str) -> bool {
+        let machine = if machine_id == LOCAL_MACHINE_ID {
+            MachineId::Local
+        } else {
+            MachineId::Remote(machine_id.to_string())
+        };
+        self.gx_store
+            .core
+            .presentation()
+            .loaded(&machine)
+            .and_then(|loaded| loaded.project(project_id))
+            .is_some_and(|project| project.is_home && !project.is_help_home)
+    }
+
+    /// Every computer's Main Hub project grouped as one choice, for the "No project" mode's
+    /// computer picker (even when different computers have different home folder paths).
+    pub(crate) fn gx_store_main_hub_choice(
+        &self,
+        preferred_machine_id: &str,
+    ) -> Option<UnifiedProjectChoice> {
+        let inputs = &self.gx_store.sidebar_list.last_inputs;
+        let store = self.gx_store.core.presentation();
+        let mut machine_list: Vec<(MachineId, String, String, bool)> = vec![(
+            MachineId::Local,
+            LOCAL_MACHINE_ID.to_string(),
+            "Local".to_string(),
+            true,
+        )];
+        for tab in &inputs.host.machines {
+            if tab.machine_id == LOCAL_MACHINE_ID {
+                machine_list[0].2.clone_from(&tab.label);
+            } else if tab.fed && !tab.this_computer {
+                machine_list.push((
+                    MachineId::Remote(tab.machine_id.clone()),
+                    tab.machine_id.clone(),
+                    tab.label.clone(),
+                    tab.state == "connected",
+                ));
+            }
+        }
+        let mut machines = Vec::new();
+        for (machine, machine_id, label, connected) in machine_list {
+            let Some(loaded) = store.loaded(&machine) else {
+                continue;
+            };
+            let Some(home) = loaded
+                .projects()
+                .iter()
+                .find(|project| project.is_home && !project.is_help_home)
+            else {
+                continue;
+            };
+            machines.push(ghostex_gx_core::unified_sidebar::UnifiedChoiceMachine {
+                machine_id,
+                label,
+                project_id: home.project_id.clone(),
+                connected,
+            });
+        }
+        if machines.is_empty() {
+            return None;
+        }
+        let selected = machines
+            .iter()
+            .position(|machine| machine.machine_id == preferred_machine_id)
+            .unwrap_or(0);
+        Some(UnifiedProjectChoice {
+            repo_key: "main-hub".to_string(),
+            label: "Main Hub".to_string(),
+            has_sessions: true,
+            recent: false,
+            detail: None,
+            machines,
+            selected,
+        })
+    }
+
+    /// Toggles a draft between "No project" (Main Hub) and its previous/default project.
+    pub(crate) fn gx_store_toggle_draft_no_project(
+        &mut self,
+        draft: PendingDraftMove,
+        agent_id: &str,
+        currently_no_project: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if !currently_no_project {
+            let from_machine = if draft.from_machine_id == LOCAL_MACHINE_ID {
+                MachineId::Local
+            } else {
+                MachineId::Remote(draft.from_machine_id.clone())
+            };
+            if let Some(repo_key) = self.gx_store_repo_key_of(&from_machine, &draft.from_project_id)
+            {
+                self.gx_store.unified_sidebar.no_project_return = Some(UnifiedNewSessionTarget {
+                    repo_key,
+                    machine_id: draft.from_machine_id.clone(),
+                    project_id: draft.from_project_id.clone(),
+                });
+            }
+            let Some(home_choice) = self.gx_store_main_hub_choice(&draft.from_machine_id) else {
+                return;
+            };
+            let Some(target) = home_choice
+                .machines
+                .get(home_choice.selected)
+                .filter(|machine| machine.connected)
+                .or_else(|| {
+                    home_choice
+                        .machines
+                        .iter()
+                        .find(|machine| machine.connected)
+                })
+            else {
+                return;
+            };
+            let target_machine_id = target.machine_id.clone();
+            let target_project_id = target.project_id.clone();
+            self.gx_store_move_draft_to_project(
+                draft,
+                agent_id,
+                &home_choice.repo_key,
+                &target_machine_id,
+                &target_project_id,
+                cx,
+            );
+            return;
+        }
+        let choices = self.gx_store_project_choices();
+        let saved_target = self
+            .gx_store
+            .unified_sidebar
+            .no_project_return
+            .take()
+            .filter(|saved| {
+                !self.gx_store_is_main_hub_project(&saved.machine_id, &saved.project_id)
+                    && choices.iter().any(|choice| {
+                        choice.machines.iter().any(|machine| {
+                            machine.connected
+                                && machine.machine_id == saved.machine_id
+                                && machine.project_id == saved.project_id
+                        })
+                    })
+            });
+        let target = saved_target.or_else(|| {
+            // Prefer the most recent non-Main-Hub project on the draft's current computer, else any connected computer.
+            let find_in = |require_same_machine: bool| {
+                choices.iter().find_map(|choice| {
+                    let machine = choice.selected_machine().filter(|machine| {
+                        machine.connected
+                            && (!require_same_machine
+                                || machine.machine_id == draft.from_machine_id)
+                            && !self.gx_store_is_main_hub_project(
+                                &machine.machine_id,
+                                &machine.project_id,
+                            )
+                    })?;
+                    Some(UnifiedNewSessionTarget {
+                        repo_key: choice.repo_key.clone(),
+                        machine_id: machine.machine_id.clone(),
+                        project_id: machine.project_id.clone(),
+                    })
+                })
+            };
+            find_in(true).or_else(|| find_in(false))
+        });
+        if let Some(target) = target {
+            self.gx_store_move_draft_to_project(
+                draft,
+                agent_id,
+                &target.repo_key,
+                &target.machine_id,
+                &target.project_id,
+                cx,
+            );
+        }
+    }
+
+    /// A pick in the tray's project or computer chip: move the same draft in place when staying on
+    /// the same computer (`/api/moveDraftSession`), preserving its session id, typed text, agent,
+    /// model and effort. Cross-computer moves (or older gxservers that predate `/api/moveDraftSession`)
+    /// fall back to starting the draft in the target project with the same agent, model, effort and
+    /// typed text, then closing the old draft.
     pub(crate) fn gx_store_move_draft_to_project(
         &mut self,
         draft: PendingDraftMove,
@@ -462,6 +636,146 @@ impl GhostexGpuiApp {
             },
             cx,
         );
+        if draft.from_machine_id != machine_id {
+            self.gx_store_move_draft_via_create(draft, agent_id, machine_id, project_id, cx);
+            return;
+        }
+        let mut params = json!({
+            "projectId": draft.from_project_id,
+            "sessionId": draft.from_session_id,
+            "targetProjectId": project_id,
+            "text": draft.text,
+        });
+        if let Some(model) = draft.agent_model.as_deref() {
+            params["agentModel"] = json!(model);
+        }
+        if let Some(effort) = draft.agent_effort.as_deref() {
+            params["agentEffort"] = json!(effort);
+        }
+        let agent_id = agent_id.to_string();
+        let machine_id = machine_id.to_string();
+        let target_project_id = project_id.to_string();
+        let preferred_interface = self.gx_store_preferred_interface(&agent_id);
+        if machine_id == LOCAL_MACHINE_ID {
+            cx.spawn(async move |this, cx| {
+                let result = super::rpc::gx_rpc(None, "/api/moveDraftSession", params).await;
+                let _ = this.update(cx, |this, cx| match result {
+                    Ok(response) => {
+                        let moved_project_id = response
+                            .get("projectId")
+                            .and_then(Value::as_str)
+                            .unwrap_or(&target_project_id);
+                        let moved_session_id = response
+                            .get("sessionId")
+                            .and_then(Value::as_str)
+                            .unwrap_or(&draft.from_session_id);
+                        this.gx_store_focus_created_session(
+                            moved_project_id,
+                            moved_session_id,
+                            true,
+                            Some(&preferred_interface),
+                            cx,
+                        );
+                    }
+                    Err(error)
+                        if is_move_draft_unsupported_error(
+                            error.code.as_deref(),
+                            &error.message,
+                        ) =>
+                    {
+                        this.gx_store_move_draft_via_create(
+                            draft,
+                            &agent_id,
+                            &machine_id,
+                            &target_project_id,
+                            cx,
+                        );
+                    }
+                    Err(error) => {
+                        this.gx_store_create_toast(
+                            "warning",
+                            "Could not move draft",
+                            Some(&error.message),
+                            cx,
+                        );
+                    }
+                });
+            })
+            .detach();
+        } else {
+            let task = self.start_gpui_remote_sidebar_rpc(
+                &machine_id,
+                "/api/moveDraftSession",
+                Some(params),
+                std::time::Duration::from_secs(15),
+                GpuiRemoteSidebarRpcMode::Awaited,
+                cx,
+            );
+            cx.spawn(async move |this, cx| {
+                let result = task.await;
+                let _ = this.update(cx, |this, cx| match result {
+                    Ok(response) => {
+                        let moved_project_id = response
+                            .get("projectId")
+                            .and_then(Value::as_str)
+                            .unwrap_or(&target_project_id);
+                        let moved_session_id = response
+                            .get("sessionId")
+                            .and_then(Value::as_str)
+                            .unwrap_or(&draft.from_session_id);
+                        let session = ghostex_gx_core::SessionKey::remote(
+                            machine_id.as_str(),
+                            moved_project_id,
+                            moved_session_id,
+                        );
+                        let payload = ghostex_gx_core::open_remote_session_terminal(
+                            &session.to_sidebar_session_id(),
+                            true,
+                            (preferred_interface == "chat").then_some("chat"),
+                        );
+                        this.receive_sidebar_native_project_path_action_payload(
+                            &payload.to_string(),
+                            cx,
+                        );
+                    }
+                    Err(error)
+                        if is_move_draft_unsupported_error(
+                            None,
+                            &crate::app::remote_conn::sidebar_rpc::gpui_remote_sidebar_rpc_failure_reason(
+                                &error,
+                                "",
+                            ),
+                        ) =>
+                    {
+                        this.gx_store_move_draft_via_create(
+                            draft,
+                            &agent_id,
+                            &machine_id,
+                            &target_project_id,
+                            cx,
+                        );
+                    }
+                    Err(error) => {
+                        let reason = crate::app::remote_conn::sidebar_rpc::gpui_remote_sidebar_rpc_failure_reason(
+                            &error,
+                            "Could not move the draft to that project.",
+                        );
+                        this.gx_store_create_toast("warning", "Could not move draft", Some(&reason), cx);
+                    }
+                });
+            })
+            .detach();
+        }
+    }
+
+    fn gx_store_move_draft_via_create(
+        &mut self,
+        draft: PendingDraftMove,
+        agent_id: &str,
+        machine_id: &str,
+        project_id: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
         self.gx_store.unified_sidebar.pending_draft_move = Some(draft);
         let message = json!({
             "type": "runSidebarAgent",
@@ -470,6 +784,402 @@ impl GhostexGpuiApp {
         });
         self.stage_agent_launch_placeholder(&message, cx);
         self.dispatch_gpui_sidebar_host_message(message, cx);
+    }
+
+    /// Remembers the target repo and computer for Recent/last-machine without touching the
+    /// sidebar's Space or widening Unified filters (Q4850 `"keep-space"`).
+    pub(crate) fn gx_store_remember_new_session_keep_space(
+        &mut self,
+        repo_key: &str,
+        machine_id: &str,
+    ) {
+        if repo_key.trim().is_empty() {
+            return;
+        }
+        let host = &mut self.gx_store.unified_sidebar;
+        host.ensure_saved_read();
+        host.saved.remember_new_session(repo_key, machine_id);
+        host.persist();
+    }
+
+    /// Commits a draft's pending target destination ("No project" / Main Hub or another project or
+    /// computer) at the moment the user presses Send (Q4849 `"follow"` + Q4850 `"keep-space"`).
+    /// Runs the server move/create while the current view stays up showing the 0ms optimistic sent
+    /// message, then transfers the live `NativeChatView` into the target project in a single frame
+    /// without switching the sidebar's Space or widening filters.
+    pub(crate) fn gx_store_commit_pending_draft_send(
+        &mut self,
+        view: gpui::Entity<crate::app::native_chat::state::NativeChatView>,
+        send: crate::app::native_chat::state::PendingDraftSend,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if send.from_machine_id != send.target.machine_id {
+            self.gx_store_commit_pending_draft_send_via_create(view, send, cx);
+            return;
+        }
+        let mut params = json!({
+            "projectId": send.from_project_id,
+            "sessionId": send.from_session_id,
+            "targetProjectId": send.target.project_id,
+        });
+        if let Some(model) = send.agent_model.as_deref() {
+            params["agentModel"] = json!(model);
+        }
+        if let Some(effort) = send.agent_effort.as_deref() {
+            params["agentEffort"] = json!(effort);
+        }
+        if send.starting_coordinator {
+            params["promoteCoordinator"] = json!({
+                "forDraft": true,
+                "skillOnlyStart": send.skill_only_start,
+            });
+        }
+        let machine_id = send.target.machine_id.clone();
+        if machine_id == LOCAL_MACHINE_ID {
+            cx.spawn(async move |this, cx| {
+                let result = super::rpc::gx_rpc(None, "/api/moveDraftSession", params).await;
+                let _ = this.update(cx, |this, cx| match result {
+                    Ok(response) => {
+                        let moved_project_id = response
+                            .get("projectId")
+                            .and_then(Value::as_str)
+                            .unwrap_or(&send.target.project_id)
+                            .to_string();
+                        let moved_session_id = response
+                            .get("sessionId")
+                            .and_then(Value::as_str)
+                            .unwrap_or(&send.from_session_id)
+                            .to_string();
+                        this.gx_store_remember_new_session_keep_space(
+                            &send.target.repo_key,
+                            &machine_id,
+                        );
+                        this.follow_moved_draft_chat(
+                            view,
+                            send,
+                            machine_id,
+                            moved_project_id,
+                            moved_session_id,
+                            cx,
+                        );
+                    }
+                    Err(error)
+                        if is_move_draft_unsupported_error(
+                            error.code.as_deref(),
+                            &error.message,
+                        ) =>
+                    {
+                        this.gx_store_commit_pending_draft_send_via_create(view, send, cx);
+                    }
+                    Err(error) => {
+                        view.update(cx, |chat, cx| {
+                            chat.restore_failed_pending_send(
+                                &send.send_request_id,
+                                &send.original_draft,
+                                send.starting_coordinator,
+                                cx,
+                            );
+                        });
+                        this.gx_store_create_toast(
+                            "warning",
+                            "Could not move draft",
+                            Some(&error.message),
+                            cx,
+                        );
+                    }
+                });
+            })
+            .detach();
+        } else {
+            let task = self.start_gpui_remote_sidebar_rpc(
+                &machine_id,
+                "/api/moveDraftSession",
+                Some(params),
+                std::time::Duration::from_secs(15),
+                GpuiRemoteSidebarRpcMode::Awaited,
+                cx,
+            );
+            cx.spawn(async move |this, cx| {
+                let result = task.await;
+                let _ = this.update(cx, |this, cx| match result {
+                    Ok(response) => {
+                        let moved_project_id = response
+                            .get("projectId")
+                            .and_then(Value::as_str)
+                            .unwrap_or(&send.target.project_id)
+                            .to_string();
+                        let moved_session_id = response
+                            .get("sessionId")
+                            .and_then(Value::as_str)
+                            .unwrap_or(&send.from_session_id)
+                            .to_string();
+                        this.gx_store_remember_new_session_keep_space(
+                            &send.target.repo_key,
+                            &machine_id,
+                        );
+                        this.follow_moved_draft_chat(
+                            view,
+                            send,
+                            machine_id,
+                            moved_project_id,
+                            moved_session_id,
+                            cx,
+                        );
+                    }
+                    Err(error)
+                        if is_move_draft_unsupported_error(
+                            None,
+                            &crate::app::remote_conn::sidebar_rpc::gpui_remote_sidebar_rpc_failure_reason(
+                                &error,
+                                "",
+                            ),
+                        ) =>
+                    {
+                        this.gx_store_commit_pending_draft_send_via_create(view, send, cx);
+                    }
+                    Err(error) => {
+                        let reason = crate::app::remote_conn::sidebar_rpc::gpui_remote_sidebar_rpc_failure_reason(
+                            &error,
+                            "Could not move the draft to that project.",
+                        );
+                        view.update(cx, |chat, cx| {
+                            chat.restore_failed_pending_send(
+                                &send.send_request_id,
+                                &send.original_draft,
+                                send.starting_coordinator,
+                                cx,
+                            );
+                        });
+                        this.gx_store_create_toast("warning", "Could not move draft", Some(&reason), cx);
+                    }
+                });
+            })
+            .detach();
+        }
+    }
+
+    /// Cross-computer (or older-gxserver) path for committing a pending draft send: creates the
+    /// draft on the target computer, promotes it if Coordinator mode is on, quietly closes the old
+    /// empty draft, and transfers the live `NativeChatView` into the new session in one frame.
+    fn gx_store_commit_pending_draft_send_via_create(
+        &mut self,
+        view: gpui::Entity<crate::app::native_chat::state::NativeChatView>,
+        send: crate::app::native_chat::state::PendingDraftSend,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let target_machine_id = send.target.machine_id.clone();
+        let target_project_id = send.target.project_id.clone();
+        let mut params = json!({
+            "projectId": target_project_id,
+            "agentId": send.agent_id,
+            "draft": true,
+        });
+        if let Some(model) = send.agent_model.as_deref() {
+            params["agentModel"] = json!(model);
+        }
+        if let Some(effort) = send.agent_effort.as_deref() {
+            params["agentEffort"] = json!(effort);
+        }
+        let finish_old = PendingDraftMove {
+            from_machine_id: send.from_machine_id.clone(),
+            from_project_id: send.from_project_id.clone(),
+            from_session_id: send.from_session_id.clone(),
+            text: String::new(),
+            agent_model: None,
+            agent_effort: None,
+        };
+        if target_machine_id == LOCAL_MACHINE_ID {
+            cx.spawn(async move |this, cx| {
+                let result = super::rpc::gx_rpc(None, "/api/createAgentSession", params).await;
+                let Ok(response) = result else {
+                    let msg = result
+                        .err()
+                        .map(|error| error.message)
+                        .unwrap_or_else(|| "Could not start the chat in that project.".to_string());
+                    let _ = this.update(cx, |this, cx| {
+                        view.update(cx, |chat, cx| {
+                            chat.restore_failed_pending_send(
+                                &send.send_request_id,
+                                &send.original_draft,
+                                send.starting_coordinator,
+                                cx,
+                            );
+                        });
+                        this.gx_store_create_toast(
+                            "warning",
+                            "Could not start chat",
+                            Some(&msg),
+                            cx,
+                        );
+                    });
+                    return;
+                };
+                let created_project_id = response
+                    .pointer("/session/projectId")
+                    .or_else(|| response.get("projectId"))
+                    .and_then(Value::as_str)
+                    .unwrap_or(&target_project_id)
+                    .to_string();
+                let Some(created_session_id) = response
+                    .pointer("/session/sessionId")
+                    .or_else(|| response.get("sessionId"))
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|id| !id.is_empty())
+                    .map(str::to_string)
+                else {
+                    let _ = this.update(cx, |this, cx| {
+                        view.update(cx, |chat, cx| {
+                            chat.restore_failed_pending_send(
+                                &send.send_request_id,
+                                &send.original_draft,
+                                send.starting_coordinator,
+                                cx,
+                            );
+                        });
+                        this.gx_store_create_toast(
+                            "warning",
+                            "Could not start chat",
+                            Some("gxserver did not return the new session id."),
+                            cx,
+                        );
+                    });
+                    return;
+                };
+                if send.starting_coordinator {
+                    let promote_params = json!({
+                        "projectId": created_project_id,
+                        "sessionId": created_session_id,
+                        "goal": "",
+                        "forDraft": true,
+                        "skillOnlyStart": send.skill_only_start,
+                    });
+                    let _ =
+                        super::rpc::gx_rpc(None, "/api/promoteCoordinator", promote_params).await;
+                }
+                let _ = this.update(cx, |this, cx| {
+                    this.gx_store_remember_new_session_keep_space(
+                        &send.target.repo_key,
+                        &target_machine_id,
+                    );
+                    this.gx_store_finish_draft_move(Some(finish_old), cx);
+                    this.follow_moved_draft_chat(
+                        view,
+                        send,
+                        target_machine_id,
+                        created_project_id,
+                        created_session_id,
+                        cx,
+                    );
+                });
+            })
+            .detach();
+        } else {
+            let task = self.start_gpui_remote_sidebar_rpc(
+                &target_machine_id,
+                "/api/createAgentSession",
+                Some(params),
+                std::time::Duration::from_secs(20),
+                GpuiRemoteSidebarRpcMode::Awaited,
+                cx,
+            );
+            cx.spawn(async move |this, cx| {
+                let result = task.await;
+                let Ok(response) = result else {
+                    let reason = result
+                        .err()
+                        .map(|error| {
+                            crate::app::remote_conn::sidebar_rpc::gpui_remote_sidebar_rpc_failure_reason(
+                                &error,
+                                "Could not start the chat on that computer.",
+                            )
+                        })
+                        .unwrap_or_else(|| "Could not start the chat on that computer.".to_string());
+                    let _ = this.update(cx, |this, cx| {
+                        view.update(cx, |chat, cx| {
+                            chat.restore_failed_pending_send(
+                                &send.send_request_id,
+                                &send.original_draft,
+                                send.starting_coordinator,
+                                cx,
+                            );
+                        });
+                        this.gx_store_create_toast("warning", "Could not start chat", Some(&reason), cx);
+                    });
+                    return;
+                };
+                let created_project_id = response
+                    .pointer("/session/projectId")
+                    .or_else(|| response.get("projectId"))
+                    .and_then(Value::as_str)
+                    .unwrap_or(&target_project_id)
+                    .to_string();
+                let Some(created_session_id) = response
+                    .pointer("/session/sessionId")
+                    .or_else(|| response.get("sessionId"))
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|id| !id.is_empty())
+                    .map(str::to_string)
+                else {
+                    let _ = this.update(cx, |this, cx| {
+                        view.update(cx, |chat, cx| {
+                            chat.restore_failed_pending_send(
+                                &send.send_request_id,
+                                &send.original_draft,
+                                send.starting_coordinator,
+                                cx,
+                            );
+                        });
+                        this.gx_store_create_toast(
+                            "warning",
+                            "Could not start chat",
+                            Some("The computer did not return the new session id."),
+                            cx,
+                        );
+                    });
+                    return;
+                };
+                if send.starting_coordinator {
+                    let promote_params = json!({
+                        "projectId": created_project_id,
+                        "sessionId": created_session_id,
+                        "goal": "",
+                        "forDraft": true,
+                        "skillOnlyStart": send.skill_only_start,
+                    });
+                    let promote_task = this.update(cx, |this, cx| {
+                        this.start_gpui_remote_sidebar_rpc(
+                            &target_machine_id,
+                            "/api/promoteCoordinator",
+                            Some(promote_params),
+                            std::time::Duration::from_secs(15),
+                            GpuiRemoteSidebarRpcMode::Awaited,
+                            cx,
+                        )
+                    });
+                    if let Ok(promote_task) = promote_task {
+                        let _ = promote_task.await;
+                    }
+                }
+                let _ = this.update(cx, |this, cx| {
+                    this.gx_store_remember_new_session_keep_space(
+                        &send.target.repo_key,
+                        &target_machine_id,
+                    );
+                    this.gx_store_finish_draft_move(Some(finish_old), cx);
+                    this.follow_moved_draft_chat(
+                        view,
+                        send,
+                        target_machine_id,
+                        created_project_id,
+                        created_session_id,
+                        cx,
+                    );
+                });
+            })
+            .detach();
+        }
     }
 
     /// The new chat is open: gxserver closes the draft it replaced.
@@ -504,6 +1214,28 @@ impl GhostexGpuiApp {
             .detach();
         }
     }
+}
+
+/// Whether a `/api/moveDraftSession` failure means the server predates in-place draft moves (HTTP
+/// 404 or unknown/unsupported operation), so the client should fall back to create + close.
+fn is_move_draft_unsupported_error(code: Option<&str>, message: &str) -> bool {
+    if matches!(
+        code,
+        Some("notFound" | "unsupportedOperation" | "unknownEndpoint" | "conflict")
+    ) {
+        return true;
+    }
+    let trimmed = message.trim();
+    if trimmed.is_empty() || trimmed == "{}" {
+        return true;
+    }
+    let lower = trimmed.to_lowercase();
+    lower.contains("404")
+        || lower.contains("not found")
+        || lower.contains("unknown endpoint")
+        || lower.contains("unsupported")
+        || lower.contains("not allowed")
+        || lower.contains("rejected the request")
 }
 
 #[cfg(test)]

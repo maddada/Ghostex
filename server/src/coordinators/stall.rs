@@ -1,4 +1,5 @@
-//! A working agent session that has gone quiet: no new transcript row and no change on its screen
+//! A working agent session that has gone quiet: no new transcript row (its own, or one of its
+//! subagents', see subagent_output.rs) and no change on its screen
 //! for a long stretch. One `StallWatch` per working session keeps its output clock. The coordinator
 //! supervisor (server/coordinator_runtime.rs) owns its threads' watches: at 8 minutes it nudges the
 //! thread and reports to its coordinator, it reports again every 8 minutes until the thread moves,
@@ -62,8 +63,8 @@ pub fn minutes_of(ms: i64) -> i64 {
 /// The message Ghostex sends a thread at its first round of quiet.
 pub fn nudge_message() -> String {
     format!(
-        "Ghostex: no new output from you for {} minutes. Still working? Say what you're waiting on, or carry on.",
-        minutes_of(quiet_round_ms())
+        "Ghostex: no new output from you for {}. Still working? Say what you're waiting on, or carry on.",
+        ghostex_gx_protocol::plural(minutes_of(quiet_round_ms()), "minute", "minutes")
     )
 }
 /// Whether a message's text is Ghostex's stall nudge (`nudge_message`), whatever its minutes.
@@ -97,7 +98,8 @@ pub struct StallWatch {
     /// The newest transcript write seen (file time or newest row, whichever is later).
     transcript_seen: Option<i64>,
     screen: Option<u64>,
-    /// The last output counted: a transcript write or a screen change outside a nudge's grace.
+    /// The last output counted: a transcript write (the session's own or a subagent's) or a screen
+    /// change outside a nudge's grace.
     last_output_at: Option<i64>,
     checked_at: Option<i64>,
     /// The quiet stretch last reported, by when it began, and how many rounds of it were.
@@ -138,8 +140,9 @@ impl StallWatch {
     CDXC:Coordinators 2026-11-11 FIX:
     GitHub #554 ("Stall and idle clocks reset when gxserver restarts"): a watch lives only in memory, so after a restart a thread that had shown no output for an hour started a fresh 8-minute wait from the restart. A watch made for a session already working now starts its quiet clock at the transcript's last write (never before the agent's last launch or the moment the session turned working), the same evidence the watch would have counted itself, and holds any report until it has looked at the screen twice, so a screen that kept moving through the restart still counts. The idle clock needs no fix: it starts at the thread's last report, which is stored (`idle_wait_report`).
     */
-    /// BLOCKING (a file stat and a short transcript tail read). A watch for a session first seen
-    /// now, already working: its quiet clock starts at the transcript's last write when there is
+    /// BLOCKING (file stats, a short transcript tail read and the subagent look of
+    /// subagent_output.rs). A watch for a session first seen now, already working: its quiet clock
+    /// starts at the transcript's last write (or its subagents' newest, when later) when there is
     /// one, so a gxserver restart does not restart a stretch of quiet.
     pub fn resumed(session: &Value, now: i64) -> Self {
         let mut watch = Self::new(now);
@@ -147,6 +150,11 @@ impl StallWatch {
         let Some(written) = transcript_at.filter(|written| *written < now) else {
             return watch;
         };
+        // A lead that waited on its subagents through the restart: their newest write is its
+        // output too (subagent_output.rs), read beside the transcript resolved above.
+        let output_at =
+            super::subagent_output::newest_subagent_write(session, watch.path.as_deref(), written)
+                .unwrap_or(written);
         // Never before the session turned working (its stored activity's last change): a turn
         // that just began, its prompt not in the transcript yet, is no old stretch of quiet.
         let working_since = session
@@ -155,7 +163,7 @@ impl StallWatch {
             .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
             .map(|at| at.timestamp_millis())
             .unwrap_or(now);
-        let start = written
+        let start = output_at
             .max(agent_launched_at(session).unwrap_or(0))
             .max(working_since)
             .min(now);
@@ -238,6 +246,35 @@ impl StallWatch {
             }
         }
         if now - self.quiet_since() < test_scaled(SCREEN_SAMPLE_AFTER_MS) {
+            return;
+        }
+        // A lead waiting on its subagents writes nothing itself; their transcript writes are its
+        // output (subagent_output.rs), read beside the transcript this look resolved.
+        let quiet_since = self.quiet_since();
+        if let Some(written) = super::subagent_output::newest_subagent_write(
+            session,
+            self.path.as_deref(),
+            quiet_since,
+        ) {
+            self.count_output(Some(written));
+        }
+        // Non-CLI (ACP / SDK) sessions have a static host log in their zmx PTY; read the host's
+        // live protocol event clock (`lastEventAtMs`) instead of fingerprinting PTY text.
+        if crate::acp::session_is_acp(session) {
+            if let (Some(project_id), Some(session_id)) = (
+                session.get("projectId").and_then(Value::as_str),
+                session.get("sessionId").and_then(Value::as_str),
+            ) {
+                if let Some(last_event_ms) =
+                    crate::acp::channel::channel_state(project_id, session_id)
+                        .and_then(|st| st.get("lastEventAtMs").and_then(Value::as_i64))
+                        .filter(|at| *at > 0)
+                {
+                    if !in_grace {
+                        self.count_output(Some(last_event_ms));
+                    }
+                }
+            }
             return;
         }
         let Some(fingerprint) = screen_fingerprint_of(session) else {
@@ -387,10 +424,11 @@ pub fn quiet_minutes(quiet_since: i64, now: i64) -> i64 {
 pub fn quiet_detail(quiet: &SessionQuiet, now: i64) -> String {
     let rounds = (now - quiet.quiet_since).max(0) / quiet_round_ms();
     let minutes = minutes_of(rounds.max(1) * quiet_round_ms());
+    let duration = ghostex_gx_protocol::plural(minutes, "minute", "minutes");
     if quiet.stuck {
-        format!("Not moving: no new output for over {minutes} minutes")
+        format!("Not moving: no new output for over {duration}")
     } else {
-        format!("No new output for over {minutes} minutes")
+        format!("No new output for over {duration}")
     }
 }
 
@@ -576,11 +614,12 @@ fn is_duration(word: &str) -> bool {
     true
 }
 
-/// BLOCKING (a transcript tail read). Read again right before a stall report goes out, from the
-/// session as it is now: `None` when the report no longer holds and is dropped (the transcript
-/// moved since the report was worded, it has a row newer than the quiet time the report names,
-/// or the agent was launched, resumed or reloaded since then), else the last row worth naming,
-/// when there is one. Ghostex's own nudge is no sign of life.
+/// BLOCKING (a transcript tail read and the subagent look of subagent_output.rs). Read again right
+/// before a stall report goes out, from the session as it is now: `None` when the report no longer
+/// holds and is dropped (the transcript moved since the report was worded, it has a row newer than
+/// the quiet time the report names, one of its subagents wrote after that time, or the agent was
+/// launched, resumed or reloaded since then), else the last row worth naming, when there is one.
+/// Ghostex's own nudge is no sign of life.
 pub fn stall_last_row(
     session: &Value,
     transcript_seen: Option<i64>,
@@ -594,19 +633,30 @@ pub fn stall_last_row(
         return None;
     }
     let messages = transcript_tail(session, &mut path);
-    if moved_after(&messages, quiet_since) {
+    if moved_after(&messages, quiet_since)
+        || super::subagent_output::newest_subagent_write(session, path.as_deref(), quiet_since)
+            .is_some()
+    {
         return None;
     }
     Some(messages.iter().rev().find_map(describe_row))
 }
 
-/// BLOCKING. Whether the thread did anything after `since` (ms): its agent was launched, resumed
-/// or reloaded since, or its transcript has a row of its own (not Ghostex's nudge) newer than it.
-/// A late "not moving" or "idle" report names a quiet time that no longer holds then
-/// (stale_report.rs).
-pub(super) fn moved_since(session: &Value, since: i64) -> bool {
-    agent_launched_at(session).is_some_and(|launched| launched > since)
-        || moved_after(&transcript_tail(session, &mut None), since)
+/// BLOCKING (a transcript tail read and, for a stall report, the subagent look of
+/// subagent_output.rs). Whether the thread did anything after `since` (ms): its agent was
+/// launched, resumed or reloaded since, or its transcript has a row of its own (not Ghostex's
+/// nudge) newer than it, or, for a stall report (`kind`), one of its subagents wrote after it, as
+/// the watch counts it. A late "not moving" or "idle" report names a quiet time that no longer
+/// holds then (stale_report.rs).
+pub(super) fn moved_since(session: &Value, kind: super::QuietReportKind, since: i64) -> bool {
+    if agent_launched_at(session).is_some_and(|launched| launched > since) {
+        return true;
+    }
+    let mut path = None;
+    moved_after(&transcript_tail(session, &mut path), since)
+        || (kind == super::QuietReportKind::Stalled
+            && super::subagent_output::newest_subagent_write(session, path.as_deref(), since)
+                .is_some())
 }
 
 fn moved_after(messages: &[SessionChatMessage], since: i64) -> bool {

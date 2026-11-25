@@ -7,6 +7,15 @@ use serde_json::json;
 struct ComposerKey {
     key: String,
 }
+
+/// Keys intercepted by the Reply popover's compact mention menu (`reply_popover.rs`) only while
+/// the menu is open (the `"ReplyPopoverMenu"` key context is attached only then, so the textarea's
+/// own bindings stay untouched whenever the menu is closed).
+#[derive(Clone, Debug, PartialEq, gpui::Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(super) struct ReplyPopoverMenuKey {
+    pub(super) key: String,
+}
 struct ComposerKeysRegistered;
 impl gpui::Global for ComposerKeysRegistered {}
 
@@ -119,6 +128,24 @@ pub(super) fn register(cx: &mut gpui::App) {
     })
     .collect();
     cx.bind_keys(composer_keys);
+    let reply_menu_keys: Vec<_> = [
+        ("up", "up"),
+        ("down", "down"),
+        ("enter", "enter"),
+        ("tab", "tab"),
+        ("escape", "escape"),
+    ]
+    .into_iter()
+    .map(|(binding, key)| {
+        crate::app::hotkeys::gpui_runtime_key_binding(
+            binding,
+            ReplyPopoverMenuKey { key: key.into() },
+            Some("ReplyPopoverMenu > Input"),
+            cx,
+        )
+    })
+    .collect();
+    cx.bind_keys(reply_menu_keys);
 }
 
 /// CDXC:SessionChat 2026-09-17 WHY:
@@ -167,6 +194,13 @@ impl NativeChatView {
         self.cancel_composer_reference_open();
         // The Work panel's Topic field owns Escape while it has focus: it cancels the rewrite.
         if self.work_topic_key_down(event, window, cx) {
+            cx.stop_propagation();
+            window.prevent_default();
+            return;
+        }
+        // Session Inbox keyboard triage (Cmd+Shift+I / Up / Down / Enter / E / S / Escape; all
+        // rebindable in Settings > Hotkeys).
+        if self.inbox_key_down(event, window, cx) {
             cx.stop_propagation();
             window.prevent_default();
             return;
@@ -620,6 +654,162 @@ impl NativeChatView {
             window.prevent_default();
         }
     }
+
+    /// Session Inbox keyboard triage (Q4687): arrows move across visible Inbox rows, Enter opens
+    /// the highlighted row, E marks read/dismisses, S opens Snooze, and Escape returns focus to
+    /// the chat box. Every key reads its configured chord from Settings > Hotkeys.
+    pub(super) fn inbox_key_down(
+        &mut self,
+        event: &gpui::KeyDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if cfg!(ghostex_web)
+            && matches_configured_inbox_hotkey("focusSessionInbox", &event.keystroke)
+        {
+            return self.focus_inbox_from_hotkey(window, cx);
+        }
+        let Some(current) = self.board.inbox_focus else {
+            return false;
+        };
+        let focused = self
+            .board
+            .inbox_focus_handle
+            .as_ref()
+            .is_some_and(|handle| handle.is_focused(window));
+        if !focused {
+            self.board.inbox_focus = None;
+            cx.notify();
+            return false;
+        }
+        if event.keystroke.key == "escape"
+            && !event.keystroke.modifiers.platform
+            && !event.keystroke.modifiers.control
+            && !event.keystroke.modifiers.alt
+        {
+            self.board.inbox_focus = None;
+            self.focus_composer_from_hotkey(window, cx);
+            return true;
+        }
+        let dock = &self.snapshot["workDock"];
+        let rows: Vec<serde_json::Value> = dock["rows"].as_array().cloned().unwrap_or_default();
+        if rows.is_empty() {
+            self.board.inbox_focus = None;
+            cx.notify();
+            return false;
+        }
+        let limit = dock["limit"].as_u64().unwrap_or(4) as usize;
+        let visible_count = if self.expanded.contains("dock-rows:all") {
+            rows.len()
+        } else {
+            rows.len().min(limit)
+        };
+        if visible_count == 0 {
+            self.board.inbox_focus = None;
+            cx.notify();
+            return false;
+        }
+        let index = current.min(visible_count - 1);
+        if matches_configured_inbox_hotkey("inboxNextItem", &event.keystroke) {
+            self.board.inbox_focus = Some((index + 1) % visible_count);
+            cx.notify();
+            return true;
+        }
+        if matches_configured_inbox_hotkey("inboxPreviousItem", &event.keystroke) {
+            self.board.inbox_focus = Some((index + visible_count - 1) % visible_count);
+            cx.notify();
+            return true;
+        }
+        let row = &rows[index];
+        if matches_configured_inbox_hotkey("inboxOpenItem", &event.keystroke) {
+            let key = row["key"].as_str().unwrap_or_default().to_string();
+            if row["kind"] == "pageBundle" {
+                let fold_key = format!("dock-bundle:{key}");
+                if !self.expanded.remove(&fold_key) {
+                    self.expanded.insert(fold_key);
+                }
+                cx.notify();
+            } else if row["open"].is_object() {
+                self.open_work_target(row["open"].clone(), window, cx);
+            } else if row["settled"] != true && !key.is_empty() {
+                self.open_dock_ask_modal(&key, window, cx);
+            }
+            return true;
+        }
+        if matches_configured_inbox_hotkey("inboxMarkRead", &event.keystroke) {
+            if row["dismiss"].is_object() {
+                self.invoke(row["dismiss"].clone(), cx);
+            }
+            return true;
+        }
+        if matches_configured_inbox_hotkey("inboxSnooze", &event.keystroke) {
+            let snooze: Vec<serde_json::Value> = row["snooze"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|choice| {
+                    json!({
+                        "label": choice["label"].as_str().unwrap_or_default(),
+                        "iconPath": "modals/settings/moon.svg",
+                        "command": choice["command"],
+                    })
+                })
+                .collect();
+            if !snooze.is_empty() {
+                let y = self.board.dock_top.get().unwrap_or(gpui::px(240.0));
+                let x = gpui::px(360.0);
+                self.show_dock_row_menu(snooze, gpui::point(x, y), window, cx);
+            }
+            return true;
+        }
+        false
+    }
+}
+
+/// Whether `keystroke` matches the user's configured chord for `action_id` in Settings > Hotkeys
+/// (including single keys like `up`, `down`, `enter`, `e`, `s`).
+fn matches_configured_inbox_hotkey(action_id: &str, keystroke: &gpui::Keystroke) -> bool {
+    let Some(chord) = crate::app::hotkeys::gpui_configured_hotkey_key(action_id) else {
+        return false;
+    };
+    let chord = chord.trim().to_ascii_lowercase();
+    if chord.is_empty() {
+        return false;
+    }
+    let mut want_primary = false;
+    let mut want_ctrl = false;
+    let mut want_alt = false;
+    let mut want_shift = false;
+    let mut want_key: Option<&str> = None;
+    for part in chord.split('+').map(str::trim).filter(|p| !p.is_empty()) {
+        match part {
+            "cmd" | "meta" | "super" => want_primary = true,
+            "ctrl" | "control" => want_ctrl = true,
+            "alt" | "option" => want_alt = true,
+            "shift" => want_shift = true,
+            other => want_key = Some(other),
+        }
+    }
+    let Some(want_key) = want_key else {
+        return false;
+    };
+    let actual_key = keystroke.key.to_ascii_lowercase();
+    let key_matches = actual_key == want_key
+        || (want_key == "enter" && actual_key == "return")
+        || (want_key == "escape" && actual_key == "esc");
+    if !key_matches {
+        return false;
+    }
+    let mac = chat_mac_keys();
+    let (expect_platform, expect_control) = if mac {
+        (want_primary, want_ctrl)
+    } else {
+        (false, want_primary || want_ctrl)
+    };
+    keystroke.modifiers.platform == expect_platform
+        && keystroke.modifiers.control == expect_control
+        && keystroke.modifiers.alt == want_alt
+        && keystroke.modifiers.shift == want_shift
 }
 
 /// `sessionChatConfirmEscapeInterrupt`; a missing key reads as its default, on. The core decides

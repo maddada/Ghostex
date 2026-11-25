@@ -96,10 +96,15 @@ impl SidebarViewModel {
             rows.sort_by_key(rank);
         }
         let core = &build.core;
+        let is_home = core
+            .project_context
+            .as_ref()
+            .is_some_and(|project| project.is_home);
         let laid_out = lay_out_group_rows(
             &rows,
             &core.storage_id,
             core.is_active,
+            is_home,
             &inputs.ui,
             &inputs.settings,
             now_ms,

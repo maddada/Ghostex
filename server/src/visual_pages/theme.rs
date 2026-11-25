@@ -102,19 +102,26 @@ pub(super) const THEME_STYLE: &str = concat!(
     // In the desktop's page window the backdrop fades into its top colour at the top edge, which the
     // window's header above the page paints (CDXC:SessionChat 2026-11-04 DECISION below).
     ":where(:root[data-gx-floating]){--gx-backdrop-fade:linear-gradient(var(--gx-backdrop-top),transparent 56px),}",
-    "html{background-color:var(--background);background-image:var(--gx-backdrop-fade,) var(--gx-backdrop,none);background-attachment:fixed;min-height:100%;color:var(--foreground);font-family:var(--font-sans);",
+    "html{background-attachment:fixed;min-height:100%;color:var(--foreground);font-family:var(--font-sans);",
     "font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}",
+    // Default backdrop for Ghostex-themed pages; omitted while a card thumbnail is captured
+    // (`data-gx-thumbnail`) so the stored PNG stays transparent and composites cleanly over the
+    // chat card's own glass or theme surface. Wrapped in `:where()` so a page's own background
+    // rule always wins, both live and in thumbnails.
+    ":where(html:not([data-gx-thumbnail])){background-color:var(--background);background-image:var(--gx-backdrop-fade,) var(--gx-backdrop,none)}",
     // The picture behind the app's glass or art backdrop, when the desktop's page window hands one
     // over (apps/desktop/src/app/window/visual_page_modal/glass.rs), dimmed under the page's cards.
-    "html[data-gx-glass]{background-image:linear-gradient(var(--gx-glass-dim),var(--gx-glass-dim)),var(--gx-glass-picture);",
+    "html[data-gx-glass]:not([data-gx-thumbnail]){background-image:linear-gradient(var(--gx-glass-dim),var(--gx-glass-dim)),var(--gx-glass-picture);",
     "background-size:auto,var(--gx-glass-size,cover);background-position:0 0,var(--gx-glass-position,center);background-repeat:no-repeat;background-attachment:fixed}",
     "body{margin:0;padding:16px}",
     // A page laid out by the template's container (kit.rs) has its own gutters.
     ":where(body:has(>gx-page,>gx-questions)){padding:0}",
     // The desktop's page window holds its controls in a 36px band over the page's top edge
     // (apps/desktop/src/app/window/visual_page_modal.rs `TOP_BAND_HEIGHT`), so a floating page
-    // starts that much lower and the template's 56px top padding drops by as much.
+    // starts that much lower and the template's 56px top padding drops by as much. Thumbnail
+    // captures use the same compact top padding so card previews show content instead of a blank top band.
     "html[data-gx-floating] gx-page,html[data-gx-floating] gx-questions{padding-top:20px}",
+    "html[data-gx-thumbnail] gx-page,html[data-gx-thumbnail] gx-questions{padding-top:20px}",
     // macOS pulls a page past its ends with a rubber band, and what that shows is the browser's
     // own solid colour, never the page's picture (CDXC:SessionChat 2026-11-05 DECISION below).
     "html[data-gx-floating]{overscroll-behavior:none}",
@@ -140,8 +147,8 @@ pub(super) const THEME_STYLE: &str = concat!(
 /// system's from its first paint (a theme the desktop's page window already set before this script
 /// keeps a reloaded page, whose address no longer has the fragment, on the app's theme; a page
 /// opened from a bare link takes the system's; either way
-/// `data-gx-theme` is always set, the one attribute `THEME_STYLE` keys every colour on), and `gx-floating=1` when the page is in the floating window, which
-/// `PAGE_API` closes once answers are sent. It then drops that fragment so the page's own hash
+/// `data-gx-theme` is always set, the one attribute `THEME_STYLE` keys every colour on), `gx-floating=1` when the page is in the floating window, which
+/// `PAGE_API` closes once answers are sent, and `gx-controls=left|right` + `gx-controls-inset=<px>` so floating chrome inside the page (such as the outside-responder pill) aligns with the window's own control buttons. It then drops that fragment so the page's own hash
 /// routing never sees it. A web link the reader clicks opens in a new window, which the floating
 /// window and the browser both send to the reader's browser, so the page itself is never navigated
 /// away. The exception is a link written relative to the page's file that names another HTML file
@@ -149,17 +156,19 @@ pub(super) const THEME_STYLE: &str = concat!(
 /// its `/link` route (linked.rs), carrying its theme, its floating mark and its reader flags along.
 pub(super) const PAGE_BOOTSTRAP: &str = concat!(
     "<script>(function(){var d=document.documentElement;",
-    "try{var h=location.hash,m=/[#&]gx-theme=(light|dark)/.exec(h);",
+    "try{var h=location.hash,m=/[#&]gx-theme=(light|dark)/.exec(h),c=/[#&]gx-controls=(left|right)/.exec(h),ci=/[#&]gx-controls-inset=(\\d+(?:\\.\\d+)?)/.exec(h);",
     "d.setAttribute(\"data-gx-theme\",m?m[1]:d.getAttribute(\"data-gx-theme\")||(matchMedia(\"(prefers-color-scheme: light)\").matches?\"light\":\"dark\"));",
     "if(/[#&]gx-floating=1/.test(h))d.setAttribute(\"data-gx-floating\",\"\");",
+    "if(c)d.setAttribute(\"data-gx-controls\",c[1]);",
+    "if(ci)d.style.setProperty(\"--gx-controls-inset\",ci[1]+\"px\");",
     "if(/[#&]gx-/.test(h))history.replaceState(history.state,\"\",location.pathname+location.search);}catch(e){}",
     "document.addEventListener(\"click\",function(e){var t=e.target,l=t&&t.closest?t.closest(\"a[href]\"):null,u;",
     "if(!l)return;var r=(l.getAttribute(\"href\")||\"\").trim();",
     "if(/^\\/visual\\/[0-9a-f]{32}$/.test(location.pathname)&&/^https?:$/.test(location.protocol)",
     "&&!/^([a-z][a-z0-9+.-]*:|[\\/\\\\#?])/i.test(r)&&/\\.html?$/i.test(r.split(/[?#]/)[0])){",
-    "e.preventDefault();var q=location.search.slice(1).split(\"&\").filter(function(s){return s===\"gx-page-script=1\"||s===\"gx-readonly=1\";});",
+    "e.preventDefault();var q=location.search.slice(1).split(\"&\").filter(function(s){return s===\"gx-page-script=1\"||s===\"gx-readonly=1\";}),cs=d.getAttribute(\"data-gx-controls\"),cv=parseFloat(d.style.getPropertyValue(\"--gx-controls-inset\"));",
     "q.unshift(\"href=\"+encodeURIComponent(r));",
-    "location.href=location.pathname+\"/link?\"+q.join(\"&\")+\"#gx-theme=\"+(d.getAttribute(\"data-gx-theme\")||\"dark\")+(d.hasAttribute(\"data-gx-floating\")?\"&gx-floating=1\":\"\");return;}",
+    "location.href=location.pathname+\"/link?\"+q.join(\"&\")+\"#gx-theme=\"+(d.getAttribute(\"data-gx-theme\")||\"dark\")+(d.hasAttribute(\"data-gx-floating\")?\"&gx-floating=1\":\"\")+(cs===\"left\"||cs===\"right\"?\"&gx-controls=\"+cs:\"\")+(isFinite(cv)&&cv>=0?\"&gx-controls-inset=\"+cv:\"\");return;}",
     "try{u=new URL(r,document.baseURI);}catch(x){return;}",
     "if(!/^https?:$/.test(u.protocol)||u.href.split(\"#\")[0]===location.href.split(\"#\")[0])return;",
     "l.setAttribute(\"target\",\"_blank\");l.setAttribute(\"rel\",\"noopener\");},true);})();</script>",
@@ -212,19 +221,20 @@ pub(crate) const PAGE_STATE_MARKER: &str = "<!--gx-page-state-->";
 /// CDXC:SessionChat 2026-10-26 WHY:
 /// A page on the phone reaches gxserver through the phone's SSH forward, which goes away whenever the link drops and comes back a moment later: the user typed answers into every question on the phone, the drafts stopped landing when the link dropped (their failure was ignored), and Send answered "Failed to fetch" and gave up, so closing the page lost everything typed after the drop. So a draft that does not land stays pending and is posted again until it does, and a send that cannot reach the host (no answer, or a 5xx while gxserver restarts) keeps trying with the answers held, telling the page through `submit`'s second argument; only a refusal from gxserver itself (already sent, no such page, a bad body) ends a send. A retried send that finds the answers already stored (409 after an earlier try whose reply was lost) counts as sent.
 /// SEE-ALSO: apps/mobile/app/modules/ghostex-native/android/src/main/java/expo/modules/ghostexnative/GhostexPortForward.kt (the forward keeps its phone port across reconnects, so the page's address works again once the link is back), apps/mobile/app/src/chat/native/cards/PageSheet.tsx (reads `ghostex.__pending()`, the draft not yet saved, when the sheet closes or the page has to move to a new port, and keeps it until it can be posted: apps/mobile/app/src/chat/native/cards/pageDrafts.ts).
-pub(super) const PAGE_API: &str = r#"<script>(function(){var st=null,draft={},edited=0,servedAt=0,dirty=false,timer=0,posting=false,changes=0,pause=0,base=location.pathname.replace(/\/+$/,""),ex=window.__gxExported||null,exKey=ex?"gx-exported:"+ex.page:"";
+pub(super) const PAGE_API: &str = r#"<script>(function(){var st=null,draft={},edited=0,servedAt=0,dirty=false,timer=0,posting=false,changes=0,pause=0,previewing=false,base=location.pathname.replace(/\/+$/,""),ex=window.__gxExported||null,sh=window.__gxShared||null,exKey=ex?"gx-exported:"+ex.page:sh?"gx-shared:"+sh.page:"",shNameKey="gx-shared-name";
 function later(wait){return Math.min(wait?wait*2:1000,10000);}
-function note(){if(!st||!st.answered||!document.body||document.getElementById("gx-answered"))return;var b=document.createElement("div");b.id="gx-answered";b.setAttribute("role","status");b.setAttribute("style","margin:0 0 12px;padding:8px 12px;border-radius:8px;font:500 12.5px/1.4 var(--font-sans);color:var(--success);background:color-mix(in srgb,var(--success) 12%,transparent);border:1px solid color-mix(in srgb,var(--success) 32%,transparent)");var when="";try{when=st.answeredAt?" on "+new Date(st.answeredAt).toLocaleString():"";}catch(e){}b.textContent=st.answers&&st.answers.seen===true?"Marked as seen"+when+". The agent was told.":"Answered"+when+". The agent has your answers.";var slot=document.querySelector("[data-gx-answered]"),kit=document.querySelector("gx-questions");if(slot)slot.appendChild(b);else if(kit){b.style.margin="0";kit.insertBefore(b,kit.firstChild);}else document.body.insertBefore(b,document.body.firstChild);}
-function layoutNotice(){if(ex||!st||!st.oldLayout||st.noticeDismissed||!document.body||document.getElementById("gx-layout-notice"))return;var b=document.createElement("div");b.id="gx-layout-notice";b.setAttribute("role","status");var t=document.createElement("span");t.innerHTML="<b>Made with an older Ghostex visuals guide.</b> This page uses the old layout. Agents read the current guide from Ghostex, so the agent&#39;s next page gets the new look.";var x=document.createElement("button");x.type="button";x.textContent="\u00d7";x.setAttribute("aria-label","Close this notice");x.setAttribute("data-gx-tip","Close");x.addEventListener("click",function(){b.remove();st.noticeDismissed=true;fetch(base+"/notice",{method:"POST",body:"{}",keepalive:true}).catch(function(){});});b.append(t,x);document.body.insertBefore(b,document.body.firstChild);}
+function note(){if(!st||!st.answered||!document.body||document.getElementById("gx-answered"))return;var b=document.createElement("div");b.id="gx-answered";b.setAttribute("role","status");b.setAttribute("style","margin:0 0 12px;padding:8px 12px;border-radius:8px;font:500 12.5px/1.4 var(--font-sans);color:var(--success);background:color-mix(in srgb,var(--success) 12%,transparent);border:1px solid color-mix(in srgb,var(--success) 32%,transparent)");var when="";try{when=st.answeredAt?" on "+new Date(st.answeredAt).toLocaleString():"";}catch(e){}b.textContent=sh&&st.by?"Thanks, "+st.by+"! Your answers were sent"+when+".":st.answers&&st.answers.seen===true?(typeof st.answers.reply==="string"&&st.answers.reply.trim()?"Sent to the agent and archived"+when+".":"Archived"+when+". The agent was told."):"Answered"+when+". The agent has your answers.";var slot=document.querySelector("[data-gx-answered]"),kit=document.querySelector("gx-questions");if(slot)slot.appendChild(b);else if(kit){b.style.margin="0";kit.insertBefore(b,kit.firstChild);}else document.body.insertBefore(b,document.body.firstChild);}
+function mountSharedName(){if(!sh||!sh.answerable||!document.body||document.getElementById("gx-shared-name-wrap"))return;if(!document.getElementById("gx-shared-style")){var css=document.createElement("style");css.id="gx-shared-style";css.textContent="\x23gx-shared-name-wrap{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 14px;margin:16px 0 10px;border-radius:12px;background:var(--gx-card);border:1px solid var(--gx-card-border);color:var(--gx-fg);font:13.5px/1.4 var(--font-sans);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}\x23gx-shared-name-wrap label{font-weight:600;color:var(--gx-fg);white-space:nowrap}\x23gx-shared-name{flex:1;min-width:180px;height:34px;padding:0 11px;border-radius:8px;border:1px solid var(--gx-line-strong);background:var(--gx-option);color:var(--gx-fg);font:13.5px var(--font-sans);outline:none;box-sizing:border-box}\x23gx-shared-name:focus{border-color:var(--gx-pick)}\x23gx-shared-name-hint{flex-basis:100%;font-size:12px;color:var(--gx-muted)}";document.head.appendChild(css);}var w=document.createElement("div");w.id="gx-shared-name-wrap";w.setAttribute("data-gx-nodraft","1");var lbl=document.createElement("label");lbl.htmlFor="gx-shared-name";lbl.textContent="Your name";var inp=document.createElement("input");inp.id="gx-shared-name";inp.type="text";inp.maxLength=60;inp.required=true;inp.placeholder="Enter your name (required to send)";inp.autocomplete="name";try{var saved=localStorage.getItem(shNameKey);if(saved)inp.value=saved;}catch(e){}inp.addEventListener("input",function(){try{localStorage.setItem(shNameKey,inp.value.trim());}catch(e){}});var hint=document.createElement("div");hint.id="gx-shared-name-hint";hint.textContent="Your answers go back to the person who shared this page, labeled with your name.";w.append(lbl,inp,hint);var sendBar=document.querySelector("gx-questions .gx-send");if(sendBar&&sendBar.parentNode){sendBar.parentNode.insertBefore(w,sendBar);}else{var kit=document.querySelector("gx-questions");if(kit)kit.appendChild(w);else document.body.appendChild(w);}}
+function layoutNotice(){if(ex||sh||!st||!st.oldLayout||st.noticeDismissed||!document.body||document.getElementById("gx-layout-notice"))return;var b=document.createElement("div");b.id="gx-layout-notice";b.setAttribute("role","status");var t=document.createElement("span");t.innerHTML="<b>Made with an older Ghostex visuals guide.</b> This page uses the old layout. Agents read the current guide from Ghostex, so the agent&#39;s next page gets the new look.";var x=document.createElement("button");x.type="button";x.textContent="\u00d7";x.setAttribute("aria-label","Close this notice");x.setAttribute("data-gx-tip","Close");x.addEventListener("click",function(){b.remove();st.noticeDismissed=true;fetch(base+"/notice",{method:"POST",body:"{}",keepalive:true}).catch(function(){});});b.append(t,x);document.body.insertBefore(b,document.body.firstChild);}
 function body(){return JSON.stringify({draft:draft,editedAt:edited});}
 function settled(status){return status>=200&&status<300||status===404||status===409;}
 function due(){timer=0;post();}
 function retry(){pause=later(pause);clearTimeout(timer);timer=setTimeout(due,pause);}
-function post(leaving){if(!dirty||(st&&st.answered))return;if(ex){clearTimeout(timer);timer=0;try{localStorage.setItem(exKey,body());}catch(e){}dirty=false;return;}if(leaving){if(navigator.sendBeacon)navigator.sendBeacon(base+"/draft",body());return;}if(posting)return;clearTimeout(timer);timer=0;posting=true;var at=changes;
+function post(leaving){if(previewing||!dirty||(st&&st.answered))return;if(ex||sh){clearTimeout(timer);timer=0;try{localStorage.setItem(exKey,body());}catch(e){}dirty=false;return;}if(leaving){if(navigator.sendBeacon)navigator.sendBeacon(base+"/draft",body());return;}if(posting)return;clearTimeout(timer);timer=0;posting=true;var at=changes;
 fetch(base+"/draft",{method:"POST",body:body(),keepalive:true}).then(function(r){posting=false;if(!settled(r.status))throw r;pause=0;if(changes===at||!r.ok)dirty=false;else post();}).catch(function(){posting=false;retry();});}
-function save(part,value){if(st&&st.answered)return;if(value==null)delete draft[part];else draft[part]=value;changes++;edited=Math.max(Date.now(),edited+1);dirty=true;if(!timer&&!posting)timer=setTimeout(due,250);}
-function flush(){if(!dirty||(st&&st.answered))return true;if(ex){post();return true;}clearTimeout(timer);timer=0;try{var x=new XMLHttpRequest();x.open("POST",base+"/draft",false);x.send(body());if(settled(x.status)){dirty=false;pause=0;return true;}}catch(e){}retry();return false;}
-function newer(){if(ex||changes||(st&&st.answered))return;fetch(base+"/draft").then(function(r){return r.ok?r.json():null;}).then(function(j){if(!j||changes||(st&&st.answered)||!(j.editedAt>servedAt))return;draft=j.draft&&typeof j.draft==="object"?j.draft:{};edited=servedAt=j.editedAt;restoreFields();document.dispatchEvent(new Event("gx-draft"));}).catch(function(){});}
+function save(part,value){if(previewing||(st&&st.answered))return;if(value==null)delete draft[part];else draft[part]=value;changes++;edited=Math.max(Date.now(),edited+1);dirty=true;if(!timer&&!posting)timer=setTimeout(due,250);}
+function flush(){if(previewing||!dirty||(st&&st.answered))return true;if(ex||sh){post();return true;}clearTimeout(timer);timer=0;try{var x=new XMLHttpRequest();x.open("POST",base+"/draft",false);x.send(body());if(settled(x.status)){dirty=false;pause=0;return true;}}catch(e){}retry();return false;}
+function newer(){if(previewing||ex||sh||changes||(st&&st.answered))return;fetch(base+"/draft").then(function(r){return r.ok?r.json():null;}).then(function(j){if(!j||previewing||changes||(st&&st.answered)||!(j.editedAt>servedAt))return;draft=j.draft&&typeof j.draft==="object"?j.draft:{};edited=servedAt=j.editedAt;restoreFields();document.dispatchEvent(new Event("gx-draft"));}).catch(function(){});}
 addEventListener("pagehide",function(){post(true);});
 document.addEventListener("visibilitychange",function(){if(document.visibilityState==="hidden")post();});
 var restoring=false;
@@ -245,16 +255,17 @@ w.addEventListener("click",function(e){if(e.target===w)close();});w.querySelecto
 w.querySelector(".gx-export-copy").addEventListener("click",function(){function done(){status.textContent="Copied.";}function by(){ta.focus();ta.select();try{if(!document.execCommand("copy"))throw 0;done();}catch(e){status.textContent="Select the text and copy it.";}}if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text).then(done,by);else by();});
 w.querySelector(".gx-export-save").addEventListener("click",function(){var url=URL.createObjectURL(new Blob([text],{type:"application/json"})),a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url);},4000);status.textContent="Saved as "+name+".";});
 document.body.appendChild(w);w.querySelector(".gx-export-save").focus();}
-window.ghostex={get exported(){return ex;},get answered(){return!!(st&&st.answered);},get awaitsSeen(){return!!(st&&st.awaitsSeen);},get answers(){return st&&st.answered?st.answers:null;},
+window.ghostex={get exported(){return ex;},get shared(){return sh;},get answered(){return!!(st&&st.answered);},get awaitsSeen(){return!!(st&&st.awaitsSeen);},get answers(){return st&&st.answered?st.answers:null;},get outsideAnswers(){return st&&Array.isArray(st.outsideAnswers)?st.outsideAnswers:[];},
 get draft(){return draft.page===undefined?null:draft.page;},saveDraft:function(value){save("page",value===undefined?null:value);},
-submit:function(answers,retrying){var body=JSON.stringify({answers:answers===undefined?null:answers}),tries=0,wait=0;return new Promise(function(resolve,reject){if(window.__gxReadOnly){reject(new Error(window.__gxReadOnlyWhy||"This page was posted by a Worker, so it is read-only here. Nothing was sent: answer through your coordinator."));return;}
+submit:function(answers,retrying){var body=JSON.stringify({answers:answers===undefined?null:answers}),tries=0,wait=0;return new Promise(function(resolve,reject){if(previewing){reject(new Error("You are previewing someone else's answers. Press Back to return to your page."));return;}if(window.__gxReadOnly){reject(new Error(window.__gxReadOnlyWhy||"This page was posted by a Worker, so it is read-only here. Nothing was sent: answer through your coordinator."));return;}
 if(ex){exportAnswers(answers);resolve({exported:true});return;}
+if(sh){if(!sh.answerable){reject(new Error("This shared page has no open questions to answer."));return;}var inp=document.getElementById("gx-shared-name");var name=(inp?inp.value:"").trim();if(!name){try{name=(localStorage.getItem(shNameKey)||"").trim();}catch(e){}}if(!name){if(inp){inp.focus();inp.scrollIntoView({behavior:"smooth",block:"center"});}reject(new Error("Please enter your name before sending your answers."));return;}try{localStorage.setItem(shNameKey,name);}catch(e){}fetch("/__gx_share/answers",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:name,answers:answers===undefined?null:answers})}).then(function(r){return r.json().catch(function(){return{};}).then(function(j){if(r.ok&&j.ok){st={answered:true,answers:answers,answeredAt:j.answeredAt,by:j.by||name};draft={};dirty=false;clearTimeout(timer);try{localStorage.removeItem(exKey);}catch(e){}if(inp)inp.disabled=true;note();resolve(j);}else{reject(new Error(j.error||"Your answers were not sent."));}});},function(){reject(new Error("Could not reach the shared page. It may have expired or stopped."));});return;}
 function sent(j){st={answered:true,answers:answers,answeredAt:j.answeredAt};draft={};dirty=false;clearTimeout(timer);note();if(document.documentElement.hasAttribute("data-gx-floating"))setTimeout(function(){window.close();},700);resolve(j);}
 function again(){if(typeof retrying==="function")try{retrying("Not sent yet: Ghostex can't be reached. Trying again… Your answers are kept.");}catch(e){}wait=later(wait);setTimeout(attempt,wait);}
 function attempt(){tries++;fetch(base+"/answers",{method:"POST",body:body}).then(function(r){return r.json().catch(function(){return{};}).then(function(j){if(r.ok&&j.ok)sent(j);else if(r.status===409&&tries>1)sent(j);else if(r.status>=500)again();else reject(new Error(j.error||"Your answers were not sent."));});},again);}
 attempt();});},
-__draft:function(part){return draft[part]===undefined?null:draft[part];},__saveDraft:save,__pending:function(){return dirty&&!(st&&st.answered)?draft:null;},__flush:flush,
-__state:function(s){st=s;draft=s&&!s.answered&&s.draft&&typeof s.draft==="object"?s.draft:{};edited=servedAt=s&&typeof s.draftEditedAt==="number"?s.draftEditedAt:0;if(ex){try{var kept=JSON.parse(localStorage.getItem(exKey)||"null");if(kept&&kept.draft&&typeof kept.draft==="object"){draft=kept.draft;edited=servedAt=+kept.editedAt||0;}}catch(e){}}var ready=function(){note();restoreFields();layoutNotice();if(!(st&&st.answered))setTimeout(newer,600);};if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",ready);else ready();}};})();</script>"#;
+__draft:function(part){return draft[part]===undefined?null:draft[part];},__saveDraft:save,__pending:function(){return dirty&&!(st&&st.answered)?draft:null;},__flush:flush,__setPreview:function(on){previewing=!!on;},
+__state:function(s){st=s;draft=s&&!s.answered&&s.draft&&typeof s.draft==="object"?s.draft:{};edited=servedAt=s&&typeof s.draftEditedAt==="number"?s.draftEditedAt:0;if(ex||sh){try{var kept=JSON.parse(localStorage.getItem(exKey)||"null");if(kept&&kept.draft&&typeof kept.draft==="object"){draft=kept.draft;edited=servedAt=+kept.editedAt||0;}}catch(e){}}var ready=function(){note();restoreFields();layoutNotice();if(sh){mountSharedName();setTimeout(mountSharedName,120);}if(!(st&&st.answered))setTimeout(newer,600);};if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",ready);else ready();}};})();</script>"#;
 
 #[cfg(test)]
 mod tests {
@@ -312,7 +323,8 @@ mod tests {
         assert!(THEME_STYLE.contains(
             ":where(:root[data-gx-floating]){--gx-backdrop-fade:linear-gradient(var(--gx-backdrop-top),transparent 56px),}"
         ));
-        assert!(THEME_STYLE
-            .contains("html{background-color:var(--background);background-image:var(--gx-backdrop-fade,) var(--gx-backdrop,none);"));
+        assert!(THEME_STYLE.contains(
+            ":where(html:not([data-gx-thumbnail])){background-color:var(--background);background-image:var(--gx-backdrop-fade,) var(--gx-backdrop,none)}"
+        ));
     }
 }

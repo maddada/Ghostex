@@ -18,6 +18,8 @@ use crate::server::AppState;
 use crate::session_chat::{read_transcript_file_version, TranscriptFileVersion};
 use crate::session_chat_fleet_transcript::timestamp;
 
+use super::async_cache::AsyncSectionCache;
+
 /// Rollouts kept scanned in memory.
 const CACHED_ROLLOUTS: usize = 16;
 /// A record longer than this is skipped unparsed (command output can be large).
@@ -26,8 +28,9 @@ const MAX_RECORD_BYTES: usize = 8 * 1024 * 1024;
 const FINISHED_KEPT: usize = 20;
 const MAX_TITLE_CHARS: usize = 160;
 /// How long `codex mcp list` may take, and how long its answer is reused.
-const MCP_LIST_TIMEOUT: Duration = Duration::from_secs(15);
-const MCP_LIST_FRESH_FOR: Duration = Duration::from_secs(60);
+const MCP_LIST_TIMEOUT: Duration = Duration::from_secs(6);
+const MCP_LIST_SYNC_WAIT: Duration = Duration::from_secs(3);
+const MCP_LIST_FRESH_FOR: Duration = Duration::from_secs(5 * 60);
 /// What Codex puts between the global AGENTS.md and the project's in the text it loads.
 const PROJECT_DOC_SEPARATOR: &str = "--- project-doc ---";
 /// The MCP server Ghostex Connectors adds to every Codex launch (connectors/agent/launch.rs).
@@ -361,42 +364,30 @@ fn codex_program(
     )
 }
 
-/// `codex mcp list --json` for a session in `folder`, run with the live session's environment.
-/// Blocking; cached a minute.
-fn mcp_servers(
-    program: &[String],
-    environment: &[(String, String)],
-    folder: Option<&Path>,
-) -> Vec<Value> {
-    type Cache = Mutex<HashMap<String, (Instant, Vec<Value>)>>;
-    static CACHE: OnceLock<Cache> = OnceLock::new();
-    let cache = CACHE.get_or_init(Mutex::default);
-    let codex_home = environment
-        .iter()
-        .find(|(name, _)| name == "CODEX_HOME")
-        .map(|(_, value)| value.as_str())
-        .unwrap_or_default();
-    let key = format!(
-        "{}\u{0}{codex_home}\u{0}{}",
-        program.join(" "),
+fn mcp_cache() -> &'static AsyncSectionCache<String, Vec<Value>> {
+    static CACHE: OnceLock<AsyncSectionCache<String, Vec<Value>>> = OnceLock::new();
+    CACHE.get_or_init(|| AsyncSectionCache::new(32))
+}
+
+fn mcp_cache_key(session_id: &str, folder: Option<&Path>, active: bool) -> String {
+    format!(
+        "{}\u{0}{}",
+        if active { session_id } else { "" },
         folder
             .map(|folder| folder.to_string_lossy())
             .unwrap_or_default()
-    );
-    if let Some((_, servers)) = cache
-        .lock()
-        .ok()
-        .and_then(|cache| cache.get(&key).cloned())
-        .filter(|(at, _)| at.elapsed() < MCP_LIST_FRESH_FOR)
-    {
-        return servers;
-    }
-    let servers = list_mcp_servers(program, environment, folder).unwrap_or_default();
-    if let Ok(mut cache) = cache.lock() {
-        cache.retain(|_, (at, _)| at.elapsed() < MCP_LIST_FRESH_FOR);
-        cache.insert(key, (Instant::now(), servers.clone()));
-    }
-    servers
+    )
+}
+
+fn compute_codex_mcp_servers(session: &Value, home: &Path, folder: Option<&Path>) -> Vec<Value> {
+    let live = super::agents::live_launch(session, home);
+    let environment = live
+        .as_ref()
+        .map(|(_, environment)| environment.clone())
+        .unwrap_or_default();
+    codex_program(live.as_ref(), home)
+        .and_then(|program| list_mcp_servers(&program, &environment, folder))
+        .unwrap_or_default()
 }
 
 fn list_mcp_servers(
@@ -430,7 +421,7 @@ fn list_mcp_servers(
         match child.try_wait() {
             Ok(Some(_)) => break,
             Ok(None) if Instant::now() < deadline => {
-                std::thread::sleep(Duration::from_millis(50));
+                std::thread::sleep(Duration::from_millis(25));
             }
             _ => {
                 let _ = child.kill();
@@ -462,35 +453,13 @@ fn list_mcp_servers(
     )
 }
 
-/// Fills Connectors, Memory files and Background tasks for a Codex session. Blocking.
-pub(super) fn read_codex_details(
+fn fill_rollout_sections(
     state: &AppState,
     project_id: &str,
     session_id: &str,
-    session: &Value,
-    folder: Option<&Path>,
+    codex_home: &Path,
     result: &mut Value,
 ) {
-    let home = state.paths.home_dir.clone();
-    let live = super::agents::live_launch(session, &home);
-    let environment = live
-        .as_ref()
-        .map(|(_, environment)| environment.clone())
-        .unwrap_or_default();
-    let codex_home = environment
-        .iter()
-        .find(|(name, _)| name == "CODEX_HOME")
-        .map(|(_, value)| PathBuf::from(value))
-        .unwrap_or_else(|| ghostex_paths::agent_homes::codex_default_home(&home));
-
-    let workspace = super::connectors::workspace_group(state, project_id, session_id);
-    let servers = codex_program(live.as_ref(), &home)
-        .map(|program| mcp_servers(&program, &environment, folder))
-        .unwrap_or_default();
-    if workspace.is_some() || !servers.is_empty() {
-        result["connectors"] = json!({"workspace": workspace, "servers": servers});
-    }
-
     let transcript = crate::session_chat_read::resolve_session_chat_read_state(
         state, project_id, session_id, None,
     )
@@ -503,7 +472,7 @@ pub(super) fn read_codex_details(
         return;
     };
     if let Some((directory, text)) = facts.agents_md.as_ref() {
-        let files = memory_files(directory.as_deref(), text, &codex_home);
+        let files = memory_files(directory.as_deref(), text, codex_home);
         if !files.is_empty() {
             result["memoryFiles"] = Value::Array(files);
         }
@@ -513,5 +482,103 @@ pub(super) fn read_codex_details(
             "running": facts.running.iter().map(run_value).collect::<Vec<_>>(),
             "finished": facts.finished.iter().map(run_value).collect::<Vec<_>>(),
         });
+    }
+}
+
+/// Non-blocking progressive Codex read: never blocks on `codex mcp list` or workspace connectors.
+pub(super) fn read_codex_details_progressive(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    session: &Value,
+    folder: Option<&Path>,
+    result: &mut Value,
+    pending: &mut Vec<&'static str>,
+) {
+    let home = state.paths.home_dir.clone();
+    let active = !super::agents::session_is_inactive(session);
+    let key = mcp_cache_key(session_id, folder, active);
+    let session_owned = session.clone();
+    let home_owned = home.clone();
+    let folder_owned = folder.map(Path::to_path_buf);
+
+    let workspace = super::connectors::workspace_group_progressive(state, project_id, session_id);
+    let servers = mcp_cache().get_or_start(key, MCP_LIST_FRESH_FOR, false, move || {
+        compute_codex_mcp_servers(&session_owned, &home_owned, folder_owned.as_deref())
+    });
+
+    let connectors_pending = workspace.is_pending() || servers.is_pending();
+    let workspace_val = workspace.into_ready().flatten();
+    let servers_val = servers.into_ready().unwrap_or_default();
+    if workspace_val.is_some() || !servers_val.is_empty() {
+        result["connectors"] = json!({"workspace": workspace_val, "servers": servers_val});
+    }
+    if connectors_pending && !pending.contains(&"connectors") {
+        pending.push("connectors");
+    }
+
+    let codex_home = ghostex_paths::agent_homes::codex_default_home(&home);
+    fill_rollout_sections(state, project_id, session_id, &codex_home, result);
+}
+
+/// Fills Connectors, Memory files and Background tasks for a Codex session (legacy / CLI callers).
+/// Runs workspace connectors, `codex mcp list` (time-boxed + cached), and rollout scan in parallel.
+pub(super) fn read_codex_details(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    session: &Value,
+    folder: Option<&Path>,
+    result: &mut Value,
+) {
+    let home = state.paths.home_dir.clone();
+    let active = !super::agents::session_is_inactive(session);
+    let key = mcp_cache_key(session_id, folder, active);
+
+    let (workspace, servers, rollout_extra) = std::thread::scope(|scope| {
+        let ws_handle =
+            scope.spawn(|| super::connectors::workspace_group(state, project_id, session_id));
+        let mcp_handle = scope.spawn(|| {
+            let session_owned = session.clone();
+            let home_owned = home.clone();
+            let folder_owned = folder.map(Path::to_path_buf);
+            mcp_cache()
+                .get_or_wait(
+                    key,
+                    MCP_LIST_FRESH_FOR,
+                    false,
+                    MCP_LIST_SYNC_WAIT,
+                    move || {
+                        compute_codex_mcp_servers(
+                            &session_owned,
+                            &home_owned,
+                            folder_owned.as_deref(),
+                        )
+                    },
+                )
+                .unwrap_or_default()
+        });
+        let rollout_handle = scope.spawn(|| {
+            let codex_home = ghostex_paths::agent_homes::codex_default_home(&home);
+            let mut extra = json!({});
+            fill_rollout_sections(state, project_id, session_id, &codex_home, &mut extra);
+            extra
+        });
+        (
+            ws_handle.join().ok().flatten(),
+            mcp_handle.join().ok().unwrap_or_default(),
+            rollout_handle.join().ok(),
+        )
+    });
+
+    if workspace.is_some() || !servers.is_empty() {
+        result["connectors"] = json!({"workspace": workspace, "servers": servers});
+    }
+    if let Some(Value::Object(extra_map)) = rollout_extra {
+        if let Some(target) = result.as_object_mut() {
+            for (k, v) in extra_map {
+                target.insert(k, v);
+            }
+        }
     }
 }

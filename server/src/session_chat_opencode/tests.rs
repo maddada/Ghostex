@@ -30,6 +30,7 @@ fn form(fields: Value) -> Snapshot {
         info: json!({}),
         messages: vec![],
         permissions: vec![],
+        lead_active: false,
         working: false,
         forms: vec![json!({"id":"frm_test","title":"Choose","fields":fields})],
     }
@@ -137,6 +138,7 @@ fn permissions_take_precedence_and_preserve_exact_request_id() {
             tool,
             summary,
             tool_use_id,
+            ..
         } => {
             assert_eq!(tool, "edit");
             assert_eq!(summary.as_deref(), Some("one.rs\ntwo.rs"));

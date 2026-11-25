@@ -762,6 +762,198 @@ pub(crate) const CODEX: &[SlashCommand] = &[
     },
 ];
 
+/// CDXC:SessionChat 2026-11-24 WHY:
+/// A Native Codex chat talks to Codex's app-server, which has no slash commands: only `/compact` is turned into its own request (`thread/compact/start` in server/src/acp/driver_codex.rs), and the composer completes `/btw` and `/mention` itself. Every other Codex command reached the model as plain text, so `/diff` answered "No changes to report." without looking (found testing Native Codex on Linux). A Native Codex chat offers only these.
+pub(crate) const CODEX_NATIVE: &[SlashCommand] = &[
+    SlashCommand {
+        name: "btw",
+        description: "Start a side conversation in an ephemeral fork",
+        insert_text: Some(crate::composer::side_chat::SIDE_CHAT_PREFIX),
+    },
+    SlashCommand {
+        name: "compact",
+        description: "Summarize conversation to save context",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "mention",
+        description: "Mention a file",
+        insert_text: Some("@"),
+    },
+];
+
+/// CDXC:SessionChat 2026-11-24 WHY:
+/// A Native Antigravity chat talks to `agy acp`, which runs the built-in commands it advertises over ACP (`available_commands_update`, agy 1.5.15; the rest of that list is its skills, which the `/` list shows from the skills source). The generic list offered `/clear`, `/exit`, `/help` and `/model`, none of which `agy acp` has: they reached the model as plain text, so `/help` got a made-up answer (found testing Native Antigravity on Linux). Descriptions are agy's own.
+pub(crate) const ANTIGRAVITY_NATIVE: &[SlashCommand] = &[
+    SlashCommand {
+        name: "boost",
+        description: "Invoke the Boost multi-agent orchestrator for complex tasks",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "browser",
+        description: "Invoke a browser agent for web tasks",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "compact",
+        description: "Compact the conversation now to free up the context window",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "goal",
+        description: "Run until the specified goal is completely finished",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "grill-me",
+        description: "Interview me to align on a plan",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "learn",
+        description: "Capture reusable skills or rules from recent work",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "plan",
+        description: "Plan carefully before executing a task",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "schedule",
+        description: "Run an instruction on a schedule or as a one-time timer",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "teamwork",
+        description: "Invoke a team of agents to tackle large projects",
+        insert_text: None,
+    },
+];
+
+/// CDXC:SessionChat 2026-11-24 WHY:
+/// A Native Claude chat drives `claude` in stream-json mode, which runs only the commands it lists in its start-up `slash_commands` (Claude Code 2.1.331; the rest of that list is skills, which the `/` list shows from the skills source). The full terminal catalog offered `/theme`, `/tui`, `/login`, `/exit` and the like, which reached the model as plain text, so `/theme` got "type it in the Claude Code prompt" (found testing Native Claude on Linux). These are the catalog's entries Claude lists, plus `/btw`, which the composer handles itself.
+const CLAUDE_NATIVE_NAMES: &[&str] = &[
+    "advisor",
+    "auto-mode-setup",
+    "autocompact",
+    "batch",
+    "btw",
+    "claude-api",
+    "clear",
+    "color",
+    "compact",
+    "config",
+    "context",
+    "debug",
+    "design",
+    "design-sync",
+    "doctor",
+    "effort",
+    "fast",
+    "fewer-permission-prompts",
+    "focus",
+    "goal",
+    "import",
+    "init",
+    "insights",
+    "list-agents",
+    "mcp",
+    "model",
+    "recap",
+    "reload-plugins",
+    "reload-skills",
+    "rename",
+    "run",
+    "run-skill-generator",
+    "schedule",
+    "security-review",
+    "skill-doctor",
+    "team-onboarding",
+    "ultrareview",
+    "update-config",
+    "usage",
+    "usage-credits",
+];
+
+/// The Claude catalog's entries a Native Claude chat can run (`CLAUDE_NATIVE_NAMES`), with the
+/// catalog's own descriptions.
+pub(crate) static CLAUDE_NATIVE: std::sync::LazyLock<Vec<SlashCommand>> =
+    std::sync::LazyLock::new(|| {
+        CLAUDE_CODE
+            .iter()
+            .filter(|command| CLAUDE_NATIVE_NAMES.contains(&command.name))
+            .copied()
+            .collect()
+    });
+
+/// Commands handled directly by OpenCode 2's Native server host (`/compact`, `/model`, `/agent`,
+/// `/init`, `/review`) plus `/btw`, which the composer handles itself.
+pub(crate) const OPENCODE_NATIVE: &[SlashCommand] = &[
+    SlashCommand {
+        name: "agent",
+        description: "Switch OpenCode agent (build or plan)",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "btw",
+        description: "Ask a quick side question without interrupting",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "compact",
+        description: "Compact conversation history",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "init",
+        description: "Initialize project instructions (AGENTS.md)",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "model",
+        description: "Switch model (/model provider/model [variant])",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "review",
+        description: "Review changes in the repository",
+        insert_text: None,
+    },
+];
+
+/// Built-in slash commands that `grok agent stdio` supports over ACP (omitting `/always-approve`,
+/// which bypasses Ghostex's permission mode, and `/context`, which completes silently over ACP).
+pub(crate) const GROK_NATIVE: &[SlashCommand] = &[
+    SlashCommand {
+        name: "compact",
+        description: "Compress conversation history to save context window",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "deep-research",
+        description:
+            "Research with bounded parallel agents, cross-check evidence, and write a cited report",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "goal",
+        description: "Set, manage, or check an autonomous goal",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "session-info",
+        description: "Show session details (model, turns, context usage)",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "workflow",
+        description: "Launch a saved workflow, list runs, or manage a run",
+        insert_text: None,
+    },
+];
+
 /// CDXC:SessionChat 2026-10-17 WHY:
 /// Grok Build 1.0.62's own built-in commands (its `slash/commands/` registry, checked against the live `/` menu); skills and workflows reach the chat through the `$` picker. The earlier list named commands Grok never had (`/editor`, `/init`, `/models`, `/status`) or renamed (`/mcp` is `/mcps`).
 pub(crate) const GROK: &[SlashCommand] = &[
@@ -1112,6 +1304,31 @@ pub(crate) const GROK: &[SlashCommand] = &[
     },
 ];
 
+/// A Native Cursor chat talks to `cursor-agent acp`, which advertises these built-in slash
+/// commands over `available_commands_update`. Skills are merged separately from the skills source.
+pub(crate) const CURSOR_NATIVE: &[SlashCommand] = &[
+    SlashCommand {
+        name: "agent",
+        description: "Switch to agent mode",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "ask",
+        description: "Switch to read-only ask mode",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "copy-request-id",
+        description: "Copy the last request ID to the clipboard",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "plan",
+        description: "Switch to plan mode",
+        insert_text: None,
+    },
+];
+
 pub(crate) const CURSOR: &[SlashCommand] = &[
     SlashCommand {
         name: "model",
@@ -1367,6 +1584,80 @@ pub(crate) const CURSOR: &[SlashCommand] = &[
     SlashCommand {
         name: "context",
         description: "Show context usage details",
+        insert_text: None,
+    },
+];
+
+/// Hermes ACP's advertised built-in slash commands (`available_commands_update`).
+pub(crate) const HERMES_NATIVE: &[SlashCommand] = &[
+    SlashCommand {
+        name: "help",
+        description: "Show available commands",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "model",
+        description: "Show or switch the active model",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "tools",
+        description: "List available tools",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "context",
+        description: "Show context window breakdown",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "reset",
+        description: "Reset conversation history",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "compress",
+        description: "Compress conversation context",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "steer",
+        description: "Queue an immediate steering note for the active turn",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "queue",
+        description: "Queue a follow-up prompt after the active turn",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "usage",
+        description: "Show token and cost usage",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "status",
+        description: "Show session status",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "version",
+        description: "Show Hermes version",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "title",
+        description: "Set or show the session title",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "undo",
+        description: "Rewind N turns",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "retry",
+        description: "Retry the last turn",
         insert_text: None,
     },
 ];
@@ -2183,6 +2474,77 @@ pub(crate) const OMP: &[SlashCommand] = &[
     SlashCommand {
         name: "exit",
         description: "Exit the application",
+        insert_text: None,
+    },
+];
+
+pub(crate) const PI_NATIVE: &[SlashCommand] = &[
+    SlashCommand {
+        name: "btw",
+        description: "Ask a side question without interrupting the main conversation",
+        insert_text: Some(crate::composer::side_chat::SIDE_CHAT_PREFIX),
+    },
+    SlashCommand {
+        name: "compact",
+        description: "Summarize conversation to save context",
+        insert_text: None,
+    },
+];
+
+pub(crate) const OMP_NATIVE: &[SlashCommand] = &[
+    SlashCommand {
+        name: "btw",
+        description: "Ask a side question without interrupting the main conversation",
+        insert_text: Some(crate::composer::side_chat::SIDE_CHAT_PREFIX),
+    },
+    SlashCommand {
+        name: "clear",
+        description: "Clear the conversation context in place, keeping the session",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "compact",
+        description: "Manually compact the session context",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "context",
+        description: "Show estimated context usage breakdown",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "handoff",
+        description: "Summarize the session into a handoff document and compact in place",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "plan",
+        description: "Toggle plan mode (agent plans before executing)",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "rename",
+        description: "Rename the current session",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "retry",
+        description: "Retry the last failed agent turn",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "shake",
+        description: "Drop heavy content from context (tool results, large blocks)",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "todo",
+        description: "View or modify the agent's todo list",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "usage",
+        description: "Show provider usage and limits",
         insert_text: None,
     },
 ];

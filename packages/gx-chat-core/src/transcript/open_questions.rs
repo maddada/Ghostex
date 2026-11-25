@@ -137,6 +137,12 @@ pub struct Asker {
     /// Each tag with how many answers to it the transcript holds before this was asked
     /// ([`settle_askers`]): two askers of a tag with no answer between them ask it in one round.
     pub rounds: Vec<(String, usize)>,
+    /// Names of outside visitors who answered this shared Live page (`source="shared-link"`),
+    /// in order of arrival. Does not mark the page answered for the user so they can still
+    /// review and answer/override.
+    pub outside_answerers: Vec<String>,
+    /// Latest timestamp (epoch ms) when an outside visitor answered this shared Live page.
+    pub outside_answered_at: Option<i64>,
 }
 
 impl Asker {
@@ -272,6 +278,13 @@ pub enum Found {
     /// gives an answer under (not skipped). [`settle_askers`] reads the tags it answers off the
     /// asker with that id, so an answer settles the copies of its tags asked before it.
     Answers(String, Vec<String>),
+    /// Outside answers submitted on a shared Live page: tracks who answered and when for the
+    /// Inbox ping `"Answered by <name>"` without settling the page for the user.
+    OutsideAnswers {
+        page_id: String,
+        by: String,
+        at: Option<i64>,
+    },
 }
 
 fn same_tag(a: &str, b: &str) -> bool {
@@ -302,19 +315,34 @@ pub fn asker_entries<'a>(
             }
             let text = prose_markdown(&message.blocks);
             let (envelopes, _) = crate::transcript::page_answers::split_all_page_answers(&text);
+            let user_envelopes: Vec<_> = envelopes
+                .iter()
+                .filter(|answers| !answers.outside)
+                .cloned()
+                .collect();
             let said = if envelopes.is_empty() {
                 said_in(message)
+            } else if user_envelopes.is_empty() {
+                Vec::new()
             } else {
-                tags_answered_in_envelopes(&envelopes)
+                tags_answered_in_envelopes(&user_envelopes)
             };
             if !said.is_empty() {
                 found.push(Found::Said(said));
             }
             for answers in envelopes {
-                found.push(Found::Answers(
-                    answers.page_id,
-                    keys_answered_in_envelope(&answers.answers),
-                ));
+                if answers.outside {
+                    found.push(Found::OutsideAnswers {
+                        page_id: answers.page_id,
+                        by: answers.by.unwrap_or_else(|| "Visitor".to_string()),
+                        at: message.timestamp,
+                    });
+                } else {
+                    found.push(Found::Answers(
+                        answers.page_id,
+                        keys_answered_in_envelope(&answers.answers),
+                    ));
+                }
             }
             continue;
         }
@@ -359,6 +387,8 @@ pub fn asker_entries<'a>(
                     ),
                 )],
                 rounds: Vec::new(),
+                outside_answerers: Vec::new(),
+                outside_answered_at: None,
             }));
         }
         if !markdown.contains("```") && !markdown.contains("~~~") {
@@ -436,6 +466,8 @@ pub fn asker_entries<'a>(
                     at: message.timestamp,
                     prints,
                     rounds: Vec::new(),
+                    outside_answerers: Vec::new(),
+                    outside_answered_at: None,
                 }
             } else if ghostex_gx_visual::is_visual_language(&language) {
                 let Some(page) = ghostex_gx_visual::page_reference(&body) else {
@@ -469,6 +501,8 @@ pub fn asker_entries<'a>(
                     at: message.timestamp,
                     prints: Vec::new(),
                     rounds: Vec::new(),
+                    outside_answerers: Vec::new(),
+                    outside_answered_at: None,
                 }
             } else {
                 continue;
@@ -503,7 +537,11 @@ pub fn said_in(message: &ChatMessage) -> Vec<String> {
     let text = prose_markdown(&message.blocks);
     let (envelopes, _) = crate::transcript::page_answers::split_all_page_answers(&text);
     if !envelopes.is_empty() {
-        return tags_answered_in_envelopes(&envelopes);
+        let user_envelopes: Vec<_> = envelopes
+            .into_iter()
+            .filter(|answers| !answers.outside)
+            .collect();
+        return tags_answered_in_envelopes(&user_envelopes);
     }
     if !text.bytes().any(|byte| byte.is_ascii_digit())
         || text.trim_start().starts_with('<')
@@ -625,7 +663,7 @@ pub fn settle_askers(found: &[Found], answered: &[String]) -> Vec<Asker> {
                     asked.entry(asker.id.as_str()).or_insert(asker);
                     Vec::new()
                 }
-                Found::Withdraw(_) => Vec::new(),
+                Found::Withdraw(_) | Found::OutsideAnswers { .. } => Vec::new(),
                 Found::Said(tags) => tags.iter().map(|tag| tag.to_ascii_lowercase()).collect(),
                 Found::Answers(id, keys) => asked.get(id.as_str()).map_or_else(Vec::new, |asker| {
                     tags_answered_on(asker, keys)
@@ -640,6 +678,19 @@ pub fn settle_askers(found: &[Found], answered: &[String]) -> Vec<Asker> {
             tags
         })
         .collect();
+    // Collect outside answerers per page id in arrival order.
+    let mut outside_by_page: HashMap<&str, (Vec<String>, Option<i64>)> = HashMap::new();
+    for entry in found {
+        if let Found::OutsideAnswers { page_id, by, at } = entry {
+            let slot = outside_by_page.entry(page_id.as_str()).or_default();
+            if !slot.0.iter().any(|existing| existing == by) {
+                slot.0.push(by.clone());
+            }
+            if let Some(ts) = at {
+                slot.1 = Some(slot.1.map_or(*ts, |prev| prev.max(*ts)));
+            }
+        }
+    }
     let (mut asked_later, mut withdrawn_later) = (HashSet::new(), HashSet::new());
     // The files later pages were published from (`Asker::source`): an earlier page from one of
     // them is replaced (CDXC:SessionChat 2026-11-16 DECISION in server/src/ghostex_cli/show.rs
@@ -651,6 +702,10 @@ pub fn settle_askers(found: &[Found], answered: &[String]) -> Vec<Asker> {
         match entry {
             Found::Asker(asker) => {
                 let mut asker = asker.clone();
+                if let Some((names, latest_at)) = outside_by_page.get(asker.id.as_str()) {
+                    asker.outside_answerers = names.clone();
+                    asker.outside_answered_at = *latest_at;
+                }
                 let later = |seen: &dyn Fn(&str) -> bool| -> Vec<String> {
                     asker
                         .tags
@@ -699,6 +754,7 @@ pub fn settle_askers(found: &[Found], answered: &[String]) -> Vec<Asker> {
                     *said_later.entry(tag.clone()).or_default() += 1;
                 }
             }
+            Found::OutsideAnswers { .. } => {}
         }
     }
     askers.reverse();

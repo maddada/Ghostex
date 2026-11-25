@@ -94,11 +94,16 @@ pub(crate) fn create_agent_session_params_for_project(
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
+    // Starting ACP approval level comes from project/agent/global acceptAll defaults, never from
+    // client-supplied `runtimeSettings` (so a caller cannot override `acceptAllMode: "disabled"`).
+    runtime_settings.remove(crate::acp::SESSION_ACP_APPROVAL_LEVEL_KEY);
+    runtime_settings.remove(crate::acp::approval::SESSION_ACP_APPROVAL_LEVEL_PICKED_KEY);
     let agent_config = resolve_project_agent_config(project, &agent_id, Some(&launch_settings));
     let agent_icon = read_text_from_map(&agent_config, "icon")
         .or_else(|| read_text_from_map(&launch_settings, "icon"));
     let configured_command = read_text_from_map(&agent_config, "command")
         .or_else(|| read_text_from_map(&launch_settings, "agentCommand"));
+    let raw_owner_configured_command = configured_command.clone();
     let (configured_command, empryo_session_id) = apply_requested_agent_model(
         project,
         &agent_id,
@@ -146,6 +151,7 @@ pub(crate) fn create_agent_session_params_for_project(
         if let Some(family) = family.as_deref() {
             let home_dir = super::agent_probe_home();
             if super::launch_cli_missing(family, configured_command.as_deref(), &home_dir) {
+                crate::telemetry::reliability_error("cli_not_found", Some(family));
                 let name = read_text_from_map(&agent_config, "name")
                     .or_else(|| crate::sidebar_hud::default_agent_name(family).map(str::to_string))
                     .unwrap_or_else(|| family.to_string());
@@ -158,6 +164,7 @@ pub(crate) fn create_agent_session_params_for_project(
             &agent_id,
             &agent_config,
             &launch_settings,
+            &settings,
             params,
             configured_command,
             &mut runtime_settings,
@@ -204,6 +211,11 @@ pub(crate) fn create_agent_session_params_for_project(
             json!(true),
         );
     }
+    let thread_marked_handovers =
+        params.get("markedHandovers").and_then(Value::as_bool) == Some(true);
+    if thread_marked_handovers {
+        runtime_settings.insert("markedHandovers".to_string(), json!(true));
+    }
     let configured_command = if agentbox_provider.is_none() {
         apply_thread_marked_handovers(
             &agent_id,
@@ -234,7 +246,8 @@ pub(crate) fn create_agent_session_params_for_project(
         runtime_settings.insert("accountId".to_string(), json!(id));
     } else if agentbox_provider.is_none() && !runtime_settings.contains_key("accountId") {
         // New sessions start on a hub (CDXC:AgentProviders 2026-11-19 in accounts/hub/launch.rs),
-        // unless the workspace picks a Claude account or the command chooses its own login.
+        // unless the workspace picks an eligible Claude account or the command chooses its own
+        // login. GBot API chats and Help chats never inherit workspace account pools.
         if let Some(provider) =
             crate::accounts::launch::agent_provider(&agent_id, agent_icon.as_deref())
         {
@@ -244,16 +257,28 @@ pub(crate) fn create_agent_session_params_for_project(
                 .unwrap_or_else(|| provider.id().to_string());
             if !crate::accounts::launch::uses_own_login(&base, provider) {
                 let registry = crate::accounts::store::read(db)?;
+                let skip_workspace = crate::workspaces::session_skips_workspace_context(
+                    project,
+                    Some(&runtime_settings),
+                );
                 let workspace_account = match provider {
-                    crate::accounts::model::Provider::Claude => {
-                        crate::workspaces::project_claude_account_id(db, project)?.filter(|id| {
-                            registry
-                                .accounts
-                                .iter()
-                                .any(|a| a.id == *id && a.provider == provider && !a.user_disabled)
-                        })
+                    crate::accounts::model::Provider::Claude if !skip_workspace => {
+                        let allowed = crate::workspaces::project_claude_account_ids(db, project)?;
+                        if allowed.is_empty() {
+                            None
+                        } else {
+                            let snapshot = crate::accounts::runtime::current_snapshot();
+                            let model = crate::accounts::default_account::launch_model(
+                                provider,
+                                Some(&base),
+                            );
+                            crate::accounts::default_account::quick_launch_account_from_pool(
+                                &registry, &snapshot, provider, &model, &allowed,
+                            )
+                            .map(|a| a.id.clone())
+                        }
                     }
-                    crate::accounts::model::Provider::Codex => None,
+                    _ => None,
                 };
                 if workspace_account.is_none() {
                     if let Some(hub) =
@@ -331,12 +356,18 @@ pub(crate) fn create_agent_session_params_for_project(
                 .entry("accountBaseCommand")
                 .or_insert(json!(command));
         }
-        let workspace_account_id = crate::workspaces::project_claude_account_id(db, project)?;
+        let workspace_account_ids =
+            if crate::workspaces::session_skips_workspace_context(project, Some(&runtime_settings))
+            {
+                Vec::new()
+            } else {
+                crate::workspaces::project_claude_account_ids(db, project)?
+            };
         crate::accounts::launch::apply_new_session(
             db,
             &agent_id,
             agent_icon.as_deref(),
-            workspace_account_id.as_deref(),
+            &workspace_account_ids,
             &mut runtime_settings,
         )?
     };
@@ -428,7 +459,22 @@ pub(crate) fn create_agent_session_params_for_project(
         }
         _ => {
             let coordinator = session_is_coordinator(&runtime_settings);
-            let mut plan = build_session_launch_plan(
+            let acp_account_command = account_command.clone();
+            let workspace_note = if crate::workspaces::session_skips_workspace_context(
+                project,
+                Some(&runtime_settings),
+            ) {
+                None
+            } else {
+                crate::workspaces::project_workspace_info(db, project)
+                    .ok()
+                    .flatten()
+                    .map(|(workspace_id, workspace_name)| WorkspaceNoteContext {
+                        workspace_id,
+                        workspace_name,
+                    })
+            };
+            let mut plan = build_session_launch_plan_for_workspace(
                 AgentLaunchInput {
                     accept_all_mode: read_text_from_map(&agent_config, "acceptAllMode")
                         .or_else(|| read_text_from_map(&launch_settings, "acceptAllMode")),
@@ -447,6 +493,7 @@ pub(crate) fn create_agent_session_params_for_project(
                     icon: agent_icon.clone(),
                 },
                 coordinator,
+                workspace_note.as_ref(),
             );
             // Only the command this launch runs names the id; `agentCommand` stays the base that
             // resume, fork and account wrapping rebuild from. Pi's id is minted here; Empryo's names
@@ -668,6 +715,7 @@ pub(crate) fn create_agent_session_params_for_project(
                         == Some(false);
                 let use_acp = agentbox_provider.is_none()
                     && !runtime_acp_off
+                    && teleport.is_none()
                     && family.as_deref().is_some_and(|fam| {
                         crate::acp::supports_acp(fam)
                             && match explicit_acp {
@@ -679,33 +727,193 @@ pub(crate) fn create_agent_session_params_for_project(
                             }
                     });
                 if use_acp {
-                    if let Some(fam) = family.as_deref() {
+                    if let Some(raw_fam) = family.as_deref() {
+                        let fam = crate::acp::canonical_native_family(raw_fam).unwrap_or(raw_fam);
                         let base_cli_cmd = plan
                             .get("command")
                             .and_then(Value::as_str)
                             .map(str::to_string);
                         let resume_id = read_text_from_map(&runtime_settings, "agentSessionId");
-                        let accept_all_effective =
-                            match read_text_from_map(&agent_config, "acceptAllMode")
-                                .or_else(|| read_text_from_map(&launch_settings, "acceptAllMode"))
-                                .as_deref()
+                        let read_only_acp = read_only_family.is_some();
+                        let api_chat = is_gbot_api_chat(Some(&runtime_settings));
+                        let approval_level: Option<crate::acp::AcpApprovalLevel> =
+                            if read_only_acp || api_chat {
+                                Some(crate::acp::AcpApprovalLevel::Ask)
+                            } else if let Some(bot_id) = runtime_settings
+                                .get("gbot")
+                                .and_then(|g| g.get("botId"))
+                                .and_then(Value::as_str)
+                                .filter(|s| !s.trim().is_empty())
                             {
-                                Some("enabled" | "acceptAll") => true,
-                                Some("disabled") => false,
-                                _ => settings
-                                    .get("agentAcceptAllEnabled")
-                                    .and_then(Value::as_bool)
-                                    .unwrap_or(false),
+                                // Local GBot chat: read the configured approval directly from
+                                // Ghostex's server-side GBot DB record (never from client params).
+                                Some(match crate::gbots::read_bot(db, bot_id).ok().flatten() {
+                                    Some(bot) => match bot.approval.as_str() {
+                                        "edits" => crate::acp::AcpApprovalLevel::AutoEdits,
+                                        "auto" => crate::acp::AcpApprovalLevel::Auto,
+                                        "full" => crate::acp::AcpApprovalLevel::FullAccess,
+                                        _ => crate::acp::AcpApprovalLevel::Ask,
+                                    },
+                                    None => crate::acp::AcpApprovalLevel::Ask,
+                                })
+                            } else if let Some(remote_approval) = runtime_settings
+                                .get("gbotHome")
+                                .and_then(|g| g.get("approval"))
+                                .and_then(Value::as_str)
+                            {
+                                // Remote GBot chat opened by a paired computer (`Principal::Peer`;
+                                // `guard_create_session_params` strips `gbotHome` for non-user devices).
+                                Some(match remote_approval {
+                                    "edits" => crate::acp::AcpApprovalLevel::AutoEdits,
+                                    "auto" => crate::acp::AcpApprovalLevel::Auto,
+                                    "full" => crate::acp::AcpApprovalLevel::FullAccess,
+                                    _ => crate::acp::AcpApprovalLevel::Ask,
+                                })
+                            } else {
+                                crate::acp::approval::resolve_explicit_starting_level(
+                                    fam,
+                                    &runtime_settings,
+                                    &agent_config,
+                                    &launch_settings,
+                                    &settings,
+                                )
+                                .or_else(|| {
+                                    (fam == "claude" && super::mode_picker_off::mode_picker_off())
+                                        .then_some(crate::acp::AcpApprovalLevel::Auto)
+                                })
                             };
-                        let req_model = read_text(params, "agentModel");
-                        let req_effort = read_text(params, "agentEffort");
-                        let acp_cmd = crate::acp::spec::build_acp_host_launch_command(
+                        let pin_obj = runtime_settings
+                            .get(crate::agent_model_pins::SESSION_PIN_KEY)
+                            .and_then(Value::as_object);
+                        let (cmd_model, cmd_effort) = raw_owner_configured_command
+                            .as_deref()
+                            .map(|cmd| {
+                                crate::acp::spec::extract_safe_model_and_effort_from_command(
+                                    fam, cmd,
+                                )
+                            })
+                            .unwrap_or((None, None));
+                        let resolved_default =
+                            crate::agent_model_pins::resolve_launch_default(fam, Some(&settings));
+                        let non_placeholder = |value: Option<String>| {
+                            value.filter(|v| {
+                                !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(v)
+                            })
+                        };
+                        let req_model = non_placeholder(read_text(params, "agentModel"))
+                            .or_else(|| non_placeholder(cmd_model))
+                            .or_else(|| {
+                                non_placeholder(
+                                    pin_obj.and_then(|m| read_text_from_map(m, "model")),
+                                )
+                            })
+                            .or_else(|| resolved_default.as_ref().map(|p| p.model.clone()));
+                        let req_effort = read_text(params, "agentEffort")
+                            .or(cmd_effort)
+                            .or_else(|| pin_obj.and_then(|m| read_text_from_map(m, "effort")))
+                            .or_else(|| resolved_default.as_ref().and_then(|p| p.effort.clone()));
+                        if let Some(ref model) = req_model {
+                            if pin_obj
+                                .and_then(|m| read_text_from_map(m, "model"))
+                                .is_none()
+                            {
+                                let pin = crate::agent_model_pins::ModelPin {
+                                    model: model.clone(),
+                                    effort: req_effort.clone(),
+                                    ..Default::default()
+                                };
+                                runtime_settings.insert(
+                                    crate::agent_model_pins::SESSION_PIN_KEY.to_string(),
+                                    crate::agent_model_pins::session_marker(
+                                        crate::agent_model_pins::ORIGIN_DEFAULT,
+                                        Some(&pin),
+                                    ),
+                                );
+                            }
+                        }
+                        // Record any owner-configured flags/env/custom binary skipped by Non-CLI
+                        // mode so logs and Chat View both surface a visible one-line notice.
+                        // For GBot chats, only inspect the owner's agent config command (never
+                        // GBot's own synthesized `launchSettings.agentCommand` approval flags).
+                        let owner_notice_command = if is_gbot_chat(Some(&runtime_settings)) {
+                            read_text_from_map(&agent_config, "command")
+                        } else {
+                            raw_owner_configured_command.clone()
+                        };
+                        let ignored_owner_tokens = crate::acp::spec::ignored_owner_command_tokens(
+                            fam,
+                            owner_notice_command.as_deref(),
+                        );
+                        if !ignored_owner_tokens.is_empty() {
+                            let joined = ignored_owner_tokens.join(" ");
+                            eprintln!(
+                                "[Native] Ignoring extra flags/env in command string for {fam} ({agent_id}): {joined}"
+                            );
+                            crate::acp::channel::log(
+                                crate::logging::LogLevel::Warn,
+                                "acp.non_cli.ignored_command_tokens",
+                                json!({
+                                    "family": fam,
+                                    "agentId": agent_id,
+                                    "ignored": joined,
+                                }),
+                            );
+                            runtime_settings.insert(
+                                crate::acp::SESSION_NON_CLI_IGNORED_COMMAND_KEY.to_string(),
+                                json!(joined),
+                            );
+                        } else {
+                            runtime_settings
+                                .remove(crate::acp::SESSION_NON_CLI_IGNORED_COMMAND_KEY);
+                        }
+                        // Build Ghostex's server-side structured `AcpLaunchProfile` strictly from
+                        // Ghostex's own account state and settings (never parsing `agentCommand`).
+                        let account_wrapper =
+                            crate::acp::spec::account_wrapper_from_ghostex_account(
+                                fam,
+                                Some(&runtime_settings),
+                                acp_account_command.as_deref(),
+                            );
+                        let (append_system_prompt_file, developer_instructions) =
+                            super::acp_launch_note(
+                                fam,
+                                session_is_coordinator(&runtime_settings),
+                                thread_marked_handovers,
+                                workspace_note.as_ref(),
+                            );
+                        let hermes_profile = (fam == "hermes")
+                            .then(|| {
+                                crate::acp::hermes::resolve_hermes_profile_for_launch(
+                                    &launch_settings,
+                                    raw_owner_configured_command.as_deref(),
+                                )
+                            })
+                            .flatten();
+                        let acp_profile = crate::acp::spec::AcpLaunchProfile {
+                            account_wrapper,
+                            hub_id: crate::accounts::hub::launch::picked_hub(&runtime_settings),
+                            connector_envs: crate::connectors::project_cli_env_for_acp(db, project),
+                            append_system_prompt_file,
+                            developer_instructions,
+                            gbot_chat: is_gbot_chat(Some(&runtime_settings)),
+                            gbot_api_chat: api_chat,
+                            gbot_computer_use_off: super::gbot_computer_use(Some(
+                                &runtime_settings,
+                            )) == Some(false),
+                            lean_worker: super::is_lean_worker(Some(&runtime_settings)),
+                            hermes_profile,
+                        };
+                        let acp_cmd = crate::acp::spec::build_acp_host_launch_command_with_profile(
                             fam,
                             base_cli_cmd.as_deref(),
                             resume_id.as_deref(),
-                            accept_all_effective,
+                            approval_level,
+                            &[],
                             req_model.as_deref(),
                             req_effort.as_deref(),
+                            false,
+                            read_only_acp,
+                            &acp_profile,
                         );
                         runtime_settings.insert(
                             crate::acp::SESSION_NON_CLI_ACTIVE_KEY.to_string(),
@@ -715,6 +923,14 @@ pub(crate) fn create_agent_session_params_for_project(
                             .insert(crate::acp::SESSION_ACP_ACTIVE_KEY.to_string(), json!(true));
                         runtime_settings
                             .insert(crate::acp::SESSION_ACP_FAMILY_KEY.to_string(), json!(fam));
+                        if let Some(level) = approval_level {
+                            runtime_settings.insert(
+                                crate::acp::SESSION_ACP_APPROVAL_LEVEL_KEY.to_string(),
+                                json!(level.as_str()),
+                            );
+                        } else {
+                            runtime_settings.remove(crate::acp::SESSION_ACP_APPROVAL_LEVEL_KEY);
+                        }
                         plan.insert(
                             "startupText".to_string(),
                             Value::String(as_atuin_ignored_shell_input(&acp_cmd)),
@@ -917,7 +1133,7 @@ fn empryo_cwd(
 /// The flags live in the session's saved base command, which resume, fork and account wrapping all rebuild from.
 /// Sven extended it to Empryo on 2026-10-06 (Empryo harness spec). Empryo's terminal app ignores launch flags, so the model goes into a session folder Ghostex seeds and launches with `--session`, and the effort is typed with `/effort` once Empryo is up; neither changes Empryo's default. A resume keeps the model (it reopens that tab), but Empryo 3.9.0-beta drops a tab's effort when it resumes it (seen 2026-10-06), so the effort lasts until the session restarts (session_chat_empryo_launch_selection.rs).
 /// Antigravity CLI joined on 2026-10-13 (user: port the launch flags after checking agy still accepts `--effort`): agy 1.2.14 takes `--model <id>` and `--effort low|medium|high|max` for that CLI session only.
-/// On 2026-11-01 the user approved every other agent whose installed CLI has the flags, so a coordinator on any agent can start threads on its own model and effort (server/src/coordinators/playbook.md): OMP 18.13.2 (`--model`, `--thinking`), Copilot 1.0.103 (`--model`, `--reasoning-effort`), Grok Build 1.0.70 (`--model`, `--reasoning-effort`) and Hermes Agent 0.22.5 (`--model`, `--reasoning`) take both; Cursor CLI 2026.10.22 (effort lives with each model) takes a model only. DeepSeek Harness 0.17.0 and OpenCode 2.1.4 (the build `with_opencode2` launches; 1.19.4's `-m` is gone from its terminal app, only `opencode run` takes one) have no interactive model flag and stay refused.
+/// On 2026-11-01 the user approved every other agent whose installed CLI has the flags, so a coordinator on any agent can start threads on its own model and effort (server/src/coordinators/playbook.md): OMP 18.13.2 (`--model`, `--thinking`), Copilot 1.0.103 (`--model`, `--reasoning-effort`), Grok Build 1.0.70 (`--model`, `--reasoning-effort`) and Hermes Agent 0.22.5 (`--model`, `--reasoning`) take both; Cursor CLI 2026.10.22 (effort lives with each model) takes a model only. DeepSeek Harness 0.17.0 and OpenCode 2.1.4 (the build `with_opencode2` launches; 1.19.4's `-m` is gone from its terminal app, only `opencode run` takes one) have no interactive model flag and stay refused, except an OpenCode coordinator and (since 2026-11-25, GitHub #747) a coordinator's OpenCode thread, whose model arrives as a `/model` line.
 /// SEE-ALSO: server/src/ghostex_cli/actions/create.rs (create-agent), server/src/ghostex_cli/board.rs and server/src/board_start_work.rs (board start-work).
 fn apply_requested_agent_model(
     project: &Value,
@@ -953,7 +1169,7 @@ fn apply_requested_agent_model(
         })
         .ok_or_else(|| {
             DomainStateError::bad_request(
-                "A launch model or effort can only be set for Claude, Codex, Pi, OMP, Copilot, Grok Build, Hermes Agent, Empryo and Antigravity CLI agents; Cursor CLI takes a model only, ZCode only a coordinator's model, and OpenCode only a coordinator's model and variant.",
+                "A launch model or effort can only be set for Claude, Codex, Pi, OMP, Copilot, Grok Build, Hermes Agent, Empryo and Antigravity agents; Cursor CLI takes a model only, ZCode only a coordinator's model, and OpenCode only a coordinator's or its thread's model and variant.",
             )
         })?;
     if effort.is_some() {
@@ -999,11 +1215,22 @@ fn apply_requested_agent_model(
         // OpenCode 2's terminal app has no launch model flag, so a coordinator create's model and
         // variant reach the session as a `/model provider/model [variant]` line the create flow
         // queues before the first message (`start_orchestrator_role`), which the OpenCode send
-        // path applies through OpenCode's server like the chat's model pill. A thread has no such
-        // delivery yet, so its model request stays refused rather than silently dropped.
-        if crate::coordinators::coordinator_create_request(params)?.is_none() {
+        // path applies through OpenCode's server like the chat's model pill.
+        // CDXC:Coordinators 2026-11-25 DECISION:
+        // GitHub #747: `coordinator start-thread --agent opencode --model provider/model
+        // [--effort <variant>]` was refused, so research threads started on OpenCode's saved
+        // default, which any click in a model picker changes. `start-thread` now queues the same
+        // `/model` line ahead of the brief (ghostex_cli/coordinator/threads.rs), applied with
+        // scope session, so OpenCode's saved default never changes. Other creates (create-agent,
+        // board start-work, automations) have no such delivery and stay refused.
+        let coordinator_thread = params
+            .get(super::codex_lean::COORDINATOR_THREAD_KEY)
+            .and_then(Value::as_bool)
+            == Some(true);
+        if !coordinator_thread && crate::coordinators::coordinator_create_request(params)?.is_none()
+        {
             return Err(DomainStateError::bad_request(
-                "An OpenCode thread keeps its configured model; only a coordinator's own model and variant can be set.",
+                "An OpenCode session keeps its configured model; only a coordinator's model and variant, or its thread's, can be set.",
             ));
         }
         let Some(model) = model.as_deref() else {
@@ -1171,21 +1398,23 @@ fn launch_effort_levels(family: &str) -> Option<(&'static str, &'static [&'stati
     }
 }
 
-/// A new Claude, Codex or Cursor session starts on the model the user last chose as the agent's
-/// default (CDXC:AgentProviders 2026-10-07 in agent_model_pins.rs). A model the create names, or
-/// one the configured command already pins, is this session's own choice and is never taught to
-/// the default; with no default known, or after the agent's settings changed outside Ghostex, the
-/// session runs the agent's own default and its first report becomes the remembered one.
+/// A new session starts on its explicit per-agent Settings choice (`agentDefaultModels`), else the
+/// model the user last chose in chat (`launch_default`), else the concrete newest default from the
+/// agent's reported model list (Opus for Claude, Sol for Codex, Neon for Antigravity, etc.). A
+/// model the create names, or one the configured command already pins, stays this session's own
+/// choice.
+#[allow(clippy::too_many_arguments)]
 fn pin_remembered_agent_model(
     agent_id: &str,
     agent_config: &Map<String, Value>,
     launch_settings: &Map<String, Value>,
+    settings: &Map<String, Value>,
     params: &Map<String, Value>,
     command: Option<String>,
     runtime_settings: &mut Map<String, Value>,
 ) -> Result<Option<String>, DomainStateError> {
     use crate::agent_model_pins::{
-        launch_default, pin_family, session_marker, ModelPin, ORIGIN_DEFAULT, ORIGIN_LEARN,
+        pin_family, resolve_launch_default, session_marker, ModelPin, ORIGIN_DEFAULT, ORIGIN_LEARN,
         ORIGIN_SESSION, SESSION_PIN_KEY,
     };
     let Some(family) =
@@ -1214,7 +1443,7 @@ fn pin_remembered_agent_model(
         );
         return Ok(command);
     }
-    let pinned = launch_default(family).and_then(|pin| {
+    let pinned = resolve_launch_default(family, Some(settings)).and_then(|pin| {
         let effort = pin.effort.as_deref().filter(|_| family != "cursor");
         with_agent_model_options(&base, family, Some(&pin.model), effort)
             .ok()
@@ -1323,7 +1552,7 @@ pub(crate) fn normalize_agent_session_title_name(value: Option<&str>) -> Option<
 pub(crate) fn default_agent_session_title_name(agent_id: &str) -> Option<&'static str> {
     match agent_id.trim().to_ascii_lowercase().as_str() {
         "amp" => Some("Amp CLI"),
-        "antigravity" => Some("Antigravity CLI"),
+        "antigravity" => Some("Antigravity"),
         "claude" => Some("Claude"),
         "codebuddy" => Some("CodeBuddy"),
         "codex" => Some("Codex"),
@@ -1368,17 +1597,28 @@ pub(crate) fn build_agent_launch_plan(input: AgentLaunchInput) -> Value {
 /// [`build_agent_launch_plan`] for a session that may be a `coordinator`
 /// ([`session_is_coordinator`]), which takes no extension lines in its launch note.
 pub(crate) fn build_session_launch_plan(input: AgentLaunchInput, coordinator: bool) -> Value {
+    build_session_launch_plan_for_workspace(input, coordinator, None)
+}
+
+/// [`build_session_launch_plan`] with optional workspace context so per-workspace instructions
+/// are attached to the launch command.
+pub(crate) fn build_session_launch_plan_for_workspace(
+    input: AgentLaunchInput,
+    coordinator: bool,
+    workspace: Option<&WorkspaceNoteContext>,
+) -> Value {
     let base_command = input
         .command
         .or_else(|| default_agent_command(&input.agent_id).map(str::to_string))
         .unwrap_or_default();
-    let launch_command = resolve_session_launch_command(
+    let launch_command = resolve_session_launch_command_for_workspace(
         &input.agent_id,
         &base_command,
         input.accept_all_mode.as_deref(),
         input.global_accept_all_enabled,
         input.icon.as_deref(),
         coordinator,
+        workspace,
     );
     let command = if input.agent_id == "cursor" {
         input
@@ -1495,9 +1735,31 @@ pub(crate) fn resolve_session_launch_command(
     icon: Option<&str>,
     coordinator: bool,
 ) -> String {
+    resolve_session_launch_command_for_workspace(
+        agent_id,
+        command,
+        accept_all_mode,
+        global_accept_all_enabled,
+        icon,
+        coordinator,
+        None,
+    )
+}
+
+/// [`resolve_session_launch_command`] with optional workspace context for workspace instructions.
+pub(crate) fn resolve_session_launch_command_for_workspace(
+    agent_id: &str,
+    command: &str,
+    accept_all_mode: Option<&str>,
+    global_accept_all_enabled: bool,
+    icon: Option<&str>,
+    coordinator: bool,
+    workspace: Option<&WorkspaceNoteContext>,
+) -> String {
+    let is_auto = accept_all_mode == Some("auto");
     let enabled = match accept_all_mode {
         Some("enabled") => true,
-        Some("disabled") => false,
+        Some("disabled") | Some("auto") => false,
         _ => global_accept_all_enabled,
     };
     let command = crate::agent_cli::opencode::with_opencode2(agent_id, icon, command);
@@ -1506,11 +1768,16 @@ pub(crate) fn resolve_session_launch_command(
         agent_id,
         enabled,
         icon,
-        accept_all_mode == Some("disabled"),
+        accept_all_mode == Some("disabled") || is_auto,
     );
+    let command = if is_auto {
+        apply_auto_permission_mode(&command, agent_id, icon)
+    } else {
+        command
+    };
     let command = super::mode_picker_off::with_auto_mode(agent_id, icon, enabled, &command);
     let command = with_codex_no_daemon(agent_id, icon, &command);
-    let command = with_launch_notes(agent_id, icon, &command, coordinator);
+    let command = with_launch_notes_for_workspace(agent_id, icon, &command, coordinator, workspace);
     let command = crate::connectors::with_connector_tools(agent_id, icon, &command);
     // Last, so the steps above still read the program's own name (agent_cli/launch_path.rs).
     let command = crate::agent_cli::launch_path::with_reachable_program(&command);
@@ -1527,25 +1794,19 @@ fn native_cli_command(command: &str) -> String {
     if cfg!(test) {
         return command.to_string();
     }
-    let trimmed = command.trim_start();
-    let binary = trimmed.split_whitespace().next().unwrap_or_default();
-    if crate::agent_cli::catalog::CATALOG
-        .iter()
-        .any(|agent| agent.binary == binary)
-    {
-        if let Some(path) = crate::platform::live_path::find(binary, &[]) {
-            if let Some(extension @ ("cmd" | "bat")) =
-                path.extension().and_then(|extension| extension.to_str())
-            {
-                return format!(
-                    "{}{binary}.{extension}{}",
-                    &command[..command.len() - trimmed.len()],
-                    &trimmed[binary.len()..]
-                );
-            }
+    let command = crate::agent_cli::launch_path::rewrite_program(command, |binary| {
+        if !crate::agent_cli::catalog::CATALOG
+            .iter()
+            .any(|agent| agent.binary == binary)
+        {
+            return None;
         }
-    }
-    command.to_string()
+        let path = crate::platform::live_path::find(binary, &[])?;
+        let extension = path.extension().and_then(|extension| extension.to_str())?;
+        (extension.eq_ignore_ascii_case("cmd") || extension.eq_ignore_ascii_case("bat"))
+            .then(|| format!("{binary}.{extension}"))
+    });
+    crate::agent_cli::launch_path::with_batch_native_args(&command)
 }
 
 /// Validate supplied launch options before an empty or non-string value can be mistaken for an omitted option.
@@ -1650,7 +1911,7 @@ mod launch_choice_tests {
         );
         assert!(launch("opencode", Some("opencode/big-pickle"), None)
             .unwrap_err()
-            .contains("An OpenCode thread keeps its configured model"));
+            .contains("An OpenCode session keeps its configured model"));
         assert!(launch("dsh", Some("deepseek-v4"), None)
             .unwrap_err()
             .contains("Cursor CLI takes a model only"));

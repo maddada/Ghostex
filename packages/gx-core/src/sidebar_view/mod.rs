@@ -138,10 +138,11 @@ pub use tags::{
 pub use view::{
     rename_shake_key, CollectionView, CoordinatorBadge, CoordinatorBadgeTone, DelayedSendView,
     EmptyState, FoldedStatus, FoldedWorktree, GroupActionTarget, GroupCore, GroupSummary,
-    GroupView, LabelDeadline, MachineChip, MachineNotice, MachineSummary, MachineTabView, NeedsYou,
-    OrderItem, OrderKind, ProjectContextView, ProjectCopy, RemoteMachineView, RowNesting,
-    RowWorktree, SectionView, SessionMenuFacts, SessionRow, SessionTiming, SessionView,
-    ShowAllProjectsRow, SidebarView, SpaceView, ThreadTally, WorktreeView, RENAME_SHAKE_FRESH_MS,
+    GroupView, LabelDeadline, MachineChip, MachineFold, MachineNotice, MachineSummary,
+    MachineTabView, NeedsYou, OrderItem, OrderKind, ProjectContextView, ProjectCopy,
+    RemoteMachineView, RowNesting, RowWorktree, SectionView, SessionMenuFacts, SessionRow,
+    SessionTiming, SessionView, ShowAllProjectsRow, SidebarView, SpaceView, ThreadTally,
+    WorktreeView, RENAME_SHAKE_FRESH_MS,
 };
 pub use work::{
     CleanupKept, SessionWork, WorkGithubIssue, WorkLinearIssue, WorkLinearProject, WorkPullRequest,

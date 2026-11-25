@@ -31,6 +31,9 @@ immediately, before the transcript can confirm anything.
 #[path = "session_chat_rewind_codex.rs"]
 mod codex;
 
+#[path = "session_chat_rewind_native.rs"]
+mod native;
+
 #[cfg(test)]
 #[path = "session_chat_rewind_tests.rs"]
 mod tests;
@@ -1314,7 +1317,7 @@ async fn rewind_session_chat(
     }
     let target = resolve_session_chat_send_target(state, params, "rewindSessionChat")?;
     let agent = crate::session_chat_follower::session_chat_agent_for_session(&target.session);
-    if agent.as_deref() == Some("opencode") {
+    if agent.as_deref() == Some("opencode") && !crate::acp::session_is_acp(&target.session) {
         let id = crate::session_chat_opencode::session_id(&target.session)?;
         let result = tokio::task::spawn_blocking(move || {
             crate::session_chat_opencode::rewind(&id, &message_id)
@@ -1327,6 +1330,15 @@ async fn rewind_session_chat(
             &target.session_id,
         );
         return Ok(result);
+    }
+    // CDXC:SessionChat 2026-11-24 WHY: Claude Code and Codex rewinds type into the agent's own terminal dialog, and a Native chat's pane runs `ghostex acp-host` instead (driving it timed out with "Codex is not showing its input box"), so a Native chat asks its host instead (session_chat_rewind_native.rs). Pi Native rewinds through Pi RPC's `fork { entryId }`.
+    if crate::acp::session_is_acp(&target.session) {
+        let native_family = crate::acp::resolve_native_family_for_session(&target.session);
+        if let Some(native_agent @ ("codex" | "claude" | "openclaude" | "opencode" | "pi")) =
+            native_family.as_deref().or(agent.as_deref())
+        {
+            return native::rewind(state, target, &message_id, native_agent).await;
+        }
     }
     if agent.as_deref() == Some("codex") {
         return codex::rewind(state, target, &message_id).await;

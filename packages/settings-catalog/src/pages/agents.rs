@@ -1,5 +1,5 @@
 use crate::data::*;
-use crate::rows::{Page, Section, row, section};
+use crate::rows::{row, section, Page, Section};
 
 pub(crate) fn page() -> Page {
     Page {
@@ -24,7 +24,7 @@ pub(crate) fn config() -> Section {
             row("defaultPromptAgent", "Default Prompt Agent", "Choose the agent used by Git helper prompts, project board Start Work, and the default worktree first-prompt selection."),
             row("titleGenerationAgent", "Title Generation Agent", "Choose the headless agent Ghostex uses for first-prompt session title generation. Hover the info icon to see the exact command Ghostex sends.").options(SESSION_TITLE_GENERATION_AGENT_OPTIONS),
             row("customTitleCommand", "Custom Title Command", "Run this command with the title prompt on stdin. It should print only the title."),
-            row("acceptAll", "Agent approvals", "Choose whether supported agents ask before editing files or running commands. Per-agent settings can override this default."),
+            row("acceptAll", "Agent approvals", "Choose whether supported agents ask before editing files or running commands. Full permissions: the agent won't ask for permission before edits or commands. At your own risk. Per-agent settings can override this default."),
             row("trustProjectFoldersAutomatically", "Trust project folders automatically", "Mark each project and worktree folder as trusted before its agent starts, so no session stops at a \"Do you trust this folder?\" question. Off by default: the chat shows that question as a card with Trust folder and Don't trust. Turning it on asks for Touch ID, Windows Hello or your password on this computer."),
             // CDXC:Settings 2026-11-11 DECISION in apps/desktop settings_modal/model.rs (`RailTier`, Q2511): these two moved here from Chat; they set what an agent is told and given when it starts, not how the chat looks. Claude task list still shows only while the Session details panel is on (its `settingKeys`).
             row("agentGhostexNote", "Tell agents about Ghostex", "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show Live pages, Ghostex forms and visuals in the chat, run other agents and coordinators, explain or change its own settings, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. It also asks them to link the files, PRs and issues they mention and to keep the images they show you in Ghostex's image folder. Applies to sessions started or resumed after you change it."),
@@ -71,7 +71,7 @@ pub(crate) fn agent_list() -> Section {
         "agentList",
         "Agents",
         vec![
-            row("agentSwitches", "Turn agents on or off", "Turn on the agents you use; they appear in the New session menu, the sidebar's Select Agent and on your phone. Drag to set their order. Agents you turned off but used before stay dimmed in the list; agents you never used wait under More agents. Expand an agent that is on to edit its command, permission mode and default view; a turned-off agent's row keeps only its CLI install and update, Duplicate and, for a custom agent, Delete.").options_of(DEFAULT_SIDEBAR_AGENTS, "name", "name"),
+            row("agentSwitches", "Turn agents on or off", "Turn on the agents you use; they appear in a new chat's agent list, a project header's chat menu, and on your phone. Drag to set their order. Agents you turned off but used before stay dimmed in the list; agents you never used wait under More agents. Expand an agent that is on to edit its command, permission mode and default view; a turned-off agent's row keeps only its CLI install and update, Duplicate and, for a custom agent, Delete.").options_of(DEFAULT_SIDEBAR_AGENTS, "name", "name"),
             row("addCustomAgent", "Add custom agent", "Add your own command, or a variant of a built-in agent with other flags. Works like gives it that agent's logo, chat view, resume hook and permission handling. Custom agents can be turned off or deleted."),
             // Claude Code's row panel, its Context group (apps/desktop settings_modal/tabs/agents/claude_context.rs).
             row("claudeIdleCompaction", "Compact idle chats before the prompt cache expires", "Claude Code compacts a long chat that has been idle for about 54 minutes, just before its 1-hour prompt cache expires, so your next message doesn't re-read the whole chat uncached. Runs only on a 1-hour cache. Auto Sleep waits for it before sleeping a qualifying Claude chat. In Claude Code's row. Applies to Claude sessions started or resumed after you change it."),
@@ -81,7 +81,8 @@ pub(crate) fn agent_list() -> Section {
             row("claudeOneHourPromptCache", "Use a 1-hour prompt cache", "Ask for Claude's 1-hour prompt cache on an API key, Bedrock, Vertex or Foundry, which otherwise get 5 minutes, so idle compaction runs there too. 1-hour cache writes cost more than 5-minute ones. A subscription already gets 1 hour."),
             // OMP's and Pi's row panels, and every custom agent that works like one of them (apps/desktop settings_modal/tabs/agents/pi_messages.rs).
             row("piMessagesWhileWorking", "Messages sent while it works", "What a message you send to a working OMP or Pi does. Steer hands it over at the agent's next step, as Enter does in its own terminal. After yield waits until it finishes its turn. In the row of OMP, Pi and every agent that works like them; one setting for all of them.").options(PI_MESSAGES_WHILE_WORKING_OPTIONS),
-            row("agentSessionMode", "Session mode", "Choose Agent CLI (interactive terminal, instant switching between Chat and Terminal) or Non-CLI (structured host without terminal scraping; switching to Terminal asks first and interrupts any active turn). Applies to sessions started or resumed after you change it."),
+            row("agentSessionMode", "Session mode", "Choose Native (faster, more stable structured host; default on new Chat-first installs; switching to Terminal-based asks first and interrupts any active turn) or Terminal-based (legacy interactive terminal, will be removed in a future release). Applies to sessions started or resumed after you change it."),
+            row("agentDefaultModels", "Default model", "Choose the model new chats and threads of this agent start on. Overrides the last model you picked in chat."),
             row("preferredAgentInterfaceOverrides", "Default view per agent", "Agents that support Ghostex's Chat View are marked with a chat bubble and can open in Chat or Terminal regardless of the global Default Agent View. Inherit keeps following that global setting."),
         ],
     )

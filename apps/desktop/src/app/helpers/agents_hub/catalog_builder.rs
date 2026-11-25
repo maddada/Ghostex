@@ -440,11 +440,11 @@ pub(crate) fn gpui_agents_hub_catalog_build() -> GpuiAgentsHubCatalogBuild {
         (
             "skill-antigravity-cli",
             builder.home_path(&[".gemini", "antigravity-cli", "skills"]),
-            "Antigravity CLI global skill installed under ~/.gemini/antigravity-cli/skills.",
-            "Antigravity CLI system skill installed under ~/.gemini/antigravity-cli/skills.",
+            "Antigravity global skill installed under ~/.gemini/antigravity-cli/skills.",
+            "Antigravity system skill installed under ~/.gemini/antigravity-cli/skills.",
             vec![gpui_agents_hub_profile(
                 "antigravity-cli",
-                "Antigravity CLI skills",
+                "Antigravity (agy) skills",
                 builder.home_path(&[".gemini", "antigravity-cli"]),
                 builder.home_path(&[".gemini", "antigravity-cli", "skills"]),
                 None,

@@ -71,7 +71,7 @@ impl NativeChatView {
             })
             // Hovering still reads the terminal tail so the glyph's readiness tint stays current.
             .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
-                if *hovered {
+                if *hovered && this.snapshot["nonCliMode"] != true {
                     this.invoke(json!({"type":"terminalTailHover"}), cx);
                 }
             }))

@@ -164,6 +164,7 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.board.inbox_focus = None;
         self.ensure_input(window, cx);
         // An explicit request: it takes the keyboard even from the find bar or a note, which the
         // queued `focus_requested` path leaves alone.
@@ -171,6 +172,35 @@ impl NativeChatView {
             gpui::Focusable::focus_handle(input.read(cx), cx).focus(window, cx);
         }
         cx.notify();
+    }
+
+    /// Focus Session Inbox hotkey (Cmd+Shift+I / Ctrl+Shift+I by default): expands the Inbox if
+    /// folded, moves keyboard focus to its rows, and highlights the first row for triage.
+    pub(crate) fn focus_inbox_from_hotkey(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let dock = &self.snapshot["workDock"];
+        let has_rows = dock["rows"].as_array().is_some_and(|rows| !rows.is_empty());
+        if !has_rows {
+            return false;
+        }
+        if dock["hidden"] == true {
+            self.invoke(serde_json::json!({"type": "showWorkDock"}), cx);
+        }
+        if self.board.dock_error_active {
+            self.board.dock_peek_over_error = true;
+        }
+        let handle = self
+            .board
+            .inbox_focus_handle
+            .get_or_insert_with(|| cx.focus_handle())
+            .clone();
+        self.board.inbox_focus = Some(0);
+        handle.focus(window, cx);
+        cx.notify();
+        true
     }
 
     /// The Stash Prompt hotkey: what the More actions row does. Answers false where the chat box

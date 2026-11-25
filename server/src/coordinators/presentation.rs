@@ -106,6 +106,7 @@ pub fn insert_coordinator_presentation_payload(
     let generated_at = now_iso();
     let chief = crate::chief::read_record(db).map(|record| record.key());
     let mains = super::main_coordinator::main_coordinators(db, repository);
+    let unsnoozed_asks = super::work::open_unsnoozed_ask_counts(db);
     let Some(sessions) = snapshot.get_mut("sessions").and_then(Value::as_array_mut) else {
         return;
     };
@@ -128,9 +129,32 @@ pub fn insert_coordinator_presentation_payload(
         );
         if is_coordinator {
             super::remote_threads::insert_coordinator_remote_threads(session, db, &key);
+            add_coordinator_unsnoozed_asks(session, unsnoozed_asks.get(&key).copied().unwrap_or(0));
             set_session_coordinator_turn_needs_you(session, db, &key);
         }
     }
+}
+
+/// Adds a running coordinator's unsnoozed open work-item asks to `pendingQuestionCount` so every
+/// client (desktop, web, mobile) shows the pink needs-you dot only for unsnoozed asks.
+fn add_coordinator_unsnoozed_asks(session: &mut Value, unsnoozed_asks: usize) {
+    if unsnoozed_asks == 0 {
+        return;
+    }
+    if session.get("lifecycleState").and_then(Value::as_str) != Some("running") {
+        return;
+    }
+    let Some(object) = session.as_object_mut() else {
+        return;
+    };
+    let current = object
+        .get("pendingQuestionCount")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    object.insert(
+        "pendingQuestionCount".to_string(),
+        Value::from(current.saturating_add(unsnoozed_asks as u64)),
+    );
 }
 
 /// Whether the coordinator turn behind `attention` (a finished attention, timed by its
@@ -210,6 +234,10 @@ pub fn insert_coordinator_session_projection(
     if is_coordinator {
         let key = (project_id, session_id);
         super::remote_threads::insert_coordinator_remote_threads(presentation_session, db, &key);
+        add_coordinator_unsnoozed_asks(
+            presentation_session,
+            super::work::open_unsnoozed_ask_count(db, &key),
+        );
         set_session_coordinator_turn_needs_you(presentation_session, db, &key);
     }
 }

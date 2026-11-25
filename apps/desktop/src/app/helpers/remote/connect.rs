@@ -69,6 +69,7 @@ pub(crate) fn gpui_connect_remote_gxserver_platform(
         serde_json::json!({
             "installApproved": install_approved,
             "machineId": config.remote_machine_id,
+            "reinstall": config.reinstall_package,
         }),
     );
     let started = std::time::Instant::now();
@@ -181,7 +182,7 @@ pub(crate) fn gpui_connect_remote_gxserver_platform_inner(
     daemon's own token, never installs or updates, and is marked as this computer, which the
     sidebar and Settings say.
     */
-    let (this_computer, local_instance_seen) = gpui_remote_reaches_this_computer(&config);
+    let (mut this_computer, local_instance_seen) = gpui_remote_reaches_this_computer(&config);
     let mut token_result = if this_computer {
         match read_gpui_gxserver_auth_token() {
             Ok(token) => GpuiRemoteProcessResult {
@@ -236,6 +237,31 @@ pub(crate) fn gpui_connect_remote_gxserver_platform_inner(
                     GPUI_REMOTE_GXSERVER_CONNECT_TIMEOUT,
                 );
                 execution_target = target;
+                if !this_computer
+                    && config.reinstall_package
+                    && matches!(
+                        execution_target,
+                        GpuiRemoteExecutionTarget::WindowsWsl { .. }
+                    )
+                    && local_instance_seen.is_some()
+                {
+                    let remote = gpui_remote_identity_instance(
+                        gpui_run_remote_ssh_in_execution_target(
+                            &config,
+                            &execution_target,
+                            gpui_remote_identity_read_command(),
+                            GPUI_REMOTE_GXSERVER_CONNECT_TIMEOUT,
+                        )
+                        .stdout
+                        .as_str(),
+                    );
+                    this_computer =
+                        gpui_remote_is_this_computer(remote.as_ref(), local_instance_seen.as_ref())
+                            || gpui_remote_is_this_computer(
+                                remote.as_ref(),
+                                gpui_local_gxserver_instance().as_ref(),
+                            );
+                }
             }
             Ok(GpuiRemoteExecutionTarget::PosixHost) => {}
             Err(GpuiRemoteExecutionTargetProbeError::Ssh(probe_result)) => {
@@ -266,9 +292,25 @@ pub(crate) fn gpui_connect_remote_gxserver_platform_inner(
             }
         }
     }
-    let installed_managed_package_update = (!this_computer && token_result.exit_code == 0)
-        .then(|| gpui_remote_managed_gxserver_package_update(&config, &execution_target))
-        .flatten();
+    if this_computer && config.reinstall_package {
+        return GpuiRemoteGxserverConnectResult::without_connection(
+            GpuiRemoteGxserverConnectState::Unsupported,
+            "This is the computer you're on. Its gxserver is the one this app runs, so it is not updated from here.",
+        );
+    }
+    let installed_managed_package_update = if !this_computer
+        && (token_result.exit_code == 0
+            || (config.reinstall_package && matches!(token_result.exit_code, 126 | 127)))
+    {
+        match gpui_remote_managed_gxserver_package_update(&config, &execution_target) {
+            Ok(update) => update,
+            // Nothing is installed yet: fall through to the install approval flow instead of reporting an unsupported update.
+            Err(_) if token_result.exit_code == 127 => None,
+            Err(failure) => return failure,
+        }
+    } else {
+        None
+    };
     if (token_result.exit_code == 127 && install_approved)
         || installed_managed_package_update.is_some()
     {
@@ -1129,7 +1171,7 @@ pub(crate) fn gpui_remote_managed_gxserver_build_identity_command() -> &'static 
         "*) case \"${XDG_DATA_HOME:-}\" in /*) GHOSTEX_REMOTE_DATA_DIR=\"${XDG_DATA_HOME%/}/ghostex\";; *) GHOSTEX_REMOTE_DATA_DIR=\"$HOME/.local/share/ghostex\";; esac;; esac; ",
         "GHOSTEX_REMOTE_IDENTITY_FILE=\"$GHOSTEX_REMOTE_DATA_DIR/gxserver/package/build-identity.json\"; ",
         "if [ ! -r \"$GHOSTEX_REMOTE_IDENTITY_FILE\" ] && [ -r \"$HOME/.ghostex/gxserver/package/build-identity.json\" ]; then GHOSTEX_REMOTE_IDENTITY_FILE=\"$HOME/.ghostex/gxserver/package/build-identity.json\"; fi; ",
-        "if [ ! -r \"$GHOSTEX_REMOTE_IDENTITY_FILE\" ]; then exit 3; fi; ",
+        "if [ ! -r \"$GHOSTEX_REMOTE_IDENTITY_FILE\" ]; then if [ -x \"/Applications/Ghostex.app/Contents/Resources/Web/gxserver/bin/gxserver\" ] || [ -x \"/opt/ghostex/gxserver/bin/gxserver\" ] || [ -x \"$GHOSTEX_REMOTE_DATA_DIR/appimage/gxserver/bin/gxserver\" ]; then printf '__GHOSTEX_REMOTE_APP_OWNED__\\n'; fi; exit 3; fi; ",
         "printf '__GHOSTEX_REMOTE_BUILD_IDENTITY_START__\\n'; ",
         "cat \"$GHOSTEX_REMOTE_IDENTITY_FILE\"; ",
         "printf '\\n__GHOSTEX_REMOTE_BUILD_IDENTITY_END__\\n'; ",

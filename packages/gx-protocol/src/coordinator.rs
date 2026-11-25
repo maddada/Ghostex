@@ -50,11 +50,10 @@ pub fn coordinator_launch_takes_effort(family: &str) -> bool {
     coordinator_launch_takes_model(family) && !matches!(family, "cursor" | "zcode")
 }
 
-/// The label of the first Model row of a family whose new coordinator can also keep the agent's
-/// own configured model (no value, no effort): OpenCode, whose lineup marks no default and runs
-/// hundreds of models across providers.
-pub fn coordinator_default_model_label(family: &str) -> Option<&'static str> {
-    (family == "opencode").then_some("OpenCode's default")
+/// Kept for API compatibility; returns `None` because coordinator model pickers always show
+/// concrete model names rather than a generic "default" row.
+pub fn coordinator_default_model_label(_family: &str) -> Option<&'static str> {
+    None
 }
 
 /// A Model row's label in a New Coordinator form: OpenCode's lineup lists the same model under

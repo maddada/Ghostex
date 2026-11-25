@@ -68,6 +68,8 @@ pub struct SidebarRevealPlan {
     pub collapsed_owner_group: Option<String>,
     /// The folded coordinators above the row, by sidebar row id.
     pub collapsed_coordinators: Vec<String>,
+    /// Main Hub's per-computer fold hiding this row (Ask Ghostex AI or Autopilot supervisor).
+    pub collapsed_machine_fold: Option<String>,
     /// The group, its collection or its Space is hidden and Show Hidden is off.
     pub show_hidden: bool,
     /// The ticked tag filters leave the row out.
@@ -135,6 +137,9 @@ impl SidebarRevealPlan {
             intents.push(SidebarUiIntent::ToggleCoordinatorCollapsed {
                 sidebar_session_id: sidebar_session_id.clone(),
             });
+        }
+        if let Some(key) = &self.collapsed_machine_fold {
+            intents.push(SidebarUiIntent::ToggleMachineFold { key: key.clone() });
         }
         intents
     }
@@ -210,6 +215,7 @@ pub fn reveal_plan(
             .filter(|owner| inputs.ui.collapse.collapsed_groups.contains(owner))
             .or_else(|| folded_gbots_fold(located, &found.group_id, inputs)),
         collapsed_coordinators: found.folded_by.clone(),
+        collapsed_machine_fold: found.folded_machine_key.clone(),
         collapsed_collection_storage_id: collection_storage_id.clone().filter(|storage_id| {
             inputs
                 .ui
@@ -406,6 +412,8 @@ struct Located {
     on_cloud_box: bool,
     /// The folded coordinators above the row, nearest first.
     folded_by: Vec<String>,
+    /// Main Hub's per-computer fold hiding this row, when folded.
+    folded_machine_key: Option<String>,
 }
 
 fn locate(
@@ -424,8 +432,14 @@ fn locate(
     // A thread under a folded coordinator: its ancestors up the tree, and the top one, whose
     // heading is the thread's.
     let mut folded_by = Vec::new();
+    let mut folded_machine_key = None;
     let mut heading_row = sidebar_session_id;
     if let Some(index) = index.filter(|index| sessions[*index].nesting.folded) {
+        if let Some(super::view::MachineFold::Child { fold_key, .. }) =
+            &sessions[index].machine_fold
+        {
+            folded_machine_key = Some(fold_key.clone());
+        }
         let mut depth = sessions[index].nesting.depth;
         for ancestor in sessions[..index].iter().rev() {
             if ancestor.nesting.depth >= depth {
@@ -436,6 +450,11 @@ fn locate(
                 folded_by.push(ancestor.row.sidebar_session_id.clone());
             }
             if depth == 0 {
+                if let Some(super::view::MachineFold::Child { fold_key, .. }) =
+                    &ancestor.machine_fold
+                {
+                    folded_machine_key = Some(fold_key.clone());
+                }
                 heading_row = &ancestor.row.sidebar_session_id;
                 break;
             }
@@ -469,6 +488,7 @@ fn locate(
         effective_tag: row.and_then(|row| row.effective_tag.clone()),
         on_cloud_box: row.is_some_and(|row| row.cloud_box.is_some()),
         folded_by,
+        folded_machine_key,
     })
 }
 

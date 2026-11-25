@@ -116,6 +116,11 @@ pub const GXSERVER_CAPABILITIES: &[&str] = &[
     // (`/api/registerEasyConnectClientKey`, CDXC:RemotePairing 2026-11-10 in
     // remote_access/paired_devices.rs); older daemons have no such route.
     "easyConnectClientKeys",
+    // Terminal -> Native switching with mid-reply queueing and cancellation
+    // (`/api/switchSessionCliToAcp`, CDXC:AgentProviders 2026-11-24).
+    "nativeModeSwitch",
+    // Built-in tunnel sharing for Live pages and localhost ports (`/api/sharing`, CDXC:Sharing 2026-11-24).
+    "shareLinks",
 ];
 
 pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
@@ -204,4 +209,7 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0083_chat_message_numbers",
     "0084_lead_links",
     "0085_session_handovers",
+    "0086_notification_feed_seen_at",
+    "0087_session_agent_restarts",
+    "0088_coordinator_thread_notes",
 ];

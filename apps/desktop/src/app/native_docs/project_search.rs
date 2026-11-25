@@ -288,11 +288,19 @@ pub(crate) fn claims_hotkey(action_id: &str) -> bool {
 
 /// `claims_hotkey` with the configured chord of each action looked up through `key_of`.
 fn claims_hotkey_with(action_id: &str, key_of: impl Fn(&str) -> Option<String>) -> bool {
-    const SEARCH: &str = "searchProjectFiles";
-    if action_id == SEARCH {
+    claims_files_hotkey_with("searchProjectFiles", action_id, key_of)
+}
+
+/// Whether `action_id` is `target` or shares its configured chord while Files has focus.
+fn claims_files_hotkey_with(
+    target: &str,
+    action_id: &str,
+    key_of: impl Fn(&str) -> Option<String>,
+) -> bool {
+    if action_id == target {
         return true;
     }
-    let Some(chord) = key_of(SEARCH) else {
+    let Some(chord) = key_of(target) else {
         return false;
     };
     key_of(action_id).is_some_and(|other| {
@@ -302,8 +310,9 @@ fn claims_hotkey_with(action_id: &str, key_of: impl Fn(&str) -> Option<String>) 
 }
 
 impl GhostexGpuiApp {
-    /// The Files roots' answer to a configured hotkey: Search in Files claims its chord (see
-    /// `claims_hotkey`) and anything else goes on to the next listener.
+    /// The Files roots' answer to a configured hotkey: Search in Files and Files Back/Forward
+    /// claim their chords (and any app-wide hotkey sharing the same chord) while Files has focus;
+    /// anything else goes on to the next listener.
     pub(crate) fn native_docs_claim_hotkey(
         &mut self,
         action: &crate::app::hotkeys::RunConfiguredGhostexHotkey,
@@ -312,6 +321,18 @@ impl GhostexGpuiApp {
     ) {
         if claims_hotkey(&action.action_id) {
             self.native_docs_show_project_search(window, cx);
+        } else if claims_files_hotkey_with(
+            "navigateFilesBack",
+            &action.action_id,
+            crate::app::hotkeys::gpui_configured_hotkey_key,
+        ) {
+            self.native_docs_navigate_history(true, cx);
+        } else if claims_files_hotkey_with(
+            "navigateFilesForward",
+            &action.action_id,
+            crate::app::hotkeys::gpui_configured_hotkey_key,
+        ) {
+            self.native_docs_navigate_history(false, cx);
         } else {
             cx.propagate();
         }

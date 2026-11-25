@@ -41,6 +41,9 @@ pub(crate) struct NeedsYouItem {
     /// A turn end already alerted about it (`api::turn_ended`).
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub(crate) notified: bool,
+    /// RFC3339 timestamp until which this to-do is snoozed (Q4686 A). Additive: older clients ignore it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) snoozed_until: Option<String>,
 }
 
 /// A to-do that left the dock, and how.
@@ -55,6 +58,15 @@ pub(crate) struct SettledItem {
     #[serde(skip_serializing_if = "String::is_empty")]
     pub(crate) answer: String,
     pub(crate) at: String,
+    /// Preserved from the open item so Mark all read Undo can restore a dismissed to-do intact.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub(crate) detail: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub(crate) command: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) answers: Vec<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub(crate) asked_at: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -93,10 +105,61 @@ impl NeedsYouRecord {
             outcome: outcome.to_string(),
             answer: answer.chars().take(MAX_ANSWER_CHARS).collect(),
             at: at.to_string(),
+            detail: item.detail.clone(),
+            command: item.command.clone(),
+            answers: item.answers.clone(),
+            asked_at: item.asked_at.clone(),
         });
         let extra = self.settled.len().saturating_sub(SETTLED_KEEP);
         self.settled.drain(..extra);
         Some(item)
+    }
+
+    /// Snoozes an open to-do until `until` (RFC3339), or clears its snooze when `None`.
+    pub(crate) fn set_snoozed(&mut self, tag: &str, until: Option<String>) -> bool {
+        let Some(item) = self
+            .open
+            .iter_mut()
+            .find(|item| item.tag.eq_ignore_ascii_case(tag))
+        else {
+            return false;
+        };
+        item.snoozed_until = until;
+        true
+    }
+
+    /// Restores a recently dismissed to-do back into `open` (Mark all read Undo, Q4685 A).
+    pub(crate) fn restore(&mut self, tag: &str) -> bool {
+        if self
+            .open
+            .iter()
+            .any(|item| item.tag.eq_ignore_ascii_case(tag))
+        {
+            return false;
+        }
+        let Some(index) = self
+            .settled
+            .iter()
+            .rposition(|item| item.tag.eq_ignore_ascii_case(tag) && item.outcome == "dismissed")
+        else {
+            return false;
+        };
+        let settled = self.settled.remove(index);
+        self.open.push(NeedsYouItem {
+            tag: settled.tag,
+            title: settled.title,
+            detail: settled.detail,
+            command: settled.command,
+            answers: settled.answers,
+            asked_at: if settled.asked_at.is_empty() {
+                settled.at
+            } else {
+                settled.asked_at
+            },
+            notified: true,
+            snoozed_until: None,
+        });
+        true
     }
 
     pub(crate) fn settled_of(&self, tag: &str) -> Option<&SettledItem> {
@@ -105,6 +168,62 @@ impl NeedsYouRecord {
             .rev()
             .find(|item| item.tag.eq_ignore_ascii_case(tag))
     }
+}
+
+/// First words of a to-do title that ask the user to paste, post, send or run something.
+const ACT_VERBS: &[&str] = &[
+    "paste", "post", "copy", "send", "reply", "run", "type", "enter", "sign in", "open",
+];
+
+/// Why a to-do (`needs-you add`, `item ask`) that asks the user to paste, post or run something
+/// is refused, or `None` when it may stand: it holds nothing to act on.
+///
+/// CDXC:Coordinators 2026-11-25 DECISION:
+/// A coordinator added "Paste the approved reply to Ajax in #general" with a one-line detail and
+/// put the reply and its link only in its chat answer; the user reads Needs you on its own, often
+/// on the phone, so the to-do was useless there. User: "there's a description field for these
+/// needs you/pings WHY NOT USE IT". On the needs-you-detail page (Q4860 "Refuse") the user chose a
+/// refusal over a warning, since the playbook rule alone had not held. So a to-do (no answers, or
+/// only Done) whose title starts with paste, post, copy, send, reply, run, type, enter, sign in or
+/// open is refused unless its detail holds a ``` block, a link or inline `code`, or it has a
+/// command. A decision question with real answers ("Send the release?" Send / Hold) passes.
+/// SEE-ALSO: server/src/coordinators/work.rs (`handle_work_request` "ask" arm),
+/// server/src/coordinators/user_handoff.rs (the guard this one is modelled on),
+/// server/src/coordinators/playbook.md ("Asking the user", Description bullet).
+pub(crate) fn paste_refusal(
+    title: &str,
+    detail: &str,
+    command: &str,
+    answers: &[String],
+) -> Option<String> {
+    let is_todo = answers
+        .iter()
+        .map(|answer| answer.trim().trim_start_matches('*').trim())
+        .filter(|answer| !answer.is_empty())
+        .all(|answer| answer.eq_ignore_ascii_case("done"));
+    if !is_todo || !command.trim().is_empty() {
+        return None;
+    }
+    let words: Vec<String> = title
+        .split(|character: char| !character.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .take(2)
+        .map(str::to_lowercase)
+        .collect();
+    let first = words.first()?;
+    let two = words.join(" ");
+    ACT_VERBS
+        .iter()
+        .find(|verb| **verb == first.as_str() || **verb == two.as_str())?;
+    let has_link = detail.contains("http://") || detail.contains("https://");
+    let has_code = detail.contains("```") || detail.matches('`').count() >= 2;
+    if has_link || has_code {
+        return None;
+    }
+    let lead = title.split_whitespace().next().unwrap_or(title);
+    Some(format!(
+        "\"{lead} …\" asks the user to act, but --detail holds no text, link or command for it. Put the text to paste in a ``` block in --detail (and the link where it goes), or the link or `command` itself, or pass --command, so the user can do it from Details."
+    ))
 }
 
 /// What `needs-you add` asks for.
@@ -138,6 +257,9 @@ impl NewItem {
             return Err(DomainStateError::bad_request(format!(
                 "Offer at most {MAX_ANSWERS} answers."
             )));
+        }
+        if let Some(refusal) = paste_refusal(&title, &self.detail, &self.command, &answers) {
+            return Err(DomainStateError::bad_request(refusal));
         }
         Ok(Self {
             title,
@@ -175,6 +297,7 @@ pub(crate) fn add(
         answers: new.answers,
         asked_at: at.to_string(),
         notified: false,
+        snoozed_until: None,
     };
     record.open.push(item.clone());
     Ok(item)
@@ -206,24 +329,54 @@ pub(crate) fn write(
     .map_err(|error| DomainStateError::corrupt_state(error.to_string()))
 }
 
-/// How many to-dos wait on the user in this session (the pink dot counts them).
+/// Whether `until` is a future RFC3339 timestamp right now.
+pub(crate) fn is_snooze_active(until: Option<&str>) -> bool {
+    let Some(until) = until.filter(|s| !s.is_empty()) else {
+        return false;
+    };
+    chrono::DateTime::parse_from_rfc3339(until)
+        .map(|dt| dt.with_timezone(&chrono::Utc) > chrono::Utc::now())
+        .unwrap_or(false)
+}
+
+/// How many to-dos wait on the user in this session (the pink dot counts them; snoozed ones stay out).
 pub(crate) fn open_count(session: &Value) -> usize {
     session
         .pointer(&format!("/runtimeSettings/{RUNTIME_KEY}/open"))
         .and_then(Value::as_array)
-        .map_or(0, Vec::len)
+        .map_or(0, |items| {
+            items
+                .iter()
+                .filter(|item| !is_snooze_active(item.get("snoozedUntil").and_then(Value::as_str)))
+                .count()
+        })
 }
 
-/// The open to-dos as a chat frame carries them (`needsYou`).
+/// The open to-dos (and recently settled ones for the Answered drawer) as a chat frame carries them (`needsYou`).
 pub(crate) fn frame_value(record: &NeedsYouRecord) -> Value {
     json!({
-        "items": record.open.iter().map(|item| json!({
+        "items": record.open.iter().map(|item| {
+            let mut value = json!({
+                "tag": item.tag,
+                "title": item.title,
+                "detail": item.detail,
+                "command": item.command,
+                "answers": item.answers,
+                "askedAt": item.asked_at,
+            });
+            if is_snooze_active(item.snoozed_until.as_deref()) {
+                if let Some(until) = &item.snoozed_until {
+                    value["snoozedUntil"] = json!(until);
+                }
+            }
+            value
+        }).collect::<Vec<_>>(),
+        "settled": record.settled.iter().map(|item| json!({
             "tag": item.tag,
             "title": item.title,
-            "detail": item.detail,
-            "command": item.command,
-            "answers": item.answers,
-            "askedAt": item.asked_at,
+            "outcome": item.outcome,
+            "answer": item.answer,
+            "at": item.at,
         })).collect::<Vec<_>>(),
     })
 }

@@ -95,6 +95,7 @@ async fn verify_answer_targets_shown_prompt(
                 tool,
                 summary,
                 tool_use_id,
+                ..
             }) => {
                 tool == shown_tool
                     && summary.as_deref() == shown_summary
@@ -118,6 +119,7 @@ User: answer a thread's approval card from its coordinator's chat, "and u pick w
 */
 pub(crate) async fn handle_answer_session_chat_prompt_http(
     state: &AppState,
+    caller: Option<&crate::security::Principal>,
     endpoint_path: String,
     request_id: String,
     body: &Value,
@@ -196,6 +198,7 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
     });
     let response = answer_session_chat_prompt(
         state,
+        caller,
         endpoint_path,
         request_id,
         rerouted.as_ref().unwrap_or(body),
@@ -214,6 +217,7 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
 
 async fn answer_session_chat_prompt(
     state: &AppState,
+    caller: Option<&crate::security::Principal>,
     endpoint_path: String,
     request_id: String,
     body: &Value,
@@ -314,6 +318,15 @@ async fn answer_session_chat_prompt(
                     params.get("accountId").cloned().unwrap_or_default(),
                 );
                 request.insert("enabled".to_string(), json!(true));
+                if let Some(caller) = caller {
+                    if let Some(error) = crate::server::accounts_http::refuse_non_user_account_op(
+                        caller,
+                        "setEnabled",
+                        &request,
+                    ) {
+                        return domain_error_response(endpoint_path, request_id, error);
+                    }
+                }
             }
             "accountUse" => {
                 request.insert("operation".to_string(), json!("select"));
@@ -459,7 +472,7 @@ async fn answer_session_chat_prompt(
     // bookkeeping: nothing reaches the agent now (session_chat_open_questions.rs, `set_later` and
     // `set_removed`). A removal that is the user's Dismiss names the question (`dismissed`), which
     // the next message the agent gets anyway tells it of (session_chat_dismissed.rs).
-    if kind == "questionForLater" || kind == "questionRemove" {
+    if kind == "questionForLater" || kind == "questionRemove" || kind == "questionRestore" {
         let Some(question_id) = params
             .get("questionId")
             .and_then(Value::as_str)
@@ -476,6 +489,7 @@ async fn answer_session_chat_prompt(
             );
         };
         let remove = kind == "questionRemove";
+        let restore = kind == "questionRestore";
         let later = params.get("later").and_then(Value::as_bool).unwrap_or(true);
         // Snooze: For later for this many hours (session_chat_open_questions.rs `LATER_UNTIL_KEY`).
         let hours = params
@@ -503,6 +517,13 @@ async fn answer_session_chat_prompt(
                     crate::session_chat_dismissed::record(&db, &project_id, &session_id, &name);
                 }
                 Ok(())
+            } else if restore {
+                crate::session_chat_open_questions::unset_removed(
+                    &worker_state,
+                    &project_id,
+                    &session_id,
+                    &question_id,
+                )
             } else {
                 crate::session_chat_open_questions::set_later(
                     &worker_state,
@@ -557,6 +578,8 @@ async fn answer_session_chat_prompt(
     // conversation, which may not exist yet (session_chat_agent_restart.rs).
     if session_chat_agent_for_session(&target.session).as_deref() == Some("opencode")
         && kind != "restartAgent"
+        && !crate::acp::session_is_acp(&target.session)
+        && crate::acp::channel::live(&target.project_id, &target.session_id, "approve").is_none()
     {
         let id = match crate::session_chat_opencode::session_id(&target.session) {
             Ok(id) => id,
@@ -641,6 +664,33 @@ async fn answer_session_chat_prompt(
         } else {
             None
         };
+        if crate::acp::session_is_acp(&target.session) {
+            if let Some(text) = answer_text {
+                if let Err(error) = crate::acp::channel::steer(&state.paths, &target, &text).await {
+                    return domain_error_response(endpoint_path, request_id, error);
+                }
+            }
+            return match crate::session_chat_async_questions::dismiss(
+                state,
+                &target.project_id,
+                &target.session_id,
+                question_id,
+            ) {
+                Ok(()) => routed_json(
+                    Some(endpoint_path),
+                    StatusCode::OK,
+                    rpc_success(request_id, json!({ "queued": false })),
+                ),
+                Err(error) => domain_error_response(
+                    endpoint_path,
+                    request_id,
+                    DomainStateError {
+                        code: "internalError",
+                        message: error.to_string(),
+                    },
+                ),
+            };
+        }
         let session = target.session.clone();
         let id = question_id.to_string();
         let answer = tokio::task::spawn_blocking(move || {
@@ -905,11 +955,13 @@ async fn answer_session_chat_prompt(
                         return domain_error_response(endpoint_path, request_id, error);
                     }
                 }
+                let tool_use_id = params.get("toolUseId").and_then(Value::as_str);
                 return match crate::acp::channel::answer_permission(
                     &target.project_id,
                     &target.session_id,
                     decision,
                     option_id,
+                    tool_use_id,
                 )
                 .await
                 {
@@ -1065,6 +1117,83 @@ async fn answer_session_chat_prompt(
             }
         }
         "question" => {
+            if crate::acp::session_is_acp(&target.session) {
+                let raw_selections: Vec<Value> = params
+                    .get("selections")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
+                let tool_use_id = params.get("toolUseId").and_then(Value::as_str);
+                let blocking_res = crate::acp::channel::answer_question(
+                    &target.project_id,
+                    &target.session_id,
+                    &raw_selections,
+                    tool_use_id,
+                )
+                .await;
+                let final_res = match blocking_res {
+                    Ok(ok) => Ok(ok),
+                    Err(err) if err.code == "noPendingQuestion" => {
+                        // Turn-ending question tools (e.g. Antigravity's `ask_question` over ACP)
+                        // finish the turn and expect the user's selection as the next prompt.
+                        let stored_prompt =
+                            crate::agents::session_chat_prompt_setting(&target.session)
+                                .as_deref()
+                                .and_then(crate::session_chat::parse_stored_session_chat_prompt)
+                                .or_else(|| transcript_pending_question_prompt(&target.session));
+                        if let Some(crate::session_chat::SessionChatInteractivePrompt::Question {
+                            questions,
+                            ..
+                        }) = stored_prompt
+                        {
+                            let typed_selections: Vec<
+                                crate::session_chat::SessionChatQuestionSelection,
+                            > = serde_json::from_value(Value::Array(raw_selections))
+                                .unwrap_or_default();
+                            if crate::session_chat_send::has_ask_answer(&typed_selections) {
+                                let answer_text =
+                                    crate::session_chat_question_liveness::format_ask_answer_message(
+                                        &questions,
+                                        &typed_selections,
+                                    );
+                                crate::acp::channel::send(
+                                    &state.paths,
+                                    &target,
+                                    &answer_text,
+                                    &[],
+                                    false,
+                                )
+                                .await
+                            } else {
+                                Ok(json!({ "dismissed": true }))
+                            }
+                        } else {
+                            Err(err)
+                        }
+                    }
+                    Err(err) => Err(err),
+                };
+                return match final_res {
+                    Ok(_) => {
+                        let agent =
+                            crate::session_chat_follower::session_chat_display_agent_for_session(
+                                &target.session,
+                            );
+                        schedule_session_chat_option_redetect(
+                            state,
+                            &target.project_id,
+                            &target.session_id,
+                            agent.as_deref(),
+                        );
+                        routed_json(
+                            Some(endpoint_path),
+                            StatusCode::OK,
+                            rpc_success(request_id, json!({ "queued": false })),
+                        )
+                    }
+                    Err(error) => domain_error_response(endpoint_path, request_id, error),
+                };
+            }
             let agent = session_chat_agent_for_session(&target.session);
             let screen_prompt =
                 if crate::session_chat_options::session_chat_questions_only_on_screen(

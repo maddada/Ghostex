@@ -455,7 +455,7 @@ pub(crate) fn apply_new_session(
     db: &Connection,
     agent_id: &str,
     icon: Option<&str>,
-    workspace_claude_account_id: Option<&str>,
+    workspace_claude_account_ids: &[String],
     runtime: &mut Map<String, Value>,
 ) -> Result<Option<String>, DomainStateError> {
     let Some(provider) = agent_provider(agent_id, icon) else {
@@ -474,16 +474,29 @@ pub(crate) fn apply_new_session(
     let registry = store::read(db)?;
     // CDXC:AgentProviders 2026-09-11 DECISION: User: use the current CLI login until an account is added to Ghostex for that provider (2026-09-09); once accounts exist, a launch without an explicit account uses the provider's Account for new sessions rule from Settings (Most limit remaining by default, see default_account.rs), which supersedes the lowest-slot choice. When that rule yields no account the launch keeps the current CLI login, so a normal CLI launch needs no account switcher.
     let snapshot = super::runtime::current_snapshot();
+    let base = runtime
+        .get("accountBaseCommand")
+        .or_else(|| runtime.get("agentCommand"))
+        .and_then(Value::as_str);
+    let model = super::default_account::launch_model(provider, base);
     // CDXC:Workspaces 2026-10-09 DECISION:
-    // User: each workspace can pick which of the user's Claude accounts its agents use; it applies when a session starts in one of the workspace's projects, unless the user picked an account for that session. A picked account (`accountId`) wins, then the workspace's account (while it is still registered), then the provider's rule.
-    let workspace_account = workspace_claude_account_id
-        .filter(|_| provider == Provider::Claude)
-        .filter(|id| {
-            registry.accounts.iter().any(|account| {
-                account.id == *id && account.provider == provider && !account.user_disabled
-            })
-        })
-        .map(str::to_string);
+    // User: each workspace can pick one or more of the user's Claude accounts for its agents; it
+    // applies when a session starts in one of the workspace's projects, unless the user picked an
+    // account for that session. A picked account (`accountId`) wins, then the workspace's account
+    // pool (ranked by the provider's rule when several are chosen), then the provider's rule.
+    let workspace_account =
+        if provider == Provider::Claude && !workspace_claude_account_ids.is_empty() {
+            super::default_account::quick_launch_account_from_pool(
+                &registry,
+                &snapshot,
+                provider,
+                &model,
+                workspace_claude_account_ids,
+            )
+            .map(|account| account.id.clone())
+        } else {
+            None
+        };
     let id = runtime
         .get("accountId")
         .and_then(Value::as_str)
@@ -491,11 +504,6 @@ pub(crate) fn apply_new_session(
         .or(workspace_account)
         .or_else(|| {
             // The model the session starts on decides which usage windows apply (#664).
-            let base = runtime
-                .get("accountBaseCommand")
-                .or_else(|| runtime.get("agentCommand"))
-                .and_then(Value::as_str);
-            let model = super::default_account::launch_model(provider, base);
             super::default_account::quick_launch_account(&registry, &snapshot, provider, &model)
                 .map(|a| a.id.clone())
         });

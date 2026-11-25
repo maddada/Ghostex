@@ -139,7 +139,7 @@ export interface GxserverReadSidebarHudParams {
 }
 
 export interface GxserverSidebarHudAgentButton {
-  acceptAllMode?: 'inherit' | 'enabled' | 'disabled';
+  acceptAllMode?: 'inherit' | 'enabled' | 'disabled' | 'auto';
   agentId: string;
   command?: string;
   icon?: string;
@@ -200,7 +200,7 @@ export type GxserverSidebarHudSettingsMutationParams = {
 
 type GxserverSidebarHudSettingsMutationIntent =
   | {
-      acceptAllMode?: 'inherit' | 'enabled' | 'disabled';
+      acceptAllMode?: 'inherit' | 'enabled' | 'disabled' | 'auto';
       activeProjectId?: string;
       agentId?: string;
       command: string;

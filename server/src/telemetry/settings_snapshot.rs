@@ -274,7 +274,6 @@ pub const FIELDS: &[Field] = &[
     field("agent_accept_all", "agentAcceptAllEnabled", Kind::Toggle),
     field("agent_hooks", "useAgentHooks", Kind::Toggle),
     field("marked_handovers", "markedHandovers", Kind::Choice),
-    field("chief_hidden", "chiefHidden", Kind::Toggle),
     field("voice_agent_hidden", "voiceAgentHidden", Kind::Toggle),
     field("floating_capture", "ghostexCaptureEnabled", Kind::Toggle),
     field(
@@ -314,6 +313,9 @@ fn other_property_spec(key: &str) -> Option<PropertySpec> {
         "codex_plans" => PropertySpec::EnumList(taxonomy::CODEX_PLANS),
         "claude_top_plan" => PropertySpec::Enum(taxonomy::CLAUDE_PLANS),
         "codex_top_plan" => PropertySpec::Enum(taxonomy::CODEX_PLANS),
+        "antigravity_mode" | "claude_mode" | "codex_mode" => {
+            PropertySpec::Enum(taxonomy::SESSION_MODES)
+        }
         "store_extensions_installed" => PropertySpec::StoreExtensionVersionList,
         _ => return None,
     })
@@ -342,6 +344,9 @@ pub const PERSON_KEYS: &[&str] = &[
     "linux_desktop",
     "claude_top_plan",
     "codex_top_plan",
+    "antigravity_mode",
+    "claude_mode",
+    "codex_mode",
 ];
 
 /*
@@ -587,10 +592,39 @@ pub fn read_linux_report() -> Option<LinuxReport> {
 /// Accounts per provider, with the plans their providers report.
 #[derive(Clone, Debug, Default)]
 pub struct AccountsReport {
-    /// `claude`, `codex`, `cursor`, `gemini`, `copilot` → how many.
+    /// `claude`, `codex`, `cursor`, `gemini`, `copilot` -> how many.
     pub counts: BTreeMap<&'static str, usize>,
     pub claude_plans: Vec<&'static str>,
     pub codex_plans: Vec<&'static str>,
+}
+
+/// Build an anonymous `AccountsReport` from a discovered accounts snapshot plus
+/// usage-only provider counts. Returns `None` if `discovered` has not yet been
+/// populated (`fetched_at.is_none()`).
+pub(crate) fn accounts_report_from_discovered(
+    paths: &crate::paths::GxserverPaths,
+    discovered: &crate::accounts::model::Snapshot,
+) -> Option<AccountsReport> {
+    discovered.fetched_at?;
+    let mut report = AccountsReport::default();
+    for account in &discovered.accounts {
+        *report.counts.entry(account.provider.id()).or_default() += 1;
+        let plans = match account.provider {
+            crate::accounts::model::Provider::Claude => &mut report.claude_plans,
+            crate::accounts::model::Provider::Codex => &mut report.codex_plans,
+        };
+        if let Some(plan) = account.plan {
+            if !plans.contains(&plan) {
+                plans.push(plan);
+            }
+        }
+    }
+    report.claude_plans.sort_unstable();
+    report.codex_plans.sort_unstable();
+    if let Some(counts) = crate::accounts::usage_only::provider_counts(paths) {
+        report.counts.extend(counts);
+    }
+    Some(report)
 }
 
 /// The best plan of `plans` by `rank` (best first).
@@ -614,7 +648,8 @@ pub struct SnapshotFacts {
     /// `None` when the workspaces could not be read: left out, not reported as 0.
     pub workspace_count: Option<usize>,
     pub boosts: BoostsReport,
-    /// `None` when no client has listed the accounts since gxserver started.
+    /// `None` when neither a live account snapshot nor a cached anonymous
+    /// `AccountsReport` in `analytics.state.v1` is available yet.
     pub accounts: Option<AccountsReport>,
     /// Installed official Store extensions with their version.
     pub store_extensions: Vec<(String, String)>,
@@ -712,6 +747,10 @@ pub fn snapshot_properties(
         "custom_extensions_installed",
         PropertyValue::Enum(taxonomy::count_bucket(facts.custom_extensions_installed)),
     ));
+    let modes = super::capture::resolve_install_session_modes(settings);
+    properties.push(("antigravity_mode", PropertyValue::Enum(modes.antigravity)));
+    properties.push(("claude_mode", PropertyValue::Enum(modes.claude)));
+    properties.push(("codex_mode", PropertyValue::Enum(modes.codex)));
     let person: Vec<(&'static str, PropertyValue)> = properties
         .iter()
         .filter(|(key, _)| PERSON_KEYS.contains(key))

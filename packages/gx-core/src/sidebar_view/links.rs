@@ -233,7 +233,22 @@ impl SessionLinks {
     /// CDXC:SessionLinks 2026-10-28 DECISION:
     /// User: "I don't like how the top bar just says "3 suggested" there. I think it's better to move the links to always be in the bar above the composer. It should be between Tasks and Threads down there in a pill, so I just click on it and see all of them. The look of the pill needs to look like the one we have in the sidebar [the Badge option]. It just shows a link icon and the number of links we have. If it's just one link, you can just put the name or the ID of that link, like SPX-123, for example, or #123." So the pill is the sidebar badge's look and text (`badge_label`: the link icon, one link's ID and "+N", in the most pressing link's colour, grey once all are finished); with no linked links but suggestions it reads "3 suggested", quiet like the sidebar's suggestions badge (muted, dashed). A click opens the session's links list. This replaces the chips and the "+N" / "N suggested" / "List" pill in the chat's top bar (and the phone's strip under its header) and the setting that hid them.
     pub fn chat_pill(&self) -> Option<SessionLinksChatPill> {
+        self.chat_pill_for(true)
+    }
+
+    /// The Links pill on the chat's bar above the composer, with `show_suggested` controlling
+    /// whether a suggestions-only session shows the quiet "{count} suggested" pill. Linked items
+    /// always show their pill.
+    ///
+    /// CDXC:SessionLinks 2026-11-24 DECISION:
+    /// Coordinators, Chief of Staff and coordinator threads pass `show_suggested = false` so they
+    /// hide the automatic "{count} suggested" pill in the chat bar just like in the sidebar row
+    /// (`row_for`), while keeping linked-item pills and manual linking from hover/menus.
+    pub fn chat_pill_for(&self, show_suggested: bool) -> Option<SessionLinksChatPill> {
         if self.items.is_empty() {
+            if !show_suggested {
+                return None;
+            }
             let count = self.suggested.len();
             return (count > 0).then(|| SessionLinksChatPill {
                 label: format!("{count} suggested"),
@@ -631,6 +646,25 @@ impl SessionLinks {
     /// CDXC:SessionLinks 2026-10-24 DECISION:
     /// User: "why didn't we suggest #263 here for this session?" A session whose only links are suggestions shows a quiet badge (muted and dashed, counting the suggestions) that opens the floating card on hover, under every option but Off, instead of nothing.
     pub fn row(&self, display: SessionLinksDisplay, selected: bool) -> SessionLinksRow {
+        self.row_for(display, selected, true)
+    }
+
+    /// What a row shows under `display`, with `show_suggested_badge` controlling whether a
+    /// suggestions-only session draws its quiet suggested badge. Hovering the row still opens the
+    /// floating links card (`hover_card: true`) so suggestions can still be linked manually.
+    ///
+    /// CDXC:SessionLinks 2026-11-24 DECISION:
+    /// User: "don't show suggested link pill on the session item for a coordinator, also don't show
+    /// the suggested session pill for coordinator thread (allow me to link by hovering on the
+    /// coordinator anyways and clicking in the menu but otherwise we don't show the pill for those 2)".
+    /// Coordinator rows and coordinator thread rows pass `show_suggested_badge = false`: they hide
+    /// the automatic suggested-links pill while keeping `hover_card = true` and any linked items.
+    pub fn row_for(
+        &self,
+        display: SessionLinksDisplay,
+        selected: bool,
+        show_suggested_badge: bool,
+    ) -> SessionLinksRow {
         if display == SessionLinksDisplay::Off {
             return SessionLinksRow::default();
         }
@@ -640,7 +674,7 @@ impl SessionLinks {
             }
             return SessionLinksRow {
                 line: Vec::new(),
-                badge: Some(SessionLinksBadge {
+                badge: show_suggested_badge.then(|| SessionLinksBadge {
                     count: self.suggested.len(),
                     tone: SessionLinkTone::Draft,
                     suggested: true,

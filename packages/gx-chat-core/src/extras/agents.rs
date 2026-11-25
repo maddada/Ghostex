@@ -19,7 +19,7 @@ const AGENTS: &[(&str, &str, &str)] = &[
     ("copilot", "copilot", "Copilot"),
     ("droid", "factory-droid", "Factory Droid"),
     ("grok", "grok-build", "Grok Build"),
-    ("antigravity", "antigravity-cli", "Antigravity CLI"),
+    ("antigravity", "antigravity-cli", "Antigravity"),
     ("amp", "amp-cli", "Amp CLI"),
     ("hermes-agent", "hermes-agent", "Hermes Agent"),
     ("rovodev", "rovo-dev", "Rovo Dev"),

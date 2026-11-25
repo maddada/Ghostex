@@ -31,9 +31,7 @@ fn undelivered_info(
     color: gpui::Hsla,
     s: f32,
 ) -> AnyElement {
-    // The tooltip's own 12px side margins sit inside these edges.
-    let (left, right) = (composer.left(), composer.right());
-    let max_width = (right - left - px(24.0)).min(px(320.0)).max(px(160.0));
+    let (left, right, max_width) = row_tooltip_bounds(composer);
     div()
         .id(format!("queue-undelivered:{id}"))
         .role(gpui::Role::Button)
@@ -58,6 +56,126 @@ fn undelivered_info(
                 .text_color(color),
         )
         .into_any_element()
+}
+
+/// The edges a row's tooltip stays inside (the composer card) and its width.
+fn row_tooltip_bounds(
+    composer: gpui::Bounds<gpui::Pixels>,
+) -> (gpui::Pixels, gpui::Pixels, gpui::Pixels) {
+    // The tooltip's own 12px side margins sit inside these edges.
+    let (left, right) = (composer.left(), composer.right());
+    (
+        left,
+        right,
+        (right - left - px(24.0)).min(px(320.0)).max(px(160.0)),
+    )
+}
+
+/// CDXC:SessionChat 2026-11-25 DECISION:
+/// User (Q4865, "chip"): the line under a queued message ("Waiting for the agent to finish
+/// compacting the conversation.") used the message's own grey and read as more of the user's
+/// text. The status is now a small neutral chip at the row's right, a clock and gxserver's short
+/// label (`waitLabel`, server/src/session_chat_queue_runtime/wait_reason.rs), and "the full text
+/// on hovering on that status pill" is its tooltip, the same stock chat tooltip as the Not sent
+/// info icon. Never accent-coloured. The phone draws the same chip (QueueList.tsx).
+fn wait_chip(
+    id: &str,
+    label: String,
+    reason: String,
+    composer: gpui::Bounds<gpui::Pixels>,
+    p: &ChatAppearance,
+) -> AnyElement {
+    let s = p.scale;
+    let (left, right, max_width) = row_tooltip_bounds(composer);
+    div()
+        .id(format!("queue-wait:{id}"))
+        .aria_label(reason.clone())
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .gap(px(4.0 * s))
+        .h(px(18.0 * s))
+        .px(px(7.0 * s))
+        .mr(px(3.0 * s))
+        .rounded(px(9.0 * s))
+        .bg(p.foreground.opacity(0.06))
+        .text_size(px(10.5 * s))
+        .line_height(px(18.0 * s))
+        .text_color(p.muted)
+        .whitespace_nowrap()
+        .managed_tooltip_with_placement(
+            ManagedTooltipPlacement::BelowWithin { left, right },
+            move |window, cx| {
+                gpui_component::tooltip::Tooltip::new(reason.clone())
+                    .max_w(max_width)
+                    .build(window, cx)
+            },
+        )
+        .child(
+            gpui::svg()
+                .path("titlebar/clock.svg")
+                .size(px(10.0 * s))
+                .text_color(p.muted),
+        )
+        .child(label)
+        .into_any_element()
+}
+
+/// CDXC:SessionChat 2026-11-25 DECISION:
+/// User (Q4866, "line count"): a queued message of several lines showed only its first line. The
+/// row keeps that one line and adds the core's "+N lines" (`moreLines`, gx-chat-core
+/// `queue_row_more`) in the chip's dimmer grey, and hovering the message shows the whole of it
+/// (`fullText`) in the same stock chat tooltip as the status chip. The phone shows it on a press
+/// (QueueList.tsx).
+fn queued_text(
+    id: &str,
+    preview: String,
+    more_lines: String,
+    full_text: String,
+    busy: bool,
+    composer: gpui::Bounds<gpui::Pixels>,
+    p: &ChatAppearance,
+) -> AnyElement {
+    let s = p.scale;
+    let line = div()
+        .id(format!("queue-text:{id}"))
+        .flex_1()
+        .min_w_0()
+        .flex()
+        .items_center()
+        .gap(px(6.0 * s))
+        .when(busy, |this| this.opacity(0.7))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .text_ellipsis()
+                .text_size(px(12.0 * s))
+                .line_height(px(20.0 * s))
+                .child(preview),
+        );
+    if more_lines.is_empty() || full_text.is_empty() {
+        return line.into_any_element();
+    }
+    let (left, right, max_width) = row_tooltip_bounds(composer);
+    line.managed_tooltip_with_placement(
+        ManagedTooltipPlacement::BelowWithin { left, right },
+        move |window, cx| {
+            gpui_component::tooltip::Tooltip::new(full_text.clone())
+                .max_w(max_width)
+                .build(window, cx)
+        },
+    )
+    .child(
+        div()
+            .flex_shrink_0()
+            .whitespace_nowrap()
+            .text_size(px(10.5 * s))
+            .line_height(px(18.0 * s))
+            .text_color(p.muted.opacity(0.75))
+            .child(more_lines),
+    )
+    .into_any_element()
 }
 
 /// The six-dot drag grip, also drawn by the Bot automations feed's channels in Manual order.
@@ -231,16 +349,15 @@ impl NativeChatView {
                             grip(p)
                         }),
                 )
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .text_ellipsis()
-                        .text_size(px(12.0 * s))
-                        .line_height(px(20.0 * s))
-                        .when(busy, |this| this.opacity(0.7))
-                        .child(preview),
-                )
+                .child(queued_text(
+                    &id,
+                    preview,
+                    text(prompt, "moreLines"),
+                    text(prompt, "fullText"),
+                    busy,
+                    composer,
+                    p,
+                ))
                 .when(failed, |this| {
                     // One wording for a message that did not go out (packages/gx-chat-core/src/composer/delivery_card.rs).
                     let reason = match ghostex_gx_chat_core::composer::delivery_card::plain_reason(
@@ -251,6 +368,17 @@ impl NativeChatView {
                     };
                     this.child(undelivered_info(&id, reason, composer, failed_color, s))
                 })
+                // Why gxserver still holds the row, once it has waited about a minute.
+                .when_some(
+                    prompt["waitReason"]
+                        .as_str()
+                        .filter(|reason| !failed && !reason.trim().is_empty())
+                        .map(str::to_string),
+                    |this, reason| {
+                        let label = text(prompt, "waitLabel");
+                        this.child(wait_chip(&id, label, reason, composer, p))
+                    },
+                )
                 .child(actions);
             div()
                 .id(format!("queued-prompt:{id}"))
@@ -284,23 +412,6 @@ impl NativeChatView {
                     }))
                 })
                 .child(line)
-                // Why gxserver still holds the row, once it has waited about a minute.
-                .when_some(
-                    prompt["waitReason"]
-                        .as_str()
-                        .filter(|reason| !failed && !reason.is_empty())
-                        .map(str::to_string),
-                    |this, reason| {
-                        this.child(
-                            div()
-                                .pl(px(22.0 * s))
-                                .pb(px(4.0 * s))
-                                .text_size(px(11.0 * s))
-                                .line_height(px(16.0 * s))
-                                .child(reason),
-                        )
-                    },
-                )
         });
         Some(
             div()

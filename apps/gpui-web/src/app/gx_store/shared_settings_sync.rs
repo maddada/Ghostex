@@ -88,6 +88,7 @@ impl GhostexGpuiApp {
             ..self.sidebar_runtime_settings_snapshot.clone()
         };
         self.gx_store_hud_settings_changed(cx);
+        self.maybe_open_web_preview_modal(cx);
         cx.refresh_windows();
     }
 }

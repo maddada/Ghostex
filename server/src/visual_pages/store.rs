@@ -53,7 +53,7 @@ pub(crate) fn prune_old_pages(
         if !old {
             continue;
         }
-        for extension in ["html", "json", "png"] {
+        for extension in ["html", "json", "png", "dark.png", "light.png"] {
             let path = dir.join(format!("{id}.{extension}"));
             if let Ok(metadata) = fs::metadata(&path) {
                 remove_file(&path, &metadata, &mut tally);
@@ -230,6 +230,44 @@ pub(super) fn store_answers(
     Ok(record)
 }
 
+/// Maximum number of outside visitor answer records stored per Live page.
+const MAX_OUTSIDE_ANSWER_RECORDS: usize = 50;
+
+/// Records answers submitted by an outside visitor through a shared Live page link, without
+/// marking `answeredAt` on the page so the owner can still answer or override and multiple
+/// outside visitors can each submit their own answers.
+pub(super) fn store_outside_answers(
+    gxserver_state_dir: &Path,
+    id: &str,
+    by: &str,
+    answers: &serde_json::Value,
+) -> Result<serde_json::Value, StoreAnswersError> {
+    let _guard = RECORD_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut record = read_record(gxserver_state_dir, id).ok_or(StoreAnswersError::NotFound)?;
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let entry = json!({
+        "by": by,
+        "answeredAt": now,
+        "answers": answers,
+    });
+    let list = record
+        .as_object_mut()
+        .ok_or(StoreAnswersError::NotFound)?
+        .entry("outsideAnswers")
+        .or_insert_with(|| json!([]));
+    if let Some(array) = list.as_array_mut() {
+        array.push(entry);
+        if array.len() > MAX_OUTSIDE_ANSWER_RECORDS {
+            let overflow = array.len() - MAX_OUTSIDE_ANSWER_RECORDS;
+            array.drain(0..overflow);
+        }
+    }
+    write_record(gxserver_state_dir, id, &record).map_err(StoreAnswersError::Io)?;
+    Ok(record)
+}
+
 /// Keeps what the reader has picked and written so far on the page's record, so closing and
 /// reopening the page (or a restart) brings it back; `null` forgets it. A page that was answered
 /// keeps its answers instead.
@@ -351,6 +389,8 @@ pub(super) fn note_thumbnail(
     gxserver_state_dir: &Path,
     id: &str,
     answered: bool,
+    theme: Option<&str>,
+    transparent: bool,
 ) -> Result<serde_json::Value, StoreAnswersError> {
     let _guard = RECORD_WRITE_LOCK
         .lock()
@@ -359,6 +399,16 @@ pub(super) fn note_thumbnail(
     record["thumbnailAt"] =
         json!(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
     record["thumbnailAnswered"] = json!(answered);
+    match theme {
+        Some("dark") => record["thumbnailDarkTransparent"] = json!(transparent),
+        Some("light") => record["thumbnailLightTransparent"] = json!(transparent),
+        _ => {
+            if let Some(fields) = record.as_object_mut() {
+                fields.remove("thumbnailDarkTransparent");
+                fields.remove("thumbnailLightTransparent");
+            }
+        }
+    }
     if let Some(fields) = record.as_object_mut() {
         fields.remove("thumbnailOutdated");
     }

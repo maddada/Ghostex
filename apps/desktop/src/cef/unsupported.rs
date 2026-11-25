@@ -14,6 +14,22 @@ pub fn initialize(_cx: &gpui::App) -> Result<()> {
 
 pub fn shutdown() {}
 
+pub fn context_initialized() -> bool {
+    false
+}
+
+pub fn runtime_start_error() -> Option<String> {
+    None
+}
+
+pub fn init_permanently_failed() -> bool {
+    false
+}
+
+pub fn init_failed_process_notified() -> bool {
+    false
+}
+
 pub fn focus_native_view(_native_view: *mut std::ffi::c_void) {}
 
 pub fn focus_gpui_root_view(_native_view: *mut std::ffi::c_void) {}
@@ -231,6 +247,14 @@ impl CefBrowser {
     }
 
     pub fn wait_for_page_settled(&self, _timeout_ms: u64) -> Option<PageSettled> {
+        None
+    }
+
+    pub fn evaluate_page_script(&self, _script: &str) -> Option<PageSettled> {
+        None
+    }
+
+    pub fn set_default_background_transparent(&self, _transparent: bool) -> Option<PageSettled> {
         None
     }
 

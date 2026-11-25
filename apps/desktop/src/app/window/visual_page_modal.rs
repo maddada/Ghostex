@@ -103,6 +103,12 @@ pub(crate) enum VisualPageModalCommand {
         title: String,
         message: String,
     },
+    /// The page finished loading: ask the main app's hidden capturer to refresh its card picture
+    /// if missing or stale (never flashing, scroll-locking, or baking wallpaper into the picture).
+    PictureStalePage {
+        url: String,
+        remote: Option<GpuiRemoteGxserverRequestTarget>,
+    },
 }
 
 pub(crate) type VisualPageModalHost = Rc<dyn Fn(VisualPageModalCommand, &mut App)>;
@@ -174,6 +180,12 @@ pub(crate) struct GpuiVisualPageModalWindow {
     _flush_draft: [Subscription; 2],
 }
 
+/// Which side of the floating window's top band holds its controls, as the page's
+/// `data-gx-controls` attribute (`server/src/visual_pages/kit.rs`).
+pub(super) fn controls_side_attr(on_left: bool) -> &'static str {
+    if on_left { "left" } else { "right" }
+}
+
 impl GpuiVisualPageModalWindow {
     /// `web_runtime_ready`: the web runtime is up, so the page is created on the window's next
     /// frame; otherwise the app creates it once the runtime it is starting is up
@@ -196,9 +208,11 @@ impl GpuiVisualPageModalWindow {
         let focus_handle = cx.focus_handle();
         focus_handle.focus(window, cx);
         let theme = if palette.light { "light" } else { "dark" };
+        let controls = controls_side_attr(super::round_close_button::close_buttons_on_left());
         let page_url = format!(
-            "{}#gx-theme={theme}&gx-floating=1",
-            url.split('#').next().unwrap_or(&url)
+            "{}#gx-theme={theme}&gx-floating=1&gx-controls={controls}&gx-controls-inset={}",
+            url.split('#').next().unwrap_or(&url),
+            CONTROL_INSET,
         );
         // Creating the page's browser holds the app until Chromium has made it, so it waits for
         // the frame after the window's first one: the window is on screen first.
@@ -303,7 +317,7 @@ impl GpuiVisualPageModalWindow {
             return None;
         }
         match web_runtime_state() {
-            WebRuntimeState::Failed(message) => {
+            WebRuntimeState::Failed(message) | WebRuntimeState::Unavailable(message) => {
                 open_timing::finish("webRuntimeFailed");
                 self.error = Some(message);
                 cx.notify();
@@ -443,25 +457,14 @@ impl GpuiVisualPageModalWindow {
                     .detach();
             })
         };
-        // The page's card picture comes from this window once the page has loaded
-        // (app/visual_page_thumbnails.rs); the surface is filled in once it exists.
-        let shown_surface: Rc<std::cell::RefCell<Option<gpui::WeakEntity<CefSurface>>>> =
-            Rc::default();
+        // When the page finishes loading, ask the main app's hidden capturer to refresh its card
+        // picture if missing or stale (`visual_page_background_pictures.rs`).
         let page_loaded: cef::PageLoadEndHandler = {
-            let shown_surface = shown_surface.clone();
             let modal = cx.weak_entity();
             let page = url.clone();
-            let viewport = window.viewport_size();
-            let viewport = (
-                f32::from(viewport.width),
-                (f32::from(viewport.height) - TOP_BAND_HEIGHT).max(1.0),
-            );
             let async_cx = cx.to_async();
             let foreground = cx.foreground_executor().clone();
             Rc::new(move || {
-                let Some(surface) = shown_surface.borrow().clone() else {
-                    return;
-                };
                 let modal = modal.clone();
                 let page = page.clone();
                 let remote = remote.clone();
@@ -476,11 +479,10 @@ impl GpuiVisualPageModalWindow {
                                 this.loaded = true;
                                 cx.notify();
                             }
-                        });
-                        async_cx.update(|cx| {
-                            crate::app::visual_page_thumbnails::picture_opened_page(
-                                surface, &page, remote, viewport, cx,
-                            )
+                            (this.host)(
+                                VisualPageModalCommand::PictureStalePage { url: page, remote },
+                                cx,
+                            );
                         });
                     })
                     .detach();
@@ -536,7 +538,6 @@ impl GpuiVisualPageModalWindow {
         open_timing::mark("pageCreated");
         match created {
             Ok(surface) => {
-                *shown_surface.borrow_mut() = Some(surface.downgrade());
                 surface.read(cx).add_page_script(page::PAGE_SCRIPT);
                 report_page_presses(&surface, window, cx);
                 // Dictate starts only while this window is shown and the active one.

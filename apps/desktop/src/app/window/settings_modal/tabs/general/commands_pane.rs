@@ -40,7 +40,10 @@ pub(super) fn commands_pane_rows(
             options.insert(
                 1,
                 SettingOption {
-                    label: format!("After {delay} seconds"),
+                    label: format!(
+                        "After {delay} {}",
+                        if delay == "1" { "second" } else { "seconds" }
+                    ),
                     value: delay.clone(),
                 },
             );

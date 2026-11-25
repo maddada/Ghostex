@@ -481,6 +481,8 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
         crate::coordinators::refresh_coordinator_panels(&db, &repository)
     {
         republish_session_chat(state, &project_id, &session_id);
+        let _ =
+            schedule_presentation_session_delta(state, &db, &repository, &project_id, &session_id);
     }
     // An ordinary session's work in short changed (coordinators/session_work.rs): its row goes
     // out again, so the extension API's listeners hear `sessionsChanged` and the Work items
@@ -744,13 +746,27 @@ fn supervise(
             CDXC:Coordinators 2026-11-13 DECISION:
             Coordinator, after G2z88 was nudged again and again while idle (see CDXC:Coordinators 2026-11-13 in session_status/model.rs): "Never nudge the same session again after it answered a nudge with no new work, until something new happens (new output, a new message, its turn starts again)." A thread whose hooks still say working, but whose transcript's newest turn was started by Ghostex's stall nudge and has ended, answered the nudge and took nothing new since, so it is finished, not quiet: no second nudge and no second "no new output" report. Any new prompt (a message, a task notification) opens a new turn and makes it working again. The read is cached until the transcript changes.
             */
-            let reading = read_turn(
-                memory.transcript_gates.entry(key.clone()).or_default(),
-                &session,
-            );
-            let answered = reading.answered_stall_nudge;
-            let open = reading.open;
-            memory.turns.insert(key.clone(), reading);
+            let finish_decision_needs_fresh_read = memory.not_working_since.contains_key(&key)
+                || memory
+                    .turns
+                    .get(&key)
+                    .is_none_or(|reading| reading.answered_stall_nudge || !reading.open);
+            let read_due = finish_decision_needs_fresh_read
+                || memory
+                    .activity_read_at
+                    .get(&key)
+                    .is_none_or(|at| now - at >= ACTIVITY_READ_EVERY_MS);
+            if read_due {
+                memory.activity_read_at.insert(key.clone(), now);
+                let reading = read_turn(
+                    memory.transcript_gates.entry(key.clone()).or_default(),
+                    &session,
+                );
+                memory.turns.insert(key.clone(), reading);
+            }
+            let reading = memory.turns.get(&key);
+            let answered = reading.is_some_and(|reading| reading.answered_stall_nudge);
+            let open = reading.is_some_and(|reading| reading.open);
             // A turn that ended and then only Claude's idle compaction is finished too
             // (CDXC:Coordinators 2026-11-18 in coordinators/idle_compaction.rs).
             if answered || (!open && coordinators::idle_compacted_after_turn_end(&session)) {
@@ -1290,24 +1306,62 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
         let thread_ref = report.sender.global_ref.clone();
         let (body, finished_text) = match &report.kind {
             ReportKind::Finished { cut_off } => {
+                use crate::notification_feed::body::{finished_turn_reply, FinishedTurnReply};
                 let session = report.session.clone();
-                let reported_at = report.thread.reported_at.clone();
-                let message = tokio::task::spawn_blocking(move || {
+                let reported_ms = report
+                    .thread
+                    .reported_at
+                    .as_deref()
+                    .and_then(parse_iso_ms_opt);
+                // A reply we already forwarded is not this turn's report.
+                let reply = tokio::task::spawn_blocking(move || {
                     session
                         .as_ref()
-                        .and_then(crate::notification_feed::body::last_assistant_message)
-                        .filter(|(_, timestamp)| {
-                            // A reply we already forwarded is not this turn's report.
-                            match (timestamp, reported_at.as_deref().and_then(parse_iso_ms_opt)) {
-                                (Some(timestamp), Some(reported)) => *timestamp > reported,
-                                _ => true,
-                            }
-                        })
-                        .map(|(text, _)| text)
+                        .map(|session| finished_turn_reply(session, reported_ms))
                 })
                 .await
                 .ok()
                 .flatten();
+                // GitHub #748 (CDXC in notification_feed/body.rs): no turn ended since the last
+                // report, so there is nothing to report; the mark that queued it is cleared, only
+                // while no report was recorded meanwhile, so the next tick does not queue it again.
+                if !*cut_off && matches!(reply, Some(FinishedTurnReply::AlreadyReported)) {
+                    let (settle_state, thread) = (state.clone(), report.thread.clone());
+                    let _ = tokio::task::spawn_blocking(move || {
+                        if let Ok(db) = open_gxserver_database(&settle_state.paths) {
+                            let _ = coordinators::clear_thread_observed_working_since_report(
+                                &db,
+                                &thread.project_id,
+                                &thread.session_id,
+                                thread.reported_at.as_deref(),
+                            );
+                        }
+                    })
+                    .await;
+                    let _ = state.logger.log_routine(
+                        crate::logging::DiagnosticLogScenario::ServerLifecycle,
+                        GxserverLogInput {
+                            level: LogLevel::Info,
+                            event: "coordinatorReportAlreadyDelivered".to_string(),
+                            server_id: Some(state.metadata.server_id.clone()),
+                            request_id: None,
+                            client: None,
+                            duration_ms: None,
+                            error: None,
+                            details: Some(json!({
+                                "coordinatorProjectId": coordinator.0,
+                                "coordinatorSessionId": coordinator.1,
+                                "threadSessionId": report.thread.session_id,
+                                "reportedAt": report.thread.reported_at,
+                            })),
+                        },
+                    );
+                    continue;
+                }
+                let message = match reply {
+                    Some(FinishedTurnReply::New(text)) => Some(text),
+                    _ => None,
+                };
                 let body = report_body(
                     &if *cut_off {
                         ThreadReport::CutOff {
@@ -2094,7 +2148,7 @@ pub(crate) fn start_orchestrator_role(
     family: &str,
     params: &Map<String, Value>,
 ) -> std::result::Result<(), DomainStateError> {
-    if let Some(line) = coordinator_model_line(family, params) {
+    if let Some(line) = coordinators::coordinator_model_line(family, params) {
         queue_session_chat_prompt(state, project_id, session_id, &line, true)?;
     }
     let first_request = coordinators::coordinator_create_request(params)?
@@ -2112,28 +2166,6 @@ pub(crate) fn start_orchestrator_role(
         );
     }
     queue_session_chat_prompt(state, project_id, session_id, &first_message, true)
-}
-
-/// The `/model` line a new ZCode or OpenCode orchestrator's chosen model goes in ahead of its first
-/// message: `/model <model>` for ZCode, `/model <provider/model> [<variant>]` for OpenCode (its send
-/// path sets both through OpenCode's server, `session_chat_opencode::Client::send`).
-fn coordinator_model_line(family: &str, params: &Map<String, Value>) -> Option<String> {
-    let text = |key: &str| {
-        params
-            .get(key)
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-    };
-    let model = text("agentModel")?;
-    match family {
-        "zcode" => Some(format!("/model {model}")),
-        "opencode" => Some(match text("agentEffort") {
-            Some(effort) => format!("/model {model} {effort}"),
-            None => format!("/model {model}"),
-        }),
-        _ => None,
-    }
 }
 
 /// Queues a message in a session's chat queue and tells its viewers. A `startup_send` is a new
@@ -2206,9 +2238,15 @@ pub(crate) async fn handle_promote_coordinator_http(
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
     // The coordinator record is committed, so a failure from here on is reported, not raised.
-    let playbook_error = send_playbook_now(state, &promoted.key, &promoted.playbook_message)
-        .await
-        .err();
+    // A draft promoted at first-send time (`forDraft: true`) sends its own first prompt carrying
+    // `COORDINATOR_GUIDE_LINE`, so skip the extra mid-conversation playbook message.
+    let playbook_error = if promoted.playbook_message.is_empty() {
+        None
+    } else {
+        send_playbook_now(state, &promoted.key, &promoted.playbook_message)
+            .await
+            .err()
+    };
     let (project_id, session_id) = &promoted.key;
     routed_json(
         Some(endpoint_path),
@@ -2308,6 +2346,20 @@ pub(crate) fn handle_coordinator_http(
     // An ask a thread made with `ghostex needs-you add`: once the user answers it here, the
     // thread hears the answer too (session_needs_you/thread.rs).
     let thread_ask = crate::session_needs_you::thread_ask_of(db, endpoint_path, params);
+    // An ask takes the next free tag: the chat's ledger is read up to now first, so a form or page
+    // the chat showed seconds ago is counted, not only what the last sweep read.
+    if endpoint_path == "/api/coordinatorWork"
+        && params.get("op").and_then(Value::as_str) == Some("ask")
+    {
+        let text = |key: &str| params.get(key).and_then(Value::as_str).unwrap_or_default();
+        crate::session_chat_open_questions::read_up_to_date(
+            state,
+            db,
+            repository,
+            text("projectId"),
+            text("sessionId"),
+        );
+    }
     let output = coordinators::handle_coordinator_endpoint(endpoint_path, db, repository, params)?;
     if let Some(ask) = thread_ask {
         if let Some((project_id, session_id)) =
@@ -2349,9 +2401,182 @@ pub(crate) fn handle_coordinator_http(
             crate::coordinators::refresh_coordinator_panels(db, repository)
         {
             republish_session_chat(state, &project_id, &session_id);
+            let _ = schedule_presentation_session_delta(
+                state,
+                db,
+                repository,
+                &project_id,
+                &session_id,
+            );
         }
     }
     Ok(output.result)
+}
+
+/// `/api/sendCoordinatorThreadNote`: a thread sends its coordinator a short one-line note right
+/// after a push (`ghostex coordinator note "<commit> <one line>"`), recording it on the thread row
+/// (for `coordinator status`) and waking/delivering it to the coordinator immediately while
+/// keeping `agents send` and raw writes refused (`coordinators/thread_messages.rs`).
+pub(crate) async fn handle_send_coordinator_thread_note_http(
+    state: &Arc<AppState>,
+    caller: &crate::security::Principal,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let fail = |error: DomainStateError| {
+        domain_error_response(endpoint_path.clone(), request_id.clone(), error)
+    };
+    let params = match crate::domain::read_domain_rpc_params(body) {
+        Ok(params) => params,
+        Err(error) => return fail(error),
+    };
+    let param = |key: &str| {
+        params
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    };
+    let (project_id, session_id) = match caller {
+        crate::security::Principal::Session {
+            project_id,
+            session_id,
+            ..
+        } => {
+            if let Some(given_project) = param("projectId") {
+                if given_project != *project_id {
+                    return fail(DomainStateError {
+                        code: "forbidden",
+                        message: "A session can only send coordinator notes for itself.".into(),
+                    });
+                }
+            }
+            if let Some(given_session) = param("sessionId") {
+                if given_session != *session_id {
+                    return fail(DomainStateError {
+                        code: "forbidden",
+                        message: "A session can only send coordinator notes for itself.".into(),
+                    });
+                }
+            }
+            (project_id.clone(), session_id.clone())
+        }
+        _ => match (param("projectId"), param("sessionId")) {
+            (Some(project_id), Some(session_id)) => (project_id, session_id),
+            _ => {
+                return fail(DomainStateError::bad_request(
+                    "Sending a coordinator note needs projectId and sessionId.",
+                ))
+            }
+        },
+    };
+    let note = param("note")
+        .map(|text| text.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|text| !text.is_empty());
+    let Some(note) = note else {
+        return fail(DomainStateError::bad_request(
+            "Give a short one-line note (e.g. \"<commit> <what landed>\").",
+        ));
+    };
+    if note.chars().count() > coordinators::COORDINATOR_THREAD_NOTE_MAX_CHARS {
+        return fail(DomainStateError::bad_request(format!(
+            "Keep the note to one line under {} characters.",
+            coordinators::COORDINATOR_THREAD_NOTE_MAX_CHARS
+        )));
+    }
+
+    let db_state = state.clone();
+    let db_project = project_id.clone();
+    let db_session = session_id.clone();
+    let db_note = note.clone();
+    let prepared = tokio::task::spawn_blocking(move || {
+        let db = open_gxserver_database(&db_state.paths).map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("SQLite gxserver state error: {error}"),
+        })?;
+        let repository = DomainRepository::new(&db, db_state.metadata.server_id.as_str());
+        let thread =
+            coordinators::read_thread(&db, &db_project, &db_session)?.ok_or_else(|| {
+                DomainStateError::not_found(
+                "This session is not a coordinator's thread, so `coordinator note` does not apply.",
+            )
+            })?;
+        if thread.is_resolved() {
+            return Err(DomainStateError::bad_request(
+                "This thread is already marked done, so its note was not sent.",
+            ));
+        }
+        let session = repository
+            .get_session(&thread.project_id, &thread.session_id)?
+            .ok_or_else(|| DomainStateError::not_found("The thread's session no longer exists."))?;
+        let coordinator_key = thread.coordinator_key();
+        if repository
+            .get_session(&coordinator_key.0, &coordinator_key.1)?
+            .is_none()
+        {
+            return Err(DomainStateError::not_found(
+                "The coordinator session no longer exists.",
+            ));
+        }
+        let project = repository.get_project(&thread.project_id).ok().flatten();
+        let names = agent_names(&repository);
+        let sender = session_sender(&db_state, project.as_ref(), &session, &thread.key(), &names);
+        let recorded_at = coordinators::record_thread_note(
+            &db,
+            &thread.project_id,
+            &thread.session_id,
+            &db_note,
+        )?;
+        let coordinator_ref = crate::ids::create_global_session_ref(
+            db_state.metadata.server_id.as_str(),
+            &coordinator_key.0,
+            &coordinator_key.1,
+        );
+        Ok::<_, DomainStateError>((coordinator_key, sender, recorded_at, coordinator_ref))
+    })
+    .await;
+
+    let (coordinator_key, sender, recorded_at, coordinator_ref) = match prepared {
+        Ok(Ok(prepared)) => prepared,
+        Ok(Err(error)) => return fail(error),
+        Err(error) => {
+            return fail(DomainStateError {
+                code: "internalError",
+                message: format!("Coordinator note task failed: {error}"),
+            })
+        }
+    };
+
+    let body_text = coordinators::note_report_body(&note);
+    let message = agent_message(&sender, &body_text);
+    let send_request_id = Uuid::new_v4().to_string();
+    if let Err(error) =
+        send_to_coordinator(state, &coordinator_key, &message, &send_request_id).await
+    {
+        return fail(DomainStateError {
+            code: "deliveryFailed",
+            message: format!(
+                "Recorded the note, but could not deliver it to the coordinator: {}",
+                error.trim()
+            ),
+        });
+    }
+
+    routed_json(
+        Some(endpoint_path),
+        StatusCode::OK,
+        rpc_success(
+            request_id,
+            json!({
+                "ok": true,
+                "note": note,
+                "recordedAt": recorded_at,
+                "coordinatorRef": coordinator_ref,
+            }),
+        ),
+    )
 }
 
 #[cfg(test)]

@@ -68,6 +68,9 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
     // The home project's group (the computers' homes merged into one with the computers combined, merged.rs), whose header is
     // Main Hub's row (`chief.rs`).
     let mut home_groups: BTreeSet<&str> = BTreeSet::new();
+    // Autopilot's supervisor system projects: never drawn as standalone project groups; their
+    // sessions are lifted into Main Hub's Autopilot section while Main Hub is on.
+    let mut autopilot_groups: BTreeSet<&str> = BTreeSet::new();
     // GBots' groups, drawn only in Main Hub's GBots section (gbots.rs), in bot-name order.
     let mut gbot_groups: Vec<&str> = Vec::new();
     let mut gbot_looks: BTreeMap<&str, &ghostex_gx_protocol::presentation::PresentationGbotsBot> =
@@ -76,6 +79,9 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
         if let Some(project) = &plan.project {
             if project.is_home && plan.kind == GroupKind::Project {
                 home_groups.insert(plan.group_id.as_str());
+            }
+            if project.is_autopilot && plan.kind == GroupKind::Project {
+                autopilot_groups.insert(plan.group_id.as_str());
             }
             if let Some(gbot) = project
                 .gbot
@@ -151,6 +157,11 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
     let bots_mode = effective_sidebar_mode(input.settings, input.ui) == SidebarMode::Bots;
     let is_bot_group = |group_id: &str| bot_groups.contains(group_id);
     let is_gbot_group = |group_id: &str| gbot_groups.contains(&group_id);
+    let is_autopilot_group = |group_id: &str| {
+        autopilot_groups.contains(group_id)
+            || owner_project_group_id(group_id)
+                .is_some_and(|owner| autopilot_groups.contains(owner.as_str()))
+    };
 
     // A section has a Space row only when its machine has Spaces on and its daemon published a
     // Space document at all; an older daemon has no Spaces and is never filtered.
@@ -179,6 +190,9 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
     if active_projects_on {
         let mut owners: BTreeMap<String, (bool, Option<u64>)> = BTreeMap::new();
         for plan in input.plans {
+            if is_autopilot_group(&plan.group_id) {
+                continue;
+            }
             let Some(build) = input.builds.get(&plan.group_id) else {
                 continue;
             };
@@ -219,9 +233,9 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
                 .unwrap_or(group_id),
         )
     };
-    // Bots belong to no Space: a Space only ever shows and counts projects.
+    // Bots and Autopilot system projects belong to no Space: a Space only ever shows and counts projects.
     let shows_group = |selection: &SpaceSelection, group_id: &str| -> bool {
-        if is_bot_group(group_id) || is_gbot_group(group_id) {
+        if is_bot_group(group_id) || is_gbot_group(group_id) || is_autopilot_group(group_id) {
             return false;
         }
         if selection.is_active_projects() {
@@ -255,7 +269,9 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
     });
     let active_space_id = match (&selection, active_group_id) {
         (Some(selection), Some(group_id))
-            if !is_bot_group(group_id) && !is_gbot_group(group_id) =>
+            if !is_bot_group(group_id)
+                && !is_gbot_group(group_id)
+                && !is_autopilot_group(group_id) =>
         {
             let project = space_project_of_group(group_id);
             Some(space_for_group(
@@ -376,6 +392,9 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
     let mut empty_projects = 0usize;
     let mut groups: Vec<GroupView> = Vec::new();
     for plan in input.plans {
+        if is_autopilot_group(&plan.group_id) {
+            continue;
+        }
         let Some(build) = input.builds.get(&plan.group_id) else {
             continue;
         };
@@ -641,6 +660,7 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
     let mut machine_summary = MachineSummary::default();
     for build in group_ids
         .iter()
+        .filter(|group_id| !is_autopilot_group(group_id))
         .filter(|group_id| counts_here(group_id))
         .filter_map(|group_id| input.builds.get(group_id))
     {

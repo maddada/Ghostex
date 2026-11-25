@@ -224,9 +224,8 @@ Chief (`server/src/chief/`) is one coordinator session per computer that the use
 other session (CDXC:Chief). No token is stored with `SessionRole::Head`: Chief's token holds
 `coordinator` like any coordinator's, and the auth gate makes it `Head` per request
 (`chief::settle_principal`) only when its `(project, session)` is the one in gxserver's Chief
-record (`metadata.chiefSession`, written only when gxserver itself creates that session) and the
-`chiefHidden` setting (user-only, not agent-writable) is off. Turning Chief off, New Chat and
-Change Agent therefore take the role away on the next request. `/api/chief` `open`, `newChat` and
+record (`metadata.chiefSession`, written only when gxserver itself creates that session). New Chat and
+Change Agent therefore take the role away from the old chat on the next request. `/api/chief` `open`, `newChat` and
 `setAgent` accept only the owner's devices and the token file.
 
 "Coordinators manage their own threads" is checked by who the session is, not by its token's role

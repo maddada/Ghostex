@@ -48,8 +48,80 @@ impl GhostexGpuiApp {
             .as_str()
             .or_else(|| message["method"].as_str())
         {
-            // The composer's terminal button: the same session, as a terminal.
-            Some("terminalView" | "switchToTerminal") => self.web_show_terminal(true, cx),
+            // The composer's terminal button: the same session, as a terminal. For Native
+            // sessions, ask for confirmation (warning if a turn is active) before switching the
+            // host into interactive Terminal mode, matching desktop.
+            Some(action @ ("terminalView" | "switchToTerminal")) => {
+                // The chat's own Switch to Terminal-based stays in the chat; the core's
+                // `switchToTerminal` asks for the terminal to work there (desktop's `stay_in_chat`).
+                let stay_in_chat = action == "terminalView";
+                let non_cli_info = self
+                    .gx_store
+                    .core
+                    .presentation()
+                    .loaded(&session.machine)
+                    .and_then(|loaded| {
+                        loaded.server_session(&session.project_id, &session.session_id)
+                    })
+                    .filter(|row| row.non_cli_mode)
+                    .map(|row| row.activity.as_str() == "working");
+                if let Some(is_working) = non_cli_info {
+                    let remote_target = match &session.machine {
+                        ghostex_gx_core::MachineId::Local => Ok(None),
+                        ghostex_gx_core::MachineId::Remote(machine_id) => self
+                            .gpui_remote_gxserver_request_target(machine_id)
+                            .map(Some)
+                            .ok_or_else(|| {
+                                "Switching a remote Native session to Terminal-based is not available in the web build yet."
+                                    .to_string()
+                            }),
+                    };
+                    let target = match remote_target {
+                        Ok(target) => target,
+                        Err(message) => {
+                            self.dispatch_gpui_app_modal_toast(
+                                "warning",
+                                "Could not switch to Terminal-based",
+                                &message,
+                                cx,
+                            );
+                            return;
+                        }
+                    };
+                    let confirmation = if is_working {
+                        ghostex_gx_core::CloseConfirmation {
+                            title: "Interrupt and switch to Terminal-based?".to_string(),
+                            message: "This session is running in Native mode and currently working. Switching to Terminal-based is not instant: Ghostex will interrupt the active turn and reopen the agent in Terminal-based mode.".to_string(),
+                            confirm_label: "Interrupt & Switch".to_string(),
+                        }
+                    } else {
+                        ghostex_gx_core::CloseConfirmation {
+                            title: "Switch to Terminal-based?".to_string(),
+                            message: "This session is running in Native mode. Switching to Terminal-based is not instant: Ghostex will stop the Native host and reopen the agent in Terminal-based mode.".to_string(),
+                            confirm_label: "Switch to Terminal-based".to_string(),
+                        }
+                    };
+                    let params = json!({
+                        "projectId": session.project_id,
+                        "sessionId": session.session_id,
+                        "interrupt": true,
+                    });
+                    self.gx_store_confirm_in_app(
+                        confirmation,
+                        Box::new(move |app, cx| {
+                            app.web_confirm_switch_non_cli_to_terminal(
+                                target,
+                                params,
+                                stay_in_chat,
+                                cx,
+                            );
+                        }),
+                        cx,
+                    );
+                } else {
+                    self.web_show_terminal(true, cx);
+                }
+            }
             // Copy Report's last step: Send Bug / Feedback with its agent switch on.
             Some("sendFeedback") => {
                 let collect_with_agent = message["collectWithAgent"] == true
@@ -311,6 +383,244 @@ impl GhostexGpuiApp {
                     .await;
                 })
                 .detach();
+            }
+            // "Switch to Native" strip chip & `•••` menu actions (`Q4768`–`Q4772`).
+            Some("switchToNative") => {
+                let family = message["family"]
+                    .as_str()
+                    .or_else(|| message["params"]["family"].as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                let agent_name = message["agentName"]
+                    .as_str()
+                    .or_else(|| message["params"]["agentName"].as_str())
+                    .unwrap_or("this agent")
+                    .to_string();
+                let native_default =
+                    message["nativeDefault"] == true || message["params"]["nativeDefault"] == true;
+                let row_working = self
+                    .gx_store
+                    .core
+                    .presentation()
+                    .loaded(&session.machine)
+                    .and_then(|loaded| {
+                        loaded.server_session(&session.project_id, &session.session_id)
+                    })
+                    .is_some_and(|row| row.activity.as_str() == "working");
+                let is_working = row_working
+                    || message["working"] == true
+                    || message["params"]["working"] == true;
+                let body = if is_working {
+                    format!(
+                        "{agent_name} is replying now. Ghostex will switch to Native mode automatically as soon as this reply finishes, keeping your chat history."
+                    )
+                } else {
+                    format!(
+                        "Ghostex will reopen {agent_name} in Native mode. Your chat history stays, and you can switch back to Terminal-based anytime."
+                    )
+                };
+                let confirmation = ghostex_gx_core::CloseConfirmation {
+                    title: "Switch to Native?".to_string(),
+                    message: body,
+                    confirm_label: "Switch to Native".to_string(),
+                };
+                let checkbox = (!native_default)
+                    .then(|| (format!("Use Native for new chats with {agent_name}"), true));
+                let session = session.clone();
+                self.gx_store_confirm_with_checkbox(
+                    confirmation,
+                    checkbox,
+                    true,
+                    Box::new(move |app, use_as_default, cx| {
+                        let target = match &session.machine {
+                            ghostex_gx_core::MachineId::Local => Ok(None),
+                            ghostex_gx_core::MachineId::Remote(machine_id) => app
+                                .gpui_remote_gxserver_request_target(machine_id)
+                                .map(Some)
+                                .ok_or_else(|| {
+                                    "Switching a remote session to Native is not available in the web build yet."
+                                        .to_string()
+                                }),
+                        };
+                        let target = match target {
+                            Ok(target) => target,
+                            Err(err) => {
+                                app.dispatch_gpui_app_modal_toast(
+                                    "warning",
+                                    "Could not switch to Native",
+                                    &err,
+                                    cx,
+                                );
+                                return;
+                            }
+                        };
+                        if use_as_default && !family.is_empty() && target.is_none() {
+                            let mut settings =
+                                crate::shared_settings::shared_sidebar_settings_snapshot()
+                                    .object()
+                                    .clone();
+                            let mut modes = settings
+                                .get("agentSessionMode")
+                                .and_then(Value::as_object)
+                                .cloned()
+                                .unwrap_or_default();
+                            modes.insert(family.clone(), json!("non-cli"));
+                            settings.insert("agentSessionMode".into(), Value::Object(modes.clone()));
+                            crate::shared_settings::install(settings);
+                            cx.refresh_windows();
+                            cx.spawn(async move |_, _| {
+                                let _ = crate::app::gx_store::gx_rpc(
+                                    None,
+                                    "/api/dispatchRendererCommand",
+                                    json!({
+                                        "action": "updateSettingsPatch",
+                                        "payload": {
+                                            "patch": { "agentSessionMode": modes },
+                                            "source": "chat:switchToNative",
+                                        },
+                                    }),
+                                )
+                                .await;
+                            })
+                            .detach();
+                        }
+                        let params = json!({
+                            "projectId": session.project_id,
+                            "sessionId": session.session_id,
+                        });
+                        cx.spawn(async move |this, cx| {
+                            let res = crate::app::gx_store::gx_rpc(
+                                target,
+                                "/api/switchSessionCliToAcp",
+                                params,
+                            )
+                            .await;
+                            let _ = this.update(cx, |this, cx| match res {
+                                Ok(value) => {
+                                    if value.get("queued").and_then(Value::as_bool) == Some(true) {
+                                        this.dispatch_gpui_app_modal_toast(
+                                            "info",
+                                            "Switch to Native",
+                                            "Switches to Native when this reply ends.",
+                                            cx,
+                                        );
+                                    } else if value.get("switched").and_then(Value::as_bool)
+                                        != Some(true)
+                                    {
+                                        let reason = value
+                                            .get("reason")
+                                            .and_then(Value::as_str)
+                                            .unwrap_or(
+                                                "This chat could not switch to Native right now.",
+                                            );
+                                        this.dispatch_gpui_app_modal_toast(
+                                            "warning",
+                                            "Could not switch to Native",
+                                            reason,
+                                            cx,
+                                        );
+                                    }
+                                }
+                                Err(err) => {
+                                    this.dispatch_gpui_app_modal_toast(
+                                        "warning",
+                                        "Could not switch to Native",
+                                        &err.message,
+                                        cx,
+                                    );
+                                }
+                            });
+                        })
+                        .detach();
+                    }),
+                    cx,
+                );
+            }
+            Some("cancelSwitchToNative") => {
+                let target = match &session.machine {
+                    ghostex_gx_core::MachineId::Local => Some(None),
+                    ghostex_gx_core::MachineId::Remote(machine_id) => self
+                        .gpui_remote_gxserver_request_target(machine_id)
+                        .map(Some),
+                };
+                if let Some(target) = target {
+                    let params = json!({
+                        "projectId": session.project_id,
+                        "sessionId": session.session_id,
+                        "cancel": true,
+                    });
+                    cx.spawn(async move |this, cx| {
+                        if let Err(err) = crate::app::gx_store::gx_rpc(
+                            target,
+                            "/api/switchSessionCliToAcp",
+                            params,
+                        )
+                        .await
+                        {
+                            let _ = this.update(cx, |this, cx| {
+                                this.dispatch_gpui_app_modal_toast(
+                                    "warning",
+                                    "Could not cancel switch",
+                                    &err.message,
+                                    cx,
+                                );
+                            });
+                        }
+                    })
+                    .detach();
+                }
+            }
+            Some("dismissNativeSwitchOffer") => {
+                let raw_family = message["family"]
+                    .as_str()
+                    .or_else(|| message["params"]["family"].as_str())
+                    .unwrap_or_default();
+                if let Some((canonical, _)) =
+                    ghostex_gx_chat_core::extras::native_switch::canonical_native_agent(raw_family)
+                {
+                    if matches!(session.machine, ghostex_gx_core::MachineId::Local) {
+                        let mut settings =
+                            crate::shared_settings::shared_sidebar_settings_snapshot()
+                                .object()
+                                .clone();
+                        let mut families: Vec<String> = settings
+                            .get("nativeSwitchOfferDismissedAgents")
+                            .and_then(Value::as_str)
+                            .map(|raw| {
+                                raw.split(',')
+                                    .map(str::trim)
+                                    .filter(|s| !s.is_empty())
+                                    .map(str::to_string)
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        if !families.iter().any(|existing| existing == canonical) {
+                            families.push(canonical.to_string());
+                        }
+                        let joined = families.join(",");
+                        settings.insert(
+                            "nativeSwitchOfferDismissedAgents".into(),
+                            Value::String(joined.clone()),
+                        );
+                        crate::shared_settings::install(settings);
+                        cx.refresh_windows();
+                        cx.spawn(async move |_, _| {
+                            let _ = crate::app::gx_store::gx_rpc(
+                                None,
+                                "/api/dispatchRendererCommand",
+                                json!({
+                                    "action": "updateSettingsPatch",
+                                    "payload": {
+                                        "patch": { "nativeSwitchOfferDismissedAgents": joined },
+                                        "source": "chat:nativeSwitchOfferDismiss",
+                                    },
+                                }),
+                            )
+                            .await;
+                        })
+                        .detach();
+                    }
+                }
             }
             // A chat's zoom chords. The page cannot save Settings, so the zoom changes every chat
             // on this page until it reloads.
@@ -741,6 +1051,37 @@ impl GhostexGpuiApp {
                     "error",
                     "Could not switch account",
                     &error.message,
+                    cx,
+                ),
+            });
+        })
+        .detach();
+    }
+
+    /// Runs `/api/switchSessionAcpToCli` after the user confirms switching a Native session to
+    /// Terminal, matching desktop's `confirm_switch_session_non_cli_to_terminal`: the chat's own
+    /// switch stays in the chat, now over the Terminal-based agent (CDXC:SessionChat 2026-11-25
+    /// in apps/desktop/src/app/session_chat/drafts_and_attachments.rs).
+    fn web_confirm_switch_non_cli_to_terminal(
+        &mut self,
+        target: Option<crate::app::model::GpuiRemoteGxserverRequestTarget>,
+        params: Value,
+        stay_in_chat: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        cx.spawn(async move |this, cx| {
+            let res =
+                crate::app::gx_store::gx_rpc(target, "/api/switchSessionAcpToCli", params).await;
+            let _ = this.update(cx, |this, cx| match res {
+                Ok(_) => {
+                    if !stay_in_chat {
+                        this.web_show_terminal(true, cx);
+                    }
+                }
+                Err(err) => this.dispatch_gpui_app_modal_toast(
+                    "warning",
+                    "Could not switch to Terminal-based",
+                    &err.message,
                     cx,
                 ),
             });

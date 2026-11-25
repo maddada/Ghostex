@@ -19,14 +19,21 @@
       "first": 3,
       "icon": "coordinator-crown-points",
       "title": "Let a coordinator delegate",
-      "body": "A coordinator hands work to threads and brings results back. Press {key:openNewThreadPalette} and pick Coordinator."
+      "body": "A coordinator hands work to threads and brings results back. Click New session and turn on Coordinator in the bar above the chat box."
     },
     {
       "id": "connect-a-device",
       "first": 4,
       "icon": "devices",
       "title": "Ghostex on your phone",
-      "body": "Open the sidebar's menu > Connect a Device and scan the code with the Ghostex app to follow your agents."
+      "body": "Open the sidebar's menu > Connect a Phone and scan the code with the Ghostex app to follow your agents."
+    },
+    {
+      "id": "use-boosts",
+      "first": 5,
+      "icon": "sparkles",
+      "title": "Boost any prompt with *",
+      "body": "Type * or click Boost above the chat box to ask for a Live page, a chart, a diagram, or a browser run in one click."
     },
     {
       "id": "quiet-view",
@@ -44,13 +51,13 @@
       "id": "dictate-into-chat-box",
       "icon": "microphone",
       "title": "Dictate instead of typing",
-      "body": "Press the microphone beside Send, or {key:toggleDictation}, and talk. Your words land in the chat box for you to check."
+      "body": "Press the microphone beside Send and talk. Your words land in the chat box for you to check."
     },
     {
       "id": "talk-to-the-voice-agent",
       "icon": "headset",
       "title": "Talk to your agents",
-      "body": "Press the headset at the top of the window ({key:toggleVoiceAgent}) and ask out loud what your sessions are doing.",
+      "body": "Press the headset at the top of the window and ask out loud what your sessions are doing.",
       "requires": "voiceAgent"
     },
     {
@@ -69,13 +76,13 @@
       "id": "command-palette-all-actions",
       "icon": "bolt",
       "title": "Find any command fast",
-      "body": "Press {key:openCommandPalette}, or pick Commands in the sidebar's menu, to search every Ghostex action and setting by name."
+      "body": "Open the sidebar's menu > Commands to search every Ghostex action and setting by name."
     },
     {
       "id": "quick-access-sessions-and-files",
       "icon": "search",
       "title": "Jump to sessions and files",
-      "body": "{key:openSessionSearchPalette} opens your recent sessions and {key:openQuickAccessFiles} the files of every project. Type a few letters, then Enter."
+      "body": "Click Search at the top of the sidebar for recent sessions and project files. Type a few letters, then Enter."
     },
     {
       "id": "find-in-chat",
@@ -87,7 +94,7 @@
       "id": "stash-and-reuse-prompts",
       "icon": "stack-push",
       "title": "Stash a prompt for later",
-      "body": "{key:stashPrompt} stashes what is in the chat box, and {key:stashedPrompts} opens Saved Prompts to send it again later."
+      "body": "More actions (⋯) > More > Stash Prompt saves your draft, or opens Saved Prompts when the chat box is empty."
     },
     {
       "id": "account-usage-meters",
@@ -111,7 +118,7 @@
       "id": "connect-another-computer",
       "icon": "device-laptop",
       "title": "Run agents on another computer",
-      "body": "Settings > Remote > Add a computer connects another computer. Its projects and sessions join your sidebar."
+      "body": "Open the sidebar's menu > Connect a Computer to add another computer. Its projects and sessions join your sidebar."
     },
     {
       "id": "run-in-a-cloud-box",
@@ -127,22 +134,10 @@
       "body": "Settings > Extensions > On lists everything you switched on. The other tabs have more to add."
     },
     {
-      "id": "new-thread-picker",
-      "icon": "keyboard",
-      "title": "Start anything in a keystroke",
-      "body": "{key:openNewThreadPalette} opens the New Thread picker: type to pick an agent, Coordinator, Browser or Terminal."
-    },
-    {
-      "id": "toggle-chat-and-terminal",
-      "icon": "terminal-2",
-      "title": "Chat or terminal, your pick",
-      "body": "Press {key:toggleChatView} to flip a session between the chat and the agent's own terminal. The agent keeps running."
-    },
-    {
       "id": "jump-to-latest-unread",
       "icon": "bell",
       "title": "Jump to what's waiting",
-      "body": "{key:jumpToLatestUnreadNotification} jumps to your latest unread notification's session, and {key:openNotifications} opens the bell.",
+      "body": "Press {key:jumpToLatestUnreadNotification} to jump to your latest unread notification's session, or click the bell at the top.",
       "requires": "notifications"
     },
     {
@@ -155,7 +150,7 @@
       "id": "model-and-effort-picker",
       "icon": "brain",
       "title": "Change model and effort",
-      "body": "Press {key:openModelPicker} for the model picker. Enter makes a choice the default; Alt+Enter uses it in this session only."
+      "body": "Click the model in the chat bar to open the model picker. Click sets the default; right-click uses it here only."
     },
     {
       "id": "focus-mode",
@@ -167,7 +162,7 @@
       "id": "see-every-hotkey",
       "icon": "keyboard",
       "title": "See every shortcut",
-      "body": "Press {key:openHotkeys} to open Settings > Hotkeys, where every shortcut is listed and any key can be changed."
+      "body": "Open Settings > Hotkeys to see every shortcut in one place and change any key."
     },
     {
       "id": "copy-last-reply",
@@ -209,7 +204,7 @@
       "id": "files-and-links",
       "icon": "link",
       "title": "Every file the chat touched",
-      "body": "Press {key:toggleChatFilesLinks}, or More actions (⋯) > Files and links, for every picture, file and link this session used."
+      "body": "Open More actions (⋯) > Files and links to see every picture, file and link this session used."
     },
     {
       "id": "new-worktree-with-base-branch",
@@ -225,9 +220,10 @@
     },
     {
       "id": "find-session-by-prompt-text",
+      "first": 6,
       "icon": "file-search",
       "title": "Find sessions by prompt",
-      "body": "The sidebar's menu > Tools > Search by Prompt ({key:openFindPrompts}) searches every prompt you sent. Enter resumes it."
+      "body": "The sidebar's menu > Tools > Search by Prompt searches every prompt you sent. Pick one to resume that session."
     },
     {
       "id": "star-prompts-you-want-again",
@@ -312,19 +308,19 @@
       "id": "fork-a-session",
       "icon": "git-fork",
       "title": "Fork a session",
-      "body": "Right-click a session > Advanced > Fork ({key:forkSession}) to copy it into a new session and try another direction."
+      "body": "Right-click a session > More > Fork to copy it into a new session and try another direction."
     },
     {
       "id": "delayed-send",
       "icon": "clock-check",
       "title": "Send a message later",
-      "body": "Type a message, then right-click the session > Advanced > Delayed Send to send it later."
+      "body": "Type a message, then right-click the session > More > Delayed Send to send it later."
     },
     {
       "id": "session-notes",
       "icon": "note",
       "title": "Leave notes on sessions",
-      "body": "Press {key:sessionNote}, or right-click a session > Note, to write down what's next. The note stays when you resume.",
+      "body": "Right-click a session > More > Note to write down what's next. The note stays when you resume.",
       "requires": "sessionNotes"
     },
     {

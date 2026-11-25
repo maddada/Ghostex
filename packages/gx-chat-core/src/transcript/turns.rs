@@ -248,6 +248,7 @@ pub fn summary_mode_turns(
                 let seam = final_at.is_none_or(|final_at| *at > final_at);
                 is_command_output_turn(row)
                     || suppressed_turn_label(row).as_deref() == Some("Interrupted")
+                    || crate::transcript::delivery_notice::is_delivery_notice(row)
                     || (seam && is_turn_seam(row))
                     // A side question stays in view in summary mode too.
                     || crate::transcript::side_question::is_side_question_message(row)

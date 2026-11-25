@@ -62,6 +62,9 @@ pub struct Document {
     pub agent_tasks: Tri<Value>,
     /// Latched once gxserver has read this session's screen.
     pub screen_probed: bool,
+    /// True while this session runs in Native (Non-CLI) mode instead of an interactive Terminal CLI.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub non_cli_mode: bool,
     /// The session's Cloud Box is paused or stopped; sending a message wakes it
     /// (`session/cloud_box.rs`). The composer's placeholder already says so.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -106,6 +109,10 @@ pub struct Document {
     /// so their cards say so (`transcript::open_questions::withdrawn_pages`).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub withdrawn_pages: BTreeMap<String, crate::transcript::open_questions::WithdrawnPage>,
+    /// How many open questions each Live page still asks, by page id, for its compact row in
+    /// Summary view (`questions::open_questions::page_open_question_counts`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub page_open_questions: BTreeMap<String, usize>,
     /// The question pages and forms put off "For later" that still wait for answers, so their
     /// cards say so and offer "Back to unanswered" (`questions::later`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -192,6 +199,10 @@ pub struct Document {
     /// the chat is long and its prompt cache has expired. Family d.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compact_before_send: Option<super::panels::CompactBeforeSendOffer>,
+    /// The "Switch to Native" strip chip and `•••` menu offer (`extras::native_switch`), absent
+    /// for Native chats, unsupported agents, guests, and older remote servers. Family f.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_switch: Option<super::panels::NativeSwitchOffer>,
     pub note: Note,
     /// The Catch me up button and card. Family d.
     #[serde(default)]
@@ -429,6 +440,10 @@ pub struct Document {
     /// the renderers draw from it rather than from the records below.
     #[serde(default)]
     pub view_level: String,
+    /// Whether Live page cards start folded to a single compact row in the transcript: true in
+    /// Summary view (`transcript::view_level::collapse_page_cards`), absent otherwise.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub collapse_page_cards: bool,
     /// The user's verbose override, or `null` to follow the setting.
     pub verbose_override: Option<bool>,
     /// The user's Simple override for this chat, or `null` to follow the setting.

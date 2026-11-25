@@ -1335,9 +1335,9 @@ async fn answer_prompt(
                 };
                 if indices.iter().any(|i| *i >= labels.len()) {
                     return Err(format!(
-                        "Question {} has only {} options.",
+                        "Question {} has only {}.",
                         index + 1,
-                        labels.len()
+                        ghostex_gx_protocol::plural(labels.len(), "option", "options")
                     ));
                 }
                 if indices.is_empty() && other.is_none() {
@@ -1364,14 +1364,22 @@ async fn answer_prompt(
         }
         PendingPrompt::Choice { options, title, .. } => {
             let Some(index) = single_option else {
-                return Err(format!(
-                    "Pick one of the {} options of \"{}\" by number.",
-                    options.len(),
-                    short(&title, 120)
-                ));
+                return Err(if options.len() == 1 {
+                    format!("Pick the 1 option of \"{}\" by number.", short(&title, 120))
+                } else {
+                    format!(
+                        "Pick one of the {} options of \"{}\" by number.",
+                        options.len(),
+                        short(&title, 120)
+                    )
+                });
             };
             let Some(option) = options.get(index) else {
-                return Err(format!("There are only {} options.", options.len()));
+                return Err(if options.len() == 1 {
+                    "There is only 1 option.".to_string()
+                } else {
+                    format!("There are only {} options.", options.len())
+                });
             };
             (option.answer.clone(), option.label.clone())
         }

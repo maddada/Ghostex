@@ -21,9 +21,92 @@ use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;
 use crate::session_chat_files::SESSION_CHAT_IMAGE_MAX_BYTES;
 
+pub mod approval;
+pub(crate) mod approval_migration;
 pub(crate) mod channel;
+mod child_lifetime;
+mod driver_claude;
+mod driver_codex;
+pub(crate) mod driver_cursor;
+mod driver_grok;
+pub(crate) mod driver_opencode;
+mod driver_pi;
+mod elicitation;
+pub(crate) mod hermes;
 pub mod host;
+pub(crate) mod host_mode_switching;
+mod omp_elicitation;
+pub(crate) mod pending_switch;
 pub(crate) mod spec;
+pub(crate) mod startup_error;
+
+pub use approval::{AcpApprovalLevel, SESSION_ACP_APPROVAL_LEVEL_KEY};
+pub(crate) use child_lifetime::ensure_dead_host_child_stopped;
+pub use child_lifetime::run_watcher_command;
+
+/// Settings key (comma-separated canonical agent families, e.g. `"claude,codex"`) recording
+/// per-agent dismissals of the chat strip's "Switch to Native" offer (`Q4770`).
+pub const NATIVE_SWITCH_OFFER_DISMISSED_KEY: &str = "nativeSwitchOfferDismissedAgents";
+
+/// Whether a live `ghostex acp-host` child process is running inside `zmx_name`.
+/// Excludes `tree.root` (the `zmx` daemon itself) because its argv can retain the original
+/// startup command containing `"acp-host"` even after the host exited back to the shell.
+/// Unreadable process trees count as running so transient read errors never trigger a restart.
+pub(crate) fn host_process_running(zmx_name: &str) -> bool {
+    match crate::zmx::read_zmx_session_tree(zmx_name) {
+        Ok(Some(tree)) => tree
+            .processes
+            .iter()
+            .any(|process| process.pid != tree.root && process.command.contains("acp-host")),
+        Ok(None) => false,
+        Err(()) => true,
+    }
+}
+
+/// Canonical Native-capable agent family (`"antigravity"`, `"claude"`, `"codex"`, or `"cursor"`).
+pub fn canonical_native_family(agent_family: &str) -> Option<&'static str> {
+    spec::spec_for_family(agent_family).map(|spec| spec.family)
+}
+
+/// Canonical families whose "Switch to Native" strip offer the user dismissed in Settings.
+pub fn dismissed_native_switch_families(
+    settings: &serde_json::Map<String, Value>,
+) -> Vec<&'static str> {
+    let mut out = Vec::new();
+    match settings.get(NATIVE_SWITCH_OFFER_DISMISSED_KEY) {
+        Some(Value::String(raw)) => {
+            for part in raw.split(',') {
+                if let Some(family) = canonical_native_family(part) {
+                    if !out.contains(&family) {
+                        out.push(family);
+                    }
+                }
+            }
+        }
+        Some(Value::Array(items)) => {
+            for item in items {
+                if let Some(family) = item.as_str().and_then(canonical_native_family) {
+                    if !out.contains(&family) {
+                        out.push(family);
+                    }
+                }
+            }
+        }
+        Some(Value::Object(map)) => {
+            for (key, value) in map {
+                if value.as_bool() == Some(true) {
+                    if let Some(family) = canonical_native_family(key) {
+                        if !out.contains(&family) {
+                            out.push(family);
+                        }
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    out
+}
 
 /// Settings key (object map of `<agentFamily>: "non-cli" | "agent-cli"`) storing per-agent
 /// session mode (`Agent CLI` default vs `Non-CLI`).
@@ -42,6 +125,10 @@ pub const SESSION_ACP_ACTIVE_KEY: &str = "acpMode";
 /// Session `runtimeSettings` key naming the Non-CLI agent family (`antigravity`, future `codex`, ...).
 pub const SESSION_ACP_FAMILY_KEY: &str = "acpFamily";
 
+/// Session `runtimeSettings` key holding extra owner-configured command flags/env vars that
+/// Non-CLI mode ignored, so the chat UI can display a visible one-line info notice.
+pub const SESSION_NON_CLI_IGNORED_COMMAND_KEY: &str = "nonCliIgnoredCommand";
+
 /// Whether Ghostex currently offers a Non-CLI host for `agent_family`.
 pub fn supports_acp(agent_family: &str) -> bool {
     spec::spec_for_family(agent_family).is_some()
@@ -52,13 +139,11 @@ pub fn agent_acp_setting(
     settings: &serde_json::Map<String, Value>,
     agent_family: &str,
 ) -> Option<bool> {
-    if !supports_acp(agent_family) {
-        return None;
-    }
+    let canonical = canonical_native_family(agent_family)?;
     if let Some(mode) = settings
         .get(SESSION_MODE_SETTING_KEY)
         .and_then(Value::as_object)
-        .and_then(|map| map.get(agent_family))
+        .and_then(|map| map.get(canonical).or_else(|| map.get(agent_family)))
         .and_then(Value::as_str)
     {
         return Some(mode.eq_ignore_ascii_case("non-cli"));
@@ -66,7 +151,7 @@ pub fn agent_acp_setting(
     settings
         .get(ACP_MODE_SETTING_KEY)
         .and_then(Value::as_object)
-        .and_then(|map| map.get(agent_family))
+        .and_then(|map| map.get(canonical).or_else(|| map.get(agent_family)))
         .and_then(Value::as_bool)
 }
 
@@ -136,7 +221,7 @@ pub(crate) fn validate_acp_image_path(
     let allowed_dirs = allowed_acp_image_dirs(paths);
     if !allowed_dirs.iter().any(|dir| canonical.starts_with(dir)) {
         return Err(
-            "Image attachments for ACP sessions must live inside Ghostex's attachment directory."
+            "Image attachments for Native sessions must live inside Ghostex's attachment directory."
                 .to_string(),
         );
     }
@@ -219,16 +304,139 @@ pub fn session_is_acp(session: &Value) -> bool {
     session_is_non_cli(session)
 }
 
+/// Resolve the canonical Native family for a session row, distinguishing OMP from Pi even though
+/// both share the `"pi"` transcript decoder.
+pub(crate) fn resolve_native_family_for_session(session: &Value) -> Option<String> {
+    session
+        .pointer("/runtimeSettings/acpFamily")
+        .and_then(Value::as_str)
+        .and_then(canonical_native_family)
+        .or_else(|| {
+            crate::session_chat_composer::session_chat_composer_agent_id(session)
+                .as_deref()
+                .and_then(canonical_native_family)
+        })
+        .or_else(|| {
+            crate::session_chat_follower::session_chat_agent_for_session(session)
+                .as_deref()
+                .and_then(canonical_native_family)
+        })
+        .map(str::to_string)
+}
+
 /// The ACP family for a session currently running in ACP mode.
 pub fn session_acp_family(session: &Value) -> Option<String> {
     if !session_is_acp(session) {
         return None;
     }
-    session
-        .pointer("/runtimeSettings/acpFamily")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
+    resolve_native_family_for_session(session)
         .or_else(|| crate::session_chat_follower::session_chat_agent_for_session(session))
+}
+
+/// Extract the canonical Native family from an `/api/agentChatChannel` agent name (`"acp:claude"`).
+pub fn acp_family_from_channel_agent(channel_agent: &str) -> Option<String> {
+    channel_agent
+        .trim()
+        .strip_prefix("acp:")
+        .and_then(canonical_native_family)
+        .map(str::to_string)
+}
+
+fn extract_acp_flag_value<'a>(command: &'a str, flag: &str) -> Option<&'a str> {
+    let acp_pos = command.find("acp-host")?;
+    // Ensure `acp-host` is a standalone token, not part of another identifier.
+    if acp_pos > 0 {
+        let prev = command.as_bytes()[acp_pos - 1];
+        if !prev.is_ascii_whitespace() && prev != b'"' && prev != b'\'' && prev != b';' {
+            return None;
+        }
+    }
+    let after_host = &command[acp_pos + "acp-host".len()..];
+    let mut tokens = after_host.split_whitespace();
+    while let Some(tok) = tokens.next() {
+        let cleaned = tok.trim_matches(|c| c == '\'' || c == '"' || c == ';');
+        if cleaned == flag {
+            let val = tokens.next()?;
+            let trimmed = val.trim_matches(|c| c == '\'' || c == '"' || c == ';');
+            if !trimmed.is_empty() {
+                return Some(trimmed);
+            }
+            return None;
+        }
+        if let Some(rest) = cleaned.strip_prefix(&format!("{flag}=")) {
+            let trimmed = rest.trim_matches(|c| c == '\'' || c == '"' || c == ';');
+            if !trimmed.is_empty() {
+                return Some(trimmed);
+            }
+            return None;
+        }
+    }
+    None
+}
+
+/// Extract the canonical Native agent family from a launch/resume startup command that invokes
+/// `ghostex acp-host --agent <family>` (including wrapped restore scripts and PowerShell forms).
+pub fn acp_family_from_launch_command(command: &str) -> Option<String> {
+    extract_acp_flag_value(command, "--agent")
+        .and_then(canonical_native_family)
+        .map(str::to_string)
+}
+
+/// Extract the `--approval-level <level>` value from an `acp-host` launch/resume command.
+pub fn acp_approval_level_from_launch_command(command: &str) -> Option<AcpApprovalLevel> {
+    acp_family_from_launch_command(command)?;
+    extract_acp_flag_value(command, "--approval-level").and_then(AcpApprovalLevel::parse)
+}
+
+/// Persist `nonCliMode: true`, `acpMode: true`, and `acpFamily` into `runtime_settings` so the
+/// stored session row matches a running `acp-host` process. Preserves any stored `acpApprovalLevel`,
+/// seeding it from `approval_level` only when absent. Returns `true` when any key changed.
+pub fn apply_acp_runtime_settings(
+    runtime_settings: &mut serde_json::Map<String, Value>,
+    family: &str,
+    approval_level: Option<AcpApprovalLevel>,
+) -> bool {
+    let mut changed = false;
+    if runtime_settings
+        .get(SESSION_NON_CLI_ACTIVE_KEY)
+        .and_then(Value::as_bool)
+        != Some(true)
+    {
+        runtime_settings.insert(SESSION_NON_CLI_ACTIVE_KEY.to_string(), Value::Bool(true));
+        changed = true;
+    }
+    if runtime_settings
+        .get(SESSION_ACP_ACTIVE_KEY)
+        .and_then(Value::as_bool)
+        != Some(true)
+    {
+        runtime_settings.insert(SESSION_ACP_ACTIVE_KEY.to_string(), Value::Bool(true));
+        changed = true;
+    }
+    if runtime_settings
+        .get(SESSION_ACP_FAMILY_KEY)
+        .and_then(Value::as_str)
+        != Some(family)
+    {
+        runtime_settings.insert(
+            SESSION_ACP_FAMILY_KEY.to_string(),
+            Value::String(family.to_string()),
+        );
+        changed = true;
+    }
+    if let Some(level) = approval_level {
+        let has_level = runtime_settings
+            .get(SESSION_ACP_APPROVAL_LEVEL_KEY)
+            .and_then(Value::as_str)
+            .and_then(AcpApprovalLevel::parse)
+            .is_some();
+        if !has_level {
+            runtime_settings.insert(
+                SESSION_ACP_APPROVAL_LEVEL_KEY.to_string(),
+                Value::String(level.as_str().to_string()),
+            );
+            changed = true;
+        }
+    }
+    changed
 }

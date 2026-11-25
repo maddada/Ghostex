@@ -641,8 +641,8 @@ fn setup_key(paths: &crate::paths::GxserverPaths, config: &AutopilotConfig) -> S
 
 fn retry_words(ms: i64) -> String {
     match ms / 1000 {
-        seconds if seconds < 60 => format!("{seconds} seconds"),
-        60 => "a minute".to_string(),
+        seconds if seconds < 60 => ghostex_gx_protocol::plural(seconds, "second", "seconds"),
+        60..=119 => "a minute".to_string(),
         seconds => format!("{} minutes", seconds / 60),
     }
 }

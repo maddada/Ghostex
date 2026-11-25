@@ -87,18 +87,23 @@ impl QuickAccessPalette {
         Self::derive(light, sidebar_theme, window).with_theme_roles(light)
     }
 
-    /// The Borders and Grey text theme roles over the derived colours (helpers/theme_roles.rs).
+    /// The theme roles over the derived colours (helpers/theme_roles.rs). Under glass, raised
+    /// fills and row selections keep translucent washes instead of opaque theme controls.
     fn with_theme_roles(mut self, light: bool) -> Self {
-        use crate::app::helpers::theme_role_or_rgba;
+        use crate::app::helpers::{theme_accent_rgba, theme_role_or_rgba};
         self.hairline = theme_role_or_rgba("border", light, self.hairline);
         self.menu_border = theme_role_or_rgba("border", light, self.menu_border);
         self.muted = theme_role_or_rgba("mutedText", light, self.muted);
         self.foreground = theme_role_or_rgba("text", light, self.foreground);
-        self.raised = theme_role_or_rgba("control", light, self.raised);
-        self.raised_hover = theme_role_or_rgba("hover", light, self.raised_hover);
-        self.menu_hover = theme_role_or_rgba("hover", light, self.menu_hover);
-        self.row_selected = theme_role_or_rgba("selection", light, self.row_selected);
-        self.menu_background = theme_role_or_rgba("menu", light, self.menu_background);
+        self.item = theme_role_or_rgba("text", light, self.item);
+        self.accent = theme_accent_rgba(light);
+        if !self.glass {
+            self.raised = theme_role_or_rgba("control", light, self.raised);
+            self.raised_hover = theme_role_or_rgba("hover", light, self.raised_hover);
+            self.menu_hover = theme_role_or_rgba("hover", light, self.menu_hover);
+            self.row_selected = theme_role_or_rgba("selection", light, self.row_selected);
+            self.menu_background = theme_role_or_rgba("menu", light, self.menu_background);
+        }
         self.destructive = theme_role_or_rgba("danger", light, self.destructive);
         if light && crate::app::helpers::theme_role_rgba("border", light).is_some() {
             // The light sheet pins the focus border to the hairline.
@@ -181,11 +186,7 @@ impl QuickAccessPalette {
     pub(crate) fn current(glass: bool) -> Self {
         let light = crate::CHROME_LIGHT_APPEARANCE.load(std::sync::atomic::Ordering::Relaxed);
         let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
-        let window = if light {
-            rgb(0xffffff)
-        } else {
-            Rgba::from(crate::app::helpers::titlebar_background())
-        };
+        let window = Rgba::from(crate::app::helpers::modal_surface_background());
         let palette = Self::resolve(
             light,
             settings

@@ -52,12 +52,12 @@ impl ChangesView {
         let disabled = count == 0;
         let main_label = self.commit_action.short_label();
         let files_label = if self.excluded.is_empty() {
-            format!(
-                "{uncommitted} {}",
-                if uncommitted == 1 { "file" } else { "files" }
-            )
+            ghostex_gx_protocol::plural(uncommitted, "file", "files")
         } else {
-            format!("{count} of {uncommitted} files")
+            format!(
+                "{count} of {}",
+                ghostex_gx_protocol::plural(uncommitted, "file", "files")
+            )
         };
         let bar = v_flex()
             .id("changes-commit-bar")

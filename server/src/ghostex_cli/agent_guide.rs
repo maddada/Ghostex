@@ -38,7 +38,8 @@ Secrets
 - A password, API key or token: `ghostex secret request --label <what> --reason <why>`, never in chat.
 
 Steps only the user can do
-- A sudo command, a phone tap, a sign-in, a check by eye: unasked, run `ghostex needs-you add \"<what to do>\" --detail \"<why>\" [--command \"…\"]` and list it under Needs you in your reply. It sits above the chat box with a Done button; the answer arrives as \"Q<n>: Done\". Done: `ghostex needs-you done Q<n>`; not needed: `ghostex needs-you drop Q<n>`.
+- Never ask the user to run or paste a `ghostex` command you can run yourself (setup, connect, sign-in, `ghostex settings open`): run it and ask only for their hands (Touch ID/fingerprint, Approve, browser sign-in, QR). Never approve prompts, Keychain, pairing or sign-ins, or type passwords/2FA.
+- For a step only the user can do (owner-only command, phone tap, browser sign-in, check by eye): unasked, run `ghostex needs-you add \"<what to do>\" --detail \"<why>\" [--command \"…\"]` and list it under Needs you. It sits above the chat box with a Done button; the answer arrives as \"Q<n>: Done\". Done: `ghostex needs-you done Q<n>`; not needed: `ghostex needs-you drop Q<n>`.
 
 Guides (built into this Ghostex; read the one for the job)
 - `ghostex agents guide` (other agents, reading a thread, renaming a session), `ghostex coordinator guide` (if you are one), `ghostex help guide` (explain Ghostex, change its settings for the user), `ghostex board guide` (Project Board beads), `ghostex secret guide`, `ghostex spaceo guide` (a Mac app on a hidden display).
@@ -52,9 +53,15 @@ Anything else
 /// The browser lines, which follow the user's Agents open pages in choice.
 fn browser_lines(browser: PreviewBrowser) -> &'static str {
     match browser {
-        PreviewBrowser::Ask => "- No browser picked yet: ask once whether they want the Ghostex browser or their default browser, and offer to remember it with `ghostex settings set agentPreviewBrowser internal-browser` (or `system-default-browser`).",
-        PreviewBrowser::Ghostex => "- The user picked the Ghostex browser (Settings > Browser > Agents open pages in). Use it, no asking.",
-        PreviewBrowser::System => "- The user picked their default browser (Settings > Browser > Agents open pages in). Use it, no asking.",
+        PreviewBrowser::Ask => {
+            "- No browser picked yet: ask once whether they want the Ghostex browser or their default browser, and offer to remember it with `ghostex settings set agentPreviewBrowser internal-browser` (or `system-default-browser`)."
+        }
+        PreviewBrowser::Ghostex => {
+            "- The user picked the Ghostex browser (Settings > Browser > Agents open pages in). Use it, no asking."
+        }
+        PreviewBrowser::System => {
+            "- The user picked their default browser (Settings > Browser > Agents open pages in). Use it, no asking."
+        }
     }
 }
 
@@ -73,7 +80,9 @@ pub fn agent_guide_command(args: &[String]) -> CliResult<()> {
             Ok(())
         }
         Some("help" | "-h" | "--help") => {
-            println!("Usage: ghostex agent-guide\n       ghostex agent-guide install-skill [--json]\n\nPrint what an agent running in Ghostex can do with the ghostex CLI: Live pages, Ghostex forms and visuals in the chat, the browser, other agents, secrets, the guide for each job and Ghostex Help. install-skill installs the ghostex skill (/ghostex, $ghostex in Codex), which sends any agent here.");
+            println!(
+                "Usage: ghostex agent-guide\n       ghostex agent-guide install-skill [--json]\n\nPrint what an agent running in Ghostex can do with the ghostex CLI: Live pages, Ghostex forms and visuals in the chat, the browser, other agents, secrets, the guide for each job and Ghostex Help. install-skill installs the ghostex skill (/ghostex, $ghostex in Codex), which sends any agent here."
+            );
             Ok(())
         }
         Some(other) => Err(CliError::Other(format!(
@@ -96,8 +105,8 @@ mod tests {
 
     #[test]
     fn the_guide_stays_compact() {
-        // About 750 tokens (characters / 4) against about 8,000 for `ghostex --help`.
+        // About 900 tokens (characters / 4) against about 8,000 for `ghostex --help`.
         let length = agent_guide_text(PreviewBrowser::Ask).len();
-        assert!(length < 3_400, "{length}");
+        assert!(length < 3_750, "{length}");
     }
 }

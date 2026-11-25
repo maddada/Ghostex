@@ -95,19 +95,17 @@ pub(crate) fn is_help_home_project(project: &Value) -> bool {
     crate::workspaces::is_config_folder_project(project)
 }
 
-/// Whether `project` is drawn as Main Hub: the home project while Main Hub is on, Ask Ghostex
-/// AI's project while it is off.
+/// Whether `project` is drawn as Main Hub: always the home project (Main Hub is always on since
+/// 2026-11-24).
 pub(crate) fn presents_as_home(project: &Value) -> bool {
-    if super::chief_shown() {
-        is_home_project(project)
-    } else {
-        is_help_home_project(project)
-    }
+    is_home_project(project)
 }
 
-/// Whether a session of `project` is listed under Main Hub: Ask Ghostex AI's project always (its
-/// chats are lifted into Main Hub while it is on), the home project while Main Hub is on. Its
-/// where pill and Session details name it "Main Hub" (session_details/environment.rs).
+/// Whether a session of `project` is listed under Main Hub: Ask Ghostex AI's project (its chats
+/// are lifted into Main Hub), the home project, and Autopilot's supervisor project. Its where pill
+/// and Session details name it "Main Hub" (session_details/environment.rs).
 pub(crate) fn lists_under_main_hub(project: &Value) -> bool {
-    is_help_home_project(project) || (super::chief_shown() && is_home_project(project))
+    is_help_home_project(project)
+        || is_home_project(project)
+        || crate::autopilot::is_supervisor_project(project)
 }

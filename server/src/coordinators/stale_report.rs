@@ -1,5 +1,9 @@
 //! A "not moving" or "idle" thread report that waited in its coordinator's queue is checked
-//! against the thread again when it is about to go out, and dropped when it no longer holds.
+//! against the thread again while it waits, and dropped when it no longer holds. When it is
+//! checked is decided by `stale_report` and `stale_stall_report_at_delivery` in
+//! session_chat_queue_runtime/scheduler.rs ("not moving" reports are also checked right before
+//! delivery; "idle" reports only periodically while waiting; never for a thread of another
+//! computer).
 //!
 //! CDXC:Coordinators 2026-11-08 DECISION:
 //! User (for 11.1.1): "drop late 'not moving' / 'idle' thread reports when they're finally
@@ -97,8 +101,9 @@ pub fn local_thread_of(thread_ref: &str, server_id: &str) -> Option<(String, Str
         .then(|| (project.to_string(), session.to_string()))
 }
 
-/// BLOCKING (a transcript tail read). Why `report` no longer holds for the thread as it is now,
-/// `None` while it still does.
+/// BLOCKING (a transcript tail read and, for a stall report, the subagent look of
+/// subagent_output.rs). Why `report` no longer holds for the thread as it is now, `None` while it
+/// still does.
 pub fn quiet_report_stale_reason(
     report: &QuietReport,
     thread: Option<&ThreadRecord>,
@@ -129,6 +134,6 @@ pub fn quiet_report_stale_reason(
             ThreadState::Done => "the thread was marked done",
         });
     }
-    super::stall::moved_since(session, report.since)
+    super::stall::moved_since(session, report.kind, report.since)
         .then_some("the thread moved on after the time the report names")
 }

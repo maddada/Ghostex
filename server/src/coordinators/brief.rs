@@ -185,15 +185,17 @@ pub fn thread_brief(coordinator: &BriefContext<'_>, task: &str) -> String {
     );
     brief.push_str(
         "\n\nWhen you are done:\n\
-- End your turn with a final report: what you did, where (files, branch, pull request), how you verified it, and anything left or blocked. Ghostex forwards your final message to the coordinator automatically. Your final message is the only way to report: never message or type into the coordinator's session yourself (`ghostex agents send`, `send-session-chat-message`, `send-text` and the like), not even for a progress update or a patch that is ready; Ghostex refuses it.\n\
+- End your turn with a final report: what you did, where (files, branch, pull request), how you verified it, and anything left or blocked. Ghostex forwards your final message to the coordinator automatically. Never use `ghostex agents send`, `send-session-chat-message`, `send-text` or the like on your coordinator (Ghostex refuses them).\n\
+- Right after every push, send a short note with `ghostex coordinator note \"<commit> <one line on what landed>\"`, then keep going and still end your turn with the full report.\n\
 - When a message gives you several tasks, finish them all and then end your turn with one report on all of them, unless it asks you to report after each one; then end your turn after the first with its report, and wait for the coordinator to tell you to go on.\n\
 - If you need a decision you cannot make, ask it plainly in your final message and stop. The coordinator answers in this chat. Give each question a title that names its subject (never \"it\" or \"this\" alone) and a line on what it is about and why: the user reads it in the coordinator's Needs you list, not in your report.\n\
+- When the user must paste, post or run something, put the whole text and its link in the question's description, not only in the report.\n\
 - The user talks only to the coordinator. Never ask the user directly or publish a page for them (`ghostex show`): put questions, mockups and the path of any page file in your final report, and the coordinator shows them to the user and sends you the answers. Link what each question is about (a PR, issue, file, page or commit: a Markdown link with the full URL, or a file path link) so the user can check it.\n\
 - Do not merge, push, or delete anything unless this brief asks for it.",
     );
     // CDXC:AgentSkills 2026-11-17 WHY: `ghostex-secrets` no longer loads on its own (agents/ghostex_note.rs `SECRETS_NOTE`) and a thread takes no launch note, so the brief names the verb.
     brief.push_str(
-        "\n- If a step needs a secret only the user has (a password, an API key or token), run `ghostex secret request --label <what> --reason <why>`: the user types it on a private card. Never ask for it in your report.",
+        "\n- If a step needs a secret only the user has (a password, an API key or token), run `ghostex secret request --label <what> --reason <why>`: the user types it on a private card. Never ask for it in your report.\n- Never ask the user to run or paste a Ghostex command you can run yourself (setup, connect, sign-in, `ghostex settings open`): run it yourself and ask only for the step that needs their hands (Touch ID or fingerprint, clicking Approve, signing in in the browser window that opened, or filling in a private secret card). Never approve permission, Keychain, consent, pairing or sign-in prompts for the user, and never type passwords or 2FA.",
     );
     // CDXC:Coordinators 2026-11-18 WHY: a thread (S90:P3lv0:G76dp) reported, then a background
     // "Wait for the PR diff reader to finish" it no longer needed ended; its task notification
@@ -289,6 +291,15 @@ pub enum StallNudge<'a> {
     Earlier,
 }
 
+/// The body of a push/progress note sent via `ghostex coordinator note`; any foreign sender-block
+/// opener inside the note is broken so only gxserver's sender block names the thread.
+pub fn note_report_body(note: &str) -> String {
+    format!(
+        "Ghostex thread note: {}",
+        without_foreign_agent_blocks(note).trim()
+    )
+}
+
 /// The body of one report; the sender header names the thread.
 ///
 /// CDXC:Coordinators 2026-11-20 FIX:
@@ -300,10 +311,13 @@ pub enum StallNudge<'a> {
 /// linked sessions alike.
 pub fn report_body(report: &ThreadReport<'_>, thread_ref: &str) -> String {
     match report {
-        ThreadReport::Finished { message: Some(message) } => {
+        ThreadReport::Finished {
+            message: Some(message),
+        } => {
             let message = without_foreign_agent_blocks(message);
             let message = message.trim();
-            let mut body = String::from("Ghostex thread report: finished its turn. Its final message:\n\n");
+            let mut body =
+                String::from("Ghostex thread report: finished its turn. Its final message:\n\n");
             if message.chars().count() > COORDINATOR_REPORT_MAX_CHARS {
                 body.extend(message.chars().take(COORDINATOR_REPORT_MAX_CHARS));
                 body.push_str(&format!(
@@ -315,7 +329,9 @@ pub fn report_body(report: &ThreadReport<'_>, thread_ref: &str) -> String {
             body
         }
         ThreadReport::CutOff { message } => {
-            let mut body = String::from("Ghostex thread report: it stopped before its turn ended: its session was put to sleep, or its agent stopped, while it was still working, so its task is not done.");
+            let mut body = String::from(
+                "Ghostex thread report: it stopped before its turn ended: its session was put to sleep, or its agent stopped, while it was still working, so its task is not done.",
+            );
             let message = message.map(without_foreign_agent_blocks);
             if let Some(message) = message
                 .as_deref()
@@ -342,21 +358,26 @@ pub fn report_body(report: &ThreadReport<'_>, thread_ref: &str) -> String {
             "Ghostex thread report: its session was closed, so it is marked done. `ghostex coordinator reopen {thread_ref}` or a message to it resumes the same conversation."
         ),
         ThreadReport::Undelivered { excerpt, evidence } => {
-            let mut body = format!(
-                "Ghostex thread report: your message did not reach it. Its transcript does not show the message you sent, and it is idle, so nothing is working on it.
-
-Your message began: {}",
-                excerpt.trim()
+            let short_line = ghostex_gx_chat_core::transcript::delivery_notice::short_first_line(
+                excerpt,
+                ghostex_gx_chat_core::transcript::delivery_notice::DELIVERY_NOTICE_PREVIEW_MAX_CHARS,
             );
-            if let Some(evidence) = evidence.map(str::trim).filter(|evidence| !evidence.is_empty()) {
-                body.push_str(&format!("
-
-Its chat shows: {evidence}"));
+            let mut body = match evidence
+                .map(str::trim)
+                .filter(|evidence| !evidence.is_empty())
+            {
+                Some(evidence) => {
+                    format!("Ghostex thread report: message wasn't delivered ({evidence}).")
+                }
+                None => String::from(
+                    "Ghostex thread report: message wasn't delivered (the thread is idle without it in its transcript).",
+                ),
+            };
+            if !short_line.is_empty() {
+                body.push_str(&format!("\nFirst line: {short_line}"));
             }
             body.push_str(&format!(
-                "
-
-Read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text), then send the message again with ghostex agents send {thread_ref}. If it fails again, tell the user."
+                "\nRead its chat (`ghostex read-session-chat {thread_ref} --last 2 --format text`) before sending again."
             ));
             body
         }
@@ -369,11 +390,13 @@ Read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text), t
         } => {
             let mut body = if *stuck {
                 format!(
-                    "Ghostex thread report: still not moving: no new output for {quiet_minutes} minutes (quiet since {quiet_since}), even after Ghostex nudged it. The user now sees it as not moving (a red dot on its row) and was notified."
+                    "Ghostex thread report: still not moving: no new output for {} (quiet since {quiet_since}), even after Ghostex nudged it. The user now sees it as not moving (a red dot on its row) and was notified.",
+                    ghostex_gx_protocol::plural(*quiet_minutes, "minute", "minutes")
                 )
             } else {
                 format!(
-                    "Ghostex thread report: still working, but no new output for {quiet_minutes} minutes (quiet since {quiet_since}). Its transcript has no new row and its screen has not changed in that time, so it may be stuck (a hung command, a lost connection) or on a long silent step."
+                    "Ghostex thread report: still working, but no new output for {} (quiet since {quiet_since}). Its transcript has no new row and its screen has not changed in that time, so it may be stuck (a hung command, a lost connection) or on a long silent step.",
+                    ghostex_gx_protocol::plural(*quiet_minutes, "minute", "minutes")
                 )
             };
             match nudge {
@@ -381,18 +404,21 @@ Read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text), t
                     "\n\nGhostex nudged it: \"{}\"",
                     super::stall::nudge_message()
                 )),
-                StallNudge::Failed(error) => body.push_str(&format!(
-                    "\n\nGhostex could not nudge it: {}",
-                    error.trim()
-                )),
+                StallNudge::Failed(error) => {
+                    body.push_str(&format!("\n\nGhostex could not nudge it: {}", error.trim()))
+                }
                 StallNudge::Earlier => {}
             }
             if let Some(row) = last_row.map(str::trim).filter(|row| !row.is_empty()) {
                 body.push_str(&format!("\n\nIts last row: {row}"));
             }
             body.push_str(&format!(
-                "\n\nHeal it: read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text) and screen (ghostex read-text {thread_ref}). If a command hangs or it sits without moving, interrupt it (ghostex interrupt-session-chat {thread_ref}) and tell it to carry on (ghostex agents send {thread_ref} \"carry on\"); if it takes no input, reload it (ghostex agents reload {thread_ref}). A long silent build or test is not stuck: leave it. Ghostex never interrupts or reloads on its own. Tell the user only if healing fails. You hear again every {} minutes until it moves.",
-                super::stall::minutes_of(super::stall::quiet_round_ms())
+                "\n\nHeal it: read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text) and screen (ghostex read-text {thread_ref}). If a command hangs or it sits without moving, interrupt it (ghostex interrupt-session-chat {thread_ref}) and tell it to carry on (ghostex agents send {thread_ref} \"carry on\"); if it takes no input, reload it (ghostex agents reload {thread_ref}). A long silent build or test is not stuck: leave it. Ghostex never interrupts or reloads on its own. Tell the user only if healing fails. You hear again every {} until it moves.",
+                ghostex_gx_protocol::plural(
+                    super::stall::minutes_of(super::stall::quiet_round_ms()),
+                    "minute",
+                    "minutes"
+                )
             ));
             body
         }
@@ -420,26 +446,31 @@ Read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text), t
             };
             let mut body = if *stuck {
                 format!(
-                    "Ghostex thread report: still idle: no new turn for {idle_minutes} minutes (since {idle_since}), even after Ghostex nudged it, though {why}. The user now sees it as not moving (a red dot on its row) and was notified."
+                    "Ghostex thread report: still idle: no new turn for {} (since {idle_since}), even after Ghostex nudged it, though {why}. The user now sees it as not moving (a red dot on its row) and was notified.",
+                    ghostex_gx_protocol::plural(*idle_minutes, "minute", "minutes")
                 )
             } else {
                 format!(
-                    "Ghostex thread report: idle for {idle_minutes} minutes (since {idle_since}), though {why}."
+                    "Ghostex thread report: idle for {} (since {idle_since}), though {why}.",
+                    ghostex_gx_protocol::plural(*idle_minutes, "minute", "minutes")
                 )
             };
             match nudge {
                 StallNudge::Sent => {
                     body.push_str(&format!("\n\nGhostex nudged it: \"{nudge_message}\""))
                 }
-                StallNudge::Failed(error) => body.push_str(&format!(
-                    "\n\nGhostex could not nudge it: {}",
-                    error.trim()
-                )),
+                StallNudge::Failed(error) => {
+                    body.push_str(&format!("\n\nGhostex could not nudge it: {}", error.trim()))
+                }
                 StallNudge::Earlier => {}
             }
             body.push_str(&format!(
-                "\n\nHeal it: read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text) and screen (ghostex read-text {thread_ref}), then tell it to read its background job's result and carry on (ghostex agents send {thread_ref} \"carry on\"); if it takes no input, reload it (ghostex agents reload {thread_ref}). A job that is really still running is not stuck: leave it. Tell the user only if healing fails. You hear again every {} minutes until it starts a new turn.",
-                super::stall::minutes_of(super::idle_wait::idle_round_ms())
+                "\n\nHeal it: read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text) and screen (ghostex read-text {thread_ref}), then tell it to read its background job's result and carry on (ghostex agents send {thread_ref} \"carry on\"); if it takes no input, reload it (ghostex agents reload {thread_ref}). A job that is really still running is not stuck: leave it. Tell the user only if healing fails. You hear again every {} until it starts a new turn.",
+                ghostex_gx_protocol::plural(
+                    super::stall::minutes_of(super::idle_wait::idle_round_ms()),
+                    "minute",
+                    "minutes"
+                )
             ));
             body
         }
@@ -524,6 +555,7 @@ mod tests {
         assert!(brief.contains("Standing instructions:\nBranch from main."));
         assert!(brief.contains("You work in your own git worktree."));
         assert!(brief.contains("ghostex coordinator rename-self"));
+        assert!(brief.contains("ghostex coordinator note"));
         assert!(brief.contains("When you are done:"));
         assert!(brief.contains("Your final report is a handover"));
         assert!(!brief.contains("Notes to keep in mind"));

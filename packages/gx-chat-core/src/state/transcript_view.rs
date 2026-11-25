@@ -156,11 +156,11 @@ pub struct TranscriptViewState {
     /// pair matches.
     pub picture_digests: std::collections::HashMap<String, u64>,
     pub picture_digests_revision: u64,
-    /// The `readVisualPageThumbnail` reads in flight, by request id, with the page asked for
+    /// The `readVisualPageThumbnail` reads in flight, by request id, with `(page_id, theme)`
     /// ([`crate::transcript::page_thumbnails`]).
-    pub page_thumbnail_requests: BTreeMap<u64, String>,
-    /// How many times in a row each page's picture was asked for and not there yet.
-    pub page_thumbnail_attempts: BTreeMap<String, u32>,
+    pub page_thumbnail_requests: BTreeMap<u64, (String, Option<String>)>,
+    /// How many times in a row each `(page_id, theme)` picture was asked for and not there yet.
+    pub page_thumbnail_attempts: BTreeMap<(String, Option<String>), u32>,
     /// The "GBot added" cards' live state, by change id ([`crate::transcript::gbot_cards`]).
     pub gbot_cards: BTreeMap<String, crate::transcript::gbot_cards::GbotCardEntry>,
     /// The `/api/gbots` calls those cards made, by request id, with the change asked about.
@@ -432,6 +432,8 @@ pub struct RewindRequest {
     pub message_id: String,
     pub prompt: String,
     pub agent: String,
+    /// A Native chat, whose rewind gxserver runs without the agent's terminal dialog.
+    pub native: bool,
     pub busy: bool,
     pub completed: bool,
     pub synchronization_pending: bool,

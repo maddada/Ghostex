@@ -258,6 +258,193 @@ pub fn detect_session_chat_selection(
     Some(found)
 }
 
+/// Build a chat notice for an ACP (Non-CLI) session when a fatal approval-profile reload error
+/// occurred or when Non-CLI mode skipped owner-configured extra flags/env from the agent's command.
+fn acp_terminal_notice(
+    acp_state: Option<&Value>,
+    session: Option<&Value>,
+) -> Option<crate::session_chat_notice::SessionChatTerminalNotice> {
+    use crate::session_chat_notice::{
+        SessionChatTerminalNotice, SessionChatTerminalNoticeAction,
+        SessionChatTerminalNoticeSeverity, SessionChatTerminalNoticeSource,
+    };
+
+    if let Some(err) = acp_state
+        .and_then(|s| s.get("fatalError"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        return Some(
+            SessionChatTerminalNotice::new(
+                crate::session_chat_notice::SESSION_CHAT_NOTICE_AGENT_ERROR,
+                SessionChatTerminalNoticeSeverity::Error,
+                SessionChatTerminalNoticeSource::Watchdog,
+                "Approval change failed",
+            )
+            .with_detail(
+                "Could not reload the agent with the new approval level. Start a new chat or switch to Terminal.",
+            )
+            .with_details(Some(err.to_string()))
+            .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
+                "Switch to Terminal",
+            )])
+            .with_input_blocking(false),
+        );
+    }
+
+    if let Some(err) = acp_state
+        .and_then(|s| s.get("authError"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        let family = acp_state
+            .and_then(|s| s.get("family"))
+            .and_then(Value::as_str)
+            .unwrap_or("claude");
+        let agent_label = crate::acp::startup_error::agent_label(family);
+        return Some(
+            SessionChatTerminalNotice::new(
+                crate::session_chat_notice::SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
+                SessionChatTerminalNoticeSeverity::Error,
+                SessionChatTerminalNoticeSource::Watchdog,
+                format!("Sign in to {agent_label} again"),
+            )
+            .with_detail(format!(
+                "{agent_label}'s login expired. Sign in again, or switch this chat to another account."
+            ))
+            .with_details(Some(err.to_string()))
+            .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
+                "Switch to Terminal",
+            )])
+            .with_input_blocking(false),
+        );
+    }
+
+    if let Some(last_err) = acp_state
+        .and_then(|s| s.get("lastError"))
+        .and_then(Value::as_object)
+    {
+        let message = last_err
+            .get("message")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        let code = last_err
+            .get("code")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        if let Some(message) = message {
+            let family = acp_state
+                .and_then(|s| s.get("family"))
+                .and_then(Value::as_str)
+                .unwrap_or("agent");
+            let agent_label = crate::acp::startup_error::agent_label(family);
+            let lower_code = code.unwrap_or_default().to_ascii_lowercase();
+            let lower_msg = message.to_ascii_lowercase();
+            let (kind, title, detail) = if lower_code.contains("usagelimit")
+                || lower_code.contains("rate_limit")
+                || lower_msg.contains("usage limit")
+                || lower_msg.contains("rate limit")
+            {
+                (
+                    crate::session_chat_notice::SESSION_CHAT_NOTICE_USAGE_LIMIT,
+                    format!("{agent_label} hit a usage limit"),
+                    "Switch this chat to another account, or wait for the limit to reset."
+                        .to_string(),
+                )
+            } else if lower_code.contains("unauthorized")
+                || lower_code.contains("authentication_failed")
+            {
+                (
+                    crate::session_chat_notice::SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
+                    format!("Sign in to {agent_label} again"),
+                    format!("{agent_label}'s login expired. Sign in again, or switch this chat to another account."),
+                )
+            } else {
+                (
+                    crate::session_chat_notice::SESSION_CHAT_NOTICE_AGENT_ERROR,
+                    format!("{agent_label} could not finish"),
+                    "The last request failed. Try sending again, or pick a different model."
+                        .to_string(),
+                )
+            };
+            return Some(
+                SessionChatTerminalNotice::new(
+                    kind,
+                    SessionChatTerminalNoticeSeverity::Error,
+                    SessionChatTerminalNoticeSource::Watchdog,
+                    title,
+                )
+                .with_detail(detail)
+                .with_details(Some(message.to_string()))
+                .with_input_blocking(false),
+            );
+        }
+    }
+
+    if let Some(ext_url) = acp_state
+        .and_then(|s| s.get("externalFormUrl"))
+        .and_then(Value::as_str)
+    {
+        let detail = if ext_url.trim().is_empty() {
+            "This form includes an external sign-in step. Switch to Terminal to finish it."
+                .to_string()
+        } else {
+            format!(
+                "It includes a sign-in step: open {}, then switch to Terminal to finish the form.",
+                ext_url.trim()
+            )
+        };
+        return Some(
+            SessionChatTerminalNotice::new(
+                crate::session_chat_notice::SESSION_CHAT_NOTICE_AGENT_ERROR,
+                SessionChatTerminalNoticeSeverity::Warning,
+                SessionChatTerminalNoticeSource::Watchdog,
+                "Complete this OpenCode form",
+            )
+            .with_detail(detail)
+            .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
+                "Switch to Terminal",
+            )])
+            .with_input_blocking(false),
+        );
+    }
+
+    let ignored = session
+        .and_then(|s| s.get("runtimeSettings"))
+        .and_then(Value::as_object)
+        .and_then(|rt| rt.get(crate::acp::SESSION_NON_CLI_IGNORED_COMMAND_KEY))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())?;
+    let mut notice = SessionChatTerminalNotice::new(
+        "nonCliIgnoredCommand",
+        SessionChatTerminalNoticeSeverity::Info,
+        SessionChatTerminalNoticeSource::Watchdog,
+        "Custom flags ignored",
+    )
+    .with_detail(
+        "Native mode skipped extra flags or environment settings from this agent's command. Switch to Terminal if you need them.",
+    )
+    .with_details(Some(ignored.to_string()))
+    .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
+        "Switch to Terminal",
+    )])
+    .with_input_blocking(false);
+    if let Some(created_at) = session
+        .and_then(|s| s.get("createdAt"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        notice.detected_at = created_at.to_string();
+    }
+    Some(notice)
+}
+
 /// Bottom-most Codex composer prompt row (`›` or `»`), so footer detection never climbs into chat
 /// prose above the input box when the real status line is unrecognized.
 fn codex_footer_prompt(lines: &[String]) -> Option<usize> {
@@ -327,6 +514,99 @@ pub(crate) fn session_chat_questions_only_on_screen(agent: Option<&str>) -> bool
 ///
 /// CDXC:AgentScreenDetection 2026-08-19: the same capture is classified
 /// for terminal-state notices, so both readings ride one process spawn.
+/// Resolves the canonical ACP agent family (`"claude"`, `"codex"`, `"antigravity"`, ...) for a
+/// session row even when its `agentId` is a custom account wrapper such as `custom-claude-70-...`.
+pub(super) fn acp_family_for_session(agent_id: Option<&str>, session: Option<&Value>) -> String {
+    if let Some(explicit) = session
+        .and_then(|s| s.pointer("/runtimeSettings/acpFamily"))
+        .and_then(Value::as_str)
+        .and_then(crate::acp::canonical_native_family)
+    {
+        return explicit.to_string();
+    }
+    let raw = session
+        .and_then(|s| s.get("agentId"))
+        .and_then(Value::as_str)
+        .filter(|s| !s.trim().is_empty())
+        .or_else(|| agent_id.filter(|s| !s.trim().is_empty()))
+        .unwrap_or("antigravity");
+    let lower = raw.trim().to_ascii_lowercase();
+    if lower.contains("claude") {
+        return "claude".to_string();
+    }
+    if lower.contains("codex") {
+        return "codex".to_string();
+    }
+    if lower.contains("antigravity") || lower == "agy" {
+        return "antigravity".to_string();
+    }
+    if lower.contains("opencode") {
+        return "opencode".to_string();
+    }
+    if lower.contains("grok") {
+        return "grok".to_string();
+    }
+    if lower.contains("hermes") {
+        return "hermes".to_string();
+    }
+    if lower.contains("cursor") {
+        return "cursor".to_string();
+    }
+    if lower == "omp" || lower == "oh-my-pi" || lower.contains("omp") {
+        return "omp".to_string();
+    }
+    if lower == "pi" || lower == "pi-agent" {
+        return "pi".to_string();
+    }
+    ghostex_gx_chat_core::menus::catalog::canonical_model_family(raw).to_string()
+}
+
+/// Reads the launched or pinned `(model, effort)` for an ACP session so a missing live effort (or
+/// a booting/disconnected ACP channel) falls back to what the session was launched with.
+pub(super) fn acp_session_launch_model_and_effort(
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+    session_id: &str,
+    session: Option<&Value>,
+    family: &str,
+) -> (Option<String>, Option<String>) {
+    let option_agent = session_chat_option_agent(Some(family));
+    let launch =
+        read_session_chat_launch_selection(repository, project_id, session_id, option_agent);
+    let mut model = launch
+        .as_ref()
+        .and_then(|sel| sel.model.as_ref())
+        .map(|c| c.value.clone());
+    let mut effort = launch
+        .as_ref()
+        .and_then(|sel| sel.effort.as_ref())
+        .map(|c| c.value.clone());
+    if let Some(pin) = session.and_then(|s| {
+        s.pointer(&format!(
+            "/runtimeSettings/{}",
+            crate::agent_model_pins::SESSION_PIN_KEY
+        ))
+    }) {
+        if model.is_none() {
+            model = pin
+                .get("model")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(s))
+                .map(str::to_string);
+        }
+        if effort.is_none() {
+            effort = pin
+                .get("effort")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_ascii_lowercase());
+        }
+    }
+    (model, effort)
+}
+
 pub fn detect_session_chat_terminal_state(
     repository: &DomainRepository<'_>,
     hook_state_directory: &Path,
@@ -334,57 +614,559 @@ pub fn detect_session_chat_terminal_state(
     session_id: &str,
     agent_id: Option<&str>,
 ) -> SessionChatTerminalDetection {
-    // An ACP-mode session reports its live model, effort, and mode directly through `ghostex acp-host`
-    // without terminal screen scraping (CDXC:AgentProviders 2026-11-22 in acp/mod.rs).
+    // An ACP-mode session reports its live model, effort, approval level, context usage, and
+    // streaming activity directly through `ghostex acp-host` without terminal screen scraping
+    // (CDXC:AgentProviders 2026-11-22 in acp/mod.rs).
     if let Some(acp_state) = crate::acp::channel::channel_state(project_id, session_id) {
-        let model = acp_state
+        let session_row = repository
+            .get_session(project_id, session_id)
+            .ok()
+            .flatten();
+        let family_owned = acp_state
+            .get("family")
+            .and_then(Value::as_str)
+            .filter(|s| !s.trim().is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| acp_family_for_session(agent_id, session_row.as_ref()));
+        let family = family_owned.as_str();
+        let (launch_model, launch_effort) = acp_session_launch_model_and_effort(
+            repository,
+            project_id,
+            session_id,
+            session_row.as_ref(),
+            family,
+        );
+        let raw_model = acp_state
             .get("model")
             .and_then(Value::as_str)
-            .filter(|s| !s.is_empty())
-            .map(|value| SessionChatDetectedChoice {
-                value: value.to_string(),
-                label: crate::agent_model_catalog::catalog_model(
-                    agent_id.unwrap_or("antigravity"),
-                    value,
-                )
-                .and_then(|entry| {
-                    entry
-                        .get("label")
-                        .and_then(Value::as_str)
-                        .map(str::to_string)
-                })
-                .unwrap_or_else(|| value.to_string()),
-                source: SessionChatOptionEvidence::Terminal,
-            });
-        let effort = acp_state
+            .filter(|s| !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(s))
+            .or(launch_model.as_deref());
+        let raw_effort = acp_state
             .get("effort")
             .and_then(Value::as_str)
-            .filter(|s| !s.is_empty())
+            .map(str::trim)
+            .filter(|s| !ghostex_gx_chat_core::menus::catalog::is_placeholder_effort_value(s))
+            .or_else(|| {
+                launch_effort.as_deref().filter(|s| {
+                    !ghostex_gx_chat_core::menus::catalog::is_placeholder_effort_value(s)
+                })
+            });
+        let resolved_acp = crate::agent_model_catalog::resolve_acp_model(
+            family,
+            raw_model,
+            raw_effort,
+            acp_state
+                .get("availableModels")
+                .and_then(Value::as_array)
+                .map(Vec::as_slice),
+        );
+        let model = resolved_acp
+            .as_ref()
+            .map(|(value, label, _)| SessionChatDetectedChoice {
+                value: value.clone(),
+                label: label.clone(),
+                source: SessionChatOptionEvidence::Terminal,
+            });
+        let effort = resolved_acp
+            .as_ref()
+            .and_then(|(_, _, effort)| effort.as_deref())
+            .or(raw_effort)
             .map(|value| SessionChatDetectedChoice {
                 value: value.to_string(),
-                label: value.to_string(),
+                label: crate::agent_model_catalog::effort_display_label(value),
                 source: SessionChatOptionEvidence::Terminal,
             });
         let mode = acp_state
-            .get("mode")
+            .get("approvalLevel")
+            .or_else(|| acp_state.get("mode"))
             .and_then(Value::as_str)
             .filter(|s| !s.is_empty())
-            .map(|value| SessionChatDetectedChoice {
-                value: value.to_string(),
-                label: value.to_string(),
-                source: SessionChatOptionEvidence::Terminal,
+            .map(|value| match crate::acp::AcpApprovalLevel::parse(value) {
+                Some(level) => SessionChatDetectedChoice {
+                    value: level.as_str().to_string(),
+                    label: level.label().to_string(),
+                    source: SessionChatOptionEvidence::Terminal,
+                },
+                None => SessionChatDetectedChoice {
+                    value: value.to_string(),
+                    label: acp_state
+                        .get("modeLabel")
+                        .and_then(Value::as_str)
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or(value)
+                        .to_string(),
+                    source: SessionChatOptionEvidence::Terminal,
+                },
             });
+        let context_usage = acp_state.get("contextUsage").and_then(|u| {
+            let obj = u.as_object()?;
+            let usage = SessionChatContextUsage {
+                used_percentage: obj
+                    .get("usedPercentage")
+                    .and_then(Value::as_u64)
+                    .map(|v| v.min(100) as u32),
+                used_tokens: obj.get("usedTokens").and_then(Value::as_u64),
+                window_size: obj.get("windowSize").and_then(Value::as_u64),
+            };
+            (!usage.is_empty()).then_some(usage)
+        });
+        let activity = acp_state.get("liveActivity").and_then(|live| {
+            let obj = live.as_object()?;
+            let kind = obj.get("kind").and_then(Value::as_str)?;
+            let detected_at = obj
+                .get("detectedAt")
+                .and_then(Value::as_str)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .unwrap_or_else(|| {
+                    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+                });
+            match kind {
+                "stream" => {
+                    let text = obj.get("text").and_then(Value::as_str)?.trim();
+                    if text.is_empty() {
+                        return None;
+                    }
+                    let first_para = text
+                        .split("\n\n")
+                        .next()
+                        .unwrap_or(text)
+                        .trim()
+                        .chars()
+                        .take(240)
+                        .collect::<String>();
+                    Some(crate::session_chat_terminal_activity::SessionChatTerminalActivity {
+                        kind: crate::session_chat_terminal_activity::SESSION_CHAT_ACTIVITY_AGENT_STREAM,
+                        label: first_para,
+                        percent: None,
+                        elapsed_seconds: None,
+                        detected_at,
+                        tokens: None,
+                        detail: None,
+                        text: Some(text.to_string()),
+                        stream: None,
+                        background: None,
+                    })
+                }
+                "tool" => {
+                    let label = obj.get("label").and_then(Value::as_str)?.trim();
+                    if label.is_empty() {
+                        return None;
+                    }
+                    let detail = obj
+                        .get("detail")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string);
+                    Some(crate::session_chat_terminal_activity::SessionChatTerminalActivity {
+                        kind: crate::session_chat_terminal_activity::SESSION_CHAT_ACTIVITY_CLAUDE_TOOL,
+                        label: label.to_string(),
+                        percent: None,
+                        elapsed_seconds: None,
+                        detected_at,
+                        tokens: None,
+                        detail,
+                        text: None,
+                        stream: None,
+                        background: None,
+                    })
+                }
+                "thinking" => {
+                    let text = obj.get("text").and_then(Value::as_str)?.trim();
+                    if text.is_empty() {
+                        return None;
+                    }
+                    let last_line = text
+                        .lines()
+                        .rev()
+                        .map(str::trim)
+                        .find(|l| !l.is_empty())
+                        .unwrap_or(text)
+                        .chars()
+                        .take(200)
+                        .collect::<String>();
+                    Some(crate::session_chat_terminal_activity::SessionChatTerminalActivity {
+                        kind: crate::session_chat_terminal_activity::SESSION_CHAT_ACTIVITY_CURSOR_THINKING,
+                        label: last_line,
+                        percent: None,
+                        elapsed_seconds: None,
+                        detected_at,
+                        tokens: None,
+                        detail: None,
+                        text: None,
+                        stream: None,
+                        background: None,
+                    })
+                }
+                "compacting" => {
+                    let label = obj
+                        .get("label")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or("Compacting conversation");
+                    Some(crate::session_chat_terminal_activity::SessionChatTerminalActivity {
+                        kind: crate::session_chat_terminal_activity::SESSION_CHAT_ACTIVITY_COMPACTING,
+                        label: label.to_string(),
+                        percent: None,
+                        elapsed_seconds: None,
+                        detected_at,
+                        tokens: None,
+                        detail: None,
+                        text: None,
+                        stream: None,
+                        background: None,
+                    })
+                }
+                _ => None,
+            }
+        });
+        let hermes_sel = (family == "hermes")
+            .then(|| {
+                crate::session_chat_hermes_status::read_hermes_status_selection(
+                    repository, project_id, session_id,
+                )
+            })
+            .flatten();
+        let (model_catalog, pi_status, transcript_context_usage) = if family == "hermes" {
+            (
+                crate::acp::hermes::build_native_model_catalog(
+                    Some(&acp_state),
+                    hermes_sel.as_ref(),
+                ),
+                None,
+                None,
+            )
+        } else if matches!(family, "pi" | "omp") {
+            let pi_agent = if family == "omp" {
+                crate::session_chat_pi_models::PiFamilyAgent::Omp
+            } else {
+                crate::session_chat_pi_models::PiFamilyAgent::Pi
+            };
+            let opt_agent = if family == "omp" {
+                SessionChatOptionAgent::Omp
+            } else {
+                SessionChatOptionAgent::Pi
+            };
+            let pi_sel = crate::session_chat_pi_models::read_pi_family_selection(
+                repository, project_id, session_id, opt_agent,
+            );
+            let catalog = pi_sel
+                .as_ref()
+                .and_then(|s| s.model_catalog.clone())
+                .or_else(|| crate::session_chat_pi_models::pi_family_model_catalog(pi_agent));
+            let status = pi_sel.as_ref().and_then(|s| s.pi_status.clone());
+            let ctx = pi_sel.and_then(|s| s.context_usage);
+            (catalog, status, ctx)
+        } else {
+            (
+                acp_state
+                    .get("modelCatalog")
+                    .filter(|v| v.is_object())
+                    .cloned(),
+                None,
+                None,
+            )
+        };
         let selection = SessionChatDetectedSelection {
             model,
             effort,
             mode,
+            context_usage: context_usage.or(transcript_context_usage),
+            hermes_status: hermes_sel.and_then(|sel| sel.hermes_status),
+            pi_status,
+            model_catalog,
             ..SessionChatDetectedSelection::default()
         };
         let options = Some(SessionChatDetectedOptions::new(selection));
         let options = with_checkout_status(repository, project_id, session_id, agent_id, options);
+        let mut notice = acp_terminal_notice(Some(&acp_state), session_row.as_ref());
+        if let Some(notice) = notice.as_mut() {
+            crate::session_chat_account_sign_in::enrich_notice(
+                repository, project_id, session_id, notice,
+            );
+        }
+        let (fleet, fleet_observed) = if family == "omp" {
+            match session_row.as_ref().and_then(|session| {
+                crate::session_chat_fleet_status::read_fleet(session, None).ok()
+            }) {
+                Some(fleet) => (fleet, true),
+                None => (None, false),
+            }
+        } else {
+            (None, true)
+        };
+        let child_exited = acp_state.get("childExited").and_then(Value::as_bool) == Some(true);
+        let has_fatal_error = acp_state
+            .get("fatalError")
+            .and_then(Value::as_str)
+            .is_some_and(|s| !s.trim().is_empty());
+        let is_working = acp_state.get("working").and_then(Value::as_bool) == Some(true);
+        let has_pending_permission = acp_state
+            .get("pendingPermission")
+            .is_some_and(|v| !v.is_null());
         let mut detection = SessionChatTerminalDetection::default();
         detection.options = options;
+        detection.activity = activity;
+        detection.notice = notice;
+        if let Some(tasks_arr) = acp_state.pointer("/tasks/tasks").and_then(Value::as_array) {
+            let tasks: Vec<crate::session_chat_agent_tasks::SessionChatAgentTask> = tasks_arr
+                .iter()
+                .filter_map(|t| {
+                    Some(crate::session_chat_agent_tasks::SessionChatAgentTask {
+                        id: t.get("id").and_then(Value::as_str)?.to_string(),
+                        subject: t.get("subject").and_then(Value::as_str)?.to_string(),
+                        active_form: t
+                            .get("activeForm")
+                            .and_then(Value::as_str)
+                            .map(str::to_string),
+                        status: t
+                            .get("status")
+                            .and_then(Value::as_str)
+                            .unwrap_or("pending")
+                            .to_string(),
+                        blocked_by: t
+                            .get("blockedBy")
+                            .and_then(Value::as_array)
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(Value::as_str)
+                                    .map(str::to_string)
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
+                    })
+                })
+                .collect();
+            if !tasks.is_empty() {
+                detection.tasks =
+                    Some(crate::session_chat_agent_tasks::SessionChatAgentTasks { tasks });
+            }
+        }
+        if family == "opencode" {
+            detection.fleet_observed = true;
+            if let Some(agents_arr) = acp_state.pointer("/fleet/agents").and_then(Value::as_array) {
+                let agents: Vec<crate::session_chat_agent_fleet::SessionChatSubAgent> = agents_arr
+                    .iter()
+                    .filter_map(|a| {
+                        let status = a.get("status").and_then(Value::as_str).unwrap_or("idle");
+                        let working = status == "working";
+                        Some(crate::session_chat_agent_fleet::SessionChatSubAgent {
+                            id: a.get("id").and_then(Value::as_str).map(str::to_string),
+                            started_at: a.get("startedAt").and_then(Value::as_i64).unwrap_or(0),
+                            working,
+                            done: !working && a.get("done").and_then(Value::as_bool) == Some(true),
+                            name: a
+                                .get("name")
+                                .and_then(Value::as_str)
+                                .unwrap_or("OpenCode agent")
+                                .to_string(),
+                            model: a.get("model").and_then(Value::as_str).map(str::to_string),
+                            effort: a.get("effort").and_then(Value::as_str).map(str::to_string),
+                            task: a.get("task").and_then(Value::as_str).map(str::to_string),
+                            elapsed_seconds: a.get("elapsedSeconds").and_then(Value::as_u64),
+                            tokens: a.get("tokens").and_then(Value::as_str).map(str::to_string),
+                            nested: a.get("nested").and_then(Value::as_u64).map(|n| n as u32),
+                        })
+                    })
+                    .collect();
+                if !agents.is_empty() {
+                    detection.fleet = Some(
+                        crate::session_chat_agent_fleet::SessionChatAgentFleet::new(agents),
+                    );
+                }
+            }
+        } else if let Some(fleet_val) = acp_state.get("agentFleet").filter(|v| v.is_object()) {
+            let agents: Vec<crate::session_chat_agent_fleet::SessionChatSubAgent> = fleet_val
+                .get("agents")
+                .and_then(Value::as_array)
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|item| {
+                            let name = item.get("name").and_then(Value::as_str)?.to_string();
+                            let working =
+                                item.get("status").and_then(Value::as_str) == Some("working");
+                            Some(crate::session_chat_agent_fleet::SessionChatSubAgent {
+                                id: item.get("id").and_then(Value::as_str).map(str::to_string),
+                                started_at: item
+                                    .get("startedAt")
+                                    .and_then(Value::as_i64)
+                                    .unwrap_or(0),
+                                working,
+                                done: item
+                                    .get("done")
+                                    .and_then(Value::as_bool)
+                                    .unwrap_or(!working),
+                                name,
+                                model: item
+                                    .get("model")
+                                    .and_then(Value::as_str)
+                                    .map(str::to_string),
+                                effort: item
+                                    .get("effort")
+                                    .and_then(Value::as_str)
+                                    .map(str::to_string),
+                                task: item.get("task").and_then(Value::as_str).map(str::to_string),
+                                elapsed_seconds: item.get("elapsedSeconds").and_then(Value::as_u64),
+                                tokens: item
+                                    .get("tokens")
+                                    .and_then(Value::as_str)
+                                    .map(str::to_string),
+                                nested: item
+                                    .get("nested")
+                                    .and_then(Value::as_u64)
+                                    .map(|n| n as u32),
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            if !agents.is_empty() {
+                let mut fleet = crate::session_chat_agent_fleet::SessionChatAgentFleet::new(agents);
+                if let Some(detected_at) = fleet_val
+                    .get("detectedAt")
+                    .and_then(Value::as_str)
+                    .filter(|s| !s.trim().is_empty())
+                {
+                    fleet.detected_at = detected_at.to_string();
+                }
+                detection.fleet = Some(fleet);
+                detection.fleet_observed = true;
+            }
+        } else if family == "omp" {
+            detection.fleet = fleet;
+            detection.fleet_observed = fleet_observed;
+        }
+        detection.composer.state =
+            if child_exited || has_fatal_error || is_working || has_pending_permission {
+                crate::session_chat_composer::SessionChatComposerState::NotReady
+            } else {
+                crate::session_chat_composer::SessionChatComposerState::Ready
+            };
+        detection.captured = true;
+        detection.attempted = true;
         return detection;
+    }
+    // While an ACP session is booting or reconnecting its channel, never fall through to CLI TUI
+    // screen scraping; report its persisted approval level, launched/pinned model, and effort.
+    if let Some(session) = repository
+        .get_session(project_id, session_id)
+        .ok()
+        .flatten()
+    {
+        if crate::acp::session_is_acp(&session) {
+            let stored_level = crate::acp::approval::stored_session_approval_level(&session);
+            let family = acp_family_for_session(agent_id, Some(&session));
+            let (launch_model, launch_effort) = acp_session_launch_model_and_effort(
+                repository,
+                project_id,
+                session_id,
+                Some(&session),
+                &family,
+            );
+            let resolved_acp = crate::agent_model_catalog::resolve_acp_model(
+                &family,
+                launch_model.as_deref(),
+                launch_effort.as_deref(),
+                None,
+            );
+            let model = resolved_acp
+                .as_ref()
+                .map(|(value, label, _)| SessionChatDetectedChoice {
+                    value: value.clone(),
+                    label: label.clone(),
+                    source: SessionChatOptionEvidence::Launch,
+                });
+            let effort = resolved_acp
+                .as_ref()
+                .and_then(|(_, _, effort)| effort.as_deref())
+                .or(launch_effort.as_deref())
+                .filter(|s| !ghostex_gx_chat_core::menus::catalog::is_placeholder_effort_value(s))
+                .map(|value| SessionChatDetectedChoice {
+                    value: value.to_string(),
+                    label: crate::agent_model_catalog::effort_display_label(value),
+                    source: SessionChatOptionEvidence::Launch,
+                });
+            let hermes_sel = (family == "hermes")
+                .then(|| {
+                    crate::session_chat_hermes_status::read_hermes_status_selection(
+                        repository, project_id, session_id,
+                    )
+                })
+                .flatten();
+            let model_catalog = match family.as_str() {
+                "hermes" => {
+                    crate::acp::hermes::build_native_model_catalog(None, hermes_sel.as_ref())
+                }
+                "pi" => crate::session_chat_pi_models::pi_family_model_catalog(
+                    crate::session_chat_pi_models::PiFamilyAgent::Pi,
+                ),
+                "omp" => crate::session_chat_pi_models::pi_family_model_catalog(
+                    crate::session_chat_pi_models::PiFamilyAgent::Omp,
+                ),
+                _ => None,
+            };
+            let selection = SessionChatDetectedSelection {
+                model,
+                effort,
+                mode: stored_level.map(|level| SessionChatDetectedChoice {
+                    value: level.as_str().to_string(),
+                    label: level.label().to_string(),
+                    source: SessionChatOptionEvidence::Launch,
+                }),
+                hermes_status: hermes_sel.and_then(|sel| sel.hermes_status),
+                model_catalog,
+                ..SessionChatDetectedSelection::default()
+            };
+            let options = Some(SessionChatDetectedOptions::new(selection));
+            let options =
+                with_checkout_status(repository, project_id, session_id, agent_id, options);
+            let mut detection = SessionChatTerminalDetection::default();
+            detection.options = options;
+            let mut startup_failed = false;
+            let mut notice =
+                if let Some(err) = crate::acp::startup_error::get(project_id, session_id) {
+                    startup_failed = true;
+                    Some(crate::acp::startup_error::startup_error_notice(&err))
+                } else {
+                    acp_terminal_notice(None, Some(&session)).or_else(|| {
+                        let zmx_name = session
+                            .get("zmxSessionName")
+                            .and_then(Value::as_str)
+                            .map(str::trim)
+                            .filter(|s| !s.is_empty())?;
+                        if crate::acp::host_process_running(zmx_name) {
+                            return None;
+                        }
+                        let capture = crate::zmx::read_zmx_session_history_capture(
+                            repository, project_id, session_id,
+                        )
+                        .ok()?;
+                        let found = crate::session_chat_start_failure::detect_agent_start_failure(
+                            repository,
+                            project_id,
+                            session_id,
+                            &capture.text,
+                        )?;
+                        startup_failed = true;
+                        Some(found)
+                    })
+                };
+            if let Some(notice) = notice.as_mut() {
+                crate::session_chat_account_sign_in::enrich_notice(
+                    repository, project_id, session_id, notice,
+                );
+            }
+            detection.notice = notice;
+            if startup_failed {
+                detection.captured = true;
+                detection.composer.state =
+                    crate::session_chat_composer::SessionChatComposerState::NotReady;
+            }
+            detection.attempted = true;
+            return detection;
+        }
     }
     // DeepSeek Harness reports its model and effort through Ghostex's dsh-tui plugin, in the Pi
     // channel's state shape (CDXC:DshChatChannel 2026-11-05 in dsh_chat_plugin.rs).

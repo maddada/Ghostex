@@ -110,7 +110,7 @@ pub(crate) async fn handle_restart_session_in_mode_http(
         }
         if text("mode") != "bypass" {
             return Err(DomainStateError::bad_request(
-                "Only Bypass can be turned on with a restart.",
+                "Only Full permissions can be turned on with a restart.",
             ));
         }
         let enabled = params.get("enabled").and_then(Value::as_bool) == Some(true);
@@ -125,12 +125,12 @@ pub(crate) async fn handle_restart_session_in_mode_http(
             Principal::Owner { .. } | Principal::Device { .. } | Principal::LocalAgent
         ) {
             return Err(DomainStateError::bad_request(
-                "Only you can turn on Bypass for a chat, from its Mode menu.",
+                "Only you can turn on Full permissions for a chat, from its Mode menu.",
             ));
         }
         if !crate::session_chat_mode_availability::bypass_restart_offered(&session) {
             return Err(DomainStateError::bad_request(
-                "This Claude can't be restarted in Bypass.",
+                "This Claude can't be restarted in Full permissions.",
             ));
         }
         write_restart(
@@ -294,7 +294,7 @@ async fn restart(state: &AppState, project_id: &str, session_id: &str) -> Result
         "sessionAgentRestartedInBypass",
         project_id,
         session_id,
-        "Restarted Claude on its own conversation in Bypass permissions, as the user asked in the Mode menu.",
+        "Restarted Claude on its own conversation in Full permissions, as the user asked in the Mode menu.",
         &[],
     );
     write_restart(state, project_id, session_id, &ModeRestart::default());

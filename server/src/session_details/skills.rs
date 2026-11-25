@@ -8,11 +8,15 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::sync::OnceLock;
+use std::time::Duration;
+
+use super::async_cache::{AsyncSectionCache, SectionLoad};
 
 /// How long one folder's index of skills is reused while the panel keeps reading.
 const FRESH_FOR: Duration = Duration::from_secs(60);
+/// Hard cap for a synchronous (non-progressive) skill source index build.
+const SYNC_WAIT: Duration = Duration::from_secs(3);
 
 /// Where one skill lives: `"user"` (a home skills folder, which Agents Hub lists), `"project"`
 /// or `"plugin"` (a SKILL.md Agents Hub does not list), or `"builtin"` (no file).
@@ -24,9 +28,9 @@ pub(super) struct SkillSource {
 
 type Index = HashMap<String, SkillSource>;
 
-fn cache() -> &'static Mutex<HashMap<PathBuf, (Instant, Index)>> {
-    static CACHE: OnceLock<Mutex<HashMap<PathBuf, (Instant, Index)>>> = OnceLock::new();
-    CACHE.get_or_init(Mutex::default)
+fn cache() -> &'static AsyncSectionCache<PathBuf, Index> {
+    static CACHE: OnceLock<AsyncSectionCache<PathBuf, Index>> = OnceLock::new();
+    CACHE.get_or_init(|| AsyncSectionCache::new(32))
 }
 
 /// The `name:` of a SKILL.md's front matter.
@@ -117,29 +121,10 @@ fn build_index(home: &Path, folder: Option<&Path>) -> Index {
     index
 }
 
-/// Where each of `names` comes from, for a session in `folder`. Blocking; cached a minute.
-pub(super) fn skill_sources<'a>(
-    home: &Path,
-    folder: Option<&Path>,
+fn map_names<'a>(
+    index: &Index,
     names: impl Iterator<Item = &'a str>,
 ) -> HashMap<String, SkillSource> {
-    let key = folder.map_or_else(|| home.to_path_buf(), Path::to_path_buf);
-    let cached = cache().lock().ok().and_then(|cache| {
-        cache
-            .get(&key)
-            .filter(|(at, _)| at.elapsed() < FRESH_FOR)
-            .map(|(_, index)| index.clone())
-    });
-    let index = cached.unwrap_or_else(|| {
-        let index = build_index(home, folder);
-        if let Ok(mut cache) = cache().lock() {
-            if cache.len() > 32 {
-                cache.clear();
-            }
-            cache.insert(key, (Instant::now(), index.clone()));
-        }
-        index
-    });
     names
         .map(|name| {
             let source = index.get(name).cloned().unwrap_or(SkillSource {
@@ -149,4 +134,38 @@ pub(super) fn skill_sources<'a>(
             (name.to_string(), source)
         })
         .collect()
+}
+
+/// Non-blocking skill-source lookup for progressive reads.
+pub(super) fn skill_sources_progressive<'a>(
+    home: &Path,
+    folder: Option<&Path>,
+    names: impl Iterator<Item = &'a str>,
+) -> SectionLoad<HashMap<String, SkillSource>> {
+    let key = folder.map_or_else(|| home.to_path_buf(), Path::to_path_buf);
+    let home_owned = home.to_path_buf();
+    let folder_owned = folder.map(Path::to_path_buf);
+    match cache().get_or_start(key, FRESH_FOR, false, move || {
+        build_index(&home_owned, folder_owned.as_deref())
+    }) {
+        SectionLoad::Ready(index) => SectionLoad::Ready(map_names(&index, names)),
+        SectionLoad::Pending => SectionLoad::Pending,
+    }
+}
+
+/// Where each of `names` comes from, for a session in `folder`. Cached with stale-while-revalidate.
+pub(super) fn skill_sources<'a>(
+    home: &Path,
+    folder: Option<&Path>,
+    names: impl Iterator<Item = &'a str>,
+) -> HashMap<String, SkillSource> {
+    let key = folder.map_or_else(|| home.to_path_buf(), Path::to_path_buf);
+    let home_owned = home.to_path_buf();
+    let folder_owned = folder.map(Path::to_path_buf);
+    let index = cache()
+        .get_or_wait(key, FRESH_FOR, false, SYNC_WAIT, move || {
+            build_index(&home_owned, folder_owned.as_deref())
+        })
+        .unwrap_or_default();
+    map_names(&index, names)
 }

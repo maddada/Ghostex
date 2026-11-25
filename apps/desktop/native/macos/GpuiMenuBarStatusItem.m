@@ -34,6 +34,17 @@ extern void GhostexGpuiMenuBarStatusSessionClicked(const char *project_id,
                                                    const char *session_id);
 
 static NSStatusItem *GhostexGpuiMenuBarStatusItem = nil;
+static NSStatusItemAutosaveName const GhostexGpuiMenuBarStatusItemAutosaveName =
+    @"GhostexSessionStatus";
+static void *GhostexGpuiMenuBarStatusItemVisibleContext =
+    &GhostexGpuiMenuBarStatusItemVisibleContext;
+static GhostexGpuiMenuBarStatusEntry GhostexGpuiMenuBarStatusLatestEntries[3];
+static NSUInteger GhostexGpuiMenuBarStatusLatestCount = 0;
+static GhostexGpuiMenuBarStatusEntry GhostexGpuiMenuBarStatusShownEntries[3];
+static NSUInteger GhostexGpuiMenuBarStatusShownCount = 0;
+static NSAppearanceName GhostexGpuiMenuBarStatusShownAppearance = nil;
+
+static void GhostexGpuiRenderMenuBarStatusItemIfVisible(void);
 
 @interface GhostexGpuiMenuBarStatusSessionModel : NSObject
 @property(nonatomic, copy) NSString *sessionId;
@@ -1502,9 +1513,12 @@ static const NSTimeInterval GhostexGpuiMenuBarStatusIdleSessionMaximumAge =
 @interface GhostexGpuiMenuBarStatusTarget : NSObject
 @property(nonatomic, strong)
     GhostexGpuiMenuBarStatusPanelController *panelController;
+@property(nonatomic, strong) NSStatusItem *observedStatusItem;
 - (void)statusItemClicked:(NSStatusBarButton *)sender;
 - (void)updateProjects:
     (NSArray<GhostexGpuiMenuBarStatusProjectModel *> *)projects;
+- (void)observeStatusItem:(NSStatusItem *)item;
+- (void)stopObservingStatusItem;
 - (void)dismissPanel;
 @end
 
@@ -1515,6 +1529,64 @@ static const NSTimeInterval GhostexGpuiMenuBarStatusIdleSessionMaximumAge =
     _panelController = [[GhostexGpuiMenuBarStatusPanelController alloc] init];
   }
   return self;
+}
+
+- (void)dealloc {
+  [self stopObservingStatusItem];
+}
+
+- (void)observeStatusItem:(NSStatusItem *)item {
+  if (_observedStatusItem == item) {
+    return;
+  }
+  [self stopObservingStatusItem];
+  if (item == nil) {
+    return;
+  }
+  _observedStatusItem = item;
+  [item addObserver:self
+         forKeyPath:@"visible"
+            options:0
+            context:GhostexGpuiMenuBarStatusItemVisibleContext];
+}
+
+- (void)stopObservingStatusItem {
+  if (_observedStatusItem == nil) {
+    return;
+  }
+  [_observedStatusItem removeObserver:self
+                           forKeyPath:@"visible"
+                              context:GhostexGpuiMenuBarStatusItemVisibleContext];
+  _observedStatusItem = nil;
+}
+
+- (void)observeValueForKeyPath:(NSString *)keyPath
+                      ofObject:(id)object
+                        change:(NSDictionary<NSKeyValueChangeKey, id> *)change
+                       context:(void *)context {
+  if (context != GhostexGpuiMenuBarStatusItemVisibleContext) {
+    [super observeValueForKeyPath:keyPath
+                         ofObject:object
+                           change:change
+                          context:context];
+    return;
+  }
+  dispatch_block_t handleVisibilityChange = ^{
+    NSStatusItem *item = GhostexGpuiMenuBarStatusItem;
+    if (item == nil || object != item) {
+      return;
+    }
+    if (!item.visible) {
+      [self dismissPanel];
+      return;
+    }
+    GhostexGpuiRenderMenuBarStatusItemIfVisible();
+  };
+  if (NSThread.isMainThread) {
+    handleVisibilityChange();
+  } else {
+    dispatch_async(dispatch_get_main_queue(), handleVisibilityChange);
+  }
 }
 
 - (void)statusItemClicked:(NSStatusBarButton *)sender {
@@ -1585,6 +1657,9 @@ GhostexGpuiMenuBarStatusEntries(uint64_t attentionCount, uint64_t workingCount,
 
 static void GhostexGpuiHideMenuBarStatusItemOnMain(void) {
   [GhostexGpuiMenuBarStatusClickTarget dismissPanel];
+  [GhostexGpuiMenuBarStatusClickTarget stopObservingStatusItem];
+  GhostexGpuiMenuBarStatusShownAppearance = nil;
+  GhostexGpuiMenuBarStatusShownCount = 0;
   if (GhostexGpuiMenuBarStatusItem == nil) {
     return;
   }
@@ -1594,11 +1669,65 @@ static void GhostexGpuiHideMenuBarStatusItemOnMain(void) {
 
 static NSStatusItem *GhostexGpuiEnsureMenuBarStatusItem(void) {
   if (GhostexGpuiMenuBarStatusItem == nil) {
-    GhostexGpuiMenuBarStatusItem = [NSStatusBar.systemStatusBar
+    /*
+     CDXC:StatusPet 2026-11-24 WHY:
+     User: "when i remove this in mac menu bar it comes back... for other apps it doesn't pls fix".
+     Give the status item a stable autosaveName and allow user removal without forcing `.visible`,
+     so macOS remembers Cmd-drag and System Settings removals across updates, window handoffs, and
+     launches instead of Ghostex resetting visibility back to YES.
+     */
+    NSStatusItem *item = [NSStatusBar.systemStatusBar
         statusItemWithLength:NSVariableStatusItemLength];
-    GhostexGpuiMenuBarStatusItem.visible = NO;
+    item.autosaveName = GhostexGpuiMenuBarStatusItemAutosaveName;
+    item.behavior = NSStatusItemBehaviorRemovalAllowed;
+    GhostexGpuiMenuBarStatusItem = item;
+    [GhostexGpuiEnsureMenuBarStatusTarget() observeStatusItem:item];
   }
   return GhostexGpuiMenuBarStatusItem;
+}
+
+static void GhostexGpuiRenderMenuBarStatusItemIfVisible(void) {
+  NSStatusItem *item = GhostexGpuiMenuBarStatusItem;
+  if (item == nil || !item.visible || GhostexGpuiMenuBarStatusLatestCount == 0) {
+    return;
+  }
+  GhostexGpuiMenuBarStatusTarget *target =
+      GhostexGpuiEnsureMenuBarStatusTarget();
+  /*
+   CDXC:StatusPet 2026-11-08 WHY:
+   The rows change far more often than the counts, and drawing the badge image and setting the item's length again laid out the menu bar on every change. The badge is drawn again only when what it shows changed.
+   */
+  NSUInteger count = GhostexGpuiMenuBarStatusLatestCount;
+  NSAppearanceName appearance = NSApp.effectiveAppearance.name;
+  if (GhostexGpuiMenuBarStatusShownAppearance != nil &&
+      item.button.target == target &&
+      GhostexGpuiMenuBarStatusShownCount == count &&
+      [GhostexGpuiMenuBarStatusShownAppearance isEqualToString:appearance] &&
+      memcmp(GhostexGpuiMenuBarStatusShownEntries,
+             GhostexGpuiMenuBarStatusLatestEntries,
+             sizeof(GhostexGpuiMenuBarStatusEntry) * count) == 0) {
+    return;
+  }
+  GhostexGpuiMenuBarStatusShownAppearance = appearance;
+  GhostexGpuiMenuBarStatusShownCount = count;
+  memcpy(GhostexGpuiMenuBarStatusShownEntries,
+         GhostexGpuiMenuBarStatusLatestEntries,
+         sizeof(GhostexGpuiMenuBarStatusEntry) * count);
+  NSSize preferredSize = GhostexGpuiMenuBarStatusPreferredSize(
+      GhostexGpuiMenuBarStatusLatestEntries, count);
+  item.length = preferredSize.width;
+
+  NSStatusBarButton *button = item.button;
+  if (button == nil) {
+    return;
+  }
+  button.action = @selector(statusItemClicked:);
+  button.target = target;
+  [button sendActionOn:NSEventMaskLeftMouseUp];
+  button.image = GhostexGpuiMenuBarStatusImage(
+      GhostexGpuiMenuBarStatusLatestEntries, count);
+  button.imagePosition = NSImageOnly;
+  button.toolTip = @"Ghostex session status";
 }
 
 static void GhostexGpuiApplyMenuBarStatusItemOnMain(
@@ -1637,38 +1766,12 @@ static void GhostexGpuiApplyMenuBarStatusItemOnMain(
         .count = 0,
     };
   }
+  GhostexGpuiMenuBarStatusLatestCount = count;
+  memcpy(GhostexGpuiMenuBarStatusLatestEntries, entries,
+         sizeof(GhostexGpuiMenuBarStatusEntry) * count);
 
-  NSStatusItem *item = GhostexGpuiEnsureMenuBarStatusItem();
-  /*
-   CDXC:StatusPet 2026-11-08 WHY:
-   The rows change far more often than the counts, and drawing the badge image and setting the item's length again laid out the menu bar on every change. The badge is drawn again only when what it shows changed.
-   */
-  static GhostexGpuiMenuBarStatusEntry shownEntries[3];
-  static NSUInteger shownCount = 0;
-  static NSAppearanceName shownAppearance = nil;
-  NSAppearanceName appearance = NSApp.effectiveAppearance.name;
-  if (shownAppearance != nil && item.visible && item.button.target == target &&
-      shownCount == count && [shownAppearance isEqualToString:appearance] &&
-      memcmp(shownEntries, entries, sizeof(GhostexGpuiMenuBarStatusEntry) * count) == 0) {
-    return;
-  }
-  shownAppearance = appearance;
-  shownCount = count;
-  memcpy(shownEntries, entries, sizeof(GhostexGpuiMenuBarStatusEntry) * count);
-  NSSize preferredSize = GhostexGpuiMenuBarStatusPreferredSize(entries, count);
-  item.length = preferredSize.width;
-  item.visible = YES;
-
-  NSStatusBarButton *button = item.button;
-  if (button == nil) {
-    return;
-  }
-  button.action = @selector(statusItemClicked:);
-  button.target = target;
-  [button sendActionOn:NSEventMaskLeftMouseUp];
-  button.image = GhostexGpuiMenuBarStatusImage(entries, count);
-  button.imagePosition = NSImageOnly;
-  button.toolTip = @"Ghostex session status";
+  (void)GhostexGpuiEnsureMenuBarStatusItem();
+  GhostexGpuiRenderMenuBarStatusItemIfVisible();
 }
 
 void GhostexGpuiApplyMenuBarStatusItemWithProjects(

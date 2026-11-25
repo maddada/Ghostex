@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::composer::references::next_file_reference_index;
 use crate::composer::slash_commands::{
-    filter_slash_commands, slash_commands_for_agent, slash_heading_for_agent, slash_query,
-    SlashCommand,
+    filter_slash_commands, slash_commands_for_agent, slash_commands_for_session,
+    slash_heading_for_agent, slash_query, SlashCommand,
 };
 use crate::composer::text::Utf16Text;
 use crate::composer::trigger::{
@@ -113,6 +113,8 @@ pub fn suggestion_row_corners(index: usize, count: usize) -> (bool, bool) {
 #[derive(Clone, Debug, PartialEq)]
 pub struct SuggestionSources {
     pub agent: Option<String>,
+    /// The chat is Native (structured host), whose `/` list is its own (`slash_commands_for_session`).
+    pub non_cli: bool,
     pub session_agent_id: Option<String>,
     /// The draft session's agent rows, for the `$` heading.
     pub available_agents: Vec<AvailableAgent>,
@@ -151,6 +153,7 @@ impl Default for SuggestionSources {
     fn default() -> Self {
         Self {
             agent: None,
+            non_cli: false,
             session_agent_id: None,
             available_agents: Vec::new(),
             skills: None,
@@ -228,11 +231,12 @@ pub fn picker_edges(
     draft: &str,
     caret: usize,
     agent: Option<&str>,
+    non_cli: bool,
     dismissed: SuggestionDismissals,
 ) -> (bool, bool) {
     let slash_open = match slash_query(draft) {
         Some(query) if !dismissed.slash => {
-            !filter_slash_commands(slash_commands_for_agent(agent), query).is_empty()
+            !filter_slash_commands(slash_commands_for_session(agent, non_cli), query).is_empty()
         }
         _ => false,
     };
@@ -254,7 +258,7 @@ pub fn composer_suggestions(
     dismissed: SuggestionDismissals,
     can_request_skills: bool,
 ) -> SuggestionMatches {
-    let commands = slash_commands_for_agent(sources.agent.as_deref());
+    let commands = slash_commands_for_session(sources.agent.as_deref(), sources.non_cli);
     let slash_query = slash_query(draft).map(str::to_string);
     let skills = sources.skills.clone().unwrap_or_default();
     let (slash_matches, slash_skills) = match &slash_query {
@@ -584,7 +588,7 @@ const DEFAULT_AGENT_NAMES: &[(&str, &str)] = &[
     ("copilot", "Copilot"),
     ("droid", "Factory Droid"),
     ("grok", "Grok Build"),
-    ("antigravity", "Antigravity CLI"),
+    ("antigravity", "Antigravity"),
     ("amp", "Amp CLI"),
     ("hermes-agent", "Hermes Agent"),
     ("rovodev", "Rovo Dev"),
@@ -839,6 +843,205 @@ pub fn suggestion_replacement(
             .get(index)
             .map(|(id, label, _)| crate::extras::boosts::boost_link(id, label)),
     }
+}
+
+/// The compact mention menu for a reply box (`*` Boosts, `+` agents, `/` or `$` skills): same
+/// trigger detection, filtering, sections and row format as the main chat composer, without `@`
+/// files, `#M` messages or built-in slash commands.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplyMentionPopup {
+    pub kind: SuggestionKind,
+    /// Draft offset of the trigger sigil, in UTF-16 code units, so the caller can track Escape
+    /// dismissal per trigger.
+    pub trigger_start: usize,
+    pub heading: String,
+    pub rows: Vec<SuggestionRow>,
+    pub status: Option<String>,
+    pub loading: bool,
+}
+
+/// The text and UTF-16 caret offset after picking a row from [`ReplyMentionPopup`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplyMentionCompletion {
+    pub text: String,
+    pub caret: usize,
+}
+
+/// Evaluates the `*`, `+`, `/` or `$` mention menu for a reply box at `caret` (UTF-16 code units).
+pub fn reply_mention_popup(
+    text: &str,
+    caret: usize,
+    sources: &SuggestionSources,
+) -> Option<ReplyMentionPopup> {
+    let trigger = detect_composer_trigger(text, Some(caret))?;
+    match trigger.kind {
+        TriggerKind::Boost => {
+            let boost_matches: Vec<(String, String, String)> =
+                crate::extras::boosts::filter_choices(&sources.boosts, &trigger.query)
+                    .into_iter()
+                    .cloned()
+                    .collect();
+            if boost_matches.is_empty() {
+                return None;
+            }
+            let (section_heading, row_sections) = boost_sections(&boost_matches);
+            let count = boost_matches.len();
+            let rows = boost_matches
+                .into_iter()
+                .enumerate()
+                .map(|(index, (_, label, detail))| {
+                    let (round_top, round_bottom) = suggestion_row_corners(index, count);
+                    SuggestionRow {
+                        label,
+                        detail,
+                        round_top,
+                        round_bottom,
+                        agent_icon: None,
+                        coordinator: false,
+                        main_coordinator: false,
+                        working: false,
+                        section: row_sections.get(index).cloned().flatten(),
+                    }
+                })
+                .collect();
+            Some(ReplyMentionPopup {
+                kind: SuggestionKind::Boost,
+                trigger_start: trigger.start,
+                heading: section_heading
+                    .map(|tab| format!("{BOOST_SUGGESTION_HEADING} \u{b7} {tab}"))
+                    .unwrap_or_else(|| BOOST_SUGGESTION_HEADING.to_string()),
+                rows,
+                status: None,
+                loading: false,
+            })
+        }
+        TriggerKind::Session => {
+            let session_matches = filter_session_choices(&sources.sessions, &trigger.query);
+            if session_matches.is_empty() {
+                return None;
+            }
+            let (section_heading, row_sections) = session_sections(&session_matches);
+            let count = session_matches.len();
+            let rows = session_matches
+                .into_iter()
+                .enumerate()
+                .map(|(index, choice)| {
+                    let (round_top, round_bottom) = suggestion_row_corners(index, count);
+                    let detail = choice_detail(&choice);
+                    SuggestionRow {
+                        label: choice.title,
+                        detail,
+                        round_top,
+                        round_bottom,
+                        agent_icon: choice.agent_icon,
+                        coordinator: choice.coordinator,
+                        main_coordinator: choice.coordinator && choice.main_coordinator,
+                        working: choice.working,
+                        section: row_sections.get(index).cloned().flatten(),
+                    }
+                })
+                .collect();
+            Some(ReplyMentionPopup {
+                kind: SuggestionKind::Session,
+                trigger_start: trigger.start,
+                heading: section_heading.unwrap_or_else(|| SESSION_SUGGESTION_HEADING.to_string()),
+                rows,
+                status: None,
+                loading: false,
+            })
+        }
+        TriggerKind::Skill => {
+            let skills = sources.skills.clone().unwrap_or_default();
+            let skill_matches = ranked_skill_matches(&skills, &trigger.query);
+            let status = if sources.skills_loading {
+                Some("Loading skills\u{2026}".to_string())
+            } else if let Some(error) = sources
+                .skills_error
+                .as_deref()
+                .filter(|error| !error.is_empty())
+            {
+                Some(error.to_string())
+            } else if sources.skills.as_ref().is_some_and(Vec::is_empty) {
+                Some("No skills available.".to_string())
+            } else {
+                None
+            };
+            // A `/` opens only while a skill matches, so `/tmp` in prose stays text; `$` also shows
+            // loading, empty and error states, matching the main composer.
+            if skill_matches.is_empty() && (trigger.slash || status.is_none()) {
+                return None;
+            }
+            let slash_rows: Vec<SlashRow> = skill_matches.iter().map(SlashRow::Skill).collect();
+            let (section_heading, row_sections) = sections(&slash_rows, sources);
+            let count = skill_matches.len();
+            let rows = skill_matches
+                .iter()
+                .enumerate()
+                .map(|(index, skill)| {
+                    let (round_top, round_bottom) = suggestion_row_corners(index, count);
+                    SuggestionRow {
+                        label: format!("/{}", skill.name),
+                        detail: skill_detail(skill),
+                        round_top,
+                        round_bottom,
+                        agent_icon: None,
+                        coordinator: false,
+                        main_coordinator: false,
+                        working: false,
+                        section: row_sections.get(index).cloned().flatten(),
+                    }
+                })
+                .collect();
+            Some(ReplyMentionPopup {
+                kind: SuggestionKind::Skill,
+                trigger_start: trigger.start,
+                heading: section_heading.unwrap_or_else(|| skills_heading(sources)),
+                rows,
+                status,
+                loading: sources.skills_loading,
+            })
+        }
+        TriggerKind::Path | TriggerKind::Message => None,
+    }
+}
+
+/// Applies a pick from [`reply_mention_popup`], inserting the exact same token and spacing the
+/// main chat composer inserts.
+pub fn complete_reply_mention(
+    text: &str,
+    caret: usize,
+    sources: &SuggestionSources,
+    index: usize,
+) -> Option<ReplyMentionCompletion> {
+    let trigger = detect_composer_trigger(text, Some(caret))?;
+    let (content, caret) = match trigger.kind {
+        TriggerKind::Boost => {
+            let matches = crate::extras::boosts::filter_choices(&sources.boosts, &trigger.query);
+            let (id, label, _) = matches.get(index)?;
+            let replacement = crate::extras::boosts::boost_link(id, label);
+            complete_composer_mention(text, caret, &format!("{replacement} "))?
+        }
+        TriggerKind::Session => {
+            let matches = filter_session_choices(&sources.sessions, &trigger.query);
+            let choice = matches.get(index)?;
+            let replacement = choice_mention(choice);
+            complete_spaced_mention(text, caret, &replacement)?
+        }
+        TriggerKind::Skill => {
+            let skills = sources.skills.clone().unwrap_or_default();
+            let matches = ranked_skill_matches(&skills, &trigger.query);
+            let skill = matches.get(index)?;
+            let replacement = linked_skill_mention(skill);
+            complete_composer_mention(text, caret, &format!("{replacement} "))?
+        }
+        TriggerKind::Path | TriggerKind::Message => return None,
+    };
+    Some(ReplyMentionCompletion {
+        text: content,
+        caret,
+    })
 }
 
 #[cfg(test)]

@@ -268,12 +268,31 @@ fn strip_terminal_codes(word: &str) -> String {
     out
 }
 
+/// Whether a failure reason came from retiring held messages because the session itself was closed.
+fn is_closed_session_retirement_reason(reason: &str) -> bool {
+    reason == crate::session_chat_send_wake::CLOSED_SESSION_RETIRE_REASON
+}
+
+/// Whether this session is a resolved (`done`) coordinator thread, which should not carry a red
+/// send-failure dot or card.
+fn is_resolved_coordinator_thread(
+    db: &rusqlite::Connection,
+    project_id: &str,
+    session_id: &str,
+) -> bool {
+    crate::coordinators::read_thread(db, project_id, session_id)
+        .ok()
+        .flatten()
+        .is_some_and(|thread| thread.is_resolved())
+}
+
 /// The record a session carries, while it carries one.
 pub(crate) fn session_send_failure(session: &Value) -> Option<SendFailure> {
     session
         .pointer(&format!("/runtimeSettings/{SEND_FAILURE_KEY}"))
         .and_then(Value::as_str)
-        .and_then(|raw| serde_json::from_str(raw).ok())
+        .and_then(|raw| serde_json::from_str::<SendFailure>(raw).ok())
+        .filter(|failure| !is_closed_session_retirement_reason(&failure.reason))
 }
 
 /// What the sidebar's red dot says: the failed send, or the row held on a closed session.
@@ -432,10 +451,16 @@ fn restore_cards(state: &AppState) {
 }
 
 async fn record_failed_row(state: &AppState, row: FailedRow) {
+    if is_closed_session_retirement_reason(&row.reason) {
+        return;
+    }
     let session = {
         let Ok(db) = open_gxserver_database(&state.paths) else {
             return;
         };
+        if is_resolved_coordinator_thread(&db, &row.project_id, &row.session_id) {
+            return;
+        }
         let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
         let Ok(Some(session)) = repository.get_session(&row.project_id, &row.session_id) else {
             return;
@@ -612,19 +637,48 @@ fn publish(state: &AppState, project_id: &str, session_id: &str) {
 
 /// The user dealt with it, or it stopped being true: the card, the dot and the bell's row go.
 pub(crate) fn clear_send_failure(state: &AppState, project_id: &str, session_id: &str) {
-    let had = registry()
+    let (had_card, had_held) = registry()
         .lock()
-        .ok()
-        .and_then(|mut registry| registry.cards.remove(&card_key(project_id, session_id)));
-    if had.is_none() {
+        .map(|mut registry| {
+            let card = registry
+                .cards
+                .remove(&card_key(project_id, session_id))
+                .is_some();
+            let held = registry
+                .held_on_closed
+                .remove(&(project_id.to_string(), session_id.to_string()))
+                .is_some();
+            (card, held)
+        })
+        .unwrap_or((false, false));
+    let persisted = if had_card || had_held {
+        true
+    } else {
+        open_gxserver_database(&state.paths)
+            .ok()
+            .and_then(|db| {
+                DomainRepository::new(&db, state.metadata.server_id.as_str())
+                    .get_session(project_id, session_id)
+                    .ok()
+                    .flatten()
+            })
+            .is_some_and(|session| {
+                session
+                    .pointer(&format!("/runtimeSettings/{SEND_FAILURE_KEY}"))
+                    .and_then(Value::as_str)
+                    .is_some_and(|raw| !raw.is_empty())
+                    || session
+                        .pointer(&format!("/runtimeSettings/{HELD_ON_CLOSED_SESSION_KEY}"))
+                        .and_then(Value::as_str)
+                        .is_some_and(|raw| !raw.is_empty())
+            })
+    };
+    if !persisted {
         return;
     }
-    SessionChatCompactingPublisher::new(state).publish_marker(
-        project_id,
-        session_id,
-        SEND_FAILURE_KEY,
-        None,
-    );
+    let publisher = SessionChatCompactingPublisher::new(state);
+    publisher.publish_marker(project_id, session_id, SEND_FAILURE_KEY, None);
+    publisher.publish_marker(project_id, session_id, HELD_ON_CLOSED_SESSION_KEY, None);
     if let Ok(db) = open_gxserver_database(&state.paths) {
         if mark_session_send_failure_read(&db, session_id).is_ok_and(|changed| changed > 0) {
             crate::notification_feed::broadcast_notification_feed_changed(state);
@@ -633,7 +687,8 @@ pub(crate) fn clear_send_failure(state: &AppState, project_id: &str, session_id:
     publish(state, project_id, session_id);
 }
 
-/// A row that stopped being failed (Retry, Remove, sent from another client) takes its card along.
+/// A row that stopped being failed (Retry, Remove, sent from another client) takes its card along,
+/// as does a resolved thread or a stale close-retirement failure left behind on a closed session.
 fn reconcile(state: &AppState) {
     let cards: Vec<(String, SendFailure)> = registry()
         .lock()
@@ -651,6 +706,7 @@ fn reconcile(state: &AppState) {
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return;
     };
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
     for (key, failure) in cards {
         let Some((project_id, session_id)) = key.split_once('|') else {
             continue;
@@ -662,7 +718,14 @@ fn reconcile(state: &AppState) {
             .queue
             .iter()
             .any(|prompt| prompt.id == failure.prompt_id && prompt.state == "failed");
-        if !still_failed {
+        let session_missing = repository
+            .get_session(project_id, session_id)
+            .ok()
+            .flatten()
+            .is_none();
+        let retired_or_resolved = is_closed_session_retirement_reason(&failure.reason)
+            || is_resolved_coordinator_thread(&db, project_id, session_id);
+        if !still_failed || session_missing || retired_or_resolved {
             clear_send_failure(state, project_id, session_id);
         }
     }
@@ -708,7 +771,9 @@ fn settle_held_on_closed(state: &AppState) {
             &project_id,
             &session_id,
         );
-        let waiting = lifecycle.as_deref().is_some_and(|state| state != "running")
+        let resolved = is_resolved_coordinator_thread(&db, &project_id, &session_id);
+        let waiting = !resolved
+            && lifecycle.as_deref().is_some_and(|state| state != "running")
             && snapshot
                 .queue
                 .iter()

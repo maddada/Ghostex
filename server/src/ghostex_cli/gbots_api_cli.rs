@@ -104,8 +104,8 @@ pub(crate) fn run_api(rest: &[String], flags: &Flags) -> CliResult<()> {
         }
         match key["lastUsedAt"].as_str() {
             Some(at) => println!(
-                "Last used: {at} ({} calls)",
-                key["uses"].as_i64().unwrap_or(0)
+                "Last used: {at} ({})",
+                ghostex_gx_protocol::plural(key["uses"].as_i64().unwrap_or(0), "call", "calls")
             ),
             None => println!("Not used yet."),
         }

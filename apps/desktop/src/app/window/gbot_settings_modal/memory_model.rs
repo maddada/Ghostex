@@ -167,7 +167,7 @@ impl GbotMemoryView {
 /// "1.2 KB" / "640 bytes".
 pub(crate) fn gbot_memory_size(bytes: u64) -> String {
     if bytes < 1024 {
-        format!("{bytes} bytes")
+        ghostex_gx_protocol::plural(bytes, "byte", "bytes")
     } else {
         format!("{:.1} KB", bytes as f64 / 1024.0)
     }

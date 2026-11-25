@@ -45,6 +45,8 @@ pub const SESSION_CHAT_QUEUE_STATE_FAILED: &str = "failed";
 
 pub(crate) const MODEL_CHANGE_FAILED_WAIT_REASON: &str =
     "Waiting: the model change before this message failed. Pick a model again to send it.";
+/// The status chip's words for [`MODEL_CHANGE_FAILED_WAIT_REASON`].
+pub(crate) const MODEL_CHANGE_FAILED_WAIT_LABEL: &str = "Model change failed";
 
 /// Reason stamped on a row that was mid-delivery when the daemon went down.
 /// Never silently re-sent: the agent may already have received it.
@@ -70,27 +72,39 @@ pub struct SessionChatQueuedPrompt {
     /// reason for a head row that has waited about a minute.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wait_reason: Option<String>,
+    /// The few words of `wait_reason` the row's status chip shows; the chip's tooltip holds the
+    /// sentence (CDXC:SessionChat 2026-11-25 in session_chat_queue_runtime/wait_reason.rs).
+    /// Optional on the wire: a client from before it shows the sentence alone.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wait_label: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<u64>,
 }
 
+/// What a waiting row shows: the full sentence and the status chip's short label.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct QueueWait {
+    pub text: String,
+    pub label: String,
+}
+
 /// The waiting reasons the scheduler shows, by prompt id. In memory only: a reason is a reading
 /// of the live session, and the scheduler states it again within a minute of a restart.
 static QUEUE_WAIT_REASONS: std::sync::LazyLock<
-    std::sync::Mutex<std::collections::HashMap<String, String>>,
+    std::sync::Mutex<std::collections::HashMap<String, QueueWait>>,
 > = std::sync::LazyLock::new(Default::default);
 
 /// Sets or clears the waiting reason shown on `prompt_id`; answers whether it changed, so the
 /// caller republishes the queue only then.
-pub(crate) fn set_queue_wait_reason(prompt_id: &str, reason: Option<&str>) -> bool {
+pub(crate) fn set_queue_wait_reason(prompt_id: &str, reason: Option<QueueWait>) -> bool {
     let Ok(mut reasons) = QUEUE_WAIT_REASONS.lock() else {
         return false;
     };
     match reason {
-        Some(reason) if reasons.get(prompt_id).map(String::as_str) != Some(reason) => {
-            reasons.insert(prompt_id.to_string(), reason.to_string());
+        Some(reason) if reasons.get(prompt_id) != Some(&reason) => {
+            reasons.insert(prompt_id.to_string(), reason);
             true
         }
         None => reasons.remove(prompt_id).is_some(),
@@ -105,7 +119,7 @@ pub(crate) fn retain_queue_wait_reasons(keep: impl Fn(&str) -> bool) {
     }
 }
 
-fn queue_wait_reason(prompt_id: &str) -> Option<String> {
+fn queue_wait_reason(prompt_id: &str) -> Option<QueueWait> {
     QUEUE_WAIT_REASONS
         .lock()
         .ok()
@@ -148,6 +162,9 @@ pub struct SessionChatQueueSnapshot {
     pub async_questions_since: Option<i64>,
     /// When the session was forked from another (`session_chat_open_questions::read_forked_at`).
     pub forked_at: Option<i64>,
+    /// When gxserver restarted this session's agent after its Native host died mid-turn, oldest
+    /// first (`session_chat_agent_restarts::read_agent_restarted_at`).
+    pub agent_restarted_at: Vec<i64>,
     pub retired_async_question_ids: Vec<String>,
     /// The question forms and pages put off "For later" (`session_chat_open_questions::read_later_ids`).
     pub later_question_ids: Vec<String>,
@@ -155,6 +172,10 @@ pub struct SessionChatQueueSnapshot {
     pub later_question_until: Value,
     /// The modes this session's agent cannot use (session_chat_mode_availability.rs).
     pub unavailable_modes: Vec<ghostex_gx_protocol::UnavailableMode>,
+    /// True while this session runs in Non-CLI (ACP) mode.
+    pub non_cli_mode: bool,
+    /// True while a Terminal -> Native switch is queued until the active reply ends (`Q4771`).
+    pub switch_to_native_queued: bool,
     /// The question forms and pages the user removed without answering (`session_chat_open_questions::read_removed_ids`).
     pub removed_question_ids: Vec<String>,
     /// The pages their agent retired (`visual_pages::read_retired_page_ids`).
@@ -191,6 +212,10 @@ impl SessionChatQueueSnapshot {
         );
         target.insert("forkedAt".to_string(), json!(self.forked_at));
         target.insert(
+            "agentRestartedAt".to_string(),
+            json!(self.agent_restarted_at),
+        );
+        target.insert(
             "laterQuestionIds".to_string(),
             json!(self.later_question_ids),
         );
@@ -201,6 +226,11 @@ impl SessionChatQueueSnapshot {
         target.insert(
             "unavailableModes".to_string(),
             json!(self.unavailable_modes),
+        );
+        target.insert("nonCliMode".to_string(), json!(self.non_cli_mode));
+        target.insert(
+            "switchToNativeQueued".to_string(),
+            json!(self.switch_to_native_queued),
         );
         target.insert(
             "removedQuestionIds".to_string(),
@@ -256,11 +286,22 @@ impl SessionChatQueueSnapshot {
         revision.push_str(&serde_json::to_string(&self.api_retry).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.async_questions_since).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.forked_at).unwrap_or_default());
+        revision.push_str(&serde_json::to_string(&self.agent_restarted_at).unwrap_or_default());
         revision
             .push_str(&serde_json::to_string(&self.retired_async_question_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.later_question_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.later_question_until).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.unavailable_modes).unwrap_or_default());
+        revision.push_str(if self.non_cli_mode {
+            "|nonCli:1"
+        } else {
+            "|nonCli:0"
+        });
+        revision.push_str(if self.switch_to_native_queued {
+            "|swNative:1"
+        } else {
+            "|swNative:0"
+        });
         revision.push_str(&serde_json::to_string(&self.removed_question_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.retired_page_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.starred_page_ids).unwrap_or_default());
@@ -385,6 +426,9 @@ pub struct SessionChatQueueDelivery {
     /// (session_chat_send/guarded_write.rs): the row waits for the user's answer, which is no
     /// missing input box and spends none of the scheduler's two-minute budget.
     pub held_for_prompt: bool,
+    /// The hold was a running Native agent that must finish its current reply first: waits
+    /// without spending the missing-input-box budget.
+    pub held_for_busy: bool,
     pub error_message: Option<String>,
     pub snapshot: SessionChatQueueSnapshot,
 }
@@ -472,6 +516,7 @@ pub fn handle_session_chat_queue_endpoint(
                     state: SESSION_CHAT_QUEUE_STATE_QUEUED.to_string(),
                     error_message: None,
                     wait_reason: None,
+                    wait_label: None,
                     created_at: now_iso(),
                     updated_at: now_iso(),
                     version: None,
@@ -784,60 +829,71 @@ impl ClaimedDelivery {
         )
         .await;
         let db = open_gxserver_database(paths).map_err(internal_error)?;
-        let (held, held_for_prompt, error_message, snapshot) = with_write_tx(&db, |db| {
-            let mut held = false;
-            // CDXC:SessionChat 2026-11-12 WHY: GitHub #555 review: "Send now" and automatic account
-            // recovery deliver without the scheduler's hold, so a row the guard refused (a prompt appeared
-            // as it went out) ended Not sent while its words said it would go out once the prompt is
-            // answered. Whoever delivers it, such a row goes back to the queue and the scheduler sends it
-            // once the prompt is answered.
-            let held_for_prompt = outcome
-                .as_ref()
-                .err()
-                .is_some_and(crate::session_chat_send::refused_for_prompt);
-            let error_message = match &outcome {
-                // A delivery that restarted the agent made this row a startup send; it waits for the new
-                // input box whichever caller delivered it.
-                Err(error)
-                    if (hold_when_composer_missing && error.code == "composerNotReady")
-                        || held_for_prompt
-                        || error.code
-                            == crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING =>
-                {
-                    let next_version = bump_queue_version(db, project_id, session_id)? as i64;
-                    db.execute(
-                        r#"
+        let (held, held_for_prompt, held_for_busy, error_message, snapshot) =
+            with_write_tx(&db, |db| {
+                let mut held = false;
+                // CDXC:SessionChat 2026-11-12 WHY: GitHub #555 review: "Send now" and automatic account
+                // recovery deliver without the scheduler's hold, so a row the guard refused (a prompt appeared
+                // as it went out) ended Not sent while its words said it would go out once the prompt is
+                // answered. Whoever delivers it, such a row goes back to the queue and the scheduler sends it
+                // once the prompt is answered.
+                let held_for_prompt = outcome
+                    .as_ref()
+                    .err()
+                    .is_some_and(crate::session_chat_send::refused_for_prompt);
+                let held_for_busy = outcome.as_ref().err().is_some_and(|error| {
+                    error.code == crate::session_chat_send_wake::SESSION_CHAT_AGENT_BUSY
+                });
+                let error_message = match &outcome {
+                    // A delivery that restarted the agent made this row a startup send; it waits for the new
+                    // input box whichever caller delivered it.
+                    Err(error)
+                        if (hold_when_composer_missing && error.code == "composerNotReady")
+                            || held_for_prompt
+                            || held_for_busy
+                            || error.code
+                                == crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING =>
+                    {
+                        let next_version = bump_queue_version(db, project_id, session_id)? as i64;
+                        db.execute(
+                            r#"
                     UPDATE session_chat_queued_prompts
                     SET state = 'queued', errorMessage = NULL, version = ?4
                     WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3 AND state = 'sending'
                     "#,
-                        params![prompt_id, project_id, session_id, next_version],
-                    )
-                    .map_err(sql_error)?;
-                    held = true;
-                    None
-                }
-                Ok(()) => {
-                    bump_queue_version(db, project_id, session_id)?;
-                    db.execute(
-                        r#"
+                            params![prompt_id, project_id, session_id, next_version],
+                        )
+                        .map_err(sql_error)?;
+                        held = true;
+                        None
+                    }
+                    Ok(()) => {
+                        bump_queue_version(db, project_id, session_id)?;
+                        db.execute(
+                            r#"
                     DELETE FROM session_chat_queued_prompts
                     WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3
                     "#,
-                        params![prompt_id, project_id, session_id],
-                    )
-                    .map_err(sql_error)?;
-                    None
-                }
-                Err(error) => {
-                    let message = bounded_reason(&error.message);
-                    fail_prompt(db, project_id, session_id, prompt_id, &message)?;
-                    Some(message)
-                }
-            };
-            let snapshot = read_snapshot(db, project_id, session_id)?;
-            Ok((held, held_for_prompt, error_message, snapshot))
-        })?;
+                            params![prompt_id, project_id, session_id],
+                        )
+                        .map_err(sql_error)?;
+                        None
+                    }
+                    Err(error) => {
+                        let message = bounded_reason(&error.message);
+                        fail_prompt(db, project_id, session_id, prompt_id, &message)?;
+                        Some(message)
+                    }
+                };
+                let snapshot = read_snapshot(db, project_id, session_id)?;
+                Ok((
+                    held,
+                    held_for_prompt,
+                    held_for_busy,
+                    error_message,
+                    snapshot,
+                ))
+            })?;
         if outcome.is_ok() {
             crate::session_chat_queue_attachments::mark_delivered(paths, prompt_id);
             crate::session_chat_queue_attachments::sweep(paths, &db);
@@ -851,6 +907,7 @@ impl ClaimedDelivery {
             sent: error_message.is_none() && !held,
             held,
             held_for_prompt,
+            held_for_busy,
             error_message,
             snapshot,
         })
@@ -912,12 +969,38 @@ pub fn fail_session_chat_queued_prompt(
     prompt_id: &str,
     reason: &str,
 ) -> Result<SessionChatQueueSnapshot, DomainStateError> {
+    fail_session_chat_queued_prompt_inner(paths, project_id, session_id, prompt_id, reason, true)
+}
+
+/// Marks a row `failed` without raising a send-failure card, red sidebar dot, or
+/// Notifications bell entry: used when retiring held rows because the session
+/// itself was deliberately closed.
+pub fn fail_session_chat_queued_prompt_quiet(
+    paths: &GxserverPaths,
+    project_id: &str,
+    session_id: &str,
+    prompt_id: &str,
+    reason: &str,
+) -> Result<SessionChatQueueSnapshot, DomainStateError> {
+    fail_session_chat_queued_prompt_inner(paths, project_id, session_id, prompt_id, reason, false)
+}
+
+fn fail_session_chat_queued_prompt_inner(
+    paths: &GxserverPaths,
+    project_id: &str,
+    session_id: &str,
+    prompt_id: &str,
+    reason: &str,
+    report_failure: bool,
+) -> Result<SessionChatQueueSnapshot, DomainStateError> {
     let db = open_gxserver_database(paths).map_err(internal_error)?;
     let bounded = bounded_reason(reason);
     fail_prompt(&db, project_id, session_id, prompt_id, &bounded)?;
-    crate::session_chat_send_failure::report_failed_row(
-        project_id, session_id, prompt_id, &bounded,
-    );
+    if report_failure {
+        crate::session_chat_send_failure::report_failed_row(
+            project_id, session_id, prompt_id, &bounded,
+        );
+    }
     read_snapshot(&db, project_id, session_id)
 }
 
@@ -1198,14 +1281,18 @@ fn read_snapshot(
                 let version: i64 = row.get(8)?;
                 // A failed pick holds every queued row. In particular, a form answer behind
                 // another message cannot inherit the head row's scheduler annotation.
-                let wait_reason = if model_change_failed && state == SESSION_CHAT_QUEUE_STATE_QUEUED
-                {
-                    Some(MODEL_CHANGE_FAILED_WAIT_REASON.to_string())
+                let wait = if model_change_failed && state == SESSION_CHAT_QUEUE_STATE_QUEUED {
+                    Some(QueueWait {
+                        text: MODEL_CHANGE_FAILED_WAIT_REASON.to_string(),
+                        label: MODEL_CHANGE_FAILED_WAIT_LABEL.to_string(),
+                    })
                 } else {
                     queue_wait_reason(&id)
                 };
+                let (wait_reason, wait_label) = wait.map(|wait| (wait.text, wait.label)).unzip();
                 Ok(SessionChatQueuedPrompt {
                     wait_reason,
+                    wait_label,
                     id,
                     text: row.get(1)?,
                     state,
@@ -1232,6 +1319,9 @@ fn read_snapshot(
             forked_at: crate::session_chat_open_questions::read_forked_at(
                 db, project_id, session_id,
             ),
+            agent_restarted_at: crate::session_chat_agent_restarts::read_agent_restarted_at(
+                db, project_id, session_id,
+            ),
             later_question_ids: crate::session_chat_open_questions::read_later_ids(
                 db, project_id, session_id,
             ),
@@ -1241,6 +1331,8 @@ fn read_snapshot(
             unavailable_modes: crate::session_chat_mode_availability::read_unavailable_modes(
                 db, project_id, session_id,
             ),
+            non_cli_mode: read_non_cli_mode(db, project_id, session_id),
+            switch_to_native_queued: crate::acp::pending_switch::is_pending(project_id, session_id),
             removed_question_ids: crate::session_chat_open_questions::read_removed_ids(
                 db, project_id, session_id,
             ),
@@ -1264,6 +1356,23 @@ fn read_snapshot(
             first_message: crate::session_chat_first_message::read(db, project_id, session_id),
         })
     })
+}
+
+fn read_non_cli_mode(db: &Connection, project_id: &str, session_id: &str) -> bool {
+    let (non_cli, acp): (Option<i64>, Option<i64>) = db
+        .query_row(
+            "SELECT json_extract(runtimeSettingsJson, '$.nonCliMode'), json_extract(runtimeSettingsJson, '$.acpMode') FROM sessions WHERE projectId = ?1 AND sessionId = ?2",
+            params![project_id, session_id],
+            |row| Ok((row.get(0).ok().flatten(), row.get(1).ok().flatten())),
+        )
+        .optional()
+        .ok()
+        .flatten()
+        .unwrap_or((None, None));
+    match non_cli {
+        Some(value) => value != 0,
+        None => acp.is_some_and(|value| value != 0),
+    }
 }
 
 fn read_api_retry(db: &Connection, project_id: &str, session_id: &str) -> Option<Value> {
@@ -1332,6 +1441,7 @@ fn append_prompt(
             state: SESSION_CHAT_QUEUE_STATE_QUEUED.to_string(),
             error_message: None,
             wait_reason: None,
+            wait_label: None,
             created_at: now_iso(),
             updated_at: now_iso(),
             version: Some(next_version),
@@ -1376,6 +1486,45 @@ pub(crate) fn enqueue_session_chat_prompt(
     startup_send: bool,
 ) -> Result<SessionChatQueuedPrompt, DomainStateError> {
     append_prompt(None, db, project_id, session_id, text, startup_send, &[])
+}
+
+/// Replaces the text of a queued (not yet sending or failed) prompt in place, returning true if the
+/// row was still queued and updated. Used to coalesce multiple delivery-failure notices for the
+/// same target into one row.
+pub(crate) fn replace_queued_prompt_text(
+    db: &Connection,
+    project_id: &str,
+    session_id: &str,
+    prompt_id: &str,
+    text: &str,
+) -> Result<bool, DomainStateError> {
+    validate_text(text)?;
+    with_write_tx(db, |db| {
+        let next_version = bump_queue_version(db, project_id, session_id)? as i64;
+        let changed = db
+            .execute(
+                r#"
+                UPDATE session_chat_queued_prompts
+                SET text = ?4,
+                    updatedAt = ?5,
+                    version = ?6
+                WHERE promptId = ?1
+                  AND projectId = ?2
+                  AND sessionId = ?3
+                  AND state = 'queued'
+                "#,
+                params![
+                    prompt_id,
+                    project_id,
+                    session_id,
+                    text,
+                    now_iso(),
+                    next_version,
+                ],
+            )
+            .map_err(sql_error)?;
+        Ok(changed > 0)
+    })
 }
 
 fn update_prompt(
@@ -1884,6 +2033,112 @@ pub(crate) fn drop_queued_prompt(
     dropped
 }
 
+/// Removes stale `failed` ("Not delivered") rows for `(project_id, session_id)` inside the
+/// caller's connection/transaction when a resolved thread is reopened: rows retired on session
+/// close (`closed_reason`) or created at/before `before_iso` (the thread's resolve timestamp).
+/// Never touches `queued` or `sending` rows, and never touches rows created after `before_iso`.
+pub(crate) fn purge_stale_failed_prompts_in(
+    db: &Connection,
+    project_id: &str,
+    session_id: &str,
+    before_iso: Option<&str>,
+    closed_reason: &str,
+) -> Result<Vec<String>, DomainStateError> {
+    let mut stmt = db
+        .prepare(
+            r#"
+            SELECT promptId
+            FROM session_chat_queued_prompts
+            WHERE projectId = ?1
+              AND sessionId = ?2
+              AND state = 'failed'
+              AND (errorMessage = ?3 OR (?4 IS NOT NULL AND createdAt <= ?4))
+            "#,
+        )
+        .map_err(sql_error)?;
+    let ids: Vec<String> = stmt
+        .query_map(
+            params![project_id, session_id, closed_reason, before_iso],
+            |row| row.get::<_, String>(0),
+        )
+        .map_err(sql_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(sql_error)?;
+    drop(stmt);
+    if ids.is_empty() {
+        return Ok(ids);
+    }
+    for id in &ids {
+        db.execute(
+            "DELETE FROM session_chat_queued_prompts WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3",
+            params![id, project_id, session_id],
+        )
+        .map_err(sql_error)?;
+    }
+    bump_queue_version(db, project_id, session_id)?;
+    Ok(ids)
+}
+
+/// Removes the given retired `prompt_ids` plus any pre-existing `failed` rows when a resolved
+/// coordinator thread is closed, so dead rows from a finished task never linger in the queue.
+pub(crate) fn drop_resolved_thread_queue_rows(
+    paths: &GxserverPaths,
+    project_id: &str,
+    session_id: &str,
+    prompt_ids: &[String],
+) -> Vec<String> {
+    let removed = open_gxserver_database(paths)
+        .ok()
+        .and_then(|db| {
+            with_write_tx(&db, |db| {
+                let mut ids: Vec<String> = Vec::new();
+                let mut stmt = db
+                    .prepare(
+                        "SELECT promptId FROM session_chat_queued_prompts WHERE projectId = ?1 AND sessionId = ?2 AND state = 'failed'",
+                    )
+                    .map_err(sql_error)?;
+                for id in stmt
+                    .query_map(params![project_id, session_id], |row| row.get::<_, String>(0))
+                    .map_err(sql_error)?
+                    .flatten()
+                {
+                    ids.push(id);
+                }
+                drop(stmt);
+                for id in prompt_ids {
+                    if !ids.iter().any(|existing| existing == id) {
+                        ids.push(id.clone());
+                    }
+                }
+                if ids.is_empty() {
+                    return Ok(ids);
+                }
+                let mut deleted = Vec::new();
+                for id in &ids {
+                    let count = db
+                        .execute(
+                            "DELETE FROM session_chat_queued_prompts WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3",
+                            params![id, project_id, session_id],
+                        )
+                        .map_err(sql_error)?;
+                    if count > 0 {
+                        deleted.push(id.clone());
+                    }
+                }
+                if !deleted.is_empty() {
+                    bump_queue_version(db, project_id, session_id)?;
+                }
+                Ok(deleted)
+            })
+            .ok()
+        })
+        .unwrap_or_default();
+    for id in &removed {
+        crate::session_chat_queue_attachments::remove(paths, id);
+    }
+    removed
+}
+
 pub(crate) fn hold_queued_prompt_for_wake(
     paths: &GxserverPaths,
     project_id: &str,
@@ -1966,8 +2221,12 @@ fn read_prompt(
         |row| {
             let id: String = row.get(0)?;
             let version: i64 = row.get(8)?;
+            let (wait_reason, wait_label) = queue_wait_reason(&id)
+                .map(|wait| (wait.text, wait.label))
+                .unzip();
             Ok(SessionChatQueuedPrompt {
-                wait_reason: queue_wait_reason(&id),
+                wait_reason,
+                wait_label,
                 id,
                 text: row.get(1)?,
                 state: row.get(2)?,

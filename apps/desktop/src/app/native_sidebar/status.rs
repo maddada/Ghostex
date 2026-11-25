@@ -348,7 +348,7 @@ fn stack_colors(
     [
         (!working && background_work, background_work_color().into()),
         (working, rgb(WORKING_COLOR).into()),
-        (attention, rgb(ATTENTION_COLOR).into()),
+        (!working && attention, rgb(ATTENTION_COLOR).into()),
         (question, rgb(QUESTION_COLOR).into()),
         (approval, rgb(APPROVAL_COLOR).into()),
     ]

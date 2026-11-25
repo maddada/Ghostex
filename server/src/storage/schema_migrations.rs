@@ -1392,4 +1392,16 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
         id: "0085_session_handovers",
         sql: include_str!("migrations/0085_session_handovers.sql"),
     },
+    Migration {
+        id: "0086_notification_feed_seen_at",
+        sql: include_str!("migrations/0086_notification_feed_seen_at.sql"),
+    },
+    Migration {
+        id: "0087_session_agent_restarts",
+        sql: include_str!("migrations/0087_session_agent_restarts.sql"),
+    },
+    Migration {
+        id: "0088_coordinator_thread_notes",
+        sql: include_str!("migrations/0088_coordinator_thread_notes.sql"),
+    },
 ];

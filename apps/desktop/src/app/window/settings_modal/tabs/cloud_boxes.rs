@@ -587,7 +587,7 @@ impl CloudBoxesTab {
     ) -> Option<AnyElement> {
         let mut lines: Vec<&str> = Vec::new();
         if show("agentboxStartThread") {
-            lines.push("Start a box: in New Thread, pick a place under Run on.");
+            lines.push("Start a box: in a new chat, pick a box under More providers in the setup bar, or choose Run in a Box in a project header's chat menu.");
         }
         if show("agentboxWebApp") {
             lines.push(

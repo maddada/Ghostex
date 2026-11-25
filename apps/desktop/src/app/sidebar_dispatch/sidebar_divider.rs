@@ -44,6 +44,8 @@ impl GhostexGpuiApp {
             // The divider is part of the work area frame's gutter and draws nothing of its own:
             // the body row (or, under glass, the gutter ring) paints there, and the card's border
             // is the only edge. It stays the grab target.
+            // Under glass the ring starts at this divider's snapped edge.
+            .child(crate::app::element::work_area_frame_sidebar_edge_marker())
             // The workspace beside the sidebar is often a CEF page (Browser, Docs), so the
             // whole grab strip lies over the native sidebar.
             .child(resize_rail_deferred_strip(

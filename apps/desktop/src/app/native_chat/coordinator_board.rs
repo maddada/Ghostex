@@ -147,13 +147,18 @@ pub(super) fn group_look(group: &str) -> (&'static str, Option<u32>) {
             "titlebar/circle-minus-filled.svg",
             Some(crate::app::native_sidebar::status::APPROVAL_COLOR),
         ),
-        // On hold: a pause in a calm blue-grey, never the red of Blocked.
+        // On hold / Waiting: a pause in a calm blue-grey, never the red of Blocked (Q4781 C).
         "hold" => ("titlebar/player-pause.svg", Some(HOLD_COLOR)),
         "moving" => (
             "titlebar/circle-half.svg",
             Some(crate::app::native_sidebar::status::WORKING_COLOR),
         ),
-        "done" => ("titlebar/circle-check-filled.svg", Some(GOOD_COLOR)),
+        // Finished / Done: outline green circle-check (Q4775 B).
+        "done" => ("titlebar/circle-check.svg", Some(GOOD_COLOR)),
+        // Idle / Later / Removed: distinct muted icons (Q4782 A).
+        "idle" => ("titlebar/circle-dashed.svg", None),
+        "later" => ("titlebar/calendar-clock.svg", None),
+        "removed" => ("titlebar/circle-off.svg", None),
         // Backlog.
         "ideas" => ("titlebar/archive.svg", None),
         _ => ("titlebar/circle-dashed.svg", None),
@@ -281,7 +286,7 @@ fn board_menu_entries(row: &Value) -> Vec<Value> {
     let mut extra = Vec::new();
     if dock["showInChat"].is_object() {
         extra.push(
-            json!({"label": "Show in chat", "icon": "message", "command": dock["showInChat"]}),
+            json!({"label": "Show in chat", "icon": "message-share", "command": dock["showInChat"]}),
         );
     }
     if dock["markAnswered"].is_object() {
@@ -289,13 +294,21 @@ fn board_menu_entries(row: &Value) -> Vec<Value> {
     }
     if dock["dismiss"].is_object() {
         let label = dock["dismissLabel"].as_str().unwrap_or("Dismiss");
-        extra.push(json!({"label": label, "icon": "x", "command": dock["dismiss"]}));
+        let icon = if matches!(
+            label,
+            "Archive" | "Archive all" | "Done" | "Mark all done" | "Mark as read"
+        ) {
+            "check"
+        } else {
+            "x"
+        };
+        extra.push(json!({"label": label, "icon": icon, "command": dock["dismiss"]}));
     }
     if dock["snooze"]
         .as_array()
         .is_some_and(|choices| !choices.is_empty())
     {
-        extra.push(json!({"label": "Snooze", "icon": "clock", "submenu": "snooze"}));
+        extra.push(json!({"label": "Snooze", "icon": "moon", "submenu": "snooze"}));
     }
     // After Open and Mention in chat, before Tags, Mark done and Drop.
     let at = entries
@@ -352,6 +365,15 @@ fn dock_card_height(dock: &Value) -> f32 {
             .sum::<f32>()
             .max(1.0);
         6.0 + 8.0 + code_lines * 18.0 + if more > 0 { 22.0 } else { 0.0 } + 6.0
+    } else if dock["commandRun"].is_object() {
+        let state = text(&dock["commandRun"], "state");
+        if state == "waiting" {
+            6.0 + 74.0 + 6.0
+        } else {
+            6.0 + 38.0 + 6.0
+        }
+    } else if dock["runCommand"].is_object() {
+        6.0 + 34.0 + 6.0
     } else {
         6.0 + 19.0 + 6.0
     };
@@ -384,15 +406,34 @@ fn dock_card_height(dock: &Value) -> f32 {
         + command
 }
 
+/// Whether the board draws its own title row: only an older gxserver's "Board", which no header
+/// button names (`board_header`).
+fn board_has_title_row(board: &Value) -> bool {
+    board["title"] != "Work"
+}
+
+/// No group to show: the panel's only line says "Nothing open".
+fn board_groups_empty(board: &Value) -> bool {
+    board["groups"].as_array().is_none_or(Vec::is_empty)
+}
+
 /// The board's content height (unscaled): its header, each group's line, an open group's rows
 /// and its "N more" line.
 fn board_height_with<F>(board: &Value, mut enrich_dock: F) -> f32
 where
     F: FnMut(&Value) -> Value,
 {
-    // The header, and room under the last group's line: the panel's own bottom padding cut the
-    // last line ("Finished today") when everything fit.
-    let mut height = HEADER_HEIGHT + 8.0 + LIST_BOTTOM + super::work_topic::topic_height(board);
+    // The header (the Work panel has none, only "Nothing open" when no group shows), and room
+    // under the last group's line: the panel's own bottom padding cut the last line ("Finished
+    // today") when everything fit.
+    let header = if board_has_title_row(board) {
+        HEADER_HEIGHT
+    } else if board_groups_empty(board) {
+        GROUP_HEIGHT
+    } else {
+        0.0
+    };
+    let mut height = header + 8.0 + LIST_BOTTOM + super::work_topic::topic_height(board);
     for group in board["groups"].as_array().into_iter().flatten() {
         height += GROUP_HEIGHT;
         for row in group["rows"].as_array().into_iter().flatten() {
@@ -523,6 +564,9 @@ pub(crate) struct CoordinatorBoardView {
     /// The panel's window once open, and while it opens.
     pub(super) dock_modal_window: Option<gpui::AnyWindowHandle>,
     pub(super) dock_modal_opening: bool,
+    /// Pending open of the first open ask's details panel after clicking a notification for this
+    /// session (dock_ask_modal.rs `request_open_first_ask_details`).
+    pub(super) pending_open_ask_details: Option<web_time::Instant>,
     /// Whether the panel's last left press began on one of its controls that close it
     /// (dock_ask_modal.rs `closes_panel`): a drag that only ends on one selected text, and
     /// leaves the panel open.
@@ -540,6 +584,19 @@ pub(crate) struct CoordinatorBoardView {
     /// Each opened card's answers line width at its last paint (unscaled), by card key: what
     /// decides whether its answers fold into one dropdown (`board_card_buttons`).
     answer_rooms: std::rc::Rc<std::cell::RefCell<std::collections::HashMap<String, f32>>>,
+    /// Keyboard-focused row index in the Session Inbox (`focusSessionInbox`, arrows/Enter/E/S/Esc).
+    pub(super) inbox_focus: Option<usize>,
+    /// Focus handle for the Session Inbox keyboard triage mode.
+    pub(super) inbox_focus_handle: Option<gpui::FocusHandle>,
+    /// Which Inbox header count chip the pointer is currently over, so hovering a chip never lights
+    /// up the collapse bar behind it (Q4680).
+    pub(super) dock_count_hovered: Option<&'static str>,
+    /// Whether an error banner is currently shown above the Inbox dock (collapses the dock to its
+    /// header until the error clears or the user expands it).
+    pub(super) dock_error_active: bool,
+    /// The user explicitly expanded the Inbox dock while an error banner is shown above it; resets
+    /// when the error goes away so the dock restores its pre-error state.
+    pub(super) dock_peek_over_error: bool,
 }
 
 /// An open card menu: its card, the window point it opened at, whether it shows its Tags, or only
@@ -590,20 +647,26 @@ impl gpui::Render for BoardCardDrag {
 const DROP_GROUPS: [(&str, &str); 7] = [
     ("ideas", "Backlog"),
     ("later", "To do"),
-    ("needs", "Needs you"),
+    (
+        "needs",
+        ghostex_gx_chat_core::extras::work_panel::ASKS_GROUP_NAME,
+    ),
     ("blocked", "Blocked"),
     ("hold", "On hold"),
     ("moving", "In progress"),
     ("done", "Done today"),
 ];
 
-/// A board pill's click: the card to show, and what is left to do for it.
+/// A board pill's or Inbox count chip's click: the card or group to show, and what is left to do.
 pub(crate) struct BoardFocus {
     key: String,
+    /// When set (clicking an Inbox header count chip, Q4681), highlight this group section and
+    /// scroll it into view rather than ringing a single card.
+    group: Option<String>,
     seq: u64,
     /// The board still has to open (done in the next frame, which has the window).
     open: bool,
-    /// Scroll attempts left; the card stops scrolling its list once it is in view.
+    /// Scroll attempts left; the card or group stops scrolling its list once it is in view.
     tries: std::rc::Rc<std::cell::Cell<u8>>,
 }
 
@@ -926,6 +989,15 @@ impl NativeChatView {
             gpui::size(px(width * scale), px(0.0)),
         );
         self.menu_side = Some(super::option_menu::MenuSide::Right);
+        // Owned by the columns trigger whichever way they open (the header's Work button, the
+        // List/Columns switch, the dock's pill), so the Work button shows lit while they are up
+        // and its next press shuts them (`work_panel_shown`, `chat_menu_toggled_shut`).
+        //
+        // CDXC:Coordinators 2026-11-25 WHY: opened from the switch or after the dock's delay, the
+        // columns had no owner: the Work button stayed unlit, and its press, which dismissed
+        // them as an outside click, found nothing of its own and opened them again. With the
+        // panel's × gone (Q4867 B) that left only Escape or a click elsewhere.
+        self.menu_toggle.arm(BOARD_COLUMNS_TRIGGER);
         self.show_chat_menu(
             vec![json!({"pillMenu": {"id": BOARD_COLUMNS_MENU, "height": height}})],
             trigger,
@@ -1033,12 +1105,27 @@ impl NativeChatView {
             // A wheel turns the row only with Shift (the columns scroll up and down under it).
             .restrict_scroll_to_axis()
             .track_scroll(&scroll);
+        // The view switch on the first open column's head, when the board has no title row.
+        let mut switch = (!board_has_title_row(&board))
+            .then(|| self.board_view_switch(BoardPlace::Columns, p, cx));
         for group in &groups {
             row = row.child(if is_collapsed(group) {
                 self.board_column_strip(group, p, cx)
             } else {
-                self.board_column(group, column, p, cx)
+                self.board_column(group, column, switch.take(), p, cx)
             });
+        }
+        // Every column collapsed to its strip: the switch after them. With no group at all it is
+        // on the "Nothing open" line (`board_header`).
+        if let Some(switch) = switch.filter(|_| !groups.is_empty()) {
+            row = row.child(
+                div()
+                    .flex_shrink_0()
+                    .h(px(GROUP_HEIGHT * s))
+                    .flex()
+                    .items_center()
+                    .child(switch),
+            );
         }
         let wheel_scroll = scroll.clone();
         let down_scroll = scroll.clone();
@@ -1104,7 +1191,7 @@ impl NativeChatView {
                 .min_h_0()
                 .flex()
                 .flex_col()
-                .child(self.board_header(&board, BoardPlace::Columns, p, cx))
+                .children(self.board_header(&board, BoardPlace::Columns, p, cx))
                 .child(row)
                 .into_any_element(),
         )
@@ -1179,11 +1266,13 @@ impl NativeChatView {
             .into_any_element()
     }
 
-    /// One group's column: its title and count, then its rows as cards.
+    /// One group's column: its title and count (and `switch`, on the first), then its rows as
+    /// cards.
     fn board_column(
         &self,
         group: &Value,
         width: f32,
+        switch: Option<AnyElement>,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -1298,6 +1387,7 @@ impl NativeChatView {
                             count => count.to_string(),
                         },
                     ))
+                    .children(switch)
                     .child(
                         svg()
                             .path("titlebar/chevron-left.svg")
@@ -1347,7 +1437,11 @@ impl NativeChatView {
         }
         let s = p.scale;
         let key = text(row, "key");
-        let focus = self.board.focus.as_ref().filter(|focus| focus.key == key);
+        let focus = self
+            .board
+            .focus
+            .as_ref()
+            .filter(|focus| focus.group.is_none() && focus.key == key);
         let expanded = row["expanded"] == true;
         let title = text(row, "title");
         let command = row["command"].clone();
@@ -1599,26 +1693,91 @@ impl NativeChatView {
                                         p,
                                         cx,
                                     ))
-                                } else if !text(row, "count").is_empty() {
+                                } else if !text(row, "count").is_empty()
+                                    || !text(row, "answeredBy").is_empty()
+                                {
                                     // Its count follows the page's draft while the card is drawn.
                                     if let Some(page_id) = key.strip_prefix("question:") {
                                         self.refresh_page_counts(page_id, cx);
                                     }
+                                    let count_text = text(row, "count");
+                                    let answered_by = text(row, "answeredBy");
+                                    let open_page = row["open"].clone();
+                                    let chip_key = key.clone();
+                                    let answered_by_chip = (!answered_by.is_empty()).then(|| {
+                                        let green: gpui::Hsla =
+                                            gpui::rgb(if p.light { 0x168049 } else { 0x34d399 })
+                                                .into();
+                                        let has_open = open_page.is_object();
+                                        div()
+                                            .id(gpui::SharedString::from(format!(
+                                                "board-row-answered-by:{chip_key}"
+                                            )))
+                                            .flex_shrink_0()
+                                            .px(px(7.0 * s))
+                                            .py(px(1.5 * s))
+                                            .rounded_full()
+                                            .bg(green.opacity(if p.light { 0.12 } else { 0.16 }))
+                                            .border_1()
+                                            .border_color(green.opacity(0.32))
+                                            .flex()
+                                            .items_center()
+                                            .gap(px(4.0 * s))
+                                            .text_size(px(TITLE_SIZE * 0.84 * s))
+                                            .line_height(px(16.0 * s))
+                                            .font_weight(gpui::FontWeight::MEDIUM)
+                                            .text_color(green)
+                                            .whitespace_nowrap()
+                                            .when(has_open, |chip| {
+                                                chip.role(gpui::Role::Button)
+                                                    .chat_cursor_pointer()
+                                                    .hover(move |style| {
+                                                        style
+                                                            .bg(green.opacity(if p.light {
+                                                                0.20
+                                                            } else {
+                                                                0.26
+                                                            }))
+                                                            .border_color(green.opacity(0.55))
+                                                    })
+                                                    .on_click(cx.listener(
+                                                        move |this, _, window, cx| {
+                                                            cx.stop_propagation();
+                                                            this.open_work_target(
+                                                                open_page.clone(),
+                                                                window,
+                                                                cx,
+                                                            );
+                                                        },
+                                                    ))
+                                            })
+                                            .child(
+                                                svg()
+                                                    .path("titlebar/user.svg")
+                                                    .size(px(11.0 * s))
+                                                    .text_color(green),
+                                            )
+                                            .child(answered_by)
+                                    });
                                     // A page's name, then how much it still asks (work_cards.rs
                                     // `page_count`); the name gives way first.
                                     element.child(
                                         div()
                                             .min_w_0()
                                             .flex()
+                                            .items_center()
                                             .gap(px(6.0 * s))
                                             .child(div().min_w_0().truncate().child(title.clone()))
-                                            .child(
-                                                div()
-                                                    .flex_shrink_0()
-                                                    .whitespace_nowrap()
-                                                    .text_color(p.card_muted)
-                                                    .child(text(row, "count")),
-                                            ),
+                                            .when(!count_text.is_empty(), |row_el| {
+                                                row_el.child(
+                                                    div()
+                                                        .flex_shrink_0()
+                                                        .whitespace_nowrap()
+                                                        .text_color(p.card_muted)
+                                                        .child(count_text),
+                                                )
+                                            })
+                                            .children(answered_by_chip),
                                     )
                                 } else {
                                     element.child(title.clone())
@@ -1851,7 +2010,11 @@ impl NativeChatView {
         let s = p.scale;
         let key = text(row, "key");
         let title = text(row, "title");
-        let focus = self.board.focus.as_ref().filter(|focus| focus.key == key);
+        let focus = self
+            .board
+            .focus
+            .as_ref()
+            .filter(|focus| focus.group.is_none() && focus.key == key);
         let has_menu = !board_menu_entries(row).is_empty();
         let hover_group = gpui::SharedString::from(format!("chat-board-card-hover:{key}"));
         let (dock, relayed) = self.enrich_board_dock(row);
@@ -1877,6 +2040,7 @@ impl NativeChatView {
                 .as_ref()
                 .map(|relayed| self.board_relay_buttons(relayed, CHIP_SIZE, true, p, cx)),
             reference: text(row, "reference"),
+            focused: false,
         };
         let move_to = row["moveTo"].clone();
         let menu_key = key.clone();
@@ -2563,6 +2727,7 @@ impl NativeChatView {
                 let label = text(&entry, "label");
                 let icon = match text(&entry, "icon").as_str() {
                     "agent" => format!("agent-icons/{agent_icon}.svg"),
+                    "moon" => "modals/settings/moon.svg".to_string(),
                     icon => format!("titlebar/{icon}.svg"),
                 };
                 let tags = text(&entry, "submenu") == "tags";
@@ -2681,9 +2846,17 @@ impl NativeChatView {
     /// board opens at that card. A chat seen for the first time leaves an older click alone.
     pub(super) fn adopt_board_focus(&mut self, before: &Value, cx: &mut Context<Self>) {
         let focus = &self.snapshot["coordinatorBoard"]["focus"];
-        let (Some(key), Some(seq)) = (focus["key"].as_str(), focus["seq"].as_u64()) else {
+        let Some(seq) = focus["seq"].as_u64() else {
             return;
         };
+        let key = focus["key"].as_str().unwrap_or_default();
+        let group = focus["group"]
+            .as_str()
+            .filter(|g| !g.is_empty())
+            .map(str::to_string);
+        if key.is_empty() && group.is_none() {
+            return;
+        }
         if !before["coordinatorBoard"].is_object()
             || before["coordinatorBoard"]["focus"]["seq"].as_u64() == Some(seq)
         {
@@ -2691,6 +2864,7 @@ impl NativeChatView {
         }
         self.board.focus = Some(BoardFocus {
             key: key.to_string(),
+            group,
             seq,
             open: true,
             tries: std::rc::Rc::new(std::cell::Cell::new(4)),
@@ -2882,7 +3056,7 @@ impl NativeChatView {
                     .flex_shrink_0()
                     .px(px(10.0 * s))
                     .pt(px(8.0 * s))
-                    .child(self.board_header(&board, BoardPlace::Docked, p, cx)),
+                    .children(self.board_header(&board, BoardPlace::Docked, p, cx)),
             )
             .child(
                 div()
@@ -2894,7 +3068,13 @@ impl NativeChatView {
                     .px(px(10.0 * s))
                     .pb(px(10.0 * s))
                     .opacity(frame.opening_content_opacity() * frame.closing_content_opacity())
-                    .child(self.board_groups(&board, &self.board.scroll, p, cx)),
+                    .child(self.board_groups(
+                        &board,
+                        BoardPlace::Docked,
+                        &self.board.scroll,
+                        p,
+                        cx,
+                    )),
             )
             .into_any_element();
         Some(if frame.animating {
@@ -2930,7 +3110,7 @@ impl NativeChatView {
                 .min_h_0()
                 .flex()
                 .flex_col()
-                .child(self.board_header(&board, BoardPlace::Floating, p, cx))
+                .children(self.board_header(&board, BoardPlace::Floating, p, cx))
                 .child(
                     div()
                         .id("chat-coordinator-board-menu-list")
@@ -2941,70 +3121,72 @@ impl NativeChatView {
                         // Room for the × badge over a card's top-right corner.
                         .px(px(10.0 * p.scale))
                         .pt(px(4.0 * p.scale))
-                        .child(self.board_groups(&board, &self.board.menu_scroll, p, cx)),
+                        .child(self.board_groups(
+                            &board,
+                            BoardPlace::Floating,
+                            &self.board.menu_scroll,
+                            p,
+                            cx,
+                        )),
                 )
                 .into_any_element(),
         )
     }
 
-    /// "Board", its counts line, the switch to the other view, and (docked or as columns) the close
-    /// button.
+    /// The board's top: the Work panel's Topic, and "Nothing open" (holding the view switch) when no
+    /// group shows. Only an older gxserver's "Board", which no header button names, keeps its title
+    /// row with the switch and the close button.
+    ///
+    /// CDXC:Coordinators 2026-11-25 DECISION:
+    /// User (Q4867 B), of the header's Work button over the panel's own icon and "Work": "doesn't
+    /// look good". The panel starts with its first group, as Session details starts with its
+    /// cards; the switch moves to the end of the first group line (`board_groups`, the first open
+    /// column's head) and the × goes, since the Work button closes the docked list, the floating
+    /// card and the columns.
     fn board_header(
         &self,
         board: &Value,
         place: BoardPlace,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
-    ) -> AnyElement {
+    ) -> Option<AnyElement> {
         let s = p.scale;
+        if !board_has_title_row(board) {
+            let topic = self.work_topic_row(board, p, cx);
+            let nothing_open = board_groups_empty(board).then(|| {
+                div()
+                    .flex_shrink_0()
+                    .h(px(GROUP_HEIGHT * s))
+                    .flex()
+                    .items_center()
+                    .gap(px(8.0 * s))
+                    .px(px(4.0 * s))
+                    .text_size(px(TITLE_SIZE * s))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .text_color(p.card_muted)
+                            .child("Nothing open"),
+                    )
+                    .child(self.board_view_switch(place, p, cx))
+            });
+            if topic.is_none() && nothing_open.is_none() {
+                return None;
+            }
+            return Some(
+                div()
+                    .flex_shrink_0()
+                    .flex()
+                    .flex_col()
+                    .children(topic)
+                    .children(nothing_open)
+                    .into_any_element(),
+            );
+        }
         let columns = place == BoardPlace::Columns;
-        let (switch_label, switch_icon, switch_to) = if columns {
-            (
-                "Show as a list beside the chat",
-                "titlebar/layout-sidebar-right-expand.svg",
-                LIST_VIEW,
-            )
-        } else {
-            (
-                "Show as columns",
-                "titlebar/layout-columns.svg",
-                COLUMNS_VIEW,
-            )
-        };
-        let switch = div()
-            .id("chat-coordinator-board-switch")
-            .role(gpui::Role::Button)
-            .aria_label(switch_label)
-            .flex_shrink_0()
-            .h(px(20.0 * s))
-            .flex()
-            .items_center()
-            .gap(px(4.0 * s))
-            .px(px(5.0 * s))
-            .rounded(px(5.0 * s))
-            .text_size(px(CHIP_SIZE * s))
-            .text_color(p.card_muted)
-            .chat_cursor_pointer()
-            .hover(|style| {
-                style
-                    .bg(p.foreground.opacity(0.06))
-                    .text_color(p.foreground)
-            })
-            .tooltip(move |window, cx| {
-                gpui_component::tooltip::Tooltip::new(switch_label).build(window, cx)
-            })
-            .child(
-                svg()
-                    .path(switch_icon)
-                    .size(px(13.0 * s))
-                    .text_color(p.muted),
-            )
-            .child(if columns { "List" } else { "Columns" })
-            .on_click(cx.listener(move |this, _, window, cx| {
-                cx.stop_propagation();
-                this.switch_board_view(switch_to, window, cx);
-            }))
-            .into_any_element();
+        let switch = self.board_view_switch(place, p, cx);
         let docked = place != BoardPlace::Floating;
         let close = docked.then(|| {
             div()
@@ -3035,7 +3217,7 @@ impl NativeChatView {
                 }))
                 .into_any_element()
         });
-        // Only "Work": its groups count themselves below, so the header repeats no count. An
+        // Only the title: its groups count themselves below, so the header repeats no count. An
         // empty panel still says so.
         //
         // CDXC:Coordinators 2026-11-11 DECISION:
@@ -3078,28 +3260,88 @@ impl NativeChatView {
             )
             .child(switch)
             .children(close);
-        // The Work panel's Topic under its title (work_topic.rs).
-        match self.work_topic_row(board, p, cx) {
-            Some(topic) => div()
+        Some(
+            div()
                 .flex_shrink_0()
                 .flex()
                 .flex_col()
                 .child(row)
-                .child(topic)
+                .children(self.work_topic_row(board, p, cx))
                 .into_any_element(),
-            None => row.into_any_element(),
-        }
+        )
     }
 
-    /// Every group: its line (a click folds it), its rows and its "N more".
+    /// The switch to the other view: "Columns" in the list, "List" in the columns.
+    fn board_view_switch(
+        &self,
+        place: BoardPlace,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let columns = place == BoardPlace::Columns;
+        let (switch_label, switch_icon, switch_to) = if columns {
+            (
+                "Show as a list beside the chat",
+                "titlebar/layout-sidebar-right-expand.svg",
+                LIST_VIEW,
+            )
+        } else {
+            (
+                "Show as columns",
+                "titlebar/layout-columns.svg",
+                COLUMNS_VIEW,
+            )
+        };
+        div()
+            .id("chat-coordinator-board-switch")
+            .role(gpui::Role::Button)
+            .aria_label(switch_label)
+            .flex_shrink_0()
+            .h(px(20.0 * s))
+            .flex()
+            .items_center()
+            .gap(px(4.0 * s))
+            .px(px(5.0 * s))
+            .rounded(px(5.0 * s))
+            .text_size(px(CHIP_SIZE * s))
+            .text_color(p.card_muted)
+            .chat_cursor_pointer()
+            .hover(|style| {
+                style
+                    .bg(p.foreground.opacity(0.06))
+                    .text_color(p.foreground)
+            })
+            .tooltip(move |window, cx| {
+                gpui_component::tooltip::Tooltip::new(switch_label).build(window, cx)
+            })
+            .child(
+                svg()
+                    .path(switch_icon)
+                    .size(px(13.0 * s))
+                    .text_color(p.muted),
+            )
+            .child(if columns { "List" } else { "Columns" })
+            .on_click(cx.listener(move |this, _, window, cx| {
+                cx.stop_propagation();
+                this.switch_board_view(switch_to, window, cx);
+            }))
+            .into_any_element()
+    }
+
+    /// Every group: its line (a click folds it), its rows and its "N more". `place`'s view switch
+    /// ends the first line when the board has no title row (`board_header`).
     fn board_groups(
         &self,
         board: &Value,
+        place: BoardPlace,
         scroll: &ScrollHandle,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
+        let mut switch =
+            (!board_has_title_row(board)).then(|| self.board_view_switch(place, p, cx));
         let mut list = div().flex().flex_col().w_full().min_w_0();
         // While a card is dragged, the groups it can land in show even when empty (an empty group
         // is otherwise left out: the 2026-11-05 decision in the core).
@@ -3133,11 +3375,26 @@ impl NativeChatView {
             let toggle = json!({"type": "toggleCoordinatorBoardGroup", "group": id});
             let drop_group = id.clone();
             let drop_fill = p_drop(p);
+            let group_focus = self
+                .board
+                .focus
+                .as_ref()
+                .filter(|focus| focus.group.as_deref() == Some(id.as_str()));
             let mut section = div()
                 .id(gpui::SharedString::from(format!("chat-board-drop:{id}")))
+                .relative()
                 .flex()
                 .flex_col()
                 .rounded(px(10.0 * s))
+                .when_some(group_focus, |section, focus| {
+                    section
+                        .border_1()
+                        .border_color(icon_color.opacity(if p.light { 0.45 } else { 0.50 }))
+                        .bg(icon_color.opacity(if p.light { 0.08 } else { 0.12 }))
+                        .px(px(4.0 * s))
+                        .py(px(2.0 * s))
+                        .child(scroll_into_view(scroll.clone(), focus.tries.clone(), s))
+                })
                 .drag_over::<BoardCardDrag>(move |style, _, _, _| style.bg(drop_fill))
                 .on_drop(cx.listener(move |this, drag: &BoardCardDrag, _, cx| {
                     this.drop_board_card(drag, &drop_group, cx);
@@ -3181,6 +3438,10 @@ impl NativeChatView {
                     } else {
                         count.to_string()
                     }))
+                    // The view switch at the first line's end, when the board has no title row.
+                    .when_some(switch.take(), |line, switch| {
+                        line.child(div().flex_1()).child(switch)
+                    })
                     .on_click(cx.listener(move |this, _, _, cx| this.invoke(toggle.clone(), cx))),
             );
             let mut cards = div()
@@ -3216,7 +3477,7 @@ impl NativeChatView {
                             .child(more)
                             .when(not_shown > 0, |this| {
                                 this.child(div().text_color(p.muted).child(format!(
-                                    "({not_shown} older in ghostex coordinator board)"
+                                    "· {not_shown} older in ghostex coordinator board"
                                 )))
                             })
                             .on_click(

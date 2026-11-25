@@ -34,7 +34,7 @@ pub(crate) enum SizedButtonVariant {
     /// The neutral fill.
     Secondary,
     Destructive,
-    /// The stock filled primary (a dialog's confirm button outside the Settings skin).
+    /// Neutral filled primary button, one step brighter than the neutral fill, never accent or white slab.
     Primary,
 }
 
@@ -77,16 +77,8 @@ pub(crate) fn sized_button_colors(
             destructive_button_fills(p.destructive, p.light),
             p.destructive,
         ),
-        SizedButtonVariant::Primary if p.modal.light => (
-            p.modal.primary_button_fills(),
-            p.modal.primary_button_text(),
-        ),
         SizedButtonVariant::Primary => (
-            ButtonFills {
-                rest: p.primary,
-                hover: css_fade(p.primary, 0.8),
-                pressed: css_fade(p.primary, 0.7),
-            },
+            p.modal.primary_button_fills(),
             p.modal.primary_button_text(),
         ),
     }
@@ -137,6 +129,14 @@ fn settings_sized_button_bound(
     disabled_reason: Option<SharedString>,
     on_click: BoundPress,
 ) -> AnyElement {
+    // A button with a text label is always filled (CDXC:AppModal 2026-10-14 on
+    // `neutral_button_fills`): `Ghost` renders as `Outline`, matching `settings_button_bound`
+    // and `hub_button`.
+    let variant = match variant {
+        SizedButtonVariant::Ghost => SizedButtonVariant::Outline,
+        other => other,
+    };
+    let primary = variant == SizedButtonVariant::Primary;
     let (fills, text) = sized_button_colors(p, variant);
     let (height, side, gap, icon_size, line_height) = match size {
         SizedButtonSize::Xs => (24.0, 10.0, 4.0, 12.0, 18.67),
@@ -160,6 +160,7 @@ fn settings_sized_button_bound(
         .items_center()
         .justify_center()
         .rounded(px(MODAL_RADIUS_CONTROL))
+        .when(primary, |this| this.font_weight(gpui::FontWeight::MEDIUM))
         .border_1()
         .border_color(transparent())
         .bg(hsla(fills.rest))

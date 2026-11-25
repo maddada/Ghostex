@@ -156,7 +156,10 @@ fn ago(at_ms: i64) -> String {
         0..=59 => "just now".to_string(),
         60..=3599 => format!("{} min ago", seconds / 60),
         3600..=86_399 => format!("{} h ago", seconds / 3600),
-        _ => format!("{} days ago", seconds / 86_400),
+        _ => format!(
+            "{} ago",
+            ghostex_gx_protocol::plural(seconds / 86_400, "day", "days")
+        ),
     }
 }
 

@@ -150,12 +150,32 @@ impl GhostexPaths {
             .join(format!("dark-look-default-{day}-migrated"))
     }
 
+    /// Written once the 2026-11-24 default theme accent update (`#5581a9` -> `#95d7f6` dark,
+    /// `#8da101` -> `#0c74a6` light) has run over an existing settings file
+    /// (`migrate_default_theme_accent_once` in the desktop app).
+    pub fn default_theme_accent_marker_file(&self) -> PathBuf {
+        self.state_dir
+            .join("default-theme-accent-2026-11-24-migrated")
+    }
+
     /// Written once the rail's on-by-default change has run over an existing settings file
     /// (`migrate_sidebar_rail_default_once` in the desktop app).
     pub fn sidebar_rail_default_marker_file(&self) -> PathBuf {
         // v2: the step switches to Rail (it kept Classic in a build of the same day, which wrote the
         // first marker).
         self.state_dir.join("sidebar-rail-default-migrated-v2")
+    }
+
+    /// Written once the Native mode first-launch announcement check has run over an existing
+    /// settings file (`migrate_native_mode_intro_once` in the desktop app).
+    pub fn native_mode_intro_marker_file(&self) -> PathBuf {
+        self.state_dir.join("native-mode-intro-migrated-v1")
+    }
+
+    /// Written once the fresh-install Native mode default check has run
+    /// (`seed_fresh_install_native_mode_once` in desktop and gxserver).
+    pub fn native_mode_fresh_default_marker_file(&self) -> PathBuf {
+        self.state_dir.join("native-mode-fresh-default-v1")
     }
 
     /// Written once Notifications has been taken off the rail's saved pins, which 11.12.0 wrote
@@ -172,6 +192,12 @@ impl GhostexPaths {
 
     pub fn hub_secret_folders_marker_file(&self) -> PathBuf {
         self.state_dir.join("hub-secret-folders-added")
+    }
+
+    /// Written once the opt-in built-in views step (`keep_old_heavy_views_once` in the desktop app)
+    /// has run over an existing settings file so upgrading users keep VS Code, Beads and Automate.
+    pub fn heavy_views_default_marker_file(&self) -> PathBuf {
+        self.state_dir.join("heavy-views-default-migrated")
     }
 
     pub fn gxserver_config_dir(&self) -> PathBuf {
@@ -588,10 +614,14 @@ impl LegacyMigrationReport {
             return None;
         }
         const SHOWN: usize = 10;
-        let mut text = format!(
-            "Ghostex left {} item(s) of its old storage where they are because they could not be moved. Ghostex keeps working and tries again on its next start.",
-            self.skipped.len()
-        );
+        let mut text = if self.skipped.len() == 1 {
+            "Ghostex left 1 item of its old storage where it is because it could not be moved. Ghostex keeps working and tries again on its next start.".to_string()
+        } else {
+            format!(
+                "Ghostex left {} items of its old storage where they are because they could not be moved. Ghostex keeps working and tries again on its next start.",
+                self.skipped.len()
+            )
+        };
         for item in self.skipped.iter().take(SHOWN) {
             text.push_str(&format!("\n  - {item}"));
         }

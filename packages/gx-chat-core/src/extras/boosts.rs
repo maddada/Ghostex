@@ -44,8 +44,17 @@
 //! and Schedule it (one Boost for "check back later" and "make it a routine"). Inbox it! means the
 //! agent does not answer in the chat: the ask and its result go together on one Needs you card
 //! (`ghostex needs-you add`, which works in every session), for any ask, a question too.
+//! CDXC:Boosts 2026-11-24 DECISION:
+//! The first-time Boost hint (`hint`) sits inside the chat box at its top-right corner as a small
+//! dismissible chip with an x: clicking x dismisses it (`dismissBoostHint`), and clicking the chip
+//! opens Boosts and dismisses it. Supersedes the 2026-11-20 floating callout bubble above the
+//! Boost pill.
+//! CDXC:Boosts 2026-11-24 DECISION:
+//! User: "please remove suggested boosts also, i dont like this feature." Do not surface inline
+//! contextual Boost suggestions above the chat box while typing; keep the Boost menu, `*` picker
+//! and pills.
 //! SEE-ALSO: server/src/boosts.rs (the prompts, the user's Boosts, `/api/boosts`, the block under
-//! the message), apps/desktop/src/app/native_chat/boosts.rs (pill, menu, preview, callout, Try a
+//! the message), apps/desktop/src/app/native_chat/boosts.rs (pill, menu, preview, hint chip, Try a
 //! Boost), apps/desktop/src/app/window/settings_modal/tabs/boosts.rs (Settings > Boosts),
 //! composer/trigger.rs and composer/suggestions.rs (`*`), composer/reference_pills.rs
 //! (`ReferenceKind::Boost`), transcript/markdown_links.rs (the pill in a sent message), the
@@ -77,8 +86,8 @@ pub struct Boost {
     /// One line on what the agent does, for the menu, the picker and the callout.
     pub description: &'static str,
     /// What the little preview beside the menu draws (`page`, `chart`, `compare`, `map`,
-    /// `triage`, `form`, `app`, `browser`, `shots`, `second`, `workers`, `worktree`, `ship`,
-    /// `docs`, `steps`, `inbox`, `schedule`, `notify`).
+    /// `triage`, `triage-messages`, `form`, `app`, `browser`, `shots`, `second`, `workers`,
+    /// `worktree`, `ship`, `docs`, `steps`, `needs-you`, `inbox`, `schedule`, `notify`).
     pub preview: &'static str,
     /// What the agent is told, unless the user edited it.
     pub prompt: &'static str,
@@ -95,7 +104,7 @@ pub const TABS: [(&str, &str); 4] = [
 ];
 
 /// Ghostex's Boosts, in the menu's order.
-pub const BOOSTS: [Boost; 18] = [
+pub const BOOSTS: [Boost; 20] = [
     Boost {
         id: "live-page",
         label: "Live page",
@@ -190,6 +199,15 @@ pub const BOOSTS: [Boost; 18] = [
         prompt: "Triage the requests this message points at: GitHub issues and pull requests, Linear or Jira tickets, or whatever I name (if I named none, the open ones of this project). Read each one, then put them all on one Live page, one card per item: a link to it, what it asks for as short bullet points, a picture of it wherever one helps (a screenshot, a mockup or a small diagram), your recommendation, and a question with the choices for that item so I can decide each with a click. If you haven't in this conversation, run `ghostex visual guide pages` first and follow it.",
     },
     Boost {
+        id: "triage-messages",
+        label: "Triage messages",
+        icon: "titlebar/message-circle.svg",
+        category: "work",
+        description: "Open mentions, DMs, promises and unanswered asks grouped by urgency on a Live page.",
+        preview: "triage-messages",
+        prompt: "Give me a Live page of my open tasks from messages since the last triage (Slack, email, or whatever channel I name): mentions, DMs, promises I made, and unanswered asks. Drop what is already settled. Group them by urgency, and give each task a short summary with a link, a recommended reply, choices so I can decide with a click, and a note box. If you haven't in this conversation, run `ghostex visual guide pages` first and follow it.",
+    },
+    Boost {
         id: "workers",
         label: "Plan with workers",
         icon: "titlebar/users-group.svg",
@@ -233,6 +251,15 @@ pub const BOOSTS: [Boost; 18] = [
         description: "Anything only you can do goes on your Needs you list, with a Done button.",
         preview: "steps",
         prompt: "Put every step only I can do (a sudo command, a sign-in, a tap on my phone, a check by eye) on my Needs you list with `ghostex needs-you add`, so each one gets a Done button, and list them under Needs you in your reply.",
+    },
+    Boost {
+        id: "needs-you",
+        label: "Add to Pings",
+        icon: "titlebar/circle-dot.svg",
+        category: "work",
+        description: "Puts this in your Pings list with context, a Done button, or choices.",
+        preview: "needs-you",
+        prompt: "Add a Ping about this with `ghostex needs-you add \"<short title naming what it is about>\" --detail \"<brief context on what it is about and why>\"`. Never use vague titles like \"it\" or \"this\" alone so it makes sense from any chat. Add `--command \"<command>\"` if there is a command for me to run, and `--answer \"<choice>\"` if there are clear choices to pick; otherwise leave it with a Done button. Confirm the Q tag in your reply.",
     },
     Boost {
         id: "inbox-it",

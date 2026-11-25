@@ -204,10 +204,10 @@ fn text(value: &Value) -> &str {
     value.as_str().unwrap_or("")
 }
 
-/// `settings?.[key] ?? DEFAULT_ghostex_SETTINGS[key]) === true`; every default here is `false`.
+/// `(settings?.[key] ?? DEFAULT_GHOSTEX_SETTINGS[key]) === true`.
 fn flag(settings: &Value, key: &str) -> bool {
     match &settings[key] {
-        Value::Null => false,
+        Value::Null => ghostex_settings_catalog::default_value(key) == Some(&J::Bool(true)),
         value => *value == Value::Bool(true),
     }
 }
@@ -270,6 +270,9 @@ fn hidden_workarea_command_ids(data: &QuickAccessData) -> BTreeSet<&'static str>
     }
     if flag(settings, "kanbanViewTabHidden") || !view_scope_visible(data, "kanban") {
         hidden.insert("switchKanbanView");
+    }
+    if flag(settings, "automateViewTabHidden") || !view_scope_visible(data, "automate") {
+        hidden.insert("switchAutomateView");
     }
     if flag(settings, "terminalViewTabHidden") || !view_scope_visible(data, "terminal") {
         hidden.insert("switchTerminalView");

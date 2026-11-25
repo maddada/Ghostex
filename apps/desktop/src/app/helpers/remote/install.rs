@@ -147,14 +147,20 @@ pub(crate) fn gpui_log_remote_gxserver_install_probe(
 pub(crate) fn gpui_remote_managed_gxserver_package_update(
     config: &GpuiRemoteMachineConfig,
     execution_target: &GpuiRemoteExecutionTarget,
-) -> Option<GpuiRemoteManagedPackageUpdate> {
+) -> Result<Option<GpuiRemoteManagedPackageUpdate>, GpuiRemoteGxserverConnectResult> {
     // Native Windows runs the app's own gxserver, which no remote connect installs; the probe
     // below is a POSIX script. The connect's health check still reads its session host.
     if matches!(
         execution_target,
         GpuiRemoteExecutionTarget::WindowsPowerShell
     ) {
-        return None;
+        if config.reinstall_package {
+            return Err(GpuiRemoteGxserverConnectResult::without_connection(
+                GpuiRemoteGxserverConnectState::UnsupportedRemotePlatform,
+                "That Windows computer runs the Ghostex app's own background service, not a remote gxserver package. Update Ghostex on that computer, or use its Update button here when a newer version is available.",
+            ));
+        }
+        return Ok(None);
     }
     let target_probe = gpui_run_remote_ssh_in_execution_target(
         config,
@@ -162,9 +168,18 @@ pub(crate) fn gpui_remote_managed_gxserver_package_update(
         gpui_remote_platform_probe_command_for(execution_target),
         GPUI_REMOTE_GXSERVER_INSTALL_PROBE_TIMEOUT,
     );
-    let target = (target_probe.exit_code == 0)
+    let Some(target) = (target_probe.exit_code == 0)
         .then(|| gpui_extract_remote_install_target(target_probe.stdout.as_str()))
-        .flatten()?;
+        .flatten()
+    else {
+        if config.reinstall_package {
+            return Err(GpuiRemoteGxserverConnectResult::without_connection(
+                GpuiRemoteGxserverConnectState::InstallFailed,
+                "Could not identify the remote operating system before updating gxserver.",
+            ));
+        }
+        return Ok(None);
+    };
     let expected_identity = gpui_bundled_remote_gxserver_package_build_identity(&target);
     let installed_identity = gpui_run_remote_ssh_in_execution_target(
         config,
@@ -173,21 +188,45 @@ pub(crate) fn gpui_remote_managed_gxserver_package_update(
         GPUI_REMOTE_GXSERVER_INSTALL_PROBE_TIMEOUT,
     );
     if installed_identity.exit_code != 0 {
-        return None;
+        if config.reinstall_package {
+            if installed_identity
+                .stdout
+                .contains("__GHOSTEX_REMOTE_APP_OWNED__")
+            {
+                return Err(GpuiRemoteGxserverConnectResult::without_connection(
+                    GpuiRemoteGxserverConnectState::UnsupportedRemotePlatform,
+                    "That computer runs the Ghostex app's own background service, not a remote gxserver package. Update Ghostex on that computer, or use its Update button here when a newer version is available.",
+                ));
+            }
+            if installed_identity.exit_code == 3 {
+                return Err(GpuiRemoteGxserverConnectResult::without_connection(
+                    GpuiRemoteGxserverConnectState::UnsupportedRemotePlatform,
+                    "This machine's gxserver was not installed as a managed remote package, so it cannot be updated from here. Update Ghostex on that machine instead.",
+                ));
+            }
+            return Err(GpuiRemoteGxserverConnectResult::without_connection(
+                GpuiRemoteGxserverConnectState::InstallFailed,
+                gpui_remote_sanitized_process_failure(
+                    "Could not inspect the remote gxserver package before updating.",
+                    &installed_identity,
+                )
+                .as_str(),
+            ));
+        }
+        return Ok(None);
     }
-    gpui_remote_managed_package_update_from_probe(
+    Ok(gpui_remote_managed_package_update_from_probe(
         installed_identity.stdout.as_str(),
         expected_identity.as_deref(),
     )
     .or_else(|| {
-        // Reinstall replaces only a package Ghostex installed there: one that names its build.
-        (config.reinstall_package
-            && gpui_extract_remote_managed_gxserver_build_identity(
-                installed_identity.stdout.as_str(),
-            )
-            .is_some())
-        .then_some(GpuiRemoteManagedPackageUpdate::Requested)
-    })
+        // Update gxserver and Reinstall replace the managed package installed there even when this
+        // app does not carry an unpacked copy to compare build identities against (such as Linux
+        // packages downloaded from the sealed on-demand manifest).
+        config
+            .reinstall_package
+            .then_some(GpuiRemoteManagedPackageUpdate::Requested)
+    }))
 }
 
 /// The build identity of the package this app itself carries for `target`, in the order the install picks it.

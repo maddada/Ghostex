@@ -130,6 +130,10 @@ fn settle_with_ids(
                 answer.clone(),
             ) {
                 effects.extend(more);
+            } else if let Some(more) =
+                crate::extras::needs_you_command::settle_rpc(state, *request_id, answer.clone())
+            {
+                effects.extend(more);
             } else if coordinator_threads::settle_read(
                 &mut state.extras.panels,
                 *request_id,
@@ -164,7 +168,9 @@ fn settle_with_ids(
             ));
             advance_loading_stage(state, context);
             // A red Terminal View verdict looks at the screen again by itself.
-            if terminal_tail::recheck_due(&mut state.extras.terminal_tail, context.now_ms) {
+            if !state.session.non_cli_mode
+                && terminal_tail::recheck_due(&mut state.extras.terminal_tail, context.now_ms)
+            {
                 let request_id = next_request_id();
                 state.extras.terminal_tail.hover_request = Some(request_id);
                 state.extras.terminal_tail.rechecking = true;
@@ -263,8 +269,14 @@ fn settle_with_ids(
     if state.core.operation_error_code.as_deref() != Some("composerNotReady") {
         terminal_tail::retire(&mut state.extras.terminal_tail);
     }
-    let prompt_open = state.session.prompt.is_some();
-    terminal_tail::expire(&mut state.extras.terminal_tail, (working, prompt_open));
+    if state.session.non_cli_mode {
+        state.extras.terminal_tail.tail = None;
+        state.extras.terminal_tail.tail_measured_during = None;
+        state.extras.terminal_tail.recheck_at_ms = None;
+    } else {
+        let prompt_open = state.session.prompt.is_some();
+        terminal_tail::expire(&mut state.extras.terminal_tail, (working, prompt_open));
+    }
     // Reduced and Quiet fold the work the way the renderers draw it (`SearchFolds::quiet_style`).
     state.extras.search.folds.quiet_style = state.transcript_view.chat_look.agent_work
         != crate::transcript::chat_look::AgentWork::Default;
@@ -380,6 +392,12 @@ fn settle_terminal_tail_rpc(
     if tail.hover_request == Some(request_id) {
         tail.hover_request = None;
         let rechecked = std::mem::take(&mut tail.rechecking);
+        if state.session.non_cli_mode {
+            tail.tail = None;
+            tail.tail_measured_during = None;
+            tail.recheck_at_ms = None;
+            return Some(Vec::new());
+        }
         // Keep the last verdict; a failed read is "unknown", never "not ready".
         if let Ok(result) = outcome {
             tail.tail = Some(result.clone());

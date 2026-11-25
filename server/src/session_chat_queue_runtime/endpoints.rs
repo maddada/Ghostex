@@ -102,6 +102,12 @@ pub(crate) async fn handle_session_chat_queue_http(
                 && params.get("retry").and_then(Value::as_bool) == Some(true)
             {
                 if let Some(prompt_id) = params.get("promptId").and_then(Value::as_str) {
+                    crate::session_chat_queue_undelivered::forget_delivery_notice_for_retry(
+                        state.metadata.server_id.as_str(),
+                        &result.project_id,
+                        &result.session_id,
+                        prompt_id,
+                    );
                     crate::session_chat_send_wake::wake_for_retried_message(
                         state,
                         &result.project_id,

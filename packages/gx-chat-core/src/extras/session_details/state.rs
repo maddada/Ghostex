@@ -33,6 +33,8 @@ pub struct SessionDetailsState {
     pub open_lists: Vec<String>,
     /// How many "Show more" presses the Tasks card's done list has had; 0 is the short form.
     pub tasks_step: u32,
+    /// Consecutive progressive `afterRevision` follow-ups sent while sections finish loading.
+    pub progressive_followups: u8,
 }
 
 /// Where the folded sections are remembered: a preference of the user, not of one session.

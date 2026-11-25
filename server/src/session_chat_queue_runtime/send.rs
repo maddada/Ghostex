@@ -827,6 +827,27 @@ async fn send_session_chat_message_locked(
     let mut params = Map::new();
     params.insert("projectId".to_string(), json!(project_id));
     params.insert("sessionId".to_string(), json!(session_id));
+    // Serialize with any in-flight Terminal <-> Native switch on this session so a send never
+    // races a sleep/wake cycle or lands on a stale transport (`acp::channel::session_switch_lock`).
+    // Bound the wait well under the 15s CLI send budget (`ghostex_cli/rpc.rs`) so a slow switch
+    // queues the message cleanly instead of timing out the caller.
+    let switch_lock = crate::acp::channel::session_switch_lock(project_id, session_id);
+    let _switch_guard = match tokio::time::timeout(Duration::from_secs(5), switch_lock.lock_owned())
+        .await
+    {
+        Ok(guard) => guard,
+        Err(_) => {
+            if let Ok(target) =
+                resolve_session_chat_send_target(state, &params, "sendSessionChatMessage")
+            {
+                return hold_for_restarted_agent(state, &target, source, text, image_paths);
+            }
+            return Err(DomainStateError {
+                code: crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING,
+                message: "This chat is switching between Terminal and Native mode; the message will be sent as soon as it is ready.".to_string(),
+            });
+        }
+    };
     let target = resolve_session_chat_send_target(state, &params, "sendSessionChatMessage")?;
     let draft_before_send = if source == SessionChatMessageSource::Composer {
         open_gxserver_database(&state.paths).ok().and_then(|db| {
@@ -893,7 +914,10 @@ async fn send_session_chat_message_locked(
     let terminal_agent =
         crate::session_chat_composer::session_chat_composer_agent_id(&target.session)
             .or_else(|| agent.clone());
-    if agent.as_deref() == Some("opencode") {
+    if agent.as_deref() == Some("opencode")
+        && !crate::acp::session_is_acp(&target.session)
+        && crate::acp::channel::live(&target.project_id, &target.session_id, "send").is_none()
+    {
         let conversation = crate::session_chat_opencode::chat_conversation(
             state,
             &target.project_id,
@@ -932,13 +956,29 @@ async fn send_session_chat_message_locked(
             Ok::<_, DomainStateError>(archive)
         })
         .await
-        .map_err(|_| crate::session_chat_opencode::error("OpenCode delivery task failed."))??;
+        .map_err(|_| crate::session_chat_opencode::error("OpenCode delivery task failed."))
+        .and_then(|result| result);
+        let archive = match archive {
+            Ok(archive) => archive,
+            Err(error) => {
+                crate::telemetry::reliability_error("prompt_delivery_failed", Some("opencode"));
+                return Err(error);
+            }
+        };
         if let Some(command) = archive {
             crate::session_chat_local_command::persist_session_chat_local_command(
                 project_id, session_id, &command,
             );
         }
         crate::session_chat_opencode::invalidate(&id);
+        let prompt_source = prompt_source_for_message_source(source);
+        crate::telemetry::prompt_sent(&target.session, prompt_source);
+        crate::telemetry::boosts_used(
+            &target.session,
+            prompt_source,
+            boosts_built_in,
+            boosts_custom,
+        );
         promote_draft_session_after_send(state, project_id, session_id);
         unpark_session_after_send(state, project_id, session_id);
         crate::session_chat_returned_prompt::record_session_chat_send_submitted(
@@ -980,11 +1020,81 @@ async fn send_session_chat_message_locked(
     let text = agent_text.as_ref();
     // An ACP-mode session running inside `ghostex acp-host` takes messages directly over ACP
     // (`session/prompt`) without typing into a terminal (CDXC:AgentProviders 2026-11-22 in acp/mod.rs).
-    if crate::acp::session_is_acp(&target.session) {
+    // If a live authenticated `acp-host` channel is open while stored `nonCliMode` is out of sync,
+    // reconcile the stored mode and deliver over the Native channel instead of waiting on a CLI box.
+    let live_acp_channel =
+        crate::acp::channel::live(&target.project_id, &target.session_id, "send");
+    if crate::acp::session_is_acp(&target.session) || live_acp_channel.is_some() {
+        if !crate::acp::session_is_acp(&target.session) {
+            if let Some(channel) = live_acp_channel.as_ref() {
+                crate::acp::channel::reconcile_live_host_mode_locked(
+                    state,
+                    &target.project_id,
+                    &target.session_id,
+                    &channel.agent,
+                    "send_path",
+                )
+                .await;
+            }
+        }
+        // If the Native host is not connected because the session is sleeping, resolved/closed, or
+        // its host exited inside zmx, wake or restart it immediately on send (matching Terminal's
+        // `starting_session_refusal` path) rather than leaving the queued row idle until backoff.
+        let session_running =
+            crate::presentation::effective_lifecycle_state(&target.session) == "running";
+        if !session_running || live_acp_channel.is_none() {
+            if let Some(refusal) =
+                crate::session_chat_send_wake::wake_missing_acp_session(state, &target).await
+            {
+                return Err(refusal);
+            }
+        }
+        // Keep strict FIFO order: if an earlier send is already queued for this Native session,
+        // queue this normal send behind it rather than jumping ahead.
+        if source == SessionChatMessageSource::Composer
+            && !interrupt
+            && crate::session_chat_send_wake::has_pending_startup_send(
+                state,
+                &target.project_id,
+                &target.session_id,
+            )
+        {
+            if crate::session_approval::session_awaits_answer(&target.session) {
+                return Err(DomainStateError {
+                    code: crate::session_chat_send::SESSION_CHAT_PROMPT_WAITING_CODE,
+                    message: "An earlier message is waiting for your answer; this message is queued behind it.".to_string(),
+                });
+            }
+            let generated_at = chrono::Utc::now().to_rfc3339();
+            if crate::presentation::presentation_activity(&target.session, &generated_at)
+                == "working"
+            {
+                return Err(DomainStateError {
+                    code: crate::session_chat_send_wake::SESSION_CHAT_AGENT_BUSY,
+                    message: "An earlier message is queued while the agent replies; this message is queued behind it.".to_string(),
+                });
+            }
+            return Err(DomainStateError {
+                code: crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING,
+                message: "An earlier message is waiting for the agent to start.".to_string(),
+            });
+        }
+        if interrupt {
+            crate::session_chat_send::record_session_chat_interrupt(
+                state,
+                &target,
+                "session-chat-interrupt-and-send",
+            );
+        }
         return match crate::acp::channel::send(&state.paths, &target, text, image_paths, interrupt)
             .await
         {
             Ok(_) => {
+                crate::session_chat_send::clear_session_chat_interrupt(
+                    state,
+                    &target,
+                    "session-chat-send-clear-interrupt",
+                );
                 crate::telemetry::prompt_sent(
                     &target.session,
                     match source {
@@ -1616,6 +1726,7 @@ async fn send_session_chat_message_locked(
                 message: error.message,
             });
         }
+        crate::telemetry::reliability_error_for_session("prompt_delivery_failed", &target.session);
         let reason = crate::session_chat_send_failure::send_failure_reason(
             &error.message,
             heal_gave_up.as_deref(),
@@ -1631,6 +1742,11 @@ async fn send_session_chat_message_locked(
             message: reason,
         });
     }
+    crate::session_chat_send::clear_session_chat_interrupt(
+        state,
+        &target,
+        "session-chat-send-clear-interrupt",
+    );
     if let Some(command) = archive_command {
         let project_id = target.project_id.clone();
         let session_id = target.session_id.clone();
@@ -1697,14 +1813,7 @@ async fn send_session_chat_message_locked(
     are all that leave; the prompt text is not in scope for the emitter and
     cannot be.
     */
-    let prompt_source = match source {
-        SessionChatMessageSource::Composer => "chat",
-        SessionChatMessageSource::AutomaticQueue
-        | SessionChatMessageSource::AutomaticRecovery
-        | SessionChatMessageSource::AccountSwitch(_)
-        | SessionChatMessageSource::ManualQueue => "queue",
-        SessionChatMessageSource::GhostexNote => "ghostexNote",
-    };
+    let prompt_source = prompt_source_for_message_source(source);
     crate::telemetry::prompt_sent(&target.session, prompt_source);
     crate::telemetry::boosts_used(
         &target.session,
@@ -1791,4 +1900,15 @@ async fn send_session_chat_message_locked(
         );
     }
     Ok(text.len())
+}
+
+fn prompt_source_for_message_source(source: SessionChatMessageSource) -> &'static str {
+    match source {
+        SessionChatMessageSource::Composer => "chat",
+        SessionChatMessageSource::AutomaticQueue
+        | SessionChatMessageSource::AutomaticRecovery
+        | SessionChatMessageSource::AccountSwitch(_)
+        | SessionChatMessageSource::ManualQueue => "queue",
+        SessionChatMessageSource::GhostexNote => "ghostexNote",
+    }
 }

@@ -1,27 +1,23 @@
-//! Chief: the Ghostex-wide coordinator, one per computer, pinned under the Spaces bar.
+//! Chief: the Ghostex-wide coordinator, one per computer, pinned at the top of Main Hub.
 //!
 //! - [`record`]: which session is this computer's Chief (`metadata.chiefSession`), written only by
 //!   gxserver itself when it creates that session.
-//! - [`feature`]: the built-in extension's switch (`mainHubHidden`, the Main Hub extension, on by default).
-//! - [`default_on`]: turns it on once for a computer that had it off only by the old default.
-//! - [`head`]: the head role, given per request at the auth gate to that one session while the
-//!   switch is on, and never stored with a token.
-//! - [`home`]: the home project at the home folder, whose header is Chief's row.
+//! - [`head`]: the head role, given per request at the auth gate to that one session, and never
+//!   stored with a token.
+//! - [`home`]: the home project at the home folder, whose header is Main Hub.
 //! - [`model`]: the agent, model and effort it starts on (the default agent's newest Opus, Sol or
 //!   Gemini Neon at High), and the user's own pick, kept for its next chats.
 //! - [`session`]: creating the session (first open, New Chat, Change Agent) in the home project,
 //!   as a coordinator whose memory and threads follow it to a new chat; earlier chats sleep.
 //! - [`presentation`]: `chiefEarlier` on the earlier chats, and the folder-trust answer for
 //!   Chief's own sessions at the home folder.
-//! - [`sweep`]: puts its agent to sleep when the switch goes off.
-//! - [`endpoint`]: `/api/chief` (`status`, `open`, `newChat`, `setAgent`, `guide`).
+//! - [`sweep`]: one-time startup migration for Chief's older default titles.
+//! - [`endpoint`]: `/api/chief` (`status`, `open`, `newChat`, `setAgent`, `guide`, `prompt`).
 //!
 //! The user's decisions: CDXC:Chief in packages/settings-catalog/src/data/official_extensions.rs
 //! and server/src/security/capability.rs.
 
-mod default_on;
 mod endpoint;
-mod feature;
 mod head;
 mod home;
 mod model;
@@ -32,9 +28,6 @@ mod sweep;
 mod welcome;
 
 pub(crate) use endpoint::{handle_chief_http, CHIEF_ENDPOINT};
-pub(crate) use feature::{
-    chief_off_message, chief_on, chief_shown, refuses_message, remember_chief_shown,
-};
 pub(crate) use head::settle_principal;
 pub(crate) use home::{
     is_help_home_project, is_home_folder, is_home_project, lists_under_main_hub, presents_as_home,

@@ -433,6 +433,7 @@ impl NativeChatView {
                         }
                     }
                     self.quiet_boxed = true;
+                    self.quiet_working = line.running;
                     self.quiet_turn = lines.turns.get(&index).cloned();
                     let content = match tail {
                         Some(tail) => {
@@ -442,6 +443,7 @@ impl NativeChatView {
                         None => self.item_content(item, next, true, p, window, cx),
                     };
                     self.quiet_boxed = false;
+                    self.quiet_working = false;
                     self.quiet_turn = None;
                     nested.push(content);
                     // The rail runs on to the next row of the line, as far below as its parts sit
@@ -618,6 +620,12 @@ impl NativeChatView {
         self.quiet_boxed && !self.in_work_fold && !self.quiet_steps
     }
 
+    /// Whether the rows drawn now sit directly inside an opened Quiet View Working line (the
+    /// running stretch, where thoughts draw as single-line cards like plain tool-call groups).
+    pub(super) fn quiet_working_here(&self) -> bool {
+        self.quiet_boxed_here() && self.quiet_working
+    }
+
     /// The space between two one-line cards drawn now: the rail's `RAIL_ROW_GAP` in an opened
     /// Quiet View line's rows, the transcript's (`SINGLE_LINE_CARD.stack_gap`) elsewhere.
     ///
@@ -721,6 +729,7 @@ impl NativeChatView {
             styled_segments(segments),
             open,
             true,
+            line.open_inner.clone(),
             actions,
             p,
             cx,
@@ -782,14 +791,26 @@ impl NativeChatView {
             .iter()
             .map(|(piece, _)| piece.as_str())
             .collect::<String>();
+        let icon = if card.outside {
+            let green = super::page_answers::answered_color(p);
+            gpui::svg()
+                .path("titlebar/user.svg")
+                .size(px(13.0 * p.scale))
+                .flex_shrink_0()
+                .text_color(green)
+                .into_any_element()
+        } else {
+            line_icon("titlebar/chat-card-checklist.svg", 13.0, p)
+        };
         self.quiet_line(
             card.key.clone(),
             spoken,
-            // The question card's own icon alone, as every finished quiet line starts.
-            vec![line_icon("titlebar/chat-card-checklist.svg", 13.0, p)],
+            // The question card's own icon (or emerald user mark for outside shared-link answers).
+            vec![icon],
             styled_segments(segments),
             open,
             true,
+            None,
             Vec::new(),
             p,
             cx,

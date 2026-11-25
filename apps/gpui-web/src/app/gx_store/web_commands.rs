@@ -16,6 +16,7 @@ fn section_id(value: &str) -> Option<SectionId> {
     Some(match value {
         "browser" => SectionId::Browser,
         "pinned" => SectionId::Pinned,
+        "autopilot" => SectionId::Autopilot,
         "drafts" => SectionId::Drafts,
         "working" => SectionId::Working,
         "sessions" => SectionId::Sessions,
@@ -98,6 +99,9 @@ impl GhostexGpuiApp {
             }),
             "toggleCoordinatorOlder" => Some(SidebarUiIntent::ToggleCoordinatorOlderThreads {
                 sidebar_session_id: text("sessionId")?,
+            }),
+            "toggleMachineFold" => Some(SidebarUiIntent::ToggleMachineFold {
+                key: text("key")?,
             }),
             "machineNotice" => Some(SidebarUiIntent::SetMachineNoticeCollapsed {
                 machine_id: text("machineId")?,
@@ -301,6 +305,7 @@ impl GhostexGpuiApp {
             }),
             cx,
         );
+        self.gx_store_prune_untouched_drafts(cx);
         // The Git state follows the active project, as the desktop's workspace reconcile does.
         let active = self.gpui_app_modal_active_project_id();
         if active != self.web_host.git_active_project {

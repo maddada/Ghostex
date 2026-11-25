@@ -3,7 +3,7 @@
 //!
 //! CDXC:SessionChat 2026-10-07 WHY:
 //! Empryo 3.9.1-beta runs one engine per repository for every window in it. A window that starts while the engine is up joins it, holds the engine's tabs plus its own, and opens on `tabs.find(own) ?? tabs[0]` (its engine boot), so the coordinator's `/agent` line and chat messages typed there went into another session's conversation (seen live 2026-10-07). A window never learns of tabs added after it joined, so every bar is a prefix of the engine's tab order, and `.empryo/tabs.json` (the last window to change tabs writes its own bar there once it holds two or more) or the engine's own session `meta.json` gives a session's own tab (the first tab of its own folder) its place in any bar that holds it; Empryo's Ctrl+] / Ctrl+\ step to it. The tab's turns are then logged in the engine's session (session_chat_empryo_mirror.rs follows them there).
-//! SEE-ALSO: server/src/session_chat_composer_input.rs `empryo_tab_bar`, server/src/session_chat_send/steps.rs (`SelectEmpryoTab`), server/src/zmx/provider.rs (the start that selects it), proxysoul/Empryo#236.
+//! SEE-ALSO: server/src/session_chat_empryo_composer.rs `empryo_tab_bar`, server/src/session_chat_send/steps.rs (`SelectEmpryoTab`), server/src/zmx/provider.rs (the start that selects it), proxysoul/Empryo#236.
 
 use std::cmp::Ordering;
 use std::collections::HashSet;

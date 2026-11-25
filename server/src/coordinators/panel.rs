@@ -272,7 +272,25 @@ struct PanelInputs {
     topic: Value,
     /// The coordinator's idle floor (turns.rs): a new turn moves items in or out of In progress.
     idle_floor: chrono::DateTime<chrono::Utc>,
+    /// Earliest future `snoozed_until` among open asks in `items`, so snooze expiry invalidates
+    /// this cache on the next tick instead of waiting up to `PANEL_REBUILD_EVERY`.
+    next_snooze_expiry: Option<chrono::DateTime<chrono::Utc>>,
     built_at: std::time::Instant,
+}
+
+fn next_snooze_expiry(
+    items: &[super::work::WorkItem],
+    now: chrono::DateTime<chrono::Utc>,
+) -> Option<chrono::DateTime<chrono::Utc>> {
+    items
+        .iter()
+        .flat_map(|item| item.asks.iter())
+        .filter(|ask| ask.is_open())
+        .filter_map(|ask| ask.snoozed_until.as_deref())
+        .filter_map(|raw| chrono::DateTime::parse_from_rfc3339(raw).ok())
+        .map(|at| at.with_timezone(&chrono::Utc))
+        .filter(|at| *at > now)
+        .min()
 }
 
 /// CDXC:Coordinators 2026-11-08 WHY:
@@ -1124,6 +1142,7 @@ pub fn refresh_coordinator_panels(
             panels.contains_key(&key)
                 && last.topic == topic
                 && last.built_at.elapsed() < PANEL_REBUILD_EVERY
+                && last.next_snooze_expiry.is_none_or(|expiry| now < expiry)
                 && last.intro_hidden == intro_hidden
                 && last.custom_tags == custom_tags
                 && last.items == items
@@ -1170,6 +1189,7 @@ pub fn refresh_coordinator_panels(
             panels.get(&key),
         );
         next.insert(key.clone(), panel);
+        let next_snooze_expiry = next_snooze_expiry(&items, now);
         next_inputs.insert(
             key,
             PanelInputs {
@@ -1180,6 +1200,7 @@ pub fn refresh_coordinator_panels(
                 intro_hidden,
                 topic,
                 idle_floor,
+                next_snooze_expiry,
                 built_at: std::time::Instant::now(),
             },
         );

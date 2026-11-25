@@ -701,19 +701,25 @@ impl ChangesView {
             .children(header)
             .when(resolved > 0, |this| {
                 let label = if self.show_resolved {
-                    format!("Hide resolved comments ({resolved})")
+                    "Hide resolved comments"
                 } else {
-                    format!("Show resolved comments ({resolved})")
+                    "Show resolved comments"
                 };
                 this.child(
                     div()
                         .id("changes-show-resolved")
+                        .role(gpui::Role::Button)
+                        .aria_label(format!("{label}, {resolved}"))
                         .absolute()
                         .bottom(px(8.0))
                         .right(px(12.0))
-                        .px(px(8.0))
+                        .flex()
+                        .items_center()
+                        .gap(px(6.0))
+                        .pl(px(9.0))
+                        .pr(px(5.0))
                         .py(px(2.0))
-                        .rounded(px(10.0))
+                        .rounded_full()
                         .border_1()
                         .border_color(hsla(s.hairline))
                         .bg(hsla(s.sticky_bg))
@@ -721,7 +727,13 @@ impl ChangesView {
                         .text_color(hsla(s.muted))
                         .cursor_pointer()
                         .on_click(cx.listener(|this, _, _, cx| this.toggle_show_resolved(cx)))
-                        .child(label),
+                        .child(label)
+                        .child(crate::app::element::count_badge_sized(
+                            resolved.to_string(),
+                            hsla(s.text),
+                            17.0,
+                            10.5,
+                        )),
                 )
             })
             .into_any_element()

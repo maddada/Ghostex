@@ -296,7 +296,7 @@ mod remote_launch_tests {
 /// `DEFAULT_SESSION_AGENT_TITLE_NAMES`.
 fn default_session_agent_title_name(lowercased: &str) -> Option<&'static str> {
     Some(match lowercased {
-        "agy" | "antigravity" | "antigravity-cli" => "Antigravity CLI",
+        "agy" | "antigravity" | "antigravity-cli" => "Antigravity",
         "amp" | "amp-cli" => "Amp CLI",
         "claude" | "claude-code" => "Claude",
         "claude-cloud" => "Claude (cloud)",

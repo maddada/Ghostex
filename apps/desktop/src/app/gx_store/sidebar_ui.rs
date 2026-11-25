@@ -118,12 +118,14 @@ pub(crate) struct SidebarUiHost {
     /// CHANGE of focused session, as `rememberNativeSidebarFocus` did; running it on every update
     /// instead would drag the selection back every time the user picked another Space.
     followed_session: Option<String>,
+    /// One-shot session id whose next focus must keep the sidebar on its current Space (Q4850
+    /// `keep-space`: following a sent draft into Main Hub or another project never pulls the
+    /// sidebar into another Space).
+    suppress_space_follow: Option<String>,
     /// The sidebar's own copy of the project collections, read with the rest of the state.
     pub(super) stored_project_collections: Option<Value>,
     pub(super) counters: SidebarUiCounters,
     pub(super) last_error: Option<&'static str>,
-    /// Autopilot's projects were looked for since the stored state landed (`hide_autopilot_projects`).
-    autopilot_checked: bool,
 }
 
 impl Default for SidebarUiHost {
@@ -141,10 +143,10 @@ impl Default for SidebarUiHost {
             generation: 0,
             handled_reveal: None,
             followed_session: None,
+            suppress_space_follow: None,
             stored_project_collections: None,
             counters: SidebarUiCounters::default(),
             last_error: None,
-            autopilot_checked: false,
         }
     }
 }
@@ -196,6 +198,21 @@ impl SidebarUiHost {
         true
     }
 
+    /// Marks `sidebar_session_id` so its next focus keeps the sidebar on its current Space.
+    pub(crate) fn suppress_next_space_follow_for(&mut self, sidebar_session_id: &str) {
+        self.suppress_space_follow = Some(sidebar_session_id.to_string());
+    }
+
+    /// Consumes the one-shot Space-follow suppression if it matches `sidebar_session_id`.
+    pub(super) fn take_suppressed_space_follow(&mut self, sidebar_session_id: &str) -> bool {
+        if self.suppress_space_follow.as_deref() == Some(sidebar_session_id) {
+            self.suppress_space_follow = None;
+            true
+        } else {
+            false
+        }
+    }
+
     pub(crate) fn selected_machine_id(&self) -> &str {
         self.store.selected_machine_id()
     }
@@ -224,27 +241,6 @@ impl SidebarUiHost {
             return false;
         }
         let moved = self.store.retain_machine_notice_collapses(machines);
-        if moved {
-            self.generation += 1;
-        }
-        moved
-    }
-
-    /// Hides Autopilot's project the first time this sidebar sees it (gx-core
-    /// `SidebarUiStore::hide_once`). Looks only when projects arrived or moved, and only once the
-    /// stored state is in: a hide made before it landed would be replaced by it. The write is owed
-    /// and goes out with the update's own (`gx_store_write_owed_sidebar_ui_state`).
-    pub(super) fn hide_autopilot_projects(
-        &mut self,
-        projects_moved: bool,
-        core: &ghostex_gx_core::Core,
-    ) -> bool {
-        if !self.restored || (!projects_moved && self.autopilot_checked) {
-            return false;
-        }
-        self.autopilot_checked = true;
-        let group_ids = ghostex_gx_core::autopilot_project_group_ids(core.presentation());
-        let moved = !group_ids.is_empty() && self.store.hide_once(&group_ids);
         if moved {
             self.generation += 1;
         }

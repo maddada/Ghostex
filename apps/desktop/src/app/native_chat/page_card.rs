@@ -60,6 +60,8 @@ const PICTURE_AFTER_OPEN: Duration = Duration::from_secs(4);
 #[derive(Default)]
 struct Thumbnail {
     image: Option<Arc<gpui::Image>>,
+    /// True when the stored PNG has a transparent background composited onto the card's backdrop.
+    transparent: bool,
     /// The picture is the page's current one (or there will be none); nothing more to ask.
     settled: bool,
     /// A read is out, or the wait before the next one is running.
@@ -68,11 +70,11 @@ struct Thumbnail {
     url: String,
 }
 
-/// The pictures of the transcript's page cards, by page id and whether the page was answered when
-/// the card asked (an answered page is pictured again).
+/// The pictures of the transcript's page cards, by `(page_id, answered, light)` so switching theme
+/// or answering a page fetches the matching picture cleanly.
 #[derive(Default)]
 pub(crate) struct PageThumbnails {
-    entries: RefCell<HashMap<(String, bool), Thumbnail>>,
+    entries: RefCell<HashMap<(String, bool, bool), Thumbnail>>,
 }
 
 impl PageThumbnails {
@@ -194,8 +196,10 @@ impl NativeChatView {
             cx.spawn(async move |this, cx| {
                 timer.await;
                 let _ = this.update(cx, |this, cx| {
+                    let light = ChatAppearance::current(&this.snapshot).light;
+                    let theme = if light { "light" } else { "dark" };
                     this.invoke(
-                        json!({"type": "loadPageThumbnail", "pageId": page_id, "fresh": true}),
+                        json!({"type": "loadPageThumbnail", "pageId": page_id, "theme": theme, "fresh": true}),
                         cx,
                     )
                 });
@@ -231,9 +235,10 @@ impl NativeChatView {
         page_id: &str,
         url: &str,
         answered: bool,
+        light: bool,
         cx: &Context<Self>,
-    ) -> Option<Arc<gpui::Image>> {
-        let key = (page_id.to_string(), answered);
+    ) -> Option<(Arc<gpui::Image>, bool)> {
+        let key = (page_id.to_string(), answered, light);
         let mut entries = self.visual.page_thumbnails.entries.borrow_mut();
         let entry = entries.entry(key).or_default();
         if entry.url.is_empty() {
@@ -242,18 +247,25 @@ impl NativeChatView {
         if !entry.settled && !entry.asking {
             entry.asking = true;
             let page_id = page_id.to_string();
+            let theme = if light { "light" } else { "dark" };
             // Asked on the next turn of the loop, because this runs while the row is rendering.
             cx.spawn(async move |this, cx| {
                 let _ = this.update(cx, |this, cx| {
-                    this.invoke(json!({"type": "loadPageThumbnail", "pageId": page_id}), cx)
+                    this.invoke(
+                        json!({"type": "loadPageThumbnail", "pageId": page_id, "theme": theme}),
+                        cx,
+                    )
                 });
             })
             .detach();
         }
-        entry.image.clone()
+        entry
+            .image
+            .as_ref()
+            .map(|image| (image.clone(), entry.transparent))
     }
 
-    /// The core's `pageThumbnail` answer (`{pageId, png, settled, retryInMs}`).
+    /// The core's `pageThumbnail` answer (`{pageId, png, settled, retryInMs, theme, transparent}`).
     pub(super) fn receive_page_thumbnail(&mut self, params: &Value, cx: &mut Context<Self>) {
         let page_id = params["pageId"].as_str().unwrap_or_default().to_string();
         if page_id.is_empty() {
@@ -265,26 +277,39 @@ impl NativeChatView {
             .map(|bytes| Arc::new(gpui::Image::from_bytes(ImageFormat::Png, bytes)));
         let settled = params["settled"].as_bool().unwrap_or(true);
         let retry = params["retryInMs"].as_u64();
+        let response_light = match params["theme"].as_str() {
+            Some("light") => Some(true),
+            Some("dark") => Some(false),
+            _ => None,
+        };
+        let transparent = params["transparent"].as_bool().unwrap_or(false);
         // The page has no picture and is new enough to be pictured unopened: the card that asked
         // is drawn, so the desktop pictures it in the background. Each answer offers it again (the
         // desktop takes each page once per run), so a page let go for now is offered again.
         let picture_unopened = super::visual_popup::FLOATING_PAGES
-            && image.is_none()
-            && params["backgroundPicture"] == true;
+            && params["backgroundPicture"] == true
+            && (image.is_none() || !transparent);
         let mut unopened_url = None;
         let mut replaced = Vec::new();
         {
             let mut entries = self.visual.page_thumbnails.entries.borrow_mut();
-            for ((id, _), entry) in entries.iter_mut() {
+            for ((id, _, entry_light), entry) in entries.iter_mut() {
                 if *id != page_id {
                     continue;
                 }
-                // A stale picture stays up until its replacement arrives.
-                if let Some(image) = &image
-                    && let Some(old) = entry.image.replace(image.clone())
-                    && old.id != image.id
+                if let Some(target_light) = response_light
+                    && *entry_light != target_light
                 {
-                    replaced.push(old);
+                    continue;
+                }
+                // A stale picture stays up until its replacement arrives.
+                if let Some(image) = &image {
+                    entry.transparent = transparent;
+                    if let Some(old) = entry.image.replace(image.clone())
+                        && old.id != image.id
+                    {
+                        replaced.push(old);
+                    }
                 }
                 entry.settled = settled;
                 if picture_unopened && !entry.url.is_empty() {
@@ -311,8 +336,10 @@ impl NativeChatView {
                 timer.await;
                 let _ = this.update(cx, |this, cx| {
                     let mut entries = this.visual.page_thumbnails.entries.borrow_mut();
-                    for ((id, _), entry) in entries.iter_mut() {
-                        if *id == page_id {
+                    for ((id, _, entry_light), entry) in entries.iter_mut() {
+                        if *id == page_id
+                            && response_light.is_none_or(|target| *entry_light == target)
+                        {
                             entry.asking = false;
                         }
                     }
@@ -354,6 +381,25 @@ impl NativeChatView {
                 .is_some_and(|id| self.answers_right_below(id))
         {
             return div().into_any_element();
+        }
+        let open_questions = page_id
+            .as_deref()
+            .and_then(|id| self.snapshot["pageOpenQuestions"][id].as_u64())
+            .unwrap_or(0) as usize;
+        let collapsible = p.collapse_page_cards;
+        let fold_key = format!("page-card:{key}");
+        let expanded = !collapsible || self.is_expanded(&fold_key, false);
+        if !expanded {
+            return self.collapsed_visual_page_card(
+                key,
+                fold_key,
+                page,
+                page_id,
+                answered,
+                open_questions,
+                p,
+                cx,
+            );
         }
         // Its questions a later block withdrew, some or all (`withdrawnPages`, the core's
         // open_questions.rs): the card says so where an answered page says Answered.
@@ -427,7 +473,7 @@ impl NativeChatView {
         };
         let picture = page_id
             .as_deref()
-            .and_then(|page_id| self.page_thumbnail(page_id, &page.url, answered, cx));
+            .and_then(|page_id| self.page_thumbnail(page_id, &page.url, answered, p.light, cx));
         let detail = match &page.file {
             Some(file) => format!("Live page · {file}"),
             None => "Live page".to_string(),
@@ -442,6 +488,13 @@ impl NativeChatView {
         };
         let gxv::PageRef { title, url, .. } = page;
         let export_url = page_id.as_ref().map(|_| url.clone());
+        let share_target = page_id.as_ref().map(|id| (id.clone(), title.clone()));
+        #[cfg(not(ghostex_web))]
+        let is_shared = page_id
+            .as_deref()
+            .is_some_and(crate::app::window::share_link_popover::is_page_shared);
+        #[cfg(ghostex_web)]
+        let is_shared = false;
         let bar_label = file.clone().unwrap_or_else(|| title.clone());
         let page_title = title.clone();
         let aria = format!("Open page {title}");
@@ -456,6 +509,9 @@ impl NativeChatView {
         };
         let open_card = open.clone();
         let window_bg = p.card_row;
+        let bar_hover = super::cards::card_hover_fill(p);
+        let collapse_key = fold_key.clone();
+        let collapse_btn_key = fold_key;
         let bar = div()
             .flex()
             .items_center()
@@ -488,43 +544,72 @@ impl NativeChatView {
                     .child(bar_label),
             )
             // Balances the dots so the name sits in the middle of the bar, and holds the page's
-            // star at its right end (gx-chat-core questions/later.rs `starred_page_ids`).
+            // star (gx-chat-core questions/later.rs `starred_page_ids`) and, in Summary view, the
+            // collapse button at its right end.
             .child(
                 div()
                     .flex_shrink_0()
-                    .w(px((v.dot_size * 3.0 + v.dot_gap * 2.0) * s))
+                    .min_w(px((v.dot_size * 3.0 + v.dot_gap * 2.0) * s))
                     .flex()
+                    .items_center()
                     .justify_end()
+                    .gap(px(2.0 * s))
                     .when_some(page_id.clone(), |this, page_id| {
                         let starred = self.snapshot["starredPages"]
                             .as_array()
                             .is_some_and(|ids| ids.iter().any(|id| id == page_id.as_str()));
                         this.child(star_button(key, &page_id, starred, p, cx))
+                    })
+                    .when(collapsible, |this| {
+                        let key = key.to_string();
+                        let fold_key = collapse_btn_key.clone();
+                        this.child(collapse_button(&key, fold_key, p, cx))
                     }),
             );
+        let bar: AnyElement = if collapsible {
+            bar.id(SharedString::from(format!("visual-page-bar:{key}")))
+                .role(gpui::Role::Button)
+                .aria_label("Collapse page preview")
+                .chat_cursor_pointer()
+                .hover(move |style| style.bg(bar_hover))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    cx.stop_propagation();
+                    this.toggle_disclosure(&collapse_key, cx);
+                }))
+                .into_any_element()
+        } else {
+            bar.into_any_element()
+        };
+        // Under window glass, keep the preview area transparent so it blends directly with the
+        // card's own translucent surface (`window_bg`) with no separate dark/light slab. When
+        // glass is off (solid theme or gpui-web), match the card's own surface (`window_bg`).
+        let preview_bg = if p.window_glass {
+            gpui::transparent_black()
+        } else {
+            window_bg
+        };
+        let has_picture = picture.is_some();
         let preview = div()
             .relative()
             .w_full()
             .h(px(v.preview_height * s))
             .overflow_hidden()
-            // CDXC:Theming 2026-11-20 (helpers/chrome_palette.rs): under window glass the dark
-            // preview area is the code blocks' wash (`glass_wash`), not the opaque near-black chat
-            // background. Light mode and glass off keep the chat background.
-            .bg(if p.window_glass && !p.light {
-                crate::app::helpers::glass_wash(p.light, 1.0)
-            } else {
-                p.background
+            .bg(preview_bg)
+            .when(p.window_glass, |this| {
+                this.border_b(px(1.0)).border_color(p.border)
             })
             .map(|this| match picture {
                 // As wide as the card, cut at the bottom: the top of the page is what it opens on.
-                Some(picture) => this.child(
-                    img(picture)
+                // Wrapped in a plain `div` with `aspect_ratio` so GPUI/Taffy computes height from
+                // the card width (`width / 1.6`) rather than the 2x PNG's intrinsic 1000px height.
+                Some((picture, _transparent)) => this.child(
+                    div()
                         .absolute()
                         .top_0()
                         .left_0()
                         .w_full()
                         .aspect_ratio(v.thumbnail_width / v.thumbnail_height)
-                        .object_fit(gpui::ObjectFit::Fill),
+                        .child(img(picture).size_full().object_fit(gpui::ObjectFit::Fill)),
                 ),
                 // No picture yet: a page icon and the file name.
                 None => this
@@ -548,20 +633,23 @@ impl NativeChatView {
                             .child(placeholder_label),
                     ),
             })
-            // Painted, not masked: a plain div with no id takes no input.
-            .child(
-                div()
-                    .absolute()
-                    .left_0()
-                    .right_0()
-                    .bottom_0()
-                    .h(px(v.fade_height * s))
-                    .bg(gpui::linear_gradient(
-                        180.0,
-                        gpui::linear_color_stop(window_bg.opacity(0.0), 0.0),
-                        gpui::linear_color_stop(window_bg, 1.0),
-                    )),
-            )
+            // On opaque themes (glass off), fade the preview cleanly into the card's solid footer;
+            // on window glass, avoid painting a dark/opaque fade band over the translucent surface.
+            .when(has_picture && !p.window_glass, |this| {
+                this.child(
+                    div()
+                        .absolute()
+                        .left_0()
+                        .right_0()
+                        .bottom_0()
+                        .h(px(v.fade_height * s))
+                        .bg(gpui::linear_gradient(
+                            180.0,
+                            gpui::linear_color_stop(window_bg.opacity(0.0), 0.0),
+                            gpui::linear_color_stop(window_bg, 1.0),
+                        )),
+                )
+            })
             .child(
                 div()
                     .absolute()
@@ -677,12 +765,54 @@ impl NativeChatView {
                         .child(done_label),
                 )
             })
+            .when(is_shared, |this| {
+                let good = super::page_answers::answered_color(p);
+                this.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(4.0 * s))
+                        .flex_shrink_0()
+                        .px(px(8.0 * s))
+                        .py(px(2.0 * s))
+                        .rounded_full()
+                        .bg(good.opacity(0.14))
+                        .text_size(px(11.0 * s))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(good)
+                        .child(
+                            svg()
+                                .path("titlebar/world.svg")
+                                .size(px(11.0 * s))
+                                .text_color(good),
+                        )
+                        .child("Shared"),
+                )
+            })
+            .when_some(share_target, |this, (share_page_id, share_title)| {
+                #[cfg(not(ghostex_web))]
+                {
+                    this.child(share_link_button(
+                        key,
+                        share_page_id,
+                        share_title,
+                        is_shared,
+                        p,
+                        cx,
+                    ))
+                }
+                #[cfg(ghostex_web)]
+                {
+                    let _ = (share_page_id, share_title);
+                    this
+                }
+            })
             .when_some(export_url, |this, export_url| {
                 this.child(export_button(key, export_url, p, cx))
             })
             .child(
                 div()
-                    .id("visual-page-open")
+                    .id(SharedString::from(format!("visual-page-open:{key}")))
                     .flex_shrink_0()
                     .role(gpui::Role::Button)
                     .aria_label("Open")
@@ -716,6 +846,134 @@ impl NativeChatView {
             .child(footer)
             .into_any_element()
     }
+
+    /// A Live page collapsed to one compact row in Summary view: page icon tile, title,
+    /// open-questions pill (if any), and Open button. Clicking the row expands the full preview
+    /// card; clicking Open opens the page directly.
+    #[allow(clippy::too_many_arguments)]
+    fn collapsed_visual_page_card(
+        &self,
+        key: &str,
+        fold_key: String,
+        page: gxv::PageRef,
+        page_id: Option<String>,
+        answered: bool,
+        open_questions: usize,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let shape = &*super::cards::SINGLE_LINE_CARD;
+        let chat = cx.weak_entity();
+        let gxv::PageRef {
+            title, url, file, ..
+        } = page;
+        let page_title = title.clone();
+        let expand_aria = format!("Expand page {title}");
+        let opened_page = page_id.clone();
+        let open = move |cx: &mut App| {
+            let url = url.clone();
+            let opened_page = opened_page.clone();
+            let _ = chat.update(cx, |chat, cx| {
+                chat.open_page_card(url, page_title.clone(), file.clone(), opened_page, cx)
+            });
+        };
+        let mut tile = shape.tile("titlebar/file-type-html.svg", p);
+        if open_questions > 0 {
+            tile = tile.child(shape.ask_badge(p));
+        } else if answered {
+            tile = tile.child(shape.check_badge(p));
+        }
+        let mut head = div()
+            .flex()
+            .flex_shrink_0()
+            .items_center()
+            .gap(px(super::cards::TITLE_ROW_GAP * s))
+            .w_full()
+            .min_w_0()
+            .h(px(shape.header_height(s)))
+            .px(px(shape.padding_x * s))
+            .child(tile)
+            .child(
+                shape
+                    .title(div().flex_1().min_w_0().truncate(), p)
+                    .text_color(p.foreground)
+                    .child(title),
+            );
+        if open_questions > 0 {
+            let label = if open_questions == 1 {
+                "1 open question".to_string()
+            } else {
+                format!("{open_questions} open questions")
+            };
+            head = head.child(shape.pill(None, Some(label), super::ask_card::ask_color(p), p));
+        }
+        head = head.child(
+            div()
+                .id(SharedString::from(format!("visual-page-open:{key}")))
+                .flex_shrink_0()
+                .role(gpui::Role::Button)
+                .aria_label("Open")
+                .chat_cursor_pointer()
+                .on_click(move |_, _, cx| {
+                    cx.stop_propagation();
+                    open(cx)
+                })
+                .child(primary_button("Open", p)),
+        );
+        let head = super::ask_card::single_line_press_head(
+            head,
+            SharedString::from(format!("visual-page:{key}")),
+            "Expand page",
+            false,
+            p,
+        )
+        .aria_label(expand_aria)
+        .on_click(cx.listener(move |this, _, _, cx| {
+            this.toggle_disclosure(&fold_key, cx);
+        }));
+        shape
+            .shell(div().w_full().min_w_0().overflow_hidden(), p)
+            .child(head)
+            .into_any_element()
+    }
+}
+
+/// The collapse chevron at the right end of an expanded page card's window bar in Summary view.
+fn collapse_button(
+    key: &str,
+    fold_key: String,
+    p: &ChatAppearance,
+    cx: &Context<NativeChatView>,
+) -> AnyElement {
+    let s = p.scale;
+    let hover = p.foreground;
+    div()
+        .id(SharedString::from(format!("visual-page-collapse:{key}")))
+        .role(gpui::Role::Button)
+        .aria_label("Collapse page preview")
+        .flex_shrink_0()
+        .size(px(22.0 * s))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(5.0 * s))
+        .chat_cursor_pointer()
+        .hover(move |style| style.bg(hover.opacity(0.08)))
+        .tooltip(|window, cx| {
+            gpui_component::tooltip::Tooltip::new("Collapse preview").build(window, cx)
+        })
+        .child(
+            svg()
+                .path("titlebar/chevron-up.svg")
+                .size(px(14.0 * s))
+                .text_color(p.muted),
+        )
+        .on_click(cx.listener(move |this, _, _, cx| {
+            cx.stop_propagation();
+            this.toggle_disclosure(&fold_key, cx);
+        }))
+        .into_any_element()
 }
 
 /// The star at the right end of the card's window bar: yellow and filled once the page is starred,
@@ -864,7 +1122,7 @@ fn export_button(
         })
         .child(
             svg()
-                .path("titlebar/download.svg")
+                .path("titlebar/file-down.svg")
                 .size(px(13.0 * s))
                 .text_color(p.foreground),
         )
@@ -876,6 +1134,61 @@ fn export_button(
             #[cfg(ghostex_web)]
             this.invoke(action.clone(), cx);
             let _ = &this;
+        }))
+        .into_any_element()
+}
+
+#[cfg(not(ghostex_web))]
+fn share_link_button(
+    key: &str,
+    page_id: String,
+    title: String,
+    is_shared: bool,
+    p: &ChatAppearance,
+    cx: &Context<NativeChatView>,
+) -> AnyElement {
+    let s = p.scale;
+    let (rest, hover) = if p.light { (0.07, 0.11) } else { (0.10, 0.15) };
+    let hover_fill = p.foreground.opacity(hover);
+    let action = json!({
+        "type": "shareVisualPage",
+        "pageId": page_id,
+        "title": title,
+    });
+    let label = if is_shared { "Shared" } else { "Share" };
+    let tip = if is_shared {
+        "Manage shared link for this Live page"
+    } else {
+        "Share link: serve this Live page over a public tunnel"
+    };
+    div()
+        .id(SharedString::from(format!("visual-page-share:{key}")))
+        .role(gpui::Role::Button)
+        .aria_label(label)
+        .flex_shrink_0()
+        .h(px(28.0 * s))
+        .px(px(11.0 * s))
+        .flex()
+        .items_center()
+        .gap(px(5.0 * s))
+        .rounded(px(8.0 * s))
+        .bg(p.foreground.opacity(rest))
+        .text_color(p.foreground)
+        .text_size(px(12.5 * s))
+        .font_weight(FontWeight::MEDIUM)
+        .chat_cursor_pointer()
+        .hover(move |style| style.bg(hover_fill))
+        .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(tip).build(window, cx))
+        .child(
+            svg()
+                .path("titlebar/link.svg")
+                .size(px(13.0 * s))
+                .text_color(p.foreground),
+        )
+        .child(label)
+        .on_click(cx.listener(move |_, _, _, cx| {
+            cx.stop_propagation();
+            cx.emit(super::state::NativeChatEvent::Host(action.clone()));
         }))
         .into_any_element()
 }

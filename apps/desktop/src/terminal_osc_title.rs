@@ -83,6 +83,7 @@ const IGNORED_PLACEHOLDER_SESSION_TITLES: &[&str] = &[
 ];
 
 const DEFAULT_SESSION_AGENT_TITLE_NAMES: &[&str] = &[
+    "antigravity",
     "antigravity cli",
     "amp cli",
     "claude",

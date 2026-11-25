@@ -38,6 +38,20 @@ pub struct SessionState {
     pub later_question_ids: crate::state::Stamped<Vec<String>>,
     /// The modes this session's agent cannot use, as gxserver keeps them. Absent means unchanged.
     pub unavailable_modes: Vec<ghostex_gx_protocol::UnavailableMode>,
+    /// True while this session runs through a Non-CLI (ACP) host. Absent means unchanged.
+    pub non_cli_mode: bool,
+    /// True while a Terminal -> Native switch is queued until the active reply finishes (`Q4771`).
+    pub switch_to_native_queued: bool,
+    /// True when this session's gxserver supports Terminal -> Native switching (`Q4772`).
+    pub native_mode_switch_capable: bool,
+    /// Whether this computer's `agentSessionMode` already enables Native for this session's agent.
+    pub native_default_for_agent: Option<bool>,
+    /// Whether the user dismissed the "Switch to Native" strip chip for this session's agent.
+    pub native_switch_dismissed: Option<bool>,
+    /// Whether this session's agent opens in Chat by default on this computer.
+    pub preferred_chat_first: Option<bool>,
+    /// True when this session is a coordinator worker thread (`Q4772`).
+    pub is_coordinator_thread: bool,
     /// The question forms and pages the user removed without answering, as gxserver keeps them
     /// (`crate::questions::later`). Absent means unchanged.
     pub removed_question_ids: crate::state::Stamped<Vec<String>>,
@@ -64,6 +78,9 @@ pub struct SessionState {
     /// When this session was forked from another (epoch ms): questions asked before then belong to
     /// the parent. Absent means unchanged, `null` means it is no fork.
     pub forked_at: Option<i64>,
+    /// When gxserver restarted the agent after its Native host died mid-turn, epoch ms, oldest
+    /// first (`agentRestartedAt`); `transcript/agent_restarts.rs` marks each cut-off turn.
+    pub agent_restarted_at: Vec<i64>,
     /// The transcript family, for example `claude` or `codex`.
     pub agent: Option<String>,
     pub agent_session_id: Option<String>,
@@ -202,6 +219,13 @@ impl Default for SessionState {
             retired_async_question_ids: Vec::new(),
             later_question_ids: Default::default(),
             unavailable_modes: Vec::new(),
+            non_cli_mode: false,
+            switch_to_native_queued: false,
+            native_mode_switch_capable: false,
+            native_default_for_agent: None,
+            native_switch_dismissed: None,
+            preferred_chat_first: None,
+            is_coordinator_thread: false,
             removed_question_ids: Default::default(),
             retired_page_ids: Vec::new(),
             starred_page_ids: Vec::new(),
@@ -210,6 +234,7 @@ impl Default for SessionState {
             resource_index: Default::default(),
             async_questions_since: None,
             forked_at: None,
+            agent_restarted_at: Vec::new(),
             agent: None,
             agent_session_id: None,
             session_agent_id: None,

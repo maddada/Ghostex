@@ -36,6 +36,9 @@ impl GhostexGpuiApp {
         } else if action.command["type"] == "gbots" {
             // Main Hub's GBots rows and menus (native_sidebar/gbots_rows.rs).
             self.run_native_sidebar_gbots_command(&action.command, window, cx);
+        } else if action.command["type"] == "openAutopilotSettings" {
+            #[cfg(not(ghostex_web))]
+            self.open_gpui_settings_tab("autopilot", Some(window), cx);
         } else if action.command["type"] == "openNotifications" {
             // The sidebar menu carries Notifications only while the bell is out of the row, so the
             // dropdown hangs from the menu button instead of the bell's last painted spot. The
@@ -68,11 +71,15 @@ impl GhostexGpuiApp {
                         snapshot.groups.iter().find(|group| group.group_id == id)
                     })
                 {
-                    let detail = format!(
-                        "This will close all {} sessions in {}.",
-                        group.sessions.len(),
-                        group.title
-                    );
+                    let detail = if group.sessions.len() == 1 {
+                        format!("This will close 1 session in {}.", group.title)
+                    } else {
+                        format!(
+                            "This will close all {} sessions in {}.",
+                            group.sessions.len(),
+                            group.title
+                        )
+                    };
                     let confirmation = ghostex_gx_core::CloseConfirmation {
                         title: "Close group?".to_owned(),
                         message: detail,

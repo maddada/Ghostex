@@ -38,6 +38,7 @@ pub fn document_with_board(
     into.terminal_activity = tri(state.session.terminal_activity.clone());
     into.agent_fleet = tri(state.session.agent_fleet.clone());
     into.agent_tasks = tri(state.session.agent_tasks.clone());
+    into.native_switch = crate::extras::native_switch::project(state);
 
     let (fleet_strip, tasks_panel, _) = panels::project(state, context);
     let threads_panel = coordinator_threads::project(
@@ -142,7 +143,11 @@ pub fn document_with_board(
         &state.transcript_view.session_directory,
     ));
     into.background_tasks_panel = Tri::Value(background);
-    into.terminal_tail = terminal_tail::project(&extras.terminal_tail);
+    into.terminal_tail = if state.session.non_cli_mode {
+        crate::document::TerminalTail::default()
+    } else {
+        terminal_tail::project(&extras.terminal_tail)
+    };
     into.subagent = Tri::Value(subagent::project(state));
     into.transcript_search = Tri::Value(search::project(&extras.search));
     into.save_markdown = Tri::Value(save_markdown::project(&extras.save_markdown));

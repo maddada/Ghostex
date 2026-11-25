@@ -562,15 +562,21 @@ fn skills(state: &ChatState, data: &Value) -> Option<Value> {
         .collect();
     let tokens = number(data.pointer("/context/breakdown/skills/tokens"));
     let count = all.len();
+    let all_skills = if count == 1 {
+        "1 skill".to_string()
+    } else {
+        format!("All {count} skills")
+    };
+    let all_label = match tokens {
+        Some(tokens) => format!("{all_skills} · {} tokens", format_context_tokens(Some(tokens))),
+        None => all_skills,
+    };
     Some(json!({
         "meta": format!("{count} available"),
         "used": used,
         "usedEmpty": tracks_use.then_some("None used in this session yet"),
         "all": all,
-        "allLabel": match tokens {
-            Some(tokens) => format!("All {count} skills · {} tokens", format_context_tokens(Some(tokens))),
-            None => format!("All {count} skills"),
-        },
+        "allLabel": all_label,
         "allOpen": state.extras.session_details.open_lists.iter().any(|list| list == "skills"),
         "allToggle": json!({"type": "sessionDetailsList", "list": "skills"}),
     }))
@@ -986,6 +992,44 @@ fn agent_section(items: &[(String, String, String)]) -> Option<Value> {
     })
 }
 
+/// Whether the server reported `id` is still computing asynchronously in `pendingSections`.
+fn section_pending(data: Option<&Value>, id: &str) -> bool {
+    data.and_then(|data| data.get("pendingSections"))
+        .and_then(Value::as_array)
+        .is_some_and(|pending| pending.iter().any(|entry| entry.as_str() == Some(id)))
+}
+
+/// Adapts the chat's already-loaded `/api/readSessionWhere` data into the shape `environment()` and
+/// `changes()` expect, so opening the Overview panel renders Environment and Changes immediately on
+/// frame 0 while `/api/readSessionDetails` is still in flight.
+fn seeded_from_where(where_data: &Value) -> Value {
+    let location = where_data.get("location").map(|loc| {
+        let kind = loc.get("kind").and_then(Value::as_str).unwrap_or("local");
+        let label = loc
+            .get("label")
+            .or_else(|| loc.get("computer"))
+            .cloned()
+            .unwrap_or(Value::Null);
+        json!({
+            "kind": if kind == "cloudBox" { "box" } else { kind },
+            "label": label,
+        })
+    });
+    json!({
+        "environment": {
+            "location": location,
+            "project": where_data.get("project").cloned().unwrap_or(Value::Null),
+            "mainHub": where_data.get("mainHub").cloned().unwrap_or(Value::Bool(false)),
+            "folder": where_data.get("folder").cloned().unwrap_or(Value::Null),
+            "folderLabel": where_data.get("folderLabel").cloned().unwrap_or(Value::Null),
+            "worktree": where_data.get("worktree").is_some_and(Value::is_object),
+            "account": where_data.get("account").cloned().unwrap_or(Value::Null),
+            "accountEmail": where_data.get("accountEmail").cloned().unwrap_or(Value::Null),
+        },
+        "changes": where_data.get("git").cloned().unwrap_or(Value::Null),
+    })
+}
+
 /// The `sessionDetails` value, or `null` while the panel does not apply to this chat. `meter` is the
 /// chat's `contextMeter` (the menus family projects it first), whose details fill the second tab
 /// and whose Compact context rides on the Context card.
@@ -995,6 +1039,12 @@ pub fn document(state: &ChatState, context: &ChatContext, meter: Option<&Value>)
     }
     let details = &state.extras.session_details;
     let data = details.data.as_ref();
+    let where_seed = state
+        .extras
+        .where_pill
+        .data
+        .as_ref()
+        .map(seeded_from_where);
     let usage = live_usage(state, data);
     let collapsed = &details.collapsed;
     let now_ms = context.now_ms;
@@ -1004,8 +1054,13 @@ pub fn document(state: &ChatState, context: &ChatContext, meter: Option<&Value>)
     let waiting = data.is_none() && details.error.is_none();
     let claude = claude(state);
     // Before the first answer, skeletons stand only where a card will surely come: every card for
-    // Claude, Environment and Changes for any other agent.
-    let sketch = |id: &str| waiting && (claude || matches!(id, "environment" | "changes"));
+    // Claude, Environment and Changes for any other agent. Once progressive data arrives, only the
+    // sections still listed in `pendingSections` keep a skeleton, so each card shows immediately
+    // when its own data arrives without waiting on any other section.
+    let sketch = |id: &str| {
+        (waiting && (claude || matches!(id, "environment" | "changes")))
+            || (details.error.is_none() && section_pending(data, id))
+    };
     let mut sections = Vec::new();
     let items = detail_items(meter);
     let computer_name = state
@@ -1015,8 +1070,9 @@ pub fn document(state: &ChatState, context: &ChatContext, meter: Option<&Value>)
         .as_ref()
         .map(|computer| computer.name.trim().to_string())
         .filter(|name| !name.is_empty());
+    let env_source = data.or(where_seed.as_ref());
     if let Some(mut body) =
-        data.and_then(|data| environment(data, state.core.hide_account_emails, computer_name))
+        env_source.and_then(|source| environment(source, state.core.hide_account_emails, computer_name))
     {
         if let (Some(rows), Some(row)) = (body["rows"].as_array_mut(), version_row(&items)) {
             rows.push(row);
@@ -1065,7 +1121,17 @@ pub fn document(state: &ChatState, context: &ChatContext, meter: Option<&Value>)
     } else if sketch("memory") {
         sections.push(loading_section("memory", "Memory files", collapsed, 2));
     }
-    if let Some(body) = data.and_then(changes) {
+    let changes_source = data
+        .filter(|data| data.get("changes").is_some_and(Value::is_object))
+        .or_else(|| {
+            where_seed
+                .as_ref()
+                .filter(|seed| {
+                    (data.is_none() || section_pending(data, "changes"))
+                        && seed.get("changes").is_some_and(Value::is_object)
+                })
+        });
+    if let Some(body) = changes_source.and_then(changes) {
         sections.push(section("changes", "Changes", collapsed, body));
     } else if sketch("changes") {
         sections.push(loading_section("changes", "Changes", collapsed, 1));

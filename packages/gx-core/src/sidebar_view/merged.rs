@@ -340,7 +340,7 @@ pub(super) fn merge_machines(
             ) else {
                 continue;
             };
-            if project.bot_profile.is_some() {
+            if project.bot_profile.is_some() || project.is_autopilot {
                 continue;
             }
             let owner = project
@@ -559,6 +559,79 @@ pub(super) fn merge_machines(
             entry_of_copy.insert(project_id.clone(), entry);
             copies.insert(entry, vec![copy]);
             names.insert(entry, vec![guest.chip.clone()]);
+        }
+        // Autopilot's supervisor sessions on another computer join the real Main Hub entry under
+        // Autopilot (without adding the Autopilot folder as a Main Hub project copy). While Main
+        // Hub is off they stay out of the sidebar.
+        let home_entry = entry_of_key
+            .get(HOME_KEY)
+            .and_then(|entries| entries.first().copied())
+            .filter(|entry| {
+                plans[*entry]
+                    .project
+                    .as_ref()
+                    .is_some_and(|project| project.is_home && !project.is_help_home)
+            });
+        if let Some(entry) = home_entry {
+            let entry_id = plans[entry].group_id.clone();
+            for project_id in machine.meta.project_order.iter() {
+                let (Some(project), Some(members)) = (
+                    machine.contexts.get(project_id),
+                    machine.membership.get(project_id),
+                ) else {
+                    continue;
+                };
+                if !project.is_autopilot {
+                    continue;
+                }
+                let group_id = ProjectKey {
+                    machine: guest.machine.clone(),
+                    project_id: project_id.clone(),
+                }
+                .to_sidebar_group_id();
+                let session_ids = members.session_ids.iter().chain(
+                    members
+                        .subgroups
+                        .iter()
+                        .flat_map(|subgroup| subgroup.session_ids.iter()),
+                );
+                let mut lifted_any = false;
+                for session_id in session_ids {
+                    let key = SessionKey {
+                        machine: guest.machine.clone(),
+                        project_id: project_id.clone(),
+                        session_id: session_id.to_string(),
+                    };
+                    if !drawn_keys.insert(key.clone()) {
+                        continue;
+                    }
+                    if let Some(row) = guest_row(
+                        &mut cache.rows,
+                        store,
+                        key,
+                        &guest.chip,
+                        input.inputs,
+                        &context,
+                        next_row_id,
+                        work,
+                    ) {
+                        plans[entry].rows.push(row);
+                        lifted_any = true;
+                    }
+                }
+                outcome.merged_into.insert(group_id, entry_id.clone());
+                for subgroup in &members.subgroups {
+                    outcome
+                        .merged_into
+                        .insert(subgroup.sidebar_group_id.clone(), entry_id.clone());
+                }
+                if lifted_any {
+                    let entry_names = names.entry(entry).or_default();
+                    if !entry_names.contains(&guest.chip) {
+                        entry_names.push(guest.chip.clone());
+                    }
+                }
+            }
         }
     }
 
@@ -837,13 +910,16 @@ fn refresh_guest(
 }
 
 /// The project a plan stands for, when it may share an entry with another copy: a project group
-/// that is neither a bot nor a worktree.
+/// that is neither a bot, an Autopilot system project, nor a worktree.
 fn mergeable(
     kind: GroupKind,
     project: Option<&ProjectContextInput>,
 ) -> Option<&ProjectContextInput> {
     project.filter(|project| {
-        kind == GroupKind::Project && project.bot_profile.is_none() && project.worktree.is_none()
+        kind == GroupKind::Project
+            && project.bot_profile.is_none()
+            && !project.is_autopilot
+            && project.worktree.is_none()
     })
 }
 
@@ -987,9 +1063,14 @@ fn guest_row(
     next_row_id: &mut u64,
     work: &mut SidebarUpdateWork,
 ) -> Option<RowRef> {
+    let is_autopilot = store
+        .loaded(&key.machine)
+        .and_then(|loaded| loaded.project(&key.project_id))
+        .is_some_and(|project| project.autopilot_supervisor_project);
     if let Some(row) = rows.get(&key).filter(|row| {
         row.row.machine_name.as_deref() == Some(machine.name.as_str())
             && row.row.machine_short_name.as_deref() == Some(machine.short_name.as_str())
+            && row.row.is_autopilot_supervisor == is_autopilot
     }) {
         return Some(row.clone());
     }
@@ -1004,6 +1085,7 @@ fn guest_row(
         inputs.host.local_delayed_sends.get(&sidebar_id),
         context,
     );
+    row.is_autopilot_supervisor = is_autopilot;
     row.machine_name = Some(machine.name.clone());
     row.machine_short_name = Some(machine.short_name.clone());
     *next_row_id += 1;

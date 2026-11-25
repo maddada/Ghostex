@@ -321,6 +321,7 @@ pub(crate) fn start_session_provider_with_observed_state(
         &lifecycle.project_id,
         &lifecycle.session_id,
     );
+    let mut launched_acp: Option<(String, Option<crate::acp::AcpApprovalLevel>)> = None;
     let command = if should_start_with_startup_text {
         crate::agent_folder_trust::trust_session_folder_before_launch(
             repository,
@@ -370,11 +371,29 @@ pub(crate) fn start_session_provider_with_observed_state(
                     .and_then(|session| string_field(&session, "globalRef"))
             },
         );
+        let mut launch_env = coordinator_environment;
         let session_token = crate::security::session_token_for_launch(
             &lifecycle.project_id,
             &lifecycle.session_id,
-            &coordinator_environment,
+            &launch_env,
         );
+        launched_acp = crate::acp::acp_family_from_launch_command(&startup_text).map(|family| {
+            (
+                family,
+                crate::acp::acp_approval_level_from_launch_command(&startup_text),
+            )
+        });
+        if crate::acp::session_is_acp(&probed_session) || launched_acp.is_some() {
+            if let Ok(auth_token) = std::fs::read_to_string(&context.auth_token_file) {
+                if let Some(secret) = crate::acp::channel::channel_secret_for_session(
+                    &auth_token,
+                    &lifecycle.project_id,
+                    &lifecycle.session_id,
+                ) {
+                    launch_env.push((crate::acp::channel::ACP_CHANNEL_SECRET_ENV, secret));
+                }
+            }
+        }
         build_zmx_run_command(ZmxRunCommandInput {
             cwd,
             global_session_ref: string_field(&probed_session, "globalRef"),
@@ -385,7 +404,7 @@ pub(crate) fn start_session_provider_with_observed_state(
             session_name: zmx_name.clone(),
             startup_text,
             zmx_executable_path: zmx.executable_path.clone(),
-            coordinator_environment,
+            coordinator_environment: launch_env,
             session_token,
         })
     } else {
@@ -405,7 +424,20 @@ pub(crate) fn start_session_provider_with_observed_state(
             ),
         })
     };
-    let start = run_zmx_start_command(&zmx_name, &zmx.executable_path, command)?;
+    let start = match run_zmx_start_command(&zmx_name, &zmx.executable_path, command) {
+        Ok(start) => start,
+        Err(error) => {
+            crate::telemetry::reliability_error_for_session(
+                if cfg!(windows) {
+                    "wmx_start_failed"
+                } else {
+                    "session_launch_failed"
+                },
+                &probed_session,
+            );
+            return Err(error);
+        }
+    };
     // CDXC:SessionChat 2026-09-28 WHY: A new terminal is not the screen a slash command's output was being read from. A capture left open read the restore banner as that command's result and replaced it (observed 2026-09-28 with Hermes's `/compress`).
     crate::session_chat_app_command::stop_local_command_output(
         &lifecycle.project_id,
@@ -434,6 +466,22 @@ pub(crate) fn start_session_provider_with_observed_state(
             launch_settings_with_consumed_agent_launch_startup_text(&probed_session)
         {
             update.insert("launchSettings".to_string(), Value::Object(launch_settings));
+        }
+    }
+    // Keep stored `nonCliMode`/`acpMode`/`acpFamily` aligned with the `acp-host` command that was
+    // actually launched (e.g. an older sleeping session whose `resume_plan` fell back to the
+    // global `agentSessionMode` default).
+    if let Some((family, approval_level)) = launched_acp.as_ref() {
+        let mut runtime_settings = probed_session
+            .get("runtimeSettings")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        if crate::acp::apply_acp_runtime_settings(&mut runtime_settings, family, *approval_level) {
+            update.insert(
+                "runtimeSettings".to_string(),
+                Value::Object(runtime_settings),
+            );
         }
     }
     let session = repository.update_session_for_lifecycle(&update)?;

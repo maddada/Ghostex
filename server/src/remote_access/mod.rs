@@ -21,6 +21,7 @@ pub mod ssh_login_trace;
 pub mod ssh_status;
 pub mod tailnet_owner;
 pub mod tailscale;
+pub mod windows_account;
 #[cfg(windows)]
 mod windows_authorized_keys;
 #[cfg(windows)]

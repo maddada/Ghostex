@@ -102,7 +102,11 @@ fn read(paths: &GxserverPaths) -> Option<Value> {
     let projects = repository.list_projects().ok()?;
     let own_projects = projects
         .iter()
-        .filter(|project| !super::is_home_project(project) && !super::is_help_home_project(project))
+        .filter(|project| {
+            !super::is_home_project(project)
+                && !super::is_help_home_project(project)
+                && !crate::autopilot::is_supervisor_project(project)
+        })
         .count();
     let sessions = repository.list_sessions(None).ok()?;
     let now = crate::coordinators::now_iso();

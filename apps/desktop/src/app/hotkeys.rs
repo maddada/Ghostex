@@ -81,9 +81,8 @@ pub(crate) fn gpui_migrated_hotkey_for_action<'a>(
     // CDXC:Hotkeys 2026-09-25: the new-session keys moved (Cmd+Shift+O, Cmd+N picker, Cmd+T browser
     // tab, Cmd+Ctrl+Shift+F fork), mirroring retiredDefaultKeys in packages/settings-catalog/src/hotkey_definitions.rs.
     let retired_new_session_keys: &[&str] = match action_id {
-        "createAgentSession" => &["cmd+t"],
+        "createAgentSession" => &["cmd+t", "cmd+shift+o"],
         "createSession" => &["cmd+t"],
-        "openNewThreadPalette" => &["cmd+shift+t", "cmd+alt+t"],
         "openBrowserPane" => &["cmd+n"],
         "forkSession" => &["ctrl+shift+f", "cmd+alt+f"],
         "openHotkeys" => &["cmd+."],
@@ -151,18 +150,28 @@ pub(crate) fn gpui_chat_owned_hotkey_action_id(action_id: &str) -> bool {
     matches!(
         action_id,
         "scrollChatToBottom"
+            | "inboxNextItem"
+            | "inboxPreviousItem"
+            | "inboxOpenItem"
+            | "inboxMarkRead"
+            | "inboxSnooze"
             | "newChatPickProject"
             | "newChatPickComputer"
             | "newChatPickWhere"
             | "newChatPickBranch"
+            | "newChatPickAgent"
     )
 }
 
 /// Hotkeys the Files view answers itself while it has focus (`native_docs/render.rs`), so the root
 /// and the native key router pass them by: outside Files their chord reaches whatever else binds it
-/// (Search in Files shares Cmd+Shift+F with Find Prompts).
+/// (Search in Files shares Cmd+Shift+F with Find Prompts; Back/Forward in Files share Cmd+[ / Cmd+]
+/// with session/project Back/Forward on macOS).
 pub(crate) fn gpui_files_owned_hotkey_action_id(action_id: &str) -> bool {
-    action_id == "searchProjectFiles"
+    matches!(
+        action_id,
+        "searchProjectFiles" | "navigateFilesBack" | "navigateFilesForward"
+    )
 }
 
 /// Hotkeys bound straight to an app action (paste, find, zoom, close, new window, Focus mode), at
@@ -178,6 +187,7 @@ pub(crate) fn gpui_focused_chat_hotkey_action_id(action_id: &str) -> bool {
     matches!(
         action_id,
         "focusChatComposer"
+            | "focusSessionInbox"
             | "copyLastChatCodeBlock"
             | "copyLastChatReply"
             | "toggleChatSummaryMode"
@@ -238,13 +248,12 @@ pub(crate) fn gpui_runtime_keystroke_parses(keystroke: &str, cx: &gpui::App) -> 
 /// from this table. Kept in lockstep with the catalog by
 /// packages/settings-catalog/tests/desktop_hotkey_defaults.rs.
 pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
-    ("createAgentSession", "cmd+shift+o"),
+    ("createAgentSession", "cmd+n"),
     ("createSession", "cmd+shift+t"),
     ("openCommandPalette", "cmd+shift+p"),
     ("openSessionSearchPalette", "cmd+p"),
     ("openProjectSearchPalette", "cmd+alt+shift+o"),
     ("openQuickAccessFiles", "cmd+o"),
-    ("openNewThreadPalette", "cmd+n"),
     ("openCommandsPanel", "cmd+j"),
     ("openCommandsPanelSecondKey", "shift+escape"),
     ("openSettings", "cmd+,"),
@@ -295,6 +304,9 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     // CDXC:Docs 2026-10-25: Files' Search sidebar shares the chord while Files has focus
     // (`gpui_files_owned_hotkey_action_id`); mirrors packages/settings-catalog/src/hotkey_definitions.rs.
     ("searchProjectFiles", "cmd+shift+f"),
+    // CDXC:Docs 2026-11-24: Files' Back/Forward history while Files has focus (GitHub #733).
+    ("navigateFilesBack", "cmd+["),
+    ("navigateFilesForward", "cmd+]"),
     ("scrollTerminalToTop", ""),
     ("scrollTerminalToBottom", ""),
     /*
@@ -307,6 +319,12 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     */
     ("scrollChatToBottom", "ctrl+shift+down"),
     ("focusChatComposer", ""),
+    ("focusSessionInbox", "cmd+shift+i"),
+    ("inboxNextItem", "down"),
+    ("inboxPreviousItem", "up"),
+    ("inboxOpenItem", "enter"),
+    ("inboxMarkRead", "e"),
+    ("inboxSnooze", "s"),
     ("copyLastChatCodeBlock", "cmd+shift+;"),
     ("copyLastChatReply", "cmd+shift+c"),
     ("toggleChatSummaryMode", "ctrl+alt+s"),
@@ -316,6 +334,7 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("newChatPickComputer", "alt+m"),
     ("newChatPickWhere", "alt+w"),
     ("newChatPickBranch", "alt+b"),
+    ("newChatPickAgent", "alt+a"),
     ("toggleVoiceAgent", "ctrl+alt+v"),
     // No default key (CDXC:VoiceMode 2026-10-23 DECISION in packages/settings-catalog/src/hotkey_definitions.rs).
     ("voiceCallAboutSession", ""),
@@ -420,6 +439,9 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("focusLastTerminal", "cmd+shift+m"),
     // The Focus Sidebar hotkey (#558, gx_store/sidebar_keyboard.rs).
     ("focusSidebar", "cmd+shift+j"),
+    // Switch-request toast hotkeys (CDXC:SwitchRequests 2026-11-23, Q4709).
+    ("acceptSwitchRequestToast", "cmd+shift+j"),
+    ("openSwitchRequestExternal", "cmd+shift+e"),
 ];
 
 #[cfg(all(target_os = "macos", not(ghostex_web)))]
@@ -633,6 +655,24 @@ pub(crate) fn gpui_configured_hotkey_action_id_for_native_text(
 }
 
 #[cfg(all(target_os = "macos", not(ghostex_web)))]
+pub(crate) fn gpui_files_navigation_hotkey_action_id_for_native_text(
+    hotkey_text: &str,
+) -> Option<String> {
+    let hotkey_text = normalized_gpui_hotkey_text(hotkey_text)?;
+    let snapshot = shared_settings::shared_sidebar_settings_snapshot();
+    for action_id in ["navigateFilesBack", "navigateFilesForward"] {
+        if gpui_normal_hotkey_key_in(&snapshot, action_id)
+            .and_then(|key| normalized_gpui_hotkey_text(&key))
+            .as_deref()
+            == Some(hotkey_text.as_str())
+        {
+            return Some(action_id.to_string());
+        }
+    }
+    None
+}
+
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 pub(crate) fn gpui_application_keyboard_command_for_native_text(
     hotkey_text: &str,
 ) -> Option<GpuiApplicationKeyboardCommand> {
@@ -702,6 +742,8 @@ pub(crate) fn gpui_normal_hotkey_context(action_id: &str) -> &'static str {
         // Files' HTML and Markdown files, and the Browser (CDXC:Docs 2026-11-14 DECISION in
         // packages/settings-catalog/src/hotkey_definitions.rs).
         "toggleAnnotate" => ANNOTATE_KEY_CONTEXT,
+        // Back and Forward in Files apply only while Files has focus (GitHub #733).
+        "navigateFilesBack" | "navigateFilesForward" => "NativeDocs",
         _ => GPUI_OUTSIDE_TERMINAL_KEY_CONTEXT,
     }
 }
@@ -843,7 +885,7 @@ pub(crate) fn gpui_keyboard_owner_allows_hotkey(
     // New Agent Session starts the last-used agent in the active project, the picker's first row.
     // CDXC:Hotkeys 2026-09-25 DECISION:
     // User: while the Code editor itself has keyboard focus, Cmd+N and Cmd+Shift+O belong to VS Code (New File, Go to Symbol); only then, not whenever the Code view is merely open.
-    if matches!(action_id, "openNewThreadPalette" | "createAgentSession") {
+    if action_id == "createAgentSession" {
         return !matches!(
             owner,
             GpuiKeyboardOwner::FirstResponder(FirstResponderTarget::CefSurface(
@@ -873,6 +915,9 @@ pub(crate) fn gpui_keyboard_owner_allows_hotkey(
             | "focusLastTerminal"
             // Focus Sidebar reaches the sidebar from any surface, and gives the keyboard back.
             | "focusSidebar"
+            // Switch-request toast hotkeys act from any surface while a toast is visible.
+            | "acceptSwitchRequestToast"
+            | "openSwitchRequestExternal"
     ) {
         return true;
     }
@@ -923,21 +968,24 @@ pub(crate) fn gpui_keyboard_owner_allows_hotkey(
                 | "toggleSidebarCollapsed"
         ),
         GpuiKeyboardOwner::FirstResponder(FirstResponderTarget::CefSurface(
-            FirstResponderCefSurface::ProjectWorkarea(_),
-        )) => matches!(
-            action_id,
-            "createSession"
-                | "openBrowserPane"
-                | "deferNotificationAndJumpNext"
-                | "focusLeft"
-                | "focusNextSession"
-                | "focusPreviousSession"
-                | "focusRight"
-                | "jumpToLatestUnreadNotification"
-                | "navigateHistoryBack"
-                | "navigateHistoryForward"
-                | "openNotifications"
-        ),
+            FirstResponderCefSurface::ProjectWorkarea(slot_key),
+        )) => {
+            matches!(
+                action_id,
+                "createSession"
+                    | "openBrowserPane"
+                    | "deferNotificationAndJumpNext"
+                    | "focusLeft"
+                    | "focusNextSession"
+                    | "focusPreviousSession"
+                    | "focusRight"
+                    | "jumpToLatestUnreadNotification"
+                    | "navigateHistoryBack"
+                    | "navigateHistoryForward"
+                    | "openNotifications"
+            ) || (slot_key == ProjectWorkareaCefSurfaceSlotKey::Manage
+                && matches!(action_id, "navigateFilesBack" | "navigateFilesForward"))
+        }
         // CDXC:Hotkeys 2026-11-20 WHY:
         // Previous/Next Session onto a session kept asleep (Wake sleeping sessions when selected off) released the hidden terminal, so the owner became `FirstResponder(None)`; the router passed Ctrl+Tab on and no responder ran the walk, leaving the keys dead on the sleeping card until a click. With no native surface holding the keyboard, the router runs the walk itself.
         GpuiKeyboardOwner::FirstResponder(FirstResponderTarget::None) => {
@@ -1152,6 +1200,33 @@ impl GhostexGpuiApp {
         if action_id == "readAloudStop" {
             crate::app::gx_chat::read_aloud_stop();
             return true;
+        }
+        // CDXC:SwitchRequests 2026-11-23 (Q4709):
+        // While a switch-request toast is visible, Cmd+Shift+J (or whatever the user bound)
+        // accepts the toast. When no toast is visible and acceptSwitchRequestToast shares its
+        // chord with focusSidebar, Cmd+Shift+J falls back to Focus Sidebar.
+        if action_id == "acceptSwitchRequestToast" {
+            if self.accept_gpui_switch_request_toast(Some(window), cx) {
+                return true;
+            }
+            #[cfg(not(ghostex_web))]
+            if gpui_configured_hotkey_key("acceptSwitchRequestToast")
+                == gpui_configured_hotkey_key("focusSidebar")
+            {
+                self.toggle_sidebar_keyboard_focus(window, cx);
+                return true;
+            }
+            return false;
+        }
+        if action_id == "focusSidebar"
+            && self.has_gpui_switch_request_toast()
+            && gpui_configured_hotkey_key("acceptSwitchRequestToast")
+                == gpui_configured_hotkey_key("focusSidebar")
+        {
+            return self.accept_gpui_switch_request_toast(Some(window), cx);
+        }
+        if action_id == "openSwitchRequestExternal" {
+            return self.open_gpui_switch_request_external(cx);
         }
         self.handle_gpui_app_modal_sidebar_command(
             serde_json::json!({

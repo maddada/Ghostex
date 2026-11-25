@@ -419,6 +419,7 @@ impl GhostexGpuiApp {
     /// day as `spaces`, `isActive`, `sections`, `isFocused`, `isVisible` on an update with no store
     /// change. Gate: the "focus moves without a frame" section of gx-core `sidebar_replay`.
     pub(crate) fn gx_store_sidebar_focus_moved(&mut self, cx: &mut gpui::Context<Self>) {
+        self.gx_store_prune_untouched_drafts(cx);
         self.gx_store_update_sidebar_list(cx);
     }
 
@@ -459,14 +460,6 @@ impl GhostexGpuiApp {
         // Before the generation is read: pruning is a change to the sidebar's own state and the
         // inputs have to carry it.
         self.gx_store_prune_sidebar_tag_filters(&settings);
-        // Autopilot's project starts hidden, once (gx-core `SidebarUiStore::hide_once`).
-        let projects_moved = {
-            let changes = &self.gx_store.sidebar_list.changes;
-            !changes.projects_changed.is_empty() || !changes.machines_reloaded.is_empty()
-        };
-        self.gx_store
-            .sidebar_ui
-            .hide_autopilot_projects(projects_moved, &self.gx_store.core);
         let ui_generation = self.gx_store.sidebar_ui.generation();
         let changes = std::mem::take(&mut self.gx_store.sidebar_list.changes);
         let dirty = std::mem::take(&mut self.gx_store.sidebar_list.dirty);
@@ -678,7 +671,6 @@ impl GhostexGpuiApp {
             collections: Vec::new(),
             order: Vec::new(),
             more_menu: Value::Null,
-            chief_enabled: false,
             chiefs: Vec::new(),
             home_headers: Vec::new(),
             machines_with_home: Vec::new(),

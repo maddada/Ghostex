@@ -206,8 +206,9 @@ pub(super) enum RemoteReport {
     TurnEnded {
         due: RemoteStallDue,
     },
-    /// A message its coordinator sent that the other computer's queue marked Not sent.
-    Undelivered(RemoteUndelivered),
+    /// One or more messages its coordinator sent that the other computer's queue marked Not sent,
+    /// coalesced into a single report per thread.
+    Undelivered(Vec<RemoteUndelivered>),
 }
 
 pub(super) struct PendingRemoteReport {
@@ -490,14 +491,15 @@ pub(super) fn tick_at(
                     })
                     .unwrap_or_default();
                     guard = memory.lock().unwrap_or_else(|error| error.into_inner());
-                    failed
+                    let unreported: Vec<RemoteUndelivered> = failed
                         .into_iter()
-                        .find(|row| {
+                        .filter(|row| {
                             !guard
                                 .undelivered_reported
                                 .contains(&(key.clone(), row.row_id.clone()))
                         })
-                        .map(RemoteReport::Undelivered)
+                        .collect();
+                    (!unreported.is_empty()).then_some(RemoteReport::Undelivered(unreported))
                 }
                 report => report,
             };
@@ -793,9 +795,13 @@ async fn deliver(
             );
             if let Some(due) = stall_due {
                 body.push_str(&format!(
-                    "\n\n(Its computer still showed it working: Ghostex read the end of this turn from its transcript after {} minutes without new output. Its hooks there may be missing; `ghostex agent-hooks status --computer {}` shows them.)",
-                    crate::coordinators::minutes_of(
-                        i64::from(due.round) * crate::coordinators::quiet_round_ms()
+                    "\n\n(Its computer still showed it working: Ghostex read the end of this turn from its transcript after {} without new output. Its hooks there may be missing; `ghostex agent-hooks status --computer {}` shows them.)",
+                    ghostex_gx_protocol::plural(
+                        crate::coordinators::minutes_of(
+                            i64::from(due.round) * crate::coordinators::quiet_round_ms()
+                        ),
+                        "minute",
+                        "minutes"
                     ),
                     report.computer.name
                 ));
@@ -824,21 +830,36 @@ async fn deliver(
             None,
             String::new(),
         ),
-        RemoteReport::Undelivered(ref row) => (
-            report_body(
-                &ThreadReport::Undelivered {
-                    excerpt: &row.excerpt,
-                    evidence: Some(&format!(
-                        "the message was marked Not sent on {}: {}",
-                        report.computer.name,
-                        row.reason.trim()
-                    )),
-                },
-                &thread_ref,
-            ),
-            None,
-            String::new(),
-        ),
+        RemoteReport::Undelivered(ref rows) => {
+            let first = &rows[0];
+            let count = rows.len();
+            let short_reason =
+                ghostex_gx_chat_core::transcript::delivery_notice::short_delivery_reason(
+                    &first.reason,
+                );
+            let evidence = if count > 1 {
+                format!(
+                    "{count} messages were marked Not delivered on {}: {short_reason}",
+                    report.computer.name
+                )
+            } else {
+                format!(
+                    "marked Not delivered on {}: {short_reason}",
+                    report.computer.name
+                )
+            };
+            (
+                report_body(
+                    &ThreadReport::Undelivered {
+                        excerpt: &first.excerpt,
+                        evidence: Some(&evidence),
+                    },
+                    &thread_ref,
+                ),
+                None,
+                String::new(),
+            )
+        }
     };
     let message = agent_message(&sender_for(&report), &body);
     let request_id = format!(
@@ -849,7 +870,7 @@ async fn deliver(
         match (&report.kind, stall_due) {
             (RemoteReport::Stalled { .. }, Some(due)) =>
                 format!("stall:{}:{}", due.quiet_since, due.round),
-            (RemoteReport::Undelivered(row), _) => format!("undelivered:{}", row.row_id),
+            (RemoteReport::Undelivered(rows), _) => format!("undelivered:{}", rows[0].row_id),
             _ => prompt_key
                 .clone()
                 .or_else(|| message_id.clone())
@@ -867,12 +888,16 @@ async fn deliver(
     .is_ok();
     let closed = matches!(report.kind, RemoteReport::Closed);
     let stalled = matches!(report.kind, RemoteReport::Stalled { .. });
-    let undelivered = match &report.kind {
-        RemoteReport::Undelivered(row) => Some(row.row_id.clone()),
-        _ => None,
+    let undelivered_ids: Vec<String> = match &report.kind {
+        RemoteReport::Undelivered(rows) => rows.iter().map(|row| row.row_id.clone()).collect(),
+        _ => Vec::new(),
     };
-    if let (true, Some(row_id), Ok(mut memory)) = (sent, undelivered.clone(), memory.lock()) {
-        memory.undelivered_reported.insert((key.clone(), row_id));
+    if let (true, Ok(mut memory)) = (sent && !undelivered_ids.is_empty(), memory.lock()) {
+        for row_id in &undelivered_ids {
+            memory
+                .undelivered_reported
+                .insert((key.clone(), row_id.clone()));
+        }
     }
     if sent {
         if let (Some(due), Ok(mut memory)) = (stall_due, memory.lock()) {
@@ -895,7 +920,7 @@ async fn deliver(
         };
         if closed {
             let _ = set_remote_thread_resolved(&db, &key, true);
-        } else if stalled || undelivered.is_some() {
+        } else if stalled || !undelivered_ids.is_empty() {
             // A stall report clears nothing the next finished report needs, and a message that
             // was not delivered leaves the thread as it was.
         } else {

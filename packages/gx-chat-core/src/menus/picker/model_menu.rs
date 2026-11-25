@@ -284,9 +284,22 @@ pub fn model_menu_entry_for<'a>(
     model: Option<&str>,
 ) -> Option<&'a ModelMenuEntry> {
     let (provider, model) = (provider?, model?);
-    entries_of(entries, provider).iter().find(|entry| {
-        entry.value == model || entry.variants.iter().any(|variant| variant.value == model)
-    })
+    let rows = entries_of(entries, provider);
+    rows.iter()
+        .find(|entry| {
+            entry.value == model || entry.variants.iter().any(|variant| variant.value == model)
+        })
+        .or_else(|| {
+            crate::menus::catalog::resolve_model_in_list(
+                rows,
+                model,
+                |entry| entry.value.as_str(),
+                |entry| entry.label.as_str(),
+                |_| None,
+                |_| &[],
+            )
+            .map(|(entry, _)| entry)
+        })
 }
 
 /// `modelMenuTabs`.

@@ -37,7 +37,7 @@ pub(crate) fn menu_rows(snooze: bool, star: Option<bool>) -> Vec<MenuRow> {
     if snooze {
         rows.push(MenuRow {
             label: "Snooze",
-            icon: Some("titlebar/alarm.svg"),
+            icon: Some("modals/settings/moon.svg"),
             submenu: true,
         });
     }
@@ -50,8 +50,9 @@ pub(crate) fn menu_rows(snooze: bool, star: Option<bool>) -> Vec<MenuRow> {
         None => {}
     }
     rows.extend([
-        row("Export page", "titlebar/download.svg"),
-        row("Import answers", "titlebar/upload.svg"),
+        row("Share link…", "titlebar/link.svg"),
+        row("Export page", "titlebar/file-down.svg"),
+        row("Import answers", "titlebar/file-up.svg"),
         row("Open in browser", "titlebar/external-link.svg"),
     ]);
     rows

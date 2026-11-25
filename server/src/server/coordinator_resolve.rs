@@ -43,6 +43,7 @@ const REOPEN_WAKE_WAIT: std::time::Duration = std::time::Duration::from_secs(8);
 /// SEE-ALSO: server/src/ghostex_cli/coordinator/threads.rs (`set_resolved`), apps/desktop/src/app/gx_store/coordinator_actions.rs (the desktop's rows), apps/mobile/app/src/screens/sessions-screen/use-sessions-screen-menus.tsx (the phone's, through the CLI).
 pub(crate) async fn handle_resolve_coordinator_thread_http(
     state: &AppState,
+    caller: &crate::security::Principal,
     endpoint_path: String,
     request_id: String,
     body: &Value,
@@ -69,24 +70,53 @@ pub(crate) async fn handle_resolve_coordinator_thread_http(
         ));
     };
     let close_session = resolved && params.get("keepOpen").and_then(Value::as_bool) != Some(true);
-    let lifecycle = match with_repository(state, |_, repository| {
+    let (lifecycle, opencode_conversation_id) = match with_repository(state, |_, repository| {
         match repository.get_session(&project_id, &session_id)? {
-            Some(session) => Ok(effective_lifecycle_state(&session)),
+            Some(session) => {
+                let opencode_id =
+                    (crate::session_chat_follower::session_chat_agent_for_session(&session)
+                        .as_deref()
+                        == Some("opencode"))
+                    .then(|| crate::session_chat_opencode::session_id(&session).ok())
+                    .flatten();
+                Ok((effective_lifecycle_state(&session), opencode_id))
+            }
             None => Err(DomainStateError::not_found(
                 "The thread session does not exist.",
             )),
         }
     }) {
-        Ok(lifecycle) => lifecycle,
+        Ok(found) => found,
         Err(error) => return fail(error),
     };
     let closed = lifecycle == "stopped";
     let session_body = json!({ "params": { "projectId": project_id, "sessionId": session_id } });
-    let close_body = json!({ "params": {
+    let closed_by_ref = match caller {
+        crate::security::Principal::Session {
+            project_id: caller_project,
+            session_id: caller_session,
+            ..
+        } => Some(crate::ids::create_global_session_ref(
+            state.metadata.server_id.as_str(),
+            caller_project,
+            caller_session,
+        )),
+        _ => params
+            .get(crate::session_close_log::CLOSED_BY_PARAM)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string),
+    };
+    let mut close_params = json!({
         "projectId": project_id,
         "sessionId": session_id,
         "closeSource": "server.threadMarkedDone",
-    } });
+    });
+    if let Some(closed_by) = closed_by_ref {
+        close_params[crate::session_close_log::CLOSED_BY_PARAM] = json!(closed_by);
+    }
+    let close_body = json!({ "params": close_params });
     // Woken before it is reopened: an open thread whose session is still closed is reported to the
     // coordinator as closed and marked done again, and a sleeping one would leave a message waiting.
     // CDXC:Coordinators 2026-10-12 WHY: a sleeping thread is woken too; reopen used to wake only a closed (`stopped`) one, so it answered "Reopened" and left a sleeping thread asleep with a message waiting for it.
@@ -143,7 +173,18 @@ pub(crate) async fn handle_resolve_coordinator_thread_http(
         Ok(result) => result,
         Err(error) => return fail(error),
     };
+    if resolved {
+        crate::session_chat_send_failure::clear_send_failure(state, &project_id, &session_id);
+    }
     if close_session && !closed {
+        // Best-effort cleanup of leftover shells in OpenCode's shared background service so
+        // resolving a finished OpenCode thread doesn't leave orphaned shells behind (GitHub #721).
+        if let Some(opencode_id) = opencode_conversation_id {
+            let _ = tokio::task::spawn_blocking(move || {
+                let _ = crate::session_chat_opencode::stop_session_shells(&opencode_id);
+            })
+            .await;
+        }
         let killed = handle_zmx_lifecycle_http(
             state,
             "/api/killSession".to_string(),

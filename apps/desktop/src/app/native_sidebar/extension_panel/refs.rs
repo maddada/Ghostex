@@ -160,7 +160,10 @@ impl GhostexGpuiApp {
                                 hover.push('\n');
                                 hover.push_str(path);
                             }
-                            hover.push_str(&format!("\n{} sessions", facts.sessions));
+                            hover.push_str(&format!(
+                                "\n{}",
+                                ghostex_gx_protocol::plural(facts.sessions, "session", "sessions")
+                            ));
                             hover
                         });
                     (

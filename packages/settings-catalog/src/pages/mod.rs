@@ -18,6 +18,7 @@ mod projects;
 mod remote;
 mod secrets;
 mod security;
+mod sharing;
 mod sync;
 mod updates;
 mod voice_agent;
@@ -45,6 +46,7 @@ pub fn pages(platform: Platform) -> Vec<Page> {
         projects::page(),
         remote::page(),
         sync::page(),
+        sharing::page(),
         secrets::page(),
         security::page(),
         workspaces::page(),

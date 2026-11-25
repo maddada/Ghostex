@@ -4,6 +4,7 @@ pub(crate) struct FollowerFileState {
     pub(super) incremental: SessionChatIncrementalState,
     watched_version: Option<TranscriptFileVersion>,
     watched_boundary: String,
+    watched_omp_sidecar_len: u64,
 }
 
 impl FollowerFileState {
@@ -12,6 +13,7 @@ impl FollowerFileState {
             incremental: SessionChatIncrementalState::new(),
             watched_version: None,
             watched_boundary: String::new(),
+            watched_omp_sidecar_len: 0,
         }
     }
 }
@@ -195,7 +197,13 @@ pub(crate) fn follower_drain_once(
         || current.size < state.incremental.offset
         || (state.incremental.offset > 0 && state.watched_boundary != current_boundary);
     if agent == SessionChatTranscriptAgent::Pi {
-        if !want_snapshot && !content_replaced && current.size == state.incremental.offset {
+        let sidecar_len = crate::session_chat_omp_local::sidecar_len_for_transcript(file_path);
+        let sidecar_changed = sidecar_len != state.watched_omp_sidecar_len;
+        if !want_snapshot
+            && !content_replaced
+            && !sidecar_changed
+            && current.size == state.incremental.offset
+        {
             state.watched_version = Some(current);
             return FollowerDrainOutcome::Idle;
         }
@@ -209,11 +217,12 @@ pub(crate) fn follower_drain_once(
         state.watched_version = read_transcript_file_version(file_path)
             .ok()
             .or(Some(current));
+        state.watched_omp_sidecar_len = sidecar_len;
         return FollowerDrainOutcome::Snapshot {
             tail,
             appended: Vec::new(),
             appended_lifecycle: None,
-            content_replaced,
+            content_replaced: content_replaced || sidecar_changed,
         };
     }
     if content_replaced {

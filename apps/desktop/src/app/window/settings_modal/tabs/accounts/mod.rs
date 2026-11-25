@@ -12,6 +12,7 @@
 //! (`getAccountsConnections()` had one connection there).
 mod claude_ai_wait;
 pub(crate) mod client;
+mod cliproxy_guide;
 mod connect;
 pub(crate) mod data;
 mod editor;
@@ -106,6 +107,19 @@ pub(crate) struct AccountsTab {
     /// The Add a hub form and the saved hubs' fields being edited (`hubs.rs`), by hub id (`new`
     /// for Add a hub).
     pub(crate) hub_drafts: HashMap<String, hubs::HubDraft>,
+    /// Whether the CLIProxyAPI info card on Settings > Accounts is collapsed.
+    pub(crate) cliproxy_card_collapsed: bool,
+    /// Whether the CLIProxyAPI setup instructions sheet is open.
+    pub(crate) cliproxy_guide_open: bool,
+    pub(crate) cliproxy_guide_needs_focus: bool,
+    pub(crate) cliproxy_guide_focus: FocusHandle,
+    /// Turning on the built-in CLIProxyAPI extension is in flight.
+    pub(crate) cliproxy_enabling: bool,
+    /// Active v8 management OAuth sign-in flow on a CLIProxyAPI hub (`hubs.rs`).
+    pub(crate) hub_oauth: Option<hubs::HubOAuthFlow>,
+    pub(crate) hub_oauth_seq: u64,
+    /// The hub account id whose inline Remove confirmation is open (`hubs.rs`).
+    pub(crate) hub_account_remove: Option<String>,
     /// The machine whose accounts the page shows (the machine picker's pick); `None` is this
     /// computer. Changing it starts the page over on that machine.
     shown_machine: Option<String>,
@@ -208,6 +222,14 @@ impl AccountsTab {
             preview_applied: false,
             masked_inputs: HashMap::new(),
             hub_drafts: HashMap::new(),
+            cliproxy_card_collapsed: false,
+            cliproxy_guide_open: false,
+            cliproxy_guide_needs_focus: false,
+            cliproxy_guide_focus: cx.focus_handle(),
+            cliproxy_enabling: false,
+            hub_oauth: None,
+            hub_oauth_seq: 0,
+            hub_account_remove: None,
             commit_inputs: HashSet::new(),
             claude_ai_polling: false,
             pending_reconnect: None,
@@ -301,6 +323,8 @@ impl AccountsTab {
             self.editors.clear();
             self.setups.clear();
             self.open_menu = None;
+            self.hub_oauth = None;
+            self.hub_account_remove = None;
             self.client
                 .update(cx, |client, cx| client.show_machine(picked.clone(), cx));
         }
@@ -380,6 +404,9 @@ impl AccountsTab {
             self.setup_poll = None;
             self.helpers.poll = None;
             for flow in self.flows.values_mut() {
+                flow.poll = None;
+            }
+            if let Some(flow) = self.hub_oauth.as_mut() {
                 flow.poll = None;
             }
             return;
@@ -808,11 +835,18 @@ impl Render for AccountsTab {
             "accounts",
             self.render_accounts_section(cx),
         ));
+        blocks.push(PageBlock::section(
+            "accounts-cliproxy",
+            self.render_cliproxy_card(&p, cx),
+        ));
         if self.client.read(cx).data.is_some() {
             let manager = self.render_manager(&p, window, cx);
             blocks.push(PageBlock::section("accounts-manager", manager));
         }
         if let Some(guide) = self.render_guide(&p, window, cx) {
+            blocks.push(PageBlock::plain(guide));
+        }
+        if let Some(guide) = self.render_cliproxy_guide(&p, window, cx) {
             blocks.push(PageBlock::plain(guide));
         }
         settings_page(&self.store, SettingsTabId::Accounts, &p, blocks, cx)

@@ -234,13 +234,23 @@ fn start(
     let editor = format!("\"{}\" prompt-editor", cli.to_string_lossy());
     // The profile runs after ConPTY applies launch.cwd and may change location.
     // Restore the selected project before any agent command can run.
+    let has_acp_secret = environment.contains_key(crate::acp::channel::ACP_CHANNEL_SECRET_ENV);
+    let clear_acp_secret = if has_acp_secret {
+        format!(
+            "; Remove-Item -LiteralPath 'Env:{}' -ErrorAction SilentlyContinue",
+            crate::acp::channel::ACP_CHANNEL_SECRET_ENV
+        )
+    } else {
+        String::new()
+    };
     let startup = format!(
-        "Set-Location -LiteralPath {} -ErrorAction Stop; {}{}$env:GHOSTEX_PROMPT_EDITOR_MACHINE_VISUAL=$env:VISUAL; $env:GHOSTEX_PROMPT_EDITOR_MACHINE_EDITOR=$env:EDITOR; $env:VISUAL={}; $env:EDITOR=$env:VISUAL; $env:GHOSTEX_PROMPT_EDITING_ENABLED='1'; {}",
+        "Set-Location -LiteralPath {} -ErrorAction Stop; {}{}$env:GHOSTEX_PROMPT_EDITOR_MACHINE_VISUAL=$env:VISUAL; $env:GHOSTEX_PROMPT_EDITOR_MACHINE_EDITOR=$env:EDITOR; $env:VISUAL={}; $env:EDITOR=$env:VISUAL; $env:GHOSTEX_PROMPT_EDITING_ENABLED='1'; {}{}",
         quote(cwd),
         portable_cli_first_on_path(&cli),
         super::codex_wrapper::wmx_codex_wrapper_path_command(),
         quote(&editor),
-        agent_without_powershell7_modules(startup.unwrap_or_default().trim_end_matches(['\r', '\n']))
+        agent_without_powershell7_modules(startup.unwrap_or_default().trim_end_matches(['\r', '\n'])),
+        clear_acp_secret
     );
     let startup = startup_from_environment(&startup, &mut environment);
     let launch = json!({"name": name, "cwd": cwd,

@@ -46,6 +46,8 @@ struct PoolEpisode {
     since: String,
     #[serde(default)]
     acknowledged_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    allowed_ids: Option<Vec<String>>,
 }
 
 fn read_pool_episodes(db: &Connection) -> BTreeMap<String, PoolEpisode> {
@@ -79,8 +81,15 @@ fn provider_title_name(provider: Provider) -> &'static str {
     }
 }
 
-fn pool_notification_session_id(provider: Provider) -> String {
-    account_notification_session_id(&format!("pool:{}", provider.id()))
+fn pool_notification_session_id(pool_key: &str) -> String {
+    account_notification_session_id(&format!("pool:{pool_key}"))
+}
+
+fn wait_pool_key(wait: &Value) -> Option<String> {
+    wait["poolKey"]
+        .as_str()
+        .or_else(|| wait["provider"].as_str())
+        .map(str::to_string)
 }
 
 /// The waits in progress, by session, as saved in `accountRecovery.accountWait`: the card's facts plus the bell row's id.
@@ -113,11 +122,13 @@ pub(crate) fn notice_wait(project: &str, session: &str) -> Option<Value> {
     if let Some(fields) = facts.as_object_mut() {
         fields.remove("notificationId");
         fields.remove("since");
+        fields.remove("poolKey");
     }
     Some(facts)
 }
 
 /// The facts of a wait: the limit the current account hit, and the eligible account (the current one included) whose full windows reset soonest.
+#[allow(dead_code, clippy::too_many_arguments)]
 pub(super) fn describe(
     registry: &Registry,
     snapshot: &Snapshot,
@@ -128,6 +139,34 @@ pub(super) fn describe(
     alternative: Option<&super::model_fallback::Alternative>,
     now: DateTime<Utc>,
 ) -> Value {
+    describe_in_pool(
+        registry,
+        snapshot,
+        provider,
+        current,
+        model,
+        model_label,
+        alternative,
+        None,
+        now,
+    )
+}
+
+/// Like [`describe`], scoped to `allowed_ids` when the session's workspace pins a Claude account
+/// pool so wait reset times and blocked accounts stay inside that workspace.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn describe_in_pool(
+    registry: &Registry,
+    snapshot: &Snapshot,
+    provider: Provider,
+    current: Option<&str>,
+    model: &str,
+    model_label: Option<&str>,
+    alternative: Option<&super::model_fallback::Alternative>,
+    allowed_ids: Option<&[String]>,
+    now: DateTime<Utc>,
+) -> Value {
+    let in_pool = |id: &str| super::workspace_pool::in_pool(id, allowed_ids);
     let reading = |id: &str| {
         snapshot
             .accounts
@@ -159,7 +198,8 @@ pub(super) fn describe(
         .accounts
         .iter()
         .filter(|a| {
-            a.provider == provider && (a.auto_switchable() || Some(a.id.as_str()) == current)
+            a.provider == provider
+                && ((a.auto_switchable() && in_pool(&a.id)) || Some(a.id.as_str()) == current)
         })
         .filter_map(|a| {
             let windows = full(reading(&a.id)?);
@@ -192,7 +232,7 @@ pub(super) fn describe(
     let blocked: Vec<Value> = registry
         .accounts
         .iter()
-        .filter(|a| a.provider == provider && Some(a.id.as_str()) != current)
+        .filter(|a| a.provider == provider && Some(a.id.as_str()) != current && in_pool(&a.id))
         .filter(|a| !(a.user_disabled && a.disabled.is_some()))
         .filter_map(|a| {
             if a.user_disabled {
@@ -256,26 +296,45 @@ fn window_name(window: &UsageWindow) -> String {
 /// Enters or refreshes the wait on `recovery` (saved by the caller). Emits ONE per-pool bell row
 /// and push notification per exhaustion episode (Q4472), never one per chat and never repeated on
 /// later passes or restarts.
+#[allow(dead_code)]
 pub(super) fn enter(
+    state: &AppState,
+    repo: &DomainRepository<'_>,
+    session: &Value,
+    recovery: &mut Value,
+    wait: Value,
+    provider: Provider,
+) {
+    enter_in_pool(state, repo, session, recovery, wait, provider, None);
+}
+
+/// Like [`enter`], keyed by the session's workspace account pool when `allowed_ids` is non-empty
+/// so an exhausted workspace pool gets its own single bell row and push notification without
+/// colliding with other workspaces or being cleared when another workspace's accounts have room.
+pub(super) fn enter_in_pool(
     state: &AppState,
     repo: &DomainRepository<'_>,
     session: &Value,
     recovery: &mut Value,
     mut wait: Value,
     provider: Provider,
+    allowed_ids: Option<&[String]>,
 ) {
     let (Some(pid), Some(sid)) = (session["projectId"].as_str(), session["sessionId"].as_str())
     else {
         return;
     };
-    let provider_key = provider.id().to_string();
+    let pool_key = super::workspace_pool::pool_key(provider, allowed_ids);
+    let scoped_ids = allowed_ids
+        .filter(|ids| !ids.is_empty())
+        .map(|ids| ids.to_vec());
     let mut episodes = read_pool_episodes(repo.db);
     let session_ack = recovery
         .pointer("/accountWait/acknowledgedAt")
         .and_then(Value::as_str)
         .map(str::to_string);
     let mut episodes_dirty = false;
-    let episode = match episodes.get_mut(&provider_key) {
+    let episode = match episodes.get_mut(&pool_key) {
         Some(existing) => {
             if let Some(next_resets) = wait["resetsAt"].as_str() {
                 let now = Utc::now();
@@ -314,6 +373,10 @@ pub(super) fn enter(
                     episodes_dirty = true;
                 }
             }
+            if existing.allowed_ids != scoped_ids {
+                existing.allowed_ids = scoped_ids.clone();
+                episodes_dirty = true;
+            }
             existing.clone()
         }
         None => {
@@ -322,7 +385,7 @@ pub(super) fn enter(
                 .and_then(Value::as_str)
                 .map(str::to_string)
                 .unwrap_or_else(|| Utc::now().to_rfc3339());
-            let pool_session_id = pool_notification_session_id(provider);
+            let pool_session_id = pool_notification_session_id(&pool_key);
             let notification_id = insert_notification_feed_row(
                 repo.db,
                 NewNotificationFeedRow {
@@ -353,8 +416,9 @@ pub(super) fn enter(
                 notification_id,
                 since,
                 acknowledged_at: session_ack.clone(),
+                allowed_ids: scoped_ids,
             };
-            episodes.insert(provider_key, created.clone());
+            episodes.insert(pool_key.clone(), created.clone());
             episodes_dirty = true;
             created
         }
@@ -363,6 +427,11 @@ pub(super) fn enter(
         write_pool_episodes(repo.db, &episodes);
     }
     wait["provider"] = json!(provider.id());
+    if pool_key != provider.id() {
+        wait["poolKey"] = json!(pool_key);
+    } else if let Some(fields) = wait.as_object_mut() {
+        fields.remove("poolKey");
+    }
     wait["notificationId"] = json!(episode.notification_id);
     wait["since"] = json!(episode.since);
     if let Some(ack) = episode.acknowledged_at.or(session_ack) {
@@ -430,11 +499,11 @@ pub(super) fn settle_pools(
     if episodes.is_empty() {
         return;
     }
-    let mut active_providers: std::collections::HashSet<String> = waits()
+    let mut active_pools: std::collections::HashSet<String> = waits()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .values()
-        .filter_map(|wait| wait["provider"].as_str().map(str::to_string))
+        .filter_map(wait_pool_key)
         .collect();
     // Also check persisted non-stopped sessions waiting or paused on a usage limit (including
     // `afterRestart` waits) so a restart never prematurely clears an active pool episode.
@@ -449,36 +518,36 @@ pub(super) fn settle_pools(
             if !matches!(recovery["status"].as_str(), Some("waiting" | "paused")) {
                 continue;
             }
-            if let Some(provider_id) = recovery
-                .pointer("/accountWait/provider")
-                .and_then(Value::as_str)
-            {
-                active_providers.insert(provider_id.to_string());
+            if let Some(pool_key) = recovery.get("accountWait").and_then(wait_pool_key) {
+                active_pools.insert(pool_key);
                 continue;
             }
             if let Some(pid) = session["projectId"].as_str() {
-                if let Some(provider) = repo
-                    .get_project(pid)
-                    .ok()
-                    .flatten()
-                    .and_then(|project| launch::provider(&project, &session))
-                {
-                    active_providers.insert(provider.id().to_string());
+                if let Some(project) = repo.get_project(pid).ok().flatten() {
+                    if let Some(provider) = launch::provider(&project, &session) {
+                        let pool = super::workspace_pool::session_pool(
+                            repo.db, &project, &session, provider,
+                        );
+                        active_pools
+                            .insert(super::workspace_pool::pool_key(provider, pool.as_deref()));
+                    }
                 }
             }
         }
     }
     let mut removed_any = false;
     let mut dismissed_any = false;
-    episodes.retain(|provider_id, episode| {
-        let provider = match provider_id.as_str() {
-            "claude" => Some(Provider::Claude),
-            "codex" => Some(Provider::Codex),
-            _ => None,
-        };
-        let has_room = provider
-            .is_some_and(|p| super::autopilot::provider_has_eligible_room(registry, snapshot, p));
-        let still_waiting = active_providers.contains(provider_id);
+    episodes.retain(|episode_key, episode| {
+        let provider = super::workspace_pool::provider_from_pool_key(episode_key);
+        let has_room = provider.is_some_and(|p| {
+            super::autopilot::provider_has_eligible_room_in_pool(
+                registry,
+                snapshot,
+                p,
+                episode.allowed_ids.as_deref(),
+            )
+        });
+        let still_waiting = active_pools.contains(episode_key);
         if !has_room && still_waiting {
             return true;
         }
@@ -508,11 +577,14 @@ pub(crate) fn acknowledge(
     clicked: &Value,
 ) -> Result<(), DomainStateError> {
     let now = Utc::now().to_rfc3339();
-    let provider_key = provider.id().to_string();
+    let clicked_pool_key = clicked
+        .pointer("/runtimeSettings/accountRecovery/accountWait")
+        .and_then(wait_pool_key)
+        .unwrap_or_else(|| provider.id().to_string());
     let mut episodes = read_pool_episodes(repo.db);
     let mut notification_to_read: Option<String> = None;
     let mut episodes_dirty = false;
-    if let Some(episode) = episodes.get_mut(&provider_key) {
+    if let Some(episode) = episodes.get_mut(&clicked_pool_key) {
         if episode.acknowledged_at.is_none() {
             episode.acknowledged_at = Some(now.clone());
             episodes_dirty = true;
@@ -547,16 +619,17 @@ pub(crate) fn acknowledge(
             continue;
         }
         let same_clicked = pid == clicked_key.0 && sid == clicked_key.1;
-        let same_pool = session
-            .pointer("/runtimeSettings/accountRecovery/accountWait/provider")
-            .and_then(Value::as_str)
-            == Some(provider.id())
-            || repo
-                .get_project(pid)
-                .ok()
-                .flatten()
-                .and_then(|project| launch::provider(&project, &session))
-                == Some(provider);
+        let session_pool_key = session
+            .pointer("/runtimeSettings/accountRecovery/accountWait")
+            .and_then(wait_pool_key)
+            .or_else(|| {
+                repo.get_project(pid).ok().flatten().and_then(|project| {
+                    let p = launch::provider(&project, &session)?;
+                    let pool = super::workspace_pool::session_pool(repo.db, &project, &session, p);
+                    Some(super::workspace_pool::pool_key(p, pool.as_deref()))
+                })
+            });
+        let same_pool = session_pool_key.as_deref() == Some(clicked_pool_key.as_str());
         if same_clicked || same_pool {
             to_update.push(session);
         }

@@ -104,28 +104,67 @@ pub(crate) fn prepare_live_switch(
 /// the same switch guard as the agent switch, so a coordinator's waiting first message is typed
 /// into the new CLI's box only once the switch is done.
 pub(crate) fn switch_in_live_provider(
+    state: &crate::server::AppState,
     repository: &DomainRepository<'_>,
     session: &Value,
     command: &str,
 ) -> Result<(), DomainStateError> {
     let project_id = session["projectId"].as_str().unwrap_or_default();
     let session_id = session["sessionId"].as_str().unwrap_or_default();
+    let launched_acp = crate::acp::acp_family_from_launch_command(command).map(|family| {
+        (
+            family,
+            crate::acp::acp_approval_level_from_launch_command(command),
+        )
+    });
+    let is_acp = crate::acp::session_is_acp(session) || launched_acp.is_some();
+    let (typed_command, mut cleanup_paths) = if is_acp {
+        let (prepared, guard_files) = super::restart::prepare_non_cli_in_place_launch_command(
+            &state.paths,
+            &state.auth_token,
+            project_id,
+            session_id,
+            command.to_string(),
+        )?;
+        (format!(" {prepared}"), guard_files)
+    } else {
+        (
+            command.to_string(),
+            super::restart::TempFilesGuard(Vec::new()),
+        )
+    };
     let guard = agents::DraftAgentSwitch::begin(project_id, session_id)?;
     crate::session_chat_first_message::retype_after_agent_switch(
         repository.db,
         project_id,
         session_id,
     );
-    let updated = agents::arm_launch_activity_suppression(repository, session)?;
+    let session = if let Some((family, approval_level)) = launched_acp.as_ref() {
+        let mut runtime = session["runtimeSettings"]
+            .as_object()
+            .cloned()
+            .unwrap_or_default();
+        if crate::acp::apply_acp_runtime_settings(&mut runtime, family, *approval_level) {
+            super::endpoint::update_session_changes(repository, session, &runtime, Map::new())?
+        } else {
+            session.clone()
+        }
+    } else {
+        session.clone()
+    };
+    let updated = agents::arm_launch_activity_suppression(repository, &session)?;
     crate::session_chat_send::cancel_session_chat_sends(project_id, session_id);
     let completion = crate::session_chat_send::enqueue_session_write_sequence_with_completion(
         &updated,
         project_id,
         session_id,
         "draft-account-switch",
-        agents::build_draft_agent_switch_steps(command),
+        agents::build_draft_agent_switch_steps(&typed_command),
         None,
     )?;
+    // Disarm the early-error guard so the script and one-shot secret file self-unlink without
+    // racing `acp-host` startup; daemon startup sweep cleans up any crash leftovers.
+    cleanup_paths.disarm();
     guard.finish_after(completion);
     Ok(())
 }

@@ -46,13 +46,34 @@ const BOXED_BODY_PAD: f32 = 4.0;
 /// CDXC:SessionChat 2026-11-12 DECISION: User, of a folded "3 tool calls" card in a Quiet View
 /// line: "make hovering here please show hover effect on whole card header not just small part
 /// like now". The header fills the card edge to edge, as the "Message to" card's does.
-fn boxed_header_corners<E: gpui::Styled>(element: E, open: bool, p: &ChatAppearance) -> E {
+pub(super) fn boxed_header_corners<E: gpui::Styled>(
+    element: E,
+    open: bool,
+    p: &ChatAppearance,
+) -> E {
     let radius = px((super::cards::SINGLE_LINE_CARD.radius - 1.0).max(0.0) * p.scale);
     if open {
         element.rounded_tl(radius).rounded_tr(radius)
     } else {
         element.rounded(radius)
     }
+}
+
+/// The rows an opened Quiet View card shows under its header: full width under the card's
+/// hairline, padded as the tool card's rows are, with no rail (the "N tool calls" card, a Working
+/// thought's calls, the "Edited N files" card's files).
+pub(super) fn boxed_card_body(rows: Vec<AnyElement>, p: &ChatAppearance) -> AnyElement {
+    div()
+        .w_full()
+        .min_w_0()
+        .flex()
+        .flex_col()
+        .gap(px(ROW_GAP * p.scale))
+        .p(px(BOXED_BODY_PAD * p.scale))
+        .border_t_1()
+        .border_color(super::cards::SINGLE_LINE_CARD.hairline(p))
+        .children(rows)
+        .into_any_element()
 }
 /// The glyph tile's side.
 pub(super) const TILE: f32 = 22.0;
@@ -261,17 +282,7 @@ impl NativeChatView {
                 // gone". Only this boxed card drops it; every other open tool group keeps its
                 // rail (`disclosure_body`). The phone matches (ToolRows.tsx).
                 let body = if card_header {
-                    div()
-                        .w_full()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .gap(px(ROW_GAP * p.scale))
-                        .p(px(BOXED_BODY_PAD * p.scale))
-                        .border_t_1()
-                        .border_color(super::cards::SINGLE_LINE_CARD.hairline(p))
-                        .children(body)
-                        .into_any_element()
+                    boxed_card_body(body, p)
                 } else {
                     disclosure_body(
                         p,
@@ -682,6 +693,36 @@ impl NativeChatView {
             .iter()
             .map(|index| self.tool_row(id, *index, &tools[*index], p, cx))
             .collect()
+    }
+
+    /// A message's visible plain tool rows inside a boxed Quiet View card (such as an opened
+    /// Working thought card, `thinking_card.rs`): full width under a hairline, padded like the
+    /// plain "N tool calls" card's body, with no nested card or rail.
+    pub(super) fn boxed_card_tool_rows(
+        &mut self,
+        message: &Value,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let tools = message["tools"].as_array().map_or(&[][..], Vec::as_slice);
+        if tools.is_empty() {
+            return None;
+        }
+        let id = text(message, "id");
+        let cards_as_rows = message["toolsShowAllRows"] == true || self.in_work_fold;
+        let visible: Vec<usize> = (0..tools.len())
+            .filter(|index| {
+                cards_as_rows
+                    || (tools[*index]["exchange"] != true
+                        && tools[*index]["sentMessage"] != true
+                        && !self.has_workflow_card(&tools[*index]))
+            })
+            .collect();
+        if visible.is_empty() {
+            return None;
+        }
+        let rows = self.tool_row_list(&id, tools, &visible, p, cx);
+        Some(boxed_card_body(rows, p))
     }
 
     /// A folded or opened group's "3 tool calls" as the header of its Quiet View card, filling it.
@@ -1137,11 +1178,16 @@ impl NativeChatView {
             ));
             if capped {
                 let toggle = show_all_key.clone();
+                let show_all_label = if output_lines == 1 {
+                    "Show 1 line".to_string()
+                } else {
+                    format!("Show all {output_lines} lines")
+                };
                 detail.push(
                     div()
                         .id(SharedString::from(toggle.clone()))
                         .role(gpui::Role::Button)
-                        .aria_label(format!("Show all {output_lines} lines"))
+                        .aria_label(show_all_label.clone())
                         .flex_none()
                         .self_start()
                         .px(px(10.0 * s))
@@ -1153,7 +1199,7 @@ impl NativeChatView {
                         .text_color(p.foreground)
                         .chat_cursor_pointer()
                         .hover(|style| style.bg(p.foreground.opacity(0.04)))
-                        .child(format!("Show all {output_lines} lines"))
+                        .child(show_all_label)
                         .on_click(cx.listener(move |view, _, _, cx| {
                             view.expanded.insert(toggle.clone());
                             cx.notify();

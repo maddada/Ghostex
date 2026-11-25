@@ -45,7 +45,7 @@ impl GhostexGpuiApp {
                 .main_window_popup_owner()
                 .display_for(window_bounds, cx),
             titlebar: None,
-            window_background: window_glass_background_appearance(),
+            window_background: modal_window_glass_background_appearance(),
             ..Default::default()
         };
         let view_slot: Rc<RefCell<Option<Entity<GpuiNoticeModalWindow>>>> =

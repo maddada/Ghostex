@@ -147,6 +147,9 @@ const CODEX_TURN_CONTEXT_TAIL_BYTES: u64 = 4 * 1024 * 1024;
 /// Seen live on Codex 0.167.2 (throwaway test server): the card stood the whole review and left
 /// when the reviewer's approval ran the command.
 pub(crate) fn codex_reviewer_decides(params: &Map<String, Value>, session: &Value) -> bool {
+    if crate::acp::session_is_acp(session) {
+        return false;
+    }
     if event_kind(params) != "permissionrequest"
         || crate::agents::normalize_agent_id(param(params, &["agentName"])).as_deref()
             != Some("codex")

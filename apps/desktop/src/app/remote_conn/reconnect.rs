@@ -88,12 +88,13 @@ impl GhostexGpuiApp {
             );
             return;
         };
-        // Settings > Remote > the machine's Reinstall: replace the package Ghostex installed there.
-        config.reinstall_package = !automatic
+        // Settings > Remote > the machine's Update gxserver or Reinstall: replace the package Ghostex installed there.
+        let reinstalling = !automatic
             && command
                 .get("reinstall")
                 .and_then(serde_json::Value::as_bool)
                 == Some(true);
+        config.reinstall_package = reinstalling;
         if automatic && config.disabled {
             self.stop_gpui_remote_gxserver_connection(&remote_machine_id);
             self.dispatch_gpui_remote_machine_status(
@@ -105,7 +106,7 @@ impl GhostexGpuiApp {
         }
 
         self.stop_gpui_remote_gxserver_connection(&remote_machine_id);
-        let status_state = if install_approved {
+        let status_state = if install_approved || reinstalling {
             "installing"
         } else {
             GpuiRemoteGxserverConnectState::Connecting.wire_status_state()
@@ -119,6 +120,8 @@ impl GhostexGpuiApp {
                     format!("Setting up Ghostex on {machine}…"),
                     "This takes a minute the first time.",
                 )
+            } else if reinstalling {
+                (format!("Updating Ghostex on {machine}…"), "")
             } else {
                 (format!("Connecting to {machine}…"), "")
             };
@@ -191,6 +194,7 @@ impl GhostexGpuiApp {
                     remote_machine_id,
                     connect_generation,
                     automatic,
+                    reinstalling,
                     result,
                     cx,
                 );
@@ -204,6 +208,7 @@ impl GhostexGpuiApp {
         remote_machine_id: String,
         connect_generation: u64,
         automatic: bool,
+        reinstalling: bool,
         mut result: GpuiRemoteGxserverConnectResult,
         cx: &mut gpui::Context<Self>,
     ) {
@@ -300,12 +305,12 @@ impl GhostexGpuiApp {
                 self.probe_gpui_remote_gxserver_install(remote_machine_id.clone(), cx);
                 if !automatic {
                     let machine = saved_machine_name(&remote_machine_id);
-                    self.dispatch_gpui_app_modal_toast(
-                        "success",
-                        &format!("Connected to {machine}"),
-                        "",
-                        cx,
-                    );
+                    let title = if reinstalling {
+                        format!("Updated Ghostex on {machine}")
+                    } else {
+                        format!("Connected to {machine}")
+                    };
+                    self.dispatch_gpui_app_modal_toast("success", &title, "", cx);
                 }
             }
             GpuiRemoteGxserverConnectState::InstallApprovalRequired => {

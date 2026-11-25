@@ -238,8 +238,8 @@ pub(crate) fn draw_switch(
         )
 }
 
-/// The track of an on switch: the app's `--primary` (#e5e5e5) in dark looks; in light ones
-/// `--primary` (#262626) lifted 25% toward white, a solid mid grey that is never near-black on glass.
+/// The track of an on switch: bright neutral `#e5e5e5` in dark looks and mid neutral `#5c5c5c`
+/// (`#262626` lifted 25% toward white) in light looks, never accent-coloured.
 pub(crate) fn switch_on_track(light: bool) -> Rgba {
     if light {
         css_mix(gpui::rgb(0x262626), 0.75, gpui::rgb(0xffffff))
@@ -248,8 +248,7 @@ pub(crate) fn switch_on_track(light: bool) -> Rgba {
     }
 }
 
-/// The thumb of an on switch over [`switch_on_track`]: `--primary-foreground` (#171717) in dark
-/// looks, white in light ones.
+/// The thumb of an on switch over [`switch_on_track`]: `#171717` in dark looks, white in light.
 pub(crate) fn switch_on_thumb(light: bool) -> Rgba {
     if light {
         gpui::rgb(0xffffff)

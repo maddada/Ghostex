@@ -31,7 +31,7 @@ pub(crate) fn start_session_stall_runtime(state: Arc<AppState>) {
     });
 }
 
-fn tick(state: &AppState, watches: &Mutex<HashMap<SessionKey, StallWatch>>) {
+pub(super) fn tick(state: &AppState, watches: &Mutex<HashMap<SessionKey, StallWatch>>) {
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return;
     };
@@ -52,6 +52,9 @@ fn tick(state: &AppState, watches: &Mutex<HashMap<SessionKey, StallWatch>>) {
         );
         if effective_lifecycle_state(session) == "running" {
             crate::session_chat_compacting::refresh_compacting_marker_from_screen(state, session);
+            crate::session_chat_compacting::refresh_screen_approval_marker_from_screen(
+                state, session,
+            );
         }
         if crate::accounts::reset_used::waits_at_usage_limit(state, session)
             || !watched(session, &key, &now_iso)
@@ -221,9 +224,13 @@ fn announce_stuck(
                 .to_string()
         }
         QuietOwner::Sessions => format!(
-            "Not moving: no new output for {} minutes. It may be stuck on a hung command.",
-            coordinators::minutes_of(
-                i64::from(coordinators::SESSION_STUCK_ROUNDS) * coordinators::quiet_round_ms()
+            "Not moving: no new output for {}. It may be stuck on a hung command.",
+            ghostex_gx_protocol::plural(
+                coordinators::minutes_of(
+                    i64::from(coordinators::SESSION_STUCK_ROUNDS) * coordinators::quiet_round_ms()
+                ),
+                "minute",
+                "minutes"
             )
         ),
         QuietOwner::Heal => "Stopped and couldn't restart: it ended unexpectedly and Ghostex couldn't keep it running. Open it to start it again.".to_string(),

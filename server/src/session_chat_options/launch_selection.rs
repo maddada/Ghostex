@@ -49,19 +49,41 @@ fn with_remembered_launch_choice(
         }
         return;
     }
-    if family != "cursor" || selection.effort.is_some() {
-        return;
-    }
-    let model = selection.model.as_ref().map(|choice| choice.value.clone());
     let marker = session.pointer(&format!(
         "/runtimeSettings/{}",
         crate::agent_model_pins::SESSION_PIN_KEY
     ));
-    selection.effort = marker
-        .filter(|marker| marker.get("model").and_then(Value::as_str) == model.as_deref())
-        .and_then(|marker| marker.get("effort"))
+    let marker_model = marker
+        .and_then(|m| m.get("model"))
         .and_then(Value::as_str)
-        .and_then(|effort| launch_effort_choice(family, effort));
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let marker_effort = marker
+        .and_then(|m| m.get("effort"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    if selection.model.is_none() {
+        if let Some(model) = marker_model {
+            selection.model = launch_model_choice(family, model);
+            if selection.effort.is_none() && family == "antigravity" {
+                if let Some((_, parsed_effort)) =
+                    crate::agent_model_catalog::split_antigravity_model_id(model)
+                {
+                    selection.effort = launch_effort_choice(family, &parsed_effort);
+                }
+            }
+        }
+    }
+    if selection.effort.is_none() {
+        let current_model = selection.model.as_ref().map(|choice| choice.value.as_str());
+        let matches_model =
+            current_model.is_none() || marker_model.is_none() || marker_model == current_model;
+        if matches_model {
+            selection.effort =
+                marker_effort.and_then(|effort| launch_effort_choice(family, effort));
+        }
+    }
 }
 
 /// The conversation's remembered model and effort alone. A slept session's transcript and
@@ -82,6 +104,12 @@ fn pinned_family(agent: SessionChatOptionAgent) -> Option<&'static str> {
         SessionChatOptionAgent::Claude => Some("claude"),
         SessionChatOptionAgent::Codex => Some("codex"),
         SessionChatOptionAgent::Cursor => Some("cursor"),
+        SessionChatOptionAgent::Antigravity => Some("antigravity"),
+        SessionChatOptionAgent::Grok => Some("grok"),
+        SessionChatOptionAgent::Copilot => Some("copilot"),
+        SessionChatOptionAgent::Pi => Some("pi"),
+        SessionChatOptionAgent::Omp => Some("omp"),
+        SessionChatOptionAgent::Hermes => Some("hermes-agent"),
         _ => None,
     }
 }
@@ -176,6 +204,7 @@ pub(crate) fn launch_command_selection(
             }
             (
                 SessionChatOptionAgent::Claude
+                | SessionChatOptionAgent::Codex
                 | SessionChatOptionAgent::Antigravity
                 | SessionChatOptionAgent::Grok,
                 "--effort",
@@ -232,18 +261,75 @@ fn launch_choice(value: &str, label: &str) -> SessionChatDetectedChoice {
 /// The label the agent itself last showed for the value wins over both, so the pill's text does
 /// not change when the agent's own report replaces the launch value a few seconds in.
 fn launch_model_choice(family: &str, model: &str) -> Option<SessionChatDetectedChoice> {
-    let choice = if let Some(entry) = crate::agent_model_catalog::catalog_model(family, model) {
-        let label = entry.get("label").and_then(Value::as_str).unwrap_or(model);
-        launch_choice(model, label)
+    use ghostex_gx_chat_core::menus::catalog::{
+        humanize_raw_model_slug, is_placeholder_model_label, is_placeholder_model_value,
+    };
+    if is_placeholder_model_value(model) {
+        return crate::agent_model_catalog::resolve_acp_model(family, None, None, None)
+            .map(|(value, label, _)| launch_choice(&value, &label));
+    }
+    let (choice, from_catalog) = if let Some(entry) =
+        crate::agent_model_catalog::catalog_model(family, model)
+    {
+        let label = entry
+            .get("label")
+            .and_then(Value::as_str)
+            .filter(|l| !is_placeholder_model_label(l))
+            .map(str::to_string)
+            .or_else(|| humanize_raw_model_slug(model))
+            .unwrap_or_else(|| model.to_string());
+        (launch_choice(model, &label), true)
     } else {
         match family {
-            "claude" => claude_transcript_model_choice(model)
-                .map(|choice| launch_choice(&choice.value, &choice.label))?,
-            _ => launch_choice(model, model),
+            "claude" => {
+                let mapped = claude_transcript_model_choice(model)?;
+                if let Some(entry) =
+                    crate::agent_model_catalog::catalog_model("claude", &mapped.value)
+                {
+                    let label = entry
+                        .get("label")
+                        .and_then(Value::as_str)
+                        .filter(|l| !is_placeholder_model_label(l))
+                        .unwrap_or(&mapped.label);
+                    (launch_choice(&mapped.value, label), true)
+                } else {
+                    let clean = mapped.label.strip_suffix(" (1M)").unwrap_or(&mapped.label);
+                    (launch_choice(&mapped.value, clean), false)
+                }
+            }
+            "antigravity" => {
+                if let Some((base, _)) =
+                    crate::agent_model_catalog::split_antigravity_model_id(model)
+                {
+                    let catalog_entry =
+                        crate::agent_model_catalog::catalog_model("antigravity", &base);
+                    let label = catalog_entry
+                        .as_ref()
+                        .and_then(|e| e.get("label").and_then(Value::as_str).map(str::to_string))
+                        .filter(|l| !is_placeholder_model_label(l))
+                        .or_else(|| humanize_raw_model_slug(&base))
+                        .unwrap_or_else(|| base.clone());
+                    (launch_choice(&base, &label), catalog_entry.is_some())
+                } else {
+                    let label = humanize_raw_model_slug(model).unwrap_or_else(|| model.to_string());
+                    (launch_choice(model, &label), false)
+                }
+            }
+            _ => {
+                let label = humanize_raw_model_slug(model).unwrap_or_else(|| model.to_string());
+                (launch_choice(model, &label), false)
+            }
         }
     };
-    let label = crate::agent_model_pins::remembered_model_label(family, &choice.value)
-        .unwrap_or(choice.label);
+    let label = if from_catalog {
+        choice.label
+    } else {
+        crate::agent_model_pins::remembered_model_label(family, &choice.value)
+            .filter(|label| {
+                !is_placeholder_model_label(label) && humanize_raw_model_slug(label).is_none()
+            })
+            .unwrap_or(choice.label)
+    };
     Some(launch_choice(&choice.value, &label))
 }
 
@@ -251,7 +337,8 @@ fn launch_effort_choice(family: &str, effort: &str) -> Option<SessionChatDetecte
     let effort = effort.trim().to_ascii_lowercase();
     (!effort.is_empty() && effort.chars().all(|ch| ch.is_ascii_alphanumeric())).then(|| {
         let label = crate::agent_model_pins::remembered_effort_label(family, &effort)
-            .unwrap_or_else(|| effort.clone());
+            .filter(|l| !l.trim().is_empty())
+            .unwrap_or_else(|| crate::agent_model_catalog::effort_display_label(&effort));
         launch_choice(&effort, &label)
     })
 }

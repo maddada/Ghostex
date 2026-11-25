@@ -72,7 +72,7 @@ pub(crate) async fn handle_send_session_chat_message_http(
         request_id,
         body,
         |state, endpoint_path, request_id, body| async move {
-            send_session_chat_message_attempt(&state, endpoint_path, request_id, &body).await
+            send_session_chat_message_attempt(&state, endpoint_path, request_id, &body, false).await
         },
     )
     .await
@@ -83,6 +83,7 @@ pub(super) async fn send_session_chat_message_attempt(
     endpoint_path: String,
     request_id: String,
     body: &Value,
+    is_user_device: bool,
 ) -> RoutedResponse {
     let params = match read_domain_rpc_params(body) {
         Ok(params) => params,
@@ -131,26 +132,86 @@ pub(super) async fn send_session_chat_message_attempt(
                 },
             );
         }
+        // Serialize raw key sends (Escape / Shift+Tab) with any in-flight Terminal <-> Native
+        // switch and re-read `target` under the lock so `session_is_acp` never races a mode flip.
+        let switch_lock =
+            crate::acp::channel::session_switch_lock(&target.project_id, &target.session_id);
+        let _switch_guard = match tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            switch_lock.lock_owned(),
+        )
+        .await
+        {
+            Ok(guard) => guard,
+            Err(_) => {
+                return domain_error_response(
+                    endpoint_path,
+                    request_id,
+                    DomainStateError {
+                        code: "dependencyUnavailable",
+                        message: "This chat is switching between Terminal and Native mode. Try again in a moment.".to_string(),
+                    },
+                );
+            }
+        };
+        let target =
+            match resolve_session_chat_send_target(state, &params, "sendSessionChatMessage") {
+                Ok(fresh) => fresh,
+                Err(error) => return domain_error_response(endpoint_path, request_id, error),
+            };
         // An ACP session does not run an interactive TUI in its PTY, so raw keystrokes cannot be
         // typed into zmx; route supported keys through the structured ACP channel instead.
-        if crate::acp::session_is_acp(&target.session) {
+        let live_acp_key_channel =
+            crate::acp::channel::live(&target.project_id, &target.session_id, "abort");
+        if crate::acp::session_is_acp(&target.session) || live_acp_key_channel.is_some() {
+            if !crate::acp::session_is_acp(&target.session) {
+                if let Some(channel) = live_acp_key_channel.as_ref() {
+                    crate::acp::channel::reconcile_live_host_mode_locked(
+                        state,
+                        &target.project_id,
+                        &target.session_id,
+                        &channel.agent,
+                        "send_key",
+                    )
+                    .await;
+                }
+            }
             return match key {
-                "escape" => match crate::acp::channel::abort(&target.project_id, &target.session_id).await {
-                    Ok(()) => {
-                        record_session_chat_interrupt(state, &target, &request_id);
-                        routed_json(
-                            Some(endpoint_path),
-                            StatusCode::OK,
-                            rpc_success(request_id, json!({ "queued": true, "textBytes": 0 })),
-                        )
+                "escape" => {
+                    let antigravity_was_active = antigravity_turn_active(&target.session);
+                    // Record the user interrupt BEFORE awaiting ACP abort so any idle/stop event
+                    // posted while the driver unwinds never races ahead and enters `attention`.
+                    record_session_chat_interrupt(state, &target, &request_id);
+                    match crate::acp::channel::abort(&target.project_id, &target.session_id).await {
+                        Ok(()) => {
+                            if antigravity_was_active {
+                                record_antigravity_user_interrupt(state, &target);
+                            }
+                            routed_json(
+                                Some(endpoint_path),
+                                StatusCode::OK,
+                                rpc_success(request_id, json!({ "queued": true, "textBytes": 0 })),
+                            )
+                        }
+                        Err(error) => domain_error_response(endpoint_path, request_id, error),
                     }
-                    Err(error) => domain_error_response(endpoint_path, request_id, error),
-                },
+                }
                 "shift-tab" => {
-                    match crate::acp::channel::cycle_mode(&target.project_id, &target.session_id)
-                        .await
+                    match crate::acp::channel::cycle_mode(
+                        state,
+                        &target.project_id,
+                        &target.session_id,
+                        is_user_device,
+                    )
+                    .await
                     {
                         Ok(_) => {
+                            if let Ok(mut cache) = state.session_chat_option_cache.lock() {
+                                cache.remove(&crate::server::session_observer_key(
+                                    &target.project_id,
+                                    &target.session_id,
+                                ));
+                            }
                             let agent =
                                 crate::session_chat_follower::session_chat_display_agent_for_session(
                                     &target.session,
@@ -176,7 +237,7 @@ pub(super) async fn send_session_chat_message_attempt(
                     DomainStateError {
                         code: "invalidParams",
                         message: format!(
-                            "ACP sessions do not accept raw terminal key \"{key}\"; switch to Terminal first."
+                            "Native sessions do not accept raw terminal key \"{key}\"; switch to Terminal first."
                         ),
                     },
                 ),
@@ -235,6 +296,9 @@ pub(super) async fn send_session_chat_message_attempt(
                     message: "Cursor is waiting for an answer in the terminal; answer it before changing the mode.".to_string(),
                 },
             );
+        }
+        if key == "escape" {
+            record_session_chat_interrupt(state, &target, &request_id);
         }
         if let Err(error) = crate::session_chat_send::execute_session_chat_send(
             &target.project_id,
@@ -297,7 +361,10 @@ pub(super) async fn send_session_chat_message_attempt(
             },
         );
     }
-    if crate::acp::session_is_acp(&target.session) && !image_paths.is_empty() {
+    if (crate::acp::session_is_acp(&target.session)
+        || crate::acp::channel::live(&target.project_id, &target.session_id, "send").is_some())
+        && !image_paths.is_empty()
+    {
         if let Err(error) = crate::acp::validate_acp_image_paths(&state.paths, &image_paths) {
             return domain_error_response(endpoint_path, request_id, error);
         }
@@ -345,21 +412,61 @@ pub(super) async fn send_session_chat_message_attempt(
     // (2026-09-27 decision in session_chat_model_selection_alert.rs): it waits behind the change in
     // the queue, which applies the change first. A sleeping session keeps the wake path, which
     // queues behind it too.
-    if crate::presentation::effective_lifecycle_state(&target.session) == "running"
-        && crate::session_chat_model_selection::has_pending_selection(
+    if crate::presentation::effective_lifecycle_state(&target.session) == "running" {
+        if let Some(pending) = crate::session_chat_model_selection::read_pending_for_state(
             state,
             &target.project_id,
             &target.session_id,
-        )
-    {
-        return crate::session_chat_send_wake::queue_startup_send(
-            state,
-            endpoint_path,
-            request_id,
-            &params,
-            &target,
-            &text,
-        );
+        ) {
+            if pending.state == "failed" {
+                if pending.model.is_empty() {
+                    // An options/mode-only failure should never block sending messages.
+                    crate::session_chat_model_selection::clear_failed_selection(
+                        state,
+                        &target.project_id,
+                        &target.session_id,
+                    );
+                } else if draft_version.is_none() {
+                    // Non-composer sends (such as `ghostex agents send`) must fail loudly instead
+                    // of returning ok/pending while held behind a failed model change.
+                    let reason = pending
+                        .error_message
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or("The previous model change failed.");
+                    return domain_error_response(
+                        endpoint_path,
+                        request_id,
+                        DomainStateError {
+                            code: "modelChangeFailed",
+                            message: format!(
+                                "Message not sent: the queued model change before it failed ({reason}). Pick a model again to clear it and continue."
+                            ),
+                        },
+                    );
+                } else {
+                    return crate::session_chat_send_wake::queue_startup_send_with_reason(
+                        state,
+                        endpoint_path,
+                        request_id,
+                        &params,
+                        &target,
+                        &text,
+                        Some("modelChangeFailed"),
+                    );
+                }
+            } else {
+                return crate::session_chat_send_wake::queue_startup_send(
+                    state,
+                    endpoint_path,
+                    request_id,
+                    &params,
+                    &target,
+                    &text,
+                );
+            }
+        }
     }
     /*
     CDXC:SessionChat 2026-11-07 WHY: GitHub #479 follow-up: a message sent while Claude's
@@ -381,13 +488,14 @@ pub(super) async fn send_session_chat_message_attempt(
             CLAUDE_QUESTION_OPEN,
             &[],
         );
-        return crate::session_chat_send_wake::queue_startup_send(
+        return crate::session_chat_send_wake::queue_startup_send_with_reason(
             state,
             endpoint_path,
             request_id,
             &params,
             &target,
             &text,
+            Some("waitingForAnswer"),
         );
     }
     match crate::session_chat_queue_runtime::send_session_chat_message_with_draft(
@@ -410,16 +518,39 @@ pub(super) async fn send_session_chat_message_attempt(
                 json!({ "queued": true, "textBytes": text_bytes }),
             ),
         ),
-        Err(error)
-            if error.code == crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING =>
-        {
-            crate::session_chat_send_wake::queue_startup_send(
+        Err(error) if error.code == crate::session_chat_send_wake::SESSION_CHAT_AGENT_BUSY => {
+            crate::session_chat_send_wake::queue_startup_send_with_reason(
                 state,
                 endpoint_path,
                 request_id,
                 &params,
                 &target,
                 &text,
+                Some("agentBusy"),
+            )
+        }
+        Err(error)
+            if error.code == crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING =>
+        {
+            let reason = if crate::session_approval::session_awaits_answer(&target.session) {
+                Some("waitingForAnswer")
+            } else if crate::presentation::presentation_activity(
+                &target.session,
+                &chrono::Utc::now().to_rfc3339(),
+            ) == "working"
+            {
+                Some("agentBusy")
+            } else {
+                Some("starting")
+            };
+            crate::session_chat_send_wake::queue_startup_send_with_reason(
+                state,
+                endpoint_path,
+                request_id,
+                &params,
+                &target,
+                &text,
+                reason,
             )
         }
         Err(error) if crate::session_chat_send_wake::holds_until_agent_takes_input(&error) => {
@@ -431,13 +562,16 @@ pub(super) async fn send_session_chat_message_attempt(
                 &error.message,
                 &[],
             );
-            crate::session_chat_send_wake::queue_startup_send(
+            let reason = (error.code == crate::session_chat_send::SESSION_CHAT_PROMPT_WAITING_CODE)
+                .then_some("waitingForAnswer");
+            crate::session_chat_send_wake::queue_startup_send_with_reason(
                 state,
                 endpoint_path,
                 request_id,
                 &params,
                 &target,
                 &text,
+                reason,
             )
         }
         // CDXC:SessionChat 2026-10-31 WHY: a chat box send names its draft revision, and only the chat
@@ -461,6 +595,35 @@ pub(super) async fn send_session_chat_message_attempt(
     }
 }
 
+fn antigravity_turn_active(session: &Value) -> bool {
+    if session_chat_agent_for_session(session).as_deref() != Some("antigravity") {
+        return false;
+    }
+    let now_iso = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    crate::session_chat_follower::session_chat_hook_working(session)
+        || crate::session_approval::session_awaits_approval(session, &now_iso)
+}
+
+/// Records an interrupted-turn timestamp for Antigravity, whose CLI writes no closing row on
+/// cancel, so the chat draws "Agent was interrupted" and settles `lifecycle` to `interrupted`
+/// like Claude and Codex (`session_chat_agent_restarts.rs`).
+fn record_antigravity_user_interrupt(state: &AppState, target: &SessionChatSendTarget) {
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    if let Ok(db) = crate::storage::open_gxserver_database(&state.paths) {
+        let _ = crate::session_chat_agent_restarts::record_agent_restarted_mid_turn(
+            &db,
+            &target.project_id,
+            &target.session_id,
+            now_ms,
+        );
+    }
+    crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
+        state,
+        &target.project_id,
+        &target.session_id,
+    );
+}
+
 /// What a chat interrupt changes besides the keys it types: shared by Stop and by interrupt and
 /// send.
 pub(crate) fn record_session_chat_interrupt(
@@ -468,6 +631,8 @@ pub(crate) fn record_session_chat_interrupt(
     target: &SessionChatSendTarget,
     request_id: &str,
 ) {
+    let non_acp_antigravity_active =
+        !crate::acp::session_is_acp(&target.session) && antigravity_turn_active(&target.session);
     // The interrupt is an Escape as far as the activity state machine is
     // concerned: it ends the hook-backed working claim the way the
     // terminal-pane Escape key does (see the escape branch in
@@ -486,9 +651,12 @@ pub(crate) fn record_session_chat_interrupt(
     );
     /*
     CDXC:SessionChat 2026-10-17 WHY:
-    Copilot's Stop is a Ctrl+C that aborts the turn (session_chat_copilot_interrupt.rs), and Copilot fires no hook for an aborted turn and keeps no status in its terminal title, so the Escape rule above left the session "working" for good. Its chat Stop settles it idle; an Escape typed in Copilot's terminal pane only backgrounds a running shell and keeps the rule above.
+    Copilot's Stop is a Ctrl+C that aborts the turn (session_chat_copilot_interrupt.rs), and Copilot fires no hook for an aborted turn and keeps no status in its terminal title, so the Escape rule above left the session "working" for good. Its chat Stop settles it idle; an Escape typed in Copilot's terminal pane only backgrounds a running shell and keeps the rule above. OpenCode titles also carry no status (`titles_carry_no_status`), so an interrupt settles it idle too (GitHub #721).
     */
-    if session_chat_agent_for_session(&target.session).as_deref() == Some("copilot") {
+    if matches!(
+        session_chat_agent_for_session(&target.session).as_deref(),
+        Some("copilot" | "opencode")
+    ) {
         let mut idle_params = Map::new();
         idle_params.insert("projectId".to_string(), json!(target.project_id));
         idle_params.insert("sessionId".to_string(), json!(target.session_id));
@@ -504,6 +672,30 @@ pub(crate) fn record_session_chat_interrupt(
         state,
         &target.project_id,
         &target.session_id,
+    );
+    if non_acp_antigravity_active {
+        record_antigravity_user_interrupt(state, target);
+    }
+}
+
+/// Clears any pending user-interrupt suppression once a new chat message has been delivered
+/// (Interrupt & Send, coordinator interrupt followed by a new prompt, or any prompt after a
+/// prior Escape), so the new turn's own completion is never swallowed.
+pub(crate) fn clear_session_chat_interrupt(
+    state: &AppState,
+    target: &SessionChatSendTarget,
+    request_id: &str,
+) {
+    crate::program_status::clear_program_status_interrupt(&target.project_id, &target.session_id);
+    let mut clear_params = Map::new();
+    clear_params.insert("projectId".to_string(), json!(target.project_id));
+    clear_params.insert("sessionId".to_string(), json!(target.session_id));
+    clear_params.insert("event".to_string(), json!("clearInterrupt"));
+    let _ = crate::server::dispatch_agent_http_blocking(
+        state,
+        "/api/updateAgentActivity".to_string(),
+        request_id.to_string(),
+        clear_params,
     );
 }
 
@@ -551,12 +743,16 @@ pub(crate) async fn handle_interrupt_session_chat_http(
     // Cancel first so queued sends (and an in-flight sequence's remaining
     // steps) drop, then deliver ESC through the queue's new generation.
     crate::session_chat_send::cancel_session_chat_sends(&target.project_id, &target.session_id);
-    if session_chat_agent_for_session(&target.session).as_deref() == Some("opencode") {
+    if session_chat_agent_for_session(&target.session).as_deref() == Some("opencode")
+        && !crate::acp::session_is_acp(&target.session)
+        && crate::acp::channel::live(&target.project_id, &target.session_id, "abort").is_none()
+    {
         let id = crate::session_chat_opencode::session_id(&target.session);
         let prompt_id = params
             .get("toolUseId")
             .and_then(Value::as_str)
             .map(str::to_owned);
+        let cancelling_prompt = prompt_id.is_some();
         let result = tokio::task::spawn_blocking(move || {
             let id = id?;
             crate::session_chat_opencode::interrupt(&id, prompt_id.as_deref())?;
@@ -569,6 +765,9 @@ pub(crate) async fn handle_interrupt_session_chat_http(
                 "OpenCode interrupt task failed.",
             ))
         });
+        if result.is_ok() && !cancelling_prompt {
+            record_session_chat_interrupt(state, &target, &request_id);
+        }
         schedule_session_chat_option_redetect(
             state,
             &target.project_id,
@@ -585,17 +784,91 @@ pub(crate) async fn handle_interrupt_session_chat_http(
         };
     }
     // An ACP-mode session cancels its active turn via ACP `session/cancel` (acp/channel.rs).
-    if crate::acp::session_is_acp(&target.session) {
+    // Record the user interrupt BEFORE awaiting abort so any activity report from the host while
+    // cancelling never enters finished-turn `attention`.
+    let live_acp_abort_channel =
+        crate::acp::channel::live(&target.project_id, &target.session_id, "abort");
+    if crate::acp::session_is_acp(&target.session) || live_acp_abort_channel.is_some() {
+        if !crate::acp::session_is_acp(&target.session) {
+            if let Some(channel) = live_acp_abort_channel.as_ref() {
+                crate::acp::channel::reconcile_live_host_mode(
+                    state,
+                    &target.project_id,
+                    &target.session_id,
+                    &channel.agent,
+                    "interrupt_chat",
+                )
+                .await;
+            }
+        }
+        let antigravity_was_active = antigravity_turn_active(&target.session);
+        record_session_chat_interrupt(state, &target, &request_id);
         return match crate::acp::channel::abort(&target.project_id, &target.session_id).await {
             Ok(()) => {
-                record_session_chat_interrupt(state, &target, &request_id);
+                if antigravity_was_active {
+                    record_antigravity_user_interrupt(state, &target);
+                }
                 routed_json(
                     Some(endpoint_path),
                     StatusCode::OK,
                     rpc_success(request_id, json!({ "interrupted": true })),
                 )
             }
-            Err(error) => domain_error_response(endpoint_path, request_id, error),
+            Err(error) => {
+                // If the Native host already exited back to the shell, stopping the turn has
+                // nothing to cancel; settle any stale `"working"` state to `"idle"` cleanly so
+                // the chat does not stay wedged on `"working"`.
+                let zmx_name = target.zmx_name.clone();
+                let host_running = tokio::task::spawn_blocking(move || {
+                    crate::acp::host_process_running(&zmx_name)
+                })
+                .await
+                .unwrap_or(true);
+                if !host_running {
+                    let agent_name = target
+                        .session
+                        .pointer("/runtimeSettings/acpFamily")
+                        .or_else(|| target.session.get("agentId"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("antigravity")
+                        .to_string();
+                    let state_bg = state.clone();
+                    let pid = target.project_id.clone();
+                    let sid = target.session_id.clone();
+                    let _ = tokio::task::spawn_blocking(move || {
+                        let mut params = Map::new();
+                        params.insert("projectId".to_string(), json!(pid));
+                        params.insert("sessionId".to_string(), json!(sid));
+                        params.insert("agentName".to_string(), json!(agent_name));
+                        params.insert("eventName".to_string(), json!("Interrupt"));
+                        params.insert("status".to_string(), json!("idle"));
+                        params.insert(
+                            "timestamp".to_string(),
+                            json!(chrono::Utc::now().timestamp_millis()),
+                        );
+                        let _ = crate::server::dispatch_agent_http_blocking(
+                            &state_bg,
+                            "/api/ingestAgentHookEvent".to_string(),
+                            format!("acp-abort-dead-host-{pid}-{sid}"),
+                            params,
+                        );
+                    })
+                    .await;
+                    if antigravity_was_active {
+                        record_antigravity_user_interrupt(state, &target);
+                    }
+                    routed_json(
+                        Some(endpoint_path),
+                        StatusCode::OK,
+                        rpc_success(
+                            request_id,
+                            json!({ "interrupted": true, "hostExited": true }),
+                        ),
+                    )
+                } else {
+                    domain_error_response(endpoint_path, request_id, error)
+                }
+            }
         };
     }
     // Pi and OMP (OMP shares Pi's transcript family) stop through the chat channel when their

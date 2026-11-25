@@ -491,6 +491,35 @@ pub struct SectionView {
     pub member_ids: Vec<String>,
 }
 
+/// Per-computer folding on Main Hub's repeated rows (Ask Ghostex AI and Autopilot supervisor):
+/// with computers combined, this computer's row carries a neutral `+N` chip that unfolds the other
+/// computers' rows under it, each showing its computer icon and name.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum MachineFold {
+    /// The lead row (this computer's) with `other_count` other computers' rows folded under it.
+    Lead {
+        /// Key passed to [`crate::SidebarUiIntent::ToggleMachineFold`].
+        key: String,
+        /// Number of other computers' rows under this lead (`>= 1`).
+        other_count: usize,
+        /// Whether those other computers' rows are currently unfolded below this row.
+        expanded: bool,
+        /// Whether a folded (currently hidden) child row holds the focused session.
+        contains_active: bool,
+    },
+    /// One of the other computers' rows under a [`MachineFold::Lead`].
+    /// While the lead is folded, `SessionView::nesting.folded` is also `true` so `sections.rs`
+    /// hides it while keeping it in section and group counts.
+    Child {
+        /// The lead's fold key, for revealing a folded child row.
+        fold_key: String,
+        /// The computer's display name (e.g. "Windows", "Arch").
+        machine_label: String,
+        /// The computer's tab id, for looking up its icon.
+        machine_id: String,
+    },
+}
+
 /// A row in a group: the session's own values plus what this list says about it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SessionView {
@@ -500,6 +529,8 @@ pub struct SessionView {
     pub is_multi_selected: bool,
     /// Where the row sits in its coordinator's tree; default for every other row.
     pub nesting: RowNesting,
+    /// Per-computer fold role for Main Hub's Ask Ghostex AI and Autopilot supervisor rows.
+    pub machine_fold: Option<MachineFold>,
 }
 
 /// A coordinator's tree in the list: its open threads drawn right under it, indented.
@@ -614,12 +645,17 @@ impl FoldedStatus {
             return;
         }
         self.working |= row.activity == "working";
-        // A thread waiting on the user (a permission prompt, a bell: gxserver's `waiting`) is the
-        // pink needs-you dot; only a finished turn is the stack's blue, so the blue is exactly what
-        // opening the orchestrator clears (server/src/coordinators/seen_threads.rs).
-        let waiting = row.activity == "attention" && row.thread_state.as_deref() == Some("waiting");
+        // A row waiting on the user (a thread in gxserver's `waiting` state, or any row whose
+        // attention kind is `needsInput` such as a terminal bell or prompt) is the pink needs-you
+        // dot; only a finished turn is the stack's blue, so working threads hide blue finished
+        // dots without hiding the coordinator's own `needsInput` alert.
+        let waiting = row.activity == "attention"
+            && (row.thread_state.as_deref() == Some("waiting") || row.attention_needs_input);
         self.question |= row.has_question() || waiting;
         self.attention |= !row.has_question() && row.activity == "attention" && !waiting;
+        if self.working {
+            self.attention = false;
+        }
         self.background_work |= row.shows_background_work();
     }
 
@@ -819,6 +855,9 @@ pub struct SessionRow {
     /// The hover tooltip, already assembled.
     pub title_tooltip: String,
     pub activity: String,
+    /// gxserver's `attention.kind == "needsInput"`: the attention waits on the user (e.g. a
+    /// terminal bell or prompt) rather than being a finished turn.
+    pub attention_needs_input: bool,
     /// A background shell or monitor is still running after the agent's turn; drawn as a grey dot
     /// when the row is otherwise idle.
     pub has_background_work: bool,
@@ -855,6 +894,9 @@ pub struct SessionRow {
     /// A computer's Chief of Staff (gxserver's `isChief`): pinned first in its group, ahead of
     /// every other pinned row (ordering.rs `sort_pinned`).
     pub is_chief: bool,
+    /// A session in an Autopilot supervisor system project (`autopilotSupervisorProject`), listed
+    /// under Main Hub's Autopilot section (`SectionId::Autopilot`).
+    pub is_autopilot_supervisor: bool,
     /// A GBot chat Chief of Staff opened (gxserver's `gbotsChat.openedBy`): its row carries a small
     /// "Chief" tag under the bot (apps/desktop/src/app/native_sidebar/gbots_rows.rs).
     pub opened_by_chief: bool,

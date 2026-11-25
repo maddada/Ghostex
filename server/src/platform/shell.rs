@@ -168,6 +168,9 @@ pub(crate) fn powershell_single_quote(text: &str) -> String {
 /// The start, middle and end of the PowerShell expression [`powershell_native_arg`] writes for a
 /// value holding a double quote, around its two single-quoted literals.
 const NATIVE_ARG_START: &str = "$(if ($PSNativeCommandArgumentPassing -in 'Standard','Windows') { ";
+/// The start of the same expression for a batch program (`claude.cmd`), see
+/// [`powershell_native_args_for_batch`].
+const NATIVE_ARG_BATCH_START: &str = "$(if ($PSNativeCommandArgumentPassing -eq 'Standard') { ";
 const NATIVE_ARG_MIDDLE: &str = " } else { ";
 const NATIVE_ARG_END: &str = " })";
 
@@ -187,6 +190,17 @@ pub(crate) fn powershell_native_arg(text: &str) -> String {
         powershell_single_quote(text),
         powershell_single_quote(&windows_command_line_argument(text))
     )
+}
+
+/// `command`, whose program is a batch file (`claude.cmd`, `codex.cmd`), with each
+/// [`powershell_native_arg`] expression picking the Windows command-line literal unless PowerShell
+/// escapes for every program.
+///
+/// CDXC:PlatformSupport 2026-11-24 WHY:
+/// GitHub #737: Claude Code installed with npm (`claude.cmd`) quit with "Invalid JSON provided to --settings" in every Terminal session on a PC with PowerShell 7, which sessions use whenever it is installed. PowerShell 7's default `$PSNativeCommandArgumentPassing = 'Windows'` escapes inner double quotes for an .exe but passes a .bat or .cmd file's arguments the legacy way, so the plain value took the first branch and reached claude.exe as `{ultracode:false}` (checked on PowerShell 7.6.10 and Windows PowerShell 5.1.26100 with Claude Code 2.1.331 on 2026-11-24). For a batch program only `Standard` escapes, so `Windows` and `Legacy` (and 5.1) take the literal, which `cmd`'s `%*` hands on unchanged.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn powershell_native_args_for_batch(command: &str) -> String {
+    command.replace(NATIVE_ARG_START, NATIVE_ARG_BATCH_START)
 }
 
 /// `text` as one argument on a Windows command line, read back whole by the C runtime's rules.
@@ -219,7 +233,10 @@ fn windows_command_line_argument(text: &str) -> String {
 /// single-quoted literal or its expression), and the length it takes.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) fn read_powershell_native_arg(text: &str) -> Option<(String, usize)> {
-    let Some(expression) = text.strip_prefix(NATIVE_ARG_START) else {
+    let Some(expression) = text
+        .strip_prefix(NATIVE_ARG_START)
+        .or_else(|| text.strip_prefix(NATIVE_ARG_BATCH_START))
+    else {
         return read_powershell_single_quoted(text);
     };
     let (value, value_len) = read_powershell_single_quoted(expression)?;

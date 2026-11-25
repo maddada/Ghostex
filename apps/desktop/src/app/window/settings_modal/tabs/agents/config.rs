@@ -293,7 +293,7 @@ impl AgentsTab {
                     value: "ask".to_string(),
                 },
                 SettingOption {
-                    label: "Skip permissions".to_string(),
+                    label: "Full permissions".to_string(),
                     value: "bypass".to_string(),
                 },
             ];
@@ -317,7 +317,7 @@ impl AgentsTab {
                 p,
                 "agentApprovals",
                 RowSpec::new("Agent approvals").description(
-                    "Choose whether supported agents ask before editing files or running commands. Per-agent settings can override this default.",
+                    "Choose whether supported agents ask before editing files or running commands. Full permissions: the agent won't ask for permission before edits or commands. At your own risk. Per-agent settings can override this default.",
                 ),
                 None,
                 control,
@@ -387,14 +387,6 @@ impl AgentsTab {
     ) -> Option<Div> {
         let section = search.section("homeFolder");
         let values = self.store.read(cx).values();
-        // The card belongs to the Main Hub beta extension: off, nothing of it shows.
-        let main_hub_on = ghostex_settings_catalog::built_in_extensions::on_with(
-            ghostex_settings_catalog::built_in_extensions::CHIEF,
-            |key| values.value(key).as_bool(),
-        );
-        if !main_hub_on {
-            return None;
-        }
         let mut rows: Vec<AnyElement> = Vec::new();
         // CDXC:Settings 2026-11-14 DECISION (AGENTS.md, Q3107): only matters with Spaces on.
         let spaces_on =
@@ -423,7 +415,7 @@ impl AgentsTab {
                 cx,
             ));
         }
-        // Shown while GBots are on (they need Main Hub, checked above).
+        // Shown while GBots are on.
         let gbots_on = ghostex_settings_catalog::built_in_extensions::on_with(
             ghostex_settings_catalog::built_in_extensions::GBOTS,
             |key| values.value(key).as_bool(),
@@ -571,7 +563,7 @@ impl AgentsTab {
         let confirm = settings_button(
             p,
             "agents-skip-permissions-confirm",
-            "Skip permissions",
+            "Full permissions",
             None,
             ButtonVariant::DestructiveDialog,
             false,
@@ -586,11 +578,11 @@ impl AgentsTab {
         let focus = self.confirm_focus.clone();
         Some(settings_dialog(
             p,
-            SettingsDialogSpec::new("agents-skip-permissions", "Skip permissions?")
+            SettingsDialogSpec::new("agents-skip-permissions", "Full permissions?")
                 .width(400.0)
                 .spacing(20.0, 16.0)
                 .description(
-                    "Supported agents may edit files and run commands without asking you first. Only enable this for agents and projects you trust."
+                    "The agent won't ask for permission before edits or commands. At your own risk. Only enable this for agents and projects you trust."
                         .into_any_element(),
                 ),
             Vec::new(),

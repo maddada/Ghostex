@@ -8,14 +8,38 @@ use super::args::{parse_args, Flags};
 use super::output::print_json;
 use super::rpc::{self, CliError, CliResult};
 
+const WORKSPACE_HELP: &str = "\
+Usage:
+  ghostex workspace list
+  ghostex workspace instructions <workspace>
+  ghostex workspace instructions <workspace> --set <text> | --clear
+  ghostex workspace create <name> [--kind work|personal] [--color #hex] [--letter L]
+  ghostex workspace rename <workspace> <new name>
+  ghostex workspace move-project <project> <workspace>
+  ghostex workspace delete <workspace>
+
+Workspaces and projects can be named by id or by name.
+Changing workspaces (create, rename, move-project, delete, instructions --set/--clear)
+only works in Settings > Workspaces, on your phone, or from a terminal outside Ghostex
+(agent sessions and Ghostex terminal panes can't modify workspaces).";
+
 /// `ghostex workspace list | create <name> [--kind work|personal] [--color #hex] [--letter L] |
-/// rename <workspace> <new name> | move-project <project> <workspace> | delete <workspace>`.
+/// rename <workspace> <new name> | move-project <project> <workspace> |
+/// instructions <workspace> [--set <text> | --clear] | delete <workspace>`.
 pub(super) fn workspace_command(args: &[String]) -> CliResult<()> {
     let parsed = parse_args(args);
     let flags = &parsed.flags;
+    if flags.truthy("help") || flags.truthy("h") {
+        println!("{WORKSPACE_HELP}");
+        return Ok(());
+    }
     let subcommand = parsed.rest.first().map(String::as_str).unwrap_or("list");
     let rest = parsed.rest.get(1..).unwrap_or_default();
     match subcommand {
+        "help" | "--help" | "-h" => {
+            println!("{WORKSPACE_HELP}");
+            Ok(())
+        }
         "list" | "ls" => list(flags),
         "create" | "new" => {
             let name = joined(rest, "Pass the name: ghostex workspace create <name>.")?;
@@ -70,8 +94,25 @@ pub(super) fn workspace_command(args: &[String]) -> CliResult<()> {
             params.insert("workspaceId".to_string(), json!(workspace));
             call_and_print("/api/deleteWorkspace", params, flags)
         }
+        "instructions" => {
+            let workspace = joined(
+                rest,
+                "Pass the workspace: ghostex workspace instructions <workspace> [--set <text> | --clear].",
+            )?;
+            let mut params = Map::new();
+            params.insert("workspaceId".to_string(), json!(workspace));
+            if flags.truthy("clear") {
+                params.insert("content".to_string(), json!(""));
+                call_and_print("/api/writeWorkspaceInstructions", params, flags)
+            } else if let Some(text) = flags.string_value("set") {
+                params.insert("content".to_string(), json!(text));
+                call_and_print("/api/writeWorkspaceInstructions", params, flags)
+            } else {
+                call_and_print("/api/readWorkspaceInstructions", params, flags)
+            }
+        }
         other => Err(CliError::Other(format!(
-            "Unknown workspace command \"{other}\". Use list, create, rename, move-project or delete."
+            "Unknown workspace command \"{other}\". Use list, create, rename, move-project, instructions or delete."
         ))),
     }
 }
@@ -130,6 +171,9 @@ fn list(flags: &Flags) -> CliResult<()> {
                 "color": workspace.get("color"),
                 "letter": workspace.get("letter"),
                 "claudeAccountId": workspace.get("claudeAccountId"),
+                "claudeAccountIds": workspace.get("claudeAccountIds"),
+                "homeMachineId": workspace.get("homeMachineId"),
+                "homeMachineName": workspace.get("homeMachineName"),
                 "default": id == default_id,
                 "projects": names,
             })

@@ -1091,14 +1091,11 @@ impl AccountsTab {
             let sessions = account.session_count();
             let effect = if sessions == 0 {
                 "No sessions use it.".to_string()
+            } else if sessions == 1 {
+                "1 session uses it. It needs another account before it resumes.".to_string()
             } else {
                 format!(
-                    "{} use it. Each one needs another account before it resumes.",
-                    if sessions == 1 {
-                        "1 session".to_string()
-                    } else {
-                        format!("{sessions} sessions")
-                    }
+                    "{sessions} sessions use it. Each one needs another account before it resumes."
                 )
             };
             column = column.child(

@@ -531,6 +531,45 @@ pub(crate) fn read_pi_session_chat_transcript_tail_file(
             chronological.push((message, entry.offset));
         }
     }
+    let local_slash = crate::session_chat_omp_local::read_local_slash_messages(file_path);
+    if !local_slash.is_empty() {
+        let max_real_ts = chronological
+            .iter()
+            .filter_map(|(msg, _)| msg.timestamp)
+            .max();
+        let include_all = end_offset.is_none();
+        let mut tagged: Vec<(i64, u8, usize, SessionChatMessage, u64)> =
+            Vec::with_capacity(chronological.len() + local_slash.len());
+        let mut last_ts = 0i64;
+        for (idx, (msg, off)) in chronological.into_iter().enumerate() {
+            let ts = msg.timestamp.unwrap_or(last_ts);
+            last_ts = ts;
+            tagged.push((ts, 0, idx, msg, off));
+        }
+        for (idx, mut msg) in local_slash.into_iter().enumerate() {
+            let ts = msg.timestamp.unwrap_or(i64::MAX);
+            if !include_all && max_real_ts.is_some_and(|cap| ts > cap) {
+                continue;
+            }
+            let anchor_offset = tagged
+                .iter()
+                .filter(|(rts, kind, _, _, _)| *kind == 0 && *rts <= ts)
+                .map(|(_, _, _, _, off)| *off)
+                .last()
+                .unwrap_or(0);
+            msg.byte_offset = Some(anchor_offset);
+            tagged.push((ts, 1, idx, msg, anchor_offset));
+        }
+        tagged.sort_by(|a, b| {
+            a.0.cmp(&b.0)
+                .then_with(|| a.1.cmp(&b.1))
+                .then_with(|| a.2.cmp(&b.2))
+        });
+        chronological = tagged
+            .into_iter()
+            .map(|(_, _, _, msg, off)| (msg, off))
+            .collect();
+    }
     let selected: Vec<(SessionChatMessage, u64)> = if limit > 0 {
         let mut skip = chronological.len().saturating_sub(limit);
         // One entry can decode to several rows (thinking, then the reply) at one offset. An older

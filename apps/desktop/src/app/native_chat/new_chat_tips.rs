@@ -17,8 +17,8 @@
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use crate::app::native_chat::cursor::ChatCursor as _;
 use ghostex_gx_chat_core::extras::new_chat_tips::{
-    NewChatTip, fill_new_chat_tip_keys, is_new_chat_tip_id, new_chat_tip_applies,
-    new_chat_tip_order,
+    NewChatTip, fill_new_chat_tip_keys, format_new_chat_tip_key_words, is_new_chat_tip_id,
+    new_chat_tip_applies, new_chat_tip_order,
 };
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -91,9 +91,14 @@ pub(crate) fn read_tip_ids(settings: &Map<String, Value>) -> HashSet<String> {
         .collect()
 }
 
-/// A tip's text with this person's keys in place of its `{key:…}`s; `None` when one is unbound.
+/// A tip's text with this person's keys in plain words in place of its `{key:…}`s; `None` when one
+/// is unbound.
 fn with_keys(text: &str) -> Option<String> {
-    fill_new_chat_tip_keys(text, crate::app::hotkeys::gpui_configured_hotkey_label)
+    let mac = super::keyboard::chat_mac_keys();
+    fill_new_chat_tip_keys(text, |action_id| {
+        let chord = crate::app::hotkeys::gpui_configured_hotkey_key(action_id)?;
+        Some(format_new_chat_tip_key_words(&chord, mac))
+    })
 }
 
 /// The unread tips that apply now, in today's order.

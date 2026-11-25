@@ -678,6 +678,7 @@ impl GhostexGpuiApp {
         if let Some(next) = state.active.as_deref().and_then(remap) {
             state.active = Some(next);
         }
+        state.history.remap_paths(old, new);
         state.expanded = std::mem::take(&mut state.expanded)
             .into_iter()
             .map(|path| remap(&path).unwrap_or(path))
@@ -704,6 +705,7 @@ impl GhostexGpuiApp {
         if state.active.as_deref().is_some_and(gone) {
             state.active = None;
         }
+        state.history.remove_matching(gone);
         state.expanded.retain(|path| !gone(path));
         state.drafts.retain(|path, _| !gone(path));
         if self.native_docs.notes.remove_for_deleted_entry(deleted) {

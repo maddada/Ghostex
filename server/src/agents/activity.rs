@@ -252,11 +252,36 @@ pub(crate) fn ingest_agent_hook_event(
     let mut quiet_turn_end = false;
     let mut session_chat_prompt_changed = false;
     let mut session_chat_activity_changed = false;
+    let normalized_event = read_text(params, "eventName")
+        .or_else(|| read_text(params, "rawEventName"))
+        .unwrap_or_default();
+    if normalized_event.eq_ignore_ascii_case("interrupt") {
+        crate::program_status::note_program_status_interrupt(
+            &lifecycle.project_id,
+            &lifecycle.session_id,
+        );
+    }
     if normalize_agent_id(params.get("agentName").and_then(Value::as_str)).as_deref()
         == Some("antigravity")
     {
-        let stop = read_text(params, "eventName")
-            .is_some_and(|event| event.trim().eq_ignore_ascii_case("stop"));
+        let stop = normalized_event.eq_ignore_ascii_case("stop");
+        if stop
+            && params
+                .get("terminationReason")
+                .or_else(|| params.get("termination_reason"))
+                .and_then(Value::as_str)
+                .is_some_and(|reason| {
+                    let lower = reason.to_ascii_lowercase();
+                    lower.contains("cancel")
+                        || lower.contains("interrupt")
+                        || lower.contains("abort")
+                })
+        {
+            crate::program_status::note_program_status_interrupt(
+                &lifecycle.project_id,
+                &lifecycle.session_id,
+            );
+        }
         crate::program_status::note_antigravity_background_wait(
             &lifecycle.project_id,
             &lifecycle.session_id,
@@ -575,9 +600,28 @@ fn coordinator_session_start_context(
     );
     let is_session_start = read_text(params, "eventName")
         .is_some_and(|event| event.eq_ignore_ascii_case("SessionStart"));
+    let session_runtime = session.get("runtimeSettings").and_then(Value::as_object);
+    let load_workspace_instructions = |paths: &crate::paths::GxserverPaths| -> Option<String> {
+        if cfg!(test) {
+            return None;
+        }
+        let project = repository
+            .get_project(&lifecycle.project_id)
+            .ok()
+            .flatten()?;
+        if crate::workspaces::session_skips_workspace_context(&project, session_runtime) {
+            return None;
+        }
+        let (workspace_id, workspace_name) =
+            crate::workspaces::project_workspace_info(repository.connection(), &project)
+                .ok()
+                .flatten()?;
+        crate::workspaces::read_workspace_instructions_note(paths, &workspace_id, &workspace_name)
+    };
     // A Claude or Codex session whose new conversation lost its earlier context gets its
     // coordinator role (coordinators/role.rs `coordinator_role_again`, GitHub #570) and/or its
     // per-session standing role line (agents/standing_role.rs, GitHub #678) back on SessionStart.
+    // Codex also receives per-workspace instructions here (never inline on a shell command line).
     if matches!(agent.as_str(), "claude" | "codex") && is_session_start {
         let key = (lifecycle.project_id.clone(), lifecycle.session_id.clone());
         let skill_coordinator = crate::coordinators::coordinator_role_is_skill(session)
@@ -599,11 +643,24 @@ fn coordinator_session_start_context(
             &key.0,
             &key.1,
         );
-        return Ok(crate::agents::standing_role::session_start_context(
+        let base_context = crate::agents::standing_role::session_start_context(
             coordinator_context.as_deref(),
             standing_role.as_ref().map(|record| record.role.as_str()),
             &source,
-        ));
+        );
+        let codex_workspace_note =
+            if agent == "codex" && !matches!(source.as_str(), "resume" | "fork") {
+                let paths = crate::paths::get_gxserver_paths(None);
+                load_workspace_instructions(&paths)
+            } else {
+                None
+            };
+        let combined = [base_context.as_deref(), codex_workspace_note.as_deref()]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        return Ok((!combined.is_empty()).then_some(combined));
     }
     let is_session_start = is_session_start
         || (agent == "kiro"
@@ -634,8 +691,14 @@ fn coordinator_session_start_context(
     };
     let legacy_coordinator =
         coordinator && !crate::coordinators::coordinator_role_is_skill(session);
+    let workspace_instructions = load_workspace_instructions(&paths);
     // Extension lines are for ordinary sessions only, as on a launch flag (marked_handovers.rs).
-    let note = super::note_text_with(&paths, marked, !coordinator && !thread);
+    let note = super::note_text_with_workspace(
+        &paths,
+        marked,
+        !coordinator && !thread,
+        workspace_instructions.as_deref(),
+    );
     let standing_role = crate::agents::standing_role::read_standing_role(
         repository.connection(),
         &lifecycle.project_id,
@@ -744,7 +807,13 @@ pub(crate) fn next_session_chat_prompt_setting(
     if let Some(prompt) =
         crate::session_chat::derive_session_chat_prompt(tool_name, tool_input, event_name)
     {
-        let prompt = prompt.with_tool_use_id(tool_use_id.map(str::to_string));
+        let approval_reason = params
+            .get("approvalReason")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        let prompt = prompt
+            .with_tool_use_id(tool_use_id.map(str::to_string))
+            .with_approval_reason(approval_reason);
         /*
         CDXC:SessionChat 2026-10-06 WHY:
         Claude Code follows an AskUserQuestion's PreToolUse (which carries the call's
@@ -1238,6 +1307,7 @@ pub(crate) fn persistable_agent_activity_snapshot(value: Option<&Value>) -> Valu
         // false and the prompt would never reach disk.
         "sessionChatPrompt",
         "suppressedUntil",
+        "userInterrupted",
         "workingSource",
         "workingStartedAt",
         // The working stint is only background work after the turn ended (session_status).
@@ -1373,7 +1443,7 @@ pub(crate) fn normalize_agent_hook_activity(
         if lower == "stop" {
             return Some("attention".to_string());
         }
-        if matches!(lower.as_str(), "sessionend" | "session-end") {
+        if matches!(lower.as_str(), "interrupt" | "sessionend" | "session-end") {
             return Some("idle".to_string());
         }
     }
@@ -1416,7 +1486,7 @@ pub(crate) fn normalize_agent_hook_activity(
         ) {
             return Some("working".to_string());
         }
-        if matches!(lower.as_str(), "sessionend" | "session-end") {
+        if matches!(lower.as_str(), "interrupt" | "sessionend" | "session-end") {
             return Some("idle".to_string());
         }
     }
@@ -1444,9 +1514,12 @@ pub(crate) fn normalize_agent_hook_activity(
         }
     }
     if normalized_agent.as_deref() == Some("antigravity") {
+        if lower == "stop" {
+            return Some("attention".to_string());
+        }
         if matches!(
             lower.as_str(),
-            "stop" | "turn-completion" | "sessionend" | "session-end"
+            "interrupt" | "turn-completion" | "sessionend" | "session-end"
         ) {
             return Some("idle".to_string());
         }
@@ -1519,7 +1592,10 @@ pub(crate) fn normalize_agent_hook_activity(
     if compact == "askuserquestion" {
         return Some("attention".to_string());
     }
-    if matches!(compact.as_str(), "sessionidle" | "stopfailure") {
+    if matches!(
+        compact.as_str(),
+        "interrupt" | "sessionidle" | "stopfailure"
+    ) {
         return Some("idle".to_string());
     }
     if let Some(status) = status

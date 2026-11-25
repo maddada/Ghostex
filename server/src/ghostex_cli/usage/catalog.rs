@@ -259,7 +259,7 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "create-agent <agentId> --project-id id [--group-id id] [--model m] [--effort e] [--first-input-draft text] [--run-on location] [--account number|email] [--defer-start] [--replace-empty-sessions] [--allow-hidden]",
-            "Create and start a configured agent session (ghostex projects lists the project ids); --group-id puts it in one of the project's session groups; an agent turned off in Settings > Agents is refused unless --allow-hidden is passed (ghostex agents types lists the visible ones); --model/--effort (Claude, Codex, Antigravity CLI, Copilot, Grok Build, Hermes Agent; Pi and OMP take provider/model and a thinking level; Cursor CLI takes --model only) apply to this session only; Empryo takes provider/model and starts on it without changing Empryo's default; --first-input-draft stages text in its input without sending; --run-on local|docker|hetzner|vercel|daytona|e2b|digitalocean|docker:<host> runs Claude, Codex, OpenCode or Pi in an agentbox box; --account starts a Claude or Codex session on that saved account (one that needs signing in is refused)",
+            "Create and start a configured agent session (ghostex projects lists the project ids); --group-id puts it in one of the project's session groups; an agent turned off in Settings > Agents is refused unless --allow-hidden is passed (ghostex agents types lists the visible ones); --model/--effort (Claude, Codex, Antigravity, Copilot, Grok Build, Hermes Agent; Pi and OMP take provider/model and a thinking level; Cursor CLI takes --model only) apply to this session only; Empryo takes provider/model and starts on it without changing Empryo's default; --first-input-draft stages text in its input without sending; --run-on local|docker|hetzner|vercel|daytona|e2b|digitalocean|docker:<host> runs Claude, Codex, OpenCode or Pi in an agentbox box; --account starts a Claude or Codex session on that saved account (one that needs signing in is refused)",
         ),
         format_help_command(
             "board guide",
@@ -618,8 +618,8 @@ pub fn usage() -> String {
             "Answer the offer a session gets when its linked PR is merged: remove its worktree and park it, or keep both",
         ),
         format_help_command(
-            "workspace list | create <name> [--kind work|personal] | rename <workspace> <new name> | move-project <project> <workspace> | delete <workspace>",
-            "List this computer's workspaces and their projects, create, rename or delete one, or move a project (by id, name or folder) into one; a workspace is named by id or name",
+            "workspace list | create <name> [--kind work|personal] | rename <workspace> <new name> | move-project <project> <workspace> | instructions <workspace> [--set <text> | --clear] | delete <workspace>",
+            "List this computer's workspaces and their projects, read a workspace's instructions, or change workspaces. Creating, renaming, deleting, moving projects, and setting or clearing instructions only work in Settings > Workspaces, on your phone, or from a terminal outside Ghostex (agent sessions and Ghostex terminal panes are refused); a workspace is named by id or name",
         ),
         format_help_command(
             "connectors [status] | sign-in | sign-out | refresh | connect <app> | tools | call <tool> [--args <json>]  (each takes --workspace name|id; sign-in and connect take --no-open)",

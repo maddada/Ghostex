@@ -31,6 +31,66 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
         action: J::Obj(&[("id", J::Str("focusChatComposer")), ("kind", J::Str("focusedChatAction"))]),
     },
     HotkeyDefinition {
+        id: "focusSessionInbox",
+        title: "Focus Session Inbox",
+        description: "Move the keyboard to the Session Inbox above the chat box, expanding it if folded.",
+        default_key: "cmd+shift+i",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("id", J::Str("focusSessionInbox")), ("kind", J::Str("focusedChatAction"))]),
+    },
+    HotkeyDefinition {
+        id: "inboxNextItem",
+        title: "Inbox: Next Item",
+        description: "While the Session Inbox has keyboard focus, move to the next item.",
+        default_key: "down",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("id", J::Str("inboxNextItem")), ("kind", J::Str("chatAction"))]),
+    },
+    HotkeyDefinition {
+        id: "inboxPreviousItem",
+        title: "Inbox: Previous Item",
+        description: "While the Session Inbox has keyboard focus, move to the previous item.",
+        default_key: "up",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("id", J::Str("inboxPreviousItem")), ("kind", J::Str("chatAction"))]),
+    },
+    HotkeyDefinition {
+        id: "inboxOpenItem",
+        title: "Inbox: Open Item",
+        description: "While the Session Inbox has keyboard focus, open the highlighted item.",
+        default_key: "enter",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("id", J::Str("inboxOpenItem")), ("kind", J::Str("chatAction"))]),
+    },
+    HotkeyDefinition {
+        id: "inboxMarkRead",
+        title: "Inbox: Archive / Dismiss",
+        description: "While the Session Inbox has keyboard focus, archive or dismiss the highlighted item.",
+        default_key: "e",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("id", J::Str("inboxMarkRead")), ("kind", J::Str("chatAction"))]),
+    },
+    HotkeyDefinition {
+        id: "inboxSnooze",
+        title: "Inbox: Snooze Item",
+        description: "While the Session Inbox has keyboard focus, open the Snooze menu for the highlighted item.",
+        default_key: "s",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("id", J::Str("inboxSnooze")), ("kind", J::Str("chatAction"))]),
+    },
+    HotkeyDefinition {
         id: "copyLastChatCodeBlock",
         title: "Copy Last Code Block",
         description: "Copy the last code block the agent wrote in the chat session you are in.",
@@ -130,6 +190,16 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
         retired_default_keys: &[],
         action: J::Obj(&[("id", J::Str("newChatPickBranch")), ("kind", J::Str("chatAction"))]),
     },
+    HotkeyDefinition {
+        id: "newChatPickAgent",
+        title: "New Chat: Agent",
+        description: "While a new chat's message box has focus, open the agent list in the bar above it. It takes Option+A from the message box on a Mac (no å there): if your keyboard types a letter with Option+A, pick another key.",
+        default_key: "alt+a",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("id", J::Str("newChatPickAgent")), ("kind", J::Str("chatAction"))]),
+    },
     // CDXC:VoiceMode 2026-10-20 DECISION:
     // User picked "Add both as proposed": Toggle Voice Agent starts the voice agent call or ends the one running, from anywhere in the window (Option+Ctrl+V on Mac; Ctrl+Alt+Shift+V on Windows and Linux, where Ctrl+Shift+V is terminal paste), and Dictate starts recording in the chat box of the chat session you are in and, pressed again, stops and transcribes, like its microphone (Option+Ctrl+D; Ctrl+Alt+Shift+D). Both show in their button's tooltip, the shape the other chat box keys use.
     // SEE-ALSO: apps/desktop/src/app/hotkeys.rs (`gpui_platform_hotkey_for_action`, `GPUI_DEFAULT_GHOSTEX_HOTKEYS`), apps/desktop/src/app/focused_chat_hotkeys.rs, apps/desktop/src/app/voice_agent/header_button.rs.
@@ -207,12 +277,12 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     // SEE-ALSO: apps/desktop/src/app/hotkeys.rs (`GPUI_DEFAULT_GHOSTEX_HOTKEYS`, `gpui_migrated_hotkey_for_action`), apps/desktop/src/terminal_element.rs (`terminal_overlay_hotkey_label`).
     HotkeyDefinition {
         id: "createAgentSession",
-        title: "New Agent Session",
-        description: "Start your last-used agent in the active project, in your default interface.",
-        default_key: "cmd+shift+o",
+        title: "New Session",
+        description: "Start a new chat draft in the active project (or Main Hub).",
+        default_key: "cmd+n",
         windows_linux_default_key: None,
         alternate_default_keys: &[],
-        retired_default_keys: &["cmd+t"],
+        retired_default_keys: &["cmd+t", "cmd+shift+o"],
         action: J::Obj(&[("id", J::Str("createAgentSession")), ("kind", J::Str("createAgentSession"))]),
     },
     // CDXC:Hotkeys 2026-05-11-09:26
@@ -284,19 +354,6 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
         alternate_default_keys: &[],
         retired_default_keys: &[],
         action: J::Obj(&[("id", J::Str("openQuickAccessFiles")), ("kind", J::Str("openQuickAccessFiles"))]),
-    },
-    // CDXC:AgentLauncher 2026-09-09 DECISION:
-    // User: a hotkey opens a borderless picker that starts a new thread in the active project. It lists the agents with the last-used one preselected at the top, filters as you type, and ends with Browser and Terminal rows. Tab on Claude or Codex drills into that provider's accounts, mirroring the project-header agent dropdown.
-    // SEE-ALSO: packages/core-ui/new-thread-palette.tsx, apps/desktop/src/app/model/app_modal_kind.rs.
-    HotkeyDefinition {
-        id: "openNewThreadPalette",
-        title: "New Thread in Active Project",
-        description: "Pick an agent, Coordinator, Browser, or Terminal to start in the active project. Press it again in the picker to choose another project.",
-        default_key: "cmd+n",
-        windows_linux_default_key: None,
-        alternate_default_keys: &[],
-        retired_default_keys: &["cmd+shift+t", "cmd+alt+t"],
-        action: J::Obj(&[("id", J::Str("openNewThreadPalette")), ("kind", J::Str("openNewThreadPalette"))]),
     },
     // CDXC:Hotkeys 2026-09-27 DECISION:
     // User: Cmd+J, Shift+Esc and F12 all open the Commands panel, with one or two of them settable in Settings > Hotkeys. Cmd+J (F12 on Windows and Linux) is this row, Shift+Esc is the Second Key row, and F12 stays a fixed shortcut. This takes Shift+Esc from Focus Chat Box, which now has no default.
@@ -826,6 +883,31 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
         alternate_default_keys: &[],
         retired_default_keys: &[],
         action: J::Obj(&[("id", J::Str("searchProjectFiles")), ("kind", J::Str("searchProjectFiles"))]),
+    },
+    // CDXC:Docs 2026-11-24 DECISION:
+    // GitHub #733: Back and Forward in the Files view walk the view's own per-pane file history
+    // (path and scroll position) while Files has focus, using Cmd+[ / Cmd+] on macOS and
+    // Ctrl+[ / Ctrl+] on Windows and Linux (no Terminal focused binding, so Ctrl+[ never touches
+    // ESC in a terminal). Settings does not mark a clash with app-wide Back/Forward (`VIEW_SCOPED_HOTKEY_IDS`).
+    HotkeyDefinition {
+        id: "navigateFilesBack",
+        title: "Back in Files",
+        description: "While the Files view has focus, go back to the previous file at its scroll position. Elsewhere the same keys go back to the previous session or project.",
+        default_key: "cmd+[",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("direction", J::Str("back")), ("id", J::Str("navigateFilesBack")), ("kind", J::Str("navigateFilesHistory"))]),
+    },
+    HotkeyDefinition {
+        id: "navigateFilesForward",
+        title: "Forward in Files",
+        description: "While the Files view has focus, go forward to the next file at its scroll position. Elsewhere the same keys go forward in session and project history.",
+        default_key: "cmd+]",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("direction", J::Str("forward")), ("id", J::Str("navigateFilesForward")), ("kind", J::Str("navigateFilesHistory"))]),
     },
     HotkeyDefinition {
         id: "scrollTerminalToTop",
@@ -1756,5 +1838,30 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
         alternate_default_keys: &[],
         retired_default_keys: &[],
         action: J::Obj(&[("id", J::Str("focusSidebar")), ("kind", J::Str("terminalFocus"))]),
+    },
+    // CDXC:SwitchRequests 2026-11-23 DECISION:
+    // User (Q4709): Cmd+Shift+J accepts a visible switch-request toast (Switch / Open); while no
+    // toast is shown, Cmd+Shift+J keeps focusing the sidebar. Open external uses Cmd+Shift+E
+    // because Cmd+Shift+O is already bound to New Agent Session (and Ctrl+Shift+X is reserved for
+    // strikethrough on Windows/Linux). Both are rebindable here.
+    HotkeyDefinition {
+        id: "acceptSwitchRequestToast",
+        title: "Accept Switch Request Toast",
+        description: "Accept the visible switch-request toast (Switch or Open) when an agent asks to change what you are looking at.",
+        default_key: "cmd+shift+j",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("id", J::Str("acceptSwitchRequestToast")), ("kind", J::Str("switchRequestToast"))]),
+    },
+    HotkeyDefinition {
+        id: "openSwitchRequestExternal",
+        title: "Open Switch Request Externally",
+        description: "Open a visible browser switch-request toast in your default external browser instead of Ghostex's built-in Browser.",
+        default_key: "cmd+shift+e",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("id", J::Str("openSwitchRequestExternal")), ("kind", J::Str("switchRequestToast"))]),
     },
 ];

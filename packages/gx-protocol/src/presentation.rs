@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::de::{Rows, null_as_default};
+use crate::de::{null_as_default, Rows};
 use crate::side_state::{
     CustomSessionTagsState, SidebarProjectCollectionsState, SidebarSpacesState,
     SidebarWorkspacesState, WorkspaceSessionGroupsState,
@@ -98,6 +98,10 @@ pub struct PresentationCapabilities {
     /// card; without the flag a client cannot tell.
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
     pub awaiting_answer: bool,
+    /// The daemon supports `/api/switchSessionCliToAcp` with mid-reply queueing and cancellation
+    /// (`Q4771`, `Q4772`). Absent on older daemons.
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub native_mode_switch: bool,
 }
 
 /// One synthetic group per project today (`<projectId>:active`). User-made groups live in
@@ -1254,6 +1258,15 @@ pub struct PresentationSession {
     /// rather than an interactive terminal CLI. Absent for Agent CLI sessions and older gxservers.
     #[serde(default, alias = "acpMode", skip_serializing_if = "is_false")]
     pub non_cli_mode: bool,
+    /// A Terminal -> Native switch is queued until the active reply ends (`Q4771`).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub switch_to_native_queued: bool,
+    /// gxserver is switching the session between Terminal-based and Native right now, whoever
+    /// asked (this app, another device, the bulk "Turn on Native mode", a queued switch); clients
+    /// keep its tab and chat view through the restart (server/src/acp/host_mode_switching.rs).
+    /// Absent otherwise and from an older gxserver.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub switching_host_mode: bool,
     /// Its project's main coordinator on this computer (server/src/coordinators/main_coordinator.rs):
     /// the one agents contact by default. Absent from an older gxserver.
     #[serde(default, skip_serializing_if = "is_false")]

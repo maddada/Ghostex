@@ -76,10 +76,34 @@ const DELIVERIES_KEY: &str = "coordinatorDeliveries";
 /// (`ghostex coordinator item delivered release v11.7.1`, ghostex-release skill), per project, so
 /// another project's release clears nothing here.
 pub const WAIT_EVENTS: [(&str, &str); 3] = [
-    ("release", "the next release"),
-    ("ota", "the next phone update"),
-    ("rebuild", "the next rebuild of Ghostex on this computer"),
+    ("release", "release"),
+    ("ota", "phone update"),
+    ("rebuild", "rebuild"),
 ];
+
+/// Whether `word` is a bare work-item reference (`W12`, `w12`, `B12`, `b12`).
+fn is_bare_item_ref(word: &str) -> bool {
+    let word = word.trim();
+    let Some(digits) = word.strip_prefix(['W', 'w', 'B', 'b']) else {
+        return false;
+    };
+    !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())
+}
+
+/// Strips a redundant leading "waiting on "/"waits on "/"waiting for "/"waits for " from free text.
+fn strip_wait_prefix(word: &str) -> &str {
+    let trimmed = word.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    for prefix in ["waiting on ", "waits on ", "waiting for ", "waits for "] {
+        if lower.starts_with(prefix) {
+            let rest = trimmed[prefix.len()..].trim();
+            if !rest.is_empty() {
+                return rest;
+            }
+        }
+    }
+    trimmed
+}
 
 /// The event a wait word names (`release`, `ota`, `rebuild` and a few spellings), or `None` for
 /// words.
@@ -251,11 +275,37 @@ pub struct WorkAsk {
     /// thread too (server/src/session_needs_you/thread.rs).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub from_thread: Option<WorkThread>,
+    /// Where its question lives: `Some(true)` for a question the coordinator's chat asked (a form,
+    /// a one-click link or a Live page with this tag, put on the board with `item ask --tag`), which
+    /// that question's answer settles; `Some(false)` for the ask's own card, which only its own
+    /// answer settles; `None` for an ask stored before this was kept, which settles by its tag as it
+    /// always did.
+    ///
+    /// CDXC:Coordinators 2026-11-25 WHY:
+    /// W1026's "Post this reply on issue #746?" (Q4846) was settled as "Answered in the chat" when
+    /// the user answered a Live page a thread had tagged Q4846 too ("Keep the dot"), and left Needs
+    /// you unanswered: the chat's ledger settled every ask naming an answered tag, whatever asked
+    /// it. An answer now settles only the question it answers (`settle_answered_items`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chat_question: Option<bool>,
 }
 
 impl WorkAsk {
     pub fn is_open(&self) -> bool {
         self.settled_at.is_none()
+    }
+
+    /// Whether the chat's answer to its tag (a form, a link, a page) answers this ask.
+    fn settles_with_chat(&self) -> bool {
+        self.chat_question != Some(false)
+    }
+
+    /// Whether this ask is currently snoozed until a future time.
+    pub fn is_snoozed(&self, now: DateTime<Utc>) -> bool {
+        self.snoozed_until
+            .as_deref()
+            .and_then(|until| DateTime::parse_from_rfc3339(until).ok())
+            .is_some_and(|at| at.with_timezone(&Utc) > now)
     }
 }
 
@@ -438,6 +488,64 @@ pub fn list_all_work_items(db: &Connection) -> HashMap<SessionKey, Vec<WorkItem>
         items.entry(key).or_default().push(item);
     }
     items
+}
+
+/// How many open, unsnoozed asks a coordinator's active work items currently hold.
+/// Snoozed asks are excluded until `snoozed_until` has passed.
+pub fn open_unsnoozed_ask_count(db: &Connection, key: &SessionKey) -> usize {
+    let now = Utc::now();
+    let Ok(mut statement) = db.prepare_cached(
+        "SELECT asksJson FROM coordinator_work_items \
+         WHERE coordinatorProjectId = ?1 AND coordinatorSessionId = ?2 \
+         AND finishedAt IS NULL AND droppedAt IS NULL",
+    ) else {
+        return 0;
+    };
+    let Ok(rows) = statement.query_map([&key.0, &key.1], |row| row.get::<_, String>(0)) else {
+        return 0;
+    };
+    rows.flatten()
+        .map(|asks_json| {
+            serde_json::from_str::<Vec<WorkAsk>>(&asks_json)
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|ask| ask.is_open() && !ask.is_snoozed(now))
+                .count()
+        })
+        .sum()
+}
+
+/// Open, unsnoozed work-item ask counts for every coordinator, in one query (for snapshots).
+/// A database without the table (minimal test fixture) reads as empty.
+pub fn open_unsnoozed_ask_counts(db: &Connection) -> HashMap<SessionKey, usize> {
+    let now = Utc::now();
+    let mut counts: HashMap<SessionKey, usize> = HashMap::new();
+    let Ok(mut statement) = db.prepare_cached(
+        "SELECT coordinatorProjectId, coordinatorSessionId, asksJson \
+         FROM coordinator_work_items \
+         WHERE finishedAt IS NULL AND droppedAt IS NULL",
+    ) else {
+        return counts;
+    };
+    let Ok(rows) = statement.query_map([], |row| {
+        Ok((
+            (row.get::<_, String>(0)?, row.get::<_, String>(1)?),
+            row.get::<_, String>(2)?,
+        ))
+    }) else {
+        return counts;
+    };
+    for (key, asks_json) in rows.flatten() {
+        let open = serde_json::from_str::<Vec<WorkAsk>>(&asks_json)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|ask| ask.is_open() && !ask.is_snoozed(now))
+            .count();
+        if open > 0 {
+            *counts.entry(key).or_default() += open;
+        }
+    }
+    counts
 }
 
 fn read_item(
@@ -763,17 +871,18 @@ impl<'a> WorkContext<'a> {
             out["kind"] = json!("item");
             out["label"] = json!(item.title);
             out["open"] = json!(item.finished_at.is_none() && item.dropped_at.is_none());
-        } else if let Some((_, ask)) = question_tag(&wait.on).and_then(|tag| self.ask(&tag)) {
+        } else if is_bare_item_ref(&wait.on) {
+            out["kind"] = json!("item");
+            out["label"] = json!("another item");
+        } else if let Some(tag) = question_tag(&wait.on) {
             out["kind"] = json!("ask");
-            out["label"] = json!(ask.text);
-            out["open"] = json!(ask.is_open());
-        } else if let Some(settled) =
-            question_tag(&wait.on).and_then(|tag| self.chat_tags.get(&tag))
-        {
-            // A question the chat asked (a page, a form): it clears once the user answers it.
-            out["kind"] = json!("ask");
-            out["label"] = json!(format!("{} (asked in the chat)", wait.on));
-            out["open"] = json!(!settled);
+            out["label"] = json!("your answer");
+            if let Some((_, ask)) = self.ask(&tag) {
+                out["open"] = json!(ask.is_open());
+            } else if let Some(settled) = self.chat_tags.get(&tag) {
+                // A question the chat asked (a page, a form): it clears once the user answers it.
+                out["open"] = json!(!settled);
+            }
         } else if let Some(kind) = wait_event(&wait.on) {
             out["kind"] = json!("event");
             out["event"] = json!(kind);
@@ -782,6 +891,11 @@ impl<'a> WorkContext<'a> {
                 out["open"] = json!(false);
                 out["delivered"] = json!(event.name);
                 out["deliveredAt"] = json!(event.at);
+            }
+        } else {
+            let trimmed = strip_wait_prefix(&wait.on);
+            if !trimmed.is_empty() {
+                out["label"] = json!(trimmed);
             }
         }
         if !wait.until.is_empty() {
@@ -816,89 +930,6 @@ fn question_tag(word: &str) -> Option<String> {
     let word = word.trim();
     let digits = word.strip_prefix(['Q', 'q'])?;
     (!digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())).then(|| format!("Q{digits}"))
-}
-
-/// Bare work-item IDs (`W34`, `w37`) in `text` (outside quotes and backticks) that match an
-/// existing item in `items`, in order of appearance without duplicates.
-///
-/// CDXC:Coordinators 2026-11-22 DECISION:
-/// User, after a coordinator asked `"Rebuild and relaunch Ghostex Mac app with W34, W37, and W38?"`:
-/// "wtf are w34 w37 and w38 PLEASE modify the playbook/instructions for the coodrinator to tell me
-/// what the work item IS and not just it's ID. I'm not robot! Do this so all users would get this
-/// fix please not just me." Work-item IDs are CLI handles, never how to talk to the user; matching
-/// only existing item numbers on whole tokens outside quotes/backticks catches bare IDs with zero
-/// false positives on words like `W3C`, `Windows`, `W-2`, or paths like `/w34`.
-/// SEE-ALSO: server/src/coordinators/playbook.md ("Asking the user", "Work items", "Your reply").
-fn bare_work_item_ids_in_title<'a>(text: &str, items: &'a [WorkItem]) -> Vec<&'a WorkItem> {
-    let unquoted = super::user_handoff::unquoted(text);
-    let chars: Vec<char> = unquoted.chars().collect();
-    let mut found: Vec<&'a WorkItem> = Vec::new();
-    let mut i = 0;
-    while i < chars.len() {
-        let ch = chars[i];
-        let left_ok = i == 0 || {
-            let prev = chars[i - 1];
-            !prev.is_alphanumeric() && !matches!(prev, '-' | '_' | '/' | '.' | '@' | '#')
-        };
-        if left_ok && matches!(ch, 'W' | 'w') {
-            let start = i + 1;
-            let mut end = start;
-            while end < chars.len() && chars[end].is_ascii_digit() {
-                end += 1;
-            }
-            if end > start && chars[start] != '0' {
-                let right_ok = if end == chars.len() {
-                    true
-                } else {
-                    let next = chars[end];
-                    let domain_dot = next == '.'
-                        && chars
-                            .get(end + 1)
-                            .is_some_and(|after| after.is_alphanumeric());
-                    !next.is_alphanumeric() && !matches!(next, '-' | '_' | '/') && !domain_dot
-                };
-                if right_ok {
-                    let digits: String = chars[start..end].iter().collect();
-                    if let Ok(number) = digits.parse::<i64>() {
-                        if let Some(matched) = items.iter().find(|item| item.number == number) {
-                            if !found.iter().any(|seen| seen.number == matched.number) {
-                                found.push(matched);
-                            }
-                        }
-                    }
-                    i = end;
-                    continue;
-                }
-            }
-        }
-        i += 1;
-    }
-    found
-}
-
-/// Why `item ask` refuses `title`, or `None` when it may stand.
-fn ask_title_refusal(title: &str, items: &[WorkItem]) -> Option<String> {
-    let found = bare_work_item_ids_in_title(title, items);
-    if found.is_empty() {
-        return None;
-    }
-    let refs: Vec<String> = found.iter().map(|item| item.reference()).collect();
-    let named: Vec<String> = found
-        .iter()
-        .map(|item| {
-            let title = item.title.trim();
-            if title.is_empty() {
-                item.reference()
-            } else {
-                format!("{} (\"{}\")", item.reference(), title)
-            }
-        })
-        .collect();
-    Some(format!(
-        "Work-item IDs ({}) are CLI handles, not how to talk to the user. Name what the work actually is in plain words instead: {}.",
-        refs.join(", "),
-        named.join(", ")
-    ))
 }
 
 /// Whether a thread row's wait genuinely requires the user in Needs you (approval, folder trust,
@@ -951,6 +982,15 @@ pub fn derive(item: &WorkItem, context: &WorkContext<'_>) -> (&'static str, Valu
         })
     };
     if item.finished_at.is_some() || item.status == "finished" {
+        // A finished item that still asks the user something is theirs until it is answered: an
+        // item with an open ask never hides under Finished (an ask stored on a finished item before
+        // `item ask` moved it back, or by an older gxserver).
+        if item.asks.iter().any(|ask| ask.is_open() && ask.holds) {
+            return ("blocked", you());
+        }
+        if item.asks.iter().any(WorkAsk::is_open) {
+            return ("needs", you());
+        }
         return ("finished", nobody());
     }
     // An item for one thread follows the thread: resolved is finished.
@@ -1684,7 +1724,10 @@ fn withdraw_open_asks(item: &mut WorkItem, at: &str) {
 /// Whether the item was already marked done and only post-done asks/answers followed (never
 /// reopened by `now`, `wait`, `status` or `restore`).
 fn finished_before_asks(item: &WorkItem) -> bool {
-    let Some(done_index) = item.history.iter().rposition(|event| event.kind == "done") else {
+    // Finished by the coordinator (`done`) or by the user's Done on its card.
+    let Some(done_index) = item.history.iter().rposition(|event| {
+        event.kind == "done" || (event.kind == "answer" && event.text == "Done")
+    }) else {
         return false;
     };
     item.history[done_index + 1..]
@@ -1891,9 +1934,19 @@ pub fn handle_work_request(
         }
         "ask" => {
             let words = param_text(params, "text").ok_or_else(|| bad("Say what you ask."))?;
+            let detail = param_text(params, "detail").unwrap_or_default();
             let items = list_work_items(db, key)?;
             if params.get("fromThread").is_none() {
-                if let Some(refusal) = ask_title_refusal(&words, &items) {
+                if let Some(refusal) = super::ask_guard::ask_refusal(&words, &detail, &items) {
+                    return Err(bad(refusal));
+                }
+                // A to-do that asks the user to paste, post or run something must hold it in its
+                // Details (Q4860 "Refuse"; the why is at `paste_refusal`).
+                let answers = split_answers(&param_text(params, "answers").unwrap_or_default());
+                let command = param_text(params, "command").unwrap_or_default();
+                if let Some(refusal) =
+                    crate::session_needs_you::paste_refusal(&words, &detail, &command, &answers)
+                {
                     return Err(bad(refusal));
                 }
             }
@@ -1902,30 +1955,36 @@ pub fn handle_work_request(
                     let tag = question_tag(&tag)
                         .ok_or_else(|| bad(format!("{tag} is not a question tag: use Q12.")))?;
                     // CDXC:Coordinators 2026-11-12 WHY:
-                    // Issue #579: an ask reusing a tag the chat had already settled was settled at once by that tag's old answer ("has no open ask"), so the user never saw it. `--tag` still puts a question the chat asked and is waiting on onto the board; a settled tag, or one another item already asked, is refused with the next free one.
+                    // Issue #579: an ask reusing a tag the chat had already settled was settled at once by that tag's old answer ("has no open ask"), so the user never saw it. `--tag` still puts a question the chat asked and is waiting on onto the board; a settled tag, or one another item or a to-do already took, is refused with the next free one.
                     let used_on_item = items.iter().any(|other| {
                         other.asks.iter().any(|ask| {
                             ask.tag.eq_ignore_ascii_case(&tag)
                                 && !(other.number == item.number && ask.is_open())
                         })
                     });
-                    if used_on_item || chat_tags.get(&tag) == Some(&true) {
+                    let used_by_todo = crate::session_needs_you::todo_tags(db, key)
+                        .iter()
+                        .any(|taken| taken.eq_ignore_ascii_case(&tag));
+                    if used_on_item || used_by_todo || chat_tags.get(&tag) == Some(&true) {
                         let next = highest_ask_tag(&items).max(ask_floor) + 1;
                         return Err(bad(format!(
-                            "{tag} was already asked and settled in this conversation, and a tag means one question. Leave out --tag to take the next free one (Q{next})."
+                            "{tag} is already taken by another question in this conversation (asked and settled, or on another item or to-do), and a tag means one question. Leave out --tag to take the next free one (Q{next})."
                         )));
                     }
                     tag
                 }
                 None => format!("Q{}", highest_ask_tag(&items).max(ask_floor) + 1),
             };
+            // A tag the chat asked and still waits on is that question put on the board: its answer
+            // there settles the ask. Any other ask is its own card's question.
+            let chat_question = chat_tags.get(&tag) == Some(&false);
             if item.asks.iter().any(|ask| ask.is_open() && ask.tag == tag) {
                 return Err(bad(format!("{name} already asks {tag}.")));
             }
             item.asks.push(WorkAsk {
                 tag: tag.clone(),
                 text: words.clone(),
-                detail: param_text(params, "detail").unwrap_or_default(),
+                detail,
                 answers: param_text(params, "answers").unwrap_or_default(),
                 holds: params.get("holds").and_then(Value::as_bool) == Some(true),
                 steps: param_text(params, "steps").unwrap_or_default(),
@@ -1936,11 +1995,19 @@ pub fn handle_work_request(
                 from_thread: params
                     .get("fromThread")
                     .and_then(|thread| serde_json::from_value(thread.clone()).ok()),
+                chat_question: Some(chat_question),
                 ..WorkAsk::default()
             });
-            // Keep a finished item finished: its open ask still shows under Needs you (or Blocked
-            // with --holds) in the dock and Work panel until answered or withdrawn, and keeping
-            // finished status ensures settling the ask never leaves the item stuck in Needs you.
+            // CDXC:Coordinators 2026-11-25 WHY:
+            // A finished item that asks the user something goes back to Needs you, so the ask
+            // shows in Needs you, the Inbox, the counts and `item list` like any other. Kept
+            // finished (2026-11-22), W1026's new ask Q4864 stayed out of Needs you and the Inbox
+            // until the coordinator moved it by hand. Once nothing is asked any more it finishes
+            // again by itself (`finish_if_only_asking`, `finished_before_asks`).
+            item.finished_at = None;
+            if item.status == "finished" {
+                item.status = "needs".to_string();
+            }
             item.record("ask", format!("{tag}: {words}"), &now);
         }
         "wait" => {
@@ -1977,29 +2044,29 @@ pub fn handle_work_request(
             if let Some(line) = param_text(params, "text") {
                 item.now = line;
             }
-            // Named as the user reads them: another item by its title, an ask by its words.
+            // Named as the user reads them: another item by its title, an ask as "your answer",
+            // known events in plain words, never a bare W-ID.
             let others = list_work_items(db, key)?;
             let words = item
                 .waits
                 .iter()
                 .map(|wait| {
-                    let named = item_number_of(&wait.on)
-                        .filter(|_| wait.on.starts_with('W'))
-                        .and_then(|number| others.iter().find(|other| other.number == number))
-                        .map(|other| other.title.clone())
-                        .or_else(|| {
-                            others.iter().flat_map(|other| other.asks.iter()).find_map(|ask| {
-                                (!ask.tag.is_empty() && ask.tag == wait.on).then(|| ask.text.clone())
-                            })
-                        })
-                        .or_else(|| {
-                            wait_event(&wait.on).map(|kind| wait_event_words(kind).to_string())
-                        });
-                    named.unwrap_or_else(|| wait.on.clone())
+                    if let Some(kind) = wait_event(&wait.on) {
+                        wait_event_words(kind).to_string()
+                    } else if question_tag(&wait.on).is_some() {
+                        "your answer".to_string()
+                    } else if is_bare_item_ref(&wait.on) {
+                        item_number_of(&wait.on)
+                            .and_then(|number| others.iter().find(|other| other.number == number))
+                            .map(|other| other.title.clone())
+                            .unwrap_or_else(|| "another item".to_string())
+                    } else {
+                        strip_wait_prefix(&wait.on).to_string()
+                    }
                 })
                 .collect::<Vec<_>>()
                 .join(", ");
-            item.record("wait", format!("Waits on {words}"), &now);
+            item.record("wait", format!("Waiting on {words}"), &now);
         }
         "done" => {
             if let Some(line) = param_text(params, "text") {
@@ -2305,11 +2372,35 @@ fn apply_edit(
 /// answered in the form, a one-click link or a page, withdrawn or asked again, and also answered
 /// in plain words ("Q12: yes"), which the ledger reads from the user's messages
 /// (server/src/session_chat_open_questions.rs).
+///
+/// Only an ask that is the chat's own question (`WorkAsk::chat_question`) settles this way: an
+/// ask with its own card that only shares a tag with a form or page is not answered by it.
 pub fn settle_answered_items(
     db: &Connection,
     key: &SessionKey,
     settled: impl Fn(&str) -> Option<bool>,
 ) -> Result<bool, DomainStateError> {
+    use ghostex_gx_chat_core::transcript::open_questions::TagState;
+    settle_answered_items_with(db, key, |tag| {
+        settled(tag).map(|done| {
+            if done {
+                TagState::Answered
+            } else {
+                TagState::Open
+            }
+        })
+    })
+}
+
+/// [`settle_answered_items`] with how each tag's question settled (answered, withdrawn, skipped),
+/// so an ask reads "Answered in the chat" only when the user answered it.
+pub fn settle_answered_items_with(
+    db: &Connection,
+    key: &SessionKey,
+    states: impl Fn(&str) -> Option<ghostex_gx_chat_core::transcript::open_questions::TagState>,
+) -> Result<bool, DomainStateError> {
+    use ghostex_gx_chat_core::transcript::open_questions::TagState;
+    let settled = |tag: &str| states(tag).map(|state| state != TagState::Open);
     let is_settled = |tags: Vec<String>| {
         let asked: Vec<bool> = tags.iter().filter_map(|tag| settled(tag)).collect();
         !asked.is_empty() && !asked.contains(&false)
@@ -2324,15 +2415,45 @@ pub fn settle_answered_items(
         let mut touched = false;
         for index in 0..item.asks.len() {
             let ask = &item.asks[index];
-            if !ask.is_open() || !is_settled(item.question_tags(Some(ask))) {
+            if !ask.is_open()
+                || !ask.settles_with_chat()
+                || !is_settled(item.question_tags(Some(ask)))
+            {
                 continue;
             }
+            // How the chat settled it: an ask with no tag of its own names several, and reads as
+            // answered when any of them was.
+            let outcome = item
+                .question_tags(Some(ask))
+                .iter()
+                .filter_map(|tag| states(tag))
+                .max_by_key(|state| match state {
+                    TagState::Answered => 3,
+                    TagState::Skipped => 2,
+                    TagState::Withdrawn => 1,
+                    TagState::Open => 0,
+                })
+                .unwrap_or(TagState::Answered);
             let ask = &mut item.asks[index];
             ask.settled_at = Some(now.clone());
-            if ask.answered.is_empty() {
-                ask.answered = "Answered in the chat".to_string();
-            }
-            let words = format!("{} answered", ask.tag);
+            let words = match outcome {
+                TagState::Withdrawn => {
+                    ask.withdrawn = true;
+                    format!("{} withdrawn", ask.tag)
+                }
+                TagState::Skipped => {
+                    if ask.answered.is_empty() {
+                        ask.answered = "Skipped".to_string();
+                    }
+                    format!("{} skipped", ask.tag)
+                }
+                _ => {
+                    if ask.answered.is_empty() {
+                        ask.answered = "Answered in the chat".to_string();
+                    }
+                    format!("{} answered", ask.tag)
+                }
+            };
             item.record("settle", words.trim().to_string(), &now);
             touched = true;
         }
@@ -2455,16 +2576,16 @@ pub fn has_question_items(db: &Connection, key: &SessionKey) -> bool {
     list_work_items(db, key).is_ok_and(|items| {
         items.iter().any(|item| {
             item.dropped_at.is_none()
-                && (item
-                    .asks
-                    .iter()
-                    .any(|ask| ask.is_open() && !item.question_tags(Some(ask)).is_empty())
-                    || (item.finished_at.is_none()
-                        && item.status == "needs"
-                        && !said_done(item)
-                        && !finished_before_asks(item)
-                        && item.asks.is_empty()
-                        && !item.question_tags(None).is_empty()))
+                && (item.asks.iter().any(|ask| {
+                    ask.is_open()
+                        && ask.settles_with_chat()
+                        && !item.question_tags(Some(ask)).is_empty()
+                }) || (item.finished_at.is_none()
+                    && item.status == "needs"
+                    && !said_done(item)
+                    && !finished_before_asks(item)
+                    && item.asks.is_empty()
+                    && !item.question_tags(None).is_empty()))
         })
     })
 }
@@ -2493,11 +2614,29 @@ pub fn add_work_tag_looks(work: &mut Value, custom_tags: &Value) {
 /// Every question tag the coordinator's work items ask, open or settled, uppercased: a form or
 /// one-click question in its chat with only these tags is that ask, counted once as its card
 /// (server/src/session_chat_open_questions.rs, gx-chat-core extras/work_cards.rs `card_tags`).
+/// The ask that holds `tag` as a question of its own card, named for a refusal ("W7's question
+/// “Post the reply?”"), when a Live page in the chat may not take that tag. An ask that is the
+/// chat's own question on the board (`item ask --tag`) holds nothing: the page asks it again.
+pub fn own_ask_holding(db: &Connection, key: &SessionKey, tag: &str) -> Option<String> {
+    list_work_items(db, key)
+        .unwrap_or_default()
+        .iter()
+        .find_map(|item| {
+            item.asks
+                .iter()
+                .find(|ask| ask.chat_question == Some(false) && ask.tag.eq_ignore_ascii_case(tag))
+                .map(|ask| format!("{}'s question “{}”", item.reference(), ask.text))
+        })
+}
+
+/// An ask with its own card (`chat_question` false) is not the chat's question, so a form or page
+/// that only shares its tag still counts as its own.
 pub fn ask_tags(db: &Connection, key: &SessionKey) -> std::collections::BTreeSet<String> {
     list_work_items(db, key)
         .unwrap_or_default()
         .iter()
         .flat_map(|item| item.asks.iter())
+        .filter(|ask| ask.settles_with_chat())
         .map(|ask| ask.tag.to_ascii_uppercase())
         .filter(|tag| !tag.is_empty())
         .collect()

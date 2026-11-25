@@ -357,6 +357,17 @@ pub(crate) fn project_presentation_session(
     if crate::acp::session_is_non_cli(session) {
         output.insert("nonCliMode".to_string(), Value::Bool(true));
     }
+    if let (Some(pid), Some(sid)) = (
+        string_field(session, "projectId"),
+        string_field(session, "sessionId"),
+    ) {
+        if crate::acp::pending_switch::is_pending(&pid, &sid) {
+            output.insert("switchToNativeQueued".to_string(), Value::Bool(true));
+        }
+        if crate::acp::host_mode_switching::is_raised(&pid, &sid) {
+            output.insert("switchingHostMode".to_string(), Value::Bool(true));
+        }
+    }
     if activity == "attention" {
         output.insert(
             "attention".to_string(),

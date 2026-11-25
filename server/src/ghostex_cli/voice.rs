@@ -311,7 +311,8 @@ fn read_wav(path: &str) -> CliResult<Vec<u8>> {
             let bits = u16::from_le_bytes([bytes[body + 14], bytes[body + 15]]);
             if channels != 1 || rate != SAMPLE_RATE || bits != 16 {
                 return Err(CliError::Other(format!(
-                    "{path} is {channels} channel(s), {rate} Hz, {bits}-bit; it must be mono 24000 Hz 16-bit (say -o file.wav --data-format=LEI16@24000 \"…\")."
+                    "{path} is {}, {rate} Hz, {bits}-bit; it must be mono 24000 Hz 16-bit (say -o file.wav --data-format=LEI16@24000 \"…\").",
+                    ghostex_gx_protocol::plural(channels, "channel", "channels")
                 )));
             }
             format_ok = true;

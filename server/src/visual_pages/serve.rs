@@ -259,6 +259,16 @@ pub(super) fn with_page_state(
     {
         state["awaitsSeen"] = serde_json::Value::Bool(true);
     }
+    // Outside visitor answers submitted via a shared Live page link (never passed into shared.rs,
+    // which supplies an empty record). The owner sees per-person preview chips in the top right
+    // without touching their own draft or answered state.
+    if let Some(outside_answers) = record
+        .as_ref()
+        .and_then(|record| record.get("outsideAnswers"))
+        .filter(|value| value.as_array().is_some_and(|items| !items.is_empty()))
+    {
+        state["outsideAnswers"] = outside_answers.clone();
+    }
     // A page written without the v2 marker shows the page API's old-layout notice until the
     // reader closes it (version.rs, notice.rs).
     if !is_current_layout(&html) {

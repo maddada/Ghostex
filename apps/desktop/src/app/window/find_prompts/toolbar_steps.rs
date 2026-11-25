@@ -181,10 +181,10 @@ mod tests {
     #[test]
     fn narrow_window_folds_the_actions_into_the_menu() {
         let m = metrics(1.0);
-        let layout = toolbar_layout(720.0, &m);
+        let layout = toolbar_layout(810.0, &m);
         assert_eq!(layout.actions, ActionsStep::Menu);
         assert!(!layout.grouping_label && !layout.short_placeholder);
-        assert!(field_width(720.0, layout, &m) >= m.placeholder_long);
+        assert!(field_width(810.0, layout, &m) >= m.placeholder_long);
     }
 
     #[test]
@@ -196,9 +196,9 @@ mod tests {
 
     #[test]
     fn a_wider_font_moves_every_step_up() {
-        // At 920 pt the normal font keeps Grouping's label; a 25% wider one has to drop it too.
-        let normal = toolbar_layout(920.0, &metrics(1.0));
-        let wider = toolbar_layout(920.0, &metrics(1.25));
+        // At 1010 pt the normal font keeps Grouping's label; a 25% wider one has to drop it too.
+        let normal = toolbar_layout(1010.0, &metrics(1.0));
+        let wider = toolbar_layout(1010.0, &metrics(1.25));
         assert_eq!(normal.actions, ActionsStep::Icons);
         assert!(normal.grouping_label);
         assert!(!wider.grouping_label);

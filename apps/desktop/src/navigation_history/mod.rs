@@ -106,9 +106,26 @@ impl GhostexGpuiApp {
         true
     }
 
-    /// Mouse 4/5, swipes and the Back/Forward hotkeys: the focused browser first, then the trail.
+    /// While the Files view has focus, mouse 4/5 and Back/Forward walk its per-pane file history
+    /// instead of switching sessions or projects (GitHub #733).
+    pub(crate) fn navigate_focused_docs_history(
+        &mut self,
+        back: bool,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        if self.focused_view_mode() != Some(TitlebarMode::Manage) {
+            return false;
+        }
+        self.native_docs_navigate_history(back, cx);
+        true
+    }
+
+    /// Mouse 4/5, swipes and the Back/Forward hotkeys: the focused browser or Files view first,
+    /// then the app trail.
     pub(crate) fn navigate_history_from_input(&mut self, back: bool, cx: &mut gpui::Context<Self>) {
-        if self.navigate_focused_browser_history(back, cx) {
+        if self.navigate_focused_browser_history(back, cx)
+            || self.navigate_focused_docs_history(back, cx)
+        {
             return;
         }
         let enabled = if back {

@@ -355,7 +355,8 @@ impl Client {
                         ));
                     }
                     // `/model provider/model [variant]`: a new coordinator's chosen model and
-                    // variant arrive this way (`coordinator_model_line`).
+                    // variant, and a coordinator's OpenCode thread's, arrive this way
+                    // (`coordinators::coordinator_model_line`).
                     let mut words = argument.split_whitespace();
                     let model = words.next().unwrap_or_default();
                     let variant = words.next().unwrap_or_default();

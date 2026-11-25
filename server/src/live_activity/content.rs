@@ -161,7 +161,7 @@ fn routable(value: &str) -> bool {
 /// Icon id, tint (0xRRGGBB) and the built-in name, as the phone's registry.
 const AGENT_ICONS: &[(&str, u32, Option<&str>)] = &[
     ("amp-cli", 0xFFFFFF, Some("Amp CLI")),
-    ("antigravity-cli", 0x749BFF, Some("Antigravity CLI")),
+    ("antigravity-cli", 0x749BFF, Some("Antigravity")),
     ("browser", 0x82B7FF, None),
     ("claude", 0xD97757, Some("Claude")),
     ("codebuddy", 0x72D6FF, Some("CodeBuddy")),

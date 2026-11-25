@@ -385,6 +385,112 @@ fn selected_base(state: &ChatState, answer: &Value) -> Option<String> {
         .or_else(|| listed.first().and_then(|branch| text(branch, "name")))
 }
 
+/// Builds a read-only preview of `worktreeTray` (with its `where` and `detail` breadcrumb parts)
+/// from a prewarmed `/api/draftWorktree` answer for a pending target project, without moving the
+/// live draft or touching its `ChatState`.
+pub fn preview_tray(
+    answer: &Value,
+    mode_override: Option<&str>,
+    base_branch_override: Option<&str>,
+    worktree_key_override: Option<&str>,
+) -> Option<Value> {
+    let available = answer.get("available").and_then(Value::as_bool) == Some(true);
+    let movable = available || answer.get("movable").and_then(Value::as_bool) == Some(true);
+    if !movable {
+        return None;
+    }
+    let worktree_list = worktrees(answer);
+    let cloud_offered = crate::menus::cloud_box::offered(answer);
+    let mode = if available {
+        let raw = mode_override
+            .map(str::to_string)
+            .or_else(|| {
+                (cloud_offered && crate::menus::cloud_box::remembered(answer))
+                    .then(|| MODE_CLOUD_BOX.to_string())
+            })
+            .or_else(|| remembered(answer, "mode"))
+            .unwrap_or_else(|| MODE_FOLDER.to_string());
+        match raw.as_str() {
+            MODE_CLOUD_BOX if cloud_offered => raw,
+            MODE_NEW => raw,
+            MODE_EXISTING if !worktree_list.is_empty() => raw,
+            _ => MODE_FOLDER.to_string(),
+        }
+    } else {
+        MODE_FOLDER.to_string()
+    };
+    let listed_branches = branches(answer);
+    let branch_exists = |name: &str| {
+        listed_branches
+            .iter()
+            .any(|branch| branch.get("name").and_then(Value::as_str) == Some(name))
+    };
+    let base_branch = base_branch_override
+        .map(str::to_string)
+        .or_else(|| remembered(answer, "baseBranch").filter(|name| branch_exists(name)))
+        .or_else(|| text(answer, "currentBranch"))
+        .or_else(|| listed_branches.first().and_then(|branch| text(branch, "name")));
+    let mut segments = Vec::new();
+    if available {
+        segments.push(json!({ "mode": MODE_FOLDER, "label": "This folder" }));
+        segments.push(json!({ "mode": MODE_NEW, "label": "New worktree" }));
+    }
+    if !worktree_list.is_empty() {
+        segments.push(json!({ "mode": MODE_EXISTING, "label": "Existing" }));
+    }
+    if cloud_offered {
+        segments.push(json!({
+            "mode": MODE_CLOUD_BOX,
+            "label": crate::menus::cloud_box::SEGMENT_LABEL,
+            "icon": crate::menus::cloud_box::ICON,
+        }));
+    }
+    let worktree_key = worktree_key_override
+        .map(str::to_string)
+        .filter(|key| {
+            worktree_list
+                .iter()
+                .any(|worktree| worktree.get("worktreeKey").and_then(Value::as_str) == Some(key))
+        });
+    let worktree_label = worktree_key.as_ref().and_then(|key| {
+        worktree_list
+            .iter()
+            .find(|worktree| worktree.get("worktreeKey").and_then(Value::as_str) == Some(key))
+            .and_then(|worktree| text(worktree, "name"))
+    });
+    let mut value = Map::new();
+    value.insert("mode".to_string(), json!(mode));
+    value.insert("segments".to_string(), Value::Array(segments));
+    value.insert(
+        "projectName".to_string(),
+        answer.get("projectName").cloned().unwrap_or(Value::Null),
+    );
+    value.insert(
+        "currentBranch".to_string(),
+        answer.get("currentBranch").cloned().unwrap_or(Value::Null),
+    );
+    value.insert(
+        "defaultBranch".to_string(),
+        answer.get("defaultBranch").cloned().unwrap_or(Value::Null),
+    );
+    value.insert("baseBranch".to_string(), json!(base_branch));
+    value.insert("branches".to_string(), Value::Array(listed_branches));
+    value.insert(
+        "recentBranches".to_string(),
+        answer.get("recentBranches").cloned().unwrap_or(Value::Null),
+    );
+    value.insert("folderPrompt".to_string(), Value::Null);
+    value.insert("worktrees".to_string(), Value::Array(worktree_list));
+    value.insert("worktreeKey".to_string(), json!(worktree_key));
+    value.insert("worktreeLabel".to_string(), json!(worktree_label));
+    value.insert("busy".to_string(), json!(false));
+    value.insert("status".to_string(), Value::Null);
+    let mut value = Value::Object(value);
+    value["where"] = where_part(&value);
+    value["detail"] = detail_part(&value);
+    Some(value)
+}
+
 /// The tray as the renderers draw it, or `None` when it is hidden.
 ///
 /// `{mode, segments: [{mode, label}], currentBranch, baseBranch, branches, worktrees, worktreeKey,

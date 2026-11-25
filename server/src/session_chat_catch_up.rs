@@ -314,7 +314,7 @@ fn agent_label(agent: &str) -> String {
         "claude" => "Claude",
         "grok" => "Grok Build",
         "pi" => "Pi Agent",
-        "antigravity" => "Antigravity CLI",
+        "antigravity" => "Antigravity",
         "empryo" => "Empryo",
         "custom" => "Your custom summary command",
         other => other,

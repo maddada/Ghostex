@@ -344,11 +344,19 @@ pub(super) fn emit_snapshot_frame(
         &config.project_id,
         &config.session_id,
     );
+    let mut lifecycle = tail.lifecycle.clone();
+    if let Some(queue) = queue.as_ref() {
+        crate::session_chat_agent_restarts::settle_interrupted_lifecycle(
+            &mut lifecycle,
+            working,
+            &queue.agent_restarted_at,
+        );
+    }
     stream.emit_sequenced(
         |seq| {
             let mut frame = session_chat_frame(config, frame_type, epoch, seq);
             frame.insert("messages".to_string(), Value::Array(rows));
-            insert_optional_lifecycle(&mut frame, tail.lifecycle.as_ref());
+            insert_optional_lifecycle(&mut frame, lifecycle.as_ref());
             frame.insert("hasMore".to_string(), json!(tail.has_more));
             frame.insert("hasMoreExact".to_string(), json!(true));
             frame.insert("beforeOffset".to_string(), json!(tail.before_offset));

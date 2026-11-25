@@ -33,7 +33,27 @@ pub struct LaterState {
 
 /// The forms and pages put off For later: gxserver's list with this client's changes on top.
 pub fn later_ids(state: &ChatState) -> BTreeSet<String> {
-    let mut ids: BTreeSet<String> = state.session.later_question_ids.iter().cloned().collect();
+    later_ids_at(state, 0)
+}
+
+/// [`later_ids`] read at `now_ms` (0 when the caller has no clock): any timed snooze whose end
+/// (`later_question_until`) has passed is no longer put off, so a snoozed form or page returns to
+/// Needs you as soon as its snooze ends even before a new server frame arrives.
+pub fn later_ids_at(state: &ChatState, now_ms: i64) -> BTreeSet<String> {
+    let mut ids: BTreeSet<String> = state
+        .session
+        .later_question_ids
+        .iter()
+        .filter(|id| {
+            now_ms <= 0
+                || state
+                    .session
+                    .later_question_until
+                    .get(*id)
+                    .is_none_or(|until| *until > now_ms)
+        })
+        .cloned()
+        .collect();
     for (id, (later, _)) in &state.questions.later.pending {
         if *later {
             ids.insert(id.clone());
@@ -201,6 +221,31 @@ pub fn remove(state: &mut ChatState, id: &str) -> Vec<Effect> {
     remove_naming(state, id, None)
 }
 
+/// `questionRestore {id}`: restores a page removed by Mark all read (Undo, Q4685 A).
+pub fn restore(state: &mut ChatState, id: &str) -> Vec<Effect> {
+    let id = id.trim();
+    if id.is_empty() {
+        return Vec::new();
+    }
+    state.questions.later.removing.remove(id);
+    state
+        .session
+        .removed_question_ids
+        .retain(|known| !known.eq_ignore_ascii_case(id));
+    let request_id = state.core.allocate_request_id();
+    state.core.request_publish();
+    vec![Effect::SendRpc {
+        request_id,
+        method: ChatRpcMethod::AnswerSessionChatPrompt,
+        params: Box::new(json!({
+            "kind": "questionRestore",
+            "questionId": id,
+            "projectId": state.identity.project_id,
+            "sessionId": state.identity.session_id,
+        })),
+    }]
+}
+
 /// [`remove`], naming the question for the agent when it is the user's Dismiss (`dismissed`, as
 /// the agent knows it): gxserver tells the agent with the next message it gets anyway.
 fn remove_naming(state: &mut ChatState, id: &str, dismissed: Option<String>) -> Vec<Effect> {
@@ -309,6 +354,20 @@ pub fn cancel(state: &mut ChatState, id: &str) -> Vec<Effect> {
         .find(|asker| asker.id == id);
     let (tags, title, seen_only) = asker
         .map(|asker| (asker.waiting_tags(), asker.title.clone(), asker.seen_only))
+        .or_else(|| {
+            state
+                .session
+                .resource_index
+                .view()
+                .records()
+                .iter()
+                .find(|entry| entry.id == id)
+                .map(|entry| {
+                    let seen_only =
+                        entry.kind == "page" && (entry.awaits_seen || entry.tags.is_empty());
+                    (entry.tags.clone(), entry.title.clone(), seen_only)
+                })
+        })
         .unwrap_or_default();
     let title = title
         .split_whitespace()
@@ -350,6 +409,16 @@ pub fn mark_answered(state: &mut ChatState, id: &str) -> Vec<Effect> {
         .iter()
         .find(|asker| asker.id == id)
         .map(|asker| (asker.waiting_tags(), asker.title.clone()))
+        .or_else(|| {
+            state
+                .session
+                .resource_index
+                .view()
+                .records()
+                .iter()
+                .find(|entry| entry.id == id)
+                .map(|entry| (entry.tags.clone(), entry.title.clone()))
+        })
         .unwrap_or_default();
     let mut effects = remove(state, id);
     if effects.is_empty() {
@@ -391,14 +460,14 @@ pub fn mark_answered(state: &mut ChatState, id: &str) -> Vec<Effect> {
 /// Only a page still waiting to be seen is cleared: one that asks questions keeps waiting for its
 /// answers.
 pub fn mark_seen(state: &mut ChatState, ids: &[&str]) -> Vec<Effect> {
-    let unseen: Vec<String> = crate::questions::open_questions::waiting(state)
+    let unseen: Vec<String> = crate::questions::open_questions::all_waiting(state)
         .into_iter()
         .filter(|asker| asker.seen_only)
         .filter(|asker| {
             ids.iter()
                 .any(|id| asker.id.eq_ignore_ascii_case(id.trim()))
         })
-        .map(|asker| asker.id.clone())
+        .map(|asker| asker.id)
         .collect();
     unseen.iter().flat_map(|id| remove(state, id)).collect()
 }
@@ -441,12 +510,12 @@ pub fn seen_on_open(state: &mut ChatState, target: &str) -> Vec<Effect> {
     }
     let lower = target.to_ascii_lowercase();
     let opened = opened_page_ids(state);
-    let ids: Vec<String> = crate::questions::open_questions::waiting(state)
+    let ids: Vec<String> = crate::questions::open_questions::all_waiting(state)
         .into_iter()
         .filter(|asker| asker.seen_only && !asker.id.is_empty())
         .filter(|asker| lower.contains(&asker.id.to_ascii_lowercase()))
         .filter(|asker| !opened.contains(&asker.id.to_ascii_lowercase()))
-        .map(|asker| asker.id.clone())
+        .map(|asker| asker.id)
         .collect();
     let mut effects = Vec::new();
     for id in ids {
@@ -756,6 +825,8 @@ mod tests {
             replaced: false,
             prints: Vec::new(),
             rounds: Vec::new(),
+            outside_answerers: Vec::new(),
+            outside_answered_at: None,
             said: Vec::new(),
             title: id.to_string(),
             at: Some(1),

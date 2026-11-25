@@ -164,7 +164,7 @@ pub(crate) fn how_to() -> Section {
         "howTo",
         "How it works",
         vec![
-            row("agentboxStartThread", "Start a thread in an agentbox box", "Open New Thread and pick where it runs under Run on. Boxes open in the terminal view."),
+            row("agentboxStartThread", "Start a thread in an agentbox box", "Start a new chat and pick a box under More providers in the setup bar's Cloud Box picker, or choose Run in a Box in a project header's chat menu. Boxes open in the terminal view."),
             row("agentboxWebApp", "Open a box's web app", "Right-click the session and choose Open Box Web App to open it on this computer. Add an agentbox.yaml with services.web.expose.port to start your dev server in the box automatically."),
             row("agentboxBilling", "Cloud boxes bill until stopped", "Cloud providers charge while a box exists. Deleting a session stops its box and keeps its work; Destroy removes the box."),
         ],

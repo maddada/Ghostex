@@ -50,7 +50,7 @@ fn default_agent_buttons() -> Value {
         { "agentId": "copilot", "command": "copilot", "icon": "copilot", "isDefault": true, "name": "Copilot" },
         { "agentId": "droid", "command": "droid", "icon": "factory-droid", "isDefault": true, "name": "Factory Droid" },
         { "agentId": "grok", "command": "grok", "icon": "grok-build", "isDefault": true, "name": "Grok Build" },
-        { "agentId": "antigravity", "command": "agy", "icon": "antigravity-cli", "isDefault": true, "name": "Antigravity CLI" },
+        { "agentId": "antigravity", "command": "agy", "icon": "antigravity-cli", "isDefault": true, "name": "Antigravity" },
         { "agentId": "amp", "command": "amp", "icon": "amp-cli", "isDefault": true, "name": "Amp CLI" },
         { "agentId": "hermes-agent", "command": "hermes", "icon": "hermes-agent", "isDefault": true, "name": "Hermes Agent" },
         { "agentId": "mastra", "command": "mastracode", "icon": "mastra", "isDefault": true, "name": "Mastra Code" },
@@ -80,8 +80,7 @@ pub(super) fn open_message(state: &str) -> Option<Value> {
     match state {
         "agents-hooks" => message["initialAgentsSection"] = json!("agentHooks"),
         "agents-search" => message["initialSearchQuery"] = json!("approval"),
-        // The Home folder card (on with `GHOSTEX_NATIVE_MODAL_DEMO_SETTINGS='{"mainHubHidden":false}'`),
-        // its folders row folded, or opened by a search that finds it.
+        // The Home folder card, its folders row folded, or opened by a search that finds it.
         "agents-home" => message["initialSection"] = json!("homeFolder"),
         "agents-home-open" => message["initialSearchQuery"] = json!("can't read"),
         "agents-no-match" => message["initialSearchQuery"] = json!("tailscale"),

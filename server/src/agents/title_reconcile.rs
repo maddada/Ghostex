@@ -107,6 +107,9 @@ pub(crate) fn reconcile_agent_metadata_title(
 ) -> Result<AgentTitleReconcileResult, DomainStateError> {
     let _identity_source =
         crate::session_identity_log::identity_write_source("titleMetadataReconcile");
+    // Warm any live Native host's cached sessionTitle before opening the SQLite write transaction,
+    // so metadata reads inside the transaction never block on channel IPC.
+    let _ = crate::acp::channel::session_title(&lifecycle.project_id, &lifecycle.session_id);
     let db = repository.connection();
     let transaction = db
         .is_autocommit()
@@ -185,6 +188,26 @@ pub(crate) fn reconcile_agent_metadata_title(
             changed: false,
             metadata_title_found: true,
             reason: "keeps-its-given-title".to_string(),
+            session: Some(session),
+        });
+    }
+    // A Native agent's own title must not overwrite a name the user set by hand in Ghostex
+    // (same rule Terminal-based OpenCode follows in `state_update.rs`).
+    if !user_requested_title
+        && (metadata_title.provider == "acp-state" || crate::acp::session_is_acp(&session))
+        && session.get("title").and_then(Value::as_str) != Some(metadata_title.title.as_str())
+        && (read_text_from_map(&runtime_settings, "titleSource").as_deref() == Some("user")
+            || (read_text_from_map(&runtime_settings, "pendingAgentTitleRequestTitleSource")
+                .as_deref()
+                == Some("user")
+                && read_text_from_map(&runtime_settings, "pendingAgentTitleRequestStatus")
+                    .as_deref()
+                    == Some("pending")))
+    {
+        return Ok(AgentTitleReconcileResult {
+            changed: false,
+            metadata_title_found: true,
+            reason: "user-title-preserved".to_string(),
             session: Some(session),
         });
     }
@@ -513,6 +536,10 @@ pub(crate) enum AgentMetadataTitleSource {
     GrokSummary {
         summary_path: PathBuf,
     },
+    /// Live `sessionTitle` reported by a Native (`acp-host`) driver via `acp_state`.
+    AcpState {
+        title: String,
+    },
 }
 
 impl AgentMetadataTitleSource {
@@ -526,6 +553,7 @@ impl AgentMetadataTitleSource {
             Self::AntigravityAnnotation { annotation_path } => vec![annotation_path.as_path()],
             Self::OmpSessionHeader { session_path } => vec![session_path.as_path()],
             Self::GrokSummary { summary_path } => vec![summary_path.as_path()],
+            Self::AcpState { .. } => Vec::new(),
         }
     }
 }
@@ -576,6 +604,30 @@ pub(crate) fn read_agent_metadata_title(
                 !inherited_title.is_some_and(|title| titles_match(title, &metadata.title))
             })
         }
+        AgentMetadataTitleSource::AcpState { title } => {
+            let initial_title = provisional_fork_title(session);
+            let inherited_title = initial_title
+                .as_deref()
+                .and_then(|title| title.strip_prefix("Fork: "));
+            let pending_title = read_text_from_map(
+                &object_field(session, "runtimeSettings"),
+                "pendingAgentTitleRequestTitle",
+            );
+            let is_inherited_fork_title = !pending_title
+                .as_deref()
+                .is_some_and(|pending| titles_match(pending, &title))
+                && inherited_title.is_some_and(|inherited| titles_match(inherited, &title));
+            if is_inherited_fork_title {
+                return None;
+            }
+            Some(AgentMetadataTitle {
+                agent_session_id: metadata_session_identity(session).agent_session_id,
+                provider: "acp-state",
+                record_revision: Some(format!("acp-state:{title}")),
+                title,
+                updated_at: None,
+            })
+        }
     }
 }
 
@@ -583,6 +635,18 @@ pub(crate) fn agent_metadata_title_source(
     home_dir: &Path,
     session: &Value,
 ) -> Option<AgentMetadataTitleSource> {
+    if crate::acp::session_is_acp(session) {
+        if let (Some(project_id), Some(session_id)) = (
+            read_text_value(session, "projectId"),
+            read_text_value(session, "sessionId"),
+        ) {
+            if let Some(title) = crate::acp::channel::cached_session_title(&project_id, &session_id)
+                .and_then(|raw| normalize_metadata_title(Some(&Value::String(raw))))
+            {
+                return Some(AgentMetadataTitleSource::AcpState { title });
+            }
+        }
+    }
     let identity = metadata_session_identity(session);
     let agent_session_id = identity.agent_session_id.as_deref()?.trim();
     if agent_session_id.is_empty() {
@@ -651,7 +715,18 @@ pub(crate) fn agent_metadata_title_source(
 }
 
 pub(crate) fn agent_metadata_title_revision(home_dir: &Path, session: &Value) -> Option<String> {
+    if crate::acp::session_is_acp(session) {
+        if let (Some(project_id), Some(session_id)) = (
+            read_text_value(session, "projectId"),
+            read_text_value(session, "sessionId"),
+        ) {
+            let _ = crate::acp::channel::session_title(&project_id, &session_id);
+        }
+    }
     let source = agent_metadata_title_source(home_dir, session)?;
+    if let AgentMetadataTitleSource::AcpState { title } = source {
+        return Some(format!("acp-state:{title}"));
+    }
     let mut revisions = Vec::new();
     for path in source.revision_paths() {
         let Ok(metadata) = fs::metadata(path) else {
@@ -719,7 +794,7 @@ fn claude_title_resume_guard(file: &fs::File, end: u64) -> Option<u64> {
 fn claude_custom_title_line(line: &[u8]) -> Option<Option<String>> {
     let line = String::from_utf8_lossy(line);
     let line = line.trim();
-    if line.is_empty() {
+    if line.is_empty() || !line.contains("\"custom-title\"") {
         return None;
     }
     let entry = serde_json::from_str::<Value>(line).ok()?;

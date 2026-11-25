@@ -310,30 +310,30 @@ export function sourceRunFromPlan({
 export function componentTagStateFixture() {
   return {
     cef: {
-      componentVersion: '156.0.15-gcf671c0-chromium-156.0.8078.80',
+      componentVersion: '156.0.31-ge603d97-chromium-156.0.8078.100',
       platforms: {
         'darwin-arm64': {
-          assetName: 'cef-156.0.15-gcf671c0-chromium-156.0.8078.80-darwin-arm64.tar.gz',
+          assetName: 'cef-156.0.31-ge603d97-chromium-156.0.8078.100-darwin-arm64.tar.gz',
           sha256: fixtureDigest('cef-darwin-arm64'),
           sizeBytes: 10,
         },
         'linux-arm64': {
-          assetName: 'cef-156.0.15-gcf671c0-chromium-156.0.8078.80-linux-arm64.tar.gz',
+          assetName: 'cef-156.0.31-ge603d97-chromium-156.0.8078.100-linux-arm64.tar.gz',
           sha256: fixtureDigest('cef-linux-arm64'),
           sizeBytes: 10,
         },
         'linux-x64': {
-          assetName: 'cef-156.0.15-gcf671c0-chromium-156.0.8078.80-linux-x64.tar.gz',
+          assetName: 'cef-156.0.31-ge603d97-chromium-156.0.8078.100-linux-x64.tar.gz',
           sha256: fixtureDigest('cef-linux-x64'),
           sizeBytes: 10,
         },
         'windows-arm64': {
-          assetName: 'cef-156.0.15-gcf671c0-chromium-156.0.8078.80-windows-arm64.tar.gz',
+          assetName: 'cef-156.0.31-ge603d97-chromium-156.0.8078.100-windows-arm64.tar.gz',
           sha256: fixtureDigest('cef-win-arm64'),
           sizeBytes: 10,
         },
         'windows-x64': {
-          assetName: 'cef-156.0.15-gcf671c0-chromium-156.0.8078.80-windows-x64.tar.gz',
+          assetName: 'cef-156.0.31-ge603d97-chromium-156.0.8078.100-windows-x64.tar.gz',
           sha256: fixtureDigest('cef-win-x64'),
           sizeBytes: 10,
         },

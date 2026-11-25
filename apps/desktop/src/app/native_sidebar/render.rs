@@ -65,22 +65,20 @@ impl GhostexGpuiApp {
         // The rows keep the Project sidebar's even spacing (selectors.rs): the filter has its own row.
         let gap = |height: f32| div().h(px(height * appearance.scale)).flex_shrink_0();
         let unified_header = unified.as_ref().map(|unified| {
+            let space_row =
+                self.render_native_sidebar_space_row(&snapshot, &appearance, false, false, cx);
+            let row_gap = self.native_sidebar_space_row_gap();
             v_flex()
                 .w_full()
                 .flex_shrink_0()
                 .child(self.render_native_sidebar_new_session_row(&appearance, window, cx))
                 .child(gap(super::selectors::SIDEBAR_TOP_ROW_GAP))
                 .child(self.render_native_unified_header(unified, &appearance, window, cx))
-                .when(snapshot.spaces_enabled, |header| {
-                    header.child(gap(self.native_sidebar_space_row_gap()))
-                })
-                .children(self.render_native_sidebar_space_row(
-                    &snapshot,
-                    &appearance,
-                    false,
-                    false,
-                    cx,
-                ))
+                .children(
+                    space_row
+                        .into_iter()
+                        .flat_map(|row| [gap(row_gap).into_any_element(), row]),
+                )
                 // CDXC:Chief 2026-11-08 DECISION: User (Q1922): Main Hub shows in the Unified sidebar too, under its header, drawn as in the Project sidebar (native_sidebar/chief.rs); its block lines up with the Unified group headers' box.
                 .child(gap(super::selectors::SIDEBAR_TOP_LIST_GAP))
                 .children(self.render_native_sidebar_chief(&snapshot, &appearance, true, cx))

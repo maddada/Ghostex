@@ -56,6 +56,8 @@ impl HotkeyDefinition {
 /// hotkey without the two clashing (Settings marks no duplicate for them).
 pub const VIEW_SCOPED_HOTKEY_IDS: &[&str] = &[
     "searchProjectFiles",
+    "navigateFilesBack",
+    "navigateFilesForward",
     // Bound in or answered by the browser page only (CDXC:Hotkeys 2026-10-27 DECISION in
     // hotkey_definitions.rs).
     "findNextInBrowser",
@@ -65,6 +67,16 @@ pub const VIEW_SCOPED_HOTKEY_IDS: &[&str] = &[
     // Files' HTML and Markdown files and the Browser only (CDXC:Docs 2026-11-14 DECISION in
     // hotkey_definitions.rs).
     "toggleAnnotate",
+    // Active only while the Session Inbox has keyboard focus.
+    "inboxNextItem",
+    "inboxPreviousItem",
+    "inboxOpenItem",
+    "inboxMarkRead",
+    "inboxSnooze",
+    // Active only while a switch-request toast is on screen, so Cmd+Shift+J still focuses the
+    // sidebar whenever no switch-request toast is visible.
+    "acceptSwitchRequestToast",
+    "openSwitchRequestExternal",
 ];
 
 /// The settings key that holds the Terminal focused bindings, the way `hotkeys` holds the normal
@@ -80,6 +92,8 @@ pub const TERMINAL_ONLY_HOTKEY_IDS: &[&str] =
 const NO_TERMINAL_BINDING_HOTKEY_IDS: &[&str] = &[
     "readAloudLastReply",
     "searchProjectFiles",
+    "navigateFilesBack",
+    "navigateFilesForward",
     "findNextInBrowser",
     "findPreviousInBrowser",
     "openBrowserHistory",
@@ -99,7 +113,6 @@ const WINDOWS_LINUX_TERMINAL_DEFAULTS: &[(&str, &str)] = &[
     ("splitMore", "cmd+shift+o"),
     ("splitMoreDown", "cmd+shift+e"),
     ("createAgentSession", "cmd+shift+d"),
-    ("openNewThreadPalette", "cmd+alt+shift+n"),
     ("openSessionSearchPalette", "cmd+alt+shift+p"),
     ("openQuickAccessFiles", "cmd+shift+y"),
     ("openHotkeys", "cmd+alt+/"),

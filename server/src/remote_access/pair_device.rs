@@ -542,6 +542,15 @@ pub fn begin_pairing(
             pairing_runtime.forget_secret();
         }
     }
+    // A phone can't sign in to an Entra ID account with its key, so it hears why before anyone is
+    // asked to approve it (CDXC:RemotePairing 2026-11-23 in windows_account.rs). Checked once the
+    // code is spent, so it tells nobody without a code what kind of account this is.
+    if params.kind == PairingDeviceKind::Phone && super::windows_account::this_account_is_entra_id()
+    {
+        return Err(PairDeviceError::BadRequest(
+            super::windows_account::ENTRA_ID_PHONE_REFUSAL.to_string(),
+        ));
+    }
     // Checked once the code is spent, so it tells nobody without a code which servers are linked.
     let server_link = match &params.server_link {
         None => None,

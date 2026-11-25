@@ -203,6 +203,8 @@ mod tests {
             reported_at: None,
             reported_prompt_key: None,
             last_report: None,
+            last_note: None,
+            last_note_at: None,
             pending_message: None,
             pending_message_at: None,
             pending_message_send_id: None,

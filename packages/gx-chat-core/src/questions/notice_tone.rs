@@ -34,6 +34,41 @@ pub fn notice_tone(notice: &TerminalNotice) -> &'static str {
     }
 }
 
+/// Whether a projected `terminalNotice` is an error, warning, or wait/issue banner (send failure,
+/// agent error, terminal issue, usage limit, sign-in required, memory guard, etc.) rather than an
+/// interactive dialog, picker, passthrough, side question, or approval prompt.
+///
+/// CDXC:SessionChat 2026-11-24 DECISION:
+/// Error and issue banners stack above the Inbox dock (and temporarily collapse the dock to its
+/// header bar while shown), while interactive dialogs and approvals keep their place below it.
+/// SEE-ALSO: apps/desktop/src/app/native_chat/composer.rs,
+/// apps/mobile/app/src/chat/native/cards/NativeChatCards.tsx.
+pub fn is_error_terminal_notice(notice: &serde_json::Value) -> bool {
+    if !notice.is_object() {
+        return false;
+    }
+    if notice["passthrough"].is_object() {
+        return false;
+    }
+    if notice["dialog"]["presentation"]["picker"].is_object()
+        || notice["dialog"]["presentation"]["sideQuestion"].is_object()
+    {
+        return false;
+    }
+    let tone = notice["tone"].as_str().unwrap_or_default();
+    if matches!(tone, "error" | "warning" | "wait") {
+        return true;
+    }
+    if matches!(tone, "terminal" | "approval") {
+        return false;
+    }
+    // Interactive terminal dialogs with rows (`/plugin`, `/model`, plan review) carry `dialog` with
+    // `tone == "info"` and stay below the Inbox dock; dialog-free `info` notices (`loginExpired`,
+    // `agentExited`, `empryoSignIn`, `updatePrompt`, `memoryGuard`, `nonCliIgnoredCommand`) are
+    // terminal/agent issues and stack above it.
+    !notice["dialog"].is_object()
+}
+
 /// What an approval card's title says the agent wants, by the kind of tool waiting.
 pub fn approval_title(agent_label: Option<&str>, tool: &str) -> String {
     let agent = welcome_agent_name(agent_label).unwrap_or_else(|| "The agent".to_string());

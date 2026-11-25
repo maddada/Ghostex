@@ -420,6 +420,34 @@ pub fn session_chat_composer_agent_id(session: &serde_json::Value) -> Option<Str
     }
 }
 
+/// The rows of `lines` (non-blank capture lines, oldest first, as `composer_lines` prepares them)
+/// that hold the input box of an agent whose dialogs replace that box, read by the same region
+/// reader its readiness and draft use: the draft rows from the first under the top rule (a
+/// scrolled Claude box included) up to the bottom rule.
+pub(crate) fn session_chat_input_box_rows(
+    agent_id: &str,
+    lines: &[String],
+) -> Option<std::ops::Range<usize>> {
+    match agent_id {
+        "claude" | "openclaude" => input::claude_input_region(lines),
+        "antigravity" => input::antigravity_input_region(lines),
+        _ => None,
+    }
+}
+
+/// The rows of `lines` (prepared as for `session_chat_input_box_rows`) that hold the list an agent
+/// draws under its own input box for its running tasks: Antigravity's active-items list, read by
+/// the region reader that finds its input box above that list.
+pub(crate) fn session_chat_active_items_rows(
+    agent_id: &str,
+    lines: &[String],
+) -> Option<std::ops::Range<usize>> {
+    match agent_id {
+        "antigravity" => input::antigravity_active_items_rows(lines),
+        _ => None,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Line preparation
 // ---------------------------------------------------------------------------
@@ -1218,10 +1246,24 @@ pub fn read_session_terminal_tail(
                 "Session {session_id} does not exist."
             ))
         })?;
-    let zmx_name = crate::zmx::provider_zmx_session_name(&session)?;
     let agent = agent_id
         .map(str::to_string)
         .or_else(|| session_chat_composer_agent_id(&session));
+    // Native (Non-CLI) sessions run `ghostex acp-host`, not an interactive CLI with a terminal
+    // input box. Judging their zmx pane as a CLI composer returns `notReady` and triggers red
+    // readiness / Copy Report UI on desktop, web and older phones.
+    if crate::acp::session_is_non_cli(&session) {
+        return Ok(serde_json::json!({
+            "agentId": agent,
+            "captured": false,
+            "composerState": SessionChatComposerState::Unknown.as_str(),
+            "lines": [],
+            "reason": serde_json::Value::Null,
+            "sessionId": session_id,
+            "projectId": project_id,
+        }));
+    }
+    let zmx_name = crate::zmx::provider_zmx_session_name(&session)?;
     let capture = read_session_composer_verdict_capture(&zmx_name, agent.as_deref());
     let readiness = match capture.as_ref() {
         Some(capture) => session_composer_verdict(agent.as_deref(), &capture.text),

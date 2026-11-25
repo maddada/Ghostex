@@ -46,6 +46,21 @@ pub(crate) fn page_questions(
     Some((title, parse_questions(&html)))
 }
 
+/// The question tags a page's `<gx-questions>` markup asks (`Q12`), uppercased, in order.
+pub(crate) fn page_tags(html: &str) -> Vec<String> {
+    let mut tags: Vec<String> = parse_questions(html)
+        .into_iter()
+        .map(|question| question.tag.trim().to_ascii_uppercase())
+        .filter(|tag| {
+            tag.strip_prefix('Q').is_some_and(|digits| {
+                !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
+            })
+        })
+        .collect();
+    tags.dedup();
+    tags
+}
+
 /// Whether a question on the page still has no answer in the reader's draft: its kit writes every
 /// question's key into the draft (`collect()` in kit.rs), as `"skipped"` while a question has no
 /// pick and no text, so a key that is missing or skipped is a question left. False once the page

@@ -221,6 +221,9 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         match action {
+            GpuiAppToastAction::SwitchRequest(_) => {
+                self.accept_gpui_switch_request_toast(None, cx);
+            }
             GpuiAppToastAction::OpenAccounts { provider } => {
                 self.open_gpui_settings_accounts_page_for_provider(provider.as_deref(), None, cx);
             }
@@ -248,9 +251,6 @@ impl GhostexGpuiApp {
             GpuiAppToastAction::UndoSyncedChange { id } => {
                 self.gx_store_undo_settings_sync_change(id, cx);
             }
-            GpuiAppToastAction::UndoChiefDisable => {
-                self.set_native_sidebar_chief_enabled(true, cx);
-            }
             GpuiAppToastAction::ResetInterfaceScale => {
                 self.reset_interface_scale_to_default(cx);
             }
@@ -273,29 +273,6 @@ impl GhostexGpuiApp {
                 self.owner_security_ask_to_manage(machine_id.clone(), (**request).clone(), cx);
             }
         }
-    }
-
-    /// Chief's Disable Extension: says where it comes back, with Undo.
-    pub(crate) fn show_chief_disabled_toast(&mut self, cx: &mut gpui::Context<Self>) {
-        self.app_toast_id_counter = self.app_toast_id_counter.wrapping_add(1);
-        self.upsert_gpui_app_toast(
-            GpuiAppToast {
-                id: format!("gpui-app-toast-{}", self.app_toast_id_counter),
-                level: GpuiAppToastLevel::Info,
-                title: "Main Hub turned off".to_string(),
-                description: Some(
-                    "Ghostex AI's chat and memory are kept. Turn it back on in Settings > Extensions."
-                        .to_string(),
-                ),
-                copy_text: None,
-                action: Some(GpuiAppToastAction::UndoChiefDisable),
-                loading: false,
-                persistent: false,
-                duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS * 2,
-                epoch: 0,
-            },
-            cx,
-        );
     }
 
     pub(crate) fn show_gpui_gxserver_bootstrap_toast(

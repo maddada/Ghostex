@@ -83,7 +83,7 @@ fn checked_url(url: &str) -> Result<String, DomainStateError> {
         _ => {
             return Err(DomainStateError::bad_request(
                 "The webhook address must start with https://.",
-            ))
+            ));
         }
     }
     if !parsed.username().is_empty() || parsed.password().is_some() {
@@ -186,8 +186,8 @@ fn test(paths: &GxserverPaths) -> Result<Value, DomainStateError> {
     };
     if let Some(wait) = delivery::wait_before_next_post() {
         return Err(DomainStateError::bad_request(format!(
-            "Ghostex sends Grok Bot at most one call every 20 seconds. Try again in {} seconds.",
-            wait.as_secs().max(1)
+            "Ghostex sends Grok Bot at most one call every 20 seconds. Try again in {}.",
+            ghostex_gx_protocol::plural(wait.as_secs().max(1), "second", "seconds")
         )));
     }
     let note = test_note("Test from Ghostex. Reply here to check the bot can reach Ghostex too.");
@@ -220,7 +220,7 @@ fn test(paths: &GxserverPaths) -> Result<Value, DomainStateError> {
 
 fn not_connected() -> DomainStateError {
     DomainStateError::bad_request(
-        "Grok Bot isn't connected. Connect it in Settings > Grok Bot, or run `ghostex grokbot connect` in your own terminal.",
+        "Grok Bot isn't connected. Open Settings > Grok Bot for the user with `ghostex settings open --tab grokBot`, or once you have the webhook address run `ghostex grokbot connect <url>` yourself (it asks the user for the key on a private card).",
     )
 }
 
@@ -439,9 +439,12 @@ pub(crate) fn handle(
             .map(|()| json!({ "opened": true }))
             .map_err(DomainStateError::bad_request),
         "confirmTest" => {
-            let arrived = params.get("arrived").and_then(Value::as_bool).ok_or_else(|| {
-                DomainStateError::bad_request("arrived (true or false) is required.")
-            })?;
+            let arrived = params
+                .get("arrived")
+                .and_then(Value::as_bool)
+                .ok_or_else(|| {
+                    DomainStateError::bad_request("arrived (true or false) is required.")
+                })?;
             mark(paths, |setup| setup.test_arrived = Some(arrived))
         }
         other => Err(DomainStateError::bad_request(format!(

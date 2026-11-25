@@ -747,27 +747,19 @@ fn text_button(id: &'static str, label: &'static str, primary: bool) -> gpui::St
         .gap(px(6.0))
         .rounded(px(7.0))
         .border_1()
-        .border_color(if primary {
-            rgba(0x00000000)
-        } else {
-            rgba(0xffffff14)
-        })
+        .border_color(rgba(0xffffff14))
         .bg(if primary {
-            rgb(0x86d3f8)
+            rgba(0xffffff33)
         } else {
-            rgb(0x1d1d1d)
+            rgba(0xffffff1a)
         })
         .text_size(px(12.0))
         .font_weight(if primary {
-            gpui::FontWeight::SEMIBOLD
+            gpui::FontWeight::MEDIUM
         } else {
             gpui::FontWeight::NORMAL
         })
-        .text_color(if primary {
-            rgb(0x0b1a24)
-        } else {
-            rgb(0xe8e8e8)
-        })
+        .text_color(rgb(0xf4f4f5))
         .cursor_pointer()
         .child(label)
 }

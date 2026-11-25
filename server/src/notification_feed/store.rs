@@ -125,7 +125,7 @@ pub(crate) fn insert_notification_feed_row(
 /// 2026-11-08 in packages/gx-core/src/alert_rule.rs) stays in the bell without lighting it.
 pub(crate) fn mark_notification_feed_row_read(db: &Connection, id: &str) -> DomainResult<()> {
     db.execute(
-        "UPDATE notification_feed SET readAt = ?1 WHERE id = ?2 AND readAt IS NULL",
+        "UPDATE notification_feed SET readAt = ?1, seenAt = COALESCE(seenAt, ?1) WHERE id = ?2 AND readAt IS NULL",
         params![now_iso(), id],
     )
     .map_err(sql_error)?;
@@ -241,10 +241,10 @@ pub(crate) fn mark_session_notifications_read(
     include_deferred: bool,
 ) -> DomainResult<usize> {
     let sql = if include_deferred {
-        "UPDATE notification_feed SET readAt = ?1, deferredAt = NULL WHERE sessionId = ?2 AND readAt IS NULL"
+        "UPDATE notification_feed SET readAt = ?1, seenAt = COALESCE(seenAt, ?1), deferredAt = NULL WHERE sessionId = ?2 AND readAt IS NULL"
     } else {
         // Attention ending on its own says nothing about a message that was not sent.
-        "UPDATE notification_feed SET readAt = ?1 WHERE sessionId = ?2 AND readAt IS NULL AND deferredAt IS NULL AND kind <> 'sendFailed'"
+        "UPDATE notification_feed SET readAt = ?1, seenAt = COALESCE(seenAt, ?1) WHERE sessionId = ?2 AND readAt IS NULL AND deferredAt IS NULL AND kind <> 'sendFailed'"
     };
     db.execute(sql, params![now_iso(), session_id])
         .map_err(sql_error)
@@ -256,7 +256,7 @@ pub(crate) fn mark_session_send_failure_read(
     session_id: &str,
 ) -> DomainResult<usize> {
     db.execute(
-        "UPDATE notification_feed SET readAt = ?1 WHERE sessionId = ?2 AND readAt IS NULL AND kind = ?3 AND COALESCE(attentionEventId, '') <> ?4",
+        "UPDATE notification_feed SET readAt = ?1, seenAt = COALESCE(seenAt, ?1) WHERE sessionId = ?2 AND readAt IS NULL AND kind = ?3 AND COALESCE(attentionEventId, '') <> ?4",
         params![
             now_iso(),
             session_id,
@@ -303,7 +303,7 @@ pub(crate) fn mark_coordinator_reports_notice_read(
     session_id: &str,
 ) -> DomainResult<usize> {
     db.execute(
-        "UPDATE notification_feed SET readAt = ?1 WHERE sessionId = ?2 AND readAt IS NULL AND attentionEventId = ?3",
+        "UPDATE notification_feed SET readAt = ?1, seenAt = COALESCE(seenAt, ?1) WHERE sessionId = ?2 AND readAt IS NULL AND attentionEventId = ?3",
         params![now_iso(), session_id, COORDINATOR_REPORTS_NOTICE_MARK],
     )
     .map_err(sql_error)
@@ -317,7 +317,7 @@ pub(crate) fn mark_unread_session_notification_needs_input(
     body: &str,
 ) -> DomainResult<usize> {
     db.execute(
-        "UPDATE notification_feed SET kind = ?2, body = ?3 WHERE sessionId = ?1 AND readAt IS NULL AND kind IN (?4, ?2) AND NOT (kind = ?2 AND body = ?3)",
+        "UPDATE notification_feed SET kind = ?2, body = ?3, seenAt = NULL WHERE sessionId = ?1 AND readAt IS NULL AND kind IN (?4, ?2) AND NOT (kind = ?2 AND body = ?3)",
         params![
             session_id,
             NOTIFICATION_FEED_KIND_NEEDS_INPUT,
@@ -355,18 +355,49 @@ pub(crate) fn unread_notification_session_ids(
 
 pub(crate) fn mark_notification_read(db: &Connection, id: &str) -> DomainResult<usize> {
     db.execute(
-        "UPDATE notification_feed SET readAt = ?1, deferredAt = NULL WHERE id = ?2 AND readAt IS NULL",
+        "UPDATE notification_feed SET readAt = ?1, seenAt = COALESCE(seenAt, ?1), deferredAt = NULL WHERE id = ?2 AND readAt IS NULL",
         params![now_iso(), id],
     )
     .map_err(sql_error)
 }
 
-/// CDXC:Notifications 2026-11-20 DECISION:
-/// User: "make the notifications thingy lose the dot shown there if it's just a completion dot when I click to see the content there (marks as read)". Opening the bell reads the "finished" rows, the blue turn-done ones, so its badge goes; anything that still needs the user (a question, an approval, a failure, a message not sent) keeps counting until it is handled.
-/// Rows pushed back with deferUnread stay unread. Unlike `markRead`, this does not acknowledge the rows' sessions: a session's blue "finished, not seen" dot clears when the session is opened, not when the bell is.
+/// CDXC:Notifications 2026-11-24 DECISION:
+/// Opening the bell panel clears the unread count badge immediately across devices by marking every
+/// unseen row seen (`seenAt`), while leaving `readAt` untouched so rows keep their unread highlight
+/// while the panel stays open. Closing the panel then marks the shown rows read (`mark_notifications_shown_read`).
+pub(crate) fn mark_all_notifications_seen(db: &Connection) -> DomainResult<usize> {
+    db.execute(
+        "UPDATE notification_feed SET seenAt = ?1 WHERE seenAt IS NULL",
+        params![now_iso()],
+    )
+    .map_err(sql_error)
+}
+
+/// Marks the rows that were shown in the bell panel read when the panel closes, without
+/// acknowledging their sessions (sidebar session dots clear when a session is opened or explicitly
+/// marked read). Active approval rows stay unread in `read_notification_feed_state` until answered.
+pub(crate) fn mark_notifications_shown_read(
+    db: &Connection,
+    ids: &[String],
+) -> DomainResult<usize> {
+    let now = now_iso();
+    let mut changed = 0usize;
+    for id in ids {
+        changed += db
+            .execute(
+                "UPDATE notification_feed SET readAt = ?1, seenAt = COALESCE(seenAt, ?1), deferredAt = NULL WHERE id = ?2 AND readAt IS NULL",
+                params![now, id],
+            )
+            .map_err(sql_error)?;
+    }
+    Ok(changed)
+}
+
+/// Legacy action kept for older desktop and phone clients (CDXC:Notifications 2026-11-20).
+/// Newer clients use `markAllSeen` on open and `markShownRead` on close.
 pub(crate) fn mark_finished_notifications_seen(db: &Connection) -> DomainResult<usize> {
     db.execute(
-        "UPDATE notification_feed SET readAt = ?1 WHERE readAt IS NULL AND deferredAt IS NULL AND kind = ?2",
+        "UPDATE notification_feed SET readAt = ?1, seenAt = COALESCE(seenAt, ?1) WHERE readAt IS NULL AND deferredAt IS NULL AND kind = ?2",
         params![now_iso(), NOTIFICATION_FEED_KIND_FINISHED],
     )
     .map_err(sql_error)
@@ -374,7 +405,7 @@ pub(crate) fn mark_finished_notifications_seen(db: &Connection) -> DomainResult<
 
 pub(crate) fn mark_notification_unread(db: &Connection, id: &str) -> DomainResult<usize> {
     db.execute(
-        "UPDATE notification_feed SET readAt = NULL, deferredAt = NULL WHERE id = ?1",
+        "UPDATE notification_feed SET readAt = NULL, seenAt = NULL, deferredAt = NULL WHERE id = ?1",
         params![id],
     )
     .map_err(sql_error)
@@ -402,7 +433,7 @@ pub(crate) fn dismiss_notification(db: &Connection, id: &str) -> DomainResult<us
 pub(crate) fn defer_session_notification(db: &Connection, session_id: &str) -> DomainResult<usize> {
     db.execute(
         r#"
-        UPDATE notification_feed SET readAt = NULL, deferredAt = ?1
+        UPDATE notification_feed SET readAt = NULL, seenAt = NULL, deferredAt = ?1
         WHERE id = (SELECT id FROM notification_feed WHERE sessionId = ?2 ORDER BY createdAt DESC LIMIT 1)
         "#,
         params![now_iso(), session_id],
@@ -412,7 +443,7 @@ pub(crate) fn defer_session_notification(db: &Connection, session_id: &str) -> D
 
 pub(crate) fn mark_all_notifications_read(db: &Connection) -> DomainResult<usize> {
     db.execute(
-        "UPDATE notification_feed SET readAt = ?1, deferredAt = NULL WHERE readAt IS NULL",
+        "UPDATE notification_feed SET readAt = ?1, seenAt = COALESCE(seenAt, ?1), deferredAt = NULL WHERE readAt IS NULL",
         params![now_iso()],
     )
     .map_err(sql_error)
@@ -444,14 +475,15 @@ pub(crate) fn clear_notification_feed(db: &Connection) -> DomainResult<usize> {
     Ok(removed)
 }
 
-/// The same live decision as the sidebar's red dot, including approvals that only the
-/// coordinator's screen detector has seen.
+/// The approval the agent reported (a hook's card) or a coordinator's screen detector saw; a
+/// screen-only approval of any other session leaves the bell as it was (CDXC:SessionStatus
+/// 2026-11-21 on `session_awaits_reported_approval`).
 fn approval_waits(db: &Connection, project_id: &str, session_id: &str) -> DomainResult<bool> {
     let repository = DomainRepository::new(db, "");
     Ok(repository
         .get_session(project_id, session_id)?
         .is_some_and(|session| {
-            crate::session_approval::session_awaits_approval(&session, &now_iso())
+            crate::session_approval::session_awaits_reported_approval(&session, &now_iso())
         }))
 }
 
@@ -502,11 +534,12 @@ pub(crate) fn attention_notification_id(
 }
 
 const ITEM_COLUMNS: &str =
-    "id, projectId, sessionId, kind, title, subtitle, body, agentName, createdAt, readAt";
+    "id, projectId, sessionId, kind, title, subtitle, body, agentName, createdAt, readAt, seenAt";
 
 fn item_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
     let agent_name: Option<String> = row.get(7)?;
     let read_at: Option<String> = row.get(9)?;
+    let seen_at: Option<String> = row.get(10)?;
     let mut item = json!({
         "id": row.get::<_, String>(0)?,
         "projectId": row.get::<_, String>(1)?,
@@ -517,6 +550,7 @@ fn item_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
         "body": row.get::<_, String>(6)?,
         "createdAt": row.get::<_, String>(8)?,
         "read": read_at.is_some(),
+        "seen": seen_at.is_some() || read_at.is_some(),
     });
     if let Some(agent_name) = agent_name.filter(|value| !value.trim().is_empty()) {
         item["agentName"] = Value::String(agent_name);
@@ -582,7 +616,7 @@ pub(crate) fn read_notification_feed_state(db: &Connection) -> DomainResult<Valu
     }
     let mut statement = db
         .prepare(
-            "SELECT id, projectId, sessionId, readAt, deferredAt FROM notification_feed \
+            "SELECT id, projectId, sessionId, readAt, deferredAt, seenAt FROM notification_feed \
              ORDER BY (deferredAt IS NOT NULL) ASC, \
              CASE WHEN deferredAt IS NULL THEN createdAt END DESC, deferredAt ASC, id DESC",
         )
@@ -595,15 +629,18 @@ pub(crate) fn read_notification_feed_state(db: &Connection) -> DomainResult<Valu
                 row.get::<_, String>(2)?,
                 row.get::<_, Option<String>>(3)?,
                 row.get::<_, Option<String>>(4)?,
+                row.get::<_, Option<String>>(5)?,
             ))
         })
         .map_err(sql_error)?
         .collect::<rusqlite::Result<Vec<_>>>()
         .map_err(sql_error)?;
     let mut approvals = std::collections::HashMap::new();
+    let mut seen_by_id = std::collections::HashMap::new();
     let mut unread_count = 0usize;
+    let mut unseen_count = 0usize;
     let mut next_unread: Option<(String, Option<String>)> = None;
-    for (id, project, session, read_at, deferred_at) in rows {
+    for (id, project, session, read_at, deferred_at, seen_at) in rows {
         let approval = match approvals.get(&session) {
             Some(approval) => *approval,
             None => {
@@ -616,8 +653,13 @@ pub(crate) fn read_notification_feed_state(db: &Connection) -> DomainResult<Valu
             && newest_by_session
                 .get(&session)
                 .is_some_and(|newest| newest == &id);
+        let is_seen = seen_at.is_some() || (read_at.is_some() && !approval_row);
+        seen_by_id.insert(id.clone(), is_seen);
         if read_at.is_none() || approval_row {
             unread_count += 1;
+            if !is_seen {
+                unseen_count += 1;
+            }
             if next_unread.is_none() {
                 next_unread = Some((id, deferred_at));
             }
@@ -632,7 +674,12 @@ pub(crate) fn read_notification_feed_state(db: &Connection) -> DomainResult<Valu
                     == Some(true)
         });
         if active {
+            let is_seen = item["id"]
+                .as_str()
+                .and_then(|id| seen_by_id.get(id).copied())
+                .unwrap_or(false);
             item["read"] = Value::Bool(false);
+            item["seen"] = Value::Bool(is_seen);
             item["awaitingApproval"] = Value::Bool(true);
             item["kind"] = Value::String(NOTIFICATION_FEED_KIND_NEEDS_INPUT.to_string());
             if item["body"]
@@ -662,6 +709,7 @@ pub(crate) fn read_notification_feed_state(db: &Connection) -> DomainResult<Valu
     let mut state = json!({
         "items": items,
         "unreadCount": unread_count,
+        "unseenCount": unseen_count,
     });
     if let Some((next_unread_id, deferred_at)) = next_unread {
         state["nextUnreadId"] = Value::String(next_unread_id);

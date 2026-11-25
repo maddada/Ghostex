@@ -263,7 +263,7 @@ impl NativeChatView {
                     .chat_cursor_pointer()
                     .hover(|style| style.bg(p.foreground.opacity(0.05)).text_color(p.muted))
                     .on_click(cx.listener(move |this, _, _, cx| {
-                        this.toggle_quiet_line(&key, expanded, &actions, cx);
+                        this.toggle_quiet_line(&key, expanded, None, &actions, cx);
                     }))
             })
             .into_any_element()

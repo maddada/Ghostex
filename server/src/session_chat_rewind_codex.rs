@@ -32,7 +32,7 @@ pub(super) struct CodexRewindPlan {
     retained_prompts: Option<RetainedPrompts>,
 }
 
-fn prompts(path: &Path) -> Result<Vec<(String, String)>, DomainStateError> {
+pub(super) fn prompts(path: &Path) -> Result<Vec<(String, String)>, DomainStateError> {
     let mut result = Vec::new();
     let mut cursor = None;
     loop {
@@ -73,7 +73,7 @@ fn prompts(path: &Path) -> Result<Vec<(String, String)>, DomainStateError> {
     }
 }
 
-fn idle(session: &Value) -> Result<(), DomainStateError> {
+pub(super) fn idle(session: &Value) -> Result<(), DomainStateError> {
     if crate::presentation::effective_lifecycle_state(session) != "running" {
         return Err(session_not_running("The Codex session is not running."));
     }

@@ -27,11 +27,7 @@ impl GhostexGpuiApp {
                 else {
                     return;
                 };
-                // The New Thread picker is a native GPUI window, not an app-modal page.
-                if action_id == "openNewThreadPalette" {
-                    self.toggle_gpui_new_thread_picker(cx);
-                    return;
-                }
+                // Cmd+N (New Session) creates a draft directly with no picker.
                 if action_id == "createAgentSession" {
                     self.start_new_agent_session(cx);
                     return;
@@ -48,6 +44,15 @@ impl GhostexGpuiApp {
                 // gx_store/sidebar_keyboard.rs
                 if action_id == "focusSidebar" {
                     self.toggle_sidebar_keyboard_focus(window, cx);
+                    return;
+                }
+                // app/switch_requests.rs
+                if action_id == "acceptSwitchRequestToast" {
+                    let _ = self.accept_gpui_switch_request_toast(Some(window), cx);
+                    return;
+                }
+                if action_id == "openSwitchRequestExternal" {
+                    let _ = self.open_gpui_switch_request_external(cx);
                     return;
                 }
                 if gpui_focused_chat_hotkey_action_id(action_id) {
@@ -144,6 +149,10 @@ impl GhostexGpuiApp {
                     self.run_configured_gpui_titlebar_action_index(action_index, window, cx);
                     return;
                 }
+                if matches!(action_id, "navigateFilesBack" | "navigateFilesForward") {
+                    self.navigate_focused_docs_history(action_id == "navigateFilesBack", cx);
+                    return;
+                }
                 if let Some(direction) =
                     navigation_history::navigation_history_hotkey_direction(action_id)
                 {
@@ -154,9 +163,11 @@ impl GhostexGpuiApp {
                     (navigation_history/controller.rs; the sidebar runtime until
                     2026-09-25): the keypress takes the exact same route as a
                     click on the titlebar arrows, unless a focused Browser pane
-                    takes it (navigate_focused_browser_history).
+                    or Files view takes it.
                     */
-                    if self.navigate_focused_browser_history(direction == "back", cx) {
+                    if self.navigate_focused_browser_history(direction == "back", cx)
+                        || self.navigate_focused_docs_history(direction == "back", cx)
+                    {
                         return;
                     }
                     self.request_navigation_history_navigation(direction, cx);

@@ -9,22 +9,23 @@
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{
     ButtonSize, ButtonVariant, ROW_PADDING_X, RowSpec, SELECT_WIDTH, setting_row,
-    settings_button_sized, settings_list_item, settings_select,
+    settings_button_sized, settings_list_item, settings_select, settings_select_described,
+    wrapped_tooltip_text,
 };
 use super::super::super::palette::SettingsPalette;
 use super::AgentsTab;
 use super::icons;
 use super::model::{
-    AgentButton, HookStatusItem, accept_all_mode_options, default_agents, hook_removable,
-    inherit_value, non_cli_mode_family, preferred_interface_override_options, session_mode_options,
-    supports_accept_all, supports_chat_view,
+    AgentButton, HookStatusItem, default_agents, hook_removable, inherit_value,
+    non_cli_mode_family, permission_mode_options, preferred_interface_override_options,
+    session_mode_options, supports_accept_all, supports_chat_view,
 };
 use super::roster::hook_detail_icon;
 use super::select::DropdownOption;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, IntoElement, ParentElement as _, SharedString, Styled as _, Window, div,
-    px,
+    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
 use gpui_component::{h_flex, v_flex};
 use serde_json::{Map, Value, json};
@@ -62,6 +63,27 @@ fn off_note(p: &SettingsPalette, name: &str) -> AnyElement {
         .child(format!(
             "{name} is turned off. Turn it on with the switch above to change its command, permission mode and other options."
         ))
+        .into_any_element()
+}
+
+const TERMINAL_MODE_LEGACY_WARNING: &str = "Terminal-based mode is legacy. Native is faster and more stable, and Terminal-based will be removed in a future release.";
+
+fn terminal_mode_legacy_dot(p: &SettingsPalette, agent_id: &str) -> AnyElement {
+    let dot_color = gpui::rgb(if p.light { 0xd97706 } else { 0xfacc15 });
+    div()
+        .id(SharedString::from(format!(
+            "agent-session-mode-legacy-dot-{agent_id}"
+        )))
+        .flex_shrink_0()
+        .size(px(18.0))
+        .rounded_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_default()
+        .aria_label(TERMINAL_MODE_LEGACY_WARNING)
+        .tooltip(wrapped_tooltip_text(TERMINAL_MODE_LEGACY_WARNING))
+        .child(div().size(px(8.0)).rounded_full().bg(hsla(dot_color)))
         .into_any_element()
 }
 
@@ -123,6 +145,20 @@ impl AgentsTab {
             message["icon"] = json!(icon);
         }
         self.post(message, cx);
+        let family = ghostex_gx_chat_core::menus::catalog::canonical_model_family(
+            agent.icon.as_deref().unwrap_or(&agent.agent_id),
+        )
+        .to_string();
+        let mut defaults = self
+            .store
+            .read(cx)
+            .value("agentDefaultModels")
+            .as_object()
+            .cloned()
+            .unwrap_or_default();
+        if defaults.remove(&family).is_some() {
+            self.save("agentDefaultModels", Value::Object(defaults), cx);
+        }
         cx.notify();
     }
 
@@ -175,6 +211,22 @@ impl AgentsTab {
         self.store.update(cx, |store, cx| {
             store.apply_patch(patch, "settings:control", cx)
         });
+    }
+
+    fn set_default_model(&mut self, family: &str, model: String, cx: &mut Context<Self>) {
+        let mut map = self
+            .store
+            .read(cx)
+            .value("agentDefaultModels")
+            .as_object()
+            .cloned()
+            .unwrap_or_default();
+        if ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(&model) {
+            map.remove(family);
+        } else {
+            map.insert(family.to_string(), json!(model));
+        }
+        self.save("agentDefaultModels", Value::Object(map), cx);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -289,11 +341,11 @@ impl AgentsTab {
                 .clone()
                 .unwrap_or_else(|| "inherit".to_string());
             let mode_agent = agent.clone();
-            let mode_select = settings_select(
+            let mode_select = settings_select_described(
                 self,
                 p,
                 SharedString::from(format!("agent-permission-{agent_id}")),
-                &accept_all_mode_options(),
+                &permission_mode_options(&agent.agent_id, agent.icon.as_deref()),
                 &mode,
                 Some(SELECT_WIDTH),
                 !accept_supported,
@@ -389,16 +441,102 @@ impl AgentsTab {
                     window,
                     cx,
                 );
-                children.push(panel_child(setting_row(
+                let control = h_flex()
+                    .items_center()
+                    .gap(px(8.0))
+                    .when(current_mode == "agent-cli", |this| {
+                        this.child(terminal_mode_legacy_dot(p, &agent_id))
+                    })
+                    .child(select)
+                    .into_any_element();
+                let session_mode_row = setting_row(
                     p,
                     SharedString::from(format!("agent-session-mode-row-{agent_id}")),
                     RowSpec::new("Session mode").description(
-                        "Choose Agent CLI (interactive terminal) or Non-CLI (structured host; switching to Terminal asks first and interrupts any active turn). Applies to new or resumed sessions.",
+                        "Choose Native (faster, more stable structured host; switching to Terminal-based asks first and interrupts any active turn) or Terminal-based (legacy interactive terminal). Applies to new or resumed sessions.",
                     ),
                     None,
-                    select,
+                    control,
                     cx,
-                )));
+                );
+                children.push(panel_child(session_mode_row));
+            }
+            if let Some(catalog) = crate::app::gx_chat::current_model_catalog() {
+                let model_family = ghostex_gx_chat_core::menus::catalog::canonical_model_family(
+                    agent.icon.as_deref().unwrap_or(&agent.agent_id),
+                )
+                .to_string();
+                let catalog_agent = catalog
+                    .agents
+                    .get(&model_family)
+                    .or_else(|| catalog.agents.get(&agent.agent_id));
+                if let Some(cat_agent) = catalog_agent {
+                    let options: Vec<super::super::super::catalog::SettingOption> = cat_agent
+                        .models
+                        .iter()
+                        .filter(|m| {
+                            !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(
+                                &m.value,
+                            ) && !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_label(
+                                &m.label,
+                            )
+                        })
+                        .map(|m| super::super::super::catalog::SettingOption {
+                            label: m.label.clone(),
+                            value: m.value.clone(),
+                        })
+                        .collect();
+                    if !options.is_empty() {
+                        let explicit = self
+                            .store
+                            .read(cx)
+                            .value("agentDefaultModels")
+                            .get(&model_family)
+                            .and_then(Value::as_str)
+                            .map(str::trim)
+                            .filter(|v| options.iter().any(|opt| opt.value == *v))
+                            .map(str::to_string);
+                        let remembered = self
+                            .agent_model_pins
+                            .get(&model_family)
+                            .filter(|v| options.iter().any(|opt| opt.value == **v))
+                            .cloned();
+                        let fallback =
+                            ghostex_gx_chat_core::menus::catalog::preferred_default_model(
+                                &model_family,
+                                cat_agent,
+                            )
+                            .map(|m| m.value.clone())
+                            .unwrap_or_else(|| options[0].value.clone());
+                        let current_model = explicit.or(remembered).unwrap_or(fallback);
+                        let save_family = model_family.clone();
+                        let select = settings_select(
+                            self,
+                            p,
+                            SharedString::from(format!("agent-default-model-{agent_id}")),
+                            &options,
+                            &current_model,
+                            Some(SELECT_WIDTH),
+                            false,
+                            None,
+                            move |page: &mut Self, value, _window, cx| {
+                                page.set_default_model(&save_family, value, cx);
+                            },
+                            window,
+                            cx,
+                        );
+                        children.push(panel_child(setting_row(
+                            p,
+                            SharedString::from(format!("agent-default-model-row-{agent_id}")),
+                            RowSpec::new("Default model").description(
+                                "Model new chats and threads of this agent start on. Overrides the last model picked in chat.",
+                            ),
+                            None,
+                            select,
+                            cx,
+                        )));
+                    }
+                }
             }
             // Claude Code's idle compaction and prompt cache length (claude_context.rs).
             if agent.is_default && agent_id == super::claude_context::CLAUDE_AGENT_ID {

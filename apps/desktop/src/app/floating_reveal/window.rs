@@ -283,7 +283,11 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        if action.action_id == "focusSidebar" {
+        if action.action_id == "focusSidebar"
+            && !(self.has_gpui_switch_request_toast()
+                && crate::app::hotkeys::gpui_configured_hotkey_key("acceptSwitchRequestToast")
+                    == crate::app::hotkeys::gpui_configured_hotkey_key("focusSidebar"))
+        {
             self.toggle_sidebar_keyboard_focus(window, cx);
             return;
         }

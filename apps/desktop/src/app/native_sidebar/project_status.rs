@@ -86,6 +86,7 @@ pub(crate) fn project_status(
         };
         return Some(
             h_flex()
+                .flex_shrink_0()
                 .gap(px(7.0 * scale))
                 .text_size(px(10.0 * scale))
                 .text_color(appearance.foreground)
@@ -135,6 +136,7 @@ pub(crate) fn project_status(
     let deletions_color = project_diff_deletions_color();
     Some(
         h_flex()
+            .flex_shrink_0()
             .gap(px(8.0 * scale))
             .text_size(px(13.55 * scale))
             .opacity(PROJECT_DIFF_OPACITY)

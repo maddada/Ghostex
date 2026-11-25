@@ -52,7 +52,7 @@ impl TrustingAgent {
             Self::Cursor => "Cursor CLI",
             Self::Copilot => "Copilot CLI",
             Self::Grok => "Grok Build",
-            Self::Antigravity => "Antigravity CLI",
+            Self::Antigravity => "Antigravity",
             Self::Pi => "Pi",
             Self::Droid => "Factory Droid",
         }

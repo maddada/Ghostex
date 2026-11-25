@@ -14,6 +14,7 @@ mod images;
 mod import;
 mod kit;
 mod linked;
+mod mentions;
 mod notice;
 mod pick_markdown;
 mod prepare;
@@ -22,13 +23,14 @@ mod questions;
 mod retire;
 mod scroll;
 mod serve;
+mod shared;
 mod source;
 mod store;
 mod theme;
 mod thumbnail;
 mod version;
 
-pub(crate) use answers::{is_answers_route, submit as submit_answers};
+pub(crate) use answers::{is_answers_route, submit as submit_answers, submit_outside_answers};
 pub(crate) use drafts::{is_draft_route, read as read_draft, save as save_draft};
 pub(crate) use exported::{
     download as download_exported_page, handle_export_http as handle_export_visual_page_http,
@@ -42,6 +44,7 @@ pub(crate) use import::{
     IMPORT_VISUAL_PAGE_ANSWERS_ENDPOINT,
 };
 pub(crate) use linked::{follow as follow_page_link, is_link_route};
+pub(crate) use mentions::{is_mentions_route, read as read_page_mentions};
 pub(crate) use notice::{dismiss as dismiss_page_notice, is_notice_route};
 pub(crate) use prepare::{page_too_large, prepare_page};
 pub(crate) use publish::{
@@ -55,6 +58,7 @@ pub(crate) use retire::{
 };
 pub(crate) use scroll::{handle as page_scroll, is_scroll_route};
 pub(crate) use serve::{serve, PAGE_SCRIPT_QUERY, VISUAL_PAGE_ROUTE_PREFIX};
+pub(crate) use shared::{shared_page, SHARED_PAGE_CONTENT_SECURITY_POLICY};
 pub(crate) use source::{
     handle_read_http as handle_read_visual_page_source_http,
     handle_refresh_http as handle_refresh_visual_page_http, READ_VISUAL_PAGE_SOURCE_ENDPOINT,

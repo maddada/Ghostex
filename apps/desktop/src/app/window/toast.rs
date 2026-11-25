@@ -26,6 +26,15 @@ pub(crate) const GPUI_APP_TOAST_DESCRIPTION_LINE_HEIGHT: f32 = 17.0;
 pub(crate) const GPUI_APP_TOAST_TITLE_CHARS_PER_LINE: usize = 36;
 pub(crate) const GPUI_APP_TOAST_DESCRIPTION_CHARS_PER_LINE: usize = 40;
 pub(crate) const GPUI_SESSION_CHAT_FILE_OPENING_TOAST_ID: &str = "gpui-session-chat-file-opening";
+pub(crate) const GPUI_SWITCH_REQUEST_TOAST_ID: &str = "gpui-switch-request-toast";
+pub(crate) const GPUI_SWITCH_REQUEST_TOAST_DURATION_MS: u64 = 8_000;
+
+pub(crate) fn gpui_switch_request_now_ms() -> u64 {
+    web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum GpuiAppToastLevel {
@@ -106,6 +115,14 @@ impl GpuiAppToastColors {
     */
     fn resolve(level: GpuiAppToastLevel, glass: bool, light: bool) -> Self {
         if !glass {
+            if light && level == GpuiAppToastLevel::Info {
+                return Self {
+                    background: rgba(0xfffffffa).into(),
+                    border: rgba(0x0000001c).into(),
+                    title: rgb(0x18181b).into(),
+                    description: rgba(0x18181ba6).into(),
+                };
+            }
             return Self {
                 background: level.container_background().into(),
                 border: level.container_border().into(),
@@ -160,10 +177,28 @@ pub(crate) struct GpuiAppToast {
     pub(crate) epoch: u64,
 }
 
+/// Payload carried by a switch-request toast (`GPUI_SWITCH_REQUEST_TOAST_ID`), drawn inline in the
+/// bottom-center toast stack instead of the centered notice modal.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct GpuiSwitchRequestToast {
+    pub(crate) request: ghostex_gx_protocol::SwitchRequest,
+    /// Remote computer id when the request came from a connected remote computer; `None` for local.
+    pub(crate) machine_id: Option<String>,
+    pub(crate) primary_label: String,
+    pub(crate) external_url: Option<String>,
+    pub(crate) icon: Option<String>,
+    pub(crate) started_at_ms: u64,
+    pub(crate) remaining_ms: u64,
+    pub(crate) paused: bool,
+}
+
 /// What a notice's button opens. The host runs it (`run_gpui_app_toast_action`) and the notice
 /// closes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiAppToastAction {
+    /// A clickable bottom-center switch-request toast (`Q4705`-`Q4711`). Never routed into the
+    /// centered notice modal (`GpuiAppToast::has_buttons` returns `false` for this variant).
+    SwitchRequest(Box<GpuiSwitchRequestToast>),
     /// Settings > Accounts, on this agent's accounts (`claude`, `codex`) when one is named.
     OpenAccounts { provider: Option<String> },
     /// Settings > Extensions, where views are turned on.
@@ -191,8 +226,6 @@ pub(crate) enum GpuiAppToastAction {
     /// Undo on a settings sync note: this computer's value of a synced setting comes back on every
     /// computer (`id` is the note's, server/src/settings_sync/).
     UndoSyncedChange { id: String },
-    /// Undo on "Chief turned off": turns the Chief extension back on (native_sidebar/chief.rs).
-    UndoChiefDisable,
     /// Set to 100% on the one-time Linux note that Ghostex now follows the desktop's display
     /// scale: Interface scale back to 100% (app/display_scale_offer.rs).
     #[cfg_attr(not(all(target_os = "linux", not(ghostex_web))), allow(dead_code))]
@@ -226,11 +259,12 @@ pub(crate) enum GpuiAppToastAction {
 impl GpuiAppToastAction {
     pub(crate) fn label(&self) -> &str {
         match self {
+            Self::SwitchRequest(request) => request.primary_label.as_str(),
             Self::OpenAccounts { .. } => "Open Accounts",
             Self::OpenViewSettings => "Open Settings",
             Self::OpenAgentSettings => "Install or pick another agent",
             Self::OpenUpdateDownloadPage => "Open download page",
-            Self::UndoSyncedChange { .. } | Self::UndoChiefDisable => "Undo",
+            Self::UndoSyncedChange { .. } => "Undo",
             Self::ResetInterfaceScale => "Set to 100%",
             Self::RepairSpaceo => "Repair",
             Self::SecurityApproval { deny: false, .. } => "Approve",
@@ -311,7 +345,10 @@ pub(crate) fn gpui_app_toast_without_repeats_at(
     mut toast: GpuiAppToast,
     now: web_time::Instant,
 ) -> Option<GpuiAppToast> {
-    if toast.in_progress() || shown.iter().any(|existing| existing.id == toast.id) {
+    if matches!(toast.action, Some(GpuiAppToastAction::SwitchRequest(_)))
+        || toast.in_progress()
+        || shown.iter().any(|existing| existing.id == toast.id)
+    {
         return Some(toast);
     }
     recent.retain(|(_, at)| now.saturating_duration_since(*at) < GPUI_APP_TOAST_REPEAT_QUIET);
@@ -428,6 +465,27 @@ pub(crate) fn gpui_app_toast_wrapped_line_count(text: &str, chars_per_line: usiz
 }
 
 pub(crate) fn gpui_app_toast_estimated_height(toast: &GpuiAppToast) -> f32 {
+    if let Some(GpuiAppToastAction::SwitchRequest(switch_request)) = &toast.action {
+        let chars_per_line = if switch_request.external_url.is_some() {
+            32
+        } else {
+            21
+        };
+        let title_height = gpui_app_toast_wrapped_line_count(&toast.title, chars_per_line) as f32
+            * GPUI_APP_TOAST_TITLE_LINE_HEIGHT;
+        let description_height = toast
+            .description
+            .as_deref()
+            .map(|_| GPUI_APP_TOAST_CONTENT_GAP + GPUI_APP_TOAST_DESCRIPTION_LINE_HEIGHT)
+            .unwrap_or(0.0);
+        let text_height = (title_height + description_height).max(26.0);
+        let actions_row_height = if switch_request.external_url.is_some() {
+            8.0 + 26.0
+        } else {
+            0.0
+        };
+        return GPUI_APP_TOAST_VERTICAL_PADDING * 2.0 + text_height + actions_row_height + 4.0;
+    }
     let title_height =
         gpui_app_toast_wrapped_line_count(&toast.title, GPUI_APP_TOAST_TITLE_CHARS_PER_LINE) as f32
             * GPUI_APP_TOAST_TITLE_LINE_HEIGHT;
@@ -526,6 +584,9 @@ pub(crate) struct GpuiAppToastWindow {
     pub(crate) app: gpui::WeakEntity<GhostexGpuiApp>,
     pub(crate) toasts: Vec<GpuiAppToast>,
     pub(crate) hovered_toast_id: Option<String>,
+    /// Which button on a switch-request toast is currently hovered (`"primary"` or `"external"`),
+    /// so its hotkey hint appears only while hovered.
+    pub(crate) hovered_switch_button: Option<&'static str>,
     /// The toast cards the window's blurred background was last limited to.
     pub(crate) blur_region: Vec<(Bounds<Pixels>, Pixels)>,
 }
@@ -541,6 +602,13 @@ impl GpuiAppToastWindow {
         }) {
             self.hovered_toast_id = None;
         }
+        if !self
+            .toasts
+            .iter()
+            .any(|toast| toast.id == GPUI_SWITCH_REQUEST_TOAST_ID)
+        {
+            self.hovered_switch_button = None;
+        }
         cx.notify();
     }
 
@@ -548,14 +616,365 @@ impl GpuiAppToastWindow {
         if hovered {
             if self.hovered_toast_id.as_deref() != Some(toast_id) {
                 self.hovered_toast_id = Some(toast_id.to_string());
+                if toast_id == GPUI_SWITCH_REQUEST_TOAST_ID {
+                    let app = self.app.clone();
+                    cx.defer(move |cx| {
+                        let _ = app.update(cx, |app, cx| {
+                            app.pause_gpui_switch_request_toast(cx);
+                        });
+                    });
+                }
                 cx.notify();
             }
             return;
         }
         if self.hovered_toast_id.as_deref() == Some(toast_id) {
             self.hovered_toast_id = None;
+            if toast_id == GPUI_SWITCH_REQUEST_TOAST_ID {
+                self.hovered_switch_button = None;
+                let app = self.app.clone();
+                cx.defer(move |cx| {
+                    let _ = app.update(cx, |app, cx| {
+                        app.resume_gpui_switch_request_toast(cx);
+                    });
+                });
+            }
             cx.notify();
         }
+    }
+
+    fn set_hovered_switch_button(
+        &mut self,
+        button: &'static str,
+        hovered: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let next = if hovered {
+            Some(button)
+        } else if self.hovered_switch_button == Some(button) {
+            None
+        } else {
+            self.hovered_switch_button
+        };
+        if self.hovered_switch_button != next {
+            self.hovered_switch_button = next;
+            cx.notify();
+        }
+    }
+
+    fn render_switch_request_toast_content(
+        &self,
+        toast: &GpuiAppToast,
+        sr: &GpuiSwitchRequestToast,
+        colors: &GpuiAppToastColors,
+        light: bool,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        let icon_slug = sr.icon.as_deref().unwrap_or("");
+        let icon_badge_bg: Hsla = if light {
+            rgba(0x18181b0f).into()
+        } else {
+            rgba(0xffffff14).into()
+        };
+        let leading_icon = if let Some(path) = workspace_tab_agent_icon_path(icon_slug) {
+            let accent = rgb(workspace_tab_agent_icon_accent_color(icon_slug));
+            let icon_color: Hsla =
+                if light && workspace_tab_agent_icon_accent_color(icon_slug) == 0xffffff {
+                    rgb(0x18181b).into()
+                } else {
+                    accent.into()
+                };
+            let svg_size = (workspace_tab_agent_svg_size(icon_slug) + 2.0).min(15.0);
+            div()
+                .flex_shrink_0()
+                .mt(px(1.0))
+                .size(px(22.0))
+                .rounded(px(6.0))
+                .bg(icon_badge_bg)
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(
+                    gpui::svg()
+                        .path(path)
+                        .size(px(svg_size))
+                        .text_color(icon_color),
+                )
+                .into_any_element()
+        } else {
+            div()
+                .flex_shrink_0()
+                .mt(px(5.0))
+                .size(px(8.0))
+                .rounded(px(4.0))
+                .bg(toast.level.indicator_color())
+                .into_any_element()
+        };
+
+        let primary_hotkey = switch_request_hotkey_label("acceptSwitchRequestToast");
+        let external_hotkey = switch_request_hotkey_label("openSwitchRequestExternal");
+        let show_primary_hotkey = self.hovered_switch_button == Some("primary");
+        let show_external_hotkey = self.hovered_switch_button == Some("external");
+
+        let primary_bg: Hsla = if light {
+            rgba(0x00000029).into()
+        } else {
+            rgba(0xffffff33).into()
+        };
+        let primary_hover_bg: Hsla = if light {
+            rgba(0x00000036).into()
+        } else {
+            rgba(0xffffff42).into()
+        };
+        let primary_fg: Hsla = if light {
+            rgb(0x18181b).into()
+        } else {
+            rgb(0xf4f4f5).into()
+        };
+        let secondary_bg: Hsla = if light {
+            rgba(0x18181b0d).into()
+        } else {
+            rgba(0xffffff14).into()
+        };
+        let secondary_hover_bg: Hsla = if light {
+            rgba(0x18181b1a).into()
+        } else {
+            rgba(0xffffff22).into()
+        };
+        let secondary_border: Hsla = if light {
+            rgba(0x18181b1f).into()
+        } else {
+            rgba(0xffffff24).into()
+        };
+
+        let app_primary = self.app.clone();
+        let primary_tooltip = match &primary_hotkey {
+            Some(hotkey) => format!("{} ({hotkey})", sr.primary_label),
+            None => sr.primary_label.clone(),
+        };
+        let primary_button = div()
+            .id("ghostex-gpui-switch-request-accept")
+            .flex_shrink_0()
+            .h(px(26.0))
+            .px(px(10.0))
+            .rounded(px(6.0))
+            .bg(primary_bg)
+            .text_color(primary_fg)
+            .text_size(px(12.0))
+            .font_weight(FontWeight::MEDIUM)
+            .flex()
+            .items_center()
+            .gap(px(5.0))
+            .cursor_pointer()
+            .hover(move |button| button.bg(primary_hover_bg))
+            .on_hover(cx.listener(|this, hovered, _, cx| {
+                this.set_hovered_switch_button("primary", *hovered, cx);
+            }))
+            .tooltip(move |window, cx| Tooltip::new(primary_tooltip.clone()).build(window, cx))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|_this, _event: &MouseDownEvent, window, cx| {
+                    window.prevent_default();
+                    cx.stop_propagation();
+                }),
+            )
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(move |_this, _event: &MouseUpEvent, window, cx| {
+                    window.prevent_default();
+                    cx.stop_propagation();
+                    let app = app_primary.clone();
+                    cx.defer(move |cx| {
+                        let _ = app.update(cx, |app, cx| {
+                            app.accept_gpui_switch_request_toast(None, cx);
+                        });
+                    });
+                }),
+            )
+            .child(sr.primary_label.clone())
+            .when(show_primary_hotkey, |button| {
+                button.when_some(primary_hotkey.clone(), |button, hotkey| {
+                    button.child(
+                        div()
+                            .text_size(px(10.5))
+                            .text_color(primary_fg.opacity(0.72))
+                            .child(hotkey),
+                    )
+                })
+            });
+
+        let text_column = div()
+            .flex()
+            .flex_col()
+            .gap(px(GPUI_APP_TOAST_CONTENT_GAP))
+            .flex_1()
+            .min_w_0()
+            .child(
+                div()
+                    .text_size(px(13.0))
+                    .line_height(px(GPUI_APP_TOAST_TITLE_LINE_HEIGHT))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(colors.title)
+                    .child(toast.title.clone()),
+            )
+            .when_some(toast.description.clone(), |column, description| {
+                column.child(
+                    div()
+                        .w_full()
+                        .text_size(px(12.0))
+                        .line_height(px(GPUI_APP_TOAST_DESCRIPTION_LINE_HEIGHT))
+                        .text_color(colors.description)
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .child(description),
+                )
+            });
+
+        if sr.external_url.is_some() {
+            let app_external = self.app.clone();
+            let external_tooltip = match &external_hotkey {
+                Some(hotkey) => format!("Open in default browser ({hotkey})"),
+                None => "Open in default browser".to_string(),
+            };
+            let external_button = div()
+                .id("ghostex-gpui-switch-request-external")
+                .flex_shrink_0()
+                .h(px(26.0))
+                .px(px(10.0))
+                .rounded(px(6.0))
+                .border_1()
+                .border_color(secondary_border)
+                .bg(secondary_bg)
+                .text_color(colors.title)
+                .text_size(px(12.0))
+                .font_weight(FontWeight::MEDIUM)
+                .flex()
+                .items_center()
+                .gap(px(5.0))
+                .cursor_pointer()
+                .hover(move |button| button.bg(secondary_hover_bg))
+                .on_hover(cx.listener(|this, hovered, _, cx| {
+                    this.set_hovered_switch_button("external", *hovered, cx);
+                }))
+                .tooltip(move |window, cx| Tooltip::new(external_tooltip.clone()).build(window, cx))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|_this, _event: &MouseDownEvent, window, cx| {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                    }),
+                )
+                .on_mouse_up(
+                    MouseButton::Left,
+                    cx.listener(move |_this, _event: &MouseUpEvent, window, cx| {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                        let app = app_external.clone();
+                        cx.defer(move |cx| {
+                            let _ = app.update(cx, |app, cx| {
+                                app.open_gpui_switch_request_external(cx);
+                            });
+                        });
+                    }),
+                )
+                .child("Open external")
+                .when(show_external_hotkey, |button| {
+                    button.when_some(external_hotkey.clone(), |button, hotkey| {
+                        button.child(
+                            div()
+                                .text_size(px(10.5))
+                                .text_color(colors.description)
+                                .child(hotkey),
+                        )
+                    })
+                });
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(8.0))
+                .child(
+                    div()
+                        .flex()
+                        .items_start()
+                        .gap(px(9.0))
+                        .child(leading_icon)
+                        .child(text_column),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_end()
+                        .gap(px(6.0))
+                        .child(external_button)
+                        .child(primary_button),
+                )
+                .into_any_element()
+        } else {
+            div()
+                .flex()
+                .items_center()
+                .gap(px(9.0))
+                .child(leading_icon)
+                .child(text_column)
+                .child(primary_button)
+                .into_any_element()
+        }
+    }
+
+    fn render_switch_request_countdown_bar(
+        toast: &GpuiAppToast,
+        sr: &GpuiSwitchRequestToast,
+        light: bool,
+    ) -> AnyElement {
+        let total = toast.duration_ms.max(1) as f32;
+        let start_fraction = (sr.remaining_ms as f32 / total).clamp(0.0, 1.0);
+        let track_color: Hsla = if light {
+            rgba(0x18181b12).into()
+        } else {
+            rgba(0xffffff14).into()
+        };
+        let fill_color: Hsla = if light {
+            rgba(0x2563ebcc).into()
+        } else {
+            rgba(0x60a5fae0).into()
+        };
+        let fill = if sr.paused {
+            div()
+                .h_full()
+                .w(relative(start_fraction))
+                .bg(fill_color)
+                .into_any_element()
+        } else {
+            div()
+                .h_full()
+                .bg(fill_color)
+                .with_throttled_animation(
+                    gpui::ElementId::Name(
+                        format!(
+                            "switch-request-countdown-{}-{}",
+                            toast.epoch, sr.remaining_ms
+                        )
+                        .into(),
+                    ),
+                    std::time::Duration::from_millis(sr.remaining_ms.max(1)),
+                    move |bar, phase| {
+                        let fraction = (start_fraction * (1.0 - phase)).clamp(0.0, 1.0);
+                        bar.w(relative(fraction))
+                    },
+                )
+                .into_any_element()
+        };
+        div()
+            .absolute()
+            .left_0()
+            .right_0()
+            .bottom_0()
+            .h(px(2.0))
+            .bg(track_color)
+            .child(fill)
+            .into_any_element()
     }
 
     /// `region` collects the button's frame into the window's frosted region, where the window is
@@ -634,6 +1053,42 @@ impl GpuiAppToastWindow {
             })
             .into_any_element()
     }
+}
+
+/// Live formatted hotkey label for a switch-request toast button, read from settings and the
+/// hotkey catalog on both desktop and gpui-web.
+pub(crate) fn switch_request_hotkey_chord(action_id: &str) -> Option<String> {
+    let default_key = ghostex_settings_catalog::hotkey_definition(action_id)?.default_key;
+    let snapshot = crate::shared_settings::shared_sidebar_settings_snapshot();
+    let key = snapshot
+        .object()
+        .get("hotkeys")
+        .and_then(serde_json::Value::as_object)
+        .and_then(|hotkeys| hotkeys.get(action_id))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or(default_key)
+        .trim();
+    (!key.is_empty()).then(|| key.to_string())
+}
+
+fn switch_request_hotkey_label(action_id: &str) -> Option<String> {
+    let chord = switch_request_hotkey_chord(action_id)?;
+    let platform = {
+        #[cfg(ghostex_web)]
+        {
+            if crate::terminal_element::uses_macos_text_editing() {
+                ghostex_settings_catalog::Platform::MacOs
+            } else {
+                ghostex_settings_catalog::Platform::Linux
+            }
+        }
+        #[cfg(not(ghostex_web))]
+        {
+            ghostex_settings_catalog::Platform::current()
+        }
+    };
+    let label = ghostex_settings_catalog::hotkey_label(&chord, platform);
+    (!label.trim().is_empty()).then_some(label)
 }
 
 /// The frames a toast window's frosted region is built from, collected while it draws.
@@ -738,6 +1193,7 @@ impl Render for GpuiAppToastWindow {
                             .px(px(GPUI_APP_TOAST_HORIZONTAL_PADDING))
                             .py(px(GPUI_APP_TOAST_VERTICAL_PADDING))
                             .relative()
+                            .overflow_hidden()
                             .rounded(px(10.0))
                             .border_1()
                             .border_color(colors.border)
@@ -764,52 +1220,66 @@ impl Render for GpuiAppToastWindow {
                                     .bottom_0(),
                                 )
                             })
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_start()
-                                    .gap(px(7.0))
-                                    .child(indicator)
-                                    .child(
+                            .map(|card| {
+                                if let Some(GpuiAppToastAction::SwitchRequest(sr)) = &toast.action {
+                                    card.child(self.render_switch_request_toast_content(
+                                        toast, sr, &colors, light, cx,
+                                    ))
+                                    .child(Self::render_switch_request_countdown_bar(
+                                        toast, sr, light,
+                                    ))
+                                } else {
+                                    card.child(
                                         div()
                                             .flex()
-                                            .flex_col()
-                                            .gap(px(GPUI_APP_TOAST_CONTENT_GAP))
-                                            .flex_1()
-                                            .min_w_0()
+                                            .items_start()
+                                            .gap(px(7.0))
+                                            .child(indicator)
                                             .child(
                                                 div()
-                                                    .text_size(px(13.0))
-                                                    .line_height(px(
-                                                        GPUI_APP_TOAST_TITLE_LINE_HEIGHT,
-                                                    ))
-                                                    .font_weight(FontWeight::SEMIBOLD)
-                                                    .text_color(colors.title)
-                                                    .child(toast.title.clone()),
-                                            )
-                                            .when_some(description, |text_column, description| {
-                                                text_column.child(
-                                                    div()
-                                                        .w_full()
-                                                        .text_size(px(12.0))
-                                                        .line_height(px(
-                                                            GPUI_APP_TOAST_DESCRIPTION_LINE_HEIGHT,
-                                                        ))
-                                                        .text_color(colors.description)
-                                                        .when(
-                                                            truncate_description_from_start,
-                                                            |description| {
-                                                                description
-                                                                    .overflow_hidden()
-                                                                    .whitespace_nowrap()
-                                                                    .text_ellipsis_start()
-                                                            },
-                                                        )
-                                                        .child(description),
-                                                )
-                                            }),
-                                    ),
-                            ),
+                                                    .flex()
+                                                    .flex_col()
+                                                    .gap(px(GPUI_APP_TOAST_CONTENT_GAP))
+                                                    .flex_1()
+                                                    .min_w_0()
+                                                    .child(
+                                                        div()
+                                                            .text_size(px(13.0))
+                                                            .line_height(px(
+                                                                GPUI_APP_TOAST_TITLE_LINE_HEIGHT,
+                                                            ))
+                                                            .font_weight(FontWeight::SEMIBOLD)
+                                                            .text_color(colors.title)
+                                                            .child(toast.title.clone()),
+                                                    )
+                                                    .when_some(
+                                                        description,
+                                                        |text_column, description| {
+                                                            text_column.child(
+                                                                div()
+                                                                    .w_full()
+                                                                    .text_size(px(12.0))
+                                                                    .line_height(px(
+                                                                        GPUI_APP_TOAST_DESCRIPTION_LINE_HEIGHT,
+                                                                    ))
+                                                                    .text_color(colors.description)
+                                                                    .when(
+                                                                        truncate_description_from_start,
+                                                                        |description| {
+                                                                            description
+                                                                                .overflow_hidden()
+                                                                                .whitespace_nowrap()
+                                                                                .text_ellipsis_start()
+                                                                        },
+                                                                    )
+                                                                    .child(description),
+                                                            )
+                                                        },
+                                                    ),
+                                            ),
+                                    )
+                                }
+                            }),
                     )
                     .when(show_close_button, |toast_element| {
                         toast_element.child(self.render_close_button(

@@ -91,5 +91,3 @@ bool GhostexGpuiPointerPressedRecently(void) {
   if (NSEvent.pressedMouseButtons != 0) return true;
   return [NSDate timeIntervalSinceReferenceDate] - GhostexGpuiLastPointerPressAt < 0.3;
 }
-
-bool GhostexGpuiApplicationIsActive(void) { return NSApp.isActive; }

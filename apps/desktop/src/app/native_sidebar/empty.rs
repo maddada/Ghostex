@@ -49,14 +49,19 @@ impl GhostexGpuiApp {
     ) -> AnyElement {
         let scale = appearance.scale;
         let label = if row.showing {
-            "Hide projects without sessions".to_string()
+            "Hide projects without sessions"
         } else {
-            format!("Show all projects ({} hidden)", row.empty_projects)
+            "Show all projects"
+        };
+        let aria = if row.showing {
+            label.to_string()
+        } else {
+            format!("{label}, {} hidden", row.empty_projects)
         };
         h_flex()
             .id("native-sidebar-show-all-projects")
             .role(gpui::Role::Button)
-            .aria_label(label.clone())
+            .aria_label(aria)
             .ml(px(18.0 * scale))
             .mr(px(5.0 * scale))
             .mt(px(4.0 * scale))
@@ -78,6 +83,13 @@ impl GhostexGpuiApp {
                 appearance.muted,
             ))
             .child(div().min_w_0().truncate().child(label))
+            .when(!row.showing, |el| {
+                el.child(crate::app::element::count_badge(
+                    row.empty_projects.to_string(),
+                    appearance.foreground,
+                    scale,
+                ))
+            })
             .on_click(cx.listener(|app, _, _, cx| {
                 cx.stop_propagation();
                 app.dispatch_native_sidebar_ui(

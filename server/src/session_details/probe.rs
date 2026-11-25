@@ -159,6 +159,8 @@ pub(super) fn request(target: ProbeTarget, mode: ProbeMode) -> ProbeSnapshot {
                 }
                 Err(error) => entry.snapshot.error = Some(error),
             }
+            drop(known);
+            super::async_cache::notify_update();
         });
         return snapshot;
     }

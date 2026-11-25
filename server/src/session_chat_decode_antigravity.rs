@@ -8,11 +8,13 @@ step log. One mirror row per rendered message, in this shape:
      "toolCalls": [{"name": "run_command", "args": {"CommandLine": "echo pong"}}]}
     {"stepIndex": 27, "part": "assistant", "createdAt": "…", "text": "…will wait…",
      "awaitsBackgroundTasks": true}
-    {"stepIndex": 0, "part": "user", "createdAt": "…", "text": "…"}
+    {"stepIndex": 0, "part": "user", "createdAt": "…", "text": "…",
+     "images": ["/home/…/brain/<id>/.user_uploaded/uploaded_media_1.png"]}
     {"stepIndex": 34, "part": "task", "taskIndex": 0, "createdAt": "…",
      "text": "<task-notification>…</task-notification>"}
     {"stepIndex": 2, "part": "tool", "createdAt": "…", "toolType": "GENERIC",
      "text": "The command exited with code 0.\nOutput:\npong", "isError": true}
+    {"stepIndex": 64, "part": "compaction", "createdAt": "…", "endsTurn": true}
 
 `stepIndex` is the CLI's own trajectory index, so ids are stable across mirror
 rewrites; a planner step's reasoning row (its thinking) and message row share
@@ -251,8 +253,31 @@ pub fn decode_antigravity_transcript_line(
 
     match part {
         // A background task's end, which the chat draws as the call it reports on.
-        "user" | "task" => Some(message(SessionChatRole::User, vec![text_block(text?)])),
+        "task" => Some(message(SessionChatRole::User, vec![text_block(text?)])),
+        "user" => {
+            let mut blocks: Vec<SessionChatBlock> = record
+                .get("images")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .map(|path| SessionChatBlock::ImageRef {
+                    path: Some(path.to_string()),
+                    url: None,
+                    alt: None,
+                })
+                .collect();
+            blocks.extend(text.map(text_block));
+            if blocks.is_empty() {
+                return None;
+            }
+            Some(message(SessionChatRole::User, blocks))
+        }
         "reasoning" => Some(message(SessionChatRole::Reasoning, vec![text_block(text?)])),
+        "compaction" => Some(message(
+            SessionChatRole::System,
+            vec![text_block(CONTEXT_COMPACTED_STATUS_TEXT)],
+        )),
         "assistant" => {
             let mut blocks = Vec::new();
             if let Some(text) = text {
@@ -285,6 +310,7 @@ The step log writes no explicit turn markers: a user row opens a turn, and a
 planner step that answers in prose WITHOUT asking for tools is the turn's last
 step (a step with tool calls is always followed by the tool's result and
 another planner step), unless the mirror marked it `awaitsBackgroundTasks`.
+A `/compact` gets no reply: its compaction row, marked `endsTurn`, closes it.
 Interrupts write no closing row, so ready-state recovery for them rides the
 agent-hook activity signal like Pi's.
 */
@@ -314,6 +340,13 @@ pub fn decode_antigravity_turn_lifecycle(
             if asks_for_tools || awaits_background_tasks {
                 return None;
             }
+            Some(SessionChatTurnLifecycle {
+                state: SessionChatTurnLifecycleState::Completed,
+                turn_id,
+                timestamp,
+            })
+        }
+        "compaction" if record.get("endsTurn") == Some(&Value::Bool(true)) => {
             Some(SessionChatTurnLifecycle {
                 state: SessionChatTurnLifecycleState::Completed,
                 turn_id,

@@ -301,9 +301,6 @@ impl GhostexGpuiApp {
     /// User (Q1739): "Ask anything" goes to the head coordinator. While Chief is on and has been opened, a Help row opens Chief's chat instead of a new Help chat, with the sample question staged as an editable draft (the 2026-09-09 rule that a Help row never sends still holds); "Ask anything" opens it with nothing staged. Chief answers from the ghostex-help guide (its playbook says so). With Chief off, or before its first open, the Help chat below is unchanged.
     /// Returns whether Chief took the question.
     fn ask_chief_help_question(&mut self, question: &str, cx: &mut gpui::Context<Self>) -> bool {
-        if !crate::app::native_sidebar::chief::chief_on() {
-            return false;
-        }
         let Some(chief) = self
             .native_sidebar
             .snapshot

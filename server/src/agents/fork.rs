@@ -240,6 +240,60 @@ fn fork_session_with(
     })
 }
 
+fn acp_profile_from_plan(plan: &Value, fam: &str) -> crate::acp::spec::AcpLaunchProfile {
+    let account_wrapper = plan
+        .get("acpAccountSlot")
+        .and_then(Value::as_str)
+        .filter(|slot| crate::acp::spec::is_valid_account_wrapper_slot(slot))
+        .and_then(|slot| {
+            let bin = crate::acp::spec::resolve_account_wrapper_executable(fam)?;
+            Some(crate::acp::spec::AcpAccountWrapper {
+                bin,
+                slot: slot.to_string(),
+            })
+        });
+    let hub_id = plan
+        .get("acpHubId")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let connector_envs = plan
+        .get("acpConnectorEnvs")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|pair| {
+                    let a = pair.as_array()?;
+                    Some((
+                        a.first()?.as_str()?.to_string(),
+                        a.get(1)?.as_str()?.to_string(),
+                    ))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let append_system_prompt_file = plan
+        .get("acpAppendSystemPromptFile")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let developer_instructions = plan
+        .get("acpDeveloperInstructions")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    crate::acp::spec::AcpLaunchProfile {
+        account_wrapper,
+        hub_id,
+        connector_envs,
+        append_system_prompt_file,
+        developer_instructions,
+        gbot_chat: plan.get("acpGbotChat").and_then(Value::as_bool) == Some(true),
+        gbot_api_chat: plan.get("acpGbotApiChat").and_then(Value::as_bool) == Some(true),
+        gbot_computer_use_off: plan.get("acpGbotComputerUseOff").and_then(Value::as_bool)
+            == Some(true),
+        lean_worker: plan.get("acpLeanWorker").and_then(Value::as_bool) == Some(true),
+        hermes_profile: None,
+    }
+}
+
 /// A fork from a message resumes its own copy of the conversation (`fork_claude_at.rs`) instead of
 /// forking the whole one: Claude Code only. Returns the copy's id.
 fn at_message_plan(plan: &mut Value) -> Result<String, DomainStateError> {
@@ -252,7 +306,42 @@ fn at_message_plan(plan: &mut Value) -> Result<String, DomainStateError> {
         ));
     };
     let fork_id = uuid::Uuid::new_v4().to_string();
-    let command = format!("{command} --resume {}", quote_shell_double_arg(&fork_id));
+    let command = if plan.get("acpFork").and_then(Value::as_bool) == Some(true) {
+        let fam = plan
+            .get("acpFamily")
+            .and_then(Value::as_str)
+            .unwrap_or("claude");
+        let level = plan
+            .get("acpApprovalLevel")
+            .and_then(Value::as_str)
+            .and_then(crate::acp::AcpApprovalLevel::parse);
+        let read_only = plan
+            .get("acpReadOnly")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let acp_model = plan.get("acpModel").and_then(Value::as_str);
+        let acp_effort = plan.get("acpEffort").and_then(Value::as_str);
+        let profile = acp_profile_from_plan(plan, fam);
+        crate::acp::spec::build_acp_host_launch_command_with_profile(
+            fam,
+            Some(command),
+            Some(&fork_id),
+            if read_only || profile.gbot_api_chat {
+                Some(crate::acp::AcpApprovalLevel::Ask)
+            } else {
+                level
+            },
+            &[],
+            acp_model,
+            acp_effort,
+            // `fork_claude_at.rs` already wrote the truncated transcript under `fork_id`.
+            false,
+            read_only,
+            &profile,
+        )
+    } else {
+        format!("{command} --resume {}", quote_shell_double_arg(&fork_id))
+    };
     plan["primaryCommand"] = json!(command);
     plan["displayCommand"] = json!(command);
     plan["startupText"] = json!(as_atuin_ignored_shell_input(&command));
@@ -269,6 +358,53 @@ fn side_chat_plan(plan: &mut Value) {
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
+    if plan.get("acpFork").and_then(Value::as_bool) == Some(true) {
+        if let Some(fam) = plan
+            .get("acpFamily")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+        {
+            let cli_cmd = plan
+                .get("runtimeCommand")
+                .or_else(|| plan.get("baseCommand"))
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            let reference = plan
+                .get("acpForkReference")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            let read_only = plan
+                .get("acpReadOnly")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let acp_model = plan
+                .get("acpModel")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            let acp_effort = plan
+                .get("acpEffort")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            let profile = acp_profile_from_plan(plan, &fam);
+            let command = crate::acp::spec::build_acp_host_launch_command_with_profile(
+                &fam,
+                cli_cmd.as_deref(),
+                reference.as_deref(),
+                Some(crate::acp::AcpApprovalLevel::Ask),
+                &[],
+                acp_model.as_deref(),
+                acp_effort.as_deref(),
+                true,
+                read_only,
+                &profile,
+            );
+            plan["acpApprovalLevel"] = json!(crate::acp::AcpApprovalLevel::Ask.as_str());
+            plan["primaryCommand"] = json!(command);
+            plan["displayCommand"] = json!(command);
+            plan["startupText"] = json!(as_atuin_ignored_shell_input(&command));
+            return;
+        }
+    }
     let Some(command) = plan
         .get("primaryCommand")
         .and_then(Value::as_str)
@@ -296,7 +432,142 @@ pub(crate) fn build_agent_fork_plan(
     let trusted_title = trusted_resume_title(session);
     let mut empryo_fork_id = None;
     let mut copilot_fork_id = None;
+    let is_acp_source = crate::acp::session_is_acp(session);
+    let source_read_only = crate::coordinators::is_read_only_thread(
+        session.get("runtimeSettings").and_then(Value::as_object),
+    );
+    let source_acp_level = if source_read_only {
+        Some(crate::acp::AcpApprovalLevel::Ask)
+    } else {
+        session
+            .pointer("/runtimeSettings/acpApprovalLevel")
+            .and_then(Value::as_str)
+            .and_then(crate::acp::AcpApprovalLevel::parse)
+    };
+    let source_runtime = session.get("runtimeSettings").and_then(Value::as_object);
+    let source_is_coordinator = source_runtime.is_some_and(session_is_coordinator);
+    let acp_model = resume_plan
+        .get("acpModel")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let acp_effort = resume_plan
+        .get("acpEffort")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let fork_workspace_note = if cfg!(test)
+        || crate::workspaces::session_skips_workspace_context(project, source_runtime)
+    {
+        None
+    } else {
+        crate::storage::open_gxserver_database(&crate::paths::get_gxserver_paths(None))
+            .ok()
+            .and_then(|db| {
+                crate::workspaces::project_workspace_info(&db, project)
+                    .ok()
+                    .flatten()
+            })
+            .map(
+                |(workspace_id, workspace_name)| super::WorkspaceNoteContext {
+                    workspace_id,
+                    workspace_name,
+                },
+            )
+    };
+    let build_fork_profile = |fam: &str| -> crate::acp::spec::AcpLaunchProfile {
+        let source_account_cmd =
+            source_runtime.and_then(|rt| read_text_from_map(rt, "accountCommand"));
+        let account_wrapper = crate::acp::spec::account_wrapper_from_ghostex_account(
+            fam,
+            source_runtime,
+            source_account_cmd.as_deref(),
+        );
+        let thread_marked_handovers = source_runtime
+            .and_then(|rt| rt.get("markedHandovers"))
+            .and_then(Value::as_bool)
+            == Some(true)
+            || super::is_lean_worker(source_runtime);
+        let (append_system_prompt_file, developer_instructions) = super::acp_launch_note(
+            fam,
+            source_is_coordinator,
+            thread_marked_handovers,
+            fork_workspace_note.as_ref(),
+        );
+        crate::acp::spec::AcpLaunchProfile {
+            account_wrapper,
+            hub_id: source_runtime.and_then(crate::accounts::hub::launch::picked_hub),
+            connector_envs: crate::connectors::project_cli_env_for_acp_resume(project),
+            append_system_prompt_file,
+            developer_instructions,
+            gbot_chat: is_gbot_chat(source_runtime),
+            gbot_api_chat: is_gbot_api_chat(source_runtime),
+            gbot_computer_use_off: super::gbot_computer_use(source_runtime) == Some(false),
+            lean_worker: super::is_lean_worker(source_runtime),
+            hermes_profile: None,
+        }
+    };
+    let mut acp_fork_family: Option<String> = None;
+    let mut acp_fork_reference: Option<String> = None;
     let primary_command = match (agent_id, runtime_command) {
+        (Some("codex"), Some(command)) if is_acp_source => exact_reference
+            .as_deref()
+            .and_then(normalize_codex_session_id)
+            .map(|reference| {
+                acp_fork_family = Some("codex".to_string());
+                acp_fork_reference = Some(reference.clone());
+                let profile = build_fork_profile("codex");
+                crate::acp::spec::build_acp_host_launch_command_with_profile(
+                    "codex",
+                    Some(command),
+                    Some(&reference),
+                    source_acp_level,
+                    &[],
+                    acp_model.as_deref(),
+                    acp_effort.as_deref(),
+                    true,
+                    source_read_only,
+                    &profile,
+                )
+            }),
+        (Some("claude"), Some(command)) if is_acp_source => exact_reference
+            .clone()
+            .or_else(|| trusted_title.clone())
+            .map(|reference| {
+                acp_fork_family = Some("claude".to_string());
+                acp_fork_reference = Some(reference.clone());
+                let profile = build_fork_profile("claude");
+                crate::acp::spec::build_acp_host_launch_command_with_profile(
+                    "claude",
+                    Some(command),
+                    Some(&reference),
+                    source_acp_level,
+                    &[],
+                    acp_model.as_deref(),
+                    acp_effort.as_deref(),
+                    true,
+                    source_read_only,
+                    &profile,
+                )
+            }),
+        (Some("opencode"), Some(command)) if is_acp_source => exact_reference
+            .clone()
+            .filter(|id| crate::session_chat_opencode::safe_id(id))
+            .map(|reference| {
+                acp_fork_family = Some("opencode".to_string());
+                acp_fork_reference = Some(reference.clone());
+                let profile = build_fork_profile("opencode");
+                crate::acp::spec::build_acp_host_launch_command_with_profile(
+                    "opencode",
+                    Some(command),
+                    Some(&reference),
+                    source_acp_level,
+                    &[],
+                    acp_model.as_deref(),
+                    acp_effort.as_deref(),
+                    true,
+                    source_read_only,
+                    &profile,
+                )
+            }),
         (Some("codex"), Some(command)) => exact_reference
             .as_deref()
             .and_then(normalize_codex_session_id)
@@ -356,6 +627,58 @@ pub(crate) fn build_agent_fork_plan(
         "runtimeCommand",
         runtime_command.map(str::to_string),
     );
+    if let Some(fam) = acp_fork_family {
+        let profile = build_fork_profile(&fam);
+        plan.insert("acpFork".to_string(), json!(true));
+        plan.insert("acpFamily".to_string(), json!(fam));
+        plan.insert("acpReadOnly".to_string(), json!(source_read_only));
+        if let Some(level) = source_acp_level {
+            plan.insert("acpApprovalLevel".to_string(), json!(level.as_str()));
+        }
+        insert_optional_string(&mut plan, "acpForkReference", acp_fork_reference);
+        insert_optional_string(
+            &mut plan,
+            "acpAccountSlot",
+            profile.account_wrapper.map(|w| w.slot),
+        );
+        insert_optional_string(&mut plan, "acpModel", acp_model);
+        insert_optional_string(&mut plan, "acpEffort", acp_effort);
+        insert_optional_string(&mut plan, "acpHubId", profile.hub_id);
+        if !profile.connector_envs.is_empty() {
+            plan.insert(
+                "acpConnectorEnvs".to_string(),
+                Value::Array(
+                    profile
+                        .connector_envs
+                        .into_iter()
+                        .map(|(k, v)| json!([k, v]))
+                        .collect(),
+                ),
+            );
+        }
+        insert_optional_string(
+            &mut plan,
+            "acpAppendSystemPromptFile",
+            profile.append_system_prompt_file,
+        );
+        insert_optional_string(
+            &mut plan,
+            "acpDeveloperInstructions",
+            profile.developer_instructions,
+        );
+        if profile.gbot_chat {
+            plan.insert("acpGbotChat".to_string(), json!(true));
+        }
+        if profile.gbot_api_chat {
+            plan.insert("acpGbotApiChat".to_string(), json!(true));
+        }
+        if profile.gbot_computer_use_off {
+            plan.insert("acpGbotComputerUseOff".to_string(), json!(true));
+        }
+        if profile.lean_worker {
+            plan.insert("acpLeanWorker".to_string(), json!(true));
+        }
+    }
     if let Some(command) = primary_command {
         plan.insert(
             "startupText".to_string(),
@@ -492,15 +815,68 @@ pub(crate) fn create_agent_fork_session_params(
         }),
     );
     // CDXC:AgentProviders 2026-11-05 WHY: a fork runs its source's account command (`cswap run 2 … -- <args>`), so switching its account starts from the agent's own command the source kept, not from that wrapper (#415). Absent rather than null, since account assignment falls back to `agentCommand` only when the key is missing.
-    if let (Some(base), Some(runtime)) = (
+    // Carry over the source session's account, CLIProxyAPI hub, and marked-handovers runtime
+    // settings so both CLI and Non-CLI forks/side chats keep the source's account across sleep/wake.
+    if let (Some(source_runtime), Some(runtime)) = (
         source_session
-            .pointer("/runtimeSettings/accountBaseCommand")
-            .and_then(Value::as_str),
+            .get("runtimeSettings")
+            .and_then(Value::as_object),
         params
             .get_mut("runtimeSettings")
             .and_then(Value::as_object_mut),
     ) {
-        runtime.insert("accountBaseCommand".to_string(), json!(base));
+        for key in [
+            "accountBaseCommand",
+            "accountId",
+            "accountSlot",
+            "accountCommand",
+            "accountProvider",
+            "accountName",
+            "accountColor",
+            crate::accounts::hub::launch::RUNTIME_KEY,
+            "markedHandovers",
+        ] {
+            if let Some(value) = source_runtime.get(key).filter(|v| !v.is_null()) {
+                runtime.insert(key.to_string(), value.clone());
+            }
+        }
+    }
+    if plan.get("acpFork").and_then(Value::as_bool) == Some(true) {
+        if let Some(runtime) = params
+            .get_mut("runtimeSettings")
+            .and_then(Value::as_object_mut)
+        {
+            runtime.insert(
+                crate::acp::SESSION_NON_CLI_ACTIVE_KEY.to_string(),
+                json!(true),
+            );
+            runtime.insert(crate::acp::SESSION_ACP_ACTIVE_KEY.to_string(), json!(true));
+            if let Some(fam) = plan.get("acpFamily").and_then(Value::as_str) {
+                runtime.insert(crate::acp::SESSION_ACP_FAMILY_KEY.to_string(), json!(fam));
+            }
+            if let Some(level) = plan.get("acpApprovalLevel").and_then(Value::as_str) {
+                runtime.insert(
+                    crate::acp::SESSION_ACP_APPROVAL_LEVEL_KEY.to_string(),
+                    json!(level),
+                );
+            }
+            if plan.get("acpReadOnly").and_then(Value::as_bool) == Some(true)
+                || crate::coordinators::is_read_only_thread(
+                    source_session
+                        .get("runtimeSettings")
+                        .and_then(Value::as_object),
+                )
+            {
+                runtime.insert(
+                    crate::coordinators::READ_ONLY_THREAD_KEY.to_string(),
+                    json!(true),
+                );
+            }
+            runtime.insert(
+                "gxserverForkInitialRenameStatus".to_string(),
+                json!("applied"),
+            );
+        }
     }
     if let Some(surface) = source_session.get("surface").cloned() {
         params.insert("surface".to_string(), surface);
@@ -538,6 +914,36 @@ pub(crate) fn request_session_rename(
         startup_text: None,
     });
     if is_agent_associated(&session, &identity) {
+        if crate::acp::session_is_acp(&session) {
+            // Native (`acp-host`) sessions have no interactive CLI reading `/rename` from the
+            // zmx PTY. Persist the title directly in Ghostex's session record so it takes effect
+            // immediately and stays protected from agent-metadata overwrites in `title_reconcile`.
+            let mut runtime_settings = object_field(&session, "runtimeSettings");
+            runtime_settings.insert(
+                "titleSource".to_string(),
+                json!(read_text(params, "titleSource").unwrap_or_else(|| "user".to_string())),
+            );
+            runtime_settings.remove("pendingAgentTitleRequestRequestedAt");
+            runtime_settings.remove("pendingAgentTitleRequestStatus");
+            runtime_settings.remove("pendingAgentTitleRequestTitle");
+            runtime_settings.remove("pendingAgentTitleRequestTitleSource");
+            runtime_settings.remove("pendingAgentTitleRequestFailedAt");
+            let mut update = lifecycle_update(lifecycle);
+            update.insert(
+                "runtimeSettings".to_string(),
+                Value::Object(runtime_settings),
+            );
+            update.insert("title".to_string(), Value::String(title));
+            let updated = repository.update_session(&update)?;
+            return Ok(json!({
+                "changed": true,
+                "pendingAgentMetadata": false,
+                "projection": project_session_title_projection(&updated),
+                "reason": "acp-local-title-applied",
+                "session": updated,
+                "shouldSendAgentRenameCommand": false,
+            }));
+        }
         if identity
             .agent_id
             .as_deref()

@@ -201,11 +201,14 @@ fn create_agent_session_params_use_project_agent_config_and_settings() {
         .get("agentLaunchPlan")
         .and_then(Value::as_object)
         .expect("launch plan");
-    assert_eq!(launch_plan.get("agentCommand"), Some(&json!("claude")));
+    assert_eq!(
+        launch_plan.get("agentCommand"),
+        Some(&json!("claude --model 'opus[1m]' --effort high"))
+    );
     assert_eq!(
         launch_plan.get("command"),
         Some(&json!(
-            r#"claude --dangerously-skip-permissions --settings '{"skipDangerousModePermissionPrompt":true}'"#
+            r#"claude --model 'opus[1m]' --effort high --dangerously-skip-permissions --settings '{"skipDangerousModePermissionPrompt":true,"ultracode":false}'"#
         ))
     );
     assert_eq!(
@@ -228,7 +231,10 @@ fn create_agent_session_params_use_project_agent_config_and_settings() {
         .get("runtimeSettings")
         .and_then(Value::as_object)
         .expect("runtime settings");
-    assert_eq!(runtime_settings.get("agentCommand"), Some(&json!("claude")));
+    assert_eq!(
+        runtime_settings.get("agentCommand"),
+        Some(&json!("claude --model 'opus[1m]' --effort high"))
+    );
     assert_eq!(
         runtime_settings.get("launchAgentId"),
         Some(&json!("claude"))
@@ -257,7 +263,7 @@ fn create_agent_session_params_use_project_agent_config_and_settings() {
             .and_then(|value| value.get("agentLaunchPlan"))
             .and_then(|value| value.get("command")),
         Some(&json!(
-            r#"claude --dangerously-skip-permissions --settings '{"skipDangerousModePermissionPrompt":true}'"#
+            r#"claude --model 'opus[1m]' --effort high --dangerously-skip-permissions --settings '{"skipDangerousModePermissionPrompt":true,"ultracode":false}'"#
         ))
     );
 }

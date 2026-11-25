@@ -54,7 +54,7 @@ impl FindPalette {
         Self::derive(light, glass).with_theme_roles(light)
     }
 
-    /// The Borders and Grey text theme roles over the derived colours (helpers/theme_roles.rs).
+    /// The theme roles over the derived colours (helpers/theme_roles.rs).
     fn with_theme_roles(mut self, light: bool) -> Self {
         use crate::app::helpers::theme_role_or_rgba;
         for line in [
@@ -66,16 +66,14 @@ impl FindPalette {
         ] {
             *line = theme_role_or_rgba("border", light, *line);
         }
+        self.foreground = theme_role_or_rgba("text", light, self.foreground);
         self.muted = theme_role_or_rgba("mutedText", light, self.muted);
+        self.destructive = theme_role_or_rgba("danger", light, self.destructive);
         self
     }
 
     fn derive(light: bool, glass: bool) -> Self {
-        let chrome: Rgba = if light {
-            modal_rgba(0xffffff, 1.0)
-        } else {
-            Rgba::from(crate::app::helpers::titlebar_background())
-        };
+        let chrome: Rgba = Rgba::from(crate::app::helpers::modal_surface_background());
         let base = Self::react(light, chrome);
         if !glass {
             return base;

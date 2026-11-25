@@ -418,7 +418,10 @@ fn merge_scans<'a>(rows: impl Iterator<Item = &'a ScanRow>) -> Scans {
                     .found
                     .iter()
                     .any(|known| matches!(known, Found::Asker(known) if known.id == asker.id)),
-                Found::Withdraw(_) | Found::Said(_) | Found::Answers(..) => false,
+                Found::Withdraw(_)
+                | Found::Said(_)
+                | Found::Answers(..)
+                | Found::OutsideAnswers { .. } => false,
             };
             if !seen {
                 merged.found.push(entry.clone());

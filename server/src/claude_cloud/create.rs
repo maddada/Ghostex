@@ -206,12 +206,16 @@ pub(crate) fn pick_claude_account(
     if let Some(account_id) = requested.map(str::to_string).or(last_cloud) {
         scratch.insert("accountId".to_string(), json!(account_id));
     }
-    let workspace_account = crate::workspaces::project_claude_account_id(db, project)?;
+    let workspace_accounts = if crate::workspaces::is_config_folder_project(project) {
+        Vec::new()
+    } else {
+        crate::workspaces::project_claude_account_ids(db, project)?
+    };
     crate::accounts::launch::apply_new_session(
         db,
         "claude",
         Some("claude"),
-        workspace_account.as_deref(),
+        &workspace_accounts,
         &mut scratch,
     )?;
     let mut account: Map<String, Value> = ["accountId", "accountName"]

@@ -349,10 +349,14 @@ pub(crate) fn plan(
         warnings.push(message);
     }
     if !editor.open.is_empty() {
-        warnings.push(format!(
-            "Ghostex's Files editor has {} file(s) of this project open; reopen them from the Files list after the move if one shows as missing.",
-            editor.open.len()
-        ));
+        warnings.push(if editor.open.len() == 1 {
+            "Ghostex's Files editor has 1 file of this project open; reopen it from the Files list after the move if it shows as missing.".to_string()
+        } else {
+            format!(
+                "Ghostex's Files editor has {} files of this project open; reopen them from the Files list after the move if one shows as missing.",
+                editor.open.len()
+            )
+        });
     }
 
     // Cloud-synced folders (risk 9).

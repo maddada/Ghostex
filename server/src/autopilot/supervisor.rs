@@ -3,11 +3,11 @@
 //! frame, the title rules). The judge (server/src/server/autopilot_judge.rs) starts the supervisor
 //! and writes its record here.
 //!
-//! CDXC:Autopilot 2026-11-18 DECISION:
-//! Q87, "A. Hidden, opened from Autopilot": the Autopilot project starts hidden, the same as a project the user hid (Show hidden in the sidebar still lists it), and Settings › Autopilot and the Autopilot pill's menu get "Open supervisor" once a supervisor session exists. gxserver marks the project (`autopilotSupervisorProject` on its presentation row, by its folder, so the very first row a client sees carries it) and every sidebar hides it once into its own hidden list; a project the user unhides afterwards stays shown. The chat frame's `autopilot.supervisor` names the session for the pill's row.
-//! SEE-ALSO: packages/gx-core/src/sidebar_ui/store.rs (`hide_once`), packages/gx-chat-core/src/extras/autopilot.rs (the pill's row), apps/desktop/src/app/window/settings_modal/tabs/autopilot.rs (Settings' button).
+//! CDXC:Autopilot 2026-11-24 DECISION:
+//! User: "move those to be in main hub instead please". Autopilot's system project (`autopilotSupervisorProject` on its presentation row, by its folder or supervisor record) is never drawn as a normal project in the sidebar (even with Show hidden on); while Main Hub is on, every connected computer's Autopilot supervisor session is lifted into Main Hub's Autopilot section (with its computer badge for remote computers). While Main Hub is turned off, the system project stays hidden from the projects list and the supervisor stays reachable from Settings > Autopilot ("Open supervisor"), the chat Autopilot pill ("Open supervisor"), and notifications. Supersedes the 2026-11-18 `hide_once` rule that kept Autopilot as a hidden project group.
+//! SEE-ALSO: packages/gx-core/src/sidebar_view/chief.rs (`lift_into_home`), packages/gx-core/src/sidebar_view/merged.rs, packages/gx-core/src/sidebar_view/assemble.rs, packages/gx-chat-core/src/extras/autopilot.rs (the pill's row), apps/desktop/src/app/window/settings_modal/tabs/autopilot.rs (Settings' button).
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use serde_json::Value;
@@ -89,13 +89,31 @@ fn notes_dirs() -> &'static (PathBuf, Option<PathBuf>) {
     DIRS.get_or_init(|| (PathBuf::from("/nonexistent/ghostex-autopilot-test"), None))
 }
 
+fn folder_key(path: &str) -> String {
+    let trimmed = path.trim().trim_end_matches(['/', '\\']);
+    let trimmed = if trimmed.is_empty() {
+        path.trim()
+    } else {
+        trimmed
+    };
+    if cfg!(windows) {
+        trimmed.replace('\\', "/").to_lowercase()
+    } else {
+        trimmed.to_string()
+    }
+}
+
 /// Whether this project row is the Autopilot project: the one whose folder holds the supervisor's
 /// notes (or the one the record names).
 pub fn is_supervisor_project(project: &Value) -> bool {
     let (dir, canonical) = notes_dirs();
     if let Some(path) = project.get("path").and_then(Value::as_str) {
-        let path = Path::new(path);
-        if path == dir.as_path() || canonical.as_deref() == Some(path) {
+        let key = folder_key(path);
+        if key == folder_key(&dir.to_string_lossy())
+            || canonical
+                .as_ref()
+                .is_some_and(|resolved| key == folder_key(&resolved.to_string_lossy()))
+        {
             return true;
         }
     }

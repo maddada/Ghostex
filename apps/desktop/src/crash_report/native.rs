@@ -72,6 +72,49 @@ pub(crate) fn crash_files_after(after_ms: u64) -> Vec<(PathBuf, u64)> {
     files
 }
 
+/// The Mach-O `LC_UUID` of the running executable (lowercase hex, no dashes), so upgrading to a
+/// newer DMG whose binary mtime predates an older build's crash cannot misattribute that crash to
+/// this build (GitHub #724).
+fn current_exe_build_id(exe: &Path) -> Option<String> {
+    use std::io::Read as _;
+    let mut file = std::fs::File::open(exe).ok()?;
+    let mut header = [0u8; 32];
+    file.read_exact(&mut header).ok()?;
+    // MH_MAGIC_64 (little-endian Mach-O 64-bit).
+    if u32::from_le_bytes(header[0..4].try_into().ok()?) != 0xfeed_facf {
+        return None;
+    }
+    let ncmds = u32::from_le_bytes(header[16..20].try_into().ok()?) as usize;
+    let sizeofcmds = u32::from_le_bytes(header[20..24].try_into().ok()?) as usize;
+    if sizeofcmds > 1024 * 1024 {
+        return None;
+    }
+    let mut cmds = vec![0u8; sizeofcmds];
+    file.read_exact(&mut cmds).ok()?;
+    let mut offset = 0usize;
+    for _ in 0..ncmds {
+        if offset.checked_add(8)? > cmds.len() {
+            break;
+        }
+        let cmd = u32::from_le_bytes(cmds[offset..offset + 4].try_into().ok()?);
+        let cmdsize = u32::from_le_bytes(cmds[offset + 4..offset + 8].try_into().ok()?) as usize;
+        if cmdsize < 8 || offset.checked_add(cmdsize)? > cmds.len() {
+            break;
+        }
+        // LC_UUID = 0x1b: 8-byte load_command header followed by 16-byte UUID.
+        if cmd == 0x1b && cmdsize >= 24 {
+            let mut hex = String::with_capacity(32);
+            for byte in &cmds[offset + 8..offset + 24] {
+                use std::fmt::Write as _;
+                let _ = write!(&mut hex, "{byte:02x}");
+            }
+            return Some(hex);
+        }
+        offset += cmdsize;
+    }
+    None
+}
+
 /// The crash record for `path`, when it is a crash of this app (Ghostty itself writes to the same
 /// folder).
 pub(crate) fn read_crash_file(path: &Path, written_ms: u64) -> Option<CrashRecord> {
@@ -127,11 +170,14 @@ pub(crate) fn read_crash_file(path: &Path, written_ms: u64) -> Option<CrashRecor
         .and_then(|time| chrono::DateTime::parse_from_rfc3339(time).ok())
         .map(|time| time.timestamp_millis() as u64)
         .unwrap_or(written_ms);
-    let same_binary = std::fs::metadata(&exe)
-        .and_then(|metadata| metadata.modified())
-        .ok()
-        .and_then(|modified| modified.duration_since(std::time::UNIX_EPOCH).ok())
-        .is_some_and(|modified| (modified.as_millis() as u64) <= at_ms);
+    let same_binary = match (current_exe_build_id(&exe), main.debug_id.as_deref()) {
+        (Some(current_id), Some(crash_id)) => current_id.eq_ignore_ascii_case(crash_id),
+        _ => std::fs::metadata(&exe)
+            .and_then(|metadata| metadata.modified())
+            .ok()
+            .and_then(|modified| modified.duration_since(std::time::UNIX_EPOCH).ok())
+            .is_some_and(|modified| (modified.as_millis() as u64) <= at_ms),
+    };
     let crashing_module = crash
         .as_ref()
         .and_then(|crash| crash.frames.first())

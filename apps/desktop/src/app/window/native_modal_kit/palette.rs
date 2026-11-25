@@ -66,6 +66,32 @@ pub(crate) fn rgba_of(color: Rgba, alpha: f32) -> Rgba {
     Rgba { a: alpha, ..color }
 }
 
+/// Linearized sRGB relative luminance (WCAG 2.1).
+fn wcag_luminance(color: Rgba) -> f32 {
+    let channel = |value: f32| {
+        let value = value.clamp(0.0, 1.0);
+        if value <= 0.03928 {
+            value / 12.92
+        } else {
+            ((value + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b)
+}
+
+/// High-contrast dark (`#141518`) or white (`#ffffff`) ink for text over a filled accent control.
+pub(crate) fn contrast_ink_on(fill: Rgba) -> Rgba {
+    // Perceptual threshold in linearized sRGB luminance: keeps crisp white ink on saturated
+    // medium-dark blues/ochres/cinnabar (Solarized #268bd2, Tokyo Night Day #2e7de9, Gruvbox
+    // Light #b47109, Inkstone #d8664f) and dark ink on pastel/bright accents (#95d7f6, #8da101,
+    // Catppuccin, Dracula, Nord, Everforest).
+    if wcag_luminance(fill) > 0.28 {
+        rgb(0x141518)
+    } else {
+        rgb(0xffffff)
+    }
+}
+
 /// CSS `color-mix(in srgb, a <weight_a>, b)`: premultiplied interpolation.
 pub(crate) fn css_mix(a: Rgba, weight_a: f32, b: Rgba) -> Rgba {
     let weight_b = 1.0 - weight_a;
@@ -134,6 +160,23 @@ pub(crate) fn neutral_button_fills(light: bool) -> ButtonFills {
         (0.07, 0.11, 0.15)
     } else {
         (0.10, 0.14, 0.18)
+    };
+    ButtonFills {
+        rest: modal_rgba(ink, rest),
+        hover: modal_rgba(ink, hover),
+        pressed: modal_rgba(ink, pressed),
+    }
+}
+
+/// The neutral filled primary button every main modal action uses (Rename, Save, Switch to Native,
+/// Create, Connect, Apply): one step brighter/stronger than [`neutral_button_fills`] (Cancel) with
+/// normal foreground text, never the theme accent or a stark white/black slab.
+pub(crate) fn primary_button_fills_for(light: bool) -> ButtonFills {
+    let ink = if light { 0x000000 } else { 0xffffff };
+    let (rest, hover, pressed) = if light {
+        (0.16, 0.21, 0.26)
+    } else {
+        (0.20, 0.26, 0.32)
     };
     ButtonFills {
         rest: modal_rgba(ink, rest),
@@ -219,7 +262,7 @@ impl ModalPalette {
             self.accent = modal_rgba(ink, 0.09);
         }
         self.glass = true;
-        self
+        self.with_theme_roles()
     }
 
     /// [`Self::frosted`] for a dialog or panel on the thinner popover glass (CDXC:AppModal
@@ -237,20 +280,30 @@ impl ModalPalette {
     }
 
     /// The theme roles over the derived colours (helpers/theme_roles.rs): Borders paints the
-    /// hairlines and menu borders, Grey text the muted text, Cards the panels, Controls the fields
-    /// and buttons, Hover their hover, Menus the menus, Focus ring the focused field's border, and
-    /// Success and Danger their colours. A role not set keeps the colour.
+    /// hairlines and menu borders, Grey text the muted text, Cards/Controls/Hover the opaque
+    /// fills when glass is off (under glass panels and fields keep translucent ink washes so they
+    /// never stack into an opaque slab), Menus the menus, Focus ring the focused field's border,
+    /// and Success and Danger their colours. A role not set keeps the derived colour. Primary
+    /// buttons and switches stay neutral (`primary_button_fills_for`, `draw_switch`).
     pub(crate) fn with_theme_roles(mut self) -> Self {
-        use crate::app::helpers::theme_role_or_rgba;
+        use crate::app::helpers::{theme_role_or_rgba, theme_role_rgba};
         let light = self.light;
         self.hairline = theme_role_or_rgba("border", light, self.hairline);
         self.menu_border = theme_role_or_rgba("border", light, self.menu_border);
         self.muted = theme_role_or_rgba("mutedText", light, self.muted);
         self.foreground = theme_role_or_rgba("text", light, self.foreground);
-        self.panel = theme_role_or_rgba("surface", light, self.panel);
-        self.raised = theme_role_or_rgba("control", light, self.raised);
-        self.raised_hover = theme_role_or_rgba("hover", light, self.raised_hover);
-        self.accent = theme_role_or_rgba("hover", light, self.accent);
+        if !self.glass {
+            if let Some(surface) = theme_role_rgba("surface", light) {
+                self.panel = css_mix(rgba_of(surface, 1.0), surface.a, self.solid_surface);
+            }
+            if let Some(control) = theme_role_rgba("control", light) {
+                self.raised = css_mix(rgba_of(control, 1.0), control.a, self.solid_surface);
+            }
+            if let Some(hover) = theme_role_rgba("hover", light) {
+                self.raised_hover = css_mix(rgba_of(hover, 1.0), hover.a, self.raised);
+                self.accent = self.raised_hover;
+            }
+        }
         self.menu_background = theme_role_or_rgba("menu", light, self.menu_background);
         self.focus_border = theme_role_or_rgba("focusRing", light, self.focus_border);
         self.destructive = theme_role_or_rgba("danger", light, self.destructive);
@@ -333,43 +386,16 @@ impl ModalPalette {
         rgba_of(self.foreground, 0.12)
     }
 
-    /// `color-mix(in srgb, var(--primary) 88%, white)`.
-    pub(crate) fn primary_hover(&self) -> Rgba {
-        css_mix(self.primary, 0.88, rgb(0xffffff))
-    }
-
-    /// The main button's fill (Save, Create, Approve, Connect): in light a frosted grey, a step
-    /// stronger than [`neutral_button_fills`], never a near-black slab; in dark the light
-    /// `primary` fill. Checkboxes, slider ranges and links keep `primary`.
-    ///
-    /// CDXC:AppModal 2026-11-08 DECISION:
-    /// User's standing rule: never black or near-black fills on glass or transparent UI. The light
-    /// main button was `#262626` in every dialog and Settings page; it is now this grey, under
-    /// window glass and on the opaque light surface alike, so a light dialog looks the same with
-    /// glass on or off and the main button still stands out from Cancel (0.16 ink against 0.07).
-    /// Supersedes the notice modal's own light override (window/notice_modal.rs, same day).
+    /// The main button's fill (Save, Create, Rename, Switch to Native, Connect): a neutral wash
+    /// one step brighter/stronger than [`neutral_button_fills`] (Cancel) with normal foreground
+    /// text, never the theme accent or a harsh white/black slab.
     pub(crate) fn primary_button_fills(&self) -> ButtonFills {
-        if self.light {
-            return ButtonFills {
-                rest: modal_rgba(0x000000, 0.16),
-                hover: modal_rgba(0x000000, 0.21),
-                pressed: modal_rgba(0x000000, 0.26),
-            };
-        }
-        ButtonFills {
-            rest: self.primary,
-            hover: self.primary_hover(),
-            pressed: css_mix(self.primary, 0.8, rgb(0xffffff)),
-        }
+        primary_button_fills_for(self.light)
     }
 
     /// The label, icon and spinner colour on [`Self::primary_button_fills`].
     pub(crate) fn primary_button_text(&self) -> Rgba {
-        if self.light {
-            self.foreground
-        } else {
-            self.primary_foreground
-        }
+        self.foreground
     }
 
     /// The Windows modal window's system border: 16% ink over the surface, so it stays visible against the same-coloured app chrome.

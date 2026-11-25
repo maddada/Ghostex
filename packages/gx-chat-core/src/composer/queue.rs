@@ -67,6 +67,73 @@ pub fn queue_row_preview(text: &str) -> String {
     first_content_line(text)
 }
 
+/// Most lines of a queued message its row's tooltip quotes.
+const QUEUE_ROW_FULL_TEXT_MAX_LINES: usize = 24;
+/// Most characters of a queued message its row's tooltip quotes.
+const QUEUE_ROW_FULL_TEXT_MAX_CHARS: usize = 2000;
+
+/// What a queued message with more than one line adds to its one-line row: the "+N lines" count
+/// and the whole message for the row's tooltip.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct QueueRowMore {
+    /// "+1 line", "+4 lines": the lines with content after the one the row shows.
+    pub label: String,
+    /// The message (a message from another agent: its body) with its blank-line runs folded to
+    /// one, cut at [`QUEUE_ROW_FULL_TEXT_MAX_LINES`] lines or [`QUEUE_ROW_FULL_TEXT_MAX_CHARS`].
+    pub full_text: String,
+}
+
+/// CDXC:SessionChat 2026-11-25 DECISION:
+/// User (Q4866, "line count"): a queued message of several lines showed only its first line, with
+/// no sign that more was there. The row keeps its one line and adds a "+N lines" count, and the
+/// whole message shows on hover (a press on the phone, as the status chip's sentence does). Both
+/// renderers read these words from the core so the desktop and the phone never count apart.
+/// `None` for a message of one line.
+pub fn queue_row_more(text: &str) -> Option<QueueRowMore> {
+    let body = match crate::transcript::agent_message::parse_inter_agent_message(text) {
+        Some(message) => message.body,
+        None => text.to_string(),
+    };
+    let more = body
+        .split('\n')
+        .filter(|line| !line.trim().is_empty())
+        .count();
+    let more = more.checked_sub(1).filter(|more| *more > 0)?;
+    let mut lines: Vec<&str> = Vec::new();
+    let mut cut = false;
+    for line in body.trim().split('\n').map(str::trim_end) {
+        if line.is_empty() && lines.last().is_some_and(|last| last.is_empty()) {
+            continue;
+        }
+        if lines.len() == QUEUE_ROW_FULL_TEXT_MAX_LINES {
+            cut = true;
+            break;
+        }
+        lines.push(line);
+    }
+    let mut full_text = lines.join("\n");
+    if full_text.chars().count() > QUEUE_ROW_FULL_TEXT_MAX_CHARS {
+        full_text = full_text
+            .chars()
+            .take(QUEUE_ROW_FULL_TEXT_MAX_CHARS)
+            .collect::<String>()
+            .trim_end()
+            .to_string();
+        cut = true;
+    }
+    if cut {
+        full_text.push('\u{2026}');
+    }
+    Some(QueueRowMore {
+        label: if more == 1 {
+            "+1 line".to_string()
+        } else {
+            format!("+{more} lines")
+        },
+        full_text,
+    })
+}
+
 fn first_content_line(text: &str) -> String {
     for line in text.split('\n') {
         let trimmed = line.trim();

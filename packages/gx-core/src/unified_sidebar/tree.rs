@@ -120,7 +120,11 @@ impl UnifiedCrew {
 }
 
 /// A session that needs the user: approval, stuck, a question, waiting on them, or failed.
+/// A resolved thread (`done`) is finished and never lifts or marks its coordinator.
 pub(super) fn needs_you(row: &SessionRow) -> bool {
+    if row.thread_state.as_deref() == Some("done") {
+        return false;
+    }
     row.awaiting_approval
         || row.stuck
         || row.has_question()
@@ -381,7 +385,9 @@ fn lay_out(
     let mut team_status = FoldedStatus::default();
     let mut stack: Vec<&UnifiedRow> = vec![row];
     while let Some(next) = stack.pop() {
-        team_status.add(&next.session.row);
+        if std::ptr::eq(next, row) || next.session.row.thread_state.as_deref() != Some("done") {
+            team_status.add(&next.session.row);
+        }
         stack.extend(next.threads.iter());
     }
     let folded_status = if open {
@@ -426,7 +432,13 @@ fn lay_out(
 fn approvals_below(row: &UnifiedRow) -> u16 {
     row.threads
         .iter()
-        .map(|child| u16::from(child.session.row.awaiting_approval) + approvals_below(child))
+        .map(|child| {
+            let own = u16::from(
+                child.session.row.thread_state.as_deref() != Some("done")
+                    && child.session.row.awaiting_approval,
+            );
+            own + approvals_below(child)
+        })
         .fold(0, u16::saturating_add)
 }
 

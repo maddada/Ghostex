@@ -15,6 +15,7 @@ pub(super) fn owns(state: &str) -> bool {
         || state == "autopilot"
         || state == "autopilot-supervisor"
         || state == "collab"
+        || state == "sharing"
         || state == "security"
 }
 

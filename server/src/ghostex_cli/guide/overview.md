@@ -1,7 +1,7 @@
 # Ghostex overview
 
 Ghostex is a desktop workspace for running AI coding agents (Claude Code, Codex,
-Cursor, OpenCode, Pi, Antigravity CLI, and other agent CLIs) side by side across many
+Cursor, OpenCode, Pi, Antigravity, and other agent CLIs) side by side across many
 projects. Every agent runs in a real, persistent terminal session; Ghostex adds
 the sidebar, the chat view, the browser, the editor, the board, and the
 automation and remote-access layers around those sessions.
@@ -43,16 +43,18 @@ hotkeys Every shortcut and its default binding
   floating workspace, and sends the window to the dock.
 - **Sidebar** (left by default): projects, their sessions, tags and filters
   (every connected computer's projects in one list, a project on several
-  computers as one entry, unless Separate by machine is on), and the More Options menu under the three-lines button at
-  the top right (Sort & Filter, Collapse All, Commands, Agents Hub, All Automations,
+  computers as one entry, unless Separate by machine is on), and the More Options menu under the three-lines button (☰) at
+  the top right (Sort & Filter, Collapse All, Terminal, Coordinator, Browser, Commands, Agents Hub, All Automations,
   Connect a Phone, Connect a Computer, Keep Awake, then Ask Ghostex AI, Join Discord and Send Bug / Feedback, then the Tools and Ghostex submenus and
   Settings; Ghostex holds New Window, Check for Updates, Restart Ghostex, Quit
   Ghostex, and Quit Ghostex & BG Service, which also stops the background
   service and every session; Tools holds Search by Prompt, Import
   Sessions, Extensions, Dev servers and Resources). The
   sidebar's top row holds Search, Add project, the Notifications bell and that
-  menu button. Under it, the New session button starts your last agent (the
-  chevron at its right end opens the New Thread picker). The bottom of the sidebar holds your
+  menu button. Under it, the New session button (Cmd+N) starts a one-click chat
+  draft with a setup bar above the message box to pick the project, folder,
+  branch, agent (Option+A), model (Option+P), or the No project and Coordinator
+  toggle pills. The bottom of the sidebar holds your
   account usage meters, which are the last thing in it; point at them for the
   small button that hides them. While they are hidden, the usage icon shows at
   the bottom right when the pointer is at the bottom of the sidebar (point at
@@ -113,8 +115,9 @@ hotkeys Every shortcut and its default binding
   custom commands), Global Actions, and the Agents Hub catalog.
 - **Coordinator**: an agent session you talk to that hands the work to
   threads (agent sessions it starts, shown indented under it in the sidebar)
-  and reports back when they finish or need you. Start one from a project's
-  Select Agent menu with New Coordinator.
+  and reports back when they finish or need you. Start one by turning on the
+  Coordinator toggle pill in a new chat's setup bar, or choose Coordinator in a
+  project header's chat menu or the sidebar main menu (☰).
 - **Extensions**: optional views and panels (Code, Browser, Beads, Automate,
   Files, and third-party ones) installed from Settings > Extensions.
 - **gxserver**: the local daemon that owns sessions, projects, settings sync,

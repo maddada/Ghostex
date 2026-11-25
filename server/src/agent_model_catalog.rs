@@ -445,9 +445,456 @@ pub fn catalog_agent(agent: &str) -> Option<Value> {
 
 /// One agent's catalog row by its dispatch value.
 pub fn catalog_model(agent: &str, value: &str) -> Option<Value> {
-    agent_models(&current(), agent)
+    let family = ghostex_gx_chat_core::menus::catalog::canonical_model_family(agent);
+    agent_models(&current(), family)
         .into_iter()
         .find(|row| row.get("value").and_then(Value::as_str) == Some(value))
+}
+
+/// Concrete default `(value, label, effort)` for `family` from the live model catalog:
+/// Claude Code -> newest Opus (today Opus 5.5), Codex -> newest Sol (today GPT 6.2 Sol),
+/// Antigravity -> newest Neon (today Gemini 4 Neon), other agents -> default/first concrete row.
+/// Falls back to a hard-coded current model only when no catalog list exists.
+pub fn preferred_default_model(family: &str) -> Option<(String, String, Option<String>)> {
+    let canonical = ghostex_gx_chat_core::menus::catalog::canonical_model_family(family);
+    if let Some(parsed) =
+        ghostex_gx_chat_core::menus::catalog::parse_agent_model_catalog(&current())
+    {
+        if let Some(found) =
+            ghostex_gx_chat_core::menus::catalog::resolved_default_model(&parsed, canonical)
+        {
+            return Some(found);
+        }
+    }
+    ghostex_gx_chat_core::menus::catalog::preferred_default_model_fallback(canonical).map(
+        |(value, label, effort)| {
+            (
+                value.to_string(),
+                label.to_string(),
+                effort.map(str::to_string),
+            )
+        },
+    )
+}
+
+/// Display label for an effort id (`"xhigh"` -> `"xHigh"`, `"high"` -> `"High"`).
+pub fn effort_display_label(effort: &str) -> String {
+    let effort = effort.trim();
+    if effort.eq_ignore_ascii_case("xhigh") {
+        return "xHigh".to_string();
+    }
+    if let Some(label) = current()
+        .pointer(&format!("/effortLabels/{}", effort.to_ascii_lowercase()))
+        .and_then(Value::as_str)
+        .filter(|s| !s.trim().is_empty())
+    {
+        return label.to_string();
+    }
+    let mut chars = effort.chars();
+    match chars.next() {
+        None => String::new(),
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+    }
+}
+
+/// Splits an Antigravity flattened model id (`"gemini-4-neon-high"`) into its catalog base id
+/// (`"gemini-4-neon"`) and effort (`"high"`) when the base model is known in the catalog.
+pub fn split_antigravity_model_id(raw: &str) -> Option<(String, String)> {
+    let trimmed = raw.trim();
+    for effort in ["low", "medium", "high", "xhigh"] {
+        if let Some(base) = trimmed.strip_suffix(&format!("-{effort}")) {
+            if catalog_model("antigravity", base).is_some() {
+                return Some((base.to_string(), effort.to_string()));
+            }
+        }
+    }
+    None
+}
+
+/// Default reasoning effort for `model_value` on `family` from the live catalog.
+/// Returns `None` when the catalog explicitly declares no efforts for that model (e.g. Haiku 4.5).
+pub fn default_effort_for_model(family: &str, model_value: &str) -> Option<String> {
+    let canonical = ghostex_gx_chat_core::menus::catalog::canonical_model_family(family);
+    if let Some(parsed) =
+        ghostex_gx_chat_core::menus::catalog::parse_agent_model_catalog(&current())
+    {
+        if let Some(agent) = parsed.agents.get(canonical) {
+            if let Some((model, _)) = agent.resolve_model(model_value) {
+                return ghostex_gx_chat_core::menus::catalog::preferred_default_effort(
+                    canonical, agent, model,
+                );
+            }
+            if let Some(default_effort) = agent
+                .default_effort
+                .as_deref()
+                .filter(|e| !ghostex_gx_chat_core::menus::catalog::is_placeholder_effort_value(e))
+            {
+                return Some(default_effort.to_ascii_lowercase());
+            }
+            if matches!(canonical, "claude" | "codex" | "antigravity")
+                && agent.efforts.iter().any(|e| e == "high")
+            {
+                return Some("high".to_string());
+            }
+            return agent.efforts.first().cloned();
+        }
+    }
+    ghostex_gx_chat_core::menus::catalog::preferred_default_model_fallback(canonical)
+        .and_then(|(_, _, effort)| effort.map(str::to_string))
+}
+
+/// Resolves an ACP/Native session's reported model + effort into a concrete catalog-aligned
+/// `(value, label, effort)` tuple. Never returns "Default", "Default (recommended)", "Auto",
+/// a raw slug like `"claude-opus-5-5"`, or blank.
+pub fn resolve_acp_model(
+    family: &str,
+    raw_model: Option<&str>,
+    raw_effort: Option<&str>,
+    available_models: Option<&[Value]>,
+) -> Option<(String, String, Option<String>)> {
+    resolve_acp_model_inner(family, raw_model, raw_effort, available_models, true)
+}
+
+fn resolve_cursor_fallback(
+    effort: Option<&str>,
+    available_models: Option<&[Value]>,
+) -> Option<(String, String, Option<String>)> {
+    if let Some((cfg_model, cfg_effort)) = crate::agent_model_pins::cursor_config_default_model() {
+        let combined_effort = effort.or(cfg_effort.as_deref());
+        if let Some(resolved) = resolve_acp_model_inner(
+            "cursor",
+            Some(&cfg_model),
+            combined_effort,
+            available_models,
+            false,
+        ) {
+            return Some(resolved);
+        }
+    }
+    if let Some(settings_model) =
+        crate::agent_model_pins::explicit_settings_default_model("cursor", None)
+    {
+        if let Some(resolved) = resolve_acp_model_inner(
+            "cursor",
+            Some(&settings_model),
+            effort,
+            available_models,
+            false,
+        ) {
+            return Some(resolved);
+        }
+    }
+    None
+}
+
+fn resolve_acp_model_inner(
+    family: &str,
+    raw_model: Option<&str>,
+    raw_effort: Option<&str>,
+    available_models: Option<&[Value]>,
+    allow_cursor_fallback: bool,
+) -> Option<(String, String, Option<String>)> {
+    use ghostex_gx_chat_core::menus::catalog::{
+        canonical_model_family, humanize_raw_model_slug, is_placeholder_effort_value,
+        is_placeholder_model_label, is_placeholder_model_value, split_parenthesized_effort,
+    };
+    let canonical = canonical_model_family(family);
+    let mut effort = raw_effort
+        .map(str::trim)
+        .filter(|s| !is_placeholder_effort_value(s))
+        .map(|s| s.to_ascii_lowercase());
+    let raw = raw_model.map(str::trim).filter(|s| {
+        !is_placeholder_model_value(s)
+            && !(canonical == "cursor" && s.eq_ignore_ascii_case("auto-smart"))
+    });
+
+    let Some(raw) = raw else {
+        if canonical == "cursor" && allow_cursor_fallback {
+            if let Some(resolved) = resolve_cursor_fallback(effort.as_deref(), available_models) {
+                return Some(resolved);
+            }
+        }
+        let (value, label, default_effort) = preferred_default_model(canonical)?;
+        return Some((value, label, effort.or(default_effort)));
+    };
+
+    if canonical == "hermes" {
+        let label = crate::acp::hermes::strip_hermes_provider_prefix(raw).to_string();
+        return Some((raw.to_string(), label, effort));
+    }
+
+    // Antigravity ACP reports flattened `<base>-<effort>` ids (e.g. `gemini-4-neon-high`); split
+    // them so the model pill and picker match the catalog's base model + effort.
+    if canonical == "antigravity" {
+        if let Some((base, parsed_effort)) = split_antigravity_model_id(raw) {
+            let label = catalog_model("antigravity", &base)
+                .and_then(|row| row.get("label").and_then(Value::as_str).map(str::to_string))
+                .filter(|label| !is_placeholder_model_label(label))
+                .or_else(|| humanize_raw_model_slug(&base))
+                .unwrap_or_else(|| base.clone());
+            let resolved_effort = effort
+                .or(Some(parsed_effort))
+                .or_else(|| default_effort_for_model("antigravity", &base));
+            return Some((base, label, resolved_effort));
+        }
+    }
+
+    // Cursor ACP reports parameterized ids like `claude-4.5-opus-high[thinking=true]` or
+    // `gpt-5.3-codex[reasoning=high]`; strip bracketed params, extract any embedded effort,
+    // and match catalog rows (including `cursor-`-prefixed catalog ids).
+    if canonical == "cursor" {
+        let (base_raw, bracket_params) = raw
+            .split_once('[')
+            .map(|(b, rest)| (b.trim(), Some(rest.trim_end_matches(']'))))
+            .unwrap_or((raw, None));
+        if effort.is_none() {
+            if let Some(params) = bracket_params {
+                for pair in params.split(',') {
+                    if let Some((k, v)) = pair.split_once('=') {
+                        let key = k.trim().to_ascii_lowercase();
+                        let val = v.trim().to_ascii_lowercase();
+                        if matches!(
+                            key.as_str(),
+                            "reasoning" | "reasoning_effort" | "effort" | "thought_level"
+                        ) && !val.is_empty()
+                        {
+                            effort = Some(val);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        let lookup = if catalog_model("cursor", base_raw).is_some() {
+            Some(base_raw.to_string())
+        } else {
+            let prefixed = format!("cursor-{base_raw}");
+            if catalog_model("cursor", &prefixed).is_some() {
+                Some(prefixed)
+            } else {
+                None
+            }
+        };
+        if let Some(value) = lookup {
+            let label = catalog_model("cursor", &value)
+                .and_then(|row| row.get("label").and_then(Value::as_str).map(str::to_string))
+                .filter(|label| !is_placeholder_model_label(label))
+                .or_else(|| humanize_raw_model_slug(&value))
+                .unwrap_or_else(|| value.clone());
+            let resolved_effort = effort.or_else(|| default_effort_for_model("cursor", &value));
+            return Some((value, label, resolved_effort));
+        }
+        if bracket_params.is_some() && !base_raw.is_empty() {
+            let label = available_models
+                .and_then(|models| {
+                    models.iter().find_map(|entry| {
+                        let id = entry
+                            .get("modelId")
+                            .or_else(|| entry.get("id"))
+                            .and_then(Value::as_str)?;
+                        if id == raw || id == base_raw {
+                            entry
+                                .get("name")
+                                .or_else(|| entry.get("displayName"))
+                                .and_then(Value::as_str)
+                                .map(str::trim)
+                                .filter(|s| !is_placeholder_model_label(s))
+                                .map(str::to_string)
+                        } else {
+                            None
+                        }
+                    })
+                })
+                .or_else(|| humanize_raw_model_slug(base_raw))
+                .unwrap_or_else(|| base_raw.to_string());
+            let (clean_label, extracted_effort) = split_parenthesized_effort(&label);
+            let final_label =
+                humanize_raw_model_slug(clean_label).unwrap_or_else(|| clean_label.to_string());
+            let resolved_effort = effort
+                .or(extracted_effort)
+                .or_else(|| default_effort_for_model("cursor", base_raw));
+            return Some((base_raw.to_string(), final_label, resolved_effort));
+        }
+    }
+
+    // Claude Native reports resolved API ids (`claude-opus-5-5`) whereas the catalog keys Opus 5.5
+    // as `opus[1m]` (and Sonnet 5.5 as `sonnet`, Haiku 5.5 as `haiku`). Map to the catalog row so
+    // the pill shows "Opus 5.5" and the picker selects that row.
+    if canonical == "claude" {
+        if let Some(row) = catalog_model("claude", raw) {
+            let label = row
+                .get("label")
+                .and_then(Value::as_str)
+                .filter(|label| !is_placeholder_model_label(label))
+                .map(str::to_string)
+                .or_else(|| humanize_raw_model_slug(raw))
+                .unwrap_or_else(|| raw.to_string());
+            let resolved_effort = effort.or_else(|| default_effort_for_model("claude", raw));
+            return Some((raw.to_string(), label, resolved_effort));
+        }
+        if let Some(mapped) = crate::session_chat_options::claude_transcript_model_choice(raw) {
+            let label = catalog_model("claude", &mapped.value)
+                .and_then(|row| row.get("label").and_then(Value::as_str).map(str::to_string))
+                .filter(|label| !is_placeholder_model_label(label))
+                .unwrap_or_else(|| {
+                    mapped
+                        .label
+                        .strip_suffix(" (1M)")
+                        .unwrap_or(&mapped.label)
+                        .to_string()
+                });
+            if !is_placeholder_model_label(&label) {
+                let resolved_effort =
+                    effort.or_else(|| default_effort_for_model("claude", &mapped.value));
+                return Some((mapped.value, label, resolved_effort));
+            }
+        }
+    }
+
+    if canonical == "opencode" {
+        let available_name = available_models.and_then(|models| {
+            models.iter().find_map(|entry| {
+                let id = entry
+                    .get("modelId")
+                    .or_else(|| entry.get("id"))
+                    .and_then(Value::as_str)?;
+                if id == raw {
+                    entry
+                        .get("name")
+                        .or_else(|| entry.get("displayName"))
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|s| !is_placeholder_model_label(s))
+                        .map(str::to_string)
+                } else {
+                    None
+                }
+            })
+        });
+        let catalog_label = catalog_model("opencode", raw)
+            .and_then(|row| row.get("label").and_then(Value::as_str).map(str::to_string))
+            .filter(|label| !is_placeholder_model_label(label));
+        let label = available_name
+            .or(catalog_label)
+            .unwrap_or_else(|| raw.split_once('/').map_or(raw, |(_, id)| id).to_string());
+        return Some((raw.to_string(), label, effort));
+    }
+
+    let available_name = available_models.and_then(|models| {
+        models.iter().find_map(|entry| {
+            let id = entry
+                .get("modelId")
+                .or_else(|| entry.get("id"))
+                .and_then(Value::as_str)?;
+            if id == raw {
+                entry
+                    .get("name")
+                    .or_else(|| entry.get("displayName"))
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|s| !is_placeholder_model_label(s))
+                    .map(str::to_string)
+            } else {
+                None
+            }
+        })
+    });
+    let catalog_label = catalog_model(canonical, raw)
+        .and_then(|row| row.get("label").and_then(Value::as_str).map(str::to_string))
+        .filter(|label| !is_placeholder_model_label(label))
+        .or_else(|| {
+            let pi_agent = match canonical {
+                "pi" => Some(crate::session_chat_pi_models::PiFamilyAgent::Pi),
+                "omp" => Some(crate::session_chat_pi_models::PiFamilyAgent::Omp),
+                _ => None,
+            }?;
+            let cat = crate::session_chat_pi_models::pi_family_model_catalog(pi_agent)?;
+            cat.pointer(&format!("/agents/{canonical}/models"))?
+                .as_array()?
+                .iter()
+                .find(|row| row.get("value").and_then(Value::as_str) == Some(raw))
+                .and_then(|row| row.get("label").and_then(Value::as_str))
+                .filter(|label| !is_placeholder_model_label(label))
+                .map(str::to_string)
+        });
+    let fallback_slug = if matches!(canonical, "pi" | "omp") {
+        raw.split_once('/').map(|(_, id)| id).unwrap_or(raw)
+    } else {
+        raw
+    };
+    let raw_label = catalog_label
+        .or(available_name)
+        .or_else(|| humanize_raw_model_slug(fallback_slug))
+        .unwrap_or_else(|| fallback_slug.to_string());
+    let (clean_label, extracted_effort) = split_parenthesized_effort(&raw_label);
+    let label = humanize_raw_model_slug(clean_label).unwrap_or_else(|| clean_label.to_string());
+    if effort.is_none() {
+        effort = extracted_effort;
+    }
+    if is_placeholder_model_label(&label) {
+        if canonical == "cursor" && allow_cursor_fallback {
+            if let Some(resolved) = resolve_cursor_fallback(effort.as_deref(), available_models) {
+                return Some(resolved);
+            }
+        }
+        let (value, fallback_label, default_effort) = preferred_default_model(canonical)?;
+        return Some((value, fallback_label, effort.or(default_effort)));
+    }
+    if effort.is_none() {
+        effort = default_effort_for_model(canonical, raw);
+    }
+    Some((raw.to_string(), label, effort))
+}
+
+/// Preserves Claude's `[1m]` context-window suffix when a live report (`system/init`, assistant
+/// message, or terminal statusline) emits the bare API id (`claude-opus-5-5`) for a session that
+/// was already running on `opus[1m]` (or reported a 1M context window).
+pub(crate) fn preserve_claude_1m_context(
+    existing: Option<&str>,
+    candidate: &str,
+    window_tokens: Option<u64>,
+) -> String {
+    let candidate = candidate.trim();
+    if candidate.is_empty() {
+        return existing.unwrap_or_default().trim().to_string();
+    }
+    if candidate.to_ascii_lowercase().ends_with("[1m]") {
+        return candidate.to_string();
+    }
+    let resolved_candidate = resolve_acp_model("claude", Some(candidate), None, None);
+    if let Some(existing_raw) = existing.map(str::trim).filter(|s| !s.is_empty()) {
+        if existing_raw.to_ascii_lowercase().ends_with("[1m]") {
+            let resolved_existing = resolve_acp_model("claude", Some(existing_raw), None, None);
+            let same_model = match (&resolved_existing, &resolved_candidate) {
+                (Some((ev, el, _)), Some((cv, cl, _))) => {
+                    ev.eq_ignore_ascii_case(cv)
+                        || el.eq_ignore_ascii_case(cl)
+                        || ev
+                            .trim_end_matches("[1m]")
+                            .eq_ignore_ascii_case(cv.trim_end_matches("[1m]"))
+                }
+                _ => false,
+            };
+            if same_model {
+                return existing_raw.to_string();
+            }
+        }
+    }
+    if window_tokens.is_some_and(|w| w >= 1_000_000) {
+        if let Some((value, _, _)) = &resolved_candidate {
+            if value.to_ascii_lowercase().ends_with("[1m]") {
+                return value.clone();
+            }
+            let with_1m = format!("{value}[1m]");
+            if catalog_model("claude", &with_1m).is_some() {
+                return with_1m;
+            }
+        }
+    }
+    if let Some((value, _, _)) = resolved_candidate {
+        return value;
+    }
+    candidate.to_string()
 }
 
 /// The name chat shows for a model the terminal printed, when the catalog offers it in a 1M

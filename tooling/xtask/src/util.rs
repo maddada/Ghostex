@@ -852,80 +852,156 @@ pub fn pid_alive(pid: u32) -> bool {
     .is_some_and(|out| out.contains(&format!("\"{pid}\"")))
 }
 
-/// Holds the start lock for the life of the process.
+/// Set by a parent command (such as `cargo xtask rebuild`) when it already holds the start locks
+/// for the child `cargo xtask start` it spawns.
+pub const START_LOCK_HELD_ENV: &str = "GHOSTEX_START_LOCK_HELD";
+
+/// Holds the start locks (install-wide and per-checkout) for the life of the process.
 pub enum StartLock {
     #[cfg(unix)]
-    Flock(#[allow(dead_code)] File),
+    Flocks(#[allow(dead_code)] Vec<File>),
     #[cfg(windows)]
-    PidFile(PathBuf),
+    PidFiles(Vec<PathBuf>),
 }
 
 #[cfg(windows)]
 impl Drop for StartLock {
     fn drop(&mut self) {
-        let StartLock::PidFile(path) = self;
+        let StartLock::PidFiles(paths) = self;
         // A stale PID lock is detected and replaced by the next start.
-        let _ = fs::remove_file(path);
+        for path in paths.iter().rev() {
+            let _ = fs::remove_file(path);
+        }
+    }
+}
+
+fn start_lock_paths() -> Vec<PathBuf> {
+    // Acquire the install-wide lock first, then the checkout lock, in one fixed order so two
+    // checkouts targeting the same installed app never race and never deadlock.
+    let install_lock = crate::gxserver::ghostex_state_dir()
+        .join("runtime")
+        .join("ghostex-gpui-local-start.lock");
+    let checkout_lock = root().join("build").join("ghostex-gpui-local-start.lock");
+    if install_lock == checkout_lock {
+        vec![install_lock]
+    } else {
+        vec![install_lock, checkout_lock]
     }
 }
 
 /// CDXC:Build 2026-06-21-18:43:
-/// The start prevents overlapping rebuilds: `start` and `start-server` take the same lock, so the two can never write the installed app at once. On macOS and Linux it is an flock on build/ghostex-gpui-local-start.lock (what lockf(1) and flock(1) took when the JS launcher re-executed itself under them); a second start waits for the first. Windows records the holder's pid and refuses while that process lives.
+/// The start prevents overlapping rebuilds: `start`, `start-server`, and `rebuild` take the same
+/// lock, so two commands can never write the installed app or restart gxserver at once.
+///
+/// CDXC:Build 2026-11-24 WHY:
+/// The lock used to live only under `<checkout>/build/ghostex-gpui-local-start.lock`, so a
+/// `cargo xtask start-server` run from one checkout (e.g. the main repo) and a `cargo xtask rebuild`
+/// run from another (e.g. a release worktree) took different files, overwrote `/Applications/Ghostex.app`
+/// concurrently, and restarted gxserver right during `rebuild`'s post-start health check
+/// (rebuilds 497 and 498). Now every command first locks `<state>/runtime/ghostex-gpui-local-start.lock`
+/// (shared across all checkouts targeting the same Ghostex profile, while `--isolated` / `GHOSTEX_HOME`
+/// keeps its own state dir), and still locks `<checkout>/build/ghostex-gpui-local-start.lock` to guard
+/// this checkout's build outputs alongside `tooling/clean-build-caches.py`.
 pub fn acquire_start_lock(command_name: &str) -> Res<StartLock> {
-    let lock_path = root().join("build").join("ghostex-gpui-local-start.lock");
-    fs::create_dir_all(lock_path.parent().expect("lock path has a parent"))?;
+    let lock_paths = start_lock_paths();
+    let holder_text = format!(
+        "`cargo xtask {command_name}` (pid {}, {})",
+        std::process::id(),
+        root().display()
+    );
     #[cfg(unix)]
     {
-        let file = fs::OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .read(true)
-            .write(true)
-            .open(&lock_path)?;
         use std::os::unix::io::AsRawFd;
-        let fd = file.as_raw_fd();
-        if unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) } != 0 {
-            println!("Waiting for another `cargo xtask {command_name}` to finish...");
-            if unsafe { libc::flock(fd, libc::LOCK_EX) } != 0 {
-                bail!(
-                    "could not lock {}: {}",
-                    lock_path.display(),
-                    std::io::Error::last_os_error()
-                );
+        let mut files = Vec::with_capacity(lock_paths.len());
+        for lock_path in lock_paths {
+            fs::create_dir_all(lock_path.parent().expect("lock path has a parent"))?;
+            let mut file = fs::OpenOptions::new()
+                .create(true)
+                .truncate(false)
+                .read(true)
+                .write(true)
+                .open(&lock_path)?;
+            let fd = file.as_raw_fd();
+            if unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+                let mut existing = String::new();
+                let _ = file.seek(SeekFrom::Start(0));
+                let _ = file.read_to_string(&mut existing);
+                let existing = existing.trim();
+                if existing.is_empty() {
+                    println!(
+                        "Waiting for another Ghostex build/install to finish before `cargo xtask {command_name}`..."
+                    );
+                } else {
+                    println!(
+                        "Waiting for {existing} to finish before `cargo xtask {command_name}`..."
+                    );
+                }
+                if unsafe { libc::flock(fd, libc::LOCK_EX) } != 0 {
+                    bail!(
+                        "could not lock {}: {}",
+                        lock_path.display(),
+                        std::io::Error::last_os_error()
+                    );
+                }
             }
+            // Record who holds the lock for any waiter; never unlink an flock'd file on drop.
+            let _ = file.set_len(0);
+            let _ = file.seek(SeekFrom::Start(0));
+            let _ = write!(file, "{holder_text}");
+            let _ = file.flush();
+            files.push(file);
         }
-        Ok(StartLock::Flock(file))
+        Ok(StartLock::Flocks(files))
     }
     #[cfg(windows)]
     {
-        for _ in 0..2 {
-            match fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&lock_path)
-            {
-                Ok(mut file) => {
-                    write!(file, "{}", std::process::id())?;
-                    return Ok(StartLock::PidFile(lock_path));
-                }
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                    let holder = fs::read_to_string(&lock_path)
-                        .unwrap_or_default()
-                        .trim()
-                        .parse::<u32>()
-                        .ok();
-                    if let Some(pid) = holder.filter(|pid| *pid > 0 && pid_alive(*pid)) {
-                        bail!("Another `cargo xtask {command_name}` (pid {pid}) is already rebuilding the GPUI app.");
+        let mut held = StartLock::PidFiles(Vec::with_capacity(lock_paths.len()));
+        for lock_path in lock_paths {
+            fs::create_dir_all(lock_path.parent().expect("lock path has a parent"))?;
+            let mut acquired = false;
+            for _ in 0..2 {
+                match fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&lock_path)
+                {
+                    Ok(mut file) => {
+                        write!(file, "{}\n{holder_text}", std::process::id())?;
+                        let StartLock::PidFiles(paths) = &mut held;
+                        paths.push(lock_path.clone());
+                        acquired = true;
+                        break;
                     }
-                    let _ = fs::remove_file(&lock_path);
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                        let content = fs::read_to_string(&lock_path).unwrap_or_default();
+                        let mut lines = content.lines();
+                        let holder = lines
+                            .next()
+                            .and_then(|line| line.trim().parse::<u32>().ok());
+                        let detail = lines.next().map(str::trim).filter(|line| !line.is_empty());
+                        if let Some(pid) = holder.filter(|pid| *pid > 0 && pid_alive(*pid)) {
+                            match detail {
+                                Some(detail) => bail!(
+                                    "Another Ghostex build/install ({detail}) is already running."
+                                ),
+                                None => bail!(
+                                    "Another `cargo xtask {command_name}` (pid {pid}) is already rebuilding the GPUI app."
+                                ),
+                            }
+                        }
+                        let _ = fs::remove_file(&lock_path);
+                    }
+                    Err(error) => return Err(error.into()),
                 }
-                Err(error) => return Err(error.into()),
+            }
+            if !acquired {
+                bail!(
+                    "Could not acquire the GPUI start lock at {}.",
+                    lock_path.display()
+                );
             }
         }
-        bail!(
-            "Could not acquire the GPUI start lock at {}.",
-            lock_path.display()
-        )
+        Ok(held)
     }
 }
 

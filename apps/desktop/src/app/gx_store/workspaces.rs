@@ -19,10 +19,9 @@ const MAX_RECENT_WINDOW_WORKSPACES: usize = 8;
 /// What the workspace tile draws.
 pub(crate) struct WorkspaceTile {
     pub(crate) name: String,
-    pub(crate) color: String,
-    /// Its icon id (`SidebarWorkspace::icon_id`), drawn on a disc of `color`.
+    /// Its icon id (`SidebarWorkspace::icon_id`), drawn as a plain glyph in the Spaces row.
     pub(crate) icon: String,
-    /// The workspace a click on the name switches to; `None` with a single workspace.
+    /// The workspace a click on the tile switches to; `None` with a single workspace.
     pub(crate) switch_to: Option<(String, String)>,
     /// The Go to Workspace hotkey of `switch_to`, as the settings bind it now.
     pub(crate) switch_hotkey: Option<String>,
@@ -198,8 +197,8 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
-    /// The workspace switcher at the sidebar's bottom left, when this computer's daemon has more
-    /// than one workspace: with a single one there is nothing to switch to, so nothing is drawn
+    /// The workspace tile in the Spaces row, when this computer's daemon has more than one
+    /// workspace: with a single one there is nothing to switch to, so nothing is drawn
     /// (CDXC:Workspaces 2026-11-20 in native_sidebar/workspace_tile.rs).
     pub(crate) fn gx_store_workspace_tile(&self) -> Option<WorkspaceTile> {
         let state = self.gx_store_workspaces_state()?;
@@ -233,7 +232,6 @@ impl GhostexGpuiApp {
         });
         Some(WorkspaceTile {
             name: workspace.name.clone(),
-            color: workspace.color.clone(),
             icon: workspace.icon_id().to_string(),
             switch_to,
             switch_hotkey,

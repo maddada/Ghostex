@@ -63,12 +63,14 @@ pub enum SessionSortMode {
     Manual,
 }
 
-/// The seven section headings of a project's session list.
+/// The eight section headings of a project's session list.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SectionId {
     Browser,
     Pinned,
+    /// Autopilot supervisor sessions lifted into Main Hub (`chief.rs`, `merged.rs`).
+    Autopilot,
     Drafts,
     /// Sessions whose agent is working, while Group working sessions is on (ordering.rs
     /// `is_grouped_working`).
@@ -80,9 +82,10 @@ pub enum SectionId {
 
 impl SectionId {
     /// Render order of the headings.
-    pub const ORDER: [SectionId; 7] = [
+    pub const ORDER: [SectionId; 8] = [
         SectionId::Browser,
         SectionId::Pinned,
+        SectionId::Autopilot,
         SectionId::Drafts,
         SectionId::Working,
         SectionId::Sessions,
@@ -94,6 +97,7 @@ impl SectionId {
         match self {
             SectionId::Browser => "browser",
             SectionId::Pinned => "pinned",
+            SectionId::Autopilot => "autopilot",
             SectionId::Drafts => "drafts",
             SectionId::Working => "working",
             SectionId::Sessions => "sessions",
@@ -104,11 +108,12 @@ impl SectionId {
 }
 
 /// Which of a project's section headings are collapsed. Drafts, Working, Parked, and Snoozed start
-/// collapsed; only Pinned and Sessions are persisted.
+/// collapsed; Pinned, Autopilot (when collapsed), and Sessions are persisted.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SectionCollapse {
     pub browser: bool,
     pub pinned: bool,
+    pub autopilot: bool,
     pub drafts: bool,
     pub working: bool,
     pub sessions: bool,
@@ -121,6 +126,7 @@ impl Default for SectionCollapse {
         Self {
             browser: false,
             pinned: false,
+            autopilot: false,
             drafts: true,
             working: true,
             sessions: false,
@@ -135,6 +141,7 @@ impl SectionCollapse {
         match section {
             SectionId::Browser => self.browser,
             SectionId::Pinned => self.pinned,
+            SectionId::Autopilot => self.autopilot,
             SectionId::Drafts => self.drafts,
             SectionId::Working => self.working,
             SectionId::Sessions => self.sessions,
@@ -147,6 +154,7 @@ impl SectionCollapse {
         match section {
             SectionId::Browser => self.browser = collapsed,
             SectionId::Pinned => self.pinned = collapsed,
+            SectionId::Autopilot => self.autopilot = collapsed,
             SectionId::Drafts => self.drafts = collapsed,
             SectionId::Working => self.working = collapsed,
             SectionId::Sessions => self.sessions = collapsed,
@@ -225,6 +233,10 @@ pub struct SidebarCollapseState {
     pub expanded_coordinators: BTreeSet<String>,
     /// Coordinators whose older threads (idle for two hours) the user listed, by sidebar row id.
     pub expanded_coordinator_older_threads: BTreeSet<String>,
+    /// Main Hub's per-computer folds (`Ask Ghostex AI`, `Autopilot supervisor`) whose other
+    /// computers' rows the user unfolded during this run (`chief.rs` `machine_fold_key`). Never
+    /// stored: they start folded on every launch.
+    pub expanded_machine_folds: BTreeSet<String>,
     /// The computers whose sessions a merged project hides, keyed by [`project_machine_key`]
     /// (CDXC:RemoteMachines 2026-11-15 in `merged.rs`).
     pub hidden_project_machines: BTreeSet<String>,

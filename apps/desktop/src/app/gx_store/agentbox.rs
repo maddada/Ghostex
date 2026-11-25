@@ -139,10 +139,8 @@ impl GhostexGpuiApp {
                 cache.in_flight = false;
                 (cache.locations.clone(), std::mem::take(&mut cache.waiters))
             };
+            let _ = changed;
             let _ = this.update(cx, |this, cx| {
-                if changed {
-                    this.push_gpui_new_thread_picker_run_locations(cx);
-                }
                 for waiter in waiters {
                     waiter(this, locations.clone(), cx);
                 }
@@ -184,11 +182,9 @@ impl GhostexGpuiApp {
     pub(crate) fn note_agentbox_status_answer(
         &mut self,
         status: &Value,
-        cx: &mut gpui::Context<Self>,
+        _cx: &mut gpui::Context<Self>,
     ) {
-        if store_status_answer(status, Instant::now()) {
-            self.push_gpui_new_thread_picker_run_locations(cx);
-        }
+        let _ = store_status_answer(status, Instant::now());
     }
 
     /// The sidebar's one-second tick: the launcher's Run in a Box page reads the cached status.

@@ -22,14 +22,13 @@ use futures::FutureExt as _;
 use crate::app::helpers::web_runtime::{WebRuntimeState, web_runtime_state};
 use crate::app::helpers::*;
 use crate::app::visual_page_thumbnails::{
-    CAPTURING, read_picture_state, screenshot_page_top, store_picture,
+    CAPTURE_VIEWPORT, CAPTURING, capture_and_store_themed_pictures, read_picture_state,
+    served_page_id,
 };
 use crate::app::window::native_modal_kit::hsla;
 use crate::app::window::visual_page_modal::VISUAL_PAGE_CEF_PROFILE_ID;
 use crate::*;
 
-/// The floating page window's top band, which the page sits under.
-const PAGE_WINDOW_HEADER_HEIGHT: f32 = crate::app::window::visual_page_modal::TOP_BAND_HEIGHT;
 /// How long a page gets to load before it is given up on.
 const LOAD_TIMEOUT: Duration = Duration::from_secs(20);
 /// How long a page gets after it loaded for its scripts to build it.
@@ -40,15 +39,18 @@ const BUSY_RETRY: Duration = Duration::from_secs(2);
 /// offers it again when it is drawn again.
 const BUSY_RETRIES: u32 = 30;
 
-/// A drawn card's page that has no picture yet.
+/// A drawn card's page that has no picture yet (or an opened page whose picture is stale).
 #[derive(Clone)]
 pub(crate) struct UnopenedPage {
     pub(crate) page_id: String,
     /// The page's address as this computer reaches it.
     pub(crate) url: String,
-    /// The chat the card is drawn in.
-    pub(crate) session_id: TerminalSessionId,
+    /// The chat the card is drawn in (`None` for a stale page queued from the floating page window).
+    pub(crate) session_id: Option<TerminalSessionId>,
     pub(crate) remote: Option<GpuiRemoteGxserverRequestTarget>,
+    /// True when the user opened a stale/answered/refreshed page, so capture proceeds without
+    /// requiring `backgroundPicture` or checking whether its chat is currently on screen.
+    pub(crate) force_stale: bool,
 }
 
 /// Which pages are pictured, in what order: one at a time, each page once per app run, and only
@@ -140,10 +142,13 @@ impl UnopenedPageQueue {
 }
 
 /// Whether gxserver's answer about a page's picture (`readVisualPageThumbnail`) lets it be pictured
-/// unopened: the page is still there, has no picture, and was published since background pictures
-/// (pages published before carry no mark and wait until they are opened).
+/// unopened: the page is still there, has no picture (or only a legacy unthemed picture), and was
+/// published since background pictures (pages published before carry no mark and wait until they
+/// are opened).
 pub(crate) fn may_picture_unopened(state: &serde_json::Value) -> bool {
-    state["backgroundPicture"] == true && state["gone"] != true && state["capturedAt"].is_null()
+    state["backgroundPicture"] == true
+        && state["gone"] != true
+        && (state["capturedAt"].is_null() || state["needsThemedPicture"] == true)
 }
 
 thread_local! {
@@ -226,8 +231,40 @@ impl GhostexGpuiApp {
             queue.borrow_mut().offer(UnopenedPage {
                 page_id: page_id.to_ascii_lowercase(),
                 url,
-                session_id,
+                session_id: Some(session_id),
                 remote,
+                force_stale: false,
+            })
+        });
+        if offered {
+            self.picture_next_unopened_page(cx);
+        }
+    }
+
+    /// Re-pictures an opened page in a hidden browser when its picture is missing or stale
+    /// (answered or refreshed since its last capture), so the visible floating page window never
+    /// flashes, locks scroll, or bakes in its static wallpaper.
+    pub(crate) fn picture_stale_opened_page(
+        &mut self,
+        url: &str,
+        remote: Option<GpuiRemoteGxserverRequestTarget>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let port = remote
+            .as_ref()
+            .map_or_else(gpui_local_gxserver_api_port, |remote| remote.local_port);
+        let Some(page_id) = served_page_id(url, port) else {
+            return;
+        };
+        let offered = QUEUE.with(|queue| {
+            let mut queue = queue.borrow_mut();
+            queue.tried.remove(&page_id);
+            queue.offer(UnopenedPage {
+                page_id,
+                url: url.to_string(),
+                session_id: None,
+                remote,
+                force_stale: true,
             })
         });
         if offered {
@@ -255,9 +292,12 @@ impl GhostexGpuiApp {
             }
         }
         let next = QUEUE.with(|queue| {
-            queue
-                .borrow_mut()
-                .start_next(|page| self.session_chat_on_screen(page.session_id))
+            queue.borrow_mut().start_next(|page| {
+                page.force_stale
+                    || page
+                        .session_id
+                        .is_some_and(|session_id| self.session_chat_on_screen(session_id))
+            })
         });
         let Some(page) = next else {
             return;
@@ -273,8 +313,7 @@ impl GhostexGpuiApp {
         };
         let light = self.gpui_native_modal_palette().light;
         let background = hsla(self.gpui_native_modal_palette().surface);
-        let (width, height) = self.chat_preview_modal_size(cx);
-        let viewport = (width, (height - PAGE_WINDOW_HEADER_HEIGHT).max(1.0));
+        let viewport = CAPTURE_VIEWPORT;
         cx.spawn(async move |this, cx| {
             let outcome =
                 picture_page_unopened(&page, window, light, background, viewport, cx).await;
@@ -315,10 +354,17 @@ async fn picture_page_unopened(
     viewport: (f32, f32),
     cx: &mut gpui::AsyncApp,
 ) -> Outcome {
-    let Some(state) = read_picture_state(page.remote.clone(), &page.page_id).await else {
+    let theme = if light { "light" } else { "dark" };
+    let Some(state) = read_picture_state(page.remote.clone(), &page.page_id, Some(theme)).await
+    else {
         return Outcome::Done;
     };
-    if !may_picture_unopened(&state) {
+    let should_picture = if page.force_stale {
+        state["stale"] == true && state["gone"] != true
+    } else {
+        may_picture_unopened(&state)
+    };
+    if !should_picture {
         return Outcome::Done;
     }
     if cx
@@ -361,7 +407,7 @@ async fn load_and_picture(
             parent,
             page_url,
             VISUAL_PAGE_CEF_PROFILE_ID.to_string(),
-            pane_prepaint_background_color(),
+            0x0000_0000,
             false,
             background,
             None,
@@ -394,16 +440,20 @@ async fn load_and_picture(
         loaded = futures::StreamExt::next(&mut loaded).fuse() => loaded.is_some(),
         _ = timeout.fuse() => false,
     };
-    let mut pictured = None;
     if loaded {
         cx.background_executor().timer(SETTLE).await;
-        pictured = screenshot_page_top(&surface.downgrade(), viewport, cx).await;
+        let _ = capture_and_store_themed_pictures(
+            &surface.downgrade(),
+            &page.page_id,
+            page.remote.clone(),
+            viewport,
+            light,
+            cx,
+        )
+        .await;
     }
     // Closes the page's browser.
     let _ = cx.update(|_| drop(surface));
-    if let Some(base64) = pictured {
-        let _ = store_picture(base64, &page.page_id, page.remote.clone(), cx).await;
-    }
     Outcome::Done
 }
 
@@ -416,8 +466,9 @@ mod tests {
         UnopenedPage {
             page_id: id.to_string(),
             url: format!("http://127.0.0.1:1/visual/{id}"),
-            session_id: TerminalSessionId(session),
+            session_id: Some(TerminalSessionId(session)),
             remote: None,
+            force_stale: false,
         }
     }
 
@@ -480,7 +531,7 @@ mod tests {
         let mut queue = UnopenedPageQueue::default();
         queue.offer(page("hidden", 1));
         queue.offer(page("shown", 2));
-        let on_screen = |p: &UnopenedPage| p.session_id == TerminalSessionId(2);
+        let on_screen = |p: &UnopenedPage| p.session_id == Some(TerminalSessionId(2));
         assert_eq!(
             queue.start_next(on_screen).map(|p| p.page_id),
             Some("shown".into())

@@ -81,6 +81,11 @@ pub(super) struct ActivityState {
     /// Since when this working state has been only background work the agent left running after
     /// its turn ended (`backgroundOnlySince`, see `turn_end_keeps_working`).
     pub(super) background_only_since: Option<String>,
+    /// The user interrupted the current working turn (Escape in terminal or Stop / Interrupt from
+    /// chat). Kept until a new turn starts so late Stop hooks, OSC 7501 `done` reports, abort
+    /// bells, and title stops from the interrupted turn settle to idle instead of entering
+    /// `attention` (`finished`).
+    pub(super) user_interrupted: Option<bool>,
 }
 
 impl ActivityState {
@@ -111,6 +116,7 @@ pub(super) struct ActivityInput {
     pub(super) agent_id: Option<String>,
     pub(super) attention_source: Option<String>,
     pub(super) event: Option<String>,
+    pub(super) event_name: Option<String>,
     pub(super) now_iso: String,
     pub(super) now_ms: i64,
     pub(super) previous: ActivityState,
@@ -152,13 +158,29 @@ pub fn compute_activity_update(
     let previous_state = previous.clone();
     let program_status_activity = read_text(params, "programStatusActivity")
         .filter(|value| matches!(value.as_str(), "idle" | "working" | "attention"));
-    // An Escape says the user stopped this turn, so its idle is not a finished turn.
+    let event_name = read_text(params, "eventName").or_else(|| read_text(params, "rawEventName"));
+    // An Escape says the user stopped this running turn, so its idle/done is not a finished turn.
+    // Only record a program-status interrupt when the session was actually working, so pressing
+    // Escape while idle or in a menu/shell never leaks into a later turn.
     if event.as_deref() == Some("escape") {
+        if previous_state.activity == "working" {
+            if let (Some(project_id), Some(session_id)) = (
+                read_text_value(session, "projectId"),
+                read_text_value(session, "sessionId"),
+            ) {
+                crate::program_status::note_program_status_interrupt(&project_id, &session_id);
+            }
+        }
+    } else if event.as_deref() == Some("clearInterrupt")
+        || is_new_turn_start_event(event_name.as_deref())
+        || (params.get("activity").and_then(Value::as_str) == Some("working")
+            && !is_post_tool_wind_down_event(event_name.as_deref()))
+    {
         if let (Some(project_id), Some(session_id)) = (
             read_text_value(session, "projectId"),
             read_text_value(session, "sessionId"),
         ) {
-            crate::program_status::note_program_status_interrupt(&project_id, &session_id);
+            crate::program_status::clear_program_status_interrupt(&project_id, &session_id);
         }
     }
     // Restoring detection's own view when a program stops driving the session
@@ -180,6 +202,7 @@ pub fn compute_activity_update(
             attention_source: read_text(params, "attentionSource")
                 .filter(|value| value == TURN_COMPLETE_ATTENTION_SOURCE),
             event: event.clone(),
+            event_name: event_name.clone(),
             now_iso: iso_from_ms(now_ms_value),
             now_ms: now_ms_value,
             previous: previous.clone(),
@@ -247,7 +270,10 @@ pub fn compute_activity_update(
     User (Q120): under Combined, detection stays in charge and the program's report is one more signal; in a disagreement "the more urgent signal wins": while the program says blocked, detection cannot take the session out of attention (the program knows it waits on the user), and while the program says working, done or error, detection cannot set it idle (a finished turn stays until the user sees it; found when Claude's Notification hook cleared a reported done). Every other disagreement goes to detection's own view (its shadow), which keeps what only it knows (subagent fleets and compaction, applied when the session is presented). The user's acknowledgement and Escape always pass. Detection's own result is recorded for the mismatch log, which keeps only disagreements that outlast its settle window (program_status/mismatch.rs).
     */
     if program_status_activity.is_none()
-        && !matches!(event.as_deref(), Some("acknowledge" | "escape"))
+        && !matches!(
+            event.as_deref(),
+            Some("acknowledge" | "escape" | "clearInterrupt")
+        )
     {
         if let (Some(program_state), Some(detected_state)) = (
             crate::program_status::program_status_combined_state(session),
@@ -305,6 +331,14 @@ fn activity_update_from(
     mut next: ActivityState,
     now_ms_value: i64,
 ) -> ActivityUpdate {
+    if previous.user_interrupted == Some(true) && next.user_interrupted != Some(true) {
+        if let (Some(project_id), Some(session_id)) = (
+            read_text_value(session, "projectId"),
+            read_text_value(session, "sessionId"),
+        ) {
+            crate::program_status::clear_program_status_interrupt(&project_id, &session_id);
+        }
+    }
     let previous_activity = previous.activity;
     let stays_in_attention = previous_activity == "attention" && next.activity == "attention";
     if stays_in_attention && previous.attention_event_id.is_some() {
@@ -502,6 +536,9 @@ impl ActivityState {
             "backgroundOnlySince",
             self.background_only_since.clone(),
         );
+        if self.user_interrupted == Some(true) {
+            output.insert("userInterrupted".to_string(), Value::Bool(true));
+        }
         Value::Object(output)
     }
 }

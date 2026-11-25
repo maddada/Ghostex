@@ -60,7 +60,8 @@ pub(super) fn export_command(args: &[String]) -> CliResult<()> {
         print_json(&json!({ "ok": true, "path": path, "settings": count }));
     } else {
         println!(
-            "Saved {count} settings to {}. Secrets, sign-ins and settings that belong to this computer are left out.",
+            "Saved {} to {}. Secrets, sign-ins and settings that belong to this computer are left out.",
+            ghostex_gx_protocol::plural(count, "setting", "settings"),
             path.display()
         );
     }
@@ -120,9 +121,9 @@ fn save_patch(patch: &Map<String, Value>, flags: &Flags) -> CliResult<()> {
         }
         if started.elapsed() >= IMPORT_CONFIRM_TIMEOUT {
             return Err(CliError::Other(format!(
-                "Ghostex accepted the import, but {missing} of {} settings did not show the new value within {} seconds. Check Settings.",
-                patch.len(),
-                IMPORT_CONFIRM_TIMEOUT.as_secs()
+                "Ghostex accepted the import, but {missing} of {} did not show the new value within {}. Check Settings.",
+                ghostex_gx_protocol::plural(patch.len(), "setting", "settings"),
+                ghostex_gx_protocol::plural(IMPORT_CONFIRM_TIMEOUT.as_secs(), "second", "seconds")
             )));
         }
         std::thread::sleep(IMPORT_POLL_INTERVAL);

@@ -131,8 +131,32 @@ pub fn message_can_rewind(message: &ChatMessage, copy_text: &str, suppressed: &V
 }
 
 /// Agents whose own rewind flow Ghostex drives; anything else never offers the action.
+///
+/// CDXC:SessionChat 2026-11-24 WHY:
+/// Claude Code and Codex rewind in a Terminal chat through the agent's own dialog and in a Native chat through gxserver's Native host (server/src/session_chat_rewind_native.rs: Claude Code restarts at the message before the prompt, Codex runs `thread/revert`), so both offer it in either mode. Antigravity, the third Native agent, has no way to go back, so it never offers it. OpenCode's rewind goes through its own server.
 pub fn agent_supports_rewind(agent: Option<&str>) -> bool {
-    matches!(agent, Some("claude") | Some("codex") | Some("opencode"))
+    matches!(agent, Some("claude" | "codex" | "opencode"))
+}
+
+/// Whether this specific chat session offers Rewind: Claude Code, Codex, and OpenCode in any mode,
+/// plus Pi Agent in Native mode (which rewinds via Pi RPC `fork`; OMP shares the `"pi"` transcript
+/// decoder and is excluded because `omp acp` has no rewind method).
+pub fn session_supports_rewind(
+    agent: Option<&str>,
+    session_agent_id: Option<&str>,
+    non_cli_mode: bool,
+) -> bool {
+    if agent_supports_rewind(agent) {
+        return true;
+    }
+    if non_cli_mode && agent == Some("pi") {
+        let is_omp = session_agent_id.is_some_and(|id| {
+            let lower = id.trim().to_ascii_lowercase();
+            lower == "omp" || lower == "oh-my-pi" || lower.contains("omp")
+        });
+        return !is_omp;
+    }
+    false
 }
 
 /// CDXC:SessionFork 2026-11-12 WHY:

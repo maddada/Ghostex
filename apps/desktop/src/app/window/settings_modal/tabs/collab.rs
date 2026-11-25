@@ -465,7 +465,10 @@ fn ago(at_ms: i64) -> String {
         0 => "just now".to_string(),
         1..=59 => format!("{minutes} min ago"),
         60..=1439 => format!("{} h ago", minutes / 60),
-        _ => format!("{} days ago", minutes / 1440),
+        _ => format!(
+            "{} ago",
+            ghostex_gx_protocol::plural(minutes / 1440, "day", "days")
+        ),
     }
 }
 
@@ -487,7 +490,10 @@ impl CollabTab {
             let (title, status, what) = match (entry["event"].as_str(), entry["outcome"].as_str()) {
                 (Some("message"), outcome) => (
                     if short.is_empty() {
-                        format!("{guest}: {images} picture(s)")
+                        format!(
+                            "{guest}: {}",
+                            ghostex_gx_protocol::plural(images, "picture", "pictures")
+                        )
                     } else {
                         format!("{guest}: {short}")
                     },

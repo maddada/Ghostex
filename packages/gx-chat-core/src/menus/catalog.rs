@@ -84,11 +84,24 @@ impl CatalogAgent {
         self.models.iter().find(|model| model.value == model_value)
     }
 
+    /// Resolves a model value, display label, raw API slug (`claude-opus-5-5`), or flattened
+    /// `<model>-<effort>` slug (`gemini-4-neon-high`) to its catalog row and any embedded effort.
+    pub fn resolve_model(&self, raw: &str) -> Option<(&CatalogModel, Option<String>)> {
+        resolve_model_in_list(
+            &self.models,
+            raw,
+            |m| m.value.as_str(),
+            |m| m.label.as_str(),
+            |m| m.picker_label.as_deref(),
+            |m| m.terminal_labels.as_slice(),
+        )
+    }
+
     /// Effort levels offered under a model: the model's own list, or every level the agent knows
     /// while the model is unknown or not in the catalog.
     pub fn efforts_for_model(&self, model_value: &str) -> Vec<String> {
-        match self.model(model_value) {
-            Some(model) => model.efforts.clone(),
+        match self.resolve_model(model_value) {
+            Some((model, _)) => model.efforts.clone(),
             None => self.efforts.clone(),
         }
     }
@@ -509,4 +522,477 @@ fn string_list(value: Option<&Value>) -> Option<Vec<String>> {
 pub fn bundled_agent_model_catalog() -> Option<AgentModelCatalog> {
     const BUNDLED: &str = include_str!("../../../../agent-model-catalog.json");
     parse_agent_model_catalog(&serde_json::from_str::<Value>(BUNDLED).ok()?)
+}
+
+/// Canonical model-catalog family key for an agent id or icon (`"antigravity-cli"` -> `"antigravity"`).
+pub fn canonical_model_family(agent_id: &str) -> &str {
+    match agent_id.trim() {
+        "claude" | "claude-code" | "openclaude" => "claude",
+        "codex" | "codex-cli" => "codex",
+        "antigravity" | "antigravity-cli" | "agy" => "antigravity",
+        "cursor" | "cursor-cli" | "cursor-agent" => "cursor",
+        "grok" | "grok-build" => "grok",
+        "hermes" | "hermes-agent" => "hermes",
+        "dsh" | "dsh-tui" => "dsh",
+        other => other,
+    }
+}
+
+/// CDXC:SessionChat 2026-11-24 DECISION:
+/// User: "never ever ever show 'Default' or some crap like that in the model selector. It must
+/// mention the model." Every model selector and label treats these values as unresolved aliases
+/// that must resolve to a concrete model instead of rendering verbatim.
+pub fn is_placeholder_model_value(value: &str) -> bool {
+    let normalized = value.trim().to_ascii_lowercase();
+    normalized.is_empty()
+        || matches!(
+            normalized.as_str(),
+            "default" | "auto" | "recommended" | "model" | "agent default"
+        )
+        || normalized.starts_with("default (")
+        || normalized.starts_with("default ")
+}
+
+/// True when `label` is a generic placeholder ("Default", "Default (recommended)", "Auto",
+/// "Agent default", "OpenCode's default", "Model", or blank) rather than a concrete model name.
+pub fn is_placeholder_model_label(label: &str) -> bool {
+    let normalized = label.trim().to_ascii_lowercase();
+    normalized.is_empty()
+        || matches!(
+            normalized.as_str(),
+            "default" | "auto" | "recommended" | "model" | "agent default"
+        )
+        || normalized.starts_with("default (")
+        || normalized.starts_with("default ")
+        || normalized.ends_with("'s default")
+        || normalized.ends_with("\u{2019}s default")
+}
+
+/// True when `value` is a generic effort placeholder ("default", "auto", "inherit", "unspecified",
+/// or blank) rather than a concrete reasoning level. Never display these as an effort label on the
+/// model pill.
+pub fn is_placeholder_effort_value(value: &str) -> bool {
+    let normalized = value.trim().to_ascii_lowercase();
+    normalized.is_empty()
+        || matches!(
+            normalized.as_str(),
+            "default" | "auto" | "inherit" | "unspecified" | "model default" | "agent default"
+        )
+        || normalized.starts_with("default (")
+        || normalized.starts_with("default ")
+}
+
+/// Preferred family words for agents with an explicit default-model rule:
+/// Claude Code -> newest Opus; Codex -> newest Sol; Antigravity -> newest Neon;
+/// Cursor CLI -> newest Composer.
+fn preferred_default_family_words(family: &str) -> Option<&'static [&'static str]> {
+    match canonical_model_family(family) {
+        "claude" => Some(&["opus"]),
+        "codex" => Some(&["gpt", "sol"]),
+        "antigravity" => Some(&["gemini", "neon"]),
+        "cursor" => Some(&["composer"]),
+        _ => None,
+    }
+}
+
+fn newest_catalog_model_matching<'a>(
+    models: &[&'a CatalogModel],
+    words: &[&str],
+    exact: bool,
+) -> Option<&'a CatalogModel> {
+    let mut best: Option<(&'a CatalogModel, Vec<u32>)> = None;
+    for model in models {
+        if is_placeholder_model_value(&model.value) || is_placeholder_model_label(&model.label) {
+            continue;
+        }
+        let Some((family, version)) =
+            family_and_version(&model.label).or_else(|| family_and_version(&model.value))
+        else {
+            continue;
+        };
+        let family_words: Vec<&str> = family.split_whitespace().collect();
+        if !words.iter().all(|word| family_words.contains(word))
+            || (exact && family_words.len() != words.len())
+        {
+            continue;
+        }
+        if best.as_ref().is_none_or(|(_, newest)| version > *newest) {
+            best = Some((model, version));
+        }
+    }
+    best.map(|(model, _)| model)
+}
+
+fn newest_catalog_model_of<'a>(
+    models: &[&'a CatalogModel],
+    words: &[&str],
+) -> Option<&'a CatalogModel> {
+    newest_catalog_model_matching(models, words, true)
+        .or_else(|| newest_catalog_model_matching(models, words, false))
+        .or_else(|| {
+            // If only a single keyword matches (e.g. a future "Sol" or "Neon" without "GPT"/"Gemini"),
+            // pick the newest row containing the distinguishing family word.
+            words
+                .last()
+                .and_then(|tail| newest_catalog_model_matching(models, &[*tail], false))
+        })
+}
+
+/// The concrete default model for `family` from its reported model lineup:
+/// - Claude Code: newest Opus available (today Opus 5.5)
+/// - Codex: newest Sol model available (today GPT 6.2 Sol)
+/// - Antigravity: newest Neon model available (today Gemini 4 Neon)
+/// - Other agents: the lineup's non-placeholder `default: true` row, else its first non-legacy
+///   concrete row, else its first concrete row.
+pub fn preferred_default_model<'a>(
+    family: &str,
+    agent: &'a CatalogAgent,
+) -> Option<&'a CatalogModel> {
+    let all: Vec<&CatalogModel> = agent
+        .models
+        .iter()
+        .filter(|m| !is_placeholder_model_value(&m.value) && !is_placeholder_model_label(&m.label))
+        .collect();
+    if all.is_empty() {
+        return None;
+    }
+    let current: Vec<&CatalogModel> = all
+        .iter()
+        .copied()
+        .filter(|m| m.group.as_deref() != Some(LEGACY_GROUP_ID))
+        .collect();
+    let pool = if current.is_empty() { &all } else { &current };
+    preferred_default_family_words(family)
+        .and_then(|words| {
+            newest_catalog_model_of(pool, words).or_else(|| newest_catalog_model_of(&all, words))
+        })
+        .or_else(|| pool.iter().copied().find(|m| m.default))
+        .or_else(|| pool.first().copied())
+        .or_else(|| all.first().copied())
+}
+
+/// Hard-coded fallback `(value, label, default_effort)` used ONLY when an agent has no reported
+/// model list at all.
+pub fn preferred_default_model_fallback(
+    family: &str,
+) -> Option<(&'static str, &'static str, Option<&'static str>)> {
+    match canonical_model_family(family) {
+        "claude" => Some(("opus[1m]", "Opus 5.5", Some("high"))),
+        "codex" => Some(("gpt-6.2-sol", "GPT 6.2 Sol", Some("medium"))),
+        "antigravity" => Some(("gemini-4-neon", "Gemini 4 Neon", Some("high"))),
+        "cursor" => Some(("composer-2.5", "Composer 2.5", None)),
+        _ => None,
+    }
+}
+
+/// Default reasoning effort for `model` on `agent` when the user has not chosen one explicitly.
+pub fn preferred_default_effort(
+    family: &str,
+    agent: &CatalogAgent,
+    model: &CatalogModel,
+) -> Option<String> {
+    let offered = |effort: &str| model.efforts.iter().any(|candidate| candidate == effort);
+    if let Some(default_effort) = model.default_effort.as_deref().filter(|e| offered(e)) {
+        return Some(default_effort.to_string());
+    }
+    if let Some(default_effort) = agent.default_effort.as_deref().filter(|e| offered(e)) {
+        return Some(default_effort.to_string());
+    }
+    if matches!(
+        canonical_model_family(family),
+        "claude" | "codex" | "antigravity"
+    ) && offered("high")
+    {
+        return Some("high".to_string());
+    }
+    model.efforts.first().cloned()
+}
+
+/// Resolves the concrete default `(value, label, effort)` for `family` from `catalog`, falling
+/// back to [`preferred_default_model_fallback`] only when the catalog has no models for it.
+pub fn resolved_default_model(
+    catalog: &AgentModelCatalog,
+    family: &str,
+) -> Option<(String, String, Option<String>)> {
+    let canonical = canonical_model_family(family);
+    if let Some(agent) = catalog.agents.get(canonical) {
+        if let Some(model) = preferred_default_model(canonical, agent) {
+            let effort = preferred_default_effort(canonical, agent, model);
+            return Some((model.value.clone(), model.label.clone(), effort));
+        }
+    }
+    preferred_default_model_fallback(canonical).map(|(value, label, effort)| {
+        (
+            value.to_string(),
+            label.to_string(),
+            effort.map(str::to_string),
+        )
+    })
+}
+
+/// Normalizes a reasoning effort token to its canonical lowercase wire id.
+pub fn normalize_effort_token(raw: &str) -> Option<&'static str> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "minimal" => Some("minimal"),
+        "low" => Some("low"),
+        "medium" => Some("medium"),
+        "high" => Some("high"),
+        "xhigh" | "extra high" | "extra-high" => Some("xhigh"),
+        "max" => Some("max"),
+        "ultra" => Some("ultra"),
+        "ultracode" => Some("ultracode"),
+        _ => None,
+    }
+}
+
+/// If `label` ends with a parenthesized reasoning effort such as `"Opus 5.5 (High)"` or
+/// `"Gemini 4 Neon (Medium)"`, splits it into `("Opus 5.5", Some("high"))` (canonical lowercase
+/// effort id) so effort always renders as separate dimmed text, never in brackets.
+pub fn split_parenthesized_effort(label: &str) -> (&str, Option<String>) {
+    let trimmed = label.trim();
+    let Some(without_close) = trimmed.strip_suffix(')') else {
+        return (trimmed, None);
+    };
+    let Some((base, inside)) = without_close.rsplit_once(" (") else {
+        return (trimmed, None);
+    };
+    let base = base.trim();
+    if base.is_empty() {
+        return (trimmed, None);
+    }
+    match normalize_effort_token(inside) {
+        Some(effort) => (base, Some(effort.to_string())),
+        None => (trimmed, None),
+    }
+}
+
+/// Parses a Claude API model slug such as `"claude-opus-5-5"`, `"claude-opus-5-5[1m]"`,
+/// `"claude-opus-5-5-20260514"`, or `"Claude-sonnet-5-5"` into its friendly display label
+/// (`"Opus 5.5"`) and optional bracket variant (`Some("1m")`).
+pub fn parse_claude_api_slug(raw: &str) -> Option<(String, Option<String>)> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed.contains(' ') {
+        return None;
+    }
+    let normalized = trimmed.to_ascii_lowercase();
+    let variant = normalized
+        .split_once('[')
+        .and_then(|(_, tail)| tail.strip_suffix(']'))
+        .map(str::to_string);
+    let head = normalized
+        .split_once('[')
+        .map_or(normalized.as_str(), |(h, _)| h);
+    let tokens: Vec<&str> = head.split('-').filter(|t| !t.is_empty()).collect();
+    if tokens.first().copied() != Some("claude") {
+        return None;
+    }
+    let (family_index, family) =
+        tokens
+            .iter()
+            .enumerate()
+            .find_map(|(index, token)| match *token {
+                "fable" | "opus" | "sonnet" | "haiku" => Some((index, *token)),
+                _ => None,
+            })?;
+    let title = match family {
+        "fable" => "Fable",
+        "opus" => "Opus",
+        "sonnet" => "Sonnet",
+        "haiku" => "Haiku",
+        _ => return None,
+    };
+    let following_version: Vec<&str> = tokens
+        .iter()
+        .skip(family_index + 1)
+        .copied()
+        .take_while(|token| {
+            token.len() <= 2 && !token.is_empty() && token.chars().all(|ch| ch.is_ascii_digit())
+        })
+        .take(2)
+        .collect();
+    let preceding_version: Vec<&str> = tokens
+        .iter()
+        .take(family_index)
+        .rev()
+        .copied()
+        .take_while(|token| {
+            token.len() <= 2 && !token.is_empty() && token.chars().all(|ch| ch.is_ascii_digit())
+        })
+        .take(2)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
+    let version = if following_version.is_empty() {
+        preceding_version
+    } else {
+        following_version
+    };
+    let label = if version.is_empty() {
+        title.to_string()
+    } else {
+        format!("{title} {}", version.join("."))
+    };
+    Some((label, variant))
+}
+
+/// Converts a raw hyphenated API/CLI model slug (`"claude-opus-5-5"`, `"Claude-opus-5-5"`,
+/// `"gpt-6.2-sol"`, `"gemini-4-neon"`) into a clean display name (`"Opus 5.5"`, `"GPT 6.2 Sol"`,
+/// `"Gemini 4 Neon"`). Returns `None` for already-human labels or unrecognized ids.
+pub fn humanize_raw_model_slug(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed.contains(' ') || !trimmed.contains('-') {
+        return None;
+    }
+    if let Some((label, _)) = parse_claude_api_slug(trimmed) {
+        return Some(label);
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    let head = lower.split_once('[').map_or(lower.as_str(), |(h, _)| h);
+    let tokens: Vec<&str> = head.split('-').filter(|t| !t.is_empty()).collect();
+    if tokens.len() < 2 {
+        return None;
+    }
+    let has_version = tokens
+        .iter()
+        .any(|t| t.starts_with(|c: char| c.is_ascii_digit()));
+    if !has_version {
+        return None;
+    }
+    match tokens[0] {
+        "gpt" => {
+            let mut out = vec!["GPT".to_string()];
+            for token in &tokens[1..] {
+                out.push(format_slug_token(token));
+            }
+            Some(out.join(" "))
+        }
+        "gemini" => {
+            let mut end = tokens.len();
+            if end > 2 && normalize_effort_token(tokens[end - 1]).is_some() {
+                end -= 1;
+            }
+            let mut out = vec!["Gemini".to_string()];
+            for token in &tokens[1..end] {
+                out.push(format_slug_token(token));
+            }
+            Some(out.join(" "))
+        }
+        _ => None,
+    }
+}
+
+fn format_slug_token(token: &str) -> String {
+    match token {
+        "codex" => "Codex".to_string(),
+        "oss" => "OSS".to_string(),
+        "pro" => "Pro".to_string(),
+        "flash" => "Flash".to_string(),
+        "mini" => "Mini".to_string(),
+        other if other.starts_with(|c: char| c.is_ascii_digit()) => other.to_string(),
+        other => sentence_case(other),
+    }
+}
+
+fn normalized_model_tokens(text: &str) -> Vec<String> {
+    text.split([' ', '-', '_'])
+        .filter(|part| !part.is_empty())
+        .map(str::to_ascii_lowercase)
+        .collect()
+}
+
+/// Resolves `raw` (exact id, label, raw API slug like `claude-opus-5-5`, bracketed context like
+/// `Opus 5.5 (1M)`, parenthesized effort like `Opus 5.5 (High)`, or flattened effort slug like
+/// `gemini-4-neon-high`) against an arbitrary slice of model rows.
+pub fn resolve_model_in_list<'a, T>(
+    items: &'a [T],
+    raw: &str,
+    value_of: impl Fn(&T) -> &str,
+    label_of: impl Fn(&T) -> &str,
+    picker_label_of: impl Fn(&T) -> Option<&str>,
+    terminal_labels_of: impl Fn(&T) -> &[String],
+) -> Option<(&'a T, Option<String>)> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Some(found) = items.iter().find(|item| value_of(item) == trimmed) {
+        return Some((found, None));
+    }
+    // Strip trailing parenthesized effort ("Opus 5.5 (High)", "Gemini 4 Neon (Medium)") up front.
+    let (candidate, paren_effort) = split_parenthesized_effort(trimmed);
+    let find_exact_ci = |needle: &str| -> Option<&'a T> {
+        items.iter().find(|item| {
+            value_of(item).eq_ignore_ascii_case(needle)
+                || label_of(item).eq_ignore_ascii_case(needle)
+                || picker_label_of(item).is_some_and(|p| p.eq_ignore_ascii_case(needle))
+                || terminal_labels_of(item)
+                    .iter()
+                    .any(|t| t.eq_ignore_ascii_case(needle))
+        })
+    };
+    if let Some(found) = find_exact_ci(candidate) {
+        return Some((found, paren_effort));
+    }
+    // Strip trailing context marker ("Opus 5.5 (1M)" / "Opus 5.5 (1M context)").
+    for suffix in [" (1M context)", " (1m context)", " (1M)", " (1m)"] {
+        if let Some(base) = candidate.strip_suffix(suffix) {
+            if let Some(found) = items
+                .iter()
+                .find(|item| {
+                    value_of(item).ends_with("[1m]") && label_of(item).eq_ignore_ascii_case(base)
+                })
+                .or_else(|| find_exact_ci(base))
+            {
+                return Some((found, paren_effort));
+            }
+        }
+    }
+    // Strip trailing flattened effort suffix ("gemini-4-neon-high").
+    if let Some((base, suffix)) = candidate.rsplit_once('-') {
+        if let Some(effort) = normalize_effort_token(suffix) {
+            if let Some(found) = find_exact_ci(base) {
+                return Some((found, paren_effort.or_else(|| Some(effort.to_string()))));
+            }
+        }
+    }
+    // Claude API slug ("claude-opus-5-5", "claude-opus-5-5[1m]", "claude-sonnet-5-5-2026...").
+    if let Some((friendly_label, variant)) = parse_claude_api_slug(candidate) {
+        let prefer_long = variant.as_deref() == Some("1m");
+        if prefer_long {
+            if let Some(found) = items.iter().find(|item| {
+                value_of(item).ends_with("[1m]")
+                    && label_of(item).eq_ignore_ascii_case(&friendly_label)
+            }) {
+                return Some((found, paren_effort));
+            }
+        }
+        if let Some(found) = items
+            .iter()
+            .find(|item| label_of(item).eq_ignore_ascii_case(&friendly_label))
+        {
+            return Some((found, paren_effort));
+        }
+    }
+    // Bare alias whose catalog row only exists with `[1m]` (e.g. `opus` -> `opus[1m]`).
+    if !candidate.to_ascii_lowercase().ends_with("[1m]") {
+        let long = format!("{candidate}[1m]");
+        if let Some(found) = items
+            .iter()
+            .find(|item| value_of(item).eq_ignore_ascii_case(&long))
+        {
+            return Some((found, paren_effort));
+        }
+    }
+    // Normalized token match ("gpt-6.2-sol" -> "GPT 6.2 Sol", "gemini-4-neon" -> "Gemini 4 Neon").
+    let needle_tokens = normalized_model_tokens(candidate);
+    if needle_tokens.len() >= 2 {
+        if let Some(found) = items.iter().find(|item| {
+            normalized_model_tokens(label_of(item)) == needle_tokens
+                || normalized_model_tokens(value_of(item)) == needle_tokens
+        }) {
+            return Some((found, paren_effort));
+        }
+    }
+    None
 }

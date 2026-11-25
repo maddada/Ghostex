@@ -32,6 +32,12 @@ pub(super) async fn route_sessions_http(
             |repository, db, params, _| {
                 // Only gxserver makes a box session (a box create, or reopening one from history).
                 let mut params = crate::agentbox::without_client_agentbox_record(params);
+                // Guard client-supplied `acpApprovalLevel` / `acceptAllMode` / raw launch plans.
+                params = crate::acp::approval::guard_create_session_params(
+                    &params,
+                    caller.is_user_device(),
+                    true,
+                )?;
                 // A session whose folder is missing never starts (the provider refuses it, and it does
                 // not expand `~`), so a new session's own `cwd` is stored as the folder it checked on
                 // this computer; a restore keeps its source's.
@@ -74,7 +80,11 @@ pub(super) async fn route_sessions_http(
             &body_json,
             |repository, db, params, _| {
                 // `--path <folder>` is added as a project first (gbots/project.rs).
-                let mut placed = params.clone();
+                let mut placed = crate::acp::approval::guard_create_session_params(
+                    params,
+                    caller.is_user_device(),
+                    false,
+                )?;
                 crate::gbots::add_create_project_path(&state, db, repository, &mut placed)?;
                 // Who the first request is from: the user's message `agents send --as-user`
                 // starts it with, labelled, or an agent's, signed (session_chat_send/sender_mark.rs).
@@ -401,8 +411,27 @@ pub(super) async fn route_sessions_http(
             &body_json,
             |repository, db, params, _| {
                 // gxserver's own GBot marks stay as they are (gbots/markers.rs).
-                let params = &crate::gbots::keep_gbot_marks(db, repository, params);
-                let session = repository.update_session(params)?;
+                let params = crate::gbots::keep_gbot_marks(db, repository, params);
+                // Single source of truth for ACP approval levels: `/api/updateSession` preserves
+                // stored `acpApprovalLevel` for all callers and refuses non-owner raises.
+                let current_session = match (
+                    params.get("projectId").and_then(Value::as_str),
+                    params.get("sessionId").and_then(Value::as_str),
+                ) {
+                    (Some(pid), Some(sid)) => repository.get_session(pid, sid).ok().flatten(),
+                    _ => None,
+                };
+                let global_accept_all_enabled =
+                    crate::acp::approval::global_accept_all_enabled_in_shared_settings(
+                        &state.paths,
+                    );
+                let params = crate::acp::approval::guard_update_session_params(
+                    current_session.as_ref(),
+                    &params,
+                    caller.is_user_device(),
+                    global_accept_all_enabled,
+                )?;
+                let session = repository.update_session(&params)?;
                 let project_id = value_text(&session, "projectId")?;
                 let session_id = value_text(&session, "sessionId")?;
                 schedule_presentation_session_delta(
@@ -603,11 +632,35 @@ pub(super) async fn route_sessions_http(
                 board_card_resolves_thread(&body_json).unwrap_or_default();
             coordinator_resolve::handle_resolve_coordinator_thread_http(
                 &state,
+                &caller,
                 "/api/resolveCoordinatorThread".to_string(),
                 request_id,
                 &json!({ "params": { "projectId": project_id, "sessionId": session_id, "resolved": true } }),
             )
             .await
+        }
+        // Owner-initiated one-click command runs on Needs you cards and coordinator asks.
+        "/api/coordinatorBoard"
+            if matches!(
+                body_json
+                    .get("params")
+                    .and_then(|params| params.get("op"))
+                    .and_then(Value::as_str),
+                Some("runCommand" | "stopCommand")
+            ) =>
+        {
+            let caller = caller.clone();
+            handle_domain_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+                |repository, db, params, _| {
+                    crate::session_needs_you::handle_board_command_op(
+                        &state, &caller, db, repository, params,
+                    )
+                },
+            )
         }
         // `ghostex message show` and `list`: the user's numbered messages (chat_message_numbers.rs).
         crate::chat_message_numbers::CHAT_MESSAGES_ENDPOINT => {
@@ -671,7 +724,6 @@ pub(super) async fn route_sessions_http(
                             chief_project == project_id && chief_session == session_id
                         },
                     );
-                    let chief_on = crate::chief::chief_on(&state.paths);
                     crate::agents::standing_role::handle_standing_role_endpoint(
                         &caller,
                         db,
@@ -680,7 +732,6 @@ pub(super) async fn route_sessions_http(
                         params,
                         is_api_chat,
                         is_chief,
-                        chief_on,
                     )
                 },
             )
@@ -746,7 +797,26 @@ pub(super) async fn route_sessions_http(
                     }
                 }
             }
-            handle_domain_http(
+            let resolved_target = (path == "/api/setCoordinatorThreadResolved")
+                .then(|| body_json.get("params").and_then(Value::as_object))
+                .flatten()
+                .filter(|params| params.get("resolved").and_then(Value::as_bool) == Some(true))
+                .and_then(|params| {
+                    let project_id = params
+                        .get("projectId")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|v| !v.is_empty())?
+                        .to_string();
+                    let session_id = params
+                        .get("sessionId")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|v| !v.is_empty())?
+                        .to_string();
+                    Some((project_id, session_id))
+                });
+            let response = handle_domain_http(
                 &state,
                 endpoint.path,
                 request_id,
@@ -756,7 +826,17 @@ pub(super) async fn route_sessions_http(
                         &state, &path, db, repository, params,
                     )
                 },
-            )
+            );
+            if response.response.status().is_success() {
+                if let Some((project_id, session_id)) = resolved_target {
+                    crate::session_chat_send_failure::clear_send_failure(
+                        &state,
+                        &project_id,
+                        &session_id,
+                    );
+                }
+            }
+            response
         }
         path if crate::coordinators::REMOTE_THREAD_ENDPOINTS.contains(&path) => {
             let path = endpoint.path.clone();
@@ -800,6 +880,17 @@ pub(super) async fn route_sessions_http(
         "/api/resolveCoordinatorThread" => {
             coordinator_resolve::handle_resolve_coordinator_thread_http(
                 &state,
+                &caller,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
+        }
+        "/api/sendCoordinatorThreadNote" => {
+            coordinator_runtime::handle_send_coordinator_thread_note_http(
+                &state,
+                &caller,
                 endpoint.path,
                 request_id,
                 &body_json,
@@ -894,6 +985,7 @@ pub(super) async fn route_sessions_http(
         "/api/openConversation" => {
             open_conversation_http::handle_open_conversation_http(
                 &state,
+                &caller,
                 endpoint.path,
                 request_id,
                 body_json,
@@ -903,6 +995,7 @@ pub(super) async fn route_sessions_http(
         "/api/restorePreviousSession" => {
             previous_session_restore_http::handle_restore_previous_session_http(
                 &state,
+                &caller,
                 endpoint.path,
                 request_id,
                 body_json,

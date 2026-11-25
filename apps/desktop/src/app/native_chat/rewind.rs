@@ -212,6 +212,8 @@ impl Render for RewindWindow {
         let destructive = gpui::rgb(if p.light { 0xe7000b } else { 0xff6467 });
         let preview = text(state, "preview");
         let error = text(state, "error");
+        // Empty for the chats whose sheet has no description (gx-chat-core `rewind_projection`).
+        let description = text(state, "description");
         let card = div()
             .flex()
             .flex_col()
@@ -270,13 +272,15 @@ impl Render for RewindWindow {
                                 .child(preview),
                         )
                     })
-                    .child(
-                        div()
-                            .text_size(px(12.0))
-                            .line_height(px(18.0))
-                            .text_color(p.muted)
-                            .child(text(state, "description")),
-                    )
+                    .when(!description.is_empty(), |column| {
+                        column.child(
+                            div()
+                                .text_size(px(12.0))
+                                .line_height(px(18.0))
+                                .text_color(p.muted)
+                                .child(description),
+                        )
+                    })
                     .when(!error.is_empty(), |column| {
                         column.child(
                             div()

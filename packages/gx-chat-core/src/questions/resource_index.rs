@@ -335,6 +335,8 @@ pub fn add_linked_pages(askers: &mut Vec<Asker>, view: &IndexView) {
             at: entry.at_ms,
             prints: Vec::new(),
             rounds: Vec::new(),
+            outside_answerers: Vec::new(),
+            outside_answered_at: None,
         });
     }
 }
@@ -419,6 +421,7 @@ pub fn scan_message(message: &ChatMessage) -> Vec<ResourceEntry> {
                     tags: page.questions.clone().unwrap_or_default(),
                     url: Some(page.url.clone()),
                     source: page.source.clone(),
+                    awaits_seen: page.questions.is_none() && page.awaits_seen,
                     ..ResourceEntry::default()
                 }
             } else {

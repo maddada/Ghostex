@@ -224,6 +224,11 @@ impl SidebarUiStore {
                 );
                 changed(SidebarPersistSet::collapse())
             }
+            SidebarUiIntent::ToggleMachineFold { key } => {
+                toggle(&mut self.state.collapse.expanded_machine_folds, key);
+                // Never stored: per-computer folds start folded on every launch.
+                outcome(true, SidebarPersistSet::default())
+            }
             SidebarUiIntent::ToggleProjectMachineHidden {
                 group_id,
                 machine_id,

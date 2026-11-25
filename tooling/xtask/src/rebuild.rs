@@ -226,7 +226,12 @@ pub fn run(args: &[String]) -> Res<i32> {
         return Ok(0);
     }
 
-    // 3. Build, install and relaunch.
+    // 3. Build, install, relaunch, and verify health.
+    // Hold the shared start lock across both `cargo xtask start` and the post-start health check so
+    // a concurrent `start`, `start-server`, or `rebuild` from any checkout cannot overwrite the
+    // installed app or restart gxserver while this rebuild or its health check runs.
+    let _lock = crate::util::acquire_start_lock("rebuild")?;
+    start.env(crate::util::START_LOCK_HELD_ENV, "1");
     let gxserver_before = read_gxserver();
     let app_before = app_pid();
     let head_before = git_head();

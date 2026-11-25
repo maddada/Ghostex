@@ -43,6 +43,7 @@ pub fn recent_session_user_prompts(
         "claude" => claude_user_prompts(&lines),
         "codex" => codex_user_prompts(&lines),
         "cursor" => cursor_user_prompts(&lines),
+        "pi" => pi_user_prompts(&lines),
         _ => Vec::new(),
     }
 }
@@ -50,7 +51,7 @@ pub fn recent_session_user_prompts(
 pub fn agent_supports_session_history_title_source(agent: Option<&str>) -> bool {
     matches!(
         agent,
-        Some("antigravity" | "claude" | "codex" | "cursor" | "empryo")
+        Some("antigravity" | "claude" | "codex" | "cursor" | "empryo" | "pi")
     )
 }
 
@@ -91,6 +92,7 @@ pub(crate) fn resolve_session_transcript_path(
         "claude" => find_claude_transcript(session_id),
         "codex" => find_codex_transcript(session_id),
         "cursor" => find_cursor_transcript(session_id),
+        "pi" => crate::session_chat_paths::find_pi_family_chat_transcript(session_id),
         // The hook-reported `agentSessionPath` names a project's log; only a session started
         // from `$HOME` lives under `~/.empryo/sessions/`.
         "empryo" => crate::session_chat_empryo_mirror::is_safe_empryo_session_id(session_id)
@@ -278,6 +280,21 @@ fn cursor_user_prompts(lines: &[String]) -> Vec<String> {
             continue;
         };
         if item.get("role").and_then(Value::as_str) != Some("user") {
+            continue;
+        }
+        push_visible_user_prompt(&mut prompts, item.get("message"));
+    }
+    prompts
+}
+
+/// Pi and OMP JSONL transcripts record each turn as `{"type":"message","message":{"role":"user",…}}`.
+fn pi_user_prompts(lines: &[String]) -> Vec<String> {
+    let mut prompts: Vec<String> = Vec::new();
+    for line in lines {
+        let Some(item) = parse_json_line(line) else {
+            continue;
+        };
+        if item.get("type").and_then(Value::as_str) != Some("message") {
             continue;
         }
         push_visible_user_prompt(&mut prompts, item.get("message"));

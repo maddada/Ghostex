@@ -711,14 +711,37 @@ pub(crate) fn switch_draft_agent(
             &lifecycle.project_id,
             &lifecycle.session_id,
         );
+        let (typed_command, mut cleanup_paths) =
+            if crate::acp::session_is_acp(&updated) || command.trim().contains(" acp-host ") {
+                let paths = crate::paths::get_gxserver_paths(None);
+                let auth_token = std::fs::read_to_string(&context.auth_token_file)
+                    .ok()
+                    .map(|s| s.trim().to_string())
+                    .unwrap_or_default();
+                let (prepared, guard_files) =
+                    crate::accounts::restart::prepare_non_cli_in_place_launch_command(
+                        &paths,
+                        &auth_token,
+                        &lifecycle.project_id,
+                        &lifecycle.session_id,
+                        command,
+                    )?;
+                (format!(" {prepared}"), guard_files)
+            } else {
+                (
+                    command,
+                    crate::accounts::restart::TempFilesGuard(Vec::new()),
+                )
+            };
         let completion = crate::session_chat_send::enqueue_session_write_sequence_with_completion(
             &updated,
             &lifecycle.project_id,
             &lifecycle.session_id,
             DRAFT_AGENT_SWITCH_SEND_SOURCE,
-            build_draft_agent_switch_steps(&command),
+            build_draft_agent_switch_steps(&typed_command),
             None,
         )?;
+        cleanup_paths.disarm();
         switch_guard.finish_after(completion);
         return Ok(AgentEndpointOutput {
             presentation_session: Some((
@@ -746,6 +769,300 @@ pub(crate) fn switch_draft_agent(
             "agentId": agent_id,
             "provider": provider.result,
             "session": session,
+        }),
+    })
+}
+
+/// Moves an unprompted draft session to another project in place, keeping the same `sessionId`,
+/// typed composer draft, agent, model, and effort instead of creating a new draft and closing the
+/// old one.
+pub(crate) fn move_draft_session(
+    repository: &DomainRepository<'_>,
+    db: &Connection,
+    params: &Map<String, Value>,
+    context: &ZmxServerContext,
+) -> Result<AgentEndpointOutput, AgentEndpointError> {
+    let lifecycle = read_lifecycle(params)?;
+    let target_project_id = read_required_text(params.get("targetProjectId"), "targetProjectId")?;
+    let _source_project = require_project(repository, &lifecycle.project_id)?;
+    let target_project = require_project(repository, &target_project_id)?;
+    let session = require_session(repository, &lifecycle)?;
+    if lifecycle.project_id == target_project_id {
+        return Ok(AgentEndpointOutput {
+            presentation_session: None,
+            result: json!({
+                "moved": false,
+                "fromProjectId": lifecycle.project_id,
+                "projectId": target_project_id,
+                "sessionId": lifecycle.session_id,
+                "session": session,
+            }),
+        });
+    }
+    crate::agentbox::refuse_for_agentbox_session(&session, "Moving a draft")?;
+    if !session_is_draft(&session) || !session_has_no_conversation(db, &session) {
+        return Err(DomainStateError {
+            code: "invalidState",
+            message: "This session has already been prompted, so it can no longer move to another project."
+                .to_string(),
+        }
+        .into());
+    }
+    let target_cwd = target_project
+        .get("path")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .map(str::to_string);
+    crate::project_folder_move::refuse_if_moving(&target_project_id, target_cwd.as_deref())?;
+    if repository
+        .get_session(&target_project_id, &lifecycle.session_id)?
+        .is_some()
+    {
+        return Err(DomainStateError {
+            code: "conflict",
+            message: "Target project already holds a session with this id.".to_string(),
+        }
+        .into());
+    }
+    let agent_id = read_text_value(&session, "agentId").ok_or_else(|| {
+        DomainStateError::bad_request("Only agent drafts can move to another project.")
+    })?;
+    let settings = read_agent_settings(db)?;
+    let probe = dispatch_zmx_lifecycle_endpoint(
+        repository,
+        "/api/probeSessionProvider",
+        params,
+        context,
+        &settings,
+    )?;
+    let provider_exists = probe
+        .result
+        .get("providerState")
+        .and_then(|state| state.get("lifecycleState"))
+        .and_then(Value::as_str)
+        == Some("exists");
+    if provider_exists {
+        let mut stop_params = Map::new();
+        stop_params.insert("projectId".to_string(), json!(lifecycle.project_id.clone()));
+        stop_params.insert("sessionId".to_string(), json!(lifecycle.session_id.clone()));
+        let _ = dispatch_zmx_lifecycle_endpoint(
+            repository,
+            "/api/stopSessionProvider",
+            &stop_params,
+            context,
+            &settings,
+        );
+    }
+    let session = require_session(repository, &lifecycle)?;
+    let mut runtime_settings = object_field(&session, "runtimeSettings");
+    let preserved_account_id = read_text_from_map(&runtime_settings, "accountId");
+    let preserved_first_input = params
+        .get("text")
+        .and_then(Value::as_str)
+        .filter(|text| !text.trim().is_empty())
+        .map(str::to_string)
+        .or_else(|| read_text_from_map(&runtime_settings, FIRST_USER_INPUT_DRAFT_KEY));
+    for key in [
+        "agentActivity",
+        "agentSessionId",
+        "agentSessionPath",
+        "agentCommand",
+        "launchAgentId",
+        "agentName",
+        crate::session_chat_model_selection_alert::MODEL_SELECTION_FAILURE_KEY,
+        crate::accounts::hub::launch::RUNTIME_KEY,
+    ] {
+        runtime_settings.remove(key);
+    }
+    let mut launch_settings = object_field(&session, "launchSettings");
+    for key in [
+        "acceptAllMode",
+        "agentCommand",
+        "agentLaunchPlan",
+        "agentResumePlan",
+        "icon",
+        "runtimeRelevant",
+    ] {
+        launch_settings.remove(key);
+    }
+    let stored_selection: Option<(String, String)> = db
+        .query_row(
+            "SELECT model, effort FROM session_chat_model_selections WHERE projectId = ?1 AND sessionId = ?2",
+            rusqlite::params![&lifecycle.project_id, &lifecycle.session_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .ok();
+    let requested_model = params
+        .get("agentModel")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            stored_selection
+                .as_ref()
+                .map(|(model, _)| model.trim().to_string())
+                .filter(|model| !model.is_empty())
+        });
+    let requested_effort = params
+        .get("agentEffort")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            stored_selection
+                .as_ref()
+                .map(|(_, effort)| effort.trim().to_string())
+                .filter(|effort| !effort.is_empty())
+        });
+
+    let mut create_params = Map::new();
+    create_params.insert("projectId".to_string(), json!(target_project_id.clone()));
+    create_params.insert("agentId".to_string(), json!(agent_id.clone()));
+    create_params.insert("requireLaunchCommand".to_string(), json!(true));
+    create_params.insert("draft".to_string(), json!(true));
+    if let Some(account_id) = preserved_account_id {
+        create_params.insert("accountId".to_string(), json!(account_id));
+    }
+    if let Some(model) = requested_model {
+        create_params.insert("agentModel".to_string(), json!(model));
+    }
+    if let Some(effort) = requested_effort {
+        create_params.insert("agentEffort".to_string(), json!(effort));
+    }
+    create_params.insert("launchSettings".to_string(), Value::Object(launch_settings));
+    create_params.insert(
+        "runtimeSettings".to_string(),
+        Value::Object(runtime_settings),
+    );
+    let resolved = create_agent_session_params_for_project(db, &target_project, &create_params)?;
+    let mut next_runtime_settings = resolved
+        .get("runtimeSettings")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    next_runtime_settings.insert(
+        "agentActivity".to_string(),
+        default_activity(Some(&agent_id), None),
+    );
+    if let Some(draft_text) = preserved_first_input.as_deref() {
+        next_runtime_settings.insert(FIRST_USER_INPUT_DRAFT_KEY.to_string(), json!(draft_text));
+    }
+    let next_launch_settings = resolved
+        .get("launchSettings")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    let server_id = session
+        .get("serverId")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| "local".to_string());
+    let next_zmx_name =
+        crate::ids::create_zmx_session_name(&server_id, &target_project_id, &lifecycle.session_id);
+    let now = crate::domain::now_iso();
+    let launch_json = serde_json::to_string(&next_launch_settings)
+        .map_err(|error| DomainStateError::corrupt_state(format!("JSON encode error: {error}")))?;
+    let runtime_json = serde_json::to_string(&Value::Object(next_runtime_settings))
+        .map_err(|error| DomainStateError::corrupt_state(format!("JSON encode error: {error}")))?;
+    let provider_json = serde_json::to_string(&json!({ "lifecycleState": "missing" }))
+        .map_err(|error| DomainStateError::corrupt_state(format!("JSON encode error: {error}")))?;
+    let incoming_text = params.get("text").and_then(Value::as_str);
+
+    let transaction =
+        rusqlite::Transaction::new_unchecked(db, rusqlite::TransactionBehavior::Immediate)
+            .map_err(|error| DomainStateError::corrupt_state(format!("SQLite error: {error}")))?;
+    transaction
+        .execute(
+            r#"
+            UPDATE sessions SET
+              projectId = ?1,
+              zmxName = ?2,
+              cwd = ?3,
+              launchSettingsJson = ?4,
+              runtimeSettingsJson = ?5,
+              providerStateJson = ?6,
+              lifecycleState = 'running',
+              updatedAt = ?7
+            WHERE projectId = ?8 AND sessionId = ?9
+            "#,
+            rusqlite::params![
+                &target_project_id,
+                &next_zmx_name,
+                target_cwd.as_deref(),
+                &launch_json,
+                &runtime_json,
+                &provider_json,
+                &now,
+                &lifecycle.project_id,
+                &lifecycle.session_id,
+            ],
+        )
+        .map_err(|error| DomainStateError::corrupt_state(format!("SQLite move error: {error}")))?;
+    let _ = transaction.execute(
+        "INSERT OR IGNORE INTO id_allocations (id, kind, parentId, createdAt) VALUES (?1, 'session', ?2, ?3)",
+        rusqlite::params![&lifecycle.session_id, &target_project_id, &now],
+    );
+    for sql in [
+        "UPDATE OR REPLACE session_chat_drafts SET projectId = ?1 WHERE projectId = ?2 AND sessionId = ?3",
+        "UPDATE OR REPLACE session_chat_draft_versions SET projectId = ?1 WHERE projectId = ?2 AND sessionId = ?3",
+        "UPDATE OR REPLACE session_chat_draft_recovery SET projectId = ?1 WHERE projectId = ?2 AND sessionId = ?3",
+        "UPDATE session_chat_draft_handoffs SET projectId = ?1 WHERE projectId = ?2 AND sessionId = ?3",
+        "UPDATE OR REPLACE session_chat_model_selections SET projectId = ?1 WHERE projectId = ?2 AND sessionId = ?3",
+        "UPDATE OR REPLACE session_chat_resources SET projectId = ?1 WHERE projectId = ?2 AND sessionId = ?3",
+        "UPDATE OR REPLACE coordinators SET projectId = ?1 WHERE projectId = ?2 AND sessionId = ?3",
+    ] {
+        let _ = transaction.execute(
+            sql,
+            rusqlite::params![&target_project_id, &lifecycle.project_id, &lifecycle.session_id],
+        );
+    }
+    if let Some(text) = incoming_text.filter(|text| !text.trim().is_empty()) {
+        let _ = transaction.execute(
+            r#"
+            INSERT INTO session_chat_drafts (projectId, sessionId, content, originClientId, updatedAt)
+            VALUES (?1, ?2, ?3, 'draft-move', ?4)
+            ON CONFLICT(projectId, sessionId) DO UPDATE SET
+              content = excluded.content,
+              updatedAt = excluded.updatedAt
+            "#,
+            rusqlite::params![&target_project_id, &lifecycle.session_id, text, &now],
+        );
+    }
+    transaction.commit().map_err(|error| {
+        DomainStateError::corrupt_state(format!("SQLite commit error: {error}"))
+    })?;
+
+    if let Some(promote) = params.get("promoteCoordinator").and_then(Value::as_object) {
+        let mut promote_params = Map::new();
+        promote_params.insert("projectId".to_string(), json!(target_project_id.clone()));
+        promote_params.insert("sessionId".to_string(), json!(lifecycle.session_id.clone()));
+        promote_params.insert("goal".to_string(), json!(""));
+        promote_params.insert("forDraft".to_string(), json!(true));
+        if promote.get("skillOnlyStart").and_then(Value::as_bool) == Some(true) {
+            promote_params.insert("skillOnlyStart".to_string(), json!(true));
+        }
+        let _ =
+            crate::coordinators::promote_session_to_coordinator(db, &server_id, &promote_params);
+    }
+
+    let updated = repository
+        .get_session(&target_project_id, &lifecycle.session_id)?
+        .ok_or_else(|| {
+            DomainStateError::corrupt_state(format!(
+                "Moved draft {target_project_id}/{} disappeared after commit.",
+                lifecycle.session_id
+            ))
+        })?;
+    Ok(AgentEndpointOutput {
+        presentation_session: Some((target_project_id.clone(), lifecycle.session_id.clone())),
+        result: json!({
+            "moved": true,
+            "fromProjectId": lifecycle.project_id,
+            "projectId": target_project_id,
+            "sessionId": lifecycle.session_id,
+            "session": updated,
         }),
     })
 }

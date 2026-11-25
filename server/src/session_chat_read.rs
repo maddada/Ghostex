@@ -70,6 +70,11 @@ pub(crate) struct SessionChatReadResolution {
     /// (`crate::agents::enabled_agent_icons`), in the fingerprint so a long-polling phone learns
     /// when one is turned on or off, or installed.
     enabled_agent_icons: Vec<String>,
+    /// True when this session is a coordinator worker thread (`Q4772`: hides the Switch to Native chip).
+    is_coordinator_thread: bool,
+    /// True when this server supports Terminal -> Native switching for this session (false for
+    /// AgentBox, detected external sessions, and Claude Cloud / Teleport sessions).
+    native_mode_switch_capable: bool,
     pub(crate) fingerprint: String,
 }
 
@@ -170,6 +175,11 @@ pub(crate) fn resolve_session_chat_read_state(
         .is_some_and(|provider| {
             crate::accounts::launch::session_uses_own_login(provider, &session)
         });
+    let is_coordinator_thread = crate::coordinators::read_thread(&db, project_id, session_id)
+        .ok()
+        .flatten()
+        .is_some();
+    let native_mode_switch_capable = crate::acp::channel::session_is_switch_eligible(&session);
     drop(session);
     drop(repository);
     drop(db);
@@ -392,6 +402,8 @@ pub(crate) fn resolve_session_chat_read_state(
         switchable_agents,
         uses_own_login,
         enabled_agent_icons,
+        is_coordinator_thread,
+        native_mode_switch_capable,
         fingerprint,
     })
 }
@@ -591,6 +603,8 @@ pub(crate) async fn handle_read_session_chat_http(
         switchable_agents,
         uses_own_login,
         enabled_agent_icons,
+        is_coordinator_thread,
+        native_mode_switch_capable,
         fingerprint,
     } = resolution;
 
@@ -783,6 +797,64 @@ pub(crate) async fn handle_read_session_chat_http(
         crate::agents::claude_idle_compaction::ClaudeCompaction::from_settings(Some(&settings))
             .min_tokens;
     result.insert("compactChatsAbove".to_string(), json!(compact_above));
+    // Terminal -> Native switch capability and per-agent state (`Q4768`–`Q4772`): additive fields
+    // ignored by older clients (11.2.1+ phones), and absent on older remote servers so clients
+    // hide the offer quietly there.
+    result.insert(
+        "nativeModeSwitchCapable".to_string(),
+        json!(native_mode_switch_capable),
+    );
+    result.insert(
+        "isCoordinatorThread".to_string(),
+        json!(is_coordinator_thread),
+    );
+    if let Some(family) = terminal_agent
+        .as_deref()
+        .and_then(crate::acp::canonical_native_family)
+        .or_else(|| {
+            session_agent_id
+                .as_deref()
+                .and_then(crate::acp::canonical_native_family)
+        })
+        .or_else(|| {
+            agent
+                .as_deref()
+                .and_then(crate::acp::canonical_native_family)
+        })
+    {
+        let settings_map = settings.as_object();
+        result.insert(
+            "nativeDefaultForAgent".to_string(),
+            json!(settings_map.is_some_and(|map| crate::acp::agent_acp_enabled(map, family))),
+        );
+        result.insert(
+            "nativeSwitchDismissed".to_string(),
+            json!(settings_map.is_some_and(|map| {
+                crate::acp::dismissed_native_switch_families(map).contains(&family)
+            })),
+        );
+        let overrides = settings
+            .get("preferredAgentInterfaceOverrides")
+            .and_then(Value::as_object);
+        let interface_pref = session_agent_id
+            .as_deref()
+            .and_then(|id| overrides.and_then(|m| m.get(id)).and_then(Value::as_str))
+            .or_else(|| {
+                overrides
+                    .and_then(|m| m.get(family))
+                    .and_then(Value::as_str)
+            })
+            .or_else(|| {
+                settings
+                    .get("preferredAgentInterface")
+                    .and_then(Value::as_str)
+            })
+            .unwrap_or("chat");
+        result.insert(
+            "preferredChatFirst".to_string(),
+            json!(!interface_pref.eq_ignore_ascii_case("terminal")),
+        );
+    }
     if let Some(session_agent_id) = session_agent_id.as_deref() {
         result.insert("sessionAgentId".to_string(), json!(session_agent_id));
     }
@@ -1214,6 +1286,11 @@ pub(crate) async fn handle_read_session_chat_http(
                     &session_id,
                     &mut messages,
                     &mut lifecycle,
+                );
+                crate::session_chat_agent_restarts::settle_interrupted_lifecycle(
+                    &mut lifecycle,
+                    working,
+                    &queue.agent_restarted_at,
                 );
             }
             /*

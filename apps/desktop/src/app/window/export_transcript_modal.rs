@@ -387,7 +387,7 @@ fn family_display_name(family: &str) -> &str {
         "codex" => "Codex",
         "cursor" => "Cursor",
         "grok" => "Grok",
-        "antigravity" => "Antigravity CLI",
+        "antigravity" => "Antigravity",
         "opencode" => "OpenCode",
         other => other,
     }

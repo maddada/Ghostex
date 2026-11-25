@@ -491,14 +491,20 @@ impl GpuiAgentsHubModalWindow {
         if !hidden.is_empty() && (filter == SyncFilter::All || !needle.is_empty()) {
             list = list.child(
                 h_flex()
-                    .gap(px(4.0))
+                    .items_center()
+                    .gap(px(6.0))
                     .px(px(8.0))
                     .pt(px(10.0))
                     .pb(px(4.0))
                     .text_size(px(11.0))
                     .text_color(hsla(hp.muted))
                     .child("NOT INSTALLED")
-                    .child(format!("({})", hidden.len())),
+                    .child(crate::app::element::count_badge_sized(
+                        hidden.len().to_string(),
+                        hsla(hp.foreground),
+                        16.0,
+                        10.0,
+                    )),
             );
             if self.sync.show_hidden {
                 for (index, agent) in hidden.iter().enumerate() {

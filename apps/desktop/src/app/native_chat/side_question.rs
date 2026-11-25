@@ -220,7 +220,10 @@ impl NativeChatView {
                     .child(if expanded {
                         "Show less".to_string()
                     } else {
-                        format!("Show all · {more} more lines")
+                        format!(
+                            "Show all · {}",
+                            ghostex_gx_protocol::plural(more, "more line", "more lines")
+                        )
                     })
                     .on_click(cx.listener(move |this, _, _, cx| {
                         if expanded {

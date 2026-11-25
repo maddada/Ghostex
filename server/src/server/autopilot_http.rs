@@ -272,7 +272,12 @@ fn autopilot_widening(before: &AutopilotConfig, after: &AutopilotConfig) -> Opti
         .count();
     if added > 0 {
         changes.push(format!(
-            "Autopilot covers {added} more project(s) or session(s)"
+            "Autopilot covers {}",
+            ghostex_gx_protocol::plural(
+                added,
+                "more project or session",
+                "more projects or sessions"
+            )
         ));
     }
     let mut summary = changes.join(", ");
@@ -300,6 +305,7 @@ fn read_view(
     let project_rows: Vec<Value> = projects
         .iter()
         .filter(|project| autopilot::main_project_of(project).is_none())
+        .filter(|project| !autopilot::is_supervisor_project(project))
         .filter(|project| project["isRecentProject"].as_bool() != Some(true))
         .filter_map(|project| {
             let project_id = project["projectId"].as_str()?;

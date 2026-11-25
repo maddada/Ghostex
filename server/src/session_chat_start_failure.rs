@@ -39,7 +39,26 @@ pub(crate) fn detect_agent_start_failure(
     match failure {
         Some(notice) => {
             let since = *first_seen.entry(key).or_insert_with(Instant::now);
-            (since.elapsed() >= START_FAILURE_SETTLE).then_some(notice)
+            if since.elapsed() >= START_FAILURE_SETTLE {
+                let category = if notice
+                    .error_lines
+                    .as_deref()
+                    .and_then(crate::session_chat_notice::missing_start_command)
+                    .is_some()
+                {
+                    "cli_not_found"
+                } else {
+                    "session_launch_failed"
+                };
+                if let Ok(Some(session)) = repository.get_session(project_id, session_id) {
+                    crate::telemetry::reliability_error_for_session(category, &session);
+                } else {
+                    crate::telemetry::reliability_error(category, None);
+                }
+                Some(notice)
+            } else {
+                None
+            }
         }
         None => {
             first_seen.remove(&key);
@@ -400,13 +419,21 @@ fn with_missing_agent_command(notice: SessionChatTerminalNotice) -> SessionChatT
     let agent_name = crate::agents::default_agent_session_title_name(&definition.agent_id)
         .unwrap_or(definition.binary.as_str());
     let home = crate::resume_lookup::home_dir();
-    // A session planned before Ghostex ran mise-installed agents through mise: Try again now does.
-    if crate::agent_cli::launch_path::with_reachable_program(&command) != command {
+    // A session planned before Ghostex resolved an off-PATH agent (via mise or an official
+    // install folder): Try again starts it through that path now.
+    let reachable = crate::agent_cli::launch_path::with_reachable_program(&command);
+    if reachable != command {
         let mut notice = notice;
         notice.title = format!("{agent_name} is ready to start again");
-        notice.detail = Some(format!(
-            "{agent_name} was installed with mise, which this terminal hadn't set up. Try again starts it through mise."
-        ));
+        notice.detail = Some(if reachable.contains("mise") {
+            format!(
+                "{agent_name} was installed with mise, which this terminal hadn't set up. Try again starts it through mise."
+            )
+        } else {
+            format!(
+                "{agent_name} is installed outside this terminal's PATH. Try again starts it directly."
+            )
+        });
         return notice;
     }
     let installed_at = crate::agent_cli::process::resolve_agent(
@@ -423,8 +450,7 @@ fn with_missing_agent_command(notice: SessionChatTerminalNotice) -> SessionChatT
 }
 
 /// What a start failure's card says when the chat's file is on disk with nothing in it (`transcript_has_records`): Try again resumes the same empty file.
-pub(crate) const LOST_CHAT_DETAIL: &str =
-    "Its saved chat is empty, so it can't reopen. This happens when the computer shuts down before saving; start a new chat.";
+pub(crate) const LOST_CHAT_DETAIL: &str = "Its saved chat is empty, so it can't reopen. This happens when the computer shuts down before saving; start a new chat.";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Transcript {

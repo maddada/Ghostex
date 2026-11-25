@@ -133,10 +133,10 @@ fn menu_action(command: &str, value: Value) -> Box<dyn gpui::Action> {
     super::actions::action(json!({ "type": "annotate", "command": command, "value": value }))
 }
 
-/// The configured Annotate chord as the page's own key listener reads it, or `None` when unbound.
-fn page_hotkey() -> Option<Value> {
+/// A configured hotkey chord as the page's own key listener reads it, or `None` when unbound.
+fn page_hotkey_for(action_id: &str) -> Option<Value> {
     let snapshot = crate::shared_settings::shared_sidebar_settings_snapshot();
-    let chord = crate::app::hotkeys::gpui_normal_hotkey_key_in(&snapshot, ANNOTATE_HOTKEY_ID)?;
+    let chord = crate::app::hotkeys::gpui_normal_hotkey_key_in(&snapshot, action_id)?;
     // GPUI's spelling: modifiers then the key, joined by `-` ("alt-shift-a", "cmd-ctrl-a").
     let keystroke = crate::gpui_keystroke_from_shared_hotkey(&chord)?;
     let mut parts: Vec<&str> = keystroke.split('-').collect();
@@ -151,10 +151,12 @@ fn page_hotkey() -> Option<Value> {
         has(&["shift"]),
         has(&["cmd", "super", "win", "platform"]),
     );
-    // Letters and digits by their physical key: Option and Shift change the character typed.
+    // Letters, digits and brackets by their physical key: Option and Shift change the character typed.
     let code = match key.as_bytes() {
         [letter @ b'a'..=b'z'] => format!("Key{}", (*letter as char).to_ascii_uppercase()),
         [digit @ b'0'..=b'9'] => format!("Digit{}", *digit as char),
+        b"[" => "BracketLeft".to_string(),
+        b"]" => "BracketRight".to_string(),
         _ => String::new(),
     };
     Some(json!({
@@ -165,6 +167,11 @@ fn page_hotkey() -> Option<Value> {
         "shift": shift,
         "meta": platform,
     }))
+}
+
+/// The configured Annotate chord as the page's own key listener reads it, or `None` when unbound.
+fn page_hotkey() -> Option<Value> {
+    page_hotkey_for(ANNOTATE_HOTKEY_ID)
 }
 
 impl GhostexGpuiApp {
@@ -297,12 +304,22 @@ impl GhostexGpuiApp {
                     .load(std::sync::atomic::Ordering::Relaxed);
                 let notes = self.native_docs.annotate.notes(&project_id, &path);
                 let settings = self.native_docs.annotate.settings();
+                let scroll = self
+                    .native_docs
+                    .document_mut(&path)
+                    .and_then(|document| document.pending_scroll.take())
+                    .map(|scroll| json!({ "x": scroll.x, "y": scroll.y }));
                 answer(json!({ "annotate": {
                     "on": on,
                     "theme": if light { "light" } else { "dark" },
                     "settings": settings,
                     "notes": notes,
                     "hotkey": page_hotkey(),
+                    "scroll": scroll,
+                    "navHotkeys": {
+                        "back": page_hotkey_for("navigateFilesBack"),
+                        "forward": page_hotkey_for("navigateFilesForward"),
+                    },
                 } }))
             }
             "annotateState" => {

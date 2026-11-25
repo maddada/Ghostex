@@ -5,12 +5,13 @@ use super::lists::agent_icon;
 use super::model::{AutomationExecutionMode, AutomationRun, AutomationState};
 use super::style::{
     AutomatePalette, CARD_RADIUS, ICON_ARCHIVE, ICON_BELL, ICON_COPY, ICON_EXTERNAL,
-    ICON_FOLDER_OPEN, ICON_PENCIL, ICON_PLAY, ICON_TRASH, detail_row, empty_state, group_card,
-    heading, icon_button, section_label, truncated,
+    ICON_FOLDER_OPEN, ICON_PENCIL, ICON_PLAY, ICON_TRASH, ROW_RADIUS, detail_row, empty_state,
+    group_card, heading, icon_button, section_label, status_dot, truncated,
 };
 use super::view::NativeAutomateView;
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _,
+    AnyElement, ClickEvent, Context, InteractiveElement as _, IntoElement, ParentElement as _,
     StatefulInteractiveElement as _, Styled as _, div, px,
 };
 use gpui_component::{h_flex, v_flex};
@@ -229,29 +230,102 @@ impl NativeAutomateView {
             }
             _ => {}
         }
+        let unread_count = state
+            .visible_runs()
+            .filter(|run| run.automation_id == automation.id && run.is_unread)
+            .count();
+        let hover = p.hover;
+        let unread_pill_bg = p.accent.opacity(0.14);
         let recent: Vec<AnyElement> = state
-            .runs
-            .iter()
+            .visible_runs()
             .filter(|run| run.automation_id == automation.id)
             .take(5)
-            .map(|run| {
+            .enumerate()
+            .map(|(index, run)| {
+                let run_id = run.id.clone();
+                let run_busy = busy || self.busy_id.as_deref() == Some(run.id.as_str());
+                let mut row_actions = Vec::new();
+                if run.session_id().is_some() {
+                    let target = run.clone();
+                    row_actions.push(icon_button(
+                        p,
+                        ("automate-recent-run-open-session", index),
+                        ICON_EXTERNAL,
+                        "Open automation session",
+                        run_busy,
+                        move |this: &mut Self, _window, cx| this.open_run_session(&target, cx),
+                        cx,
+                    ));
+                }
+                if run.is_unread {
+                    let target = run.clone();
+                    row_actions.push(icon_button(
+                        p,
+                        ("automate-recent-run-mark-read", index),
+                        ICON_BELL,
+                        "Mark run read",
+                        run_busy,
+                        move |this: &mut Self, _window, cx| this.mark_run_read(&target, cx),
+                        cx,
+                    ));
+                }
                 h_flex()
+                    .id(("automate-recent-run", index))
                     .w_full()
                     .min_h(px(44.0))
                     .px(px(16.0))
                     .py(px(10.0))
                     .items_center()
                     .justify_between()
-                    .gap(px(16.0))
+                    .gap(px(12.0))
                     .text_size(px(14.0))
+                    .cursor_pointer()
+                    .hover(move |this| this.bg(hover))
+                    .on_click(cx.listener(move |this, _: &ClickEvent, _window, cx| {
+                        this.open_run_in_runs_tab(&run_id, cx);
+                    }))
                     .child(
-                        div()
-                            .text_color(p.run_status_color(&run.status))
-                            .child(run_status_label(&run.status)),
+                        h_flex()
+                            .min_w_0()
+                            .gap(px(8.0))
+                            .items_center()
+                            .child(status_dot(if run.is_unread {
+                                p.accent
+                            } else {
+                                gpui::transparent_black()
+                            }))
+                            .child(
+                                div()
+                                    .flex_shrink_0()
+                                    .text_color(p.run_status_color(&run.status))
+                                    .child(run_status_label(&run.status)),
+                            )
+                            .when(run.is_unread, |this| {
+                                this.child(
+                                    div()
+                                        .flex_shrink_0()
+                                        .px(px(6.0))
+                                        .py(px(1.0))
+                                        .rounded(px(ROW_RADIUS))
+                                        .bg(unread_pill_bg)
+                                        .text_size(px(11.0))
+                                        .text_color(p.accent)
+                                        .child("Unread"),
+                                )
+                            }),
                     )
-                    .child(div().text_color(p.muted).child(format_short_date(Some(
-                        run.completed_at.as_deref().unwrap_or(&run.created_at),
-                    ))))
+                    .child(
+                        h_flex()
+                            .flex_shrink_0()
+                            .items_center()
+                            .gap(px(8.0))
+                            .child(div().text_color(p.muted).child(format_short_date(Some(
+                                run.completed_at.as_deref().unwrap_or(&run.created_at),
+                            ))))
+                            .when(!row_actions.is_empty(), |this| {
+                                this.child(h_flex().gap(px(2.0)).children(row_actions))
+                            }),
+                    )
                     .into_any_element()
             })
             .collect();
@@ -268,13 +342,49 @@ impl NativeAutomateView {
         } else {
             recent
         };
+        let mark_all_id = automation.id.clone();
+        let mark_all_hover = p.hover;
+        let recent_header = h_flex()
+            .w_full()
+            .items_center()
+            .justify_between()
+            .gap(px(8.0))
+            .child(section_label(p, "Recent runs"))
+            .when(unread_count > 0, |this| {
+                this.child(
+                    div()
+                        .id("automate-detail-mark-all-read")
+                        .role(gpui::Role::Button)
+                        .aria_label("Mark all runs read")
+                        .px(px(8.0))
+                        .py(px(2.0))
+                        .rounded(px(ROW_RADIUS))
+                        .text_size(px(12.0))
+                        .text_color(p.accent)
+                        .when(busy, |this| this.opacity(0.4))
+                        .when(!busy, |this| {
+                            this.cursor_pointer()
+                                .hover(move |this| this.bg(mark_all_hover))
+                                .on_click(cx.listener(move |this, _: &ClickEvent, _window, cx| {
+                                    this.mark_all_runs_read(&mark_all_id, cx);
+                                }))
+                        })
+                        .child("Mark all read"),
+                )
+            });
+        let recent_section = v_flex()
+            .w_full()
+            .gap(px(10.0))
+            .child(recent_header)
+            .child(group_card(p, recent))
+            .into_any_element();
         self.detail_frame(
             "automate-automation-detail",
             vec![
                 header,
                 body_card(p, automation.prompt.clone()),
                 section(p, "Details", group_card(p, rows).into_any_element()),
-                section(p, "Recent runs", group_card(p, recent).into_any_element()),
+                recent_section,
             ],
         )
     }

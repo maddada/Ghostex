@@ -151,6 +151,7 @@ fn project_group(machine: &MachineId, project: &Value, sessions: &[&Value]) -> G
                     is_visible: false,
                     is_multi_selected: false,
                     nesting: Default::default(),
+                    machine_fold: None,
                 })
                 .collect(),
             remote_machine: None,
@@ -293,6 +294,7 @@ fn borrow_remote_threads(
             is_visible: false,
             is_multi_selected: false,
             nesting: Default::default(),
+            machine_fold: None,
         });
     }
 }

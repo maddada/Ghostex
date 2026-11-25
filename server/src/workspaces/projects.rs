@@ -401,16 +401,66 @@ pub(crate) fn resolve_project_reference(
     id_of(&project).ok_or_else(|| DomainStateError::bad_request("No project id."))
 }
 
-/// The Claude account the workspace of `project` picked for its agents, if any. None while
-/// Workspaces is off: launches use the account they would without workspaces.
-pub(crate) fn project_claude_account_id(
+/// Whether a session in `project` with `runtime_settings` must opt out of workspace instructions
+/// and workspace Claude account pools: GBot API chats (which serve external/untrusted callers)
+/// and Help / Ask Ghostex AI chats (the config-folder project).
+pub(crate) fn session_skips_workspace_context(
+    project: &Value,
+    runtime_settings: Option<&Map<String, Value>>,
+) -> bool {
+    is_config_folder_project(project) || crate::agents::is_gbot_api_chat(runtime_settings)
+}
+
+/// Resolves `project`'s workspace id and display name when Workspaces is enabled and the
+/// workspace lives on this computer (not tied to a different workspace PC).
+pub(crate) fn project_workspace_info(
     db: &rusqlite::Connection,
     project: &Value,
-) -> Result<Option<String>, DomainStateError> {
+) -> Result<Option<(String, String)>, DomainStateError> {
     if !super::workspaces_feature_enabled() {
         return Ok(None);
     }
     let workspaces = read_sidebar_workspaces(db)?;
+    let workspace_id = resolve_project_workspace_id_in(db, &workspaces, project);
+    if !workspace_is_local(&workspaces, &workspace_id) {
+        return Ok(None);
+    }
+    let name = workspace_name(&workspaces, &workspace_id);
+    Ok(Some((workspace_id, name)))
+}
+
+/// The Claude account(s) the workspace of `project` picked for its agents, if any. Empty while
+/// Workspaces is off or when the workspace is tied to another computer: launches then fall back
+/// to this computer's global Accounts setting.
+pub(crate) fn project_claude_account_ids(
+    db: &rusqlite::Connection,
+    project: &Value,
+) -> Result<Vec<String>, DomainStateError> {
+    if !super::workspaces_feature_enabled() {
+        return Ok(Vec::new());
+    }
+    let workspaces = read_sidebar_workspaces(db)?;
+    let workspace_id = resolve_project_workspace_id_in(db, &workspaces, project);
+    if !workspace_is_local(&workspaces, &workspace_id) {
+        return Ok(Vec::new());
+    }
+    Ok(workspace_claude_account_ids(&workspaces, &workspace_id))
+}
+
+/// The first Claude account the workspace of `project` picked for its agents, if any.
+#[allow(dead_code)]
+pub(crate) fn project_claude_account_id(
+    db: &rusqlite::Connection,
+    project: &Value,
+) -> Result<Option<String>, DomainStateError> {
+    Ok(project_claude_account_ids(db, project)?.into_iter().next())
+}
+
+fn resolve_project_workspace_id_in(
+    db: &rusqlite::Connection,
+    workspaces: &Value,
+    project: &Value,
+) -> String {
     let project_workspace = match project
         .get("worktree")
         .and_then(|worktree| worktree.get("parentProjectId"))
@@ -436,9 +486,8 @@ pub(crate) fn project_claude_account_id(
         }
         None => stored_project_workspace_id(project).map(str::to_string),
     };
-    let workspace_id = match project_workspace {
-        Some(id) if workspace_exists(&workspaces, &id) => id,
+    match project_workspace {
+        Some(id) if workspace_exists(workspaces, &id) => id,
         _ => DEFAULT_WORKSPACE_ID.to_string(),
-    };
-    Ok(workspace_claude_account_id(&workspaces, &workspace_id))
+    }
 }

@@ -199,7 +199,10 @@ fn plan_drawn_pinned_move(
                 .iter()
                 .find(|session| session.row.sidebar_session_id == *id)?
                 .row;
-            row.is_pinned.then(|| (id.clone(), row.sidebar_order))
+            // Chief is always pinned first by `sort_pinned`, never reordered by `sidebarOrder`,
+            // and renumbering Pinned must not persist `isPinned: true` onto Chief (otherwise
+            // retiring it to an earlier chat would leave that old dated chat stuck in Pinned).
+            (row.is_pinned && !row.is_chief).then(|| (id.clone(), row.sidebar_order))
         })
         .collect();
     if !rows.iter().any(|(id, _)| id == session_id) {
@@ -334,6 +337,7 @@ fn drawn_pinned_rows(
             .iter()
             .filter(|session| {
                 session.row.is_pinned
+                    && !session.row.is_chief
                     && !session.row.is_parked
                     && session.row.sidebar_session_id != session_id
             })

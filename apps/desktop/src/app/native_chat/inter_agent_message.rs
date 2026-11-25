@@ -731,7 +731,7 @@ impl NativeChatView {
         let glyph = match text(status, "icon").as_str() {
             "alert" => "titlebar/alert-triangle.svg",
             "clock" => "titlebar/clock.svg",
-            _ => "titlebar/check.svg",
+            _ => "titlebar/mail-check.svg",
         };
         let hint = SharedString::from(text(status, "hint"));
         SINGLE_LINE_CARD

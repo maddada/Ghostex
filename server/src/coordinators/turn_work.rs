@@ -28,6 +28,11 @@ use crate::session_chat::{SessionChatBlock, SessionChatMessage, SessionChatRole}
 use crate::session_chat_queue_runtime::SessionChatTranscriptGate;
 use crate::session_chat_tail::{read_session_chat_tail_page, SessionChatTailPage};
 
+/// Rows read on the first page when an existing turn is already tracked: a live turn appends at
+/// most a few rows per tick, so reading a small tail first avoids decoding 200 rows (many MB of
+/// JSON) on every append; if the previously counted row is older, the loop pages back with
+/// `PAGE_ROWS`.
+const INCREMENTAL_PAGE_ROWS: usize = 6;
 /// Rows read per page while walking back to the turn's prompt.
 const PAGE_ROWS: usize = 200;
 /// The most rows one read walks back; a longer turn counts what is within them.
@@ -127,12 +132,17 @@ fn read_new_rows(
     let mut before = None;
     let mut read = 0;
     'pages: while read < MAX_ROWS {
+        let page_rows = if before.is_none() && entry.newest.is_some() {
+            INCREMENTAL_PAGE_ROWS
+        } else {
+            PAGE_ROWS
+        };
         let Ok(SessionChatTailPage::Page {
             messages,
             has_more,
             before_offset,
             ..
-        }) = read_session_chat_tail_page(agent, path, PAGE_ROWS, before)
+        }) = read_session_chat_tail_page(agent, path, page_rows, before)
         else {
             break;
         };

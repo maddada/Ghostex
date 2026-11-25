@@ -40,7 +40,9 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         return Ok(());
     }
     if computers.is_empty() {
-        println!("No computer is connected to this one. Connect one in Settings > Remote > Remote machines.");
+        println!(
+            "No computer is connected to this one. Open Settings > Remote > Remote machines (`ghostex settings open --tab remote`) so the user can connect one."
+        );
         return Ok(());
     }
     println!("NAME\tSERVER ID\tAGENT ACCESS");
@@ -209,7 +211,7 @@ pub(crate) fn pick_computer<'a>(
     match matches.as_slice() {
         [one] => Ok(Some(one)),
         [] => Err(CliError::Other(if computers.is_empty() {
-            "No computer is connected to this one. Connect one in Settings > Remote > Remote machines, and open it in the sidebar.".to_string()
+            "No computer is connected to this one. Open Settings > Remote > Remote machines (`ghostex settings open --tab remote`) so the user can connect one and open it in the sidebar.".to_string()
         } else {
             format!(
                 "No connected computer is called \"{wanted}\". Connected: {}.",

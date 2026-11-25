@@ -332,20 +332,20 @@ impl GhostexGpuiApp {
             .rounded(px(7.0))
             .border_1()
             .border_color(if primary {
-                rgba(0x5a9bf0ff)
+                rgba(0xffffff24)
             } else {
-                rgba(0xffffff2b)
+                rgba(0xffffff14)
             })
             .bg(if primary {
-                rgba(0x377bd8ff)
+                rgba(0xffffff33)
             } else {
-                rgba(0xffffff0d)
+                rgba(0xffffff1a)
             })
             .hover(|this| {
                 this.bg(if primary {
-                    rgba(0x4389e7ff)
+                    rgba(0xffffff42)
                 } else {
-                    rgba(0xffffff17)
+                    rgba(0xffffff24)
                 })
             })
             .cursor_pointer()

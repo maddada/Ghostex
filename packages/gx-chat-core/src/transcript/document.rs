@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 
 use crate::document::Document;
 use crate::state::{ChatContext, ChatState, RewindRequest};
-use crate::transcript::presentation::agent_supports_rewind;
+use crate::transcript::presentation::session_supports_rewind;
 use crate::transcript::{presentation, rows};
 
 const PREVIEW_LINE_LIMIT: usize = 3;
@@ -40,14 +40,14 @@ The transcript's per-message actions for GPUI chat: Rewind (the confirmation in 
 the "put the prompt back in the composer" rule came from those two files; only the rendering
 differs.
 */
+/// CDXC:SessionChat 2026-11-24 DECISION:
+/// User, of the rewind sheet's "Rewind the conversation to this point and put this message back in the composer for editing. Files stay as they are.": "please remove this text". Native Claude Code and Codex chats, Terminal Codex and OpenCode send no description, and the desktop (`native_chat/rewind.rs`) and phone (`RewindDialog.tsx`) sheets draw no line, and no gap, for an empty one.
 fn rewind_projection(request: &RewindRequest) -> Value {
     json!({
         "messageId": request.message_id,
         "preview": prompt_preview(&request.prompt),
-        "description": if request.agent == "codex" {
-            "Codex continues in a new conversation from this point and puts this message back in the composer for editing."
-        } else if request.agent == "opencode" {
-            "Rewind the conversation to this point and put this message back in the composer for editing. Files stay as they are."
+        "description": if request.native || matches!(request.agent.as_str(), "opencode" | "codex") {
+            ""
         } else {
             "We only rewind using \"Restore conversation\" in the Chat View currently. Switch to Terminal View and use /rewind to resume using another option."
         },
@@ -71,6 +71,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     let view = &state.transcript_view;
     into.summary_mode = view.summary_mode;
     into.view_level = crate::transcript::view_level::view_level(view).to_string();
+    into.collapse_page_cards = crate::transcript::view_level::collapse_page_cards(view);
     into.verbose_override = view.verbose_override;
     into.simple_override = view.simple_override;
     // The projection's askers are only read for the withdrawn pages, so the held ones are not
@@ -114,7 +115,11 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     live `canRewind` gate, the same condition that lets the composer send, because the daemon types
     the rewind into that same pane.
     */
-    into.rewind_available = agent_supports_rewind(state.session.agent.as_deref());
+    into.rewind_available = session_supports_rewind(
+        state.session.agent.as_deref(),
+        state.session.session_agent_id.as_deref(),
+        state.session.non_cli_mode,
+    );
     into.fork_from_message_available =
         crate::transcript::presentation::agent_supports_fork_from_message(
             state.session.agent.as_deref(),

@@ -178,6 +178,10 @@ pub fn compute_native_chat_options(state: &ChatState, _context: &ChatContext) ->
         }
         None => Vec::new(),
     };
+    if state.session.non_cli_mode {
+        option_descriptors.retain(|descriptor| !is_mode_button(descriptor));
+        option_descriptors.push(crate::menus::option_catalog::acp_approval_mode());
+    }
     if limits_orchestrator_efforts(state) {
         let current = values.get("effort").map(|entry| entry.value.clone());
         limit_to_orchestrator_efforts(&mut option_descriptors, current.as_deref());
@@ -194,10 +198,11 @@ pub fn compute_native_chat_options(state: &ChatState, _context: &ChatContext) ->
     // `chat.pendingModelSelection !== undefined && provider !== undefined`: absent means the
     // daemon never carried the field, which is the "cannot queue a model" state.
     let can_pick_model = !state.session.pending_model_selection.is_absent() && provider.is_some();
-    let queued_controls = matches!(
-        catalog.as_ref().map(|catalog| catalog.model_icon.as_str()),
-        Some("codex") | Some("claude") | Some("opencode") | Some("antigravity-cli")
-    );
+    let queued_controls = state.session.non_cli_mode
+        || matches!(
+            catalog.as_ref().map(|catalog| catalog.model_icon.as_str()),
+            Some("codex") | Some("claude") | Some("opencode") | Some("antigravity-cli")
+        );
     let can_send_key = menus.can_send_key;
     let draft_agents = DraftAgent::list(state.session.available_agents.as_ref());
     let draft_agent_id = state.session.session_agent_id.clone();
@@ -215,6 +220,7 @@ pub fn compute_native_chat_options(state: &ChatState, _context: &ChatContext) ->
         has_provider: provider.is_some(),
         selection_error: selection_error.clone(),
         unavailable_modes: state.session.unavailable_modes.clone(),
+        non_cli_mode: state.session.non_cli_mode,
     };
     let option_menus =
         native_option_menus(catalog.as_ref(), &values, &option_descriptors, &menu_params);
@@ -303,13 +309,28 @@ pub fn compute_native_chat_options(state: &ChatState, _context: &ChatContext) ->
         ));
         option_labels.mode_note = Some(crate::menus::mode_restart::PILL_SUFFIX.to_string());
     }
-    // A completed screen read without a model is an unset control, not a
-    // pending read. Keep the same settled state on every chat renderer.
-    if state.session.screen_probed {
-        if option_labels.show_model && option_labels.model.is_none() {
+    // Never show "Default", "Default (recommended)", "Auto", "Model", or blank when the agent has
+    // a concrete model list: resolve to the agent's concrete default model from the catalog.
+    let concrete_default = catalog.as_ref().and_then(|cat| {
+        crate::menus::catalog::resolved_default_model(&menus.model_catalog, &cat.model_icon)
+    });
+    let model_is_placeholder = option_labels
+        .model
+        .as_deref()
+        .is_some_and(crate::menus::catalog::is_placeholder_model_label);
+    if option_labels.show_model && (option_labels.model.is_none() || model_is_placeholder) {
+        if let Some((_, label, _)) = concrete_default {
+            option_labels.model_display = Some(crate::menus::catalog::truncate_agent_model_label(
+                &label,
+                crate::menus::catalog::AGENT_MODEL_LABEL_MAX_CHARS,
+            ));
+            option_labels.model = Some(label);
+        } else if state.session.screen_probed && option_labels.model.is_none() {
             option_labels.model = Some("Model".to_string());
             option_labels.model_display = option_labels.model.clone();
         }
+    }
+    if state.session.screen_probed {
         if option_labels.show_options && option_labels.options.is_none() {
             option_labels.options = Some("Options".to_string());
         }

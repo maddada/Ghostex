@@ -568,6 +568,7 @@ pub(crate) fn project_select(state: &PromptsTabState, data: &QuickAccessData) ->
     }));
     QuickAccessSelect {
         label: selected_name,
+        count: None,
         detail: String::new(),
         color: String::new(),
         options,
@@ -609,12 +610,9 @@ pub(crate) fn tag_select(
         },
         QuickAccessOption {
             color: "#ffffff".to_string(),
+            count: Some(scoped.len()),
             separated: true,
-            ..QuickAccessOption::plain(
-                ALL_TAGS_VALUE,
-                &format!("All tags ({})", scoped.len()),
-                value == ALL_TAGS_VALUE,
-            )
+            ..QuickAccessOption::plain(ALL_TAGS_VALUE, "All tags", value == ALL_TAGS_VALUE)
         },
     ];
     for tag in &state.tags {
@@ -623,29 +621,24 @@ pub(crate) fn tag_select(
         let selected = option_value == value;
         options.push(QuickAccessOption {
             color: text(tag, "color").to_string(),
-            ..QuickAccessOption::plain(
-                &option_value,
-                &format!(
-                    "{} ({})",
-                    text(tag, "name"),
-                    count_by_tag.get(tag_id).copied().unwrap_or(0)
-                ),
-                selected,
-            )
+            count: Some(count_by_tag.get(tag_id).copied().unwrap_or(0)),
+            ..QuickAccessOption::plain(&option_value, text(tag, "name"), selected)
         });
     }
     if has_tagged || state.tag_filter == TagFilter::Untagged {
-        options.push(QuickAccessOption::plain(
-            NO_TAG_VALUE,
-            &format!("No tag ({untagged})"),
-            value == NO_TAG_VALUE,
-        ));
+        options.push(QuickAccessOption {
+            count: Some(untagged),
+            ..QuickAccessOption::plain(NO_TAG_VALUE, "No tag", value == NO_TAG_VALUE)
+        });
     }
     let selected = options.iter().find(|option| option.selected);
     QuickAccessSelect {
         label: selected
             .map(|option| option.label.clone())
-            .unwrap_or_else(|| format!("All tags ({})", scoped.len())),
+            .unwrap_or_else(|| "All tags".to_string()),
+        count: selected
+            .and_then(|option| option.count)
+            .or(Some(scoped.len())),
         detail: String::new(),
         color: selected
             .map(|option| option.color.clone())
@@ -689,6 +682,7 @@ pub(crate) fn editor_state(
                 .find(|(id, _)| format!("project:{id}") == editing.project_value)
                 .map(|(_, name)| name.clone())
                 .unwrap_or_else(|| "No project".to_string()),
+            count: None,
             detail: String::new(),
             color: String::new(),
             options,
@@ -723,6 +717,7 @@ pub(crate) fn editor_state(
             label: selected_tag
                 .map(|tag| text(tag, "name").to_string())
                 .unwrap_or_else(|| "No tag".to_string()),
+            count: None,
             detail: String::new(),
             color: selected_tag
                 .map(|tag| text(tag, "color").to_string())

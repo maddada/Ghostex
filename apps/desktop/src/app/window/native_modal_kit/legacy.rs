@@ -162,8 +162,7 @@ pub(crate) enum ModalLegacyButtonTone {
     /// shadcn `variant='outline'`, drawn with the neutral fill (CDXC:AppModal 2026-10-14 on
     /// [`neutral_button_fills`]).
     Outline,
-    /// shadcn `variant='default'`. This skin has no white buttons, so it takes the same neutral
-    /// fill as `Outline`.
+    /// Neutral filled primary button, one step brighter than `Outline`.
     Primary,
     /// shadcn `variant='destructive'`: the destructive fill.
     Destructive,
@@ -184,9 +183,8 @@ pub(crate) fn modal_legacy_action_button<V: 'static>(
 ) -> AnyElement {
     let lp = *lp;
     let (fills, text) = match tone {
-        ModalLegacyButtonTone::Outline | ModalLegacyButtonTone::Primary => {
-            (neutral_button_fills(lp.light), lp.foreground)
-        }
+        ModalLegacyButtonTone::Outline => (neutral_button_fills(lp.light), lp.foreground),
+        ModalLegacyButtonTone::Primary => (primary_button_fills_for(lp.light), lp.foreground),
         ModalLegacyButtonTone::Destructive => (
             destructive_button_fills(lp.destructive, lp.light),
             lp.destructive,

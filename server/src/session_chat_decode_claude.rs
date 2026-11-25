@@ -511,8 +511,26 @@ fn claude_bash_input_command(record: &Map<String, Value>) -> Option<String> {
     (!command.is_empty()).then(|| command.to_string())
 }
 
+/// CDXC:SessionChat 2026-11-23 WHY:
+/// Claude Code's experimental Code Mode (`CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1`) enqueues settled
+/// async `REPL` eval results (`<event kind="repl-eval" ...>`) and pending status lines
+/// (`<event kind="repl-status" ...>`) as `queue-operation` `enqueue` rows, then drains them with a
+/// content-free `dequeue` into the `Poll` `tool_result` (which carries cryptographic nonces and
+/// decodes as a `Tool` row, not a `promptSource: "queued"` user row). Decoding those `enqueue`
+/// rows left every eval permanently pinned as a `role: "user", queued: true` bubble duplicating
+/// `Poll`'s tool result and leaked `outstanding_queued_prompts`. Skipping them here and in
+/// `decode_claude_queued_prompt` fixes desktop, web, `ghostex read-session-chat`, queue checks,
+/// and already-installed phone apps together.
+/// SEE-ALSO: packages/gx-chat-core/src/transcript/noise.rs (`parse_claude_repl_event`).
 fn claude_queue_operation(record: &Map<String, Value>) -> Option<TranscriptQueueOp> {
-    let key = extract_string(record.get("content"))
+    let raw_content = extract_string(record.get("content"));
+    if raw_content
+        .as_deref()
+        .is_some_and(is_claude_repl_event_text)
+    {
+        return None;
+    }
+    let key = raw_content
         .map(|content| queued_prompt_key(&content))
         .filter(|key| !key.is_empty());
     match record.get("operation").and_then(Value::as_str)? {
@@ -594,6 +612,36 @@ collapses for ordinary user rows, so routing them through the same rule keeps
 one source of truth instead of an `origin.kind` whitelist that silently drops
 turns whenever the harness adds a kind.
 */
+/// Extract the prompt text from a Claude `queued_command` attachment. Terminal mode stores
+/// `attachment.prompt` as a plain JSON string, while Native (`stream-json` input) stores it as an
+/// array of content blocks (`[{"type":"text","text":"..."}]`).
+fn extract_claude_queued_command_prompt(value: Option<&Value>) -> Option<String> {
+    match value? {
+        Value::String(text) => Some(text.clone()),
+        Value::Array(items) => {
+            let mut parts: Vec<&str> = Vec::new();
+            for item in items {
+                match item {
+                    Value::String(text) if !text.is_empty() => parts.push(text),
+                    Value::Object(block) => {
+                        let kind = block.get("type").and_then(Value::as_str);
+                        if matches!(kind, None | Some("text") | Some("input_text")) {
+                            if let Some(text) = block.get("text").and_then(Value::as_str) {
+                                if !text.is_empty() {
+                                    parts.push(text);
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            (!parts.is_empty()).then(|| parts.join("\n"))
+        }
+        _ => None,
+    }
+}
+
 fn decode_claude_queued_command(
     record: &Map<String, Value>,
     fallback_id: &str,
@@ -602,7 +650,9 @@ fn decode_claude_queued_command(
     if attachment.get("type").and_then(Value::as_str) != Some(CLAUDE_QUEUED_COMMAND_ATTACHMENT) {
         return None;
     }
-    let prompt = strip_claude_pasted_content_envelopes(&extract_string(attachment.get("prompt"))?);
+    let prompt = strip_claude_pasted_content_envelopes(&extract_claude_queued_command_prompt(
+        attachment.get("prompt"),
+    )?);
     if prompt.trim().is_empty() {
         return None;
     }
@@ -633,7 +683,7 @@ fn decode_claude_queued_prompt(
         return None;
     }
     let content = strip_claude_pasted_content_envelopes(&extract_string(record.get("content"))?);
-    if content.trim().is_empty() {
+    if content.trim().is_empty() || is_claude_repl_event_text(&content) {
         return None;
     }
     Some(SessionChatMessage {
@@ -724,6 +774,38 @@ fn is_claude_no_response_placeholder(record: &Map<String, Value>) -> bool {
         )
 }
 
+/// CDXC:SessionChat 2026-11-24 WHY: Claude Code 2.1.33x writes what a slash command printed (`/context`, `/cost`, `/model`…) as a `system` row with subtype `local_command` whose `content` holds `<local-command-stdout>…`, where older versions wrote a `user` row. The decoder kept only informational system rows, so `/context` sent from the chat showed the user's bubble and nothing else, in Native and terminal Claude chats alike (found testing Native Claude on Linux). It is decoded as the user row the older format was, which the chat core already draws as the command's output note (`command_output_note` in packages/gx-chat-core/src/transcript/noise.rs).
+fn decode_claude_local_command_output(
+    record: &Map<String, Value>,
+    fallback_id: &str,
+) -> Option<SessionChatMessage> {
+    if record.get("type").and_then(Value::as_str) != Some("system")
+        || record.get("subtype").and_then(Value::as_str) != Some("local_command")
+    {
+        return None;
+    }
+    let content = extract_string(record.get("content"))?;
+    let trimmed = content.trim_start();
+    if !(trimmed.starts_with("<local-command-stdout")
+        || trimmed.starts_with("<local-command-stderr"))
+    {
+        return None;
+    }
+    Some(SessionChatMessage {
+        id: extract_string(record.get("uuid")).unwrap_or_else(|| fallback_id.to_string()),
+        role: SessionChatRole::User,
+        blocks: vec![text_block(content)],
+        timestamp: parse_timestamp(record.get("timestamp")),
+        source: SessionChatSource::Transcript,
+        turn_id: None,
+        byte_offset: None,
+        async_questions: None,
+        queued: false,
+        api_error: None,
+        custom_message: None,
+    })
+}
+
 pub fn decode_claude_transcript_line(line: &str, fallback_id: &str) -> Option<SessionChatMessage> {
     let record = parse_json_object(line)?;
     let role = record.get("type").and_then(Value::as_str)?;
@@ -732,6 +814,9 @@ pub fn decode_claude_transcript_line(line: &str, fallback_id: &str) -> Option<Se
     }
     if role == CLAUDE_QUEUE_RECORD_TYPE {
         return decode_claude_queued_prompt(&record, fallback_id);
+    }
+    if let Some(output) = decode_claude_local_command_output(&record, fallback_id) {
+        return Some(output);
     }
     /*
     Claude Code records composer rejections as top-level informational system
@@ -900,8 +985,11 @@ pub(crate) const KNOWN_HARNESS_TAG_NAMES: &[&str] = &[
     "user-prompt-submit-hook",
 ];
 
+const AUTHENTIC_EVENT_NONCES_PREFIX: &str = "<system>authentic event nonces for this delivery:";
+
 const HARNESS_INJECTED_TURN_PREFIXES: &[&str] = &[
     "<channel source=",
+    AUTHENTIC_EVENT_NONCES_PREFIX,
     "[request interrupted",
     "a message arrived from ",
     "another claude session sent a message",
@@ -909,6 +997,66 @@ const HARNESS_INJECTED_TURN_PREFIXES: &[&str] = &[
     "caveat: the messages below were generated by the user while running local commands",
     "this session is being continued from a previous conversation",
 ];
+
+/// Matches Claude Code's Code Mode internal REPL poll events (`<event kind="repl-eval" ...>` and
+/// `<event kind="repl-status" ...>`), with or without a leading nonce attribute or the
+/// `<system>authentic event nonces for this delivery:` header. A bare `<event>` without a Code
+/// Mode `kind` attribute returns `None` so user-pasted XML stays prose.
+pub(crate) fn claude_repl_event_kind(text: &str) -> Option<&'static str> {
+    let mut rest = text.trim_start();
+    if rest
+        .as_bytes()
+        .get(..AUTHENTIC_EVENT_NONCES_PREFIX.len())
+        .is_some_and(|head| head.eq_ignore_ascii_case(AUTHENTIC_EVENT_NONCES_PREFIX.as_bytes()))
+    {
+        let close_system = rest.find("</system>")?;
+        rest = rest[close_system + "</system>".len()..].trim_start();
+    }
+    let after_open = rest
+        .as_bytes()
+        .get(..6)
+        .filter(|head| head.eq_ignore_ascii_case(b"<event"))
+        .map(|_| &rest[6..])?;
+    if !after_open.starts_with(|ch: char| ch.is_ascii_whitespace()) {
+        return None;
+    }
+    let close = after_open
+        .as_bytes()
+        .iter()
+        .take(1024)
+        .position(|&byte| byte == b'>')?;
+    let attrs = &after_open[..close];
+    for kind in ["repl-eval", "repl-status"] {
+        if has_xml_attr_value(attrs, "kind", kind) {
+            return Some(kind);
+        }
+    }
+    None
+}
+
+fn has_xml_attr_value(attrs: &str, name: &str, expected: &str) -> bool {
+    let needle = format!("{name}=\"");
+    let lower = attrs.to_ascii_lowercase();
+    let mut cursor = 0;
+    while let Some(pos) = lower[cursor..].find(&needle) {
+        let start = cursor + pos;
+        let boundary_ok = start == 0 || attrs.as_bytes()[start - 1].is_ascii_whitespace();
+        let value_start = start + needle.len();
+        if boundary_ok {
+            if let Some(end_rel) = lower[value_start..].find('"') {
+                if &lower[value_start..value_start + end_rel] == expected {
+                    return true;
+                }
+            }
+        }
+        cursor = value_start;
+    }
+    false
+}
+
+pub(crate) fn is_claude_repl_event_text(text: &str) -> bool {
+    claude_repl_event_kind(text).is_some()
+}
 
 pub(crate) fn message_text(message: &SessionChatMessage) -> String {
     message
@@ -945,6 +1093,9 @@ fn leading_tag_name(normalized: &str) -> Option<&str> {
 }
 
 pub(crate) fn is_known_harness_injected_user_turn_text(text: &str) -> bool {
+    if is_claude_repl_event_text(text) {
+        return true;
+    }
     let normalized = text.trim().to_lowercase();
     if normalized.is_empty() {
         return false;

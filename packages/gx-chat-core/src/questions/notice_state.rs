@@ -43,7 +43,7 @@ pub fn notice_identity(notice: &TerminalNotice) -> String {
 }
 
 /// True when `notice` is the detection the user dismissed, or the same screen-state words
-/// re-detected within the cooldown.
+/// re-detected within the cooldown. An approval is only ever the one request dismissed.
 pub fn is_notice_dismissed(notice: &TerminalNotice, dismissed: Option<&DismissedNotice>) -> bool {
     let Some(dismissed) = dismissed else {
         return false;
@@ -52,6 +52,10 @@ pub fn is_notice_dismissed(notice: &TerminalNotice, dismissed: Option<&Dismissed
         return true;
     }
     if !dismissed.from_screen || notice.source != "screen" {
+        return false;
+    }
+    // CDXC:SessionChat 2026-11-21 WHY: every permission picker has the title "Allow this?" (server/src/session_chat_notice/classify.rs `notice_from_picker`), so the cooldown by words hid every later approval of that session for 30 minutes once one had been closed, and the next approval waited with no card. An approval waits on the user until answered, so only the request closed stays hidden; a later one is a new request and shows its card. The pass-through card's release already keeps to its one detection for the same reason (questions/actions.rs `dismiss_notice`).
+    if crate::extras::dock_approvals::approval_kind(notice).is_some() {
         return false;
     }
     if notice_identity(notice) != dismissed.identity {

@@ -47,6 +47,12 @@ pub(crate) struct SessionProgramStatus {
     /// The user interrupted the current turn from Ghostex (Escape in the
     /// terminal pane or Stop in the chat) since the session last went working.
     pub interrupted: bool,
+    /// `submits` when `interrupted` was recorded, so a new submitted prompt clears it even if
+    /// the program stays `working`.
+    pub interrupted_submits: Option<u64>,
+    /// Highest `seq` among `"working"` records when `interrupted` was recorded, so a fresh
+    /// OSC 7501 `working` update after the Escape clears it (the Escape did not abort the turn).
+    pub interrupted_working_seq: Option<u64>,
     /// The daemon's count of submitted input (an Enter reaching the session
     /// from a terminal, a chat send, `ghostex send-text` and the like); `None`
     /// from a daemon that predates it.
@@ -289,21 +295,48 @@ pub(crate) fn program_status_entry(
         .cloned()
 }
 
-/// Store a snapshot; returns true when the records changed.
+fn max_working_seq(records: &[ProgramStatusRecord]) -> Option<u64> {
+    records
+        .iter()
+        .filter(|record| record.state.eq_ignore_ascii_case("working"))
+        .map(|record| record.seq)
+        .max()
+}
+
+/// Store a snapshot; returns `(records_changed, interrupt_cleared)`.
 pub(crate) fn store_program_status_snapshot(
     project_id: &str,
     session_id: &str,
     reported: bool,
     submits: Option<u64>,
     records: Vec<ProgramStatusRecord>,
-) -> bool {
+) -> (bool, bool) {
     let Ok(mut registry) = registry().lock() else {
-        return false;
+        return (false, false);
     };
     let entry = registry
         .entry(registry_key(project_id, session_id))
         .or_default();
     let changed = !entry.supported || entry.reported != reported || entry.records != records;
+    let mut interrupt_cleared = false;
+    if entry.interrupted {
+        let submits_increased = matches!(
+            (submits, entry.interrupted_submits.or(entry.submits)),
+            (Some(now), Some(before)) if now > before
+        );
+        let new_working_seq = max_working_seq(&records);
+        let fresh_working = match (new_working_seq, entry.interrupted_working_seq) {
+            (Some(now), Some(before)) => now > before,
+            (Some(_), None) => true,
+            _ => false,
+        };
+        if submits_increased || fresh_working {
+            entry.interrupted = false;
+            entry.interrupted_submits = None;
+            entry.interrupted_working_seq = None;
+            interrupt_cleared = true;
+        }
+    }
     entry.supported = true;
     entry.reported = reported;
     entry.submits = submits;
@@ -311,7 +344,7 @@ pub(crate) fn store_program_status_snapshot(
         entry.saw_empty_records = true;
     }
     entry.records = records;
-    changed
+    (changed, interrupt_cleared)
 }
 
 /// The daemon predates OSC 7501 support: the session stays on detection.
@@ -348,6 +381,8 @@ pub(crate) fn set_program_status_applied(
             }
             if state == Some("working") && entry.applied_state.as_deref() != Some("working") {
                 entry.interrupted = false;
+                entry.interrupted_submits = None;
+                entry.interrupted_working_seq = None;
                 entry.working_after_input = matches!(
                     (entry.submits, entry.submits_at_working_start),
                     (Some(now), Some(before)) if now > before
@@ -389,6 +424,21 @@ pub(crate) fn note_program_status_interrupt(project_id: &str, session_id: &str) 
     if let Ok(mut registry) = registry().lock() {
         if let Some(entry) = registry.get_mut(&registry_key(project_id, session_id)) {
             entry.interrupted = true;
+            entry.interrupted_submits = entry.submits;
+            entry.interrupted_working_seq = max_working_seq(&entry.records);
+        }
+    }
+}
+
+/// A new user turn started (e.g. Interrupt & Send while OSC 7501 stayed `working`) or the current
+/// turn showed new working activity after an Escape: clear any prior interrupt flag so the turn's
+/// own completion counts as finished.
+pub(crate) fn clear_program_status_interrupt(project_id: &str, session_id: &str) {
+    if let Ok(mut registry) = registry().lock() {
+        if let Some(entry) = registry.get_mut(&registry_key(project_id, session_id)) {
+            entry.interrupted = false;
+            entry.interrupted_submits = None;
+            entry.interrupted_working_seq = None;
         }
     }
 }

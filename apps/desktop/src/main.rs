@@ -333,6 +333,8 @@ fn main() {
     // The rail is the default; an existing settings file is switched to it and gets the one-time
     // Meet the rail pop-up (shared_settings/sidebar_rail_default.rs).
     shared_settings::sidebar_rail_default::migrate_sidebar_rail_default_once();
+    // Queue the one-time Native mode announcement modal for existing installs after updating.
+    shared_settings::native_mode_intro::migrate_native_mode_intro_once();
     // With the rail on, the bell is in the sidebar's top bar; the bell 11.12.0 saved with the
     // rail's pins comes off them once (shared_settings/sidebar_rail_bell.rs).
     shared_settings::sidebar_rail_bell::migrate_sidebar_rail_bell_once();
@@ -342,6 +344,15 @@ fn main() {
     // The 2026-11-21 dark look is the default for a new install; an existing, set-up settings file
     // keeps the look it had (shared_settings/dark_look_default.rs). Before the first settings read too.
     shared_settings::dark_look_default::keep_old_dark_look_once();
+    // Move existing default-theme settings off the dark `#5581a9` accent to `#95d7f6` (and `#0c74a6`
+    // in light mode) once (shared_settings/dark_look_default.rs).
+    shared_settings::dark_look_default::migrate_default_theme_accent_once();
+    // Fresh installs whose preferred view is Chat default Native mode for Antigravity, Claude Code
+    // and Codex; existing installs and Terminal-preferred installs keep what they have.
+    shared_settings::native_mode_intro::seed_fresh_install_native_mode_once();
+    // VS Code, Beads and Automate are opt-in for new installs; existing users keep them
+    // (shared_settings/heavy_views_default.rs). Before the first settings read too.
+    shared_settings::heavy_views_default::keep_old_heavy_views_once();
     // The CLIProxyAPI hub key files join a saved secret-folder list once (shared_settings/hub_secret_folders.rs).
     shared_settings::hub_secret_folders::add_hub_secret_folders_once();
     // Enable Experimental Features becomes one switch each, once (shared_settings/experimental_switches.rs).

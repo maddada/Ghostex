@@ -81,6 +81,9 @@ fn kind_of(id: &str) -> Option<UpdateCheckKind> {
 /// kinds set to Only on Check now.
 pub(crate) fn changed(id: &str, updated: bool) {
     GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    if let Some(agent) = id.strip_prefix("agent:") {
+        agent_job_ended(agent);
+    }
     let Some(kind) = kind_of(id) else {
         return;
     };
@@ -868,13 +871,32 @@ fn agent_item(agent: &Value, usage: &Usage) -> Option<Value> {
     let method = agent["detectedMethodId"].as_str();
     let job = &agent["job"];
     let held_back = agent["updateHeldBack"].as_str();
-    let available = agent["updateAvailable"] == true && held_back.is_none();
+    let detected_method = method.and_then(|method_id| {
+        agent["methods"]
+            .as_array()?
+            .iter()
+            .find(|candidate| candidate["id"].as_str() == Some(method_id))
+    });
+    let method_command = detected_method
+        .and_then(|candidate| candidate["command"].as_str())
+        .map(str::trim)
+        .filter(|command| !command.is_empty());
+    let method_reason = detected_method
+        .and_then(|candidate| candidate["unavailableReason"].as_str())
+        .map(str::trim)
+        .filter(|reason| !reason.is_empty());
+    // A method with no command (or a CLI that updates itself without mise) has nothing for Ghostex
+    // to run, so it must never count as an available update in Update all or the top bar badge.
+    let updates_itself = definition.updates_itself() && method != Some("mise");
+    let no_command = updates_itself || (detected_method.is_some() && method_command.is_none());
+    let available = agent["updateAvailable"] == true && held_back.is_none() && !no_command;
     let can_tell = definition.latest_version.is_some()
         || definition.npm_package.is_some()
         || definition.update_check.is_some();
-    // A CLI that updates itself (Antigravity) has no update to run, unless mise manages it.
-    let updates_itself = definition.updates_itself() && method != Some("mise");
-    let can_run = !updates_itself && (method.is_some() || definition.self_updater().is_some());
+    let can_run = !no_command
+        && method_reason.is_none()
+        && method != Some("manual")
+        && (method_command.is_some() || (method.is_none() && definition.self_updater().is_some()));
     let detail = match method {
         Some(method) => format!("Agent · {}", method_label(method)),
         None => "Agent".to_string(),
@@ -894,8 +916,12 @@ fn agent_item(agent: &Value, usage: &Usage) -> Option<Value> {
         "available"
     } else if agent["updateChecking"] == true {
         "checking"
-    } else if !can_tell || version_line.is_none() {
-        // A CLI that didn't say its version can't be called up to date.
+    } else if !can_tell
+        || version_line.is_none()
+        || (no_command && agent["updateAvailable"] == true)
+    {
+        // A CLI that didn't say its version, or whose method has no command, isn't called up to
+        // date without showing why and never counts as an actionable update.
         "unknown"
     } else {
         "upToDate"
@@ -930,11 +956,15 @@ fn agent_item(agent: &Value, usage: &Usage) -> Option<Value> {
     let sessions = usage.running.get(id).map_or(0, Vec::len);
     let note = if let Some(held_back) = held_back {
         Some(held_back.to_string())
+    } else if let Some(reason) = method_reason {
+        Some(reason.to_string())
     } else if updates_itself {
         Some(
             "Updates itself while it runs; start a new session to use the newest version."
                 .to_string(),
         )
+    } else if no_command {
+        Some("Ghostex has no update command for this installation method.".to_string())
     } else if available && definition.update_stops_sessions {
         Some(format!(
             "Its updater stops running {name} sessions, so it waits until they're idle."

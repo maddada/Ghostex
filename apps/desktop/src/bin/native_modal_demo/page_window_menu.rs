@@ -93,21 +93,23 @@ impl Render for PageWindowMenuDemo {
                             .child("Coordinator work items, the Work panel and the dock, opened up to every session."),
                     ),
             )
-            .child(
+            .child({
+                let rows = menu_rows(true, Some(false));
+                let row_count = rows.len();
                 div()
                     .absolute()
                     .left(px(menu_left))
                     .top(px(menu_top))
                     .w(px(MENU_WIDTH))
-                    .h(px(height(4, ink.row_height)))
+                    .h(px(height(row_count, ink.row_height)))
                     .child(panel(
                         "visual-page-more-menu",
                         ink,
-                        menu_rows(true, Some(false)),
+                        rows,
                         Some(0),
                         std::rc::Rc::new(|_, _| {}),
-                    )),
-            )
+                    ))
+            })
             // The Snooze lengths, beside the Snooze row toward the page (more_menu.rs).
             .child(
                 div()

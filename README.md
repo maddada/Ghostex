@@ -227,6 +227,12 @@ Pair the phone app with Ghostex on your computer using Easy Connect, or use your
 
 </details>
 
+## Privacy & Telemetry
+
+Ghostex sends minimal, anonymous usage telemetry (event counts, OS/version, and closed-enum feature usage) through your local `gxserver` to PostHog using a random per-install UUIDv4 to help us continue supporting and building Ghostex. It never sends prompts, replies, code, file paths, project names, credentials, third-party account IDs, custom CLI/tool names, custom extension names, or custom Boost names (unknown agents, local extensions, and custom Boosts report only `"custom"` or bucketed counts). PostHog derives country-only GeoIP on ingest and discards raw client IP addresses. On brand-new installs, nothing leaves your machine until first-run onboarding completes or is skipped, and daily/weekly events are strictly activity-gated so an idle daemon never phones home.
+
+Turning off the analytics switch in Onboarding Step 2 or **Settings > About** (`"analyticsEnabled": false`) stops all usage and feature tracking immediately and sends only 1 anonymous weekly active install count (random install ID + `analytics_enabled: false`, zero other properties, only when used that week). Setting `DO_NOT_TRACK=1`, `GHOSTEX_TELEMETRY_DISABLED=1`, or `--no-analytics` stops even that completely (0 events ever). See [ANALYTICS.md](ANALYTICS.md) for the complete list of every event and property, plus **Settings > About > View what's sent** or `GHOSTEX_TELEMETRY_DEBUG=1` to inspect live payloads.
+
 ## Community
 
 [Discord](https://discord.gg/df7b3G92CS) for help and feature talk · [Issues](https://github.com/maddada/Ghostex/issues) for bugs and ideas · [Contributing](CONTRIBUTING.md) to help with ports, agents, docs and polish.

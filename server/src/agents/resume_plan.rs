@@ -89,6 +89,8 @@ pub(crate) fn build_agent_resume_plan(
     );
     insert_optional_string(&mut plan, "primaryCommand", primary_command.clone());
     insert_optional_string(&mut plan, "runtimeCommand", input.agent_command.clone());
+    insert_optional_string(&mut plan, "acpModel", input.acp_model.clone());
+    insert_optional_string(&mut plan, "acpEffort", input.acp_effort.clone());
     if let Some(command) = primary_command {
         /*
         CDXC:Zmx 2026-06-22-06:58:
@@ -146,23 +148,59 @@ pub(crate) fn account_switch_resume_command(
     let command = input.agent_command.as_deref()?;
     let resume = match input.agent_id.as_deref()? {
         "claude" => {
-            let reference = get_claude_session_reference(&input)?;
-            let id = get_claude_session_id(Some(&reference))?;
-            if claude_transcript_written(&input, &id) {
-                build_claude_resume_invocation(command, &quote_shell_arg(&id))
+            if input.acp_mode {
+                let resume_ref = get_claude_session_reference(&input).filter(|exact| {
+                    get_claude_session_id(Some(exact))
+                        .is_none_or(|id| claude_transcript_written(&input, &id))
+                });
+                crate::acp::spec::build_acp_host_launch_command_with_profile(
+                    "claude",
+                    Some(command),
+                    resume_ref.as_deref(),
+                    input.acp_approval_level,
+                    &[],
+                    input.acp_model.as_deref(),
+                    input.acp_effort.as_deref(),
+                    false,
+                    input.acp_read_only,
+                    &input.acp_profile,
+                )
             } else {
-                build_claude_fresh_invocation(command, &quote_shell_arg(&id))
+                let reference = get_claude_session_reference(&input)?;
+                let id = get_claude_session_id(Some(&reference))?;
+                if claude_transcript_written(&input, &id) {
+                    build_claude_resume_invocation(command, &quote_shell_arg(&id))
+                } else {
+                    build_claude_fresh_invocation(command, &quote_shell_arg(&id))
+                }
             }
         }
         "codex" => {
-            let id = get_codex_session_reference(&input)?;
-            if !is_uuid(&id) {
-                return None;
-            }
-            if codex_rollout_written(&input, &id) {
-                build_codex_resume_invocation(command, &quote_shell_arg(&id))
+            if input.acp_mode {
+                let resume_ref = get_codex_session_reference(&input)
+                    .filter(|exact| !is_uuid(exact) || codex_rollout_written(&input, exact));
+                crate::acp::spec::build_acp_host_launch_command_with_profile(
+                    "codex",
+                    Some(command),
+                    resume_ref.as_deref(),
+                    input.acp_approval_level,
+                    &[],
+                    input.acp_model.as_deref(),
+                    input.acp_effort.as_deref(),
+                    false,
+                    input.acp_read_only,
+                    &input.acp_profile,
+                )
             } else {
-                command.to_string()
+                let id = get_codex_session_reference(&input)?;
+                if !is_uuid(&id) {
+                    return None;
+                }
+                if codex_rollout_written(&input, &id) {
+                    build_codex_resume_invocation(command, &quote_shell_arg(&id))
+                } else {
+                    command.to_string()
+                }
             }
         }
         _ => return None,
@@ -237,8 +275,12 @@ pub(crate) const CLAUDE_CONVERSATIONS_SET_ASIDE_AT: &str = "claudeConversationsS
 
 #[derive(Clone)]
 pub(crate) struct AgentResumeInput {
-    accept_all: bool,
+    acp_approval_level: Option<crate::acp::AcpApprovalLevel>,
+    acp_effort: Option<String>,
     acp_mode: bool,
+    acp_model: Option<String>,
+    acp_profile: crate::acp::spec::AcpLaunchProfile,
+    acp_read_only: bool,
     agent_command: Option<String>,
     agent_id: Option<String>,
     agent_lookup_command: Option<String>,
@@ -325,11 +367,30 @@ pub(crate) fn to_agent_resume_input(
     let base_command = base_command
         .map(|command| with_resume_model_pin(agent_id.as_deref(), project, session, command))
         .map(|command| with_codex_moved_cwd(agent_id.as_deref(), session, command));
+    let workspace_note = if cfg!(test)
+        || crate::workspaces::session_skips_workspace_context(
+            project,
+            session.get("runtimeSettings").and_then(Value::as_object),
+        ) {
+        None
+    } else {
+        crate::storage::open_gxserver_database(&crate::paths::get_gxserver_paths(None))
+            .ok()
+            .and_then(|db| {
+                crate::workspaces::project_workspace_info(&db, project)
+                    .ok()
+                    .flatten()
+            })
+            .map(|(workspace_id, workspace_name)| WorkspaceNoteContext {
+                workspace_id,
+                workspace_name,
+            })
+    };
     let runtime_command = agent_id
         .as_ref()
         .and_then(|agent_id| {
             base_command.as_ref().map(|command| {
-                resolve_session_launch_command(
+                resolve_session_launch_command_for_workspace(
                     agent_id,
                     command,
                     // A Claude the user restarted in Bypass from the Mode menu keeps starting in
@@ -348,6 +409,7 @@ pub(crate) fn to_agent_resume_input(
                         .or_else(|| read_text_from_map(&launch_settings, "icon"))
                         .as_deref(),
                     session_is_coordinator(&runtime_settings),
+                    workspace_note.as_ref(),
                 )
             })
         })
@@ -440,34 +502,154 @@ pub(crate) fn to_agent_resume_input(
         Some(id) => crate::agent_cli::opencode::with_opencode2(id, None, &command),
         None => command,
     });
-    let accept_all = match read_text_from_map(&agent_config, "acceptAllMode")
-        .or_else(|| read_text_from_map(&launch_settings, "acceptAllMode"))
-        .as_deref()
-    {
-        Some("enabled" | "acceptAll") => true,
-        Some("disabled") => false,
-        _ => settings
-            .get("agentAcceptAllEnabled")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
-    };
-    let acp_mode = match runtime_settings
-        .get(crate::acp::SESSION_NON_CLI_ACTIVE_KEY)
-        .and_then(Value::as_bool)
+    let acp_read_only = crate::coordinators::is_read_only_thread(Some(&runtime_settings));
+    let force_ask = acp_read_only
+        || crate::side_chats::parent_of(session).is_some()
+        || crate::agents::is_gbot_api_chat(Some(&runtime_settings));
+    let acp_approval_level = if force_ask {
+        Some(crate::acp::AcpApprovalLevel::Ask)
+    } else {
+        let canonical_fam = agent_id
+            .as_deref()
+            .and_then(crate::acp::canonical_native_family)
+            .unwrap_or_else(|| agent_id.as_deref().unwrap_or_default());
+        crate::acp::approval::resolve_explicit_starting_level(
+            canonical_fam,
+            &runtime_settings,
+            &agent_config,
+            &launch_settings,
+            settings,
+        )
         .or_else(|| {
-            runtime_settings
-                .get(crate::acp::SESSION_ACP_ACTIVE_KEY)
+            (agent_id.as_deref() == Some("claude") && super::mode_picker_off::mode_picker_off())
+                .then_some(crate::acp::AcpApprovalLevel::Auto)
+        })
+    };
+    let acp_mode = crate::acp::channel::session_is_switch_eligible(session)
+        && match runtime_settings
+            .get(crate::acp::SESSION_NON_CLI_ACTIVE_KEY)
+            .and_then(Value::as_bool)
+            .or_else(|| {
+                runtime_settings
+                    .get(crate::acp::SESSION_ACP_ACTIVE_KEY)
+                    .and_then(Value::as_bool)
+            }) {
+            Some(flag) => flag,
+            None => agent_id.as_deref().is_some_and(|fam| {
+                crate::acp::agent_acp_setting(settings, fam)
+                    .unwrap_or_else(|| crate::acp::agent_acp_enabled_in_shared_settings(fam))
+            }),
+        };
+    let (acp_profile, acp_model, acp_effort) = if acp_mode {
+        if let Some(raw_fam) = agent_id.as_deref() {
+            let fam = crate::acp::canonical_native_family(raw_fam).unwrap_or(raw_fam);
+            let stored_account_cmd = read_text_from_map(&runtime_settings, "accountCommand");
+            let account_wrapper = crate::acp::spec::account_wrapper_from_ghostex_account(
+                fam,
+                Some(&runtime_settings),
+                stored_account_cmd.as_deref(),
+            );
+            let thread_marked_handovers = runtime_settings
+                .get("markedHandovers")
                 .and_then(Value::as_bool)
-        }) {
-        Some(flag) => flag,
-        None => agent_id.as_deref().is_some_and(|fam| {
-            crate::acp::agent_acp_setting(settings, fam)
-                .unwrap_or_else(|| crate::acp::agent_acp_enabled_in_shared_settings(fam))
-        }),
+                == Some(true)
+                || super::is_lean_worker(Some(&runtime_settings));
+            let (append_system_prompt_file, developer_instructions) = super::acp_launch_note(
+                fam,
+                session_is_coordinator(&runtime_settings),
+                thread_marked_handovers,
+                workspace_note.as_ref(),
+            );
+            let session_pin = read_text_value(session, "projectId")
+                .or_else(|| read_text_value(project, "projectId"))
+                .zip(read_text_value(session, "sessionId"))
+                .and_then(|(project_id, session_id)| {
+                    crate::agent_model_pins::session_choice(
+                        &project_id,
+                        &session_id,
+                        fam,
+                        agent_session_id.as_deref(),
+                    )
+                });
+            let pin_obj = runtime_settings
+                .get(crate::agent_model_pins::SESSION_PIN_KEY)
+                .and_then(Value::as_object);
+            let (runtime_cmd_model, runtime_cmd_effort) = runtime_command
+                .as_deref()
+                .map(|cmd| crate::acp::spec::extract_safe_model_and_effort_from_command(fam, cmd))
+                .unwrap_or((None, None));
+            let (cmd_model, cmd_effort) = read_text_from_map(&agent_config, "command")
+                .as_deref()
+                .map(|cmd| crate::acp::spec::extract_safe_model_and_effort_from_command(fam, cmd))
+                .unwrap_or((None, None));
+            let default_pin = crate::agent_model_pins::resolve_launch_default(fam, Some(settings));
+            let non_placeholder = |value: Option<String>| {
+                value.filter(|v| {
+                    !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(v)
+                })
+            };
+            let pin_obj_model =
+                non_placeholder(pin_obj.and_then(|m| read_text_from_map(m, "model")));
+            let runtime_cmd_model = non_placeholder(runtime_cmd_model);
+            let raw_acp_model = non_placeholder(session_pin.as_ref().map(|p| p.model.clone()))
+                .or_else(|| pin_obj_model.clone())
+                .or_else(|| runtime_cmd_model.clone())
+                .or_else(|| non_placeholder(cmd_model))
+                .or_else(|| default_pin.as_ref().map(|p| p.model.clone()));
+            let acp_model = raw_acp_model.map(|m| {
+                if fam == "claude" {
+                    let hint = pin_obj_model.as_deref().or(runtime_cmd_model.as_deref());
+                    crate::agent_model_catalog::preserve_claude_1m_context(hint, &m, None)
+                } else {
+                    m
+                }
+            });
+            let acp_effort = session_pin
+                .as_ref()
+                .and_then(|p| p.effort.clone())
+                .or_else(|| pin_obj.and_then(|m| read_text_from_map(m, "effort")))
+                .or(runtime_cmd_effort)
+                .or(cmd_effort)
+                .or_else(|| default_pin.as_ref().and_then(|p| p.effort.clone()));
+            let hermes_profile = (fam == "hermes")
+                .then(|| {
+                    crate::acp::hermes::resolve_hermes_profile_for_resume(
+                        &runtime_settings,
+                        &launch_settings,
+                        runtime_command.as_deref(),
+                    )
+                })
+                .flatten();
+            (
+                crate::acp::spec::AcpLaunchProfile {
+                    account_wrapper,
+                    hub_id: crate::accounts::hub::launch::picked_hub(&runtime_settings),
+                    connector_envs: crate::connectors::project_cli_env_for_acp_resume(project),
+                    append_system_prompt_file,
+                    developer_instructions,
+                    gbot_chat: is_gbot_chat(Some(&runtime_settings)),
+                    gbot_api_chat: is_gbot_api_chat(Some(&runtime_settings)),
+                    gbot_computer_use_off: super::gbot_computer_use(Some(&runtime_settings))
+                        == Some(false),
+                    lean_worker: super::is_lean_worker(Some(&runtime_settings)),
+                    hermes_profile,
+                },
+                acp_model,
+                acp_effort,
+            )
+        } else {
+            (crate::acp::spec::AcpLaunchProfile::default(), None, None)
+        }
+    } else {
+        (crate::acp::spec::AcpLaunchProfile::default(), None, None)
     };
     AgentResumeInput {
-        accept_all,
+        acp_approval_level,
+        acp_effort,
         acp_mode,
+        acp_model,
+        acp_profile,
+        acp_read_only,
         agent_command: runtime_command,
         agent_id,
         agent_lookup_command,
@@ -667,13 +849,17 @@ pub(crate) fn build_agent_resume_command(
         }),
         "antigravity" => exact_reference.map(|reference| {
             if input.acp_mode {
-                crate::acp::spec::build_acp_host_launch_command(
+                crate::acp::spec::build_acp_host_launch_command_with_profile(
                     "antigravity",
                     Some(&agent_command),
                     Some(&reference),
-                    input.accept_all,
-                    None,
-                    None,
+                    input.acp_approval_level,
+                    &[],
+                    input.acp_model.as_deref(),
+                    input.acp_effort.as_deref(),
+                    false,
+                    input.acp_read_only,
+                    &input.acp_profile,
                 )
             } else {
                 format!(
@@ -682,7 +868,32 @@ pub(crate) fn build_agent_resume_command(
                 )
             }
         }),
-        "codebuddy" | "copilot" | "droid" | "dsh" | "hermes-agent" | "qoder" | "zcode" => {
+        "hermes-agent" => {
+            if input.acp_mode {
+                Some(
+                    crate::acp::spec::build_acp_host_launch_command_with_profile(
+                        "hermes",
+                        Some(agent_command),
+                        exact_reference.as_deref(),
+                        input.acp_approval_level,
+                        &[],
+                        input.acp_model.as_deref(),
+                        input.acp_effort.as_deref(),
+                        false,
+                        input.acp_read_only,
+                        &input.acp_profile,
+                    ),
+                )
+            } else {
+                exact_reference.map(|reference| {
+                    format!(
+                        "{agent_command} --resume {}",
+                        quote_shell_double_arg(&reference)
+                    )
+                })
+            }
+        }
+        "codebuddy" | "copilot" | "droid" | "dsh" | "qoder" | "zcode" => {
             exact_reference.map(|reference| {
                 format!(
                     "{agent_command} --resume {}",
@@ -690,8 +901,27 @@ pub(crate) fn build_agent_resume_command(
                 )
             })
         }
-        "grok" => exact_reference
-            .map(|reference| format!("{agent_command} -r {}", quote_shell_double_arg(&reference))),
+        "grok" => {
+            if input.acp_mode {
+                return Some(
+                    crate::acp::spec::build_acp_host_launch_command_with_profile(
+                        "grok",
+                        Some(&agent_command),
+                        exact_reference.as_deref(),
+                        input.acp_approval_level,
+                        &[],
+                        input.acp_model.as_deref(),
+                        input.acp_effort.as_deref(),
+                        false,
+                        input.acp_read_only,
+                        &input.acp_profile,
+                    ),
+                );
+            }
+            exact_reference.map(|reference| {
+                format!("{agent_command} -r {}", quote_shell_double_arg(&reference))
+            })
+        }
         "freebuff" => exact_reference.map(|reference| {
             format!(
                 "{agent_command} --continue {}",
@@ -706,15 +936,56 @@ pub(crate) fn build_agent_resume_command(
         }),
         // CDXC:AgentProviders 2026-10-06 DECISION: "Resume. `empryo --session <id>`. The process-identity scan reads `--session` from argv." SEE-ALSO: extract_agent_process_session_id in server/src/zmx/process_identity.rs.
         // A session with no written folder: see `get_empryo_session_reference`.
-        "omp" | "empryo" => match omp_wake_reference(input, exact_reference) {
-            OmpWakeReference::Resume(reference) => Some(format!(
-                "{agent_command} --session {}",
-                quote_shell_double_arg(&reference)
-            )),
-            OmpWakeReference::Fresh => Some(agent_command.to_string()),
-            OmpWakeReference::None => (agent_id == "empryo").then(|| agent_command.to_string()),
-        },
+        "omp" | "empryo" => {
+            if agent_id == "omp" && input.acp_mode {
+                let resume_ref = match omp_wake_reference(input, exact_reference) {
+                    OmpWakeReference::Resume(reference) => Some(reference),
+                    OmpWakeReference::Fresh | OmpWakeReference::None => None,
+                };
+                return Some(
+                    crate::acp::spec::build_acp_host_launch_command_with_profile(
+                        "omp",
+                        Some(agent_command),
+                        resume_ref.as_deref(),
+                        input.acp_approval_level,
+                        &[],
+                        input.acp_model.as_deref(),
+                        input.acp_effort.as_deref(),
+                        false,
+                        input.acp_read_only,
+                        &input.acp_profile,
+                    ),
+                );
+            }
+            match omp_wake_reference(input, exact_reference) {
+                OmpWakeReference::Resume(reference) => Some(format!(
+                    "{agent_command} --session {}",
+                    quote_shell_double_arg(&reference)
+                )),
+                OmpWakeReference::Fresh => Some(agent_command.to_string()),
+                OmpWakeReference::None => (agent_id == "empryo").then(|| agent_command.to_string()),
+            }
+        }
         "codex" => {
+            if input.acp_mode {
+                let resume_ref = codex_exact_reference
+                    .as_deref()
+                    .filter(|exact| !is_uuid(exact) || codex_rollout_written(input, exact));
+                return Some(
+                    crate::acp::spec::build_acp_host_launch_command_with_profile(
+                        "codex",
+                        Some(agent_command),
+                        resume_ref,
+                        input.acp_approval_level,
+                        &[],
+                        input.acp_model.as_deref(),
+                        input.acp_effort.as_deref(),
+                        false,
+                        input.acp_read_only,
+                        &input.acp_profile,
+                    ),
+                );
+            }
             let reference = codex_reference?;
             // See `codex_rollout_written`: a thread Codex never saved starts fresh.
             if codex_exact_reference
@@ -743,6 +1014,26 @@ pub(crate) fn build_agent_resume_command(
             }
         }
         "claude" => {
+            if input.acp_mode {
+                let resume_ref = claude_exact_reference.as_deref().filter(|exact| {
+                    get_claude_session_id(Some(exact))
+                        .is_none_or(|id| claude_transcript_written(input, &id))
+                });
+                return Some(
+                    crate::acp::spec::build_acp_host_launch_command_with_profile(
+                        "claude",
+                        Some(agent_command),
+                        resume_ref,
+                        input.acp_approval_level,
+                        &[],
+                        input.acp_model.as_deref(),
+                        input.acp_effort.as_deref(),
+                        false,
+                        input.acp_read_only,
+                        &input.acp_profile,
+                    ),
+                );
+            }
             // CDXC:SessionChat 2026-10-09 WHY:
             // A session whose Claude has no conversation yet has nothing to lose, so a wake starts it fresh under the same session id instead of resuming. A wake used to resume whatever id the session held, and a Claude that quit before its first message printed "No conversation found with session ID" and fell back to the shell, so the automatic send recovery and Fix it (session_chat_queue_runtime/send_heal.rs) both failed on it. Every wake now follows the account switch's rule (CDXC:AgentProviders 2026-10-04 above).
             if let Some(id) = claude_exact_reference
@@ -786,6 +1077,22 @@ pub(crate) fn build_agent_resume_command(
             }
         }
         "cursor" => {
+            if input.acp_mode {
+                return Some(
+                    crate::acp::spec::build_acp_host_launch_command_with_profile(
+                        "cursor",
+                        Some(agent_command),
+                        cursor_reference.as_deref(),
+                        input.acp_approval_level,
+                        &[],
+                        input.acp_model.as_deref(),
+                        input.acp_effort.as_deref(),
+                        false,
+                        input.acp_read_only,
+                        &input.acp_profile,
+                    ),
+                );
+            }
             if let Some(reference) = cursor_reference {
                 return Some(format!(
                     "{agent_command} --resume {}",
@@ -808,6 +1115,22 @@ pub(crate) fn build_agent_resume_command(
             }
         }
         "opencode" => {
+            if input.acp_mode {
+                return Some(
+                    crate::acp::spec::build_acp_host_launch_command_with_profile(
+                        "opencode",
+                        Some(agent_command),
+                        opencode_reference.as_deref(),
+                        input.acp_approval_level,
+                        &[],
+                        input.acp_model.as_deref(),
+                        input.acp_effort.as_deref(),
+                        false,
+                        input.acp_read_only,
+                        &input.acp_profile,
+                    ),
+                );
+            }
             if let Some(reference) = opencode_reference {
                 return Some(format!(
                     "{agent_command} --session {}",
@@ -828,7 +1151,39 @@ pub(crate) fn build_agent_resume_command(
                 ))
             }
         }
-        "pi" => pi_reference.and_then(|_| build_pi_resume_command(agent_command, input)),
+        "pi" => {
+            if input.acp_mode {
+                let written_path = input
+                    .agent_session_path
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|p| !p.is_empty() && crate::resume_lookup::expand_home(p).is_file())
+                    .map(str::to_string);
+                let resume_ref = written_path.or_else(|| {
+                    input
+                        .agent_session_id
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)
+                });
+                return Some(
+                    crate::acp::spec::build_acp_host_launch_command_with_profile(
+                        "pi",
+                        Some(agent_command),
+                        resume_ref.as_deref(),
+                        input.acp_approval_level,
+                        &[],
+                        input.acp_model.as_deref(),
+                        input.acp_effort.as_deref(),
+                        false,
+                        input.acp_read_only,
+                        &input.acp_profile,
+                    ),
+                );
+            }
+            pi_reference.and_then(|_| build_pi_resume_command(agent_command, input))
+        }
         "rovodev" => {
             exact_reference.map(|reference| build_rovodev_resume_command(agent_command, &reference))
         }
@@ -937,6 +1292,9 @@ pub(crate) fn build_agent_resume_fallback_command(input: &AgentResumeInput) -> O
             ))
         }
         "opencode" => {
+            if input.acp_mode {
+                return None;
+            }
             let exact = get_opencode_session_reference(input)?;
             (exact != resume_title).then(|| {
                 build_opencode_resume_command(agent_command, &resume_title, agent_lookup_command)

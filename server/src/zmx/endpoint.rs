@@ -138,7 +138,7 @@ pub(crate) fn create_started_workspace_terminal(
         None => {
             return Err(
                 DomainStateError::corrupt_state("Created terminal missing projectId.").into(),
-            )
+            );
         }
     };
     let created_session_id = match string_field(&created, "sessionId") {
@@ -146,7 +146,7 @@ pub(crate) fn create_started_workspace_terminal(
         None => {
             return Err(
                 DomainStateError::corrupt_state("Created terminal missing sessionId.").into(),
-            )
+            );
         }
     };
     let session = match apply_created_session_identity(repository, &created, &create_params) {
@@ -198,6 +198,14 @@ pub(crate) fn create_started_workspace_terminal(
         session_token: crate::security::session_token_for_launch(&project_id, &session_id, &[]),
     });
     if let Err(error) = run_zmx_start_command(&zmx_name, &zmx.executable_path, start_command) {
+        crate::telemetry::reliability_error(
+            if cfg!(windows) {
+                "wmx_start_failed"
+            } else {
+                "session_launch_failed"
+            },
+            None,
+        );
         return Err(workspace_terminal_failure_with_cleanup(
             error,
             compensate_created_workspace_terminal(repository, &created_identity),
@@ -371,7 +379,15 @@ pub fn dispatch_zmx_lifecycle_endpoint(
         }
         "/api/attachSessionMetadata" | "/api/wakeSession" => {
             let mut attach =
-                create_attach_session_metadata(repository, params, context, agent_settings)?;
+                match create_attach_session_metadata(repository, params, context, agent_settings) {
+                    Ok(attach) => attach,
+                    Err(error) => {
+                        if matches!(error, ZmxEndpointError::DependencyUnavailable(_)) {
+                            crate::telemetry::reliability_error("zmx_attach_failed", None);
+                        }
+                        return Err(error);
+                    }
+                };
             let restore_blocked = attach.get("restoreBlocked").is_some();
             // Its folder is gone: the folder watch reads the project now, so its header gets the
             // missing folder's mark even on a disk it otherwise leaves alone
@@ -479,7 +495,7 @@ pub fn dispatch_zmx_lifecycle_endpoint(
                         "Invalid session transition action: {}.",
                         js_string(params.get("action"))
                     ))
-                    .into())
+                    .into());
                 }
             };
             if action == "sleep" {
@@ -717,7 +733,7 @@ pub fn dispatch_zmx_lifecycle_endpoint(
             return Err(DomainStateError::not_found(format!(
                 "{endpoint_path} is not a gxserver zmx lifecycle endpoint."
             ))
-            .into())
+            .into());
         }
     };
     let presentation_session = session_target_from_lifecycle_result(&result);

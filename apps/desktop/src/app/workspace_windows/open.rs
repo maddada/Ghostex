@@ -342,7 +342,6 @@ pub(crate) fn open_workspace_window(
                 }
                 if change != WorkspaceWindowFrameChange::Unchanged {
                     app.close_gpui_titlebar_popup(None, window, cx);
-                    app.schedule_gpui_new_thread_picker_recycle(cx);
                 }
             })
             .detach();

@@ -1,6 +1,7 @@
 use super::wait_reason::{
     stuck_input_box_text, stuck_notification_body, HeadWait, InputBoxStep, WaitReason,
-    INPUT_BOX_LAST_RESORT_AFTER_MS, INPUT_BOX_RELOAD_AFTER_MS, WATCHDOG_AFTER_MS,
+    INPUT_BOX_LAST_RESORT_AFTER_MS, INPUT_BOX_RELOAD_AFTER_MS, STUCK_INPUT_BOX_LABEL,
+    WATCHDOG_AFTER_MS,
 };
 use super::*;
 
@@ -167,8 +168,14 @@ enum Assessment {
     },
 }
 
-/// A queued thread report is checked for staleness once it has waited this long: the coordinator
-/// runtime checked it right before sending it.
+enum StaleReportCheck {
+    NotDue,
+    CheckedStillHolds,
+    Stale(String),
+}
+
+/// A queued thread report is checked periodically for staleness while it waits once it has waited
+/// this long; "not moving" reports are also checked once more right before delivery.
 const STALE_REPORT_CHECK_AFTER_MS: i64 = 60_000;
 /// How often a waiting thread report is checked again (each check may read a transcript tail).
 const STALE_REPORT_CHECK_EVERY_MS: i64 = 30_000;
@@ -217,6 +224,10 @@ fn input_box_hold_log_due(
     (waited, true)
 }
 
+/// How long `SessionChatTranscriptGate` caches a negative (`None`) lookup for an idle session
+/// whose `agentSessionPath` does not exist on disk yet.
+const TRANSCRIPT_GATE_NEGATIVE_CACHE_TTL: Duration = Duration::from_secs(2);
+
 /// CDXC:DelayedSend 2026-09-16 WHY:
 /// Hooks and titles can look stopped before a turn finishes. Conditional delayed sends and queued prompts must both check the transcript before starting their stability window.
 #[derive(Default)]
@@ -224,6 +235,9 @@ pub(crate) struct SessionChatTranscriptGate {
     /// Cache resolution by agent and conversation identity; resolving can scan agent homes.
     identity: String,
     path: Option<PathBuf>,
+    /// When a negative (`None`) resolution last ran for `identity`, so callers polling every
+    /// 2 seconds do not re-scan agent homes while a conversation still has no file on disk.
+    negative_resolved_at: Option<std::time::Instant>,
     /// The last `tail` read, kept while the transcript file is unchanged.
     tail: Option<CachedTranscriptTail>,
 }
@@ -342,6 +356,29 @@ impl SessionChatTranscriptGate {
             .then(|| self.path.clone())
             .flatten()
             .filter(|path| path.is_file());
+        if cached.is_none()
+            && !cfg!(test)
+            && self.identity == identity
+            && self.path.is_none()
+            && self
+                .negative_resolved_at
+                .is_some_and(|at| at.elapsed() < TRANSCRIPT_GATE_NEGATIVE_CACHE_TTL)
+        {
+            let supplied_path_exists = agent_session_path
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(crate::resume_lookup::expand_home)
+                .is_some_and(|path| path.is_file());
+            let session_working = !supplied_path_exists
+                && presentation_activity(
+                    session,
+                    &Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+                ) == "working";
+            if !supplied_path_exists && !session_working {
+                return None;
+            }
+        }
         let path = match cached {
             Some(path) => {
                 // The Empryo chat is a mirror only a resolve or an open chat keeps current.
@@ -364,6 +401,11 @@ impl SessionChatTranscriptGate {
             ),
         };
         self.identity = identity;
+        self.negative_resolved_at = if path.is_none() {
+            Some(std::time::Instant::now())
+        } else {
+            None
+        };
         self.path = path.clone();
         Some((transcript_agent, path?))
     }
@@ -583,7 +625,29 @@ impl SessionChatQueueRuntime {
                         now,
                         &generated_at,
                     ) {
-                        ready.push(delivery);
+                        let head =
+                            read_session_chat_queue_snapshot_with(&db, &project_id, &session_id)
+                                .queue
+                                .into_iter()
+                                .find(|prompt| prompt.id == delivery.prompt_id);
+                        if let Some(reason) = head.as_ref().and_then(|head| {
+                            self.stale_stall_report_at_delivery(
+                                &db,
+                                &repository,
+                                head,
+                                &generated_at,
+                            )
+                        }) {
+                            let noted = self.note_wait(&key, None, now, || {
+                                (self.composer_reader)(&project_id, &session_id).screen_tail
+                            });
+                            if noted.changed {
+                                to_publish.push((project_id.clone(), session_id.clone()));
+                            }
+                            stale.push((project_id, session_id, delivery.prompt_id, reason));
+                        } else {
+                            ready.push(delivery);
+                        }
                     }
                 }
             }
@@ -614,7 +678,7 @@ impl SessionChatQueueRuntime {
             ) {
                 (self.publisher_factory)(&project_id, &session_id)();
                 if let Some(prompt) = snapshot.queue.iter().find(|prompt| prompt.id == prompt_id) {
-                    self.notify_sender(&project_id, &session_id, &prompt.text, &reason);
+                    self.notify_sender(&project_id, &session_id, &prompt.id, &prompt.text, &reason);
                 }
             }
             self.reset_gate(&session_queue_key(&project_id, &session_id));
@@ -670,16 +734,6 @@ impl SessionChatQueueRuntime {
         now: DateTime<Utc>,
         generated_at: &str,
     ) -> Assessment {
-        let deliver = |head: &crate::session_chat_queue::SessionChatQueuedPrompt| {
-            Assessment::Deliver(ReadyDelivery {
-                project_id: project_id.to_string(),
-                session_id: session_id.to_string(),
-                prompt_id: head.id.clone(),
-                startup_send: head.startup_send,
-                model_selection: None,
-                input_box_reload: false,
-            })
-        };
         let reload = |head: &crate::session_chat_queue::SessionChatQueuedPrompt| {
             Assessment::Deliver(ReadyDelivery {
                 project_id: project_id.to_string(),
@@ -700,6 +754,15 @@ impl SessionChatQueueRuntime {
             // A send in flight is the busiest a session ever is.
             self.reset_gate(key);
             return Assessment::Delivering;
+        }
+        // Hold queued messages (including coordinator thread reports) while a Terminal <-> Native
+        // switch is cycling the provider so the scheduler never races a duplicate wake against it.
+        if crate::acp::channel::is_switching(project_id, session_id) {
+            self.reset_gate(key);
+            let snapshot = read_session_chat_queue_snapshot_with(db, project_id, session_id);
+            return snapshot
+                .deliverable_head()
+                .map_or(Assessment::Skip, |head| hold(head, WaitReason::Starting));
         }
         let Ok(Some(session)) = repository.get_session(project_id, session_id) else {
             self.reset_gate(key);
@@ -804,12 +867,36 @@ impl SessionChatQueueRuntime {
             self.reset_gate(key);
             return Assessment::Skip;
         };
-        if let Some(reason) = self.stale_report(db, repository, key, head, now) {
-            return Assessment::DropStale {
+        let stale_checked = match self.stale_report(db, repository, key, head, now, generated_at) {
+            StaleReportCheck::Stale(reason) => {
+                return Assessment::DropStale {
+                    prompt_id: head.id.clone(),
+                    reason,
+                };
+            }
+            StaleReportCheck::CheckedStillHolds => true,
+            StaleReportCheck::NotDue => false,
+        };
+        let deliver = |head: &crate::session_chat_queue::SessionChatQueuedPrompt| {
+            if !stale_checked {
+                if let Some(reason) =
+                    self.stale_stall_report_at_delivery(db, repository, head, generated_at)
+                {
+                    return Assessment::DropStale {
+                        prompt_id: head.id.clone(),
+                        reason,
+                    };
+                }
+            }
+            Assessment::Deliver(ReadyDelivery {
+                project_id: project_id.to_string(),
+                session_id: session_id.to_string(),
                 prompt_id: head.id.clone(),
-                reason,
-            };
-        }
+                startup_send: head.startup_send,
+                model_selection: None,
+                input_box_reload: false,
+            })
+        };
         // CDXC:SessionChat 2026-09-25 WHY:
         // A send held for a session that was asleep or still starting (session_chat_send_wake.rs) waits exactly like a new chat's first message: nobody may be viewing the session, so the scheduler refreshes the screen itself and delivers the moment the input box appears. Waiting for the cached reading made a woken session take 40 seconds.
         let draft = crate::agents::session_is_draft(&session);
@@ -819,11 +906,34 @@ impl SessionChatQueueRuntime {
         // first queued prompt starts the box (agents/draft_run_location.rs).
         let pending_box = crate::agentbox::pending_session_agentbox(&session).is_some();
         let awaiting_startup = (draft || head.startup_send) && !pending_box;
+        let acp_channel_live = crate::acp::channel::live(project_id, session_id, "send").is_some();
+        let acp_mid_turn_ready =
+            crate::acp::channel::live(project_id, session_id, "mid_turn_send").is_some();
+        let acp_session = crate::acp::session_is_acp(&session) || acp_channel_live;
+        if acp_session && !acp_channel_live {
+            self.reset_gate(key);
+            // Wake/heal both startup sends and regular sends when a Native host died back to the
+            // shell so a crashed `acp-host` recovers automatically instead of holding forever.
+            if self.composer_holds.wake_check_due(key, &head.id, now) {
+                (self.waker)(project_id, session_id, &head.id);
+            }
+            let reason = if crate::session_approval::session_awaits_answer(&session) {
+                WaitReason::Answer
+            } else if presentation_activity(&session, generated_at) == "working"
+                || self.transcript_lifecycle_is_working(key, &session)
+            {
+                WaitReason::Working
+            } else {
+                WaitReason::Starting
+            };
+            return hold(head, reason);
+        }
         // A Pi or OMP whose chat channel is open takes the message through its own API, so its
         // input box need not be read off the screen (CDXC:PiChatChannel 2026-11-05).
-        let channel_ready = matches!(composer_agent.as_deref(), Some("pi" | "omp"))
-            && crate::pi_chat_channel::live(project_id, session_id)
-                .is_some_and(|channel| channel.supports("send"));
+        let channel_ready = acp_channel_live
+            || (matches!(composer_agent.as_deref(), Some("pi" | "omp"))
+                && crate::pi_chat_channel::live(project_id, session_id)
+                    .is_some_and(|channel| channel.supports("send")));
         // DeepSeek Harness's plugin takes a message while a turn runs too (dsh-tui queues it).
         let channel_ready = channel_ready
             || (composer_agent.as_deref() == Some("dsh")
@@ -831,7 +941,7 @@ impl SessionChatQueueRuntime {
         // Hermes 0.22's gateway says whether a typed message would start a turn, instead of its
         // input box on screen; Hermes 0.21 keeps the screen (CDXC:HermesGateway 2026-11-05 in
         // hermes_gateway.rs).
-        let hermes_gate = (composer_agent.as_deref() == Some("hermes-agent"))
+        let hermes_gate = (!acp_session && composer_agent.as_deref() == Some("hermes-agent"))
             .then(|| crate::hermes_gateway::typed_message_gate(&session))
             .flatten();
         match hermes_gate {
@@ -971,7 +1081,7 @@ impl SessionChatQueueRuntime {
         let working = !question_waits && presentation_activity(&session, generated_at) == "working";
         if !gateway_idle
             && !agent_gone
-            && !(working && startup_composer_ready)
+            && !(working && startup_composer_ready && (!acp_session || acp_mid_turn_ready))
             && (question_waits
                 || !session_chat_queue_activity_is_deliverable(&session, generated_at))
         {
@@ -985,7 +1095,12 @@ impl SessionChatQueueRuntime {
         }
         // CDXC:SessionChat 2026-09-26 WHY:
         // An agent that died mid-turn leaves its transcript ending in a tool result with no reply, which reads as Working forever. A freshly started CLI showing an empty input box cannot be mid-turn, so a startup send trusts the screen over that dead turn; checking the transcript here left a woken session's "continue" queued indefinitely.
-        if !startup_composer_ready && self.transcript_lifecycle_is_working(key, &session) {
+        // For a live Native (`acp-host`) channel, the host owns the subprocess directly and reports
+        // live turn activity, so an older interrupted turn on disk must not block queued rows.
+        if !startup_composer_ready
+            && !acp_channel_live
+            && self.transcript_lifecycle_is_working(key, &session)
+        {
             self.reset_gate(key);
             return hold(head, WaitReason::Working);
         }
@@ -995,7 +1110,18 @@ impl SessionChatQueueRuntime {
             return hold(head, WaitReason::Settling);
         }
         if self.composer_holds.waiting(key, &head.id, now) {
-            return hold(head, WaitReason::Retrying);
+            let reason = if acp_session {
+                if question_waits {
+                    WaitReason::Answer
+                } else if working {
+                    WaitReason::Working
+                } else {
+                    WaitReason::Starting
+                }
+            } else {
+                WaitReason::Retrying
+            };
+            return hold(head, reason);
         }
         /*
         A trust dialog, a first-run setup screen, an update modal, a usage
@@ -1136,10 +1262,12 @@ impl SessionChatQueueRuntime {
             may_hold,
         )
         .await;
+        let mut kick_next = false;
         if let Ok(delivery) = &delivered {
             (self.publisher_factory)(&ready.project_id, &ready.session_id)();
-            if delivery.held_for_prompt {
-                // Waiting on the user's answer is no missing input box (session_chat_queue.rs).
+            if delivery.held_for_prompt || delivery.held_for_busy {
+                // Waiting on the user's answer or an active Native reply is no missing input box
+                // (session_chat_queue.rs).
                 self.composer_holds
                     .restart_clock(&key, &ready.prompt_id, Utc::now());
             } else if delivery.held {
@@ -1147,6 +1275,15 @@ impl SessionChatQueueRuntime {
                     .record(&key, &ready.prompt_id, ready.startup_send, Utc::now());
             } else {
                 self.composer_holds.clear(&key);
+            }
+            if delivery.sent
+                && delivery
+                    .snapshot
+                    .queue
+                    .iter()
+                    .any(|prompt| prompt.startup_send && prompt.state == "queued")
+            {
+                kick_next = true;
             }
             if let Some(reason) = delivery.error_message.as_deref() {
                 crate::session_chat_send_diagnostics::record_send_recovery_from_worker(
@@ -1162,7 +1299,13 @@ impl SessionChatQueueRuntime {
                     .iter()
                     .find(|prompt| prompt.id == ready.prompt_id)
                 {
-                    self.notify_sender(&ready.project_id, &ready.session_id, &prompt.text, reason);
+                    self.notify_sender(
+                        &ready.project_id,
+                        &ready.session_id,
+                        &prompt.id,
+                        &prompt.text,
+                        reason,
+                    );
                 }
             }
         }
@@ -1172,6 +1315,9 @@ impl SessionChatQueueRuntime {
         */
         self.reset_gate(&key);
         self.finish_delivery(&key);
+        if kick_next {
+            kick_session_chat_queue();
+        }
     }
 
     /// The transcript read happens outside the `gates` lock, which deliveries also take.
@@ -1271,10 +1417,13 @@ impl SessionChatQueueRuntime {
         key: &str,
         head: &crate::session_chat_queue::SessionChatQueuedPrompt,
         now: DateTime<Utc>,
-    ) -> Option<String> {
-        let created = chrono::DateTime::parse_from_rfc3339(&head.created_at).ok()?;
+        generated_at: &str,
+    ) -> StaleReportCheck {
+        let Ok(created) = chrono::DateTime::parse_from_rfc3339(&head.created_at) else {
+            return StaleReportCheck::NotDue;
+        };
         if now.signed_duration_since(created).num_milliseconds() < STALE_REPORT_CHECK_AFTER_MS {
-            return None;
+            return StaleReportCheck::NotDue;
         }
         let due = self.gates.lock().ok().is_some_and(|mut gates| {
             let check = &mut gates.entry(key.to_string()).or_default().stale_report_check;
@@ -1290,9 +1439,47 @@ impl SessionChatQueueRuntime {
             due
         });
         if !due {
+            return StaleReportCheck::NotDue;
+        }
+        let Some(report) = crate::coordinators::parse_quiet_report(&head.text) else {
+            return StaleReportCheck::CheckedStillHolds;
+        };
+        match self.quiet_report_stale_reason(db, repository, head, &report, generated_at) {
+            Some(reason) => StaleReportCheck::Stale(reason),
+            None => StaleReportCheck::CheckedStillHolds,
+        }
+    }
+
+    /// CDXC:Coordinators 2026-11-24 WHY:
+    /// The periodic `stale_report` check runs only after `STALE_REPORT_CHECK_AFTER_MS` and at most every `STALE_REPORT_CHECK_EVERY_MS` so held rows do not read transcripts every second.
+    /// That left two windows where a queued "not moving" report still went out after its local thread (or one of its subagents) had already moved: a report delivered within its first minute (common right after a round-1 nudge wakes the thread), and a write that landed in the seconds since the last periodic check.
+    /// Re-checking right before returning `Assessment::Deliver` (and before a watchdog escalation) closes both windows at one check per delivery, with no cost for non-reports; idle reports keep their periodic check only, and threads on other computers cannot be read here.
+    /// SEE-ALSO: server/src/coordinators/stale_report.rs, server/src/coordinators/subagent_output.rs.
+    fn stale_stall_report_at_delivery(
+        &self,
+        db: &rusqlite::Connection,
+        repository: &DomainRepository<'_>,
+        head: &crate::session_chat_queue::SessionChatQueuedPrompt,
+        generated_at: &str,
+    ) -> Option<String> {
+        let report = crate::coordinators::parse_quiet_report(&head.text)?;
+        if report.kind != crate::coordinators::QuietReportKind::Stalled {
             return None;
         }
-        let report = crate::coordinators::parse_quiet_report(&head.text)?;
+        self.quiet_report_stale_reason(db, repository, head, &report, generated_at)
+    }
+
+    /// Blocking: reads the local thread's transcript (and, for a stall report, its subagents'
+    /// transcripts via `subagent_output.rs`) and formats the drop reason when `report` no longer
+    /// holds.
+    fn quiet_report_stale_reason(
+        &self,
+        db: &rusqlite::Connection,
+        repository: &DomainRepository<'_>,
+        head: &crate::session_chat_queue::SessionChatQueuedPrompt,
+        report: &crate::coordinators::QuietReport,
+        generated_at: &str,
+    ) -> Option<String> {
         let (project_id, session_id) =
             crate::coordinators::local_thread_of(&report.thread_ref, &self.server_id)?;
         let thread = crate::coordinators::read_thread(db, &project_id, &session_id)
@@ -1303,10 +1490,10 @@ impl SessionChatQueueRuntime {
             .ok()
             .flatten();
         let why = crate::coordinators::quiet_report_stale_reason(
-            &report,
+            report,
             thread.as_ref(),
             session.as_ref(),
-            &crate::presentation::now_iso(),
+            generated_at,
         )?;
         Some(format!(
             "Dropped a queued {} report about thread {} that waited since {}: {why}.",
@@ -1432,12 +1619,22 @@ impl SessionChatQueueRuntime {
         });
         drop(gates);
         let Some((minutes, report)) = stuck else {
-            noted.changed |= crate::session_chat_queue::set_queue_wait_reason(prompt_id, words);
+            let wait = words.map(|text| crate::session_chat_queue::QueueWait {
+                text: text.to_string(),
+                label: reason.label().to_string(),
+            });
+            noted.changed |= crate::session_chat_queue::set_queue_wait_reason(prompt_id, wait);
             return noted;
         };
         let screen = screen();
         let text = stuck_input_box_text(minutes, &screen);
-        noted.changed |= crate::session_chat_queue::set_queue_wait_reason(prompt_id, Some(&text));
+        noted.changed |= crate::session_chat_queue::set_queue_wait_reason(
+            prompt_id,
+            Some(crate::session_chat_queue::QueueWait {
+                text: text.clone(),
+                label: STUCK_INPUT_BOX_LABEL.to_string(),
+            }),
+        );
         if report {
             noted.stuck = Some(StuckReport {
                 body: stuck_notification_body(minutes, &screen),
@@ -1509,13 +1706,18 @@ impl SessionChatQueueRuntime {
     /// or account recovery, hooks idle (or a finished turn's attention) with no question or
     /// approval standing, and a transcript whose last turn ended.
     fn idle_by_every_signal(&self, key: &str, session: &Value, generated_at: &str) -> bool {
+        let acp_channel_live = session_text(session, "projectId")
+            .zip(session_text(session, "sessionId"))
+            .is_some_and(|(project_id, session_id)| {
+                crate::acp::channel::live(&project_id, &session_id, "send").is_some()
+            });
         session_text(session, "lifecycleState").as_deref() == Some("running")
             && crate::session_chat_compacting::session_chat_compacting_detected_at(session)
                 .is_none()
             && !account_recovery_waiting(session)
             && session_chat_queue_activity_is_deliverable(session, generated_at)
             && crate::agents::session_chat_prompt_setting(session).is_none()
-            && !self.transcript_lifecycle_is_working(key, session)
+            && (acp_channel_live || !self.transcript_lifecycle_is_working(key, session))
     }
 
     /// Drops the in-memory window for sessions whose queue has gone empty, so a
@@ -1541,13 +1743,21 @@ impl SessionChatQueueRuntime {
         crate::session_chat_queue::retain_queue_wait_reasons(|id| heads.contains(id));
     }
 
-    fn notify_sender(&self, project_id: &str, session_id: &str, text: &str, reason: &str) {
+    fn notify_sender(
+        &self,
+        project_id: &str,
+        session_id: &str,
+        prompt_id: &str,
+        text: &str,
+        reason: &str,
+    ) {
         if let Some((sender_project, sender_session)) =
             crate::session_chat_queue_undelivered::notify_sender_of_undelivered_agent_message(
                 &self.paths,
                 &self.server_id,
                 project_id,
                 session_id,
+                prompt_id,
                 text,
                 reason,
             )
@@ -1663,7 +1873,7 @@ fn agent_idle_since(session: &Value) -> Option<DateTime<Utc>> {
         .map(|stamp| stamp.with_timezone(&Utc))
 }
 
-pub(super) fn session_chat_queue_activity_is_deliverable(
+pub(crate) fn session_chat_queue_activity_is_deliverable(
     session: &Value,
     generated_at: &str,
 ) -> bool {
@@ -1761,6 +1971,7 @@ mod tests {
             state: "queued".to_string(),
             error_message: None,
             wait_reason: None,
+            wait_label: None,
             created_at: created.clone(),
             updated_at: created,
             version: None,

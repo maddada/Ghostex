@@ -26,6 +26,10 @@ impl GhostexGpuiApp {
                 view.update(cx, |view, cx| view.focus_composer_from_hotkey(window, cx));
                 true
             }
+            "focusSessionInbox" => {
+                self.reclaim_gpui_root_for_native_chat_composer(window);
+                view.update(cx, |view, cx| view.focus_inbox_from_hotkey(window, cx))
+            }
             "copyLastChatCodeBlock" => {
                 view.update(cx, |view, cx| view.copy_last_reply_from_hotkey(true, cx))
             }

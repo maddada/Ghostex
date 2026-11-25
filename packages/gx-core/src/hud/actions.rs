@@ -20,7 +20,7 @@ const DEFAULT_AGENTS: [(&str, &str, &str, &str); 16] = [
     ("copilot", "copilot", "copilot", "Copilot"),
     ("droid", "droid", "factory-droid", "Factory Droid"),
     ("grok", "grok", "grok-build", "Grok Build"),
-    ("antigravity", "agy", "antigravity-cli", "Antigravity CLI"),
+    ("antigravity", "agy", "antigravity-cli", "Antigravity"),
     ("amp", "amp", "amp-cli", "Amp CLI"),
     ("hermes-agent", "hermes", "hermes-agent", "Hermes Agent"),
     ("mastra", "mastracode", "mastra", "Mastra Code"),

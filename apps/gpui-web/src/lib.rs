@@ -63,6 +63,7 @@ mod notification_feed {
     #[derive(Default)]
     pub(crate) struct GpuiNotificationFeedState {
         pub(crate) unread_count: usize,
+        pub(crate) unseen_count: usize,
     }
 }
 mod shared_settings;

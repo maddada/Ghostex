@@ -35,6 +35,7 @@ fn opens_in_browser(kind: GpuiAppModalKind) -> bool {
             | GpuiAppModalKind::CreateLinearTicket
             | GpuiAppModalKind::WorkLinkPicker
             | GpuiAppModalKind::AddSessionLink
+            | GpuiAppModalKind::NativeModeIntro
     )
 }
 
@@ -56,7 +57,7 @@ const MODAL_WINDOW_CORNER_RADIUS: f32 = 12.0;
 /// (gpui_web appends each one as it opens, and removes it on close), so the frame is CSS on that
 /// element: `border-radius` clips the canvas, and a 1px spread `box-shadow` draws the rim outside
 /// it without changing the size the dialog lays out at. No drop shadow, no page-wide fill.
-fn frame_modal_canvas(border: gpui::Rgba) {
+fn frame_modal_canvas(border: gpui::Rgba, glass: bool) {
     use wasm_bindgen::JsCast as _;
     let Some(canvas) = web_sys::window()
         .and_then(|window| window.document())
@@ -84,7 +85,17 @@ fn frame_modal_canvas(border: gpui::Rgba) {
         border.a.clamp(0.0, 1.0)
     );
     let _ = style.set_property("border-radius", &format!("{MODAL_WINDOW_CORNER_RADIUS}px"));
-    let _ = style.set_property("box-shadow", &format!("0 0 0 1px {rim}"));
+    let _ = style.set_property(
+        "box-shadow",
+        &format!("0 0 0 1px {rim}, 0 20px 50px rgba(0, 0, 0, 0.42)"),
+    );
+    if glass {
+        let _ = style.set_property("backdrop-filter", "blur(20px)");
+        let _ = style.set_property("-webkit-backdrop-filter", "blur(20px)");
+    } else {
+        let _ = style.remove_property("backdrop-filter");
+        let _ = style.remove_property("-webkit-backdrop-filter");
+    }
 }
 
 impl GhostexGpuiApp {
@@ -151,8 +162,63 @@ impl GhostexGpuiApp {
                 self.open_gpui_create_linear_ticket_modal(message, cx)
             }
             GpuiAppModalKind::WorkLinkPicker => self.open_gpui_work_link_picker_modal(message, cx),
+            GpuiAppModalKind::NativeModeIntro => self.open_gpui_native_mode_intro_modal(cx),
             _ => {}
         }
+    }
+
+    /// Opens an explicit preview modal on `gpui-web` when `?previewModal=nativeModeIntro` is in
+    /// the query string (used for visual verification and screenshots; normal `gpui-web` visits
+    /// never auto-open the desktop first-launch modal).
+    pub(crate) fn maybe_open_web_preview_modal(&mut self, cx: &mut Context<Self>) {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static OPENED: AtomicBool = AtomicBool::new(false);
+        if OPENED.load(Ordering::Relaxed) || self.native_app_modal_kind().is_some() {
+            return;
+        }
+        let search = web_sys::window()
+            .and_then(|w| w.location().search().ok())
+            .unwrap_or_default();
+        if !search.contains("previewModal=nativeModeIntro") {
+            return;
+        }
+        OPENED.store(true, Ordering::Relaxed);
+        let app = cx.weak_entity();
+        cx.defer(move |cx| {
+            let _ = app.update(cx, |app, cx| {
+                app.open_gpui_native_mode_intro_modal(cx);
+            });
+        });
+    }
+
+    /// Opens the Native mode announcement modal in `gpui-web` as a safe no-op preview (matching
+    /// desktop's `open_native_mode_intro_preview`): never writes `agentSessionMode` or switches
+    /// running sessions, and never auto-opens on normal `gpui-web` visits.
+    pub(crate) fn open_gpui_native_mode_intro_modal(&mut self, cx: &mut Context<Self>) {
+        use crate::app::window::{
+            GpuiNativeModeIntroModalWindow, NATIVE_MODE_INTRO_MODAL_INITIAL_HEIGHT,
+            NATIVE_MODE_INTRO_MODAL_WIDTH, NativeModeIntroCommand, NativeModeIntroHost,
+            NativeModeIntroModalConfig,
+        };
+        let config = NativeModeIntroModalConfig {
+            palette: self.gpui_native_dialog_palette(),
+        };
+        let host: NativeModeIntroHost =
+            self.native_app_modal_host(cx, |app, command, cx| match command {
+                NativeModeIntroCommand::TurnOn | NativeModeIntroCommand::Dismiss => {
+                    app.release_native_app_modal_window(GpuiAppModalKind::NativeModeIntro, cx);
+                    cx.notify();
+                }
+            });
+        self.open_native_app_modal(
+            GpuiAppModalKind::NativeModeIntro,
+            NATIVE_MODE_INTRO_MODAL_WIDTH,
+            NATIVE_MODE_INTRO_MODAL_INITIAL_HEIGHT,
+            move |window, cx| {
+                cx.new(|cx| GpuiNativeModeIntroModalWindow::new(config, host, window, cx))
+            },
+            cx,
+        );
     }
 
     pub(crate) fn close_app_modal_from_bridge(&mut self, cx: &mut Context<Self>) {
@@ -219,7 +285,7 @@ impl GhostexGpuiApp {
             })
             .ok();
         if window.is_some() {
-            frame_modal_canvas(window_border);
+            frame_modal_canvas(window_border, palette.glass);
         }
         let view = view_slot.borrow_mut().take();
         self.native_app_modal = match (window, view) {

@@ -58,9 +58,20 @@ fn parse_claude_attachment(builder: &mut TranscriptBuilder, record: &Map<String,
         return;
     }
     // A prompt typed mid-turn is delivered as this attachment and exists
-    // nowhere else in the file (see session_chat.rs).
+    // nowhere else in the file (see session_chat.rs). Terminal mode writes a string;
+    // Native (`stream-json`) writes an array of content blocks.
     if let Some(prompt) = text_field(attachment, "prompt") {
         builder.push_dialog(TranscriptExportSection::UserMessage, prompt);
+    } else if let Some(prompt_value) = attachment.get("prompt") {
+        let mut spoken = String::new();
+        for block in claude_blocks(prompt_value) {
+            if matches!(type_of(&block), "text" | "input_text" | "") {
+                append_paragraph(&mut spoken, text_field(&block, "text"));
+            }
+        }
+        if !spoken.trim().is_empty() {
+            builder.push_dialog(TranscriptExportSection::UserMessage, spoken);
+        }
     }
 }
 

@@ -83,7 +83,12 @@ impl AccountUsagePanel {
                         }
                     }))
                     .child(chevron(self.models_open, false, p.muted))
-                    .child(format!("More model limits ({})", other.len())),
+                    .child("More model limits")
+                    .child(crate::app::element::count_badge(
+                        other.len().to_string(),
+                        p.ink,
+                        1.0,
+                    )),
             );
             if self.models_open {
                 models =

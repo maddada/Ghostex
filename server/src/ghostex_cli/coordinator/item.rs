@@ -119,6 +119,7 @@ pub(super) fn item(args: &[String], parsed: &ParsedArgs) -> CliResult<()> {
         ("steps", "steps"),
         ("tag", "tag"),
         ("detail", "detail"),
+        ("command", "command"),
     ] {
         if let Some(value) = flag_text(&parsed.flags, flag) {
             params.insert(key.into(), json!(value));
@@ -431,8 +432,9 @@ fn one_line(item: &Value) -> String {
     let total = item["steps"]["total"].as_u64().unwrap_or(0);
     if total > 0 {
         parts.push(format!(
-            "{} of {total} steps",
-            item["steps"]["done"].as_u64().unwrap_or(0)
+            "{} of {}",
+            item["steps"]["done"].as_u64().unwrap_or(0),
+            ghostex_gx_protocol::plural(total, "step", "steps")
         ));
     }
     let mut line = parts.join(" · ");
@@ -457,8 +459,9 @@ fn print_item(item: &Value, full: bool) {
     let total = item["steps"]["total"].as_u64().unwrap_or(0);
     if total > 0 {
         tags.push(format!(
-            "{} of {total} steps",
-            item["steps"]["done"].as_u64().unwrap_or(0)
+            "{} of {}",
+            item["steps"]["done"].as_u64().unwrap_or(0),
+            ghostex_gx_protocol::plural(total, "step", "steps")
         ));
     }
     let reason = agents::text(item, "reason");

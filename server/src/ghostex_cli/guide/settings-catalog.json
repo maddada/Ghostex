@@ -357,7 +357,7 @@
     {
       "key": "chatComposerModePicker",
       "title": "Mode in the chat box",
-      "subtitle": "Show the mode picker (Auto, Plan, Bypass permissions and the like) in the chat box. Off, sessions run in Auto, or in Bypass permissions while Skip permissions is on. The phone has its own switch.",
+      "subtitle": "Show the mode picker (Auto, Plan, Full permissions and the like) in the chat box. Off, sessions run in Auto, or in Full permissions while Agent approvals is set to Full permissions. The phone has its own switch.",
       "tab": "chat",
       "tabTitle": "Chat",
       "section": "chat",
@@ -9909,12 +9909,12 @@
     },
     {
       "key": "analyticsEnabled",
-      "title": "Anonymous analytics",
-      "subtitle": "Send anonymous usage analytics. Settings has no switch for it: to turn analytics off, start Ghostex or gxserver with GHOSTEX_TELEMETRY_DISABLED=1 (or DO_NOT_TRACK=1, or the --no-analytics flag). Ask the user before changing it.",
+      "title": "Share 100% Fully Anonymous Usage Analytics to Support Ghostex Development",
+      "subtitle": "Zero personal data. Helps us continue supporting and building Ghostex. Turning this off stops all usage tracking and keeps only 1 anonymous weekly active count (stop all with DO_NOT_TRACK=1 or --no-analytics).",
       "tab": "about",
       "tabTitle": "About",
       "section": "privacy",
-      "sectionTitle": "Privacy",
+      "sectionTitle": "Privacy & Analytics",
       "type": "boolean",
       "default": true,
       "agentWritable": false
@@ -10021,6 +10021,18 @@
       "sectionTitle": "Internal state (not user settings)",
       "type": "json",
       "default": {},
+      "agentWritable": false
+    },
+    {
+      "key": "mainHubHidden",
+      "title": "mainHubHidden",
+      "subtitle": "App-managed state saved with the settings; not a user preference.",
+      "tab": "about",
+      "tabTitle": "About",
+      "section": "internalState",
+      "sectionTitle": "Internal state (not user settings)",
+      "type": "boolean",
+      "default": false,
       "agentWritable": false
     },
     {
@@ -10686,7 +10698,7 @@
     {
       "key": "agentSwitches",
       "title": "Turn agents on or off",
-      "subtitle": "Turn on the agents you use; they appear in the New session menu, the sidebar's Select Agent and on your phone. Drag to set their order. Agents you turned off but used before stay dimmed in the list; agents you never used wait under More agents. Expand an agent that is on to edit its command, permission mode and default view; a turned-off agent's row keeps only its CLI install and update, Duplicate and, for a custom agent, Delete.",
+      "subtitle": "Turn on the agents you use; they appear in a new chat's agent list, a project header's chat menu, and on your phone. Drag to set their order. Agents you turned off but used before stay dimmed in the list; agents you never used wait under More agents. Expand an agent that is on to edit its command, permission mode and default view; a turned-off agent's row keeps only its CLI install and update, Duplicate and, for a custom agent, Delete.",
       "tab": "agents",
       "tabTitle": "Agents",
       "section": "agentList",
@@ -10730,8 +10742,8 @@
           "value": "Grok Build"
         },
         {
-          "label": "Antigravity CLI",
-          "value": "Antigravity CLI"
+          "label": "Antigravity",
+          "value": "Antigravity"
         },
         {
           "label": "Amp CLI",
@@ -10918,13 +10930,24 @@
     {
       "key": "agentSessionMode",
       "title": "Session mode",
-      "subtitle": "Choose Agent CLI (interactive terminal, instant switching between Chat and Terminal) or Non-CLI (structured host without terminal scraping; switching to Terminal asks first and interrupts any active turn). Applies to sessions started or resumed after you change it.",
+      "subtitle": "Choose Native (faster, more stable structured host; default on new Chat-first installs; switching to Terminal-based asks first and interrupts any active turn) or Terminal-based (legacy interactive terminal, will be removed in a future release). Applies to sessions started or resumed after you change it.",
       "tab": "agents",
       "tabTitle": "Agents",
       "section": "agentList",
       "sectionTitle": "Agents",
       "type": "json",
       "default": {},
+      "agentWritable": false
+    },
+    {
+      "key": "agentDefaultModels",
+      "title": "Default model",
+      "subtitle": "Choose the model new chats and threads of this agent start on. Overrides the last model you picked in chat.",
+      "tab": "agents",
+      "tabTitle": "Agents",
+      "section": "agentList",
+      "sectionTitle": "Agents",
+      "type": "ui",
       "agentWritable": false
     },
     {
@@ -11007,7 +11030,7 @@
           "value": "pi"
         },
         {
-          "label": "Antigravity CLI",
+          "label": "Antigravity",
           "value": "antigravity"
         },
         {
@@ -11035,7 +11058,7 @@
     {
       "key": "acceptAll",
       "title": "Agent approvals",
-      "subtitle": "Choose whether supported agents ask before editing files or running commands. Per-agent settings can override this default.",
+      "subtitle": "Choose whether supported agents ask before editing files or running commands. Full permissions: the agent won't ask for permission before edits or commands. At your own risk. Per-agent settings can override this default.",
       "tab": "agents",
       "tabTitle": "Agents",
       "section": "config",
@@ -11093,8 +11116,8 @@
     },
     {
       "key": "agentAcceptAllEnabled",
-      "title": "Agent approvals: accept all",
-      "subtitle": "Start supported agents with approvals turned off (full access) by default. Off keeps each agent CLI default approval mode. Projects can override it.",
+      "title": "Agent approvals: Full permissions",
+      "subtitle": "Start supported agents in Full permissions by default. The agent won't ask for permission before edits or commands. At your own risk. Off keeps each agent CLI default approval mode. Projects can override it. Only your own devices can turn this on; agents can only turn it off.",
       "tab": "agents",
       "tabTitle": "Agents",
       "section": "config",
@@ -11147,7 +11170,7 @@
           "value": "pi"
         },
         {
-          "label": "Antigravity CLI",
+          "label": "Antigravity",
           "value": "antigravity"
         },
         {
@@ -11216,8 +11239,8 @@
           "value": "Grok Build"
         },
         {
-          "label": "Antigravity CLI",
-          "value": "Antigravity CLI"
+          "label": "Antigravity",
+          "value": "Antigravity"
         },
         {
           "label": "Amp CLI",
@@ -11935,7 +11958,7 @@
     {
       "key": "agentboxStartThread",
       "title": "Start a thread in an agentbox box",
-      "subtitle": "Open New Thread and pick where it runs under Run on. Boxes open in the terminal view.",
+      "subtitle": "Start a new chat and pick a box under More providers in the setup bar's Cloud Box picker, or choose Run in a Box in a project header's chat menu. Boxes open in the terminal view.",
       "tab": "cloudBoxes",
       "tabTitle": "Cloud Boxes",
       "section": "howTo",
@@ -12447,7 +12470,7 @@
     {
       "key": "gbots",
       "title": "GBots",
-      "subtitle": "Your own team of bots under Ghostex AI in Main Hub, each with its own instructions and memory, running on your Claude Code or Codex. Needs Main Hub.",
+      "subtitle": "Your own team of bots under Ghostex AI in Main Hub, each with its own instructions and memory, running on your Claude Code or Codex.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -12646,7 +12669,7 @@
     {
       "key": "gbotsEnabled",
       "title": "GBots",
-      "subtitle": "Turn GBots on or off: your own team of bots under Ghostex AI in Main Hub, running on your Claude Code or Codex. Needs Main Hub. Off by default.",
+      "subtitle": "Turn GBots on or off: your own team of bots under Ghostex AI in Main Hub, running on your Claude Code or Codex. Off by default.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -12694,7 +12717,7 @@
     {
       "key": "cloudBoxesEnabled",
       "title": "Cloud Boxes",
-      "subtitle": "Turn Cloud Boxes on or off everywhere: the Cloud Boxes page in Settings, the Cloud Box choice of a new chat, the Run on choice of a new thread, Run in a Box in the Select Agent menu and the cloud and agentbox commands. On by default; your boxes and box settings are kept while it is off.",
+      "subtitle": "Turn Cloud Boxes on or off everywhere: the Cloud Boxes page in Settings, the Cloud Box choice in a new chat's setup bar, Run in a Box in a project header's chat menu, and the cloud and agentbox commands. On by default; your boxes and box settings are kept while it is off.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -12920,18 +12943,6 @@
       "type": "boolean",
       "default": false,
       "agentWritable": true
-    },
-    {
-      "key": "mainHubHidden",
-      "title": "Turn off Main Hub",
-      "subtitle": "Main Hub is on by default: your home folder's project becomes the home for chats that don't belong to a project, with Ghostex AI, an agent that can see and steer your other agents and help you set up Ghostex, pinned at the top, here and in the phone app. Off, the home folder is an ordinary project and Ghostex AI's agent stops; its chat and memory are kept for when you turn it back on. Only you can change this, not an agent.",
-      "tab": "extensions",
-      "tabTitle": "Extensions",
-      "section": "official",
-      "sectionTitle": "Built-in",
-      "type": "boolean",
-      "default": false,
-      "agentWritable": false
     },
     {
       "key": "store",
@@ -13833,7 +13844,7 @@
     {
       "key": "syncAgentDefaults",
       "title": "Agent defaults",
-      "subtitle": "Keep the default agent, how new sessions open, the title agent, Accept all, and each agent's default model and effort the same on your computers. Off by default.",
+      "subtitle": "Keep the default agent, how new sessions open, the title agent, Agent approvals, and each agent's default model and effort the same on your computers. Off by default.",
       "tab": "sync",
       "tabTitle": "Sync",
       "section": "whatSyncs",
@@ -13955,6 +13966,72 @@
       "tabTitle": "Sync",
       "section": "settingsTransfer",
       "sectionTitle": "Export and import",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "sharingEnabled",
+      "title": "Enable sharing",
+      "subtitle": "Share individual Live pages or local dev server ports over temporary encrypted links. Turning this off stops every active share immediately.",
+      "tab": "sharing",
+      "tabTitle": "Sharing",
+      "section": "switch",
+      "sectionTitle": "Sharing",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "sharingProvider",
+      "title": "Provider",
+      "subtitle": "OpenTunnel by default: blind end-to-end TLS where the relay never reads your HTML, headers or cookies, with no account required.",
+      "tab": "sharing",
+      "tabTitle": "Sharing",
+      "section": "provider",
+      "sectionTitle": "Tunnel provider",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "sharingRelayUrl",
+      "title": "Relay URL",
+      "subtitle": "Optional self-hosted OpenTunnel API address (OPENTUNNEL_API). Leave blank to use the default hosted relay (https://opentunnel.xyz).",
+      "tab": "sharing",
+      "tabTitle": "Sharing",
+      "section": "provider",
+      "sectionTitle": "Tunnel provider",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "sharingDefaultExpiry",
+      "title": "Default link expiry",
+      "subtitle": "How long a new share link stays live: 1 hour, 24 hours (the default), 7 days, or Until stopped. Links stop immediately when stopped or when Ghostex quits.",
+      "tab": "sharing",
+      "tabTitle": "Sharing",
+      "section": "defaults",
+      "sectionTitle": "New shares start with",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "sharingDefaultPasscode",
+      "title": "Require passcode by default",
+      "subtitle": "Protect newly shared Live pages and local ports with a 6-digit passcode by default. Off by default; you can turn a passcode on per share.",
+      "tab": "sharing",
+      "tabTitle": "Sharing",
+      "section": "defaults",
+      "sectionTitle": "New shares start with",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "sharingActiveShares",
+      "title": "Active share links",
+      "subtitle": "Every Live page and local port currently shared from this computer, with Copy link, Stop, and Stop all.",
+      "tab": "sharing",
+      "tabTitle": "Sharing",
+      "section": "active",
+      "sectionTitle": "Active shares",
       "type": "ui",
       "agentWritable": false
     },
@@ -14127,9 +14204,42 @@
       "agentWritable": false
     },
     {
+      "key": "workspaceHomeMachine",
+      "title": "Workspace computer",
+      "subtitle": "Which computer owns this workspace's agent instructions, Claude accounts and claude.ai connectors (no multi-PC sync).",
+      "tab": "workspaces",
+      "tabTitle": "Workspaces",
+      "section": "workspaces",
+      "sectionTitle": "Workspaces",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "workspaceAgentInstructions",
+      "title": "Agent instructions",
+      "subtitle": "File-backed Markdown rules (up to 32 KB) Ghostex sends automatically to agents in this workspace without editing your CLAUDE.md or AGENTS.md files.",
+      "tab": "workspaces",
+      "tabTitle": "Workspaces",
+      "section": "workspaces",
+      "sectionTitle": "Workspaces",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
       "key": "workspaceClaudeAccount",
-      "title": "Claude account",
-      "subtitle": "Which of your Claude accounts agents in this workspace's projects use.",
+      "title": "Claude accounts",
+      "subtitle": "Which of your Claude accounts agents in this workspace's projects use, including automatic rotation and usage-limit switches.",
+      "tab": "workspaces",
+      "tabTitle": "Workspaces",
+      "section": "workspaces",
+      "sectionTitle": "Workspaces",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "workspaceClaudeConnectors",
+      "title": "claude.ai connectors",
+      "subtitle": "Slack, Linear and other apps seen on claude.ai per Claude account, with one-click setup in that account's isolated Browser profile.",
       "tab": "workspaces",
       "tabTitle": "Workspaces",
       "section": "workspaces",
@@ -14880,6 +14990,48 @@
       "noTerminalBinding": true
     },
     {
+      "id": "focusSessionInbox",
+      "title": "Focus Session Inbox",
+      "description": "Move the keyboard to the Session Inbox above the chat box, expanding it if folded.",
+      "defaultKey": "cmd+shift+i",
+      "noTerminalBinding": true
+    },
+    {
+      "id": "inboxNextItem",
+      "title": "Inbox: Next Item",
+      "description": "While the Session Inbox has keyboard focus, move to the next item.",
+      "defaultKey": "down",
+      "noTerminalBinding": true
+    },
+    {
+      "id": "inboxPreviousItem",
+      "title": "Inbox: Previous Item",
+      "description": "While the Session Inbox has keyboard focus, move to the previous item.",
+      "defaultKey": "up",
+      "noTerminalBinding": true
+    },
+    {
+      "id": "inboxOpenItem",
+      "title": "Inbox: Open Item",
+      "description": "While the Session Inbox has keyboard focus, open the highlighted item.",
+      "defaultKey": "enter",
+      "noTerminalBinding": true
+    },
+    {
+      "id": "inboxMarkRead",
+      "title": "Inbox: Archive / Dismiss",
+      "description": "While the Session Inbox has keyboard focus, archive or dismiss the highlighted item.",
+      "defaultKey": "e",
+      "noTerminalBinding": true
+    },
+    {
+      "id": "inboxSnooze",
+      "title": "Inbox: Snooze Item",
+      "description": "While the Session Inbox has keyboard focus, open the Snooze menu for the highlighted item.",
+      "defaultKey": "s",
+      "noTerminalBinding": true
+    },
+    {
       "id": "copyLastChatCodeBlock",
       "title": "Copy Last Code Block",
       "description": "Copy the last code block the agent wrote in the chat session you are in.",
@@ -14949,6 +15101,13 @@
       "noTerminalBinding": true
     },
     {
+      "id": "newChatPickAgent",
+      "title": "New Chat: Agent",
+      "description": "While a new chat's message box has focus, open the agent list in the bar above it. It takes Option+A from the message box on a Mac (no å there): if your keyboard types a letter with Option+A, pick another key.",
+      "defaultKey": "alt+a",
+      "noTerminalBinding": true
+    },
+    {
       "id": "toggleVoiceAgent",
       "title": "Toggle Voice Agent",
       "description": "Start a spoken conversation with the voice agent, or end the one that is running.",
@@ -14994,13 +15153,14 @@
     },
     {
       "id": "createAgentSession",
-      "title": "New Agent Session",
-      "description": "Start your last-used agent in the active project, in your default interface.",
-      "defaultKey": "cmd+shift+o",
+      "title": "New Session",
+      "description": "Start a new chat draft in the active project (or Main Hub).",
+      "defaultKey": "cmd+n",
       "retiredDefaultKeys": [
-        "cmd+t"
+        "cmd+t",
+        "cmd+shift+o"
       ],
-      "terminalDefaultKey": "cmd+shift+o",
+      "terminalDefaultKey": "cmd+n",
       "windowsLinuxTerminalDefaultKey": "cmd+shift+d"
     },
     {
@@ -15046,18 +15206,6 @@
       "defaultKey": "cmd+o",
       "terminalDefaultKey": "cmd+o",
       "windowsLinuxTerminalDefaultKey": "cmd+shift+y"
-    },
-    {
-      "id": "openNewThreadPalette",
-      "title": "New Thread in Active Project",
-      "description": "Pick an agent, Coordinator, Browser, or Terminal to start in the active project. Press it again in the picker to choose another project.",
-      "defaultKey": "cmd+n",
-      "retiredDefaultKeys": [
-        "cmd+shift+t",
-        "cmd+alt+t"
-      ],
-      "terminalDefaultKey": "cmd+n",
-      "windowsLinuxTerminalDefaultKey": "cmd+alt+shift+n"
     },
     {
       "id": "openCommandsPanel",
@@ -15439,6 +15587,20 @@
       "title": "Search in Files",
       "description": "While the Files view has focus, search the text of every file in the project, like VS Code's Search. Elsewhere the same keys open Find Prompts.",
       "defaultKey": "cmd+shift+f",
+      "noTerminalBinding": true
+    },
+    {
+      "id": "navigateFilesBack",
+      "title": "Back in Files",
+      "description": "While the Files view has focus, go back to the previous file at its scroll position. Elsewhere the same keys go back to the previous session or project.",
+      "defaultKey": "cmd+[",
+      "noTerminalBinding": true
+    },
+    {
+      "id": "navigateFilesForward",
+      "title": "Forward in Files",
+      "description": "While the Files view has focus, go forward to the next file at its scroll position. Elsewhere the same keys go forward in session and project history.",
+      "defaultKey": "cmd+]",
       "noTerminalBinding": true
     },
     {
@@ -16168,6 +16330,20 @@
       "description": "Move the keyboard to the sidebar's session list, showing the sidebar if it is hidden: arrow keys move through the sessions and Enter opens one. Escape or the same key gives the keyboard back.",
       "defaultKey": "cmd+shift+j",
       "terminalDefaultKey": "cmd+shift+j"
+    },
+    {
+      "id": "acceptSwitchRequestToast",
+      "title": "Accept Switch Request Toast",
+      "description": "Accept the visible switch-request toast (Switch or Open) when an agent asks to change what you are looking at.",
+      "defaultKey": "cmd+shift+j",
+      "terminalDefaultKey": "cmd+shift+j"
+    },
+    {
+      "id": "openSwitchRequestExternal",
+      "title": "Open Switch Request Externally",
+      "description": "Open a visible browser switch-request toast in your default external browser instead of Ghostex's built-in Browser.",
+      "defaultKey": "cmd+shift+e",
+      "terminalDefaultKey": "cmd+shift+e"
     }
   ]
 }

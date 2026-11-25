@@ -21,9 +21,11 @@
 //! server/src/server/route_http/workspaces.rs.
 
 mod feature;
+mod instructions;
 mod projects;
 mod store;
 
 pub(crate) use feature::*;
+pub(crate) use instructions::*;
 pub(crate) use projects::*;
 pub use store::*;

@@ -15,8 +15,9 @@ const BUTTON_WINDOW_HEIGHT: f32 = 44.0;
 const BUTTON_MARGIN: f32 = 20.0;
 
 thread_local! {
-    /// The open button and the account whose sign-in it waits for.
-    static RETURN_BUTTON: RefCell<Option<(WindowHandle<ClaudeSignInReturnButton>, String)>> =
+    /// The open button, the account whose sign-in/connectors page it waits for, and the Settings
+    /// tab to reopen ("accounts" or "workspaces").
+    static RETURN_BUTTON: RefCell<Option<(WindowHandle<ClaudeSignInReturnButton>, String, &'static str)>> =
         const { RefCell::new(None) };
 }
 
@@ -74,18 +75,19 @@ impl Render for ClaudeSignInReturnButton {
 
 /// Takes the button down (Settings is back, or the sign-in it waited for was seen).
 pub(crate) fn hide_claude_sign_in_return_button(cx: &mut gpui::App) {
-    if let Some((handle, _)) = RETURN_BUTTON.with(|button| button.borrow_mut().take()) {
+    if let Some((handle, _, _)) = RETURN_BUTTON.with(|button| button.borrow_mut().take()) {
         let _ = handle.update(cx, |_, window, _| window.remove_window());
     }
 }
 
-/// `account_id`'s claude.ai page was seen signed in: its button has nothing left to wait for.
+/// `account_id`'s claude.ai page was seen signed in: its button has nothing left to wait for when
+/// it was waiting on an Accounts sign-in.
 pub(crate) fn finish_claude_sign_in_return(account_id: &str, cx: &mut gpui::App) {
     let waits_for_it = RETURN_BUTTON.with(|button| {
         button
             .borrow()
             .as_ref()
-            .is_some_and(|(_, waiting)| waiting == account_id)
+            .is_some_and(|(_, waiting, tab)| waiting == account_id && *tab == "accounts")
     });
     if waits_for_it {
         hide_claude_sign_in_return_button(cx);
@@ -97,6 +99,17 @@ impl GhostexGpuiApp {
     pub(crate) fn step_settings_aside_for_claude_sign_in(
         &mut self,
         account_id: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.step_settings_aside_for_claude_return(account_id, "accounts", cx);
+    }
+
+    /// Settings' claude.ai page opener: Settings closes and the Back to Settings button reopens
+    /// `return_tab` ("accounts" or "workspaces").
+    pub(crate) fn step_settings_aside_for_claude_return(
+        &mut self,
+        account_id: &str,
+        return_tab: &'static str,
         cx: &mut gpui::Context<Self>,
     ) {
         if self.native_app_modal_kind() == Some(GpuiAppModalKind::Settings) {
@@ -137,14 +150,21 @@ impl GhostexGpuiApp {
             .ok();
         if let Some(handle) = handle {
             RETURN_BUTTON.with(|button| {
-                *button.borrow_mut() = Some((handle, account_id.to_string()));
+                *button.borrow_mut() = Some((handle, account_id.to_string(), return_tab));
             });
         }
     }
 
-    /// Back to Settings: Accounts, on the account that was signing in.
+    /// Back to Settings: reopens the Settings tab that opened claude.ai.
     pub(crate) fn return_to_settings_from_claude_sign_in(&mut self, cx: &mut gpui::Context<Self>) {
+        let return_tab = RETURN_BUTTON
+            .with(|button| button.borrow().as_ref().map(|(_, _, tab)| *tab))
+            .unwrap_or("accounts");
         hide_claude_sign_in_return_button(cx);
-        self.open_gpui_settings_accounts_page(None, cx);
+        if return_tab == "accounts" {
+            self.open_gpui_settings_accounts_page(None, cx);
+        } else {
+            self.open_gpui_settings_tab(return_tab, None, cx);
+        }
     }
 }

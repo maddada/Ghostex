@@ -13,8 +13,10 @@
 //! team-flow steps (`workspaces/flow_steps.rs`).
 //! SEE-ALSO: server/src/server/route_http/workspaces.rs, server/src/work_mode/credentials.rs,
 //! apps/desktop/src/app/workspace_browser.rs (`clear_workspace_browser_signins`).
+mod claude_accounts;
 mod drafts;
 mod flow_steps;
+mod instructions;
 mod slack_flow;
 mod team;
 mod tracker;
@@ -22,7 +24,7 @@ mod tracker;
 use super::super::catalog::SettingOption;
 use super::super::fields::notice::{greyed_out, is_service_unreachable, service_unreachable_state};
 use super::super::fields::{
-    ButtonVariant, FieldStates, RowSpec, SettingsPage, setting_row, settings_button,
+    ButtonVariant, FieldStates, RowSpec, SettingsPage, setting_row, settings_button, settings_icon,
     settings_section, settings_segmented, settings_select, settings_text_input, static_note,
 };
 use super::super::model::SettingsTabId;
@@ -66,8 +68,12 @@ pub(crate) struct WorkspacesTab {
     error: Option<String>,
     /// `linearKeys` from `/api/readWorkModeStatus`: which keys exist.
     linear_keys: Option<Value>,
-    /// The saved Claude accounts, as (id, label).
-    claude_accounts: Vec<(String, String)>,
+    /// The saved Claude accounts with their detected `claude.ai` connectors.
+    claude_accounts: Vec<claude_accounts::ClaudeAccountInfo>,
+    /// Whether `/api/agentAccounts` is being refreshed.
+    reloading_accounts: bool,
+    /// Per-workspace file-backed agent instructions from `/api/readWorkspaceInstructions`.
+    instructions: HashMap<String, instructions::WorkspaceInstructionsState>,
     /// A Linear key typed but not saved yet, per workspace.
     key_drafts: HashMap<String, String>,
     /// Workspaces whose Linear key is being checked and saved.
@@ -112,6 +118,8 @@ impl WorkspacesTab {
             error: None,
             linear_keys: None,
             claude_accounts: Vec::new(),
+            reloading_accounts: false,
+            instructions: HashMap::new(),
             key_drafts: HashMap::new(),
             saving_keys: HashSet::new(),
             key_accounts: HashMap::new(),
@@ -178,22 +186,8 @@ impl WorkspacesTab {
             },
             cx,
         );
-        let this = cx.weak_entity();
-        store_gxserver_rpc(
-            &self.store.clone(),
-            "/api/agentAccounts",
-            json!({ "operation": "list", "cachedOnly": true }),
-            RPC_TIMEOUT,
-            move |result, cx| {
-                let _ = this.update(cx, |page, cx| {
-                    if let Ok(result) = result {
-                        page.claude_accounts = claude_accounts(&result);
-                        cx.notify();
-                    }
-                });
-            },
-            cx,
-        );
+        self.reload_claude_accounts(cx);
+        self.reload_all_workspace_instructions(cx);
     }
 
     /// One workspace write, then a reload so the page shows what the daemon kept.
@@ -517,55 +511,23 @@ impl WorkspacesTab {
         // Linear API key.
         rows.push(self.linear_key_row(p, &workspace_id, is_default, window, cx));
 
-        // Claude account.
-        let mut options = vec![SettingOption {
-            label: "Account for new sessions (Accounts page)".into(),
-            value: String::new(),
-        }];
-        let hide_emails = {
-            let store = self.store.read(cx);
-            store.bool("hideAccountEmails") || store.bool("screenshotMode")
-        };
-        options.extend(
-            self.claude_accounts
-                .iter()
-                .map(|(id, label)| SettingOption {
-                    label: super::accounts::widgets::account_text(label, hide_emails).into(),
-                    value: id.clone(),
-                }),
-        );
-        let account = text(workspace, "claudeAccountId");
-        let account_workspace = workspace_id.clone();
-        let account_select = settings_select(
-            self,
-            p,
-            format!("workspace-claude-{workspace_id}"),
-            &options,
-            &account,
-            Some(260.0),
-            false,
-            None,
-            move |page: &mut Self, value, _window, cx| {
-                let value = if value.is_empty() {
-                    Value::Null
-                } else {
-                    json!(value)
-                };
-                page.update_workspace(&account_workspace, json!({ "claudeAccountId": value }), cx);
-            },
-            window,
-            cx,
-        );
-        rows.push(setting_row(
-            p,
-            format!("workspace-claude-{workspace_id}"),
-            RowSpec::new("Claude account").description(
-                "The Claude account agents in this workspace's projects use, unless you pick one when you start them.",
-            ),
-            None,
-            account_select,
-            cx,
-        ));
+        // Workspace computer (shown when remote computers are saved or this workspace lives on
+        // another computer). Instructions, Claude accounts and connectors live only on that one
+        // computer's gxserver with no multi-machine sync.
+        if let Some(row) = self.workspace_computer_row(p, workspace, window, cx) {
+            rows.push(row);
+        }
+
+        let home_machine_id = text(workspace, "homeMachineId");
+        if home_machine_id.trim().is_empty() {
+            // Agent instructions (file-backed Markdown, local to this computer).
+            rows.push(self.agent_instructions_row(p, &workspace_id, &name, window, cx));
+
+            // Claude accounts (multi-account) and per-account claude.ai connectors + guide.
+            rows.extend(self.claude_accounts_rows(p, workspace, cx));
+        } else {
+            rows.push(self.remote_workspace_local_only_row(p, workspace, cx));
+        }
 
         rows.extend(self.connection_rows(p, &workspace_id, window, cx));
 
@@ -687,6 +649,190 @@ impl WorkspacesTab {
             rows,
         )
         .map(IntoElement::into_any_element)
+    }
+
+    fn workspace_computer_row(
+        &mut self,
+        p: &SettingsPalette,
+        workspace: &Value,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let workspace_id = text(workspace, "workspaceId");
+        let current_id = text(workspace, "homeMachineId");
+        let saved_name = text(workspace, "homeMachineName");
+        let machines = saved_remote_machines(&self.store.read(cx).value("remoteMachines"));
+        if machines.is_empty() && current_id.is_empty() {
+            return None;
+        }
+        let local_name = crate::host_name::local_computer_name();
+        let mut options = vec![SettingOption {
+            label: format!("This computer ({local_name})").into(),
+            value: String::new(),
+        }];
+        for (id, label) in &machines {
+            options.push(SettingOption {
+                label: label.clone().into(),
+                value: id.clone(),
+            });
+        }
+        if !current_id.is_empty() && !machines.iter().any(|(id, _)| id == &current_id) {
+            let fallback = if saved_name.is_empty() {
+                current_id.clone()
+            } else {
+                saved_name
+            };
+            options.push(SettingOption {
+                label: fallback.into(),
+                value: current_id.clone(),
+            });
+        }
+        let names_by_id: HashMap<String, String> = machines.into_iter().collect();
+        let target_workspace = workspace_id.clone();
+        let select = settings_select(
+            self,
+            p,
+            format!("workspace-home-machine-{workspace_id}"),
+            &options,
+            &current_id,
+            Some(260.0),
+            false,
+            None,
+            move |page: &mut Self, value, _window, cx| {
+                if value.is_empty() {
+                    page.update_workspace(
+                        &target_workspace,
+                        json!({
+                            "homeMachineId": Value::Null,
+                            "homeMachineName": Value::Null,
+                        }),
+                        cx,
+                    );
+                } else {
+                    let machine_name = names_by_id
+                        .get(&value)
+                        .cloned()
+                        .unwrap_or_else(|| value.clone());
+                    page.update_workspace(
+                        &target_workspace,
+                        json!({
+                            "homeMachineId": value,
+                            "homeMachineName": machine_name,
+                        }),
+                        cx,
+                    );
+                }
+            },
+            window,
+            cx,
+        );
+        Some(setting_row(
+            p,
+            format!("workspace-home-machine-{workspace_id}"),
+            RowSpec::new("Workspace computer").description(
+                "Which computer owns this workspace's instructions file, Claude accounts and claude.ai connectors. They stay on that one computer and are not synced to other PCs.",
+            ),
+            None,
+            select,
+            cx,
+        ))
+    }
+
+    /// Read-only note shown when a workspace is tied to another computer (its workspace PC).
+    fn remote_workspace_local_only_row(
+        &mut self,
+        p: &SettingsPalette,
+        workspace: &Value,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let workspace_id = text(workspace, "workspaceId");
+        let home_id = text(workspace, "homeMachineId");
+        let machines = saved_remote_machines(&self.store.read(cx).value("remoteMachines"));
+        let machine_label = machines
+            .into_iter()
+            .find(|(id, _)| id == &home_id)
+            .map(|(_, label)| label)
+            .or_else(|| {
+                let saved = text(workspace, "homeMachineName");
+                (!saved.is_empty()).then_some(saved)
+            })
+            .unwrap_or(home_id);
+        let target_workspace = workspace_id.clone();
+        let card = h_flex()
+            .w_full()
+            .justify_between()
+            .items_center()
+            .gap(px(12.0))
+            .px(px(12.0))
+            .py(px(10.0))
+            .rounded(px(8.0))
+            .border_1()
+            .border_color(super::super::super::native_modal_kit::hsla(p.hairline))
+            .bg(super::super::super::native_modal_kit::hsla(p.surface))
+            .child(
+                gpui_component::v_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .gap(px(4.0))
+                    .child(
+                        h_flex()
+                            .gap(px(6.0))
+                            .items_center()
+                            .child(settings_icon(
+                                "modals/settings/device-desktop.svg",
+                                14.0,
+                                p.muted,
+                            ))
+                            .child(
+                                div()
+                                    .text_size(px(12.5))
+                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                    .text_color(super::super::super::native_modal_kit::hsla(
+                                        p.foreground,
+                                    ))
+                                    .child(format!("Lives on {machine_label}")),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(11.5))
+                            .line_height(px(16.0))
+                            .text_color(super::super::super::native_modal_kit::hsla(p.muted))
+                            .child(format!(
+                                "This workspace's instructions file, Claude accounts and claude.ai connectors live on {machine_label}'s Ghostex service and are not synced across computers. Open Settings > Workspaces on {machine_label} to edit them."
+                            )),
+                    ),
+            )
+            .child(settings_button(
+                p,
+                SharedString::from(format!("workspace-use-this-pc-{workspace_id}")),
+                "Use this computer",
+                None,
+                ButtonVariant::Outline,
+                false,
+                None,
+                move |page: &mut Self, _window, cx| {
+                    page.update_workspace(
+                        &target_workspace,
+                        json!({
+                            "homeMachineId": Value::Null,
+                            "homeMachineName": Value::Null,
+                        }),
+                        cx,
+                    );
+                },
+                cx,
+            ));
+        setting_row(
+            p,
+            format!("workspace-remote-note-{workspace_id}"),
+            RowSpec::new("Instructions & Claude connectors")
+                .readout(format!("On {machine_label}"))
+                .wide(),
+            None,
+            card.into_any_element(),
+            cx,
+        )
     }
 
     fn linear_key_row(
@@ -843,7 +989,7 @@ impl Render for WorkspacesTab {
         }
         let intro = static_note(
             &p,
-            "Each workspace has its own projects, Spaces, Linear key, Claude account and browser sign-ins. Switch workspaces with the button left of your Spaces; each window shows one workspace.",
+            "Each workspace has its own projects, Spaces, Linear key, agent instructions, Claude accounts and browser sign-ins. Switch workspaces with the button left of your Spaces; each window shows one workspace.",
             false,
         );
         let new_button = settings_button(
@@ -914,6 +1060,37 @@ fn text(value: &Value, key: &str) -> String {
         .to_string()
 }
 
+fn saved_remote_machines(machines: &Value) -> Vec<(String, String)> {
+    machines
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|machine| {
+            let id = machine
+                .get("id")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|id| !id.is_empty())?
+                .to_string();
+            let name = machine
+                .get("name")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+                .or_else(|| {
+                    machine
+                        .get("sshHost")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|host| !host.is_empty())
+                })
+                .unwrap_or(id.as_str())
+                .to_string();
+            Some((id, name))
+        })
+        .collect()
+}
+
 /// A workspace icon as the sidebar draws it (`workspace_badge` in native_sidebar/workspace_tile.rs,
 /// which the native-modal demo this tab also builds into does not have): the icon in white on a
 /// disc of the workspace's colour. The icon ids are their own `assets/titlebar/` file names.
@@ -939,39 +1116,6 @@ fn hex(color: &str) -> gpui::Hsla {
         .map(rgb)
         .map(gpui::Hsla::from)
         .unwrap_or(gpui::Hsla::from(rgb(0x808080)))
-}
-
-/// The saved Claude accounts of an `/api/agentAccounts` list, by slot.
-fn claude_accounts(result: &Value) -> Vec<(String, String)> {
-    let mut accounts: Vec<(f64, String, String)> = result
-        .get("accounts")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter(|account| account.get("provider").and_then(Value::as_str) == Some("claude"))
-        .filter_map(|account| {
-            let id = account.get("id").and_then(Value::as_str)?.to_string();
-            let slot = text(account, "selector");
-            // As Settings > Accounts names it: the nickname (or the email it defaults to), else
-            // the email, and the number only when neither is known (gxserver's
-            // `CDXC:AgentProviders 2026-11-06` on `card_account_name`).
-            let label = [text(account, "name"), text(account, "email")]
-                .into_iter()
-                .map(|value| value.trim().to_string())
-                .find(|value| !value.is_empty())
-                .unwrap_or_else(|| format!("Account {slot}"));
-            Some((slot.parse::<f64>().unwrap_or(f64::MAX), id, label))
-        })
-        .collect();
-    accounts.sort_by(|left, right| {
-        left.0
-            .partial_cmp(&right.0)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    accounts
-        .into_iter()
-        .map(|(_, id, label)| (id, label))
-        .collect()
 }
 
 /// "Name @ Organization" from a `/api/setLinearApiKey` answer.

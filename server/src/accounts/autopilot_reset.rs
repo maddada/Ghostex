@@ -347,17 +347,20 @@ pub(crate) fn check(
     // A claim Anthropic answered without spending anything (not at a limit, no longer offered)
     // stays in the logs; a used reset and a failed claim go to the bell.
     let posted = match kind {
-        "success" => bell(
-            state,
-            saved,
-            NOTIFICATION_FEED_KIND_RESET_REDEEMED,
-            "Autopilot used a Claude limit reset".to_string(),
-            format!(
-                "A session waited on {}'s usage limit and no other account had room, so Autopilot used one of its limit resets ({} left). Its limits are fresh again.",
-                saved.name,
-                fresh.resets_left.saturating_sub(1)
-            ),
-        ),
+        "success" => {
+            let left = fresh.resets_left.saturating_sub(1);
+            let reset_noun = if left == 1 { "reset" } else { "resets" };
+            bell(
+                state,
+                saved,
+                NOTIFICATION_FEED_KIND_RESET_REDEEMED,
+                "Autopilot used a Claude limit reset".to_string(),
+                format!(
+                    "A session waited on {}'s usage limit and no other account had room, so Autopilot used one of its limit resets, with {left} {reset_noun} left. Its limits are fresh again.",
+                    saved.name,
+                ),
+            )
+        }
         "failed" => bell(
             state,
             saved,

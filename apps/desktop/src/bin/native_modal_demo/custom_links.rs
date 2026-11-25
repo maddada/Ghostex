@@ -183,18 +183,17 @@ struct CustomLinksDemo {
     address: Entity<InputState>,
 }
 
-/// The pinned links, as `sidebarRailPins` holds them among the other pins.
-const RAIL_PINS: &[&str] = &[
+/// Top and bottom rail pins, matching `sidebarRailPins` (`slot:bottom` separates the groups).
+const RAIL_TOP_PINS: &[&str] = &[
     "search",
-    "notifications",
     "mainHub",
     "agentsHub",
     "allAutomations",
+    "sep:1",
     "link:proxy",
     "link:wiki",
-    "claude",
-    "grok",
 ];
+const RAIL_BOTTOM_PINS: &[&str] = &["sep:2", "claude", "grok"];
 
 impl CustomLinksDemo {
     fn new(state: String, window: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -203,9 +202,13 @@ impl CustomLinksDemo {
             (link.id == "wiki").then(|| WIKI_ICON.to_string())
         });
         let address = cx.new(|cx| InputState::new(window, cx).default_value(PAGE_ADDRESS));
-        // The rail's ⋯ menu as app/sidebar_rail/menu.rs builds it: a group of items, each with
-        // its pin, then the Links group with each link row's pin and Pin to rail in its own menu.
-        let pins: Vec<String> = RAIL_PINS.iter().map(|pin| pin.to_string()).collect();
+        // The rail's ⋯ menu as app/sidebar_rail/menu.rs builds it: Go to, Agents, Links (with
+        // each link row's pin and Pin to rail / Pin to bottom in its own menu), and Layout.
+        let pins: Vec<String> = RAIL_TOP_PINS
+            .iter()
+            .chain(RAIL_BOTTOM_PINS.iter())
+            .map(|pin| pin.to_string())
+            .collect();
         let pin = |key: &str| {
             let pinned = pins.iter().any(|pin| pin == key);
             json!({ "icon": if pinned { "pin-filled" } else { "pin-outline" }, "hoverOnly": !pinned })
@@ -215,14 +218,14 @@ impl CustomLinksDemo {
         let mut rail_menu = vec![
             heading("Go to"),
             item("Search", "search", "search"),
-            item("Notifications", "bell", "notifications"),
-            item("Ask Ghostex AI", "ghostex-flower", "mainHub"),
+            item("Ask Ghostex AI", "ghostex", "mainHub"),
             item("Agents Hub", "users-group", "agentsHub"),
             item("All Automations", "clock", "allAutomations"),
             item("Commands", "bolt", "commands"),
-            heading("Views"),
-            item("Files", "folder", "files"),
-            item("Browser", "browser", "browser"),
+            heading("Agents"),
+            item("Hermes bots", "robot", "hermes"),
+            item("Claude", "robot", "claude"),
+            item("Grok Bot", "robot", "grok"),
             heading("Links"),
         ];
         let mut rail_row_menu = Vec::new();
@@ -240,6 +243,9 @@ impl CustomLinksDemo {
             }
             rail_menu.push(row);
         }
+        rail_menu.push(heading("Layout"));
+        rail_menu.push(json!({ "label": "Add separator", "icon": "plus" }));
+        rail_menu.push(json!({ "label": "Add separator at bottom", "icon": "plus" }));
         Self {
             state,
             rail_menu,
@@ -627,11 +633,12 @@ impl CustomLinksDemo {
             .into_any_element()
     }
 
-    /// The rail (app/sidebar_rail/render.rs): its pins, the showing link's filled tile, ⋯, and at
-    /// its foot the usage toggle and Toggle sidebar. `hovered` is the pin under the pointer.
+    /// The rail (app/sidebar_rail/render.rs): Toggle sidebar at top, top pins with separator, ⋯,
+    /// middle spacer, bottom pins with separator, and at its foot the workspace and usage toggle.
     fn render_rail(&self, showing: Option<&str>, hovered: Option<&str>) -> AnyElement {
         let fill: Hsla = overlay().opacity(if light() { 0.09 } else { 0.11 }).into();
         let hover: Hsla = overlay().opacity(if light() { 0.06 } else { 0.08 }).into();
+        let line_color: Hsla = foreground().opacity(0.28);
         let tile = |content: AnyElement, on: bool, under_pointer: bool| {
             div()
                 .flex_shrink_0()
@@ -644,8 +651,21 @@ impl CustomLinksDemo {
                 .when(under_pointer && !on, |tile| tile.bg(hover))
                 .child(content)
         };
-        let mut column = v_flex().w_full().flex_1().items_center().gap(px(RAIL_GAP));
-        for key in RAIL_PINS {
+        let render_entry = |key: &&str| -> AnyElement {
+            if ghostex_gx_core::sidebar_rail::is_rail_separator_key(key) {
+                let under_pointer = hovered == Some(*key);
+                return div()
+                    .flex_shrink_0()
+                    .w(px(RAIL_BUTTON))
+                    .h(px(16.0))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(6.0))
+                    .when(under_pointer, |el| el.bg(hover))
+                    .child(div().w(px(22.0)).h(px(1.5)).rounded_full().bg(line_color))
+                    .into_any_element();
+            }
             let on = showing == Some(*key);
             let under_pointer = hovered == Some(*key);
             let color = if on {
@@ -664,8 +684,7 @@ impl CustomLinksDemo {
                 None => {
                     let (icon, size): (&'static str, f32) = match *key {
                         "search" => ("titlebar/search.svg", RAIL_ICON),
-                        "notifications" => ("titlebar/bell.svg", RAIL_ICON),
-                        "mainHub" => ("titlebar/ghostex-flower.svg", RAIL_ICON),
+                        "mainHub" => ("titlebar/ghostex.svg", RAIL_ICON),
                         "agentsHub" => ("titlebar/users-group.svg", RAIL_ICON),
                         "allAutomations" => ("titlebar/clock.svg", RAIL_ICON),
                         "claude" => ("agent-icons/claude.svg", 15.0),
@@ -674,7 +693,7 @@ impl CustomLinksDemo {
                     titlebar_svg_icon(icon, size, color).into_any_element()
                 }
             };
-            column = column.child(tile(
+            tile(
                 div()
                     .size(px(RAIL_ICON))
                     .flex()
@@ -684,32 +703,33 @@ impl CustomLinksDemo {
                     .into_any_element(),
                 on,
                 under_pointer,
-            ));
+            )
+            .into_any_element()
+        };
+        let mut top_column = v_flex().w_full().items_center().gap(px(RAIL_GAP));
+        for key in RAIL_TOP_PINS {
+            top_column = top_column.child(render_entry(key));
         }
-        column = column.child(tile(
+        top_column = top_column.child(tile(
             titlebar_svg_icon("titlebar/dots.svg", RAIL_ICON, titlebar_icon_color())
                 .into_any_element(),
             false,
             hovered == Some("more"),
         ));
+        let mut bottom_column = v_flex().w_full().items_center().gap(px(RAIL_GAP));
+        for key in RAIL_BOTTOM_PINS {
+            bottom_column = bottom_column.child(render_entry(key));
+        }
         v_flex()
             .w(px(RAIL_WIDTH))
             .h_full()
             .flex_shrink_0()
             .items_center()
+            .pt(px(8.0))
             .pb(px(8.0))
             .bg(chrome_color(0x121212, 0xebebeb))
             .border_r_1()
             .border_color(foreground().opacity(0.06))
-            .child(div().h(px(RAIL_TOP)).flex_shrink_0())
-            .child(column)
-            .child(tile(
-                titlebar_svg_icon("titlebar/chart-bar.svg", RAIL_ICON, titlebar_icon_color())
-                    .into_any_element(),
-                false,
-                false,
-            ))
-            .child(div().h(px(RAIL_GAP)))
             .child(tile(
                 titlebar_svg_icon(
                     "titlebar/layout-sidebar.svg",
@@ -720,13 +740,42 @@ impl CustomLinksDemo {
                 false,
                 false,
             ))
+            .child(div().h(px(RAIL_GAP)))
+            .child(top_column)
+            .child(div().flex_1().min_h(px(16.0)))
+            .child(bottom_column)
+            .child(div().h(px(RAIL_GAP)))
+            .child(tile(
+                titlebar_svg_icon("titlebar/user.svg", RAIL_ICON, titlebar_icon_color())
+                    .into_any_element(),
+                false,
+                false,
+            ))
+            .child(div().h(px(RAIL_GAP)))
+            .child(tile(
+                titlebar_svg_icon("titlebar/chart-bar.svg", RAIL_ICON, titlebar_icon_color())
+                    .into_any_element(),
+                false,
+                false,
+            ))
             .into_any_element()
     }
 
     /// A rail pin's top, from the window's top.
     fn rail_pin_top(key: &str) -> f32 {
-        let index = RAIL_PINS.iter().position(|pin| *pin == key).unwrap_or(0);
-        RAIL_TOP + index as f32 * (RAIL_BUTTON + RAIL_GAP)
+        let mut y = 8.0 + RAIL_BUTTON + RAIL_GAP;
+        for pin in RAIL_TOP_PINS {
+            if *pin == key {
+                return y;
+            }
+            let h = if ghostex_gx_core::sidebar_rail::is_rail_separator_key(pin) {
+                16.0
+            } else {
+                RAIL_BUTTON
+            };
+            y += h + RAIL_GAP;
+        }
+        y
     }
 
     /// The link page in the sessions column's place: the toolbar over a stand-in page.
@@ -790,8 +839,14 @@ impl CustomLinksDemo {
             .when(pin_menu, |frame| {
                 // The pin's right-click menu (app/sidebar_rail/menu.rs `sidebar_rail_item_menu`).
                 let rows = vec![
+                    json!({ "label": "Edit…", "icon": "pencil" }),
+                    json!({ "label": "Change icon…", "icon": "sparkles" }),
+                    json!({ "separator": true }),
                     json!({ "label": "Move up", "icon": "arrow-up" }),
                     json!({ "label": "Move down", "icon": "arrow-down" }),
+                    json!({ "label": "Move to bottom", "icon": "chevron-down" }),
+                    json!({ "label": "Add separator", "icon": "plus" }),
+                    json!({ "separator": true }),
                     json!({ "label": "Unpin from rail", "icon": "pin-outline" }),
                 ];
                 frame.child(
@@ -799,9 +854,38 @@ impl CustomLinksDemo {
                         .absolute()
                         .left(px(RAIL_WIDTH - 8.0))
                         .top(px(Self::rail_pin_top("link:proxy") + 20.0))
-                        .child(menu_panel(&rows, Some(2))),
+                        .child(menu_panel(&rows, Some(5))),
                 )
             })
+            .into_any_element()
+    }
+
+    /// Bottom-section separator's right-click menu on the rail.
+    fn render_bottom_separator_menu(&self) -> AnyElement {
+        let rows = vec![
+            json!({ "label": "Move down", "icon": "arrow-down" }),
+            json!({ "label": "Move to top", "icon": "chevron-up" }),
+            json!({ "label": "Add separator", "icon": "plus" }),
+            json!({ "separator": true }),
+            json!({ "label": "Remove", "icon": "trash", "danger": true }),
+        ];
+        div()
+            .size_full()
+            .relative()
+            .child(
+                h_flex()
+                    .size_full()
+                    .child(self.render_rail(Some("claude"), Some("sep:2")))
+                    .child(sidebar_stand_in())
+                    .child(div().flex_1().h_full().bg(chrome_color(0x0f0f0f, 0xffffff))),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .left(px(RAIL_WIDTH - 8.0))
+                    .bottom(px(196.0))
+                    .child(menu_panel(&rows, Some(1))),
+            )
             .into_any_element()
     }
 
@@ -858,6 +942,7 @@ impl Render for CustomLinksDemo {
                 "page" => self.render_page(false, false),
                 "rail" => self.render_page(true, false),
                 "rail-pin-menu" => self.render_page(false, true),
+                "rail-bottom-menu" => self.render_bottom_separator_menu(),
                 _ => self.render_rail_menu(),
             })
     }

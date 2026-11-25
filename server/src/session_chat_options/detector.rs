@@ -29,6 +29,13 @@ pub(crate) struct SessionChatOptionCacheEntry {
     pub(crate) projected_compacting: Option<bool>,
     pub(crate) projected_fleet: Option<bool>,
     pub(crate) projected_monitor: Option<bool>,
+    /// Whether the screen showed an approval when the marker was last projected
+    /// (`session_approval::screen_approval_transition`).
+    pub(crate) projected_screen_approval: Option<bool>,
+    /// The marker write the latest verdict still owes the database (`Some(Some(detectedAt))` sets,
+    /// `Some(None)` clears), taken by `session_chat_compacting::publish_screen_approval_marker` and
+    /// owed again when that write fails.
+    pub(crate) unpublished_screen_approval: Option<Option<String>>,
     /// First capture that was settle-eligible except for its missing model —
     /// the anchor `SESSION_CHAT_OPTION_MODEL_SETTLE_GRACE` counts from. Cleared
     /// the moment a model (or a screen-owning notice) shows up.
@@ -261,6 +268,7 @@ impl SessionChatOptionDetector {
         let mut compacting_transition: Option<Option<String>> = None;
         let mut fleet_transition: Option<Option<String>> = None;
         let mut monitor_transition: Option<Option<String>> = None;
+        let mut screen_approval_owed = false;
         if let Ok(mut cache) = self.cache.lock() {
             let previous_compacting = cache.get(&key).and_then(|entry| entry.projected_compacting);
             let previous_fleet = cache.get(&key).and_then(|entry| entry.projected_fleet);
@@ -318,9 +326,23 @@ impl SessionChatOptionDetector {
                     );
                     None
                 }
-                None => cached_notice
-                    .map(|notice| (notice, std::time::Instant::now()))
-                    .or(recently_retired_notice),
+                // CDXC:SessionStatus 2026-11-21 WHY: a permission prompt that a whole capture no
+                // longer shows was answered; the next one with the same visible words is a new
+                // request (OMP draws two eval `commit` calls alike), and inheriting the old
+                // `detectedAt` kept it hidden behind the card closed for the first. A capture
+                // that failed keeps it as before. The reappear grace still covers every other
+                // notice, whose banners a repaint can drop for one read.
+                None => {
+                    let kept = |notice: &crate::session_chat_notice::SessionChatTerminalNotice| {
+                        !(detected.captured
+                            && notice.kind
+                                == crate::session_chat_notice::SESSION_CHAT_NOTICE_PERMISSION_PROMPT)
+                    };
+                    cached_notice
+                        .filter(|notice| kept(notice))
+                        .map(|notice| (notice, std::time::Instant::now()))
+                        .or(recently_retired_notice.filter(|(notice, _)| kept(notice)))
+                }
             };
             /*
             CDXC:AgentScreenDetection 2026-08-22: same instance-not-sample
@@ -421,6 +443,26 @@ impl SessionChatOptionDetector {
             } else {
                 previous_compacting
             };
+            // After the notice inherited its `detectedAt` above, so the marker names the instance.
+            let (detected_screen_approval, screen_approval_write) =
+                crate::session_approval::screen_approval_transition(
+                    cache
+                        .get(&key)
+                        .and_then(|entry| entry.projected_screen_approval),
+                    detected.captured,
+                    detected.notice.as_ref(),
+                );
+            // This capture's write replaces one still owed; without one, a write that failed stays
+            // owed and this capture retries it.
+            let unpublished_screen_approval = screen_approval_write.or_else(|| {
+                cache
+                    .get(&key)
+                    .and_then(|entry| entry.unpublished_screen_approval.clone())
+            });
+            // The first reading since the session's reading was dropped also asks: a clear the drop
+            // could not write is owed outside the cache.
+            screen_approval_owed =
+                unpublished_screen_approval.is_some() || !cache.contains_key(&key);
             cache.insert(
                 key,
                 SessionChatOptionCacheEntry {
@@ -428,6 +470,8 @@ impl SessionChatOptionDetector {
                     projected_compacting: detected_compacting,
                     projected_fleet: detected_fleet,
                     projected_monitor: detected_monitor,
+                    projected_screen_approval: detected_screen_approval,
+                    unpublished_screen_approval,
                     model_grace_started,
                     retired_notice,
                     value: detected.clone(),
@@ -461,6 +505,13 @@ impl SessionChatOptionDetector {
                 project_id,
                 session_id,
                 detected_at.as_deref(),
+            );
+        }
+        if screen_approval_owed {
+            crate::session_chat_compacting::publish_screen_approval_marker(
+                &self.app_state,
+                project_id,
+                session_id,
             );
         }
         if let Some(notice) = detected

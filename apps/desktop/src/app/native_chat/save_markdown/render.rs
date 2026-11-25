@@ -253,10 +253,8 @@ impl Render for SaveMarkdownWindow {
             ))
             .bg(if glass {
                 p.menu_surface()
-            } else if p.light {
-                p.background
             } else {
-                gpui::rgb(0x191919).into()
+                p.card_background
             })
             .when(glass, |dialog| {
                 dialog.border_1().border_color(p.composer_border)
@@ -277,7 +275,7 @@ impl Render for SaveMarkdownWindow {
                     inset: false,
                 },
             ])
-            .font_family("DM Sans")
+            .font_family(p.font.clone())
             .text_size(px(14.0))
             .line_height(px(20.0))
             .text_color(p.foreground)

@@ -341,7 +341,7 @@ impl SessionOptionCatalog {
             CatalogOptions::Claude { agent, catalog } => {
                 // Until gxserver confirms the model, do not offer effort controls that may not
                 // exist for the actual model (the catalog gives Haiku none).
-                let current = agent.model(model_value);
+                let current = agent.resolve_model(model_value).map(|(model, _)| model);
                 let efforts = current
                     .map(|model| model.efforts.clone())
                     .unwrap_or_default();
@@ -356,7 +356,7 @@ impl SessionOptionCatalog {
                 sort_descriptors(descriptors)
             }
             CatalogOptions::Codex { agent, catalog } => {
-                let current = agent.model(model_value);
+                let current = agent.resolve_model(model_value).map(|(model, _)| model);
                 let mut descriptors =
                     vec![codex_effort(catalog, &agent.efforts_for_model(model_value))];
                 if agent.fast_mode.available && current.is_none_or(|model| model.fast_mode) {
@@ -382,8 +382,8 @@ impl SessionOptionCatalog {
             CatalogOptions::Antigravity { agent, catalog } => {
                 // The effort is typed together with the model, so it is only offered once
                 // gxserver has confirmed which catalog model is running.
-                let mut descriptors = match agent.model(model_value) {
-                    Some(model) if !model.efforts.is_empty() => {
+                let mut descriptors = match agent.resolve_model(model_value) {
+                    Some((model, _)) if !model.efforts.is_empty() => {
                         vec![antigravity_effort(agent, catalog, model)]
                     }
                     _ => Vec::new(),
@@ -552,16 +552,21 @@ fn fast_mode_descriptor(agent: &CatalogAgent) -> OptionDescriptor {
 /// `CLAUDE_MODES`.
 fn claude_modes() -> Vec<OptionChoice> {
     [
-        ("bypass", "Bypass permissions"),
-        ("auto", "Auto"),
-        ("manual", "Manual"),
-        ("accept-edits", "Accept edits"),
-        ("plan", "Plan"),
+        (
+            "bypass",
+            "Full permissions",
+            Some("The agent won't ask for permission before edits or commands. At your own risk."),
+        ),
+        ("auto", "Auto", None),
+        ("manual", "Manual", None),
+        ("accept-edits", "Accept edits", None),
+        ("plan", "Plan", None),
     ]
     .into_iter()
-    .map(|(value, label)| OptionChoice {
+    .map(|(value, label, description)| OptionChoice {
         value: value.to_string(),
         label: label.to_string(),
+        description: description.map(str::to_string),
         ..OptionChoice::default()
     })
     .collect()
@@ -660,9 +665,9 @@ fn codex_permissions() -> OptionDescriptor {
         ),
         (
             "full-access",
-            "Full Access",
+            "Full permissions",
             ":danger-full-access",
-            "Edits anywhere and uses the internet without asking",
+            "The agent won't ask for permission before edits or commands. At your own risk.",
         ),
         (
             "read-only",
@@ -870,15 +875,20 @@ fn grok_mode() -> OptionDescriptor {
     );
     descriptor.choices = Some(
         [
-            ("default", "Default"),
-            ("plan", "Plan"),
-            ("auto-review", "Auto review"),
-            ("always-approve", "Always approve"),
+            ("default", "Default", None),
+            ("plan", "Plan", None),
+            ("auto-review", "Auto review", None),
+            (
+                "always-approve",
+                "Full permissions",
+                Some("The agent won't ask for permission before edits or commands. At your own risk."),
+            ),
         ]
         .into_iter()
-        .map(|(value, label)| OptionChoice {
+        .map(|(value, label, description)| OptionChoice {
             value: value.to_string(),
             label: label.to_string(),
+            description: description.map(str::to_string),
             ..OptionChoice::default()
         })
         .collect(),
@@ -939,6 +949,50 @@ fn antigravity_effort(
     descriptor
 }
 
+/// Four approval levels shown on the chat box's existing Mode button for ACP (Non-CLI) sessions.
+/// Replaces the binary accept-all toggle for ACP sessions; switching takes effect on the next
+/// permission request with no restart.
+pub fn acp_approval_mode() -> OptionDescriptor {
+    let mut descriptor = OptionDescriptor::new(
+        "mode",
+        "Mode",
+        OptionCategory::Mode,
+        OptionDispatch::CyclicKeySteps {
+            key: "shift-tab".to_string(),
+        },
+    );
+    descriptor.choices = Some(
+        [
+            ("ask", "Ask", "Ask before edits and commands."),
+            (
+                "auto-edits",
+                "Auto-edits",
+                "Auto-approve edits in this folder; ask for commands.",
+            ),
+            (
+                "auto",
+                "Auto",
+                "Use the agent's automatic mode when available, else ask.",
+            ),
+            (
+                "full-access",
+                "Full permissions",
+                "The agent won't ask for permission before edits or commands. At your own risk.",
+            ),
+        ]
+        .into_iter()
+        .map(|(value, label, description)| OptionChoice {
+            value: value.to_string(),
+            label: label.to_string(),
+            description: Some(description.to_string()),
+            ..OptionChoice::default()
+        })
+        .collect(),
+    );
+    descriptor.description = Some("Choose when this agent asks before acting.".to_string());
+    descriptor
+}
+
 /// Shift+Tab cycles agy's mode in this order (Antigravity CLI 1.4.0) and the footer names the
 /// current one, which gxserver reports with these values (`match_antigravity_statusline` in
 /// `server/src/session_chat_options/agent_matchers.rs`). A pick is queued to gxserver, which presses
@@ -968,7 +1022,7 @@ fn antigravity_mode() -> OptionDescriptor {
         })
         .collect(),
     );
-    descriptor.description = Some("Select Antigravity CLI's mode.".to_string());
+    descriptor.description = Some("Select Antigravity's mode.".to_string());
     descriptor
 }
 

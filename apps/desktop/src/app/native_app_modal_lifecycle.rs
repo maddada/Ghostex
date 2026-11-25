@@ -30,7 +30,7 @@ impl GhostexGpuiApp {
         if !window_glass_active() {
             return palette;
         }
-        palette.frosted(frosted_modal_fill(palette.surface.into()).into())
+        palette.frosted_dialog(frosted_panel_fill(palette.surface.into()).into())
     }
 
     /// The palette of a form dialog (Send Bug / Feedback, Add Project, Rename and the like): under
@@ -57,7 +57,7 @@ impl GhostexGpuiApp {
     }
 
     /// The palette of a large panel (Settings and its pages, the Agents Hub, the New Thread
-    /// picker): the dialogs' frost and washes over the darker panel tint (`frosted_panel_fill`).
+    /// picker): the dialogs' frost and washes over the panel tint (`frosted_panel_fill`).
     pub(crate) fn gpui_native_panel_palette(&self) -> ModalPalette {
         let palette = self.gpui_native_modal_solid_palette();
         if !window_glass_active() {
@@ -66,7 +66,8 @@ impl GhostexGpuiApp {
         palette.frosted_dialog(frosted_panel_fill(palette.surface.into()).into())
     }
 
-    /// The modal palette for the current appearance and sidebar theme with glass off.
+    /// The modal palette for the current appearance and sidebar theme with glass off: uses the
+    /// theme's elevated modal/menu surface rather than raw near-black `titlebar_background`.
     fn gpui_native_modal_solid_palette(&self) -> ModalPalette {
         let settings = shared_settings::shared_sidebar_settings_snapshot();
         ModalPalette::resolve(
@@ -76,7 +77,8 @@ impl GhostexGpuiApp {
                 .get("sidebarTheme")
                 .and_then(serde_json::Value::as_str),
         )
-        .tinted(titlebar_background().into())
+        .tinted(modal_surface_background().into())
+        .with_theme_roles()
     }
 
     /// Opens `kind` as a native window whose content is built by `build`.
@@ -156,8 +158,8 @@ impl GhostexGpuiApp {
                 .main_window_popup_owner()
                 .display_for(window_bounds, cx),
             titlebar: None,
-            // Under window glass the modal draws the frosted palette over what its window blurs.
-            window_background: window_glass_background_appearance(),
+            // Under window glass (including over art themes) the modal blurs what is behind it.
+            window_background: modal_window_glass_background_appearance(),
             ..Default::default()
         };
         let view_slot: Rc<RefCell<Option<AnyEntity>>> = Rc::new(RefCell::new(None));
@@ -451,7 +453,13 @@ impl GhostexGpuiApp {
             return;
         };
         let palette = self.gpui_native_modal_palette();
+        let background = modal_window_glass_background_appearance();
         let _ = window.update(cx, |root, window, cx| {
+            #[cfg(not(target_os = "windows"))]
+            window.set_background_appearance(background);
+            #[cfg(target_os = "windows")]
+            let _ = background;
+            apply_frosted_menu_blur(window);
             crate::app::window::popup_frame::frame_app_modal_window(
                 window,
                 palette.window_border(),

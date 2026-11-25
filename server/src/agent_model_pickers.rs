@@ -133,6 +133,9 @@ pub(crate) fn picker_rows(
     if !fresh && cached.is_some() {
         return cached;
     }
+    if agent == "antigravity" && skips_agy_picker_read() {
+        return cached;
+    }
     let scratch = cache_dir.join("model-picker-scratch");
     std::fs::create_dir_all(&scratch).ok()?;
     // agy saves the scratch folder as trusted when the read answers its folder question: taken
@@ -162,6 +165,19 @@ pub(crate) fn picker_rows(
         }
     }
     Some(rows)
+}
+
+/// CDXC:AgentProviders 2026-11-24 WHY: reading agy's picker runs a real agy session, which agy keeps
+/// as a chat (brain folder, conversation, summary row) in the user's own `~/.gemini`, and a read
+/// stopped midway leaves its scratch folder in agy's trusted list. A throwaway gxserver (its own
+/// `GHOSTEX_HOME`, as `cargo xtask test-server` starts) has an empty cache and read it on every
+/// start, so the user's agy history filled with "model-picker-scratch" chats from test servers.
+/// Such a server keeps the published catalog and `agy models` instead. Pointing `HOME` at a folder
+/// of the server's own was tried and must not come back: agy stays signed in there (the login is in
+/// the keyring) but a fresh agy home opens its first-run screens, one of them a data-sharing consent
+/// that comes ticked "Yes, I agree", which Ghostex must not answer for the user.
+fn skips_agy_picker_read() -> bool {
+    ghostex_paths::uses_separate_profile()
 }
 
 /// The CLI's `--version` line, which keys the cached read.

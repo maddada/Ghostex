@@ -137,7 +137,12 @@ pub(crate) fn carry_agent_history(journal: &Journal) -> Vec<String> {
     }
     if copied > 0 {
         notes.push(format!(
-            "Copied {copied} Claude project memory file(s) to the new folder's name."
+            "Copied {} to the new folder's name.",
+            ghostex_gx_protocol::plural(
+                copied,
+                "Claude project memory file",
+                "Claude project memory files"
+            )
         ));
     }
     if !old_folders.is_empty() {

@@ -241,7 +241,12 @@ fn install_agent_skills_blocking(
             "the app bundle".to_string()
         };
         summary_lines.push(format!(
-            "Installed {skill_name} from {source_label} into {installed_count} global skill folder(s)."
+            "Installed {skill_name} from {source_label} into {}.",
+            ghostex_gx_protocol::plural(
+                installed_count,
+                "global skill folder",
+                "global skill folders"
+            )
         ));
         skill_sources.insert(skill_name.clone(), json!(source_kind));
     }

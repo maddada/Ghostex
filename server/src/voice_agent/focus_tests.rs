@@ -108,6 +108,10 @@ fn state_in(temp: &tempfile::TempDir, live: bool) -> Arc<AppState> {
         repository_clone_jobs: crate::repository_clone::RepositoryCloneJobManager::default(),
         session_chat_followers: Arc::new(Mutex::new(HashMap::new())),
         session_chat_option_cache: Arc::new(Mutex::new(HashMap::new())),
+        share_manager: Arc::new(crate::sharing::ShareManager::new(
+            std::env::temp_dir(),
+            58744,
+        )),
         shutdown_tx,
         stale_activity_timers: Arc::new(Mutex::new(HashMap::new())),
         tailcat_runtime: crate::tailcat::TailcatRuntime::new(),

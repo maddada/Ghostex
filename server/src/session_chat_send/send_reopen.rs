@@ -66,14 +66,28 @@ pub(crate) async fn handle_send_session_chat_message_from(
             // replay it answers), before it is typed: its quotes check the record
             // (sender_mark.rs `note_accepted_user_send`); a refused or failed send withdraws it.
             let noted = super::sender_mark::note_accepted_user_send(&state.paths, &body);
+            let is_user_device = attempt_caller.is_user_device();
             let response = match &compaction {
                 Some(compaction) => {
-                    send_after_compaction(&state, endpoint_path, request_id, &body, compaction)
-                        .await
+                    send_after_compaction(
+                        &state,
+                        endpoint_path,
+                        request_id,
+                        &body,
+                        compaction,
+                        is_user_device,
+                    )
+                    .await
                 }
                 None => {
-                    send_session_chat_message_attempt(&state, endpoint_path, request_id, &body)
-                        .await
+                    send_session_chat_message_attempt(
+                        &state,
+                        endpoint_path,
+                        request_id,
+                        &body,
+                        is_user_device,
+                    )
+                    .await
                 }
             };
             if !response.response.status().is_success() {
@@ -204,6 +218,7 @@ async fn send_after_compaction(
     request_id: String,
     body: &Value,
     compaction: &crate::carry_on_compaction::WorkerCompaction,
+    is_user_device: bool,
 ) -> RoutedResponse {
     let params = match read_domain_rpc_params(body) {
         Ok(params) => params,
@@ -227,11 +242,19 @@ async fn send_after_compaction(
         endpoint_path.clone(),
         uuid::Uuid::new_v4().to_string(),
         &json!({ "params": compact }),
+        false,
     )
     .await;
     // A worker that would not take the command gets the message the usual way.
     if !compacted.response.status().is_success() {
-        return send_session_chat_message_attempt(state, endpoint_path, request_id, body).await;
+        return send_session_chat_message_attempt(
+            state,
+            endpoint_path,
+            request_id,
+            body,
+            is_user_device,
+        )
+        .await;
     }
     let target = match resolve_session_chat_send_target(state, &params, "sendSessionChatMessage") {
         Ok(target) => target,
@@ -329,6 +352,11 @@ async fn run_reopen(
             .map(|(text, send_id, sent)| (text.as_str(), send_id.as_deref(), *sent));
         let reopened = apply_reopen(&db, &repository, &plan, watch).unwrap_or(false);
         if reopened {
+            crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
+                &state,
+                &plan.thread_key.0,
+                &plan.thread_key.1,
+            );
             let _ = crate::server::schedule_presentation_session_delta(
                 &state,
                 &db,

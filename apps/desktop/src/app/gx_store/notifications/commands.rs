@@ -42,6 +42,8 @@ struct OpenTarget {
     account_id: Option<String>,
     /// Set on security rows: open Settings > Security, not a session.
     security: bool,
+    /// Needs-input / question notification: also open the question's details panel on desktop.
+    needs_input: bool,
 }
 
 impl OpenTarget {
@@ -65,6 +67,7 @@ impl OpenTarget {
                 .to_string(),
             account_id: item["accountId"].as_str().map(str::to_string),
             security: item["securityEntry"].is_u64(),
+            needs_input: item["kind"].as_str() == Some("needsInput"),
         })
     }
 
@@ -77,6 +80,8 @@ impl OpenTarget {
             session_id: session_id.to_string(),
             account_id: item.account_id.clone(),
             security: item.security_entry.is_some(),
+            needs_input: item.kind
+                == crate::notification_feed::GpuiNotificationFeedKind::NeedsInput,
         }
     }
 }
@@ -105,7 +110,7 @@ impl GhostexGpuiApp {
                         .map(OpenTarget::from_feed_item)
                 });
                 if let Some(target) = target {
-                    self.gx_store_open_notification(target, cx);
+                    self.gx_store_open_notification(target, false, cx);
                 }
             }
             NotificationFeedCommand::JumpToLatestUnread => {
@@ -122,13 +127,17 @@ impl GhostexGpuiApp {
                         // The runtime opened from the state it held after the read, which is the
                         // previous one when a read failed.
                         if let Some(target) = this.gx_store_next_unread_notification() {
-                            this.gx_store_open_notification(target, cx);
+                            this.gx_store_open_notification(target, true, cx);
                         }
                     });
                 })
                 .detach();
             }
             NotificationFeedCommand::DeferAndJumpNext => self.gx_store_defer_notification(cx),
+            NotificationFeedCommand::MarkAllSeen => {
+                let machines = self.gx_store_notification_machines_on(tab);
+                self.gx_store_mark_machines_notifications_seen(machines, cx);
+            }
             NotificationFeedCommand::MarkFinishedSeen => {
                 self.gx_store_mark_finished_notifications_seen(tab, cx)
             }
@@ -136,24 +145,190 @@ impl GhostexGpuiApp {
                 let Some(action) = command.update_action() else {
                     return;
                 };
+                self.notifications_panel_kept_unread.clear();
+                if command == NotificationFeedCommand::MarkAllRead {
+                    for item in &mut self.notification_feed_state.items {
+                        item.seen = true;
+                        self.gx_store.notifications.mark_item_seen(
+                            &item.machine,
+                            item.id.clone(),
+                            item.kind.wire_name(),
+                        );
+                        if !item.awaiting_approval {
+                            item.read = true;
+                        }
+                    }
+                } else {
+                    self.notification_feed_state
+                        .items
+                        .retain(|item| item.awaiting_approval);
+                    for item in &mut self.notification_feed_state.items {
+                        item.seen = true;
+                        self.gx_store.notifications.mark_item_seen(
+                            &item.machine,
+                            item.id.clone(),
+                            item.kind.wire_name(),
+                        );
+                    }
+                }
+                self.notification_feed_state.recount_from_items();
                 for machine in self.gx_store_notification_machines_on(tab) {
+                    self.gx_store.notifications.bump_epoch(&machine);
                     self.gx_store_update_notification_feed(
                         machine,
                         json!({ "action": action }),
                         cx,
                     );
                 }
+                cx.notify();
             }
             _ => {
                 let (Some(action), Some((machine, id))) = (command.update_action(), row) else {
                     return;
                 };
+                self.gx_store.notifications.bump_epoch(machine);
+                match command {
+                    NotificationFeedCommand::MarkRead => {
+                        self.mark_cached_notification_row_read(machine, id, true);
+                    }
+                    NotificationFeedCommand::MarkUnread => {
+                        self.gx_store.notifications.clear_item_seen(machine, id);
+                        self.mark_cached_notification_row_read(machine, id, false);
+                    }
+                    NotificationFeedCommand::Dismiss => {
+                        if let Some(index) = self
+                            .notification_feed_state
+                            .items
+                            .iter()
+                            .position(|item| item.id == id && &item.machine == machine)
+                            && !self.notification_feed_state.items[index].awaiting_approval
+                        {
+                            let removed = self.notification_feed_state.items.remove(index);
+                            self.notifications_panel_kept_unread.remove(&removed.key());
+                            self.notification_feed_state.recount_from_items();
+                        }
+                    }
+                    _ => {}
+                }
                 self.gx_store_update_notification_feed(
                     machine.clone(),
                     json!({ "action": action, "notificationId": id }),
                     cx,
                 );
+                cx.notify();
             }
+        }
+    }
+
+    fn mark_cached_notification_row_read(&mut self, machine: &MachineId, id: &str, read: bool) {
+        if let Some(item) = self
+            .notification_feed_state
+            .items
+            .iter_mut()
+            .find(|item| item.id == id && &item.machine == machine)
+        {
+            if read && item.awaiting_approval {
+                return;
+            }
+            let key = item.key();
+            item.read = read;
+            item.seen = read;
+            if read {
+                self.notifications_panel_kept_unread.remove(&key);
+                self.gx_store.notifications.mark_item_seen(
+                    &item.machine,
+                    item.id.clone(),
+                    item.kind.wire_name(),
+                );
+            } else {
+                self.notifications_panel_kept_unread.insert(key);
+            }
+            self.notification_feed_state.recount_from_items();
+        }
+    }
+
+    /// Marks unseen rows seen on `machines` without marking them read, so the bell badge clears
+    /// across devices while rows keep their unread highlight while the panel is open.
+    pub(crate) fn gx_store_mark_machines_notifications_seen(
+        &mut self,
+        machines: Vec<MachineId>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        for machine in machines {
+            let Some(route) = self.gx_store_notification_feed_route(&machine) else {
+                continue;
+            };
+            let started_epoch = self.gx_store.notifications.bump_epoch(&machine);
+            cx.spawn(async move |this, cx| {
+                let Some(message) =
+                    update_notification_feed(route, json!({ "action": "markAllSeen" })).await
+                else {
+                    return;
+                };
+                let _ = this.update(cx, |this, cx| {
+                    // Ignore a late `markAllSeen` answer if a newer mutation (such as
+                    // `markShownRead` on close) has already started on this computer.
+                    if this.gx_store.notifications.epoch(&machine) != started_epoch {
+                        return;
+                    }
+                    this.gx_store_store_notification_feed(machine, message, cx);
+                });
+            })
+            .detach();
+        }
+    }
+
+    /// Marks the shown unread rows read on their owning computers when the bell panel closes.
+    /// Falls back to per-row `markRead` for an older remote daemon that predates `markShownRead`.
+    pub(crate) fn gx_store_mark_shown_notifications_read(
+        &mut self,
+        by_machine: std::collections::BTreeMap<MachineId, Vec<String>>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        for (machine, ids) in by_machine {
+            if ids.is_empty() {
+                continue;
+            }
+            let Some(route) = self.gx_store_notification_feed_route(&machine) else {
+                continue;
+            };
+            let started_epoch = self.gx_store.notifications.begin_mark_read(&machine, &ids);
+            cx.spawn(async move |this, cx| {
+                let final_message = if let Some(message) = update_notification_feed(
+                    route.clone(),
+                    json!({ "action": "markShownRead", "notificationIds": ids }),
+                )
+                .await
+                {
+                    Some(message)
+                } else {
+                    let mut last = None;
+                    for id in ids {
+                        let marked = update_notification_feed(
+                            route.clone(),
+                            json!({ "action": "markRead", "notificationId": id }),
+                        )
+                        .await;
+                        last = marked.or(last);
+                    }
+                    last
+                };
+                let _ = this.update(cx, |this, cx| {
+                    this.gx_store.notifications.finish_mark_read(&machine);
+                    if let Some(message) = final_message {
+                        if this.gx_store.notifications.epoch(&machine) == started_epoch {
+                            this.gx_store_store_notification_feed(machine, message, cx);
+                        }
+                    } else if !this
+                        .gx_store
+                        .notifications
+                        .has_in_flight_mark_read(&machine)
+                    {
+                        this.gx_store_publish_notification_feeds(cx);
+                    }
+                });
+            })
+            .detach();
         }
     }
 
@@ -312,7 +487,7 @@ impl GhostexGpuiApp {
                     merged_notification_feed_jump_target(&merged, Some((&machine, &session_id)))
                         .and_then(OpenTarget::from_message_item);
                 if let Some(target) = target {
-                    this.gx_store_open_notification(target, cx);
+                    this.gx_store_open_notification(target, true, cx);
                 }
             });
         })
@@ -330,11 +505,45 @@ impl GhostexGpuiApp {
             .map(OpenTarget::from_feed_item)
     }
 
-    /// Marks the row read on its computer, then focuses its session and reveals it in the sidebar,
-    /// the same way a sidebar click on that session does (a remote one opens on its computer). An
-    /// account row on this computer opens its account instead; a remote computer's accounts are
-    /// not this app's to open, so its account rows are only marked read.
-    fn gx_store_open_notification(&mut self, target: OpenTarget, cx: &mut gpui::Context<Self>) {
+    /// Focuses the row's session and reveals it in the sidebar, the same way a sidebar click on
+    /// that session does (a remote one opens on its computer). When `mark_read` is true (jump
+    /// hotkeys outside the bell panel), the row is marked read first and attention is acknowledged;
+    /// when `mark_read` is false (clicking a row inside the bell panel), the row stays unread and
+    /// highlighted until the user marks it read manually or closes the bell popup. An account row
+    /// on this computer opens its account instead, and a security row opens Settings > Security.
+    fn gx_store_open_notification(
+        &mut self,
+        target: OpenTarget,
+        mark_read: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if !mark_read {
+            if target.security {
+                if target.machine.is_local() {
+                    self.open_gpui_settings_tab("security", None, cx);
+                }
+                return;
+            }
+            if let Some(account_id) = target.account_id {
+                if target.machine.is_local() {
+                    self.open_account_notification(&account_id, cx);
+                }
+                return;
+            }
+            let session = self.resolve_notification_open_session(&target);
+            self.gx_store_show_session_on_its_machine(
+                &session,
+                RowFocusOptions {
+                    skip_acknowledge_attention: true,
+                    ..RowFocusOptions::default()
+                },
+                cx,
+            );
+            if target.needs_input {
+                self.request_open_notification_ask_details(&session.to_sidebar_session_id(), cx);
+            }
+            return;
+        }
         let Some(route) = self.gx_store_notification_feed_route(&target.machine) else {
             return;
         };
@@ -376,10 +585,34 @@ impl GhostexGpuiApp {
             .detach();
             return;
         }
-        // The raw ids become the sidebar's session id: the session's CURRENT project when the
-        // daemon lists it, else the row's own, so a session the list does not draw still resolves.
-        let session = self
-            .gx_store
+        let session = self.resolve_notification_open_session(&target);
+        let needs_input = target.needs_input;
+        let machine = target.machine;
+        cx.spawn(async move |this, cx| {
+            let marked = update_notification_feed(route, mark_read).await;
+            let _ = this.update(cx, |this, cx| {
+                if let Some(message) = marked {
+                    this.gx_store_store_notification_feed(machine.clone(), message, cx);
+                }
+                // CDXC:Notifications 2026-10-18 DECISION:
+                // User: "when i click on a notification from another machine please switch the sidebar to show that other machine". The switch, the focus and the reveal are one shared step (gx_store/activation_focus.rs) that an OS banner's click takes too (issue #401: the banner used to focus only).
+                this.gx_store_show_session_on_its_machine(&session, RowFocusOptions::default(), cx);
+                if needs_input {
+                    this.request_open_notification_ask_details(
+                        &session.to_sidebar_session_id(),
+                        cx,
+                    );
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// Resolves a notification row's raw ids into the sidebar's `SessionKey`: the session's
+    /// CURRENT project when the daemon lists it, else the row's own, so a session the list does
+    /// not draw still resolves.
+    fn resolve_notification_open_session(&self, target: &OpenTarget) -> SessionKey {
+        self.gx_store
             .core
             .presentation()
             .loaded(&target.machine)
@@ -397,19 +630,6 @@ impl GhostexGpuiApp {
                 machine: target.machine.clone(),
                 project_id: target.project_id.clone(),
                 session_id: target.session_id.clone(),
-            });
-        let machine = target.machine;
-        cx.spawn(async move |this, cx| {
-            let marked = update_notification_feed(route, mark_read).await;
-            let _ = this.update(cx, |this, cx| {
-                if let Some(message) = marked {
-                    this.gx_store_store_notification_feed(machine.clone(), message, cx);
-                }
-                // CDXC:Notifications 2026-10-18 DECISION:
-                // User: "when i click on a notification from another machine please switch the sidebar to show that other machine". The switch, the focus and the reveal are one shared step (gx_store/activation_focus.rs) that an OS banner's click takes too (issue #401: the banner used to focus only).
-                this.gx_store_show_session_on_its_machine(&session, RowFocusOptions::default(), cx);
-            });
-        })
-        .detach();
+            })
     }
 }

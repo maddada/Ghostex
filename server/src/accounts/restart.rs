@@ -52,10 +52,33 @@ fn apply_account_settings(runtime: &mut Map<String, Value>, settings: &Value) {
 pub(crate) struct RestartPlan {
     agent: String,
     resume_command: String,
+    launched_acp: Option<(String, Option<crate::acp::AcpApprovalLevel>)>,
+    cleanup_paths: TempFilesGuard,
     account_settings: Value,
     expected_identity: String,
     previous_process_id: Option<i64>,
     background: Option<super::claude_background::BackgroundSession>,
+}
+
+/// Removes any temporary one-shot channel secret files and account-switch scripts if a switch
+/// fails before being handed off to the shell. Once the shell command is enqueued, callers
+/// [`disarm`](Self::disarm) the guard so the script (`rm -f`) and `acp-host`
+/// (`read_and_remove_channel_secret_file`) self-unlink without racing startup; daemon startup
+/// sweep cleans up any crash leftovers.
+pub(crate) struct TempFilesGuard(pub(crate) Vec<std::path::PathBuf>);
+
+impl TempFilesGuard {
+    pub(crate) fn disarm(&mut self) {
+        self.0.clear();
+    }
+}
+
+impl Drop for TempFilesGuard {
+    fn drop(&mut self) {
+        for path in &self.0 {
+            let _ = std::fs::remove_file(path);
+        }
+    }
 }
 
 /// Whether the session's zmx daemon is alive, so the CLI inside it can be exited and resumed in place.
@@ -98,11 +121,17 @@ pub(crate) fn plan(
                     "This account switch needs an exact saved conversation and a single-line agent command.",
                 )
             })?;
-    let resume_command = typed_resume_command(
-        state,
-        session,
-        super::default_login::route_around_signed_out_default(&resume_command),
-    )?;
+    let routed_resume_command =
+        super::default_login::route_around_signed_out_default(&resume_command);
+    let launched_acp =
+        crate::acp::acp_family_from_launch_command(&routed_resume_command).map(|family| {
+            (
+                family,
+                crate::acp::acp_approval_level_from_launch_command(&routed_resume_command),
+            )
+        });
+    let (resume_command, cleanup_paths) =
+        typed_resume_command(state, session, routed_resume_command)?;
     let zmx_name = crate::zmx::provider_zmx_session_name(session)?;
     // CDXC:AgentProviders 2026-11-16 WHY: this read of the session's own processes is the check
     // before anything is stopped (GitHub #630); the exit loop reads the same way
@@ -114,7 +143,14 @@ pub(crate) fn plan(
             )
         })?
         .and_then(|tree| tree.agent_identity());
-    let previous_process_id = current_process.and_then(|identity| identity.process_id);
+    let project_id = session["projectId"].as_str().unwrap_or_default();
+    let session_id = session["sessionId"].as_str().unwrap_or_default();
+    let acp_child_pid = crate::acp::session_is_acp(session)
+        .then(|| crate::acp::channel::channel_state(project_id, session_id))
+        .flatten()
+        .and_then(|snap| snap.get("childPid").and_then(Value::as_i64))
+        .filter(|&pid| pid > 0);
+    let previous_process_id = acp_child_pid.or_else(|| current_process.and_then(|i| i.process_id));
     let background = if agent == "claude" {
         previous_process_id.and_then(|pid| {
             super::claude_background::resolve(
@@ -140,6 +176,8 @@ pub(crate) fn plan(
     Ok(RestartPlan {
         agent,
         resume_command,
+        launched_acp,
+        cleanup_paths,
         account_settings: Value::Object(account_settings),
         expected_identity,
         previous_process_id,
@@ -150,15 +188,106 @@ pub(crate) fn plan(
 /// The longest resume command typed into the shell as it is.
 const TYPED_COMMAND_LIMIT: usize = 768;
 
+/// Prepare an in-place shell launch command for a Non-CLI (`acp-host`) session:
+/// - Writes the session's host channel secret atomically to a private (`0600` under `0700` dir
+///   inside `paths.auth_dir`, which is in `gxserver_private_paths()`) random-UUID one-shot file
+///   and appends `--channel-secret-file <path>` to `ghostex acp-host` (which reads and unlinks it
+///   immediately before spawning the agent). The secret is never written into a script, PTY, or env.
+/// - Writes a random-UUID wrapper script atomically (`0600` under `0700` `account-switch/`) that
+///   self-unlinks and invokes `exec <command>` via `/bin/sh` on Unix so POSIX syntax works in
+///   `zsh`, `bash`, and `fish`.
+/// - Returns `(command_to_type, TempFilesGuard)`. Callers must call `guard.disarm()` once the
+///   shell write sequence is enqueued so files are never deleted before `acp-host` reads them.
+pub(crate) fn prepare_non_cli_in_place_launch_command(
+    paths: &crate::paths::GxserverPaths,
+    auth_token: &str,
+    project_id: &str,
+    session_id: &str,
+    command: String,
+) -> Result<(String, TempFilesGuard), DomainStateError> {
+    let trimmed = command.trim().to_string();
+    let mut guard = TempFilesGuard(Vec::new());
+
+    let effective_command = if let Some(secret_path) =
+        crate::acp::channel::write_one_shot_channel_secret_file(
+            &paths.auth_dir,
+            auth_token,
+            project_id,
+            session_id,
+        )
+        .map_err(super::store::error)?
+    {
+        let quoted_secret = crate::agents::quote_shell_arg(&secret_path.to_string_lossy());
+        guard.0.push(secret_path);
+        format!("{trimmed} --channel-secret-file {quoted_secret}")
+    } else {
+        trimmed
+    };
+
+    let dir = paths.root_dir.join("account-switch");
+    std::fs::create_dir_all(&dir).map_err(super::store::error)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
+    }
+    let file = dir.join(format!(
+        "{project_id}-{session_id}-{}.{}",
+        uuid::Uuid::new_v4(),
+        if cfg!(windows) { "ps1" } else { "sh" }
+    ));
+    let quoted_file = crate::agents::quote_shell_arg(&file.to_string_lossy());
+    let script = if cfg!(windows) {
+        format!(
+            "Remove-Item -LiteralPath {quoted_file} -ErrorAction SilentlyContinue\n{effective_command}\n"
+        )
+    } else {
+        format!("rm -f {quoted_file}\nexec {effective_command}\n")
+    };
+    {
+        let mut opts = std::fs::OpenOptions::new();
+        opts.create_new(true).write(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt as _;
+            opts.mode(0o600);
+        }
+        use std::io::Write as _;
+        let mut f = opts.open(&file).map_err(super::store::error)?;
+        f.write_all(script.as_bytes())
+            .map_err(super::store::error)?;
+        f.flush().map_err(super::store::error)?;
+    }
+    guard.0.push(file);
+    let typed = if cfg!(windows) {
+        format!(". {quoted_file}")
+    } else {
+        format!("/bin/sh {quoted_file}")
+    };
+    Ok((typed, guard))
+}
+
 /// CDXC:AgentProviders 2026-10-14 WHY:
 /// A Codex resume command carries Marked handovers inline (`-c developer_instructions=…`, Codex has no file form for it) and ran past 1 KB. Typed into the shell right after Codex exited, it arrived while the terminal was still in line mode, which keeps at most 1,024 bytes of a line on macOS: the shell got the command cut inside its quote, the agent never started and the switch failed. A command longer than `TYPED_COMMAND_LIMIT` is written to a script file in gxserver's state and the shell is given only `source '<file>'` (`. '<file>'` in PowerShell), which every shell Ghostex runs reads in full.
 fn typed_resume_command(
     state: &AppState,
     session: &Value,
     command: String,
-) -> Result<String, DomainStateError> {
+) -> Result<(String, TempFilesGuard), DomainStateError> {
+    let is_acp = crate::acp::session_is_acp(session) || command.trim().contains(" acp-host ");
+    if is_acp {
+        let project_id = session["projectId"].as_str().unwrap_or_default();
+        let session_id = session["sessionId"].as_str().unwrap_or_default();
+        return prepare_non_cli_in_place_launch_command(
+            &state.paths,
+            &state.auth_token,
+            project_id,
+            session_id,
+            command,
+        );
+    }
     if command.len() <= TYPED_COMMAND_LIMIT {
-        return Ok(command);
+        return Ok((command, TempFilesGuard(Vec::new())));
     }
     let dir = state.paths.root_dir.join("account-switch");
     std::fs::create_dir_all(&dir).map_err(super::store::error)?;
@@ -169,10 +298,13 @@ fn typed_resume_command(
         if cfg!(windows) { "ps1" } else { "sh" }
     ));
     std::fs::write(&file, format!("{command}\n")).map_err(super::store::error)?;
-    Ok(format!(
-        "{} {}",
-        if cfg!(windows) { "." } else { "source" },
-        crate::agents::quote_shell_arg(&file.to_string_lossy())
+    Ok((
+        format!(
+            "{} {}",
+            if cfg!(windows) { "." } else { "source" },
+            crate::agents::quote_shell_arg(&file.to_string_lossy())
+        ),
+        TempFilesGuard(Vec::new()),
     ))
 }
 
@@ -212,6 +344,9 @@ pub(crate) fn start(
         })),
         source == SwitchSource::Automatic,
     );
+    if let Some((family, approval_level)) = plan.launched_acp.as_ref() {
+        crate::acp::apply_acp_runtime_settings(&mut runtime, family, *approval_level);
+    }
     endpoint::update_session_changes(repository, session, &runtime, Map::new())?;
     let cwd = session["cwd"].as_str().map(str::to_string).or_else(|| {
         repository
@@ -296,6 +431,11 @@ pub(crate) fn start(
             return Err(error);
         }
     };
+    let mut cleanup_paths = plan.cleanup_paths;
+    // The shell write sequence is now running; disarm the early-error guard so the wrapper script
+    // (`rm -f`) and `acp-host` (`read_and_remove_channel_secret_file`) self-unlink without racing
+    // startup. Any leftover on failure or crash is swept on daemon startup.
+    cleanup_paths.disarm();
     let state = Arc::new(state.clone());
     let started = Instant::now();
     tokio::spawn(async move {
@@ -394,6 +534,8 @@ async fn finish(
     };
     let runs_on_selected_login = result.is_err()
         && super::restart_verification::runs_on_selected_login(
+            &project_id,
+            &session_id,
             &started_login.zmx_name,
             &started_login.agent,
             &started_login.expected_identity,

@@ -52,6 +52,10 @@ mod session_handoff_modal;
 #[path = "../ui_fonts.rs"]
 mod ui_fonts;
 // DEMO-MODULES: one `#[path]` include per converted modal, plus its demo module under native_modal_demo/.
+#[path = "../app/native_chat/account_switch_card_view.rs"]
+mod account_switch_card_view;
+#[path = "native_modal_demo/account_switch.rs"]
+mod account_switch_demo;
 #[path = "native_modal_demo/add_project.rs"]
 mod add_project_demo;
 #[path = "../app/window/add_project_modal/mod.rs"]
@@ -112,6 +116,10 @@ mod header_more_demo;
 mod missing_project_folder_demo;
 #[path = "../app/window/missing_project_folder_modal.rs"]
 mod missing_project_folder_modal;
+#[path = "native_modal_demo/native_mode_intro.rs"]
+mod native_mode_intro_demo;
+#[path = "../app/window/native_mode_intro_modal.rs"]
+mod native_mode_intro_modal;
 #[path = "native_modal_demo/new_bot.rs"]
 mod new_bot_demo;
 #[path = "../app/window/new_bot_modal.rs"]
@@ -124,10 +132,6 @@ mod new_coordinator_modal;
 mod new_gbot_demo;
 #[path = "../app/window/new_gbot_modal.rs"]
 mod new_gbot_modal;
-#[path = "../app/window/new_thread_picker.rs"]
-mod new_thread_picker;
-#[path = "native_modal_demo/new_thread_picker.rs"]
-mod new_thread_picker_demo;
 #[path = "../app/window/notice_modal.rs"]
 mod notice_modal;
 #[path = "native_modal_demo/notice_modal.rs"]
@@ -180,7 +184,11 @@ mod session_note_modal;
 mod settings_demo;
 #[path = "../app/window/settings_modal/mod.rs"]
 mod settings_modal;
+#[path = "native_modal_demo/theme_modals_showcase.rs"]
+mod theme_modals_showcase_demo;
 // The chat header's Share popover (Ghostex Collab), drawn from the app's own view.
+#[path = "native_modal_demo/share_link_popover.rs"]
+mod share_link_popover_demo;
 #[path = "native_modal_demo/share_popover.rs"]
 mod share_popover_demo;
 #[path = "../app/window/share_popover_view.rs"]
@@ -855,14 +863,18 @@ fn main() {
                 "export-transcript" => open_export_transcript(&demo, cx),
                 "session-handoff" => open_session_handoff(&demo, cx),
                 // DEMO-ARMS: one arm per converted modal.
+                "account-switch" => account_switch_demo::open(&demo, cx),
+                "theme-modals" => theme_modals_showcase_demo::open(&demo, cx),
                 "add-project" => add_project_demo::open(&demo, cx),
-                "new-thread-picker" => new_thread_picker_demo::open(&demo, cx),
                 "go-back" => go_back_demo::open(&demo, cx),
                 "crash-report" => crash_report_demo::open(&demo, cx),
                 "update-available" => update_available_demo::open(&demo, cx),
                 "notice-modal" => notice_modal_demo::open(&demo, cx),
                 "updates-menu" => updates_menu_demo::open(&demo, cx),
                 "share-popover" => share_popover_demo::open(&demo, cx),
+                "share-link-popover" => share_link_popover_demo::open(&demo, cx),
+                "share-inbox-ping" => share_link_popover_demo::open_inbox_ping(&demo, cx),
+                "share-transcript-card" => share_link_popover_demo::open_transcript_card(&demo, cx),
                 "jobs-popover" => jobs_popover_demo::open(&demo, cx),
                 "start-menu" => start_menu_demo::open(&demo, cx),
                 "start-menu-click" => start_menu_click_demo::open(&demo, cx),
@@ -884,6 +896,7 @@ fn main() {
                 "new-gbot" => new_gbot_demo::open(&demo, cx),
                 "new-bot" => new_bot_demo::open(&demo, cx),
                 "rail-intro" => rail_intro_demo::open(&demo, cx),
+                "native-mode-intro" => native_mode_intro_demo::open(&demo, cx),
                 "close-buttons" => close_buttons_demo::open(&demo, cx),
                 "browser-route-icon" => browser_route_icon_demo::open(&demo, cx),
                 "page-window-band" => page_window_band_demo::open(&demo, cx),

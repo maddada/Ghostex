@@ -3,7 +3,12 @@ import { MANAGE_CONTENT_AUTOSAVE_DELAY_MS } from './constants';
 import { requestManageFiles } from './files-bridge';
 import { ManageExcalidrawEditor } from './preview/excalidraw-editor';
 import { ManageFontViewer } from './preview/font-viewer';
-import { type ManageAnnotateBoot, ManageHtmlRenderViewer, manageHtmlPageName } from './preview/html-viewer';
+import {
+  type ManageAnnotateBoot,
+  type ManageHtmlScroll,
+  ManageHtmlRenderViewer,
+  manageHtmlPageName,
+} from './preview/html-viewer';
 import type { ManageWebKitWindow } from './types';
 
 /** The Docs resource origin's URL for one file, or `undefined` when the app gave no origin. */
@@ -156,8 +161,39 @@ function ManageEmbedDocument() {
     [path, projectEditorId, projectId]
   );
   const onOpenDocument = useCallback(
-    (next: string) => void requestManageFiles({ action: 'openDocsFile', path: next, projectEditorId, projectId }),
+    (next: string, scroll?: ManageHtmlScroll) =>
+      void requestManageFiles({
+        action: 'openDocsFile',
+        path: next,
+        ...(scroll ? { scrollX: scroll.x, scrollY: scroll.y } : {}),
+        projectEditorId,
+        projectId,
+      }),
     [projectEditorId, projectId]
+  );
+  const onScrollChange = useCallback(
+    (scroll: ManageHtmlScroll) =>
+      void requestManageFiles({
+        action: 'scrollPosition',
+        path,
+        scrollX: scroll.x,
+        scrollY: scroll.y,
+        projectEditorId,
+        projectId,
+      }).catch(() => undefined),
+    [path, projectEditorId, projectId]
+  );
+  const onNavigateHistory = useCallback(
+    (direction: 'back' | 'forward', scroll?: ManageHtmlScroll) =>
+      void requestManageFiles({
+        action: 'navigateDocsHistory',
+        direction,
+        path,
+        ...(scroll ? { scrollX: scroll.x, scrollY: scroll.y } : {}),
+        projectEditorId,
+        projectId,
+      }).catch(() => undefined),
+    [path, projectEditorId, projectId]
   );
   const onSendAnnotation = useCallback(
     async (markdown: string, screenshots: { id: string; png: string }[]) => {
@@ -237,7 +273,9 @@ function ManageEmbedDocument() {
         onAnnotateNotes={onAnnotateNotes}
         onAnnotateState={onAnnotateState}
         onCopyAnnotation={onCopyAnnotation}
+        onNavigateHistory={onNavigateHistory}
         onOpenDocument={onOpenDocument}
+        onScrollChange={onScrollChange}
         onSendAnnotation={onSendAnnotation}
         pageName={manageHtmlPageName(path, resourcePath)}
       />

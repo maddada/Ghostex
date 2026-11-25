@@ -32,7 +32,7 @@ const GROUPS: [(&str, &str); 8] = [
     // The `ideas` group, shown as Backlog. User: "rename Ideas to Backlog in the board please".
     ("ideas", "Backlog"),
     ("later", "To do"),
-    ("needs", "Needs you"),
+    ("needs", crate::extras::work_panel::ASKS_GROUP_NAME),
     ("blocked", "Blocked"),
     // Waiting on something outside: the user's 2026-11-06 words on server/src/coordinators/board.rs
     // `BOARD_GROUPS`. No pill of its own: nothing in it needs the user.
@@ -925,11 +925,11 @@ fn question_chips(state: &ChatState, row: &Value) -> Vec<BoardTag> {
         .collect()
 }
 
-/// The chat's own unanswered questions (forms and question pages not put off For later), as
-/// Needs you rows, newest first.
+/// The chat's own unanswered questions (forms and question pages not put off For later, both
+/// loaded and older entries from the resource index), as Needs you rows, newest first.
 fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
     let mut rows: Vec<(Option<i64>, BoardRow)> =
-        crate::questions::open_questions::unanswered(state)
+        crate::questions::open_questions::all_unanswered_at(state, now_ms)
             .into_iter()
             .map(|asker| {
                 let tags = match asker.tags.as_slice() {
@@ -1326,7 +1326,13 @@ pub fn coordinator_board_with(
         focus: panels
             .board_focus
             .as_ref()
-            .map_or(Value::Null, |(key, seq)| json!({"key": key, "seq": seq})),
+            .map_or(Value::Null, |(key, seq)| {
+                let mut value = json!({"key": key, "seq": seq});
+                if let Some(group) = &panels.board_focus_group {
+                    value["group"] = json!(group);
+                }
+                value
+            }),
         tag_options: board
             .get("tagOptions")
             .cloned()
@@ -1360,7 +1366,9 @@ pub struct BoardInputs {
     askers: Stamped<Vec<crate::transcript::open_questions::Asker>>,
     questions: crate::questions::forms::QuestionsInputs,
     resource_index: Stamped<crate::questions::resource_index::ResourceIndex>,
+    queue_prompts: Stamped<Option<Vec<Value>>>,
     later_question_ids: Stamped<Vec<String>>,
+    later_question_until: std::collections::BTreeMap<String, i64>,
     removed_question_ids: Stamped<Vec<String>>,
     /// The opened pages that wait only to be seen: they leave the Needs you count.
     opened_page_ids: Vec<String>,
@@ -1378,7 +1386,9 @@ impl BoardInputs {
             askers: state.transcript_view.askers.clone(),
             questions: crate::questions::forms::QuestionsInputs::of(&state.questions),
             resource_index: state.session.resource_index.clone(),
+            queue_prompts: state.session.queue_prompts.clone(),
             later_question_ids: state.session.later_question_ids.clone(),
+            later_question_until: state.session.later_question_until.clone(),
             removed_question_ids: state.session.removed_question_ids.clone(),
             opened_page_ids: state.session.opened_page_ids.clone(),
         }
@@ -1396,7 +1406,9 @@ impl BoardInputs {
             askers,
             questions,
             resource_index,
+            queue_prompts,
             later_question_ids,
+            later_question_until,
             removed_question_ids,
             opened_page_ids,
             turns: mark,
@@ -1408,7 +1420,9 @@ impl BoardInputs {
             && askers.same_as(&state.transcript_view.askers)
             && questions.matches(&state.questions)
             && resource_index.same_as(&state.session.resource_index)
+            && queue_prompts.same_as(&state.session.queue_prompts)
             && later_question_ids.same_as(&state.session.later_question_ids)
+            && *later_question_until == state.session.later_question_until
             && removed_question_ids.same_as(&state.session.removed_question_ids)
             && *opened_page_ids == state.session.opened_page_ids
     }
@@ -1457,7 +1471,7 @@ fn ages_change_at(state: &ChatState, now_ms: i64) -> Option<i64> {
         })
         .filter_map(at_ms);
     let board_rows = board_rows.chain(work);
-    let questions = crate::questions::open_questions::unanswered(state)
+    let questions = crate::questions::open_questions::all_unanswered_at(state, now_ms)
         .into_iter()
         .filter_map(|asker| asker.at);
     board_rows
@@ -1507,11 +1521,7 @@ pub fn project_kept(
 /// this count (the Work pill, the Work panel's header, the dock's header and its "N more" line)
 /// agrees with its number. Supersedes "need you" for any number.
 pub fn needs_you(count: usize) -> String {
-    if count == 1 {
-        "1 needs you".to_string()
-    } else {
-        format!("{count} need you")
-    }
+    crate::extras::work_panel::asks_count_label(count)
 }
 
 /// The document value, `null` when there is no board.
@@ -1672,14 +1682,13 @@ pub fn focus_row(state: &mut ChatState, key: &str) -> Vec<crate::effect::Effect>
     panels.board_expanded.insert(group);
     let seq = panels.board_focus.as_ref().map_or(0, |(_, seq)| *seq) + 1;
     panels.board_focus = Some((key.to_string(), seq));
+    panels.board_focus_group = None;
     Vec::new()
 }
 
-/// `showCoordinatorBoardGroup {group}`: the board opens at `group` (the Blocked pill), unfolded
-/// and showing every row, scrolled to its first card.
+/// `showCoordinatorBoardGroup {group}`: the board opens at `group` (unfolded, no filtering) and
+/// briefly highlights that group (Q4681).
 pub fn show_group(state: &mut ChatState, group: &str) -> Vec<crate::effect::Effect> {
-    // The Work panel's own groups when the chat has work items (`work_panel::work_board`), as the
-    // dock's status line counts them; else gxserver's board.
     let threads = crate::extras::work_source::work_holder(state);
     let built = threads
         .and_then(|threads| threads.get("work"))
@@ -1698,8 +1707,6 @@ pub fn show_group(state: &mut ChatState, group: &str) -> Vec<crate::effect::Effe
                 .first()
                 .map(|row| text(row, "key").to_string())
         });
-    // Needs you also counts the chat's own open questions (`question_rows`), which the work
-    // value doesn't hold: the newest is the row it opens at, so the count is never a dead spot.
     let key = key.or_else(|| {
         (group == "needs")
             .then(|| question_rows(state, 0).into_iter().next())
@@ -1722,6 +1729,7 @@ pub fn show_group(state: &mut ChatState, group: &str) -> Vec<crate::effect::Effe
     panels.board_expanded.insert(group.to_string());
     let seq = panels.board_focus.as_ref().map_or(0, |(_, seq)| *seq) + 1;
     panels.board_focus = Some((key, seq));
+    panels.board_focus_group = Some(group.to_string());
     Vec::new()
 }
 
@@ -1857,6 +1865,7 @@ pub fn show_item(state: &mut ChatState, item: u64) -> Vec<crate::effect::Effect>
     }
     let seq = panels.board_focus.as_ref().map_or(0, |(_, seq)| *seq) + 1;
     panels.board_focus = Some((key, seq));
+    panels.board_focus_group = None;
     Vec::new()
 }
 
@@ -2359,6 +2368,8 @@ mod tests {
             replaced: false,
             prints: Vec::new(),
             rounds: Vec::new(),
+            outside_answerers: Vec::new(),
+            outside_answered_at: None,
             said: Vec::new(),
             title: format!("About {tag}?"),
             at: Some(at),

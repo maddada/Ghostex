@@ -17,9 +17,6 @@ impl GhostexGpuiApp {
         cx: &mut Context<Self>,
     ) {
         self.close_gpui_quick_access_window(cx);
-        if self.new_thread_picker_visible {
-            self.close_gpui_new_thread_picker(cx);
-        }
         self.dismiss_native_sidebar_menu(cx);
         self.native_docs_close_transient(cx);
         self.close_floating_reveal(cx);

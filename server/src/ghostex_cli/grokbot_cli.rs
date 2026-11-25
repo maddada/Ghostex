@@ -65,7 +65,11 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         "status" | "--json" => status_command(&parse_args(args)),
         "connect" => connect_command(&parsed),
         "notify" | "send" => notify_command(&parsed),
-        "test" => simple_command("test", &parsed, "Test note sent. Look for it in the Ghostex bot's chat."),
+        "test" => simple_command(
+            "test",
+            &parsed,
+            "Test note sent. Look for it in the Ghostex bot's chat.",
+        ),
         "disconnect" => simple_command(
             "disconnect",
             &parsed,
@@ -74,7 +78,9 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         "brief" => brief_command(&parsed),
         "instructions" => {
             // stderr, so what's printed on stdout stays exactly the text to paste.
-            eprintln!("The ready-made Ghostex bot: {TEMPLATE_URL} (add it to Grok Bot). To build your own, paste the text below into a new bot named Ghostex.\n");
+            eprintln!(
+                "The ready-made Ghostex bot: {TEMPLATE_URL} (add it to Grok Bot). To build your own, paste the text below into a new bot named Ghostex.\n"
+            );
             print!("{}", crate::grokbot::INSTRUCTIONS);
             Ok(())
         }
@@ -119,11 +125,15 @@ fn brief_command(parsed: &ParsedArgs) -> CliResult<()> {
 
 fn print_status(answer: &Value) {
     if answer["enabled"] == false {
-        println!("Grok Bot Integration is turned off: Ghostex sends nothing to Grok Bot. Turn it on at the top of Settings > Grok Bot.");
+        println!(
+            "Grok Bot Integration is turned off: Ghostex sends nothing to Grok Bot. Turn it on at the top of Settings > Grok Bot."
+        );
         return;
     }
     if answer["connected"] != true {
-        println!("Grok Bot isn't connected. Set it up in Settings > Grok Bot, or run `ghostex grokbot connect` in your own terminal.");
+        println!(
+            "Grok Bot isn't connected. Open Settings > Grok Bot (`ghostex settings open --tab grokBot`), or once you have the webhook address run `ghostex grokbot connect <url>` (in a Ghostex session it asks the user for the key on a private card)."
+        );
         return;
     }
     println!("Connected to Grok Bot: {}", text(answer, "url"));
@@ -275,7 +285,7 @@ fn read_key(parsed: &ParsedArgs, url: &str) -> CliResult<String> {
         return key_from_card(&project_id, &session_id, url, &parsed.flags);
     }
     Err(CliError::Other(
-        "No key: run this in your own terminal (it asks for the key without showing it), or pipe it in with --key-stdin.".to_string(),
+        "No key: run `ghostex grokbot connect <url>` inside a Ghostex session (it asks on a private card), in a terminal (it asks without showing it), or pipe the key in with --key-stdin.".to_string(),
     ))
 }
 
@@ -284,7 +294,7 @@ fn connect_command(parsed: &ParsedArgs) -> CliResult<()> {
     // keep in their history and every process listing shows; only the address is.
     if parsed.flags.contains("key") {
         return Err(CliError::Other(
-            "Don't put the key on the command line. Run `ghostex grokbot connect <url>` and paste it when asked, or pipe it in with --key-stdin.".to_string(),
+            "Don't put the key on the command line. Run `ghostex grokbot connect <url>` (it asks privately on a card or in a terminal) or pipe it in with --key-stdin.".to_string(),
         ));
     }
     let url = match parsed
@@ -299,7 +309,7 @@ fn connect_command(parsed: &ParsedArgs) -> CliResult<()> {
         None => {
             return Err(CliError::Other(
                 "Give the routine's POST to address: ghostex grokbot connect <url>".to_string(),
-            ))
+            ));
         }
     };
     let key = read_key(parsed, &url)?;

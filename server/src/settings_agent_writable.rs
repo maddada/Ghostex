@@ -9,9 +9,12 @@ use std::sync::OnceLock;
 
 use serde_json::{Map, Value};
 
-/// Keys the API may write although the catalog lists them as JSON: the hotkey maps `ghostex
-/// settings hotkeys` saves whole (ghostex_cli/settings_hotkeys.rs), theme roles, and saved themes.
-fn api_writable_json_keys() -> [&'static str; 4] {
+/// Keys the API may write although the catalog lists them as JSON or app-managed: the hotkey maps
+/// `ghostex settings hotkeys` saves whole (ghostex_cli/settings_hotkeys.rs), theme roles, saved
+/// themes, per-agent session mode (`agentSessionMode` for the "Use Native for new chats" checkbox
+/// and phone announcement sheet), and per-agent "Switch to Native" offer dismissals
+/// (`nativeSwitchOfferDismissedAgents`, Q4767/Q4769/Q4770).
+fn api_writable_json_keys() -> [&'static str; 6] {
     [
         "hotkeys",
         ghostex_settings_catalog::TERMINAL_HOTKEYS_SETTING_KEY,
@@ -19,6 +22,8 @@ fn api_writable_json_keys() -> [&'static str; 4] {
         ghostex_settings_catalog::theme_roles::THEME_ROLES_SETTING,
         // The saved themes `ghostex theme save` appends to (server/src/theme/).
         "savedThemes",
+        crate::acp::SESSION_MODE_SETTING_KEY,
+        crate::acp::NATIVE_SWITCH_OFFER_DISMISSED_KEY,
     ]
 }
 
@@ -37,14 +42,32 @@ fn agent_writable_keys() -> &'static HashSet<String> {
     })
 }
 
+/// User-only settings that paired owner devices (this computer's apps and paired
+/// Ghostex phones, `Principal::is_owner_device()`) may sync through
+/// `updateSettingsPatch`, while agents (`Session`), Collab guests (`Guest`),
+/// extensions (`Extension`), and remote peers (`Peer`) remain blocked.
+const OWNER_DEVICE_ONLY_API_KEYS: &[&str] = &["analyticsEnabled"];
+
 /// The keys of `patch` the API may not change, in the patch's order. "Trust project folders
 /// automatically" may be turned off here but never on (packages/settings-catalog/src/folder_trust.rs).
 pub(crate) fn refused_keys(patch: &Map<String, Value>) -> Vec<String> {
+    refused_keys_for_caller(patch, false)
+}
+
+/// Like [`refused_keys`], additionally permitting [`OWNER_DEVICE_ONLY_API_KEYS`] when
+/// `caller_is_owner_device` is true (e.g. a paired Ghostex phone toggling Analytics in
+/// Mobile Settings and syncing it via `dispatchRendererCommand` -> `updateSettingsPatch`).
+pub(crate) fn refused_keys_for_caller(
+    patch: &Map<String, Value>,
+    caller_is_owner_device: bool,
+) -> Vec<String> {
     let allowed = agent_writable_keys();
     patch
         .iter()
         .filter(|(key, value)| {
-            !allowed.contains(key.as_str())
+            let key_allowed = allowed.contains(key.as_str())
+                || (caller_is_owner_device && OWNER_DEVICE_ONLY_API_KEYS.contains(&key.as_str()));
+            !key_allowed
                 || ghostex_settings_catalog::folder_trust::api_write_turns_on_folder_trust(
                     key, value,
                 )

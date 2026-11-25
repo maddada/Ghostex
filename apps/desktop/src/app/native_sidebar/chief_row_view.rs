@@ -70,9 +70,9 @@ fn flower(size: f32, color: Hsla) -> impl IntoElement {
 }
 
 /// CDXC:Chief 2026-11-08 DECISION:
-/// User: "please don't show the chief of staff thing at the top in the gbots or hermes bots' views". The row shows in the sessions sidebar only: never in Bots mode (GBots or Hermes), nor while the extension is off.
-pub(crate) fn chief_row_shown(enabled: bool, bots_mode: bool) -> bool {
-    enabled && !bots_mode
+/// User: "please don't show the chief of staff thing at the top in the gbots or hermes bots' views". The row shows in the sessions sidebar only: never in Bots mode (GBots or Hermes).
+pub(crate) fn chief_row_shown(bots_mode: bool) -> bool {
+    !bots_mode
 }
 
 /// The block the rows sit in, so their boxes stand where a project header's does (the sidebar's

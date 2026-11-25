@@ -37,13 +37,8 @@ pub const READ_ALOUD: &str = "readAloud";
 /// calls while it is off, and the phone learns it from `builtInFeaturesOff`. Dictate is not part
 /// of it.
 pub const VOICE_AGENT: &str = "voiceAgent";
-/// Main Hub with Chief of Staff, the Ghostex-wide coordinator (its pinned row in Main Hub on the
-/// desktop and the phone, its agent session and its head role); on by default. gxserver
-/// takes the head role away and puts its agent to sleep while it is off (server/src/chief/).
-pub const CHIEF: &str = "chief";
-/// GBots, Ghostex's own bots under Chief of Staff in Main Hub; off by default, and off while Main
-/// Hub ([`CHIEF`]) is off. gxserver refuses `/api/gbots` and `ghostex gbots` while it is off
-/// (server/src/gbots/feature.rs).
+/// GBots, Ghostex's own bots under Ask Ghostex AI in Main Hub; off by default. gxserver refuses
+/// `/api/gbots` and `ghostex gbots` while it is off (server/src/gbots/feature.rs).
 pub const GBOTS: &str = "gbots";
 /// Claude (claude.ai in a view opened from a header button, with an account bar to switch
 /// between the saved Claude accounts' sign-ins). Off by default.
@@ -349,7 +344,7 @@ SEE-ALSO: apps/desktop/src/app/window/settings_modal/tabs/extensions/remote_mach
 /// The built-in extensions whose switch the owner's app may flip on a connected computer from
 /// Settings > Extensions with that computer picked: features gxserver itself turns on or off on
 /// the computer it runs on.
-pub const COMPUTER_SWITCHES: &[&str] = &[CHIEF, GBOTS, CLI_PROXY_API];
+pub const COMPUTER_SWITCHES: &[&str] = &[GBOTS, CLI_PROXY_API];
 
 /// [`turned_off_message`] naming the computer whose switch is off, for a refusal that may reach
 /// another computer's app: where to turn it on, there or from a computer connected to it.
@@ -376,8 +371,8 @@ pub fn terminal_hint(key: &str, value: bool) -> String {
         .into_iter()
         .any(|entry| entry.key == key && entry.agent_writable);
     if writable {
-        format!(" From a terminal: ghostex settings set {key} {value}")
+        format!(" Run `ghostex settings set {key} {value}`.")
     } else {
-        format!(" From a terminal: ghostex settings open {key}")
+        format!(" Open it with `ghostex settings open {key}`.")
     }
 }

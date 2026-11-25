@@ -32,12 +32,14 @@ fn log_runtime_ready() {
 }
 
 pub fn initialize(cx: &gpui::App) -> Result<()> {
-    let state = CEF_RUNTIME.get_or_init(|| Mutex::new(None));
+    let state = CEF_RUNTIME.get_or_init(|| Mutex::new(CefRuntimeState::NotStarted));
     let mut state = state
         .lock()
         .expect("CEF runtime mutex should not be poisoned");
-    if state.is_some() {
-        return Ok(());
+    match &*state {
+        CefRuntimeState::Active { .. } => return Ok(()),
+        CefRuntimeState::InitFailed { error, .. } => anyhow::bail!("{error}"),
+        CefRuntimeState::NotStarted => {}
     }
     CEF_INITIALIZE_STARTED_AT.get_or_init(std::time::Instant::now);
     CEF_SHUTDOWN_IN_PROGRESS.store(false, Ordering::Release);
@@ -99,7 +101,11 @@ pub fn initialize(cx: &gpui::App) -> Result<()> {
     */
     platform::install_message_pump(cx);
     let runtime_app = app.clone();
-    platform::start_cef(Box::new(move || {
+    let start_result = platform::start_cef(Box::new(move || {
+        if CEF_INIT_ATTEMPTED.swap(true, Ordering::AcqRel) {
+            CEF_INIT_FAILED.store(true, Ordering::Release);
+            anyhow::bail!("CEF initialization was already attempted in this process");
+        }
         crate::crash_report::note_cef_phase("initializeStart");
         let initialized = cef::initialize(
             Some(args.as_main_args()),
@@ -108,23 +114,51 @@ pub fn initialize(cx: &gpui::App) -> Result<()> {
             std::ptr::null_mut(),
         );
         if initialized != 1 {
+            let exit_code = cef::get_exit_code();
+            CEF_INIT_FAILED.store(true, Ordering::Release);
+            if i64::from(exit_code)
+                == i64::from(cef::Resultcode::NORMAL_EXIT_PROCESS_NOTIFIED.get_raw())
+            {
+                CEF_INIT_FAILED_PROCESS_NOTIFIED.store(true, Ordering::Release);
+            }
+            crate::crash_report::note_cef_phase("initializeFailed");
+            crate::crash_report::note_event(&format!("gpui.cef.exitCode.{exit_code}"));
             platform::invalidate_message_pump();
             #[cfg(target_os = "windows")]
-            if cef::get_exit_code() == cef::Resultcode::NORMAL_EXIT_AUTO_DE_ELEVATED.get_raw() {
+            if exit_code == cef::Resultcode::NORMAL_EXIT_AUTO_DE_ELEVATED.get_raw() {
                 std::process::exit(0);
             }
-            anyhow::bail!("CEF initialization returned false");
+            anyhow::bail!("CEF initialization returned false (exit code {exit_code})");
         }
+        CEF_INITIALIZED.store(true, Ordering::Release);
         crate::crash_report::note_cef_phase("initializeDone");
         start_cef_devtools_relay();
         Ok(())
-    }))?;
+    }));
 
-    *state = Some(CefRuntimeState {
-        _platform: platform_runtime,
-        _app: runtime_app,
-    });
-    Ok(())
+    match start_result {
+        Ok(()) => {
+            *state = CefRuntimeState::Active {
+                _platform: platform_runtime,
+                _app: runtime_app,
+            };
+            Ok(())
+        }
+        Err(error) => {
+            if CEF_INIT_FAILED.load(Ordering::Acquire) {
+                let message = format!("{error:#}");
+                *CEF_START_ERROR
+                    .lock()
+                    .expect("CEF start error mutex should not be poisoned") = Some(message.clone());
+                *state = CefRuntimeState::InitFailed {
+                    _platform: Some(platform_runtime),
+                    _app: Some(runtime_app),
+                    error: message,
+                };
+            }
+            Err(error)
+        }
+    }
 }
 
 /// Why CEF cannot start when the loaded libcef refuses this build's API version.
@@ -175,26 +209,63 @@ fn loaded_libcef_path() -> Option<std::path::PathBuf> {
 
 static CEF_START_ERROR: Mutex<Option<String>> = Mutex::new(None);
 
-/// A start that `platform::start_cef` ran after `initialize` returned (macOS) failed: forget the
-/// runtime so a later request can try again, and hand the error to the app's wait for the context.
+/// A start that `platform::start_cef` ran after `initialize` returned (macOS) failed: keep the
+/// loaded framework handles intact (never unload or re-enter `cef::initialize` in this process,
+/// GitHub #724) and hand the error to every window waiting for the context.
 pub(crate) fn record_deferred_start_failure(error: &anyhow::Error) {
+    let message = format!("{error:#}");
+    CEF_INIT_FAILED.store(true, Ordering::Release);
     if let Some(state) = CEF_RUNTIME.get() {
-        state
+        let mut guard = state
             .lock()
-            .expect("CEF runtime mutex should not be poisoned")
-            .take();
+            .expect("CEF runtime mutex should not be poisoned");
+        let previous = std::mem::replace(&mut *guard, CefRuntimeState::NotStarted);
+        *guard = match previous {
+            CefRuntimeState::Active { _platform, _app } => CefRuntimeState::InitFailed {
+                _platform: Some(_platform),
+                _app: Some(_app),
+                error: message.clone(),
+            },
+            CefRuntimeState::InitFailed {
+                _platform,
+                _app,
+                error: existing,
+            } => CefRuntimeState::InitFailed {
+                _platform,
+                _app,
+                error: existing,
+            },
+            CefRuntimeState::NotStarted => CefRuntimeState::InitFailed {
+                _platform: None,
+                _app: None,
+                error: message.clone(),
+            },
+        };
     }
     *CEF_START_ERROR
         .lock()
-        .expect("CEF start error mutex should not be poisoned") = Some(format!("{error:#}"));
+        .expect("CEF start error mutex should not be poisoned") = Some(message);
 }
 
-/// The error of a start that failed after `initialize` returned, once.
-pub fn take_runtime_start_error() -> Option<String> {
+/// The error of a CEF start that failed, if any. Non-consuming so every workspace window waiting
+/// for startup observes it and stops polling.
+pub fn runtime_start_error() -> Option<String> {
     CEF_START_ERROR
         .lock()
         .expect("CEF start error mutex should not be poisoned")
-        .take()
+        .clone()
+}
+
+/// True once `cef::initialize` has failed in this process: CEF cannot be initialized a second time
+/// in the same process, so browser features stay off until Ghostex restarts.
+pub fn init_permanently_failed() -> bool {
+    CEF_INIT_FAILED.load(Ordering::Acquire)
+}
+
+/// True when `cef::initialize` failed with `NORMAL_EXIT_PROCESS_NOTIFIED` (another Ghostex
+/// instance already holds the browser profile lock).
+pub fn init_failed_process_notified() -> bool {
+    CEF_INIT_FAILED_PROCESS_NOTIFIED.load(Ordering::Acquire)
 }
 
 pub fn context_initialized() -> bool {
@@ -222,6 +293,9 @@ fn runtime_demand() -> &'static CefRuntimeDemand {
 /// User: defer CEF at launch so startup is as fast as possible, and start it when it is actually needed.
 /// Browser creation is the one place that knows a web view is wanted right now, and it runs inside app updates, so it only signals here; the app's listener starts the runtime on its next turn and the existing "not yet" retry paths create the view once the context is ready.
 pub fn request_runtime() {
+    if init_permanently_failed() {
+        return;
+    }
     CEF_FIRST_REQUESTED_AT.get_or_init(std::time::Instant::now);
     let _ = runtime_demand().sender.unbounded_send(());
 }
@@ -659,11 +733,7 @@ pub fn shutdown() {
     let mut state = state
         .lock()
         .expect("CEF runtime mutex should not be poisoned");
-    if state.is_none() {
-        return;
-    }
-    CEF_SHUTDOWN_IN_PROGRESS.store(true, Ordering::Release);
-    state.take();
+    platform::invalidate_message_pump();
     CEF_REQUEST_CONTEXTS_BY_PROFILE.with(|contexts| {
         contexts.borrow_mut().clear();
     });
@@ -672,7 +742,22 @@ pub fn shutdown() {
     });
     clear_remote_browser_contexts();
     clear_workspace_browser_contexts();
-    platform::invalidate_message_pump();
+
+    if !CEF_INITIALIZED.swap(false, Ordering::AcqRel) {
+        // `cef::initialize` either never ran (macOS deferred start cancelled before firing) or
+        // failed. Never call `cef::shutdown` without a matching successful `cef::initialize`, and
+        // keep `InitFailed` handles alive until process exit rather than unloading a partially
+        // initialized framework.
+        if matches!(*state, CefRuntimeState::Active { .. }) {
+            *state = CefRuntimeState::NotStarted;
+        }
+        CEF_CONTEXT_INITIALIZED.store(false, Ordering::Release);
+        return;
+    }
+
+    CEF_SHUTDOWN_IN_PROGRESS.store(true, Ordering::Release);
     cef::shutdown();
     CEF_CONTEXT_INITIALIZED.store(false, Ordering::Release);
+    // Drop `PlatformCefRuntime` only after `cef::shutdown()` finishes.
+    *state = CefRuntimeState::NotStarted;
 }

@@ -42,6 +42,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     into.agent_session_id = tri_string(session.agent_session_id.clone());
     into.session_agent_id = tri_string(session.session_agent_id.clone());
     into.screen_probed = session.screen_probed;
+    into.non_cli_mode = session.non_cli_mode;
     into.cloud_box_asleep = session.cloud_box_asleep;
     into.computer_notice = crate::session::computer::notice(state, context);
     into.issue_link_base = session.issue_link_base.clone();

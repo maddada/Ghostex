@@ -8,13 +8,14 @@ use serde_json::{Map, Value};
 pub(crate) const INSTALL_GUIDE_URL: &str =
     "https://github.com/maddada/Ghostex#supports-all-of-the-popular-agent-clis";
 
-/// CDXC:Onboarding 2026-09-28 DECISION:
-/// User: "We need to implement installing claude/codex/cursor/grok through the setup flow if not installed, and from the agents page in settings." These four always have a row on the Agents panel; a missing one shows an Install button that runs the same gxserver CLI job Settings > Agents uses, with each agent's official installer (PowerShell on Windows). Every other catalog agent installs from the Install guide popup.
-/// CDXC:Onboarding 2026-11-21 DECISION: User: Antigravity is "one of the fully supported options in the onboarding": a row of its own beside Claude and Codex, with its install, its sign-in check (server/src/agent_sign_in.rs) and the default pick, which Chief of Staff then runs on (Gemini Neon at High, server/src/chief/model.rs).
-pub(crate) const PRIMARY_AGENTS: [(&str, &str); 5] = [
+/// CDXC:Onboarding 2026-11-24 DECISION:
+/// Primary auto-detected CLIs on Step 1 of the streamlined 3-step Day-0 onboarding: top 4 active
+/// agents (Claude Code, Codex CLI, Antigravity CLI, OpenCode) plus Cursor Agent and Grok Build.
+pub(crate) const PRIMARY_AGENTS: [(&str, &str); 6] = [
     ("claude", "Claude Code"),
-    ("codex", "Codex CLI"),
-    ("antigravity", "Antigravity CLI"),
+    ("codex", "Codex"),
+    ("antigravity", "Antigravity"),
+    ("opencode", "OpenCode"),
     ("cursor", "Cursor Agent"),
     ("grok", "Grok Build"),
 ];
@@ -100,8 +101,8 @@ pub(crate) enum ComputerUseState {
 fn display_name_override(agent_id: &str) -> Option<&'static str> {
     match agent_id {
         "claude" => Some("Claude Code"),
-        "codex" => Some("Codex CLI"),
-        "antigravity" => Some("Antigravity CLI"),
+        "codex" => Some("Codex"),
+        "antigravity" => Some("Antigravity"),
         _ => None,
     }
 }
@@ -232,9 +233,14 @@ pub(crate) struct OnboardingSettings {
     pub(crate) experience_values: Map<String, Value>,
     pub(crate) notify: bool,
     pub(crate) preferred_interface: String,
+    pub(crate) agent_session_mode: Map<String, Value>,
+    /// True when `preferredAgentInterface` was explicitly saved in the user's settings file.
+    pub(crate) preferred_interface_explicit: bool,
     pub(crate) default_prompt_agent_id: String,
     /// Agent approvals (`agentAcceptAllEnabled`): true is Skip permissions.
     pub(crate) accept_all: bool,
+    /// Anonymous usage analytics (`analyticsEnabled`): default true.
+    pub(crate) analytics_enabled: bool,
     pub(crate) sidebar_theme: String,
     pub(crate) dark_theme_preset: String,
     pub(crate) light_theme_preset: String,
@@ -395,7 +401,10 @@ impl OnboardingSettings {
                 .unwrap_or_else(|| catalog_number(key))
         };
         Self {
-            view_hidden: VIEW_KEYS.map(|key| read_bool(object, key.hidden_key(), false)),
+            view_hidden: VIEW_KEYS.map(|key| {
+                let default_hidden = catalog_default(key.hidden_key()) == Some(&J::Bool(true));
+                read_bool(object, key.hidden_key(), default_hidden)
+            }),
             spaces_on: read_bool(object, "sidebarSpacesEnabled", true),
             unified_sidebar: text("sidebarView") == Some("unified"),
             experience_values: ghostex_settings_catalog::experience::AREAS
@@ -417,6 +426,15 @@ impl OnboardingSettings {
                 Some("terminal") => "terminal".to_string(),
                 _ => "chat".to_string(),
             },
+            agent_session_mode: object
+                .get("agentSessionMode")
+                .and_then(Value::as_object)
+                .cloned()
+                .unwrap_or_default(),
+            preferred_interface_explicit: matches!(
+                text("preferredAgentInterface"),
+                Some("chat" | "terminal")
+            ),
             default_prompt_agent_id: text("defaultPromptAgentId")
                 .filter(|value| !value.is_empty())
                 .unwrap_or("claude")
@@ -424,6 +442,7 @@ impl OnboardingSettings {
                 .take(120)
                 .collect(),
             accept_all: read_bool(object, "agentAcceptAllEnabled", false),
+            analytics_enabled: read_bool(object, "analyticsEnabled", true),
             sidebar_theme,
             dark_theme_preset: preset("darkThemePreset", &DARK_PRESETS),
             light_theme_preset: preset("lightThemePreset", &LIGHT_PRESETS),
@@ -544,12 +563,19 @@ impl OnboardingSettings {
         }
         if let Some(value) = text("preferredAgentInterface") {
             self.preferred_interface = value;
+            self.preferred_interface_explicit = true;
+        }
+        if let Some(modes) = patch.get("agentSessionMode").and_then(Value::as_object) {
+            self.agent_session_mode = modes.clone();
         }
         if let Some(value) = text("defaultPromptAgentId") {
             self.default_prompt_agent_id = value;
         }
         if let Some(value) = patch.get("agentAcceptAllEnabled").and_then(Value::as_bool) {
             self.accept_all = value;
+        }
+        if let Some(value) = patch.get("analyticsEnabled").and_then(Value::as_bool) {
+            self.analytics_enabled = value;
         }
         if let Some(value) = text("sidebarTheme") {
             self.sidebar_theme = value;

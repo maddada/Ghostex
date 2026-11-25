@@ -97,11 +97,11 @@ fn mode_label(mode: &str) -> String {
     }
 }
 
-/// A greyed Bypass whose switch below it can restart Claude in it (session_chat_mode_restart.rs).
-const CLAUDE_BYPASS_NEEDS_RESTART: &str = "Claude has to restart to use Bypass.";
-/// A greyed Bypass with no switch: a side chat or read-only thread, or a refusal from a Claude
+/// A greyed Full permissions whose switch below it can restart Claude in it (session_chat_mode_restart.rs).
+const CLAUDE_BYPASS_NEEDS_RESTART: &str = "Claude has to restart to use Full permissions.";
+/// A greyed Full permissions with no switch: a side chat or read-only thread, or a refusal from a Claude
 /// whose command Ghostex can't read.
-const CLAUDE_BYPASS_HOW_TO: &str = "Claude wasn't started with Bypass allowed. New chats can have it: Settings > Agents > Agent approvals > Accept all.";
+const CLAUDE_BYPASS_HOW_TO: &str = "Claude wasn't started with Full permissions allowed. New chats can have it: Settings > Agents > Agent approvals > Full permissions.";
 
 /// How to turn a refused mode on, saying only what is true of that agent. Claude's flag is the
 /// one switch known to bring a mode back. Antigravity CLI 1.4 offered Auto with and without its

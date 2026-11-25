@@ -52,7 +52,7 @@ pub fn status_command(args: &[String]) -> CliResult<()> {
         }
         if health.state == State::Stuck {
             println!(
-                "Fix it with Repair in Settings > Integrations, or run `ghostex spaceo repair` yourself in a terminal."
+                "Fix it with Repair in Settings > Integrations (`ghostex settings open --tab integrations`), or have the user run `ghostex spaceo repair` in a terminal."
             );
         }
     }

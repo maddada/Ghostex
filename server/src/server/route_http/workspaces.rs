@@ -1,12 +1,16 @@
 //! Workspace routes (crate::workspaces): read, create, update and delete workspaces, and move a
 //! project into one.
 
+use axum::http::StatusCode;
 use serde_json::{json, Map, Value};
 
 use crate::{
+    audit,
     constants::GXSERVER_PROTOCOL_VERSION,
-    domain::{DomainRepository, DomainStateError},
+    domain::{read_domain_rpc_params, DomainRepository, DomainStateError},
     presentation::increment_presentation_revision,
+    protocol::rpc_error,
+    security::Principal,
     sidebar_project_collections::{
         read_sidebar_project_collections, update_sidebar_project_collections,
     },
@@ -14,14 +18,126 @@ use crate::{
     work_mode::{store_linear_api_key, LinearKeyScope},
     workspaces::{
         assign_machine_workspace_in, assign_remote_project_workspace_in, create_workspace_in,
-        delete_workspace_in, find_workspace_id, move_project_to_workspace, read_sidebar_workspaces,
-        reapply_workspace_defaults, resolve_project_reference, update_workspace_in,
-        write_sidebar_workspaces, DEFAULT_WORKSPACE_ID,
+        delete_workspace_in, delete_workspace_instructions_file, find_workspace_id,
+        move_project_to_workspace, read_sidebar_workspaces, read_workspace_instructions_file,
+        reapply_workspace_defaults, resolve_project_reference, update_workspace_in, workspace_name,
+        write_sidebar_workspaces, write_workspace_instructions_file, DEFAULT_WORKSPACE_ID,
+        MAX_WORKSPACE_INSTRUCTIONS_BYTES,
     },
 };
 
 use super::super::work_mode_sync::{publish_project_work_mode_change, spawn_work_mode_refresh};
 use super::*;
+
+const WORKSPACE_WRITE_REFUSED: &str = "Only the user can change workspaces: in Settings > Workspaces, on your phone, or from a terminal outside Ghostex (agent sessions and Ghostex terminal panes can't modify workspaces).";
+
+fn workspace_write_gate(
+    endpoint_path: &str,
+    request_id: &str,
+    caller: &Principal,
+    body_json: &Value,
+) -> Option<RoutedResponse> {
+    let allowed = caller.is_user_device()
+        && !(matches!(caller, Principal::LocalAgent) && crate::audit::token_file_names_session());
+    if allowed {
+        return None;
+    }
+    let (kind, summary) = match endpoint_path {
+        "/api/createWorkspace" => ("workspace.create", "Refused creating a workspace"),
+        "/api/updateWorkspace" => ("workspace.update", "Refused updating a workspace"),
+        "/api/deleteWorkspace" => ("workspace.delete", "Refused deleting a workspace"),
+        "/api/writeWorkspaceInstructions" => (
+            "workspace.instructions.write",
+            "Refused changing workspace instructions",
+        ),
+        "/api/moveProjectToWorkspace" => (
+            "workspace.moveProject",
+            "Refused moving a project between workspaces",
+        ),
+        "/api/moveMachineToWorkspace" => (
+            "workspace.moveMachine",
+            "Refused moving a computer between workspaces",
+        ),
+        "/api/moveRemoteProjectToWorkspace" => (
+            "workspace.moveRemoteProject",
+            "Refused moving a remote project between workspaces",
+        ),
+        _ => ("workspace.write", "Refused changing a workspace"),
+    };
+    let target = read_domain_rpc_params(body_json).ok().and_then(|params| {
+        params
+            .get("workspaceId")
+            .or_else(|| params.get("name"))
+            .or_else(|| params.get("projectId"))
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    });
+    let mut action = audit::Action::new(kind, summary);
+    if let Some(target) = target {
+        action = action.target(target);
+    }
+    audit::record(
+        action,
+        audit::Actor::current(),
+        audit::Outcome::Refused(WORKSPACE_WRITE_REFUSED.to_string()),
+        None,
+    );
+    Some(routed_json(
+        Some(endpoint_path.to_string()),
+        StatusCode::FORBIDDEN,
+        rpc_error(
+            "forbidden",
+            WORKSPACE_WRITE_REFUSED,
+            Some(request_id.to_string()),
+        ),
+    ))
+}
+
+fn workspace_instructions_read_gate(
+    state: &AppState,
+    endpoint_path: &str,
+    request_id: &str,
+    caller: &Principal,
+) -> Option<RoutedResponse> {
+    let refused_reason = match caller {
+        caller if caller.is_user_device() => None,
+        Principal::Session {
+            project_id,
+            session_id,
+            ..
+        } => {
+            let is_api_chat = crate::storage::open_gxserver_database(&state.paths)
+                .ok()
+                .and_then(|db| {
+                    DomainRepository::new(&db, &state.metadata.server_id)
+                        .get_session(project_id, session_id)
+                        .ok()
+                        .flatten()
+                })
+                .is_some_and(|session| {
+                    crate::agents::is_gbot_api_chat(
+                        session.get("runtimeSettings").and_then(Value::as_object),
+                    )
+                });
+            is_api_chat.then_some("GBot API chats cannot read workspace instructions.")
+        }
+        _ => Some("Only your own devices or sessions can read workspace instructions."),
+    }?;
+    audit::record(
+        audit::Action::new(
+            "workspace.instructions.read",
+            "Refused reading workspace instructions",
+        ),
+        audit::Actor::from(caller),
+        audit::Outcome::Refused(refused_reason.to_string()),
+        None,
+    );
+    Some(routed_json(
+        Some(endpoint_path.to_string()),
+        StatusCode::FORBIDDEN,
+        rpc_error("forbidden", refused_reason, Some(request_id.to_string())),
+    ))
+}
 
 pub(super) async fn route_workspaces_http(
     request: RouteHttpRequest,
@@ -45,22 +161,34 @@ pub(super) async fn route_workspaces_http(
                     .map(|workspaces| json!({ "sidebarWorkspaces": workspaces }))
             },
         ),
-        "/api/createWorkspace" => handle_domain_http(
-            &state,
-            endpoint.path,
-            request_id,
-            &body_json,
-            |_, db, params, _| {
-                let _event_sequence = lock_presentation_event_sequence(&state)?;
-                let current = read_sidebar_workspaces(db)?;
-                refuse_other_trackers(params)?;
-                let (workspace_id, next) = create_workspace_in(&current, params)?;
-                let workspaces = write_sidebar_workspaces(db, &next)?;
-                broadcast_workspaces(&state, db, &workspaces)?;
-                Ok(json!({ "workspaceId": workspace_id, "sidebarWorkspaces": workspaces }))
-            },
-        ),
+        "/api/createWorkspace" => {
+            if let Some(refused) =
+                workspace_write_gate(&endpoint.path, &request_id, &caller, &body_json)
+            {
+                return Ok(refused);
+            }
+            handle_domain_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+                |_, db, params, _| {
+                    let _event_sequence = lock_presentation_event_sequence(&state)?;
+                    let current = read_sidebar_workspaces(db)?;
+                    refuse_other_trackers(params)?;
+                    let (workspace_id, next) = create_workspace_in(&current, params)?;
+                    let workspaces = write_sidebar_workspaces(db, &next)?;
+                    broadcast_workspaces(&state, db, &workspaces)?;
+                    Ok(json!({ "workspaceId": workspace_id, "sidebarWorkspaces": workspaces }))
+                },
+            )
+        }
         "/api/updateWorkspace" => {
+            if let Some(refused) =
+                workspace_write_gate(&endpoint.path, &request_id, &caller, &body_json)
+            {
+                return Ok(refused);
+            }
             let response = handle_domain_http(
                 &state,
                 endpoint.path,
@@ -83,6 +211,11 @@ pub(super) async fn route_workspaces_http(
             response
         }
         "/api/deleteWorkspace" => {
+            if let Some(refused) =
+                workspace_write_gate(&endpoint.path, &request_id, &caller, &body_json)
+            {
+                return Ok(refused);
+            }
             let response = handle_domain_http(
                 &state,
                 endpoint.path,
@@ -141,13 +274,108 @@ pub(super) async fn route_workspaces_http(
                         LinearKeyScope::Workspace(&workspace_id),
                         None,
                     );
+                    delete_workspace_instructions_file(&state.paths, &workspace_id);
                     Ok(json!({ "workspaceId": workspace_id, "sidebarWorkspaces": workspaces }))
                 },
             );
             spawn_work_mode_refresh(&state);
             response
         }
+        "/api/readWorkspaceInstructions" => {
+            if let Some(refused) =
+                workspace_instructions_read_gate(&state, &endpoint.path, &request_id, &caller)
+            {
+                return Ok(refused);
+            }
+            handle_domain_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+                |_, db, params, _| {
+                    let workspaces = read_sidebar_workspaces(db)?;
+                    if params.contains_key("workspaceId") {
+                        let workspace_id = required_workspace(&workspaces, params)?;
+                        let (content, path, exists, truncated) =
+                            read_workspace_instructions_file(&state.paths, &workspace_id)?;
+                        return Ok(json!({
+                            "workspaceId": workspace_id,
+                            "name": workspace_name(&workspaces, &workspace_id),
+                            "content": content,
+                            "path": path.to_string_lossy(),
+                            "exists": exists,
+                            "truncated": truncated,
+                            "maxBytes": MAX_WORKSPACE_INSTRUCTIONS_BYTES,
+                        }));
+                    }
+                    let mut entries = Map::new();
+                    for workspace_id in workspaces
+                        .get("order")
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten()
+                        .filter_map(Value::as_str)
+                    {
+                        let (content, path, exists, truncated) =
+                            read_workspace_instructions_file(&state.paths, workspace_id)?;
+                        entries.insert(
+                            workspace_id.to_string(),
+                            json!({
+                                "workspaceId": workspace_id,
+                                "name": workspace_name(&workspaces, workspace_id),
+                                "content": content,
+                                "path": path.to_string_lossy(),
+                                "exists": exists,
+                                "truncated": truncated,
+                                "maxBytes": MAX_WORKSPACE_INSTRUCTIONS_BYTES,
+                            }),
+                        );
+                    }
+                    Ok(json!({
+                        "workspaces": entries,
+                        "maxBytes": MAX_WORKSPACE_INSTRUCTIONS_BYTES,
+                    }))
+                },
+            )
+        }
+        "/api/writeWorkspaceInstructions" => {
+            if let Some(refused) =
+                workspace_write_gate(&endpoint.path, &request_id, &caller, &body_json)
+            {
+                return Ok(refused);
+            }
+            handle_domain_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+                |_, db, params, _| {
+                    let workspaces = read_sidebar_workspaces(db)?;
+                    let workspace_id = required_workspace(&workspaces, params)?;
+                    let content = params
+                        .get("content")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
+                    let (saved, path, exists) =
+                        write_workspace_instructions_file(&state.paths, &workspace_id, content)?;
+                    Ok(json!({
+                        "workspaceId": workspace_id,
+                        "name": workspace_name(&workspaces, &workspace_id),
+                        "content": saved,
+                        "path": path.to_string_lossy(),
+                        "exists": exists,
+                        "truncated": false,
+                        "maxBytes": MAX_WORKSPACE_INSTRUCTIONS_BYTES,
+                    }))
+                },
+            )
+        }
         "/api/moveProjectToWorkspace" => {
+            if let Some(refused) =
+                workspace_write_gate(&endpoint.path, &request_id, &caller, &body_json)
+            {
+                return Ok(refused);
+            }
             let response = handle_domain_http(
                 &state,
                 endpoint.path,
@@ -194,57 +422,71 @@ pub(super) async fn route_workspaces_http(
             spawn_work_mode_refresh(&state);
             response
         }
-        "/api/moveMachineToWorkspace" => handle_domain_http(
-            &state,
-            endpoint.path,
-            request_id,
-            &body_json,
-            |_, db, params, _| {
-                let machine_id = required_text(params, "machineId")?;
-                let _event_sequence = lock_presentation_event_sequence(&state)?;
-                let current = read_sidebar_workspaces(db)?;
-                let workspace_id = required_workspace(&current, params)?;
-                let next = assign_machine_workspace_in(&current, &machine_id, &workspace_id)?;
-                let workspaces = write_sidebar_workspaces(db, &next)?;
-                if workspaces != current {
-                    broadcast_workspaces(&state, db, &workspaces)?;
-                }
-                Ok(json!({
-                    "machineId": machine_id,
-                    "workspaceId": workspace_id,
-                    "sidebarWorkspaces": workspaces,
-                }))
-            },
-        ),
-        "/api/moveRemoteProjectToWorkspace" => handle_domain_http(
-            &state,
-            endpoint.path,
-            request_id,
-            &body_json,
-            |_, db, params, _| {
-                let machine_id = required_text(params, "machineId")?;
-                let project_id = required_text(params, "projectId")?;
-                let _event_sequence = lock_presentation_event_sequence(&state)?;
-                let current = read_sidebar_workspaces(db)?;
-                let workspace_id = required_workspace(&current, params)?;
-                let next = assign_remote_project_workspace_in(
-                    &current,
-                    &machine_id,
-                    &project_id,
-                    &workspace_id,
-                )?;
-                let workspaces = write_sidebar_workspaces(db, &next)?;
-                if workspaces != current {
-                    broadcast_workspaces(&state, db, &workspaces)?;
-                }
-                Ok(json!({
-                    "machineId": machine_id,
-                    "projectId": project_id,
-                    "workspaceId": workspace_id,
-                    "sidebarWorkspaces": workspaces,
-                }))
-            },
-        ),
+        "/api/moveMachineToWorkspace" => {
+            if let Some(refused) =
+                workspace_write_gate(&endpoint.path, &request_id, &caller, &body_json)
+            {
+                return Ok(refused);
+            }
+            handle_domain_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+                |_, db, params, _| {
+                    let machine_id = required_text(params, "machineId")?;
+                    let _event_sequence = lock_presentation_event_sequence(&state)?;
+                    let current = read_sidebar_workspaces(db)?;
+                    let workspace_id = required_workspace(&current, params)?;
+                    let next = assign_machine_workspace_in(&current, &machine_id, &workspace_id)?;
+                    let workspaces = write_sidebar_workspaces(db, &next)?;
+                    if workspaces != current {
+                        broadcast_workspaces(&state, db, &workspaces)?;
+                    }
+                    Ok(json!({
+                        "machineId": machine_id,
+                        "workspaceId": workspace_id,
+                        "sidebarWorkspaces": workspaces,
+                    }))
+                },
+            )
+        }
+        "/api/moveRemoteProjectToWorkspace" => {
+            if let Some(refused) =
+                workspace_write_gate(&endpoint.path, &request_id, &caller, &body_json)
+            {
+                return Ok(refused);
+            }
+            handle_domain_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+                |_, db, params, _| {
+                    let machine_id = required_text(params, "machineId")?;
+                    let project_id = required_text(params, "projectId")?;
+                    let _event_sequence = lock_presentation_event_sequence(&state)?;
+                    let current = read_sidebar_workspaces(db)?;
+                    let workspace_id = required_workspace(&current, params)?;
+                    let next = assign_remote_project_workspace_in(
+                        &current,
+                        &machine_id,
+                        &project_id,
+                        &workspace_id,
+                    )?;
+                    let workspaces = write_sidebar_workspaces(db, &next)?;
+                    if workspaces != current {
+                        broadcast_workspaces(&state, db, &workspaces)?;
+                    }
+                    Ok(json!({
+                        "machineId": machine_id,
+                        "projectId": project_id,
+                        "workspaceId": workspace_id,
+                        "sidebarWorkspaces": workspaces,
+                    }))
+                },
+            )
+        }
         _ => {
             return Err(RouteHttpRequest {
                 state,

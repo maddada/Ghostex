@@ -334,7 +334,7 @@ fn add_column_regions(
         let value_text = |p: &Point| {
             if normalize {
                 format!(
-                    "{} ({})",
+                    "{} · {}",
                     format_percent(p.v1 - p.v0),
                     format_number(p.value)
                 )

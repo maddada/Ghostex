@@ -189,6 +189,7 @@ pub const ENTRIES: &[SessionMenuEntry] = &[
         "toggleChatFilesLinks",
     ),
     row("sideChat", "Side Chat", "message-circle"),
+    row("switchToNative", "Switch to Native", "bolt"),
     row("view", "View", "eye"),
     row("stopReading", "Stop Reading", "player-stop"),
     row("searchConversation", "Search Conversation", "search"),
@@ -318,7 +319,7 @@ fn spot_rows(spot: SessionMenuSpot) -> SpotRows {
         },
         SessionMenuSpot::ChatBox => SpotRows {
             tiles: &["filesLinks", "sideChat"],
-            rows: &["chatToolbar", "view", "stopReading"],
+            rows: &["chatToolbar", "switchToNative", "view", "stopReading"],
             more: &["stashPrompt", "skills", "chatOptions"],
         },
         SessionMenuSpot::PhoneRow => SpotRows {
@@ -336,7 +337,13 @@ fn spot_rows(spot: SessionMenuSpot) -> SpotRows {
         },
         SessionMenuSpot::PhoneChat => SpotRows {
             tiles: &["filesLinks", "sideChat"],
-            rows: &["chatToolbar", "view", "stopReading", "searchConversation"],
+            rows: &[
+                "chatToolbar",
+                "switchToNative",
+                "view",
+                "stopReading",
+                "searchConversation",
+            ],
             more: &[
                 "voiceCall",
                 "promptEditor",

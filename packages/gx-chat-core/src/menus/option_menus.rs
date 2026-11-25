@@ -121,6 +121,8 @@ pub struct OptionMenuParams {
     pub selection_error: Option<String>,
     /// The modes this session's agent cannot use.
     pub unavailable_modes: Vec<ghostex_gx_protocol::UnavailableMode>,
+    /// True while this session runs in Non-CLI (ACP) mode, so approval level switches queue live.
+    pub non_cli_mode: bool,
 }
 
 fn command(descriptor_id: &str) -> Map<String, Value> {
@@ -137,10 +139,11 @@ pub fn native_option_menus(
     option_descriptors: &[OptionDescriptor],
     params: &OptionMenuParams,
 ) -> NativeOptionMenus {
-    let queued_controls = matches!(
-        catalog.map(|catalog| catalog.model_icon.as_str()),
-        Some("codex") | Some("claude") | Some("antigravity-cli")
-    );
+    let queued_controls = params.non_cli_mode
+        || matches!(
+            catalog.map(|catalog| catalog.model_icon.as_str()),
+            Some("codex") | Some("claude") | Some("antigravity-cli")
+        );
     let caps = OptionCaps {
         can_pick_model: params.can_pick_model,
         can_send_key: params.can_send_key,

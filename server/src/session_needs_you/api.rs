@@ -57,7 +57,7 @@ pub(crate) fn insert_needs_you(frame: &mut Map<String, Value>, project_id: &str,
         .lock()
         .ok()
         .and_then(|frames| frames.get(&key).cloned());
-    let value = cached.unwrap_or_else(|| {
+    let mut value = cached.unwrap_or_else(|| {
         let paths = crate::paths::get_gxserver_paths(None);
         let record = crate::storage::open_gxserver_database(&paths)
             .ok()
@@ -75,17 +75,29 @@ pub(crate) fn insert_needs_you(frame: &mut Map<String, Value>, project_id: &str,
         }
         value
     });
+    let command_runs = super::runner::runs_for_session(project_id, session_id);
+    if !command_runs.is_empty() {
+        if let Some(obj) = value.as_object_mut() {
+            obj.insert("commandRuns".to_string(), Value::Object(command_runs));
+        }
+    }
     frame.insert("needsYou".to_string(), value);
 }
 
 /// The tags of the open to-dos, in memory: wakes an SSH-only long-poller when a row opens or closes.
 pub(crate) fn needs_you_identity(project_id: &str, session_id: &str) -> String {
-    frames()
+    let items = frames()
         .lock()
         .ok()
         .and_then(|frames| frames.get(&frame_key(project_id, session_id)).cloned())
         .map(|value| value["items"].to_string())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    let runs = super::runner::identity_for_session(project_id, session_id);
+    if runs.is_empty() {
+        items
+    } else {
+        format!("{items}#{runs}")
+    }
 }
 
 /// The highest tag this session's to-dos ever took (`Q61` is 61), 0 for none, so a coordinator's
@@ -96,6 +108,74 @@ pub(crate) fn highest_tag(db: &rusqlite::Connection, key: &crate::coordinators::
         .ok()
         .flatten()
         .map_or(0, |session| NeedsYouRecord::of(&session).last)
+}
+
+/// The tags this session's own to-dos hold, open or settled, uppercased: a work item's ask may not
+/// take one of them (`item ask --tag`), nor may a Live page (visual_pages/publish.rs).
+pub(crate) fn todo_tags(
+    db: &rusqlite::Connection,
+    key: &crate::coordinators::SessionKey,
+) -> Vec<String> {
+    let Some(session) = DomainRepository::new(db, "")
+        .get_session(&key.0, &key.1)
+        .ok()
+        .flatten()
+    else {
+        return Vec::new();
+    };
+    let record = NeedsYouRecord::of(&session);
+    record
+        .open
+        .iter()
+        .map(|item| item.tag.to_ascii_uppercase())
+        .chain(
+            record
+                .settled
+                .iter()
+                .map(|item| item.tag.to_ascii_uppercase()),
+        )
+        .filter(|tag| !tag.is_empty())
+        .collect()
+}
+
+/// Gives out the session's next free question tag, one past `floor` (the highest its chat, work
+/// items and to-dos use) and past every tag given out before, and keeps it taken in the to-do
+/// counter (`last`), so no other caller gets it: `ghostex coordinator next-tag` asked by a
+/// coordinator and its threads at once never answer the same tag.
+pub(crate) fn reserve_tag(
+    db: &rusqlite::Connection,
+    key: &crate::coordinators::SessionKey,
+    floor: u64,
+) -> Result<u64, DomainStateError> {
+    let _lock = store::write_lock();
+    let session = DomainRepository::new(db, "")
+        .get_session(&key.0, &key.1)?
+        .ok_or_else(|| bad("No such session."))?;
+    let mut record = NeedsYouRecord::of(&session);
+    let number = record.last.max(floor) + 1;
+    record.last = number;
+    store::write(db, &key.0, &key.1, &record)?;
+    Ok(number)
+}
+
+/// Keeps the tags up to `highest` taken (a published page's questions), so a tag given out next
+/// comes after them even before the chat shows the page.
+pub(crate) fn hold_tags(
+    db: &rusqlite::Connection,
+    key: &crate::coordinators::SessionKey,
+    highest: u64,
+) -> Result<(), DomainStateError> {
+    let _lock = store::write_lock();
+    let Some(session) = DomainRepository::new(db, "").get_session(&key.0, &key.1)? else {
+        return Ok(());
+    };
+    let mut record = NeedsYouRecord::of(&session);
+    if record.last >= highest {
+        return Ok(());
+    }
+    record.last = highest;
+    store::write(db, &key.0, &key.1, &record)?;
+    Ok(())
 }
 
 /// Who may keep a session's to-dos: the session's own agent, or the CLI in the user's own terminal
@@ -145,14 +225,20 @@ fn tag_floor(db: &rusqlite::Connection, project_id: &str, session_id: &str) -> u
 }
 
 fn item_json(item: &store::NeedsYouItem) -> Value {
-    json!({
+    let mut value = json!({
         "tag": item.tag,
         "title": item.title,
         "detail": item.detail,
         "command": item.command,
         "answers": item.answers,
         "askedAt": item.asked_at,
-    })
+    });
+    if store::is_snooze_active(item.snoozed_until.as_deref()) {
+        if let Some(until) = &item.snoozed_until {
+            value["snoozedUntil"] = json!(until);
+        }
+    }
+    value
 }
 
 /// `/api/sessionNeedsYou {projectId, sessionId, op}`: `add` (`title`, `detail`, `command`,
@@ -190,8 +276,16 @@ pub(crate) fn handle_needs_you_request(
             }
             .checked()?;
             if let Some(thread) = thread {
-                let added = super::thread::add_for_thread(db, repository, &thread, new)?;
+                // Its tag follows every question the coordinator's chat asked up to now.
                 let coordinator = thread.coordinator_key();
+                crate::session_chat_open_questions::read_up_to_date(
+                    state,
+                    db,
+                    repository,
+                    &coordinator.0,
+                    &coordinator.1,
+                );
+                let added = super::thread::add_for_thread(db, repository, &thread, new)?;
                 for (project_id, session_id) in
                     crate::coordinators::refresh_coordinator_panels(db, repository)
                 {
@@ -206,6 +300,13 @@ pub(crate) fn handle_needs_you_request(
                 );
                 return Ok(added);
             }
+            crate::session_chat_open_questions::read_up_to_date(
+                state,
+                db,
+                repository,
+                &project_id,
+                &session_id,
+            );
             let _lock = store::write_lock();
             let session = session_of(repository, &project_id, &session_id)?;
             let mut record = NeedsYouRecord::of(&session);
@@ -331,6 +432,39 @@ pub(crate) fn route_board_answer(
     let _lock = store::write_lock();
     let session = session_of(repository, &project_id, &session_id)?;
     let mut record = NeedsYouRecord::of(&session);
+    match op.as_str() {
+        "snooze" => {
+            let hours = params
+                .get("hours")
+                .and_then(Value::as_u64)
+                .unwrap_or(1)
+                .clamp(1, 24 * 14);
+            let until = (chrono::Utc::now() + chrono::Duration::hours(hours as i64))
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+            if !record.set_snoozed(&tag, Some(until.clone())) {
+                return Err(bad(format!("{tag} is not an open to-do.")));
+            }
+            store::write(db, &project_id, &session_id, &record)?;
+            changed(state, db, repository, &project_id, &session_id, &record);
+            return Ok(Some(json!({ "item": tag, "snoozedUntil": until })));
+        }
+        "unsnooze" => {
+            if !record.set_snoozed(&tag, None) {
+                return Err(bad(format!("{tag} is not an open to-do.")));
+            }
+            store::write(db, &project_id, &session_id, &record)?;
+            changed(state, db, repository, &project_id, &session_id, &record);
+            return Ok(Some(json!({ "item": tag, "snoozedUntil": Value::Null })));
+        }
+        "restore" => {
+            if record.restore(&tag) {
+                store::write(db, &project_id, &session_id, &record)?;
+                changed(state, db, repository, &project_id, &session_id, &record);
+            }
+            return Ok(Some(json!({ "item": tag, "restored": true })));
+        }
+        _ => {}
+    }
     let (outcome, words) = match op.as_str() {
         "cancel" => ("dismissed", String::new()),
         "answer" | "reply" if !answer.is_empty() => ("answered", answer.clone()),
@@ -410,8 +544,13 @@ pub(crate) fn turn_ended(state: &AppState, project_id: &str, session_id: &str, e
     }
     remember(project_id, session_id, &record);
     let body = match newly.as_slice() {
-        [one] => format!("Needs you: {one}"),
-        [first, rest @ ..] => format!("{} things need you: {first}", rest.len() + 1),
+        [one] => format!("{}: {one}", super::INBOX_FULL_NAME),
+        [first, rest @ ..] => format!(
+            "{} {} in {}: {first}",
+            rest.len() + 1,
+            super::ASKS_GROUP_NAME.to_ascii_lowercase(),
+            super::INBOX_FULL_NAME
+        ),
         [] => return,
     };
     crate::session_chat_open_questions::notify_waiting(

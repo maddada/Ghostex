@@ -446,7 +446,8 @@ pub(super) async fn route_projects_http(
         comes from the per-session git probe reading that cwd.
         */
         "/api/createWorktreeSession" | "/api/removeSessionWorktree" => {
-            handle_worktree_session_http(&state, endpoint.path, request_id, &body_json).await
+            handle_worktree_session_http(&state, &caller, endpoint.path, request_id, &body_json)
+                .await
         }
         // A new chat's worktree tray (worktree_ops/draft_worktree.rs).
         "/api/draftWorktree" => {

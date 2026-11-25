@@ -110,7 +110,7 @@ pub(crate) async fn handle_generate_session_title_http(
                     DomainStateError {
                         code: "invalidParams",
                         message:
-                            "generateSessionTitle requires text for this agent; only Claude Code, Codex, Cursor CLI, Antigravity CLI, and Empryo sessions can generate from recent messages."
+                            "generateSessionTitle requires text for this agent; only Claude Code, Codex, Cursor CLI, Antigravity, and Empryo sessions can generate from recent messages."
                                 .to_string(),
                     },
                 );
@@ -238,7 +238,9 @@ pub(crate) async fn run_manual_session_title_generation_job(
     // `/name` or `/rename` (CDXC:PiChatChannel 2026-11-05 in pi_chat_channel.rs); OMP's extension
     // rename is stored as user-set, exactly like its `/rename`.
     // OpenCode is renamed in its service (`PATCH /api/session/{id}`), not with a typed `/rename`.
-    let named_by_channel =
+    let named_by_channel = if crate::acp::session_is_acp(&session) {
+        true
+    } else {
         match normalize_agent_name(first_prompt_agent_name(&session).as_deref()).as_deref() {
             Some("pi" | "omp") => {
                 crate::pi_chat_channel::set_session_name(&project_id, &session_id, &title).await
@@ -273,7 +275,8 @@ pub(crate) async fn run_manual_session_title_generation_job(
                 .is_ok_and(|renamed| renamed.is_ok())
             }
             _ => false,
-        };
+        }
+    };
     {
         let db = open_gxserver_database(&state.paths).map_err(|_| ())?;
         let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());

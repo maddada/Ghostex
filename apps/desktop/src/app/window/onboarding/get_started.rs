@@ -1,6 +1,11 @@
-//! Panel 5, Get started: the work card (default session view, agent approvals) and the look
-//! card (appearance, theme colour, Colourfulness, transparency) (panels/get-started.tsx (deleted 2026-10-01),
-//! styles/get-started.css, settings-modal/theme-simple-controls.tsx (deleted 2026-10-01), styles/settings-theme.css (deleted 2026-11-06)).
+//! Panel 2, Preferences: top Day-0 setup choices inline (Experience preset, agent approvals,
+//! optional phone pairing after first reply, and appearance/theme with a live Native Chat preview).
+//!
+//! CDXC:Onboarding 2026-11-24 DECISION:
+//! User: "pls make native chat default for all new useres and dont even offerthem anything about
+//! terminal based chat which we're taking out soon". The Default session view (Chat | Terminal)
+//! picker is removed completely; the live preview always shows Native Chat, and the top Day-0
+//! friction controls (Experience preset, Agent approvals, and theme) live inline here.
 use super::FinishTarget;
 use super::GpuiOnboardingWindow;
 use super::interact;
@@ -11,7 +16,6 @@ use super::model::{
 };
 use super::primitives::*;
 use super::stage::*;
-use super::welcome::foot_actions;
 use gpui::StyledImage as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -28,8 +32,12 @@ use std::sync::Arc;
 use std::time::Instant;
 
 const CARDS_LEFT: f32 = 156.0;
-const CARDS_TOP: f32 = 290.0;
+const CARDS_TOP: f32 = 240.0;
 const CARDS_WIDTH: f32 = 1360.0;
+
+const ANALYTICS_TITLE: &str =
+    "Share 100% Fully Anonymous Usage Analytics to Support Ghostex Development";
+const ANALYTICS_SUBTITLE: &str = "Collects no personal data at all. Helps us continue supporting and building Ghostex. Completely free and MIT open-source. Turning this off stops all usage tracking (keeps only 1 anonymous weekly count; DO_NOT_TRACK=1 stops all).";
 
 #[derive(Default)]
 pub(crate) struct GetStartedState {
@@ -300,7 +308,7 @@ impl GpuiOnboardingWindow {
         } else {
             return false;
         };
-        if self.panel != 6 {
+        if self.panel != 2 {
             return false;
         }
         let delta = if right { 1.0 } else { -1.0 };
@@ -320,23 +328,137 @@ impl GpuiOnboardingWindow {
         true
     }
 
+    /// The preset the Experience choice shows: what the settings match, else Regular, which a
+    /// first run starts on.
+    pub(super) fn experience_shown(&self) -> ghostex_settings_catalog::experience::Preset {
+        self.settings
+            .experience()
+            .unwrap_or(ghostex_settings_catalog::experience::FIRST_RUN_PRESET)
+    }
+
+    /// Leaving step 2 keeps the preselected preset: settings that match none get Regular's.
+    pub(super) fn keep_experience(&mut self, cx: &mut Context<Self>) {
+        if self.settings.experience().is_none() {
+            self.pick_experience(ghostex_settings_catalog::experience::FIRST_RUN_PRESET, cx);
+        }
+    }
+
+    fn pick_experience(
+        &mut self,
+        preset: ghostex_settings_catalog::experience::Preset,
+        cx: &mut Context<Self>,
+    ) {
+        let patch: serde_json::Map<String, serde_json::Value> =
+            ghostex_settings_catalog::experience::writes_all(preset)
+                .into_iter()
+                .map(|(key, value)| (key.to_string(), value))
+                .collect();
+        self.update_settings(patch, cx);
+    }
+
+    fn toggle_pair_phone(&mut self, cx: &mut Context<Self>) {
+        self.flow.phone_queued = !self.flow.phone_queued;
+        cx.notify();
+    }
+
+    fn toggle_analytics(&mut self, cx: &mut Context<Self>) {
+        let next = !self.settings.analytics_enabled;
+        self.update_one("analyticsEnabled", Value::Bool(next), cx);
+    }
+
+    /// Persist `analyticsEnabled` explicitly when advancing past Step 2 or finishing setup
+    /// so gxserver's pre-onboarding flush hold always releases with the user's choice on disk.
+    pub(super) fn persist_analytics_choice(&mut self, cx: &mut Context<Self>) {
+        self.update_one(
+            "analyticsEnabled",
+            Value::Bool(self.settings.analytics_enabled),
+            cx,
+        );
+    }
+
+    /// CDXC:Telemetry 2026-11-25 DECISION (Q24 = strip, Q29):
+    /// Compact privacy strip tucked right above the Back / Next footer on Step 2 with the
+    /// unified title, zero-personal-data + MIT open-source + 3-state explanation, and no
+    /// "check code" link ("remove check code here no need").
+    fn render_analytics_strip(&mut self, s: S, now: Instant, cx: &mut Context<Self>) -> AnyElement {
+        let analytics_on = self.settings.analytics_enabled;
+        let thumb = self.thumb("onboarding-analytics", analytics_on, now);
+        let analytics_switch = self.control(
+            s,
+            toggle(
+                s,
+                "onboarding-analytics-toggle",
+                analytics_on,
+                thumb,
+                ToggleSize::Lg,
+                false,
+            ),
+            "onboarding-analytics-toggle",
+            interact::Ring::new(17.0, 1.0),
+            interact::Keys::EnterSpace,
+            cx,
+            |this, _, cx| {
+                cx.stop_propagation();
+                this.toggle_analytics(cx);
+            },
+        );
+        self.control(
+            s,
+            div()
+                .id("onboarding-analytics-strip")
+                .relative()
+                .w_full()
+                .py(s.px(12.0))
+                .px(s.px(18.0))
+                .rounded(s.px(12.0))
+                .border_1()
+                .border_color(white(0.10))
+                .bg(rgba(18, 21, 31, 0.85))
+                .flex()
+                .items_center()
+                .gap(s.px(14.0))
+                .cursor_pointer()
+                .child(
+                    ibox(s, 34.0, 9.0)
+                        .bg(rgba(28, 34, 51, 0.9))
+                        .border_color(white(0.11))
+                        .child(icon(s, "shield", 17.0, 1.6, hex(0x9fc0ff))),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .child(nm(s, 14.5, 600.0).child(ANALYTICS_TITLE))
+                        .child(ss(s, 12.5).mt(s.px(3.0)).child(ANALYTICS_SUBTITLE)),
+                )
+                .child(analytics_switch),
+            "onboarding-analytics-strip",
+            interact::Ring::new(12.0, 1.0),
+            interact::Keys::EnterSpace,
+            cx,
+            |this, _, cx| this.toggle_analytics(cx),
+        )
+        .into_any_element()
+    }
+
     pub(super) fn render_get_started(
         &mut self,
         s: S,
         now: Instant,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
-        let session_view = self.settings.preferred_interface.clone();
+        use ghostex_settings_catalog::experience::Preset;
+        let shown_preset = self.experience_shown();
 
         let mut out = Vec::new();
-        out.push(eyebrow(s, 486.0, 150.0, Some(700.0), "Get started").into_any_element());
+        out.push(eyebrow(s, 486.0, 108.0, Some(700.0), "Step 2 · Preferences").into_any_element());
         out.push(
             heading(
                 s,
                 336.0,
-                182.0,
+                138.0,
                 1000.0,
-                48.0,
+                46.0,
                 "Make Ghostex yours.",
                 None,
                 true,
@@ -344,100 +466,134 @@ impl GpuiOnboardingWindow {
             .into_any_element(),
         );
         out.push(
-            sub(s, 336.0, 252.0, 1000.0, 16.5, true)
-                .child("How sessions open, how agents ask before they act, and a look you like. Everything else can change later.")
+            sub(s, 336.0, 200.0, 1000.0, 16.0, true)
+                .child(
+                    "Choose how much detail Native Chat shows, how agents ask before they act, and a look you like.",
+                )
                 .into_any_element(),
         );
-        let option =
-            |id: SharedString, selected: bool, name: &str, detail: Option<&str>, height: f32| {
-                let (border, bg) = opt_colors(&id, selected);
-                div()
-                    .id(id)
-                    .relative()
-                    .flex_1()
-                    .min_w_0()
-                    .h(s.px(height))
-                    .flex()
-                    .flex_col()
-                    .justify_center()
-                    .px(s.px(16.0))
-                    .rounded(s.px(10.0))
-                    .border_1()
-                    .border_color(border)
-                    .bg(bg)
-                    .cursor_pointer()
-                    .when(selected, |this| {
-                        this.shadow(vec![inset_shadow(white(0.04), 0.0, 1.0, 0.0, 0.0, s)])
-                    })
-                    .child(
-                        nm(s, 17.0, 500.0)
-                            .overflow_hidden()
-                            .text_ellipsis()
-                            .whitespace_nowrap()
-                            .child(name.to_string()),
-                    )
-                    .when_some(detail, |this, detail| {
-                        this.child(
-                            ss(s, 13.5)
-                                .mt(s.px(7.0))
-                                .overflow_hidden()
-                                .text_ellipsis()
-                                .whitespace_nowrap()
-                                .child(detail.to_string()),
-                        )
-                    })
-            };
+
+        let experience_picks = div()
+            .flex()
+            .gap(s.px(8.0))
+            .children(Preset::ALL.into_iter().map(|preset| {
+                let selected = preset == shown_preset;
+                let key = SharedString::from(format!("experience-{}", preset.id()));
+                let (border, bg) = opt_colors(&key, selected);
+                self.control(
+                    s,
+                    div()
+                        .id(key.clone())
+                        .relative()
+                        .flex_1()
+                        .min_w_0()
+                        .h(s.px(42.0))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .px(s.px(12.0))
+                        .rounded(s.px(10.0))
+                        .border_1()
+                        .border_color(border)
+                        .bg(bg)
+                        .cursor_pointer()
+                        .when(selected, |this| {
+                            this.shadow(vec![inset_shadow(white(0.04), 0.0, 1.0, 0.0, 0.0, s)])
+                        })
+                        .child(nm(s, 15.5, 500.0).child(preset.label())),
+                    key,
+                    interact::Ring::new(10.0, 1.0),
+                    interact::Keys::EnterSpace,
+                    cx,
+                    move |this, _, cx| {
+                        this.pick_experience(preset, cx);
+                    },
+                )
+            }));
+
+        let phone_on = self.flow.phone_queued;
+        let phone_thumb = self.thumb("pair-phone-inline", phone_on, now);
+        let phone_switch = self.control(
+            s,
+            toggle(
+                s,
+                "pair-phone-inline-toggle",
+                phone_on,
+                phone_thumb,
+                ToggleSize::Sm,
+                false,
+            ),
+            "pair-phone-inline-toggle",
+            interact::Ring::new(9.5, 1.0),
+            interact::Keys::EnterSpace,
+            cx,
+            |this, _, cx| {
+                cx.stop_propagation();
+                this.toggle_pair_phone(cx);
+            },
+        );
+        let phone_row = self.control(
+            s,
+            div()
+                .id("pair-phone-inline-row")
+                .relative()
+                .mt(s.px(14.0))
+                .py(s.px(10.0))
+                .px(s.px(12.0))
+                .rounded(s.px(10.0))
+                .border_1()
+                .border_color(white(0.07))
+                .bg(white(0.02))
+                .flex()
+                .items_center()
+                .gap(s.px(12.0))
+                .cursor_pointer()
+                .child(icon(s, "phone", 16.0, 1.6, hex(0xcfd5e0)))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .child(nm(s, 14.0, 500.0).child("Pair my phone after my first reply"))
+                        .child(
+                            ss(s, 12.0)
+                                .mt(s.px(2.0))
+                                .child("Opens the QR code to follow agents on iPhone or Android."),
+                        ),
+                )
+                .child(phone_switch),
+            "pair-phone-inline-row",
+            interact::Ring::new(10.0, 1.0),
+            interact::Keys::EnterSpace,
+            cx,
+            |this, _, cx| this.toggle_pair_phone(cx),
+        );
+
         let project_card = pcard(s)
-            .child(div().mb(s.px(14.0)).child(label(s, "Default session view")))
+            .child(div().mb(s.px(10.0)).child(label(s, "Chat experience")))
+            .child(experience_picks)
             .child(
-                div().flex().gap(s.px(8.0)).mb(s.px(20.0)).children(
-                    [
-                        ("chat", "Chat", "Cleaner agent conversation"),
-                        ("terminal", "Terminal", "Raw CLI interface"),
-                    ]
-                    .into_iter()
-                    .map(|(id, name, detail)| {
-                        let key = SharedString::from(format!("view-{id}"));
-                        self.control(
-                            s,
-                            option(key.clone(), session_view == id, name, Some(detail), 72.0),
-                            key,
-                            interact::Ring::new(10.0, 1.0),
-                            interact::Keys::EnterSpace,
-                            cx,
-                            move |this, _, cx| {
-                                this.update_one(
-                                    "preferredAgentInterface",
-                                    Value::String(id.to_string()),
-                                    cx,
-                                );
-                            },
-                        )
-                    }),
-                ),
+                ss(s, 12.5)
+                    .mt(s.px(8.0))
+                    .mb(s.px(16.0))
+                    .child(shown_preset.description()),
             )
-            .child(div().mb(s.px(14.0)).child(label(s, "Agent approvals")))
+            .child(div().mb(s.px(10.0)).child(label(s, "Agent approvals")))
             .child(self.render_agent_approvals(s, cx))
+            .child(phone_row)
             .child(
                 div()
-                    .mt(s.px(22.0))
-                    .mb(s.px(10.0))
-                    .child(label(s, "Preview")),
+                    .mt(s.px(16.0))
+                    .mb(s.px(8.0))
+                    .child(label(s, "Native Chat preview")),
             )
             .child(self.render_look_preview(s));
         let look_card = self.render_look_card(s, now, cx);
-        // CDXC:Onboarding 2026-11-11 DECISION:
-        // User, on the first-run page (step 10, Get started): "remove the picking folder from here please no need", and (step 11) go straight to the app with no "You're set" summary. Setup asks for no folder and starts no session: Open Ghostex ends it, and an app with no project opens Add Project (onboarding_modal_lifecycle.rs) so it is never an empty shell. The "Start with" agent tiles went with the folder (they only chose the first session's agent there); the Agents panel's default agent decides it.
-        let note = if self.has_projects {
-            "That's it. The workspace teaches the deeper features once you are inside."
-        } else {
-            "That's it. Next you add a project folder, and your first session starts there."
-        };
+        let analytics_strip = self.render_analytics_strip(s, now, cx);
         out.push(
             abs(s, CARDS_LEFT, CARDS_TOP, Some(CARDS_WIDTH), None)
                 .flex()
                 .flex_col()
-                .gap(s.px(40.0))
+                .gap(s.px(16.0))
                 .child(
                     div()
                         .flex()
@@ -446,48 +602,31 @@ impl GpuiOnboardingWindow {
                         .child(project_card)
                         .child(look_card),
                 )
-                .child(
-                    div()
-                        .w_full()
-                        .flex()
-                        .flex_col()
-                        .items_center()
-                        .gap(s.px(8.0))
-                        .font_family(super::fonts::dm_sans())
-                        .text_size(s.px(15.0))
-                        .line_height(s.px(15.0 * 1.45))
-                        .text_color(hex(0xb2b9c6))
-                        .child(note)
-                        // CDXC:Onboarding 2026-11-11 DECISION: User, on the first-run page (step 2), picked "Say it is starting, and mention usage data once": analytics are on by default, so setup says so once, here.
-                        // 2026-11-13 (Q2799, PR #588): there is no Settings switch for analytics; the user opts people out with a launch option instead (server/src/telemetry/gate.rs), so this line no longer points at Settings > About.
-                        .child(
-                            sans(s, 13.0, 400.0, hex(0x8e97a8))
-                                .child("Ghostex sends anonymous usage analytics to get better."),
-                        ),
-                )
+                .child(analytics_strip)
                 .into_any_element(),
         );
-        // CDXC:Onboarding 2026-11-13 DECISION: User, on the first-run showcase page (Q3048), picked
-        // "Remove it" for "Advanced settings later" (it finished setup and opened Settings at once,
-        // the opposite of what it said): Open Ghostex is the one way out of setup here.
         out.push(
-            foot_actions(s, 6)
+            foot_actions(s, 2)
                 .child(self.control(
                     s,
                     cta(
                         s,
-                        "open-ghostex",
-                        "Open Ghostex",
+                        "preferences-next",
+                        "Next",
                         true,
                         true,
                         false,
                         CtaSize::Foot,
                     ),
-                    "open-ghostex",
+                    "preferences-next",
                     interact::Ring::new(10.0, 1.0),
                     interact::Keys::EnterSpace,
                     cx,
-                    |this, _, cx| this.finish(FinishTarget::None, cx),
+                    |this, _, cx| {
+                        this.keep_experience(cx);
+                        this.persist_analytics_choice(cx);
+                        this.go(3, cx);
+                    },
                 ))
                 .into_any_element(),
         );
@@ -580,45 +719,30 @@ impl GpuiOnboardingWindow {
                         .child(name.to_string()),
                 )
         };
-        let chat = settings.preferred_interface != "terminal";
-        let body: AnyElement = if chat {
-            div()
-                .flex()
-                .flex_col()
-                .gap(s.px(6.0))
-                .child(
-                    sans(s, 10.0, 400.0, text)
-                        .self_end()
-                        .py(s.px(4.0))
-                        .px(s.px(8.0))
-                        .rounded(s.px(7.0))
-                        .bg(accent_wash)
-                        .child("Add a dark mode toggle"),
-                )
-                .child(
-                    sans(s, 10.0, 400.0, muted)
-                        .py(s.px(4.0))
-                        .px(s.px(8.0))
-                        .rounded(s.px(7.0))
-                        .border_1()
-                        .border_color(line)
-                        .child("Edited 3 files. The toggle is in Settings."),
-                )
-                .into_any_element()
-        } else {
-            mono(s, 9.5, 400.0, muted)
-                .flex()
-                .flex_col()
-                .gap(s.px(3.0))
-                .child(
-                    div()
-                        .text_color(accent_color)
-                        .child("› Add a dark mode toggle"),
-                )
-                .child("Edited src/theme.ts")
-                .child("Edited src/settings/page.tsx")
-                .into_any_element()
-        };
+        // Always preview Native Chat (terminal-based chat is never offered to new users).
+        let body: AnyElement = div()
+            .flex()
+            .flex_col()
+            .gap(s.px(6.0))
+            .child(
+                sans(s, 10.0, 400.0, text)
+                    .self_end()
+                    .py(s.px(4.0))
+                    .px(s.px(8.0))
+                    .rounded(s.px(7.0))
+                    .bg(accent_wash)
+                    .child("Add a dark mode toggle"),
+            )
+            .child(
+                sans(s, 10.0, 400.0, muted)
+                    .py(s.px(4.0))
+                    .px(s.px(8.0))
+                    .rounded(s.px(7.0))
+                    .border_1()
+                    .border_color(line)
+                    .child("Edited 3 files. The toggle is in Settings."),
+            )
+            .into_any_element();
         div()
             .h(s.px(118.0))
             .flex()
@@ -679,7 +803,7 @@ impl GpuiOnboardingWindow {
     /// User: add the "Agent approvals" setting (Keep default / Skip permissions) to the last page of the setup flow, with the same shared segmented control and the same setting key as Settings -> Agents -> Defaults so the two always agree, plus a one-line explanation. The line already warns what Skip permissions does, so the pick saves at once without Settings' "Skip permissions?" confirmation.
     fn render_agent_approvals(&mut self, s: S, cx: &mut Context<Self>) -> AnyElement {
         use super::super::native_modal_kit::{ModalRailItem, modal_bordered_segmented_control};
-        let items = ["Keep default", "Skip permissions"].map(|label| ModalRailItem {
+        let items = ["Keep default", "Full permissions"].map(|label| ModalRailItem {
             label: label.into(),
             trailing: None,
             dot: None,
@@ -702,7 +826,7 @@ impl GpuiOnboardingWindow {
             .flex_col()
             .child(control)
             .child(ss(s, 13.0).mt(s.px(10.0)).child(
-                "Skip permissions: agents edit files and run commands without asking. Change it in Settings → Agents.",
+                "Full permissions: the agent won't ask for permission before edits or commands. At your own risk. Change it in Settings → Agents.",
             ))
             .into_any_element()
     }

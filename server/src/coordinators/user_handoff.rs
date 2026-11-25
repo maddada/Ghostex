@@ -123,7 +123,7 @@ fn names_the_user(on: &str) -> bool {
 /// exists).
 fn ask_instead(name: &str) -> String {
     format!(
-        "use `ghostex coordinator item ask {name} \"<what to try>\" --answer Works --answer \"Something's off\"` (and `ghostex coordinator item done {name}` if the work itself is finished)"
+        "use `ghostex coordinator item ask {name} \"<what to try>\" --detail \"<full context to decide>\" --answer Works --answer \"Something's off\"` (and `ghostex coordinator item done {name}` if the work itself is finished)"
     )
 }
 
