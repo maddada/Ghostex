@@ -187,6 +187,16 @@ impl GhostexGpuiApp {
             initial_panel: InitialPanel::Panel(1),
             intro_video,
             notification_problem: gpui_attention_notification_problem(),
+            art_preview: std::rc::Rc::new(|object, light, cx| {
+                window_art_style_preview(object, light, cx).map(|preview| {
+                    crate::app::window::onboarding::ArtPreview {
+                        image: preview.image,
+                        base: preview.base,
+                        sidebar: preview.sidebar,
+                        work_area: preview.work_area,
+                    }
+                })
+            }),
         };
         let host: OnboardingHost = self.native_app_modal_host(cx, |app, command, cx| {
             app.handle_gpui_onboarding_command(command, cx);

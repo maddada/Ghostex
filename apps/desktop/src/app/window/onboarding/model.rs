@@ -252,6 +252,11 @@ pub(crate) struct OnboardingSettings {
     pub(crate) window_art_light: String,
     pub(crate) window_art_dim: f64,
     pub(crate) window_art_blur: f64,
+    /// How the artwork is drawn (`windowArtStyle`): `picture` (the default), `ascii` or `dither`.
+    pub(crate) window_art_style: String,
+    /// Black and white (`windowArtMonochrome`, off by default): the artwork itself in greys (a
+    /// Picture) or the theme's text colour (ASCII and Dither); the tints over it keep their colour.
+    pub(crate) window_art_monochrome: bool,
     pub(crate) window_art_image: String,
     pub(crate) window_art_image_light: String,
     pub(crate) window_glass: String,
@@ -478,6 +483,18 @@ impl OnboardingSettings {
                 .unwrap_or_else(|| catalog_number("windowArtDim")),
             window_art_blur: read_number(object, "windowArtBlur")
                 .unwrap_or_else(|| catalog_number("windowArtBlur")),
+            window_art_style: match text("windowArtStyle")
+                .unwrap_or_else(|| catalog_str("windowArtStyle", "picture"))
+            {
+                value @ ("ascii" | "dither") => value.to_string(),
+                _ => "picture".to_string(),
+            },
+            window_art_monochrome: object
+                .get("windowArtMonochrome")
+                .and_then(Value::as_bool)
+                .unwrap_or_else(|| {
+                    matches!(catalog_default("windowArtMonochrome"), Some(J::Bool(true)))
+                }),
             window_art_image: text("windowArtImage").unwrap_or_default().to_string(),
             window_art_image_light: text("windowArtImageLight").unwrap_or_default().to_string(),
             window_glass: match text("windowGlass").or_else(|| {
@@ -610,6 +627,12 @@ impl OnboardingSettings {
         if let Some(value) = number("windowArtBlur") {
             self.window_art_blur = value;
         }
+        if let Some(value) = text("windowArtStyle") {
+            self.window_art_style = value;
+        }
+        if let Some(value) = patch.get("windowArtMonochrome").and_then(Value::as_bool) {
+            self.window_art_monochrome = value;
+        }
         if let Some(value) = text("windowArtImage") {
             self.window_art_image = value;
         }
@@ -700,6 +723,14 @@ impl OnboardingSettings {
         );
         map.insert("windowArtDim".into(), js_number(self.window_art_dim));
         map.insert("windowArtBlur".into(), js_number(self.window_art_blur));
+        map.insert(
+            "windowArtStyle".into(),
+            Value::String(self.window_art_style.clone()),
+        );
+        map.insert(
+            "windowArtMonochrome".into(),
+            Value::Bool(self.window_art_monochrome),
+        );
         map.insert(
             "windowArtImage".into(),
             Value::String(self.window_art_image.clone()),

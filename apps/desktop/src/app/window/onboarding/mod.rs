@@ -82,7 +82,27 @@ pub(crate) struct OnboardingConfig {
     /// Why this computer cannot show agent alerts, if it is known (Linux without notify-send,
     /// Windows with Ghostex's notifications off).
     pub(crate) notification_problem: Option<String>,
+    /// Draws the window's backdrop for a set of settings, for the Appearance card's Window art
+    /// tiles and the Native Chat preview (`window_art_style_preview` in the app).
+    pub(crate) art_preview: ArtPreviewSource,
 }
+
+/// One picture of the window's backdrop as the settings would draw it: the artwork in its style on
+/// the work area colour (`base`, 0xRRGGBB) under its dimming, and how much of that colour the
+/// sidebar and the work area lay over it.
+#[derive(Clone)]
+pub(crate) struct ArtPreview {
+    pub(crate) image: Arc<RenderImage>,
+    pub(crate) base: u32,
+    pub(crate) sidebar: f32,
+    pub(crate) work_area: f32,
+}
+
+/// Makes an [`ArtPreview`] for a settings object in the light (`true`) or dark appearance, or
+/// `None` when they paint no artwork or while it is being drawn (every window redraws when it is
+/// ready).
+pub(crate) type ArtPreviewSource =
+    Rc<dyn Fn(&Map<String, Value>, bool, &mut App) -> Option<ArtPreview>>;
 
 /// Where the flow goes once it closes.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -236,6 +256,7 @@ pub(crate) struct GpuiOnboardingWindow {
     system_light: bool,
     cli_available: bool,
     notification_problem: Option<String>,
+    art_preview: ArtPreviewSource,
     settings: OnboardingSettings,
     panel: usize,
     flow: FlowState,
@@ -319,6 +340,7 @@ impl GpuiOnboardingWindow {
             system_light: config.system_light,
             cli_available: config.cli_available,
             notification_problem: config.notification_problem,
+            art_preview: config.art_preview,
             settings: config.settings,
             panel,
             flow: FlowState::default(),

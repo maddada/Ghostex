@@ -4397,7 +4397,7 @@
     {
       "key": "windowArtMonochrome",
       "title": "Black and white art",
-      "subtitle": "Draw the artwork's characters or dots in the theme's own text colour, and a Picture in greys. Off draws them in the artwork's own colours.",
+      "subtitle": "Draw the artwork without its own colours: a Picture in greys, ASCII characters and Dither dots in the theme's text colour. Only the artwork changes; the theme colour laid over it keeps its colour. Off draws it in its own colours.",
       "tab": "theme",
       "tabTitle": "Themes",
       "group": "appearance",

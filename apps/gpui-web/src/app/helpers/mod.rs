@@ -40,6 +40,7 @@ pub(crate) mod ids {
 }
 pub(crate) mod web;
 pub(crate) mod window_art;
+pub(crate) mod window_art_style;
 
 /// The data URL decoders the desktop's `helpers/browser.rs` re-exports (data_url_image.rs).
 #[allow(unused_imports)]

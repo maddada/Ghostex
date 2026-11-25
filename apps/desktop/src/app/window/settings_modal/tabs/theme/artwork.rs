@@ -215,7 +215,7 @@ impl ThemeTab {
                     t.spec(
                         "windowArtMonochrome",
                         "Black and white",
-                        "Draw the artwork's characters or dots in the theme's own text colour. Turn off to draw them in the artwork's own colours.",
+                        "Draw the artwork without its own colours: a Picture in greys, ASCII characters and Dither dots in the theme's text colour. Only the artwork changes; your theme colour over it keeps its colour.",
                     )
                     .dependent(),
                     values.bool("windowArtMonochrome"),

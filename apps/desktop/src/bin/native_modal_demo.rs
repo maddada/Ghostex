@@ -186,6 +186,9 @@ mod settings_demo;
 mod settings_modal;
 #[path = "native_modal_demo/theme_modals_showcase.rs"]
 mod theme_modals_showcase_demo;
+/// The artwork's drawing (Window art tiles in the setup demo use the app's own code).
+#[path = "../app/helpers/window_art_style.rs"]
+mod window_art_style;
 // The chat header's Share popover (Ghostex Collab), drawn from the app's own view.
 #[path = "native_modal_demo/share_link_popover.rs"]
 mod share_link_popover_demo;

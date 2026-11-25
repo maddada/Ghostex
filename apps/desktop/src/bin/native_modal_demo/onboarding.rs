@@ -13,6 +13,9 @@
 //! `computer-use-on`, `mobile`, `mobile-no-notify-send`, `mobile-after-setup` (both after-setup
 //! switches on), `get-started`, `get-started-with-projects`, `get-started-light` (Light with Teal,
 //! for the live preview), `get-started-terminal-glass` (Terminal, Indigo, transparency on),
+//! `get-started-ascii`, `get-started-dither`, `get-started-light-ascii`, `get-started-light-dither`
+//! (Window art picked; the tiles draw the artwork a local Ghostex downloaded),
+//! `get-started-mono-tint` (a Picture in Black and white under the Red theme),
 //! and the first-run intro video page: `intro-video` (the still with a play button),
 //! `intro-video-play` (presses Play after 1s: the real player in the system web view),
 //! `intro-video-offline`, `intro-video-no-web-view` (what Linux shows), `intro-video-continue`
@@ -374,7 +377,9 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
                 false,
             ),
-            "get-started" | "preferences" | "get-started-light" | "get-started-glass" => (
+            "get-started" | "preferences" | "get-started-light" | "get-started-glass"
+            | "get-started-ascii" | "get-started-dither" | "get-started-light-ascii"
+            | "get-started-light-dither" | "get-started-mono-tint" => (
                 InitialPanel::Panel(2),
                 three,
                 false,
@@ -771,6 +776,20 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             "This computer can't show alerts yet: install libnotify (the notify-send command)."
                 .to_string()
         }),
+        art_preview: Rc::new(|object, light, cx| {
+            super::window_art_style::art_style_preview(
+                object,
+                light,
+                |id, _light| async move { demo_art_bytes(id) },
+                cx,
+            )
+            .map(|preview| ArtPreview {
+                image: preview.image,
+                base: preview.base,
+                sidebar: preview.sidebar,
+                work_area: preview.work_area,
+            })
+        }),
     };
     let host_for_window = host_state.clone();
     // `GHOSTEX_ONBOARDING_DEMO_SIZE=WxH` opens another window size, to check the stage scaling.
@@ -802,6 +821,33 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             patch.insert("lightThemePreset".into(), json!("teal"));
             view.preview_settings_patch(patch, cx)
         }),
+        "get-started-ascii"
+        | "get-started-dither"
+        | "get-started-light-ascii"
+        | "get-started-light-dither"
+        | "get-started-mono-tint" => {
+            let state = state.to_string();
+            with_view(&host, cx, move |view, cx| {
+                let mut patch = serde_json::Map::new();
+                if state.starts_with("get-started-light") {
+                    patch.insert("sidebarTheme".into(), json!("plain-light"));
+                }
+                let style = if state.ends_with("ascii") {
+                    "ascii"
+                } else if state.ends_with("dither") {
+                    "dither"
+                } else {
+                    "picture"
+                };
+                patch.insert("windowArtStyle".into(), json!(style));
+                if state == "get-started-mono-tint" {
+                    // Black and white under a coloured theme: the artwork greys, the tint stays red.
+                    patch.insert("windowArtMonochrome".into(), json!(true));
+                    patch.insert("darkThemePreset".into(), json!("red"));
+                }
+                view.preview_settings_patch(patch, cx)
+            })
+        }
         "get-started-glass" => with_view(&host, cx, |view, cx| {
             let mut patch = serde_json::Map::new();
             patch.insert("sidebarTheme".into(), json!("dark-2"));
@@ -841,4 +887,25 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
 
 fn demo_settings(object: &serde_json::Map<String, Value>) -> OnboardingSettings {
     OnboardingSettings::from_object(object)
+}
+
+/// The artwork a Ghostex on this computer already downloaded (gxserver keeps it as
+/// `<id>-<hash>.webp` in components/theme-art), or the folder `GHOSTEX_NATIVE_MODAL_DEMO_ART_DIR`
+/// names, so the Appearance card's Window art tiles show real artwork in the demo.
+fn demo_art_bytes(id: &str) -> Option<Vec<u8>> {
+    let folder = std::env::var_os("GHOSTEX_NATIVE_MODAL_DEMO_ART_DIR")
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME").map(|home| {
+                std::path::PathBuf::from(home).join(".local/share/ghostex/components/theme-art")
+            })
+        })?;
+    let prefix = format!("{id}-");
+    std::fs::read_dir(folder).ok()?.flatten().find_map(|entry| {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        (name.starts_with(&prefix) && name.ends_with(".webp"))
+            .then(|| std::fs::read(entry.path()).ok())
+            .flatten()
+    })
 }

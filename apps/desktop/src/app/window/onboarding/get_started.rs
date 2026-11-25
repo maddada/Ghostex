@@ -6,6 +6,7 @@
 //! terminal based chat which we're taking out soon". The Default session view (Chat | Terminal)
 //! picker is removed completely; the live preview always shows Native Chat, and the top Day-0
 //! friction controls (Experience preset, Agent approvals, and theme) live inline here.
+use super::ArtPreview;
 use super::FinishTarget;
 use super::GpuiOnboardingWindow;
 use super::interact;
@@ -586,7 +587,7 @@ impl GpuiOnboardingWindow {
                     .mb(s.px(8.0))
                     .child(label(s, "Native Chat preview")),
             )
-            .child(self.render_look_preview(s));
+            .child(self.render_look_preview(s, cx));
         let look_card = self.render_look_card(s, now, cx);
         let analytics_strip = self.render_analytics_strip(s, now, cx);
         out.push(
@@ -639,7 +640,14 @@ impl GpuiOnboardingWindow {
     /// Transparency) used to change nothing on screen. A small Ghostex window here follows every
     /// choice at once: the appearance System resolves to, the theme colour at its Colourfulness,
     /// the stage showing through when Transparency is on, and Chat or Terminal in its session.
-    fn render_look_preview(&self, s: S) -> AnyElement {
+    ///
+    /// CDXC:Onboarding 2026-11-25: with an artwork, the small window draws the real backdrop
+    /// (`art_preview_for`) under its sidebar and work area at the tints the window uses over art,
+    /// so the Window art pick (and Black and white) shows here as it will in the app.
+    fn render_look_preview(&self, s: S, cx: &mut Context<Self>) -> AnyElement {
+        // The preview spans the card's 620-point column.
+        const PREVIEW_WIDTH: f32 = 620.0;
+        let art = self.art_preview_for(None, cx);
         let settings = &self.settings;
         let dark = match settings.sidebar_theme.as_str() {
             "system" => !self.system_light,
@@ -659,7 +667,9 @@ impl GpuiOnboardingWindow {
             .map(|preset| neutral_accent(&preset.value, dark).unwrap_or(preset.accent))
             .unwrap_or(0x5a7deb);
         let glass_on = dark && settings.window_glass != "opaque";
-        let (sidebar_alpha, work_alpha) = if glass_on {
+        let (sidebar_alpha, work_alpha) = if let Some(art) = &art {
+            (art.sidebar, art.work_area)
+        } else if glass_on {
             (
                 (settings.glass_sidebar_dark / 100.0) as f32,
                 (settings.glass_work_area_dark / 100.0) as f32,
@@ -744,11 +754,26 @@ impl GpuiOnboardingWindow {
             )
             .into_any_element();
         div()
+            .relative()
             .h(s.px(118.0))
             .flex()
             .flex_col()
             .rounded(s.px(10.0))
             .overflow_hidden()
+            .when_some(art, |this, art| {
+                let size = art.image.size(0);
+                let tall = size.height.0 as f32 / (size.width.0 as f32).max(1.0);
+                // The artwork rises from the window's bottom, so the preview shows its bottom.
+                this.bg(hex(art.base)).child(
+                    img(art.image)
+                        .absolute()
+                        .left_0()
+                        .bottom_0()
+                        .w(s.px(PREVIEW_WIDTH))
+                        .h(s.px(PREVIEW_WIDTH * tall))
+                        .object_fit(ObjectFit::Fill),
+                )
+            })
             .border_1()
             .border_color(if dark { white(0.12) } else { black(0.12) })
             .child(
@@ -1173,7 +1198,240 @@ impl GpuiOnboardingWindow {
             )
             .child(colourfulness_row)
             .child(transparency_row)
+            .child(self.render_window_art(s, now, cx))
             .child(more_link)
+            .into_any_element()
+    }
+
+    /// Whether the look being picked is the light one: Appearance, with System as the computer has it.
+    fn look_light(&self) -> bool {
+        match self.settings.sidebar_theme.as_str() {
+            "system" => self.system_light,
+            theme => !theme.starts_with("dark"),
+        }
+    }
+
+    /// The window's backdrop as the settings picked here would draw it, in `style` when given
+    /// (else the picked one), or `None` without an artwork or while it is being drawn.
+    fn art_preview_for(&self, style: Option<&str>, cx: &mut Context<Self>) -> Option<ArtPreview> {
+        let mut object = self.settings.to_settings_values().map().clone();
+        if let Some(style) = style {
+            object.insert("windowArtStyle".into(), Value::String(style.to_string()));
+        }
+        let source = self.art_preview.clone();
+        source(&object, self.look_light(), cx)
+    }
+
+    /// CDXC:Onboarding 2026-11-25 DECISION:
+    /// User, of PR 757's art styles: "the dither and ascii are nice! Will offer them in the onboarding so people can pick if they want them on or off", then on the Live page picked: Picture, ASCII, Dither and the Black and white switch, in the Appearance card on Step 2 (setup stays 3 steps), as picture tiles plus a live preview, Picture already picked with a small "New" tag on ASCII and Dither. Their note: "allow black and white even if picking image pls ... if i choose black and white i want it to just affect the image yea? so i can pick a tint color as i like and its not affected by the image's color". Each tile is the real backdrop (`window_art_style_preview` in helpers/window_art.rs: the theme's artwork drawn in that style, dimmed, under the work area's tint), in the appearance being picked, so a style that is faint in light mode looks faint here too. Black and white greys only the artwork; the theme colour laid over it keeps its colour. Today's default stays Picture with Black and white off.
+    fn render_window_art(&mut self, s: S, now: Instant, cx: &mut Context<Self>) -> AnyElement {
+        // About a third of the card's 620-point column, less the gaps.
+        const TILE_WIDTH: f32 = 200.0;
+        const TILE_HEIGHT: f32 = 62.0;
+        // Each tile is a close-up of the backdrop's bottom left, where the artwork is strongest,
+        // so ASCII characters and Dither dots still read at this size.
+        const TILE_ZOOM: f32 = 2.2;
+        const STYLES: [(&str, &str, bool); 3] = [
+            ("picture", "Picture", false),
+            ("ascii", "ASCII", true),
+            ("dither", "Dither", true),
+        ];
+        let picked = self.settings.window_art_style.clone();
+        let readout = STYLES
+            .iter()
+            .find(|(value, _, _)| *value == picked)
+            .map_or("Picture", |(_, name, _)| *name);
+        let tiles = STYLES
+            .into_iter()
+            .map(|(value, name, new)| {
+                let preview = self.art_preview_for(Some(value), cx);
+                let selected = picked == value;
+                let key = SharedString::from(format!("window-art-{value}"));
+                let lift = interact::tween_value(
+                    &key,
+                    "lift",
+                    if interact::hovered(&key) { -1.0 } else { 0.0 },
+                    120,
+                );
+                let picture = div()
+                    .relative()
+                    .w_full()
+                    .h(s.px(TILE_HEIGHT))
+                    .rounded(s.px(8.0))
+                    .overflow_hidden()
+                    .bg(white(0.04))
+                    .when_some(preview, |this, preview| {
+                        let size = preview.image.size(0);
+                        let tall = size.height.0 as f32 / (size.width.0 as f32).max(1.0);
+                        // The artwork rises from the window's bottom, so the tile shows its bottom.
+                        this.bg(hex(preview.base))
+                            .child(
+                                img(preview.image)
+                                    .absolute()
+                                    .left_0()
+                                    .bottom_0()
+                                    .w(s.px(TILE_WIDTH * TILE_ZOOM))
+                                    .h(s.px(TILE_WIDTH * TILE_ZOOM * tall))
+                                    .object_fit(ObjectFit::Fill),
+                            )
+                            .child(
+                                div()
+                                    .absolute()
+                                    .left_0()
+                                    .top_0()
+                                    .size_full()
+                                    .bg(hex(preview.base).opacity(preview.work_area)),
+                            )
+                    })
+                    .child(
+                        div()
+                            .absolute()
+                            .left_0()
+                            .top_0()
+                            .size_full()
+                            .rounded(s.px(8.0))
+                            .shadow(vec![
+                                inset_shadow(white(0.14), 0.0, 1.0, 0.0, 0.0, s),
+                                inset_shadow(white(0.06), 0.0, 0.0, 0.0, 1.0, s),
+                            ]),
+                    );
+                let framed = div()
+                    .relative()
+                    .top(s.px(lift))
+                    .shadow(vec![shadow(black(0.3), 0.0, 4.0, 10.0, 0.0, s)])
+                    .rounded(s.px(8.0))
+                    .child(picture)
+                    .when(selected, |this| {
+                        this.child(
+                            div()
+                                .absolute()
+                                .left(s.px(-4.0))
+                                .top(s.px(-4.0))
+                                .right(s.px(-4.0))
+                                .bottom(s.px(-4.0))
+                                .rounded(s.px(12.0))
+                                .border(s.px(2.0))
+                                .border_color(hex(0x5a7deb)),
+                        )
+                    });
+                let caption = div()
+                    .mt(s.px(9.0))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .gap(s.px(6.0))
+                    .child(
+                        sans(
+                            s,
+                            13.0,
+                            if selected { 500.0 } else { 400.0 },
+                            if selected {
+                                hex(0xeef1f7)
+                            } else {
+                                hex(0xaeb6c4)
+                            },
+                        )
+                        .child(name),
+                    )
+                    .when(new, |this| {
+                        this.child(
+                            div()
+                                .flex_none()
+                                .px(s.px(5.0))
+                                .py(s.px(2.0))
+                                .rounded(s.px(4.0))
+                                .border_1()
+                                .border_color(white(0.14))
+                                .bg(white(0.06))
+                                .child(label_sized(s, "New", 9.0)),
+                        )
+                    });
+                self.control(
+                    s,
+                    div()
+                        .id(key.clone())
+                        .relative()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .cursor_pointer()
+                        .child(framed)
+                        .child(caption),
+                    key,
+                    interact::Ring::new(8.0, 0.0),
+                    interact::Keys::EnterSpace,
+                    cx,
+                    move |this, _, cx| {
+                        this.update_one("windowArtStyle", Value::String(value.to_string()), cx);
+                    },
+                )
+                .into_any_element()
+            })
+            .collect::<Vec<_>>();
+        let mono_on = self.settings.window_art_monochrome;
+        let mono_thumb = self.thumb("art-monochrome", mono_on, now);
+        let mono_toggle = self.control(
+            s,
+            toggle(
+                s,
+                "art-monochrome-toggle",
+                mono_on,
+                mono_thumb,
+                ToggleSize::Sm,
+                false,
+            ),
+            "art-monochrome-toggle",
+            interact::Ring::new(9.5, 1.0),
+            interact::Keys::EnterSpace,
+            cx,
+            |this, _, cx| {
+                cx.stop_propagation();
+                let next = !this.settings.window_art_monochrome;
+                this.update_one("windowArtMonochrome", Value::Bool(next), cx);
+            },
+        );
+        div()
+            .mt(s.px(12.0))
+            .flex()
+            .flex_col()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .mb(s.px(12.0))
+                    .child(label(s, "Window art"))
+                    .child(
+                        div()
+                            .font_family("Inter")
+                            .text_size(s.px(11.5))
+                            .text_color(hex(0x7c8598))
+                            .ml(s.px(6.0))
+                            .child(readout),
+                    ),
+            )
+            .child(div().flex().gap(s.px(10.0)).children(tiles))
+            .child(
+                div()
+                    .mt(s.px(12.0))
+                    .flex()
+                    .items_center()
+                    .gap(s.px(14.0))
+                    .h(s.px(34.0))
+                    .child(
+                        sans(s, 15.0, 400.0, hex(0xeef1f7))
+                            .flex_none()
+                            .child("Black and white"),
+                    )
+                    .child(mono_toggle)
+                    .child(
+                        ss(s, 12.5)
+                            .mt(s.px(0.0))
+                            .flex_1()
+                            .min_w_0()
+                            .child("Greys out the artwork only; your theme colour stays."),
+                    ),
+            )
             .into_any_element()
     }
 
