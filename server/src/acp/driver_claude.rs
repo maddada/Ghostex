@@ -2766,7 +2766,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
 
     if switch_to_cli_requested {
         drop(signal_guard);
-        let (sid, accept_all, read_only, carry_model, carry_effort) = {
+        let (sid, approval_level, read_only, carry_model, carry_effort) = {
             let s = state.lock().unwrap_or_else(|p| p.into_inner());
             let model = s.current_model.as_deref().map(|m| {
                 crate::agent_model_catalog::preserve_claude_1m_context(
@@ -2777,7 +2777,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             });
             (
                 s.native_session_id.clone(),
-                s.approval_level.implies_cli_accept_all(),
+                s.approval_level,
                 s.read_only,
                 model,
                 s.current_effort.clone(),
@@ -2787,7 +2787,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             spec,
             parsed.cli_command.as_deref(),
             sid.as_deref(),
-            accept_all,
+            approval_level,
             read_only,
             &parsed.profile,
             Some(&cwd),

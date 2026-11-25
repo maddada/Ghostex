@@ -976,24 +976,51 @@ pub(crate) fn validated_ghostex_prompt_file(raw: Option<&str>) -> Option<String>
     }
 }
 
+/// The interactive CLI's flags for a Native session's Auto or Auto-edits level, on a switch to
+/// Terminal-based. Ask (and an agent without these modes) keeps the CLI's own default; Full access
+/// is the agent's accept-all flag.
+///
+/// CDXC:AgentProviders 2026-11-25 WHY:
+/// The mirror of GitHub #746 (`terminal_approval_level` in channel.rs, Terminal -> Native): a Native chat in Auto or Auto-edits switched to Terminal-based restarted its CLI in the agent's default mode and asked before each edit or command. The flags are the ones Terminal-based launches already use for these levels: Auto is Settings > Agents Permission mode "Auto" (`apply_auto_permission_mode` in agents/accept_all.rs: Claude `--permission-mode auto`, Codex `--approve-for-me`), Auto-edits is a GBot chat's "edits" launch (`apply_approval` in gbots/session.rs: Claude `--permission-mode acceptEdits`, Codex `--sandbox workspace-write --ask-for-approval on-request`).
+fn cli_switch_permission_args(
+    family: &str,
+    level: super::AcpApprovalLevel,
+) -> &'static [&'static str] {
+    use super::AcpApprovalLevel::{Auto, AutoEdits};
+    match (family, level) {
+        ("claude", Auto) => &["--permission-mode", "auto"],
+        ("claude", AutoEdits) => &["--permission-mode", "acceptEdits"],
+        ("codex", Auto) => &["--approve-for-me"],
+        ("codex", AutoEdits) => &[
+            "--sandbox",
+            "workspace-write",
+            "--ask-for-approval",
+            "on-request",
+        ],
+        _ => &[],
+    }
+}
+
 /// Build `(envs, program, args)` to exec in-place inside `zmx`/`wmx` when the user switches an ACP
 /// session to the interactive CLI terminal. Builds the interactive CLI strictly from Ghostex's
 /// structured `AcpLaunchProfile`, preserving `--permission-mode plan` /
 /// `--sandbox read-only --ask-for-approval on-request` for `--read-only` threads and re-applying
 /// Ghostex's own deny profiles cleanly for the session's current approval level (never leaking
 /// untrusted command flags, arbitrary binary paths, or a full-write `ghostex-home` profile on
-/// downgrade).
+/// downgrade). The session's approval level picks the CLI's permission flags
+/// ([`cli_switch_permission_args`]).
 pub fn build_cli_switch_argv_with_options(
     spec: &AcpAgentSpec,
     _cli_command: Option<&str>,
     native_session_id: Option<&str>,
-    accept_all: bool,
+    approval_level: super::AcpApprovalLevel,
     read_only: bool,
     profile: &AcpLaunchProfile,
     cwd: Option<&str>,
     model: Option<&str>,
     effort: Option<&str>,
 ) -> (Vec<(String, String)>, String, Vec<String>) {
+    let accept_all = approval_level.implies_cli_accept_all();
     let model = model.map(str::trim).filter(|m| {
         !m.is_empty() && !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(m)
     });
@@ -1129,10 +1156,18 @@ pub fn build_cli_switch_argv_with_options(
             inner_args.push("--ask-for-approval".to_string());
             inner_args.push("on-request".to_string());
         }
-    } else if let Some(flag) = spec.cli_accept_all_flag {
-        if accept_all && !(spec.family == "codex" && codex_deny.is_some()) {
-            inner_args.push(flag.to_string());
+    } else if accept_all {
+        if let Some(flag) = spec.cli_accept_all_flag {
+            if !(spec.family == "codex" && codex_deny.is_some()) {
+                inner_args.push(flag.to_string());
+            }
         }
+    } else {
+        inner_args.extend(
+            cli_switch_permission_args(spec.family, approval_level)
+                .iter()
+                .map(|arg| arg.to_string()),
+        );
     }
 
     if let Some((is_api, deny_paths)) = codex_deny {

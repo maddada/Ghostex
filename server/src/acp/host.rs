@@ -1632,7 +1632,7 @@ pub(super) fn exec_interactive_cli(
     spec: &AcpAgentSpec,
     cli_command: Option<&str>,
     native_session_id: Option<&str>,
-    accept_all: bool,
+    approval_level: AcpApprovalLevel,
     read_only: bool,
     profile: &AcpLaunchProfile,
     cwd: Option<&str>,
@@ -1643,7 +1643,7 @@ pub(super) fn exec_interactive_cli(
         spec,
         cli_command,
         native_session_id,
-        accept_all,
+        approval_level,
         read_only,
         profile,
         cwd,
@@ -2910,7 +2910,7 @@ pub fn run(args: &[String]) -> i32 {
 
     if switch_to_cli_requested {
         drop(signal_guard);
-        let (sid, accept_all, carry_model, carry_effort) = {
+        let (sid, approval_level, carry_model, carry_effort) = {
             let s = state.lock().unwrap_or_else(|p| p.into_inner());
             let (m, e) = match s.current_model.as_deref() {
                 Some(raw) if spec.family == "antigravity" => {
@@ -2925,18 +2925,13 @@ pub fn run(args: &[String]) -> i32 {
                 Some(raw) => (Some(raw.to_string()), s.current_effort.clone()),
                 None => (None, s.current_effort.clone()),
             };
-            (
-                s.native_session_id.clone(),
-                s.approval_level.implies_cli_accept_all(),
-                m,
-                e,
-            )
+            (s.native_session_id.clone(), s.approval_level, m, e)
         };
         return exec_interactive_cli(
             spec,
             parsed.cli_command.as_deref(),
             sid.as_deref(),
-            accept_all,
+            approval_level,
             parsed.read_only,
             &parsed.profile,
             Some(&cwd),

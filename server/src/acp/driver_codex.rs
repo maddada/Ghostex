@@ -3695,11 +3695,11 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
 
     if switch_to_cli_requested {
         drop(signal_guard);
-        let (tid, accept_all, read_only, carry_model, carry_effort) = {
+        let (tid, approval_level, read_only, carry_model, carry_effort) = {
             let s = state.lock().unwrap_or_else(|p| p.into_inner());
             (
                 s.thread_id.clone(),
-                s.approval_level.implies_cli_accept_all(),
+                s.approval_level,
                 s.read_only,
                 s.current_model.clone(),
                 s.current_effort.clone(),
@@ -3709,7 +3709,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             spec,
             parsed.cli_command.as_deref(),
             tid.as_deref(),
-            accept_all,
+            approval_level,
             read_only,
             &parsed.profile,
             Some(&cwd),
