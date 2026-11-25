@@ -1,11 +1,16 @@
-//! The quiet fallback name for a Codex or Claude session that its agent did not name itself.
+//! The quiet fallback name for a session whose agent did not name it itself (Codex, Claude, and
+//! OMP/Pi Native sessions).
 
 use super::*;
 use std::collections::HashSet;
 use std::sync::{LazyLock, Mutex};
 
-/// How long the agent has to name the session itself after a prompt before Ghostex names it.
+/// How long Codex or Claude has to name the session itself after a prompt before Ghostex names it.
 const AGENT_TITLE_FALLBACK_DELAY: Duration = Duration::from_secs(60);
+
+/// Short settle window for OMP/Pi Native sessions: OMP in ACP mode disables auto-titling and Pi
+/// has no built-in auto-title (only optional extension `setTitle` or resumed `sessionName`).
+const NATIVE_AGENT_TITLE_FALLBACK_DELAY: Duration = Duration::from_secs(5);
 
 /// Sessions with a fallback waiting or done in this gxserver run, so every later hook does not
 /// start another one.
@@ -30,6 +35,9 @@ pub(crate) fn schedule_agent_title_fallback(
     let Some(session) = result.get("session") else {
         return;
     };
+    let Some(agent) = fallback_agent(session) else {
+        return;
+    };
     if !title_fallback_eligible(session) {
         return;
     }
@@ -47,9 +55,10 @@ pub(crate) fn schedule_agent_title_fallback(
     {
         return;
     }
+    let delay = fallback_delay(agent);
     let state = state.clone();
     tokio::spawn(async move {
-        tokio::time::sleep(AGENT_TITLE_FALLBACK_DELAY).await;
+        tokio::time::sleep(delay).await;
         let retry = run_agent_title_fallback(&state, &project_id, &session_id).await;
         if retry {
             // Nothing to name it from yet: the next prompt schedules it again.
@@ -60,13 +69,37 @@ pub(crate) fn schedule_agent_title_fallback(
     });
 }
 
-/// The agents this fallback names: Codex and Claude, custom launch profiles of either included.
+/// The agents this fallback names: Codex, Claude, and OMP/Pi Native sessions (custom launch
+/// profiles included).
 fn fallback_agent(session: &Value) -> Option<&'static str> {
-    match crate::session_chat_follower::session_chat_agent_for_session(session)?.as_str() {
+    match crate::session_chat_follower::session_chat_display_agent_for_session(session)?.as_str() {
         "codex" => Some("codex"),
         "claude" => Some("claude"),
+        "omp" if crate::acp::session_is_acp(session) => Some("omp"),
+        "pi" if crate::acp::session_is_acp(session) => Some("pi"),
         _ => None,
     }
+}
+
+fn fallback_delay(agent: &str) -> Duration {
+    match agent {
+        "omp" | "pi" => NATIVE_AGENT_TITLE_FALLBACK_DELAY,
+        _ => AGENT_TITLE_FALLBACK_DELAY,
+    }
+}
+
+/// Checks whether the agent already reported a metadata title (including live Native `sessionTitle`
+/// or OMP's JSONL header title) that may not have reconciled into SQLite yet.
+fn has_agent_metadata_title(
+    home_dir: &std::path::Path,
+    project_id: &str,
+    session_id: &str,
+    session: &Value,
+) -> bool {
+    if crate::acp::session_is_acp(session) {
+        let _ = crate::acp::channel::session_title(project_id, session_id);
+    }
+    crate::agents::read_agent_metadata_title(home_dir, session).is_some()
 }
 
 /// Whether the session is one this fallback names and still carries a name Ghostex may replace.
@@ -82,6 +115,12 @@ fn title_fallback_eligible(session: &Value) -> bool {
         return false;
     }
     let title_source = read_runtime_text(session, "titleSource");
+    // Never overwrite a hand-set title or an agent-supplied metadata title.
+    if title_source.as_deref() == Some("user")
+        || read_runtime_text(session, "titleMetadataSource").as_deref() == Some("agent-metadata")
+    {
+        return false;
+    }
     title_source.as_deref() == Some("placeholder")
         || is_terminal_auto_working_directory_title(session)
         || is_generic_agent_session_title(Some(agent), read_session_text(session, "title").as_deref())
@@ -115,6 +154,9 @@ async fn run_agent_title_fallback(state: &AppState, project_id: &str, session_id
             .unwrap_or_else(|| state.paths.home_dir.to_string_lossy().to_string());
         (session, project_path)
     };
+    if has_agent_metadata_title(&state.paths.home_dir, project_id, session_id, &session) {
+        return false;
+    }
     let Some(source) = session_history_title_source(&session) else {
         return true;
     };
@@ -146,6 +188,10 @@ async fn run_agent_title_fallback(state: &AppState, project_id: &str, session_id
             return false;
         }
     };
+    // Warm any live Native host title before reopening SQLite so IPC never blocks the write lock.
+    if crate::acp::session_is_acp(&session) {
+        let _ = crate::acp::channel::session_title(project_id, session_id);
+    }
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return false;
     };
@@ -153,7 +199,9 @@ async fn run_agent_title_fallback(state: &AppState, project_id: &str, session_id
     let Ok(Some(latest)) = repository.get_session(project_id, session_id) else {
         return false;
     };
-    if !title_fallback_eligible(&latest) || crate::coordinators::keeps_its_given_title(&db, &latest)
+    if !title_fallback_eligible(&latest)
+        || crate::coordinators::keeps_its_given_title(&db, &latest)
+        || crate::agents::read_agent_metadata_title(&state.paths.home_dir, &latest).is_some()
     {
         return false;
     }

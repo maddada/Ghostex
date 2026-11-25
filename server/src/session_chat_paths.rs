@@ -179,7 +179,7 @@ pub(crate) fn configured_agent_directory(env_key: &str, fallback: &str) -> PathB
         .unwrap_or_else(|| home_dir().join(fallback))
 }
 
-fn find_pi_family_chat_transcript(session_id: &str) -> Option<PathBuf> {
+pub(crate) fn find_pi_family_chat_transcript(session_id: &str) -> Option<PathBuf> {
     let pi_agent_dir = configured_agent_directory("PI_CODING_AGENT_DIR", ".pi/agent");
     let omp_agent_dir = std::env::var("PI_CONFIG_DIR")
         .ok()
