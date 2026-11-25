@@ -105,7 +105,7 @@ fn chat(key: &ChatKey) -> std::sync::Arc<Mutex<Known>> {
 /// Runs `work`, which may wait on the database, without holding up the async workers: on the
 /// multi-thread runtime it hands the worker's other tasks to another thread for the duration
 /// (`block_in_place`); anywhere else (a blocking thread, a test) it simply runs.
-fn off_worker<R>(work: impl FnOnce() -> R) -> R {
+pub(crate) fn off_worker<R>(work: impl FnOnce() -> R) -> R {
     match tokio::runtime::Handle::try_current() {
         Ok(handle) if handle.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread => {
             tokio::task::block_in_place(work)

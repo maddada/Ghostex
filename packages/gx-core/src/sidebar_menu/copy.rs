@@ -8,7 +8,7 @@ use super::commands::{message, MenuCommand};
 use super::group::MenuGroup;
 use super::item::MenuItem;
 
-/// The Copy submenu's first row, Copy ID, or `None` while the machine's daemon id is not known yet,
+/// The Copy submenu's first row, Copy Reference (Copy ID before 2026-11-25), or `None` while the machine's daemon id is not known yet,
 /// since a mention without the ref reaches nobody.
 ///
 /// CDXC:ContextMenus 2026-11-12 DECISION:
@@ -17,12 +17,17 @@ use super::item::MenuItem;
 ///
 /// CDXC:ContextMenus 2026-11-18 DECISION:
 /// User: "please move copy id to the top of the copy menu item in the context menu for a session in the sidebar and move Popup to be the 3rd button after rename and pin". Copy ID is the first row of the Copy submenu again (`copy_submenu`), and the quick row's third button is the desktop's Open in a Popup (`gx_store/sidebar_menus.rs`) instead. Supersedes the 2026-11-15 quick-row placement.
+///
+/// CDXC:SessionChat 2026-11-25 DECISION:
+/// User, on the references page: "make threads and session say Copy Reference". It still copies
+/// `[<session title>](<Global Ref>)`; every kind's row has the one name now
+/// (gx-chat-core transcript/item_references.rs).
 pub(crate) fn copy_id_row(row: &SessionRow, group: &MenuGroup<'_>) -> Option<MenuItem> {
     session_mention_text(row, &group.details())
         .filter(|text| !text.trim().is_empty())
         .map(|text| {
             MenuItem::row(
-                "Copy ID",
+                "Copy Reference",
                 "hash",
                 MenuCommand::command(message::copy_text(&text)),
             )
@@ -193,7 +198,7 @@ mod tests {
     #[test]
     fn copy_id_copies_a_mention() {
         let item = copy_id_row(&row(), &group(Some("S90"))).expect("a Copy ID row");
-        assert_eq!(item.label.as_deref(), Some("Copy ID"));
+        assert_eq!(item.label.as_deref(), Some("Copy Reference"));
         let message = item
             .command
             .as_ref()
@@ -209,7 +214,7 @@ mod tests {
     #[test]
     fn copy_link_copies_the_page_under_copy_details() {
         let rows = copied(&group(Some("S90")));
-        assert_eq!(rows[0].0, "Copy ID");
+        assert_eq!(rows[0].0, "Copy Reference");
         assert_eq!(rows[1].0, "Copy Details");
         assert_eq!(
             rows[2],

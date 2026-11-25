@@ -6,6 +6,7 @@
 //! CDXC:SessionChat 2026-10-11 SEE-ALSO:
 //! The phone draws the same form in apps/mobile/app/src/chat/native/transcript/QuestionForm.tsx; the grammar is packages/gx-chat-core/src/transcript/question_forms.rs. Change them together.
 
+use crate::app::native_chat::cursor::ChatCursor as _;
 use std::cell::Cell;
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -743,7 +744,10 @@ impl NativeChatView {
             .flatten()
             .filter_map(Value::as_u64)
             .collect();
+        let more = (!tag.is_empty())
+            .then(|| self.question_more_button(id, index, &tag, &text(question, "title"), p, cx));
         let mut column = div()
+            .group("native-chat-form-question")
             .flex()
             .flex_col()
             .gap(px(8.0 * s))
@@ -779,6 +783,7 @@ impl NativeChatView {
                                 cx,
                             )),
                     )
+                    .children(more)
                     .when(!tag.is_empty(), |header| {
                         header.child(
                             div()
@@ -1193,5 +1198,68 @@ fn choice_letter(number: usize) -> String {
         ((b'a' + number as u8) as char).to_string()
     } else {
         (number + 1).to_string()
+    }
+}
+
+impl NativeChatView {
+    /// A question's ⋯, shown while the pointer is on the question: Copy reference and Reference in
+    /// chat for it (gx-chat-core `item_references.rs`, CDXC:SessionChat 2026-11-25 there), named by
+    /// its title, its tag in the link. Copy reference's link keeps this chat's session, so it still
+    /// names this question pasted in another chat.
+    fn question_more_button(
+        &self,
+        id: &str,
+        index: usize,
+        tag: &str,
+        title: &str,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        use ghostex_gx_chat_core::transcript::item_references::question_link;
+        let s = p.scale;
+        let tags = [tag.to_string()];
+        let mut rows = Vec::new();
+        if let Some(copied) = question_link(title, Some(&self.config.session_id), &tags) {
+            rows.push(serde_json::json!({
+                "label": "Copy reference", "iconPath": "titlebar/hash.svg",
+                "command": { "type": "copyText", "text": copied },
+            }));
+        }
+        if let Some(pill) = question_link(title, None, &tags) {
+            rows.push(serde_json::json!({
+                "label": "Reference in chat", "iconPath": "titlebar/quote.svg",
+                "command": { "type": "appendToDraft", "text": pill, "inline": true },
+            }));
+        }
+        div()
+            .id(gpui::SharedString::from(format!("question-form-more:{id}:{index}")))
+            .opacity(0.0)
+            .group_hover("native-chat-form-question", |style| style.opacity(1.0))
+            .role(gpui::Role::Button)
+            .aria_label("Question actions")
+            .tab_index(0)
+            .focus_visible(|mut style| {
+                style.opacity = Some(1.0);
+                style
+            })
+            .size(px(22.0 * s))
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(px(6.0 * s))
+            .chat_cursor_pointer()
+            .hover(|style| style.bg(p.border.opacity(0.4)))
+            .child(
+                gpui::svg()
+                    .path("titlebar/dots.svg")
+                    .size(px(14.0 * s))
+                    .text_color(p.muted),
+            )
+            .on_click(cx.listener(move |chat, event: &gpui::ClickEvent, window, cx| {
+                cx.stop_propagation();
+                chat.show_dock_row_menu(rows.clone(), event.position(), window, cx);
+            }))
+            .into_any_element()
     }
 }

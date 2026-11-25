@@ -210,11 +210,11 @@ fn row_markdown(row: &Value, forms: &Value) -> String {
             answers(&buttons),
         ]),
         "form" if row["page"] == true => {
-            // Its mention is `[Name](url) (Q12 to Q14)` (gx-chat-core `questions_mention`), or
+            // Its `titleLink` is `[Name](url) (Q12 to Q14)` (gx-chat-core `questions_mention`), or
             // the name in quotes when the page has no address: the heading is the link, else the
             // title.
             let tags = str_of(&row["reply"], "tag");
-            let mention = str_of(row, "mention");
+            let mention = str_of(row, "titleLink");
             let link = match mention.rfind(" (") {
                 Some(at) if !tags.is_empty() && mention.ends_with(')') => &mention[..at],
                 _ => mention.as_str(),
@@ -3085,7 +3085,20 @@ impl NativeChatView {
                 "command": { "type": "copyText", "text": markdown },
             }));
         }
+        // Copy reference and Reference in chat (gx-chat-core `item_references.rs`): the row's
+        // question, page or work item as a link named by its words; Copy reference's keeps the
+        // chat's session in a question's link, for pasting into another chat.
         let mention = text(row, "mention");
+        let reference = Some(text(row, "reference"))
+            .filter(|reference| !reference.is_empty())
+            .unwrap_or_else(|| mention.clone());
+        if !reference.is_empty() {
+            rows.push(json!({
+                "label": "Copy reference",
+                "iconPath": "titlebar/hash.svg",
+                "command": { "type": "copyText", "text": reference },
+            }));
+        }
         if !mention.is_empty() {
             let selection = self
                 .input
@@ -3098,7 +3111,7 @@ impl NativeChatView {
                     .count()
             };
             rows.push(json!({
-                "label": "Mention in chat box",
+                "label": "Reference in chat",
                 "iconPath": "titlebar/quote.svg",
                 "command": {
                     "type": "insertBoardReference",

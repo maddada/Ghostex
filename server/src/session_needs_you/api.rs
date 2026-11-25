@@ -138,6 +138,57 @@ pub(crate) fn todo_tags(
         .collect()
 }
 
+/// One of the session's to-dos, open or settled, as `ghostex question show` and the quote of a
+/// pointed-at question read it (server/src/chat_item_quotes/question.rs).
+pub(crate) struct TodoQuestion {
+    pub(crate) title: String,
+    pub(crate) detail: String,
+    pub(crate) command: String,
+    pub(crate) answers: Vec<String>,
+    pub(crate) asked_at: String,
+    /// `None` while open; else answered, dismissed, done or dropped.
+    pub(crate) outcome: Option<String>,
+    pub(crate) answer: String,
+}
+
+/// The session's to-do with `tag`: the open one, else the latest settled one.
+pub(crate) fn todo_question(
+    db: &rusqlite::Connection,
+    key: &crate::coordinators::SessionKey,
+    tag: &str,
+) -> Option<TodoQuestion> {
+    let session = DomainRepository::new(db, "")
+        .get_session(&key.0, &key.1)
+        .ok()
+        .flatten()?;
+    let record = NeedsYouRecord::of(&session);
+    if let Some(item) = record
+        .open
+        .iter()
+        .find(|item| item.tag.eq_ignore_ascii_case(tag))
+    {
+        return Some(TodoQuestion {
+            title: item.title.clone(),
+            detail: item.detail.clone(),
+            command: item.command.clone(),
+            answers: item.answers.clone(),
+            asked_at: item.asked_at.clone(),
+            outcome: None,
+            answer: String::new(),
+        });
+    }
+    let item = record.settled_of(tag)?;
+    Some(TodoQuestion {
+        title: item.title.clone(),
+        detail: item.detail.clone(),
+        command: item.command.clone(),
+        answers: item.answers.clone(),
+        asked_at: item.asked_at.clone(),
+        outcome: Some(item.outcome.clone()),
+        answer: item.answer.clone(),
+    })
+}
+
 /// Gives out the session's next free question tag, one past `floor` (the highest its chat, work
 /// items and to-dos use) and past every tag given out before, and keeps it taken in the to-do
 /// counter (`last`), so no other caller gets it: `ghostex coordinator next-tag` asked by a

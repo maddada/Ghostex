@@ -675,6 +675,16 @@ pub(super) async fn route_sessions_http(
             )
             .await
         }
+        // `ghostex question show`: one question by its tag (chat_item_quotes/).
+        crate::chat_item_quotes::CHAT_QUESTIONS_ENDPOINT => {
+            crate::chat_item_quotes::handle_chat_questions_http(
+                state.clone(),
+                endpoint.path,
+                request_id,
+                body_json.clone(),
+            )
+            .await
+        }
         // `ghostex clear-command`: who may clear is decided from `caller` (session_clear_http.rs).
         super::super::session_clear_http::CLEAR_SESSION_ENDPOINT => {
             super::super::session_clear_http::handle_clear_session_http(

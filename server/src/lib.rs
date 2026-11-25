@@ -28,6 +28,7 @@ pub(crate) mod boosts;
 pub(crate) mod bot_feed;
 pub(crate) mod bot_projects;
 pub(crate) mod carry_on_compaction;
+pub(crate) mod chat_item_quotes;
 pub(crate) mod chat_message_numbers;
 pub(crate) mod chief;
 pub(crate) mod claude_cloud;

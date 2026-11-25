@@ -28,6 +28,7 @@ pub mod gbot_cards;
 pub mod grouped_work;
 pub mod hex_colors;
 pub mod hook_blocked;
+pub mod item_references;
 pub mod image_markers;
 pub mod images;
 pub mod inline_answers;

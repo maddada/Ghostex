@@ -41,17 +41,25 @@ enum MoreAction {
     OpenInBrowser,
     Snooze,
     Star,
+    CopyReference,
+    ReferenceInChat,
 }
 
 /// The menu's actions, in the order of the panel's rows (`more_menu_panel::menu_lines`): Snooze
 /// first while the page waits for answers.
-fn actions(snooze: bool, star: Option<bool>) -> Vec<MoreAction> {
-    let mut actions = Vec::with_capacity(6);
+fn actions(snooze: bool, star: Option<bool>, reference: (bool, bool)) -> Vec<MoreAction> {
+    let mut actions = Vec::with_capacity(8);
     if snooze {
         actions.push(MoreAction::Snooze);
     }
     if star.is_some() {
         actions.push(MoreAction::Star);
+    }
+    if reference.0 {
+        actions.push(MoreAction::CopyReference);
+    }
+    if reference.1 {
+        actions.push(MoreAction::ReferenceInChat);
     }
     actions.extend([
         MoreAction::ShareLink,
@@ -83,6 +91,22 @@ impl GpuiVisualPageModalWindow {
         self.page_session.as_ref().and(self.page_starred)
     }
 
+    /// Whether the menu offers Copy reference (the page has an id) and Reference in chat (it also
+    /// knows the chat whose card opened it).
+    fn reference_rows(&self) -> (bool, bool) {
+        let copy = self.page_id.is_some();
+        (copy, copy && self.source_session.is_some())
+    }
+
+    /// The page's link for the chat box: `[<its title>](page:<id>)` (gx-chat-core
+    /// `item_references.rs`, CDXC:SessionChat 2026-11-25 there).
+    fn page_reference(&self) -> Option<String> {
+        ghostex_gx_chat_core::transcript::item_references::page_link(
+            &self.title,
+            self.page_id.as_deref()?,
+        )
+    }
+
     /// The menu's lines for this page as it is now.
     fn more_menu_lines(&self) -> Vec<MenuLine> {
         let age = self.page_created_ms.map(|created| {
@@ -100,6 +124,7 @@ impl GpuiVisualPageModalWindow {
             age.as_deref(),
             self.can_snooze(),
             self.star_state(),
+            self.reference_rows(),
         )
     }
 
@@ -147,6 +172,7 @@ impl GpuiVisualPageModalWindow {
         };
         let snooze = self.can_snooze();
         let star = self.star_state();
+        let reference = self.reference_rows();
         let lines = self.more_menu_lines();
         let snooze_top = first_row_top(&lines);
         let light = self.glass.light;
@@ -164,7 +190,8 @@ impl GpuiVisualPageModalWindow {
                     lines.clone(),
                     (menu.snooze && snooze).then_some(0),
                     Rc::new(move |index, cx| {
-                        let Some(action) = actions(snooze, star).get(index).copied() else {
+                        let Some(action) = actions(snooze, star, reference).get(index).copied()
+                        else {
                             return;
                         };
                         view.update(cx, |this, cx| this.run_more_action(action, cx));
@@ -272,6 +299,21 @@ impl GpuiVisualPageModalWindow {
             MoreAction::OpenInBrowser => {
                 let url = self.url.clone();
                 (self.host)(VisualPageModalCommand::OpenInBrowser { url }, cx);
+            }
+            MoreAction::CopyReference => {
+                if let Some(link) = self.page_reference() {
+                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(link));
+                }
+            }
+            // The page's pill at the end of the chat box of the chat that opened it; the window is
+            // put aside so the chat box is in reach.
+            MoreAction::ReferenceInChat => {
+                if let (Some(text), Some(session)) =
+                    (self.page_reference(), self.source_session.clone())
+                {
+                    (self.host)(VisualPageModalCommand::ReferenceInChat { session, text }, cx);
+                    (self.host)(VisualPageModalCommand::Hide, cx);
+                }
             }
             MoreAction::Import => self.import_answers(cx),
             MoreAction::Star => self.star_page(cx),

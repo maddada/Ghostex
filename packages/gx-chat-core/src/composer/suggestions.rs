@@ -831,11 +831,12 @@ pub fn suggestion_replacement(
             .map(|path| file_mention(path, next_file_reference_index(text))),
         SuggestionKind::Session => matches.session_matches.get(index).map(choice_mention),
         SuggestionKind::Message => matches.message_matches.get(index).map(|choice| {
-            crate::transcript::message_numbers::message_link(
+            crate::transcript::message_numbers::message_link_named(
                 &crate::transcript::message_numbers::MessageRef {
                     session_id: None,
                     number: choice.number,
                 },
+                &choice.preview,
             )
         }),
         SuggestionKind::Boost => matches

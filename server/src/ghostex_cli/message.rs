@@ -32,7 +32,7 @@ const VALUE_FLAGS: &[&str] = &[
 
 /// Where the subcommand stands in `args`: the first word that is neither a flag nor a value
 /// flag's value. Flags may come before it (`message --session X show M12`, `message --json list`).
-fn subcommand_at(args: &[String]) -> Option<usize> {
+pub(super) fn subcommand_at(args: &[String]) -> Option<usize> {
     let mut index = 0;
     while index < args.len() {
         let arg = args[index].as_str();
@@ -56,7 +56,7 @@ pub fn is_message_read(args: &[String]) -> bool {
 /// `args` without the subcommand, written so the parser reads every switch as a switch and every
 /// word as a word: value flags keep their value, switches become `--name=true`, and the words
 /// follow `--`.
-fn normalized(args: &[String], skip: Option<usize>) -> Vec<String> {
+pub(super) fn normalized(args: &[String], skip: Option<usize>) -> Vec<String> {
     let mut flags = Vec::new();
     let mut words = Vec::new();
     let mut index = 0;

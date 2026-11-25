@@ -310,13 +310,13 @@ fn board_menu_entries(row: &Value) -> Vec<Value> {
     {
         extra.push(json!({"label": "Snooze", "icon": "moon", "submenu": "snooze"}));
     }
-    // After Open and Mention in chat, before Tags, Mark done and Drop.
+    // After Open, Copy reference and Reference in chat, before Tags, Mark done and Drop.
     let at = entries
         .iter()
         .position(|entry| {
             !matches!(
                 entry["command"]["type"].as_str(),
-                Some("insertBoardReference")
+                Some("insertBoardReference" | "copyText")
             ) && text(entry, "label") != text(row, "openLabel")
         })
         .unwrap_or(entries.len());
@@ -2824,6 +2824,11 @@ impl NativeChatView {
                         this.close_board_card_menu(cx);
                         if command["type"] == "insertBoardReference" {
                             this.insert_board_reference(&text(&command, "reference"), cx);
+                        } else if command["type"] == "copyText" {
+                            // Copy reference (gx-chat-core `card_menu`).
+                            cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                                text(&command, "text").to_string(),
+                            ));
                         } else {
                             this.invoke_board_jump(command.clone(), cx);
                             if command["type"] == "openMarkdownLink" {

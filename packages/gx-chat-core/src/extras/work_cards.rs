@@ -722,6 +722,7 @@ fn thread_wait_dock_row(item: &Value, thread: &Value, turns: &[Turn], now_ms: i6
         "agentIcon": crate::transcript::agent_message_card::agent_icon(text(thread, "agent"), ""),
         "needsApproval": wait_kind == "approval",
         "mention": mention_of(item),
+        "reference": mention_of(item),
         "needs": true,
     });
     if text(item, "kind") == "item" && !reference.is_empty() {
@@ -1462,7 +1463,9 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
                 // settles it (an answer picked from its buttons is marked on that button instead).
                 "replied": replied_words(ask, answers.get(&key).map(String::as_str)),
                 "reply": { "item": text(item, "ref"), "key": key, "tag": ask_tag, "name": reply_name(text(ask, "text")) },
-                "mention": mention_of(item),
+                // Its question, by its words (`item_references.rs`); its item when it has no tag.
+                "mention": if ask_tag.is_empty() { mention_of(item) } else { question_links(state, text(ask, "text"), &[ask_tag.to_string()]).0 },
+                "reference": if ask_tag.is_empty() { mention_of(item) } else { question_links(state, text(ask, "text"), &[ask_tag.to_string()]).1 },
                 "dismiss": card["cancel"],
                 "markAnswered": card["markAnswered"],
                 "snooze": card["snooze"],
@@ -1549,6 +1552,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
             "busy": picked && item["saidDone"] != true,
             "reply": { "item": text(item, "ref"), "key": key, "tag": "", "name": reply_name(text(item, "title")) },
             "mention": mention_of(item),
+            "reference": mention_of(item),
             "chips": card["chips"],
             "needs": true,
         });
@@ -2265,13 +2269,22 @@ const DAY_MS: i64 = 86_400_000;
 /// The mention a work item's Mention button puts in the chat box: `[title](board:B12)`, the
 /// reference a + pick inserts.
 fn mention_of(item: &Value) -> String {
-    let reference = text(item, "ref").replacen('W', "B", 1);
-    if reference.is_empty() || text(item, "kind") != "item" {
+    if text(item, "kind") != "item" {
         return String::new();
     }
-    format!(
-        "[{}](board:{reference})",
-        text(item, "title").replace(['[', ']'], "")
+    crate::transcript::item_references::work_item_link(text(item, "title"), text(item, "ref"))
+        .unwrap_or_default()
+}
+
+/// A question's two links for a row's menu (`transcript/item_references.rs`): Reference in chat's
+/// (`mention`, the tags alone) and Copy reference's (`reference`, the chat's session first, so a
+/// paste in another chat still names this chat's question). Empty without a tag.
+pub(crate) fn question_links(state: &ChatState, title: &str, tags: &[String]) -> (String, String) {
+    use crate::transcript::item_references::question_link;
+    let session = state.identity.session_id.as_str();
+    (
+        question_link(title, None, tags).unwrap_or_default(),
+        question_link(title, Some(session), tags).unwrap_or_default(),
     )
 }
 
@@ -2343,6 +2356,7 @@ fn work_row(item: &Value, turns: &[Turn], now_ms: i64, done_key: Option<String>)
         "detail": [card["line"]],
         "buttons": [],
         "mention": mention_of(item),
+        "reference": mention_of(item),
         // A finished row is never archived: the Recent drawer clears itself after the next turn.
         "dismiss": Value::Null,
         "dismissLabel": Value::Null,
@@ -2525,6 +2539,7 @@ fn question_rows_of(
                 "snooze": snooze,
                 "showInChat": show_in_chat,
                 "mention": "",
+                "reference": "",
                 "needs": true,
             });
             let mut row = base;
@@ -2550,6 +2565,10 @@ fn question_rows_of(
                     "tag": question.tag,
                     "name": reply_name(&question.question),
                 });
+                let (mention, reference) =
+                    question_links(state, &question.question, &[question.tag.clone()]);
+                row["mention"] = json!(mention);
+                row["reference"] = json!(reference);
                 row["detail"] = json!([]);
                 // What it is about: the lines between it and its links, else the lines above it
                 // (transcript/inline_answers.rs `context_above`), as an ask's `--detail` reads.
@@ -2635,7 +2654,20 @@ fn question_rows_of(
                     "to": to,
                     "name": reply_name(&title),
                 });
-                row["mention"] = json!(mention);
+                // Reference in chat and Copy reference name the page itself, or a form's questions
+                // (`item_references.rs`); `mention` above stays the Reply box's name for it.
+                let (pointed, copied) = if form {
+                    let tags = if tags.is_empty() { asker.tags.clone() } else { tags.clone() };
+                    question_links(state, &title, &tags)
+                } else {
+                    let link = crate::transcript::item_references::page_link(&title, &asker.id)
+                        .unwrap_or_default();
+                    (link.clone(), link)
+                };
+                row["mention"] = json!(pointed);
+                row["reference"] = json!(copied);
+                // Its title linked to its page, with its open tags: Copy as Markdown's heading.
+                row["titleLink"] = json!(mention);
             }
             (at, row)
         })

@@ -1018,6 +1018,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         // The user's numbered messages, read by the `ghostex message` an agent runs on this
         // computer (chat_message_numbers.rs).
         crate::chat_message_numbers::CHAT_MESSAGES_ENDPOINT => full_local(path),
+        // One question by its tag, read by the `ghostex question show` an agent runs on this
+        // computer (chat_item_quotes/).
+        crate::chat_item_quotes::CHAT_QUESTIONS_ENDPOINT => full_local(path),
         // CDXC:GrokBot 2026-11-19 WHY: the Grok Bot webhook key lives on this computer, and
         // `ghostex grokbot` here connects, tests or sends through it (grokbot/). The label alone
         // keeps no phone out: grokbot/api.rs `require_this_computer` checks the caller.

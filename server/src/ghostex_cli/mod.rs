@@ -65,6 +65,7 @@ pub mod ports;
 mod previous_sessions;
 mod project_status;
 mod projects;
+mod question;
 pub mod resources;
 pub mod rpc;
 mod run_in_terminal;
@@ -255,6 +256,8 @@ const HELP_GATE_EXCLUDED: &[&str] = &[
     "notify",
     "needs-you",
     "messages",
+    "question",
+    "questions",
     "work",
     "secret",
     "secrets",
@@ -576,6 +579,8 @@ fn is_known_command(name: &str) -> bool {
         "notify",
         "needs-you",
         "messages",
+        "question",
+        "questions",
         "work",
         "secret",
         "secrets",
@@ -967,6 +972,8 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         // `message <selector> <text>` stays the older alias of send-message.
         "message" | "messages" if message::is_message_read(args) => message::message_command(args),
         "messages" => message::message_command(args),
+        // `question show Q12` reads one question whole (question.rs).
+        "question" | "questions" => question::question_command(args),
         "send-message" | "message" | "msg" => wait::send_message_command(args),
         "read-text" | "read-messages" | "read-thread" => wait::read_session_text_command(args),
         /*

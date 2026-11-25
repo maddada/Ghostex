@@ -412,6 +412,10 @@ impl GhostexGpuiApp {
                 });
                 return;
             }
+            VisualPageModalCommand::ReferenceInChat { session, text } => {
+                self.append_to_session_chat_composer(session, &text, cx);
+                return;
+            }
             VisualPageModalCommand::OpenInBrowser { url } => {
                 self.close_native_app_modal_from_bridge(cx);
                 let _ = gpui_open_external_http_url(&url);

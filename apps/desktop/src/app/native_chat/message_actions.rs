@@ -436,27 +436,40 @@ impl NativeChatView {
             "label":"Copy message","iconPath":"chat-actions/copy",
             "command":{"type":"copyText","text":prompt},
         })];
-        // A message the user wrote has an ID (gx-chat-core `message_numbers.rs`): Copy message ID
-        // copies it as a link that pastes as its pill (`[M12](message:G9jt7.M12)`,
-        // CDXC:SessionChat 2026-11-25 there) and Reference in chat puts its pill in the chat box.
-        // The ID is shown nowhere else under the message (CDXC:SessionChat 2026-11-20 there).
+        // A message the user wrote has an ID (gx-chat-core `message_numbers.rs`): Copy reference
+        // copies it as a link named by its words that pastes as its pill
+        // (`[Fix the sidebar spacing](message:G9jt7.M12)`, the core's `referenceLink`) and
+        // Reference in chat puts that pill in the chat box (`referencePill`), CDXC:SessionChat
+        // 2026-11-25 there. The ID is shown nowhere else under the message.
         if let (Some(number), Some(full)) = (
             message["messageNumber"].as_u64(),
             message["messageRef"].as_str(),
         ) {
             use ghostex_gx_chat_core::transcript::message_numbers::{
-                MessageRef, copied_message_link, message_link,
+                MessageRef, copied_message_link, message_link_named,
             };
-            let copied = copied_message_link(full).unwrap_or_else(|| full.to_string());
+            let copied = message["referenceLink"]
+                .as_str()
+                .map(str::to_string)
+                .or_else(|| copied_message_link(full, prompt))
+                .unwrap_or_else(|| full.to_string());
             rows.push(json!({
-                "label":"Copy message ID","iconPath":"titlebar/hash.svg",
+                "label":"Copy reference","iconPath":"titlebar/hash.svg",
                 "command":{"type":"copyText","text":copied},
             }));
             if !self.in_subagent {
-                let pill = message_link(&MessageRef {
-                    session_id: None,
-                    number: number as u32,
-                });
+                let pill = message["referencePill"].as_str().map_or_else(
+                    || {
+                        message_link_named(
+                            &MessageRef {
+                                session_id: None,
+                                number: number as u32,
+                            },
+                            prompt,
+                        )
+                    },
+                    str::to_string,
+                );
                 rows.push(json!({
                     "label":"Reference in chat","iconPath":"titlebar/quote.svg",
                     "command":{"type":"appendToDraft","text":pill,"inline":true},

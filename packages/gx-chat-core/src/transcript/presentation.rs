@@ -306,6 +306,25 @@ pub fn project_message(
     );
     projected.insert("actionContent".to_string(), message_action_content(&body));
     projected.insert("time".to_string(), message_time(message.timestamp, context));
+    // A numbered message's two links (`message_numbers.rs`): Copy reference's, which keeps the
+    // session in it, and Reference in chat's, both named by the message's words.
+    if let (Some(number), Some(full)) = (message.message_number, message.message_ref.as_deref()) {
+        let words = crate::transcript::message_numbers::shown_text(message);
+        if let Some(link) = crate::transcript::message_numbers::copied_message_link(full, &words) {
+            projected.insert("referenceLink".to_string(), link.into());
+        }
+        projected.insert(
+            "referencePill".to_string(),
+            crate::transcript::message_numbers::message_link_named(
+                &crate::transcript::message_numbers::MessageRef {
+                    session_id: None,
+                    number,
+                },
+                &words,
+            )
+            .into(),
+        );
+    }
     let mut references = markdown_references(&native_body);
     // A message pill's hover names the message it points at (`message_numbers.rs`).
     crate::transcript::message_numbers::dress_message_references(&mut references, messages);

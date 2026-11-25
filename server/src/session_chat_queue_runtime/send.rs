@@ -792,7 +792,9 @@ async fn send_session_chat_message_locked(
     // chat_message_numbers.rs). Never under a slash or shell command, which the agent runs, and
     // only when the user's own caller sent it (the app, the web build, a phone, `--as-user`): a
     // Collab guest could otherwise pull words from the owner's other chats into the prompt, and
-    // another agent's `#M3` means its own chat, not this one.
+    // another agent's `#M3` means its own chat, not this one. The questions, work items and Live
+    // pages the user's own words point at (`question:`, `board:`, `page:` links) are quoted after
+    // them, in a block of their own (chat_item_quotes/).
     let expanded = if expanded.trim_start().starts_with(['/', '!'])
         || !crate::session_chat_send::sender_mark::is_user_send(
             &state.paths,
@@ -802,12 +804,13 @@ async fn send_session_chat_message_locked(
         ) {
         expanded
     } else {
-        crate::chat_message_numbers::with_message_quotes(
+        let expanded = crate::chat_message_numbers::with_message_quotes(
             &state.paths,
             project_id,
             session_id,
             &expanded,
-        )
+        );
+        crate::chat_item_quotes::with_item_quotes(state, project_id, session_id, text, &expanded)
     };
     // Each Boost pill's prompt goes under the message (CDXC:Boosts 2026-11-20 in boosts.rs).
     // Which Boosts it carried is kept for the anonymous `boosts.used` event sent after a

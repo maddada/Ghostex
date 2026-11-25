@@ -107,21 +107,39 @@ pub fn message_link(reference: &MessageRef) -> String {
     format!("[{written}]({MESSAGE_LINK_SCHEME}{written})")
 }
 
-/// What a message's Copy message ID copies, from its full ID (`G9jt7.M12`): `[M12](message:G9jt7.M12)`,
-/// a link that pastes as the pill. Its words are the short ID, as Reference in chat writes them;
-/// its link keeps the session, so the pill still points at this message pasted in another chat.
-/// `None` for anything that is not a message ID.
+/// The pill Reference in chat and the `#M` picker write: `[<the message's words>](message:M12)`,
+/// its words the message's first line that is not empty and not super short, cut to 25 characters
+/// (`item_references::reference_label`), the ID when it has none.
+pub fn message_link_named(reference: &MessageRef, text: &str) -> String {
+    let written = reference.written();
+    format!(
+        "[{}]({MESSAGE_LINK_SCHEME}{written})",
+        crate::transcript::item_references::reference_label(text, &format!("M{}", reference.number))
+    )
+}
+
+/// What a message's Copy reference copies, from its full ID (`G9jt7.M12`) and its words:
+/// `[<words>](message:G9jt7.M12)`, a link that pastes as the pill. Its words are the ones
+/// Reference in chat writes ([`message_link_named`]); its link keeps the session, so the pill
+/// still points at this message pasted in another chat. `None` for anything that is not a
+/// message ID.
 ///
 /// CDXC:SessionChat 2026-11-25 DECISION:
 /// User: "when i copy id of message make it actually copy the reference instead of just the id of
 /// it pls (same for all similar cases pls, we copy the reference like this: [M573](message:M573)
 /// not just message:M573 please so when i paste it then it looks better)". Supersedes Copy message
 /// ID copying the bare full form (Q4237): the full form now lives in the link.
-pub fn copied_message_link(full: &str) -> Option<String> {
+///
+/// CDXC:SessionChat 2026-11-25 DECISION:
+/// User, later the same day: "when i copy a message, include it's first non empty and not super
+/// short line there in the message reference but up to 25 chatacters then truncate ... this is so
+/// we dont show the message id raw and instead show some text". The words are the message's, the
+/// ID stays in the link and the pill's hover.
+pub fn copied_message_link(full: &str, text: &str) -> Option<String> {
     let reference = parse_message_ref(full)?;
     Some(format!(
-        "[M{}]({MESSAGE_LINK_SCHEME}{})",
-        reference.number,
+        "[{}]({MESSAGE_LINK_SCHEME}{})",
+        crate::transcript::item_references::reference_label(text, &format!("M{}", reference.number)),
         reference.written()
     ))
 }
@@ -448,7 +466,7 @@ pub fn preview(text: &str, max: usize) -> String {
 
 /// `line` with each Markdown link `[label](destination)` written as its label, as the chat shows
 /// it: "same as M2", not "same as [M2](message:M2)".
-fn link_labels(line: &str) -> String {
+pub(crate) fn link_labels(line: &str) -> String {
     let mut out = String::with_capacity(line.len());
     let mut rest = line;
     while let Some(open) = rest.find('[') {
@@ -738,9 +756,9 @@ mod tests {
         assert_eq!(popup.rows[0].label, "M12");
         assert_eq!(popup.rows[0].detail, "make them 30px");
         let pill = suggestion_replacement(&matches, popup.kind, 0, "same as #M1").unwrap();
-        assert_eq!(pill, "[M12](message:M12)");
+        assert_eq!(pill, "[make them 30px](message:M12)");
         let (text, _) = complete_spaced_mention("same as #M1", 11, &pill).unwrap();
-        assert_eq!(text, "same as [M12](message:M12) ");
+        assert_eq!(text, "same as [make them 30px](message:M12) ");
         // A GitHub issue and a heading's word open nothing.
         assert!(open("see #12").is_none());
         assert!(open("#Make").is_none());

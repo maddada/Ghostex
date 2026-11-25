@@ -128,6 +128,44 @@ pub(crate) fn page_answered(gxserver_state_dir: &Path, id: &str) -> bool {
         .is_some_and(|record| record.get("answeredAt").is_some_and(|at| !at.is_null()))
 }
 
+/// What the quote of a pointed-at Live page and `ghostex question show` say of a page: its title,
+/// when it was published, the file it came from, its questions and the answers sent from it.
+pub(crate) struct PageOverview {
+    pub(crate) title: String,
+    /// RFC 3339, from the page's record.
+    pub(crate) created_at: Option<String>,
+    pub(crate) source_path: Option<String>,
+    pub(crate) answered_at: Option<String>,
+    pub(crate) questions: Vec<PageQuestion>,
+    /// The answers sent from the page, by question key (`Null` until sent).
+    pub(crate) answers: serde_json::Value,
+}
+
+/// The [`PageOverview`] of a page gxserver published; `None` for one it does not have.
+pub(crate) fn page_overview(gxserver_state_dir: &Path, id: &str) -> Option<PageOverview> {
+    let record = read_record(gxserver_state_dir, id)?;
+    let text = |key: &str| {
+        record
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    };
+    let (title, questions) = page_questions(gxserver_state_dir, id)
+        .unwrap_or_else(|| (text("title").unwrap_or_else(|| "Live page".into()), Vec::new()));
+    Some(PageOverview {
+        title,
+        created_at: text("createdAt"),
+        source_path: text("sourcePath"),
+        answered_at: text("answeredAt"),
+        questions,
+        answers: record
+            .get("answers")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null),
+    })
+}
+
 fn parse_questions(html: &str) -> Vec<PageQuestion> {
     let mut questions = written_questions(html);
     add_row_choices(&mut questions, &page_rows(html));

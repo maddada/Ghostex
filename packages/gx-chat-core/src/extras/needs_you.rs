@@ -149,7 +149,9 @@ pub fn rows_split(
             "busy": picked.is_some(),
             "replied": replied,
             "reply": { "item": tag, "key": key, "tag": "", "name": reply_name(title) },
-            "mention": "",
+            // Its question by its words (`transcript/item_references.rs`).
+            "mention": super::work_cards::question_links(state, title, &[tag.to_string()]).0,
+            "reference": super::work_cards::question_links(state, title, &[tag.to_string()]).1,
             // Not needed: a to-do asks no question, so it is not Dismiss. It sends the agent
             // nothing now; gxserver tells it with its next message
             // (server/src/session_chat_dismissed.rs, where the quiet-dismiss decision lives). It

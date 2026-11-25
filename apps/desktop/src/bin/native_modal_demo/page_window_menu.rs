@@ -109,7 +109,7 @@ impl Render for PageWindowMenuDemo {
         let more_right = WIDTH - CONTROL_INSET - 2.0 * (CONTROL_SIZE + 6.0);
         let menu_left = more_right - MENU_WIDTH;
         let menu_top = CONTROL_INSET + CONTROL_SIZE + 6.0;
-        let lines = menu_lines("Sidebar cleanup", Some("2h ago"), true, Some(false));
+        let lines = menu_lines("Sidebar cleanup", Some("2h ago"), true, Some(false), (true, true));
         let sub_lines = snooze_lines();
         let sub_top = menu_top + first_row_top(&lines) - first_row_top(&sub_lines);
         let menu_height = height(&lines);
@@ -133,7 +133,7 @@ impl Render for PageWindowMenuDemo {
                         .left(px(7.0))
                         .right(px(7.0))
                         .top(px(
-                            first_row_top(&menu_lines("", None, true, Some(false))) + 32.0
+                            first_row_top(&menu_lines("", None, true, Some(false), (true, true))) + 32.0
                         ))
                         .h(px(32.0))
                         .rounded(px(8.0))

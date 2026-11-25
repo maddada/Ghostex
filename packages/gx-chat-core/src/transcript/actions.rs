@@ -320,6 +320,35 @@ fn handle_action(state: &mut ChatState, action: &UserAction, context: &ChatConte
             if crate::questions::answer_pills::parse_href(&href).is_some() {
                 return crate::questions::answer_pills::open(state, context, &href);
             }
+            // A question pointed at (`item_references.rs`): it opens where it lives, as a pill
+            // that answers it does, without answering it.
+            if let Some(reference) =
+                crate::transcript::item_references::parse_question_href(&href)
+            {
+                let about = format!(
+                    "{}{}",
+                    crate::questions::answer_pills::REGARDING,
+                    reference.tags.join(".")
+                );
+                return crate::questions::answer_pills::open(state, context, &about);
+            }
+            // A Live page pointed at: it opens, as its card's Open does.
+            if let Some(id) = crate::transcript::item_references::parse_page_href(&href) {
+                return match crate::questions::open_questions::page_url(state, &id) {
+                    Some(url) => {
+                        let mut effects = crate::questions::later::seen_on_open(state, &url);
+                        effects.push(Effect::Open(OpenTarget::Url {
+                            url,
+                            external: false,
+                        }));
+                        effects
+                    }
+                    None => vec![Effect::Toast {
+                        level: "info".to_string(),
+                        message: "That page isn't in this chat any more.".to_string(),
+                    }],
+                };
+            }
             // One of the user's earlier messages (`message_numbers.rs`): scrolls to it when it is
             // in the loaded part of this chat.
             if let Some(reference) = href

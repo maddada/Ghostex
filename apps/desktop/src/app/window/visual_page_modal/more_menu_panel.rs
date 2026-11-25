@@ -68,6 +68,7 @@ pub(crate) fn menu_lines(
     age: Option<&str>,
     snooze: bool,
     star: Option<bool>,
+    reference: (bool, bool),
 ) -> Vec<MenuLine> {
     let row = |label, icon| {
         MenuLine::Row(MenuRow {
@@ -107,6 +108,13 @@ pub(crate) fn menu_lines(
         Some(true) => this_page.push(row("Unstar page", "titlebar/star-filled.svg")),
         Some(false) => this_page.push(row("Star page", "titlebar/star.svg")),
         None => {}
+    }
+    // Copy reference and Reference in chat (gx-chat-core `item_references.rs`).
+    if reference.0 {
+        this_page.push(row("Copy reference", "titlebar/hash.svg"));
+    }
+    if reference.1 {
+        this_page.push(row("Reference in chat", "titlebar/quote.svg"));
     }
     if !this_page.is_empty() {
         lines.push(MenuLine::Heading("This page"));

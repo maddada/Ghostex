@@ -67,6 +67,10 @@ pub enum ReferenceKind {
     Message,
     /// A Boost for this message, `[Live page](boost:live-page)` (`extras/boosts.rs`).
     Boost,
+    /// A question pointed at, `[<title>](question:Q4933)` (`transcript/item_references.rs`).
+    QuestionRef,
+    /// A Live page pointed at, `[<title>](page:<id>)` (`transcript/item_references.rs`).
+    PageRef,
 }
 
 impl ReferenceKind {
@@ -85,6 +89,8 @@ impl ReferenceKind {
             Self::Answer => "answer",
             Self::Message => "message",
             Self::Boost => "boost",
+            Self::QuestionRef => "questionRef",
+            Self::PageRef => "pageRef",
         }
     }
 }
@@ -373,6 +379,8 @@ pub fn reference_display_label(label: &str, path: &str, kind: ReferenceKind) -> 
         || kind == ReferenceKind::Answer
         || kind == ReferenceKind::Message
         || kind == ReferenceKind::Boost
+        || kind == ReferenceKind::QuestionRef
+        || kind == ReferenceKind::PageRef
     {
         return crate::transcript::session_mentions::pill_label(label);
     }
@@ -784,6 +792,26 @@ pub fn composer_references(text: &str) -> Vec<ComposerReference> {
                 kind: ReferenceKind::Message,
                 label,
                 path: destination.path.trim().to_string(),
+                start: indexed.offset(start),
+            });
+            continue;
+        }
+        // A question or Live page pointed at: its title in a pill (`item_references.rs`).
+        let pointed = destination.path.trim();
+        let item_kind = if crate::transcript::item_references::parse_question_href(pointed).is_some() {
+            Some(ReferenceKind::QuestionRef)
+        } else if crate::transcript::item_references::parse_page_href(pointed).is_some() {
+            Some(ReferenceKind::PageRef)
+        } else {
+            None
+        };
+        if let Some(kind) = item_kind {
+            references.push(ComposerReference {
+                end: indexed.offset(destination.end),
+                identity: format!("{}:{pointed}", kind.as_str()),
+                kind,
+                label,
+                path: pointed.to_string(),
                 start: indexed.offset(start),
             });
             continue;

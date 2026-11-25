@@ -77,6 +77,12 @@ pub(crate) enum VisualPageModalCommand {
     /// The Settings hotkey pressed while the page had the keyboard: Settings opens over it, which
     /// puts the page aside as any other app window does.
     OpenSettings,
+    /// The page's link for the chat box (Reference in chat in its ⋯ menu), for the chat whose card
+    /// opened it.
+    ReferenceInChat {
+        session: TerminalSessionId,
+        text: String,
+    },
     /// Closes the window and opens the page in the reader's browser.
     OpenInBrowser { url: String },
     /// Downloads the page's exported file in the reader's browser and keeps the window open

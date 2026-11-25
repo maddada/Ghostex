@@ -298,6 +298,10 @@ pub fn usage() -> String {
             "Read one of the user's numbered messages whole (M12 in this chat, G9jt7.M12 in another), or list this chat's with their first line. When the user points at a message (a pill, #M12 or G9jt7.M12, not a bare M12), its start is already quoted at the bottom of their prompt",
         ),
         format_help_command(
+            "question show <Q12|G9jt7.Q12> [--json]",
+            "Read one question whole by its tag: its words, detail, choices, whether it is answered, the answer, and where it was asked (a work item, a Needs you to-do, a form in the chat or a Live page). When the user points at a question, work item or Live page in their message, a short quote of it is already at the bottom of their prompt",
+        ),
+        format_help_command(
             "work item add|now|step|ask|wait|done|drop|list … | work topic [\"one line\"] | work next-tag",
             "Keep this session's work items and its Topic in the Work panel (ghostex coordinator item is the same command); an ordinary session keeps its own while the Work items extension is on. ghostex work --help has the rules",
         ),

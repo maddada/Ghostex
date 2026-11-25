@@ -30,6 +30,13 @@ pub fn markdown_link(href: &str, label: &str) -> Option<Value> {
     if let Some(reference) = crate::transcript::message_numbers::message_reference(href, label) {
         return Some(reference);
     }
+    // A question, Live page or (above, `board:`) work item pointed at (`item_references.rs`).
+    if let Some(reference) = crate::transcript::item_references::question_reference(href, label) {
+        return Some(reference);
+    }
+    if let Some(reference) = crate::transcript::item_references::page_reference(href, label) {
+        return Some(reference);
+    }
     // A Boost the message carried (`extras/boosts.rs`): its name in a pill, what it asked of the
     // agent in its hover.
     if crate::extras::boosts::boost_id_of_href(href).is_some() {

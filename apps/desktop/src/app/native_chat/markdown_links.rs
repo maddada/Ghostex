@@ -189,6 +189,14 @@ pub(super) fn presentations(
                     question_states,
                 )
                 .into()
+            } else if kind == "questionRef" {
+                // A question pointed at: its tag and how it stands (`item_references::tooltip`).
+                ghostex_gx_chat_core::transcript::item_references::tooltip(
+                    reference["sourceLabel"].as_str()?,
+                    reference["href"].as_str()?,
+                    question_states,
+                )
+                .into()
             } else {
                 reference["title"].as_str()?.to_owned().into()
             };

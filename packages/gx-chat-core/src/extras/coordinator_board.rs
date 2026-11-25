@@ -137,12 +137,17 @@ pub struct BoardRow {
     /// What Restore sends on a row under Removed, else `null`.
     #[serde(default, skip_serializing_if = "Value::is_null")]
     pub restore: Value,
-    /// The Markdown link Mention in chat (or an ⌥-click) puts in the chat box, so the user can
+    /// The Markdown link Reference in chat (or an ⌥-click) puts in the chat box, so the user can
     /// comment on it:
     /// `[title](board:B4)` for an item, the thread's session ref for a thread (the + mention's
-    /// form); "" for a question, whose click jumps to its card instead.
+    /// form), `[title](question:Q12)` for a question and `[title](page:<id>)` for a Live page.
     #[serde(default)]
     pub reference: String,
+    /// What Copy reference copies when it differs from `reference`: a question's link with this
+    /// chat's session in it (`question:G9jt7.Q12`), so it works pasted in another chat. "" copies
+    /// `reference`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub copied_reference: String,
     /// The coordinator's own line for it, which the second line shows when it has no links.
     #[serde(default)]
     pub note: String,
@@ -375,21 +380,6 @@ fn release_chip_label(release: &str) -> String {
     }
 }
 
-/// A Markdown link for the chat box, its label escaped the way the + mention escapes one.
-fn markdown_link(label: &str, destination: &str) -> String {
-    let label: String = label
-        .chars()
-        .flat_map(|character| {
-            if matches!(character, '\\' | '[' | ']') {
-                vec!['\\', character]
-            } else {
-                vec![character]
-            }
-        })
-        .collect();
-    format!("[{label}]({destination})")
-}
-
 /// A GitHub PR or issue link's colour, the same on a board chip and a work item card's part:
 /// merged, closed, failing or running checks, open, or neutral while its state is unknown.
 pub fn link_tone(link: &Value) -> &'static str {
@@ -584,10 +574,22 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
     let here = text(row, "kind") == "item" || text(row, "serverId").is_empty();
     let agent = text(row, "agent");
     let title = text(row, "title");
+    // An ask points at its question, an item at itself (`board:B12`: the rows carry `W12`, which
+    // this wrote as `board:W12` before 2026-11-25 and the chat box did not read as a pill), a
+    // thread at its session (`transcript/item_references.rs`).
     let reference = match text(row, "kind") {
-        "item" => markdown_link(title, &format!("board:{}", text(row, "ref"))),
+        "item" if !text(row, "ask").is_empty() => {
+            crate::transcript::item_references::question_link(
+                title,
+                None,
+                &[text(row, "ask").to_string()],
+            )
+            .unwrap_or_default()
+        }
+        "item" => crate::transcript::item_references::work_item_link(title, text(row, "ref"))
+            .unwrap_or_default(),
         "thread" if !text(row, "globalRef").is_empty() => {
-            markdown_link(title, text(row, "globalRef"))
+            crate::transcript::item_references::session_link(title, text(row, "globalRef"))
         }
         _ => String::new(),
     };
@@ -633,6 +635,7 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
         .collect();
     BoardRow {
         reference,
+        copied_reference: String::new(),
         // A finished thread with no links of its own says how its last report began, so a Done or
         // To do card's second line is still worth reading.
         //
@@ -757,10 +760,21 @@ fn card_menu(row: &BoardRow, work: bool) -> Vec<BoardMenuItem> {
             ..BoardMenuItem::default()
         });
     }
+    // Copy reference and Reference in chat, the one pair of names every surface uses
+    // (CDXC:SessionChat 2026-11-25 in transcript/item_references.rs).
     if !row.reference.is_empty() {
         menu.push(BoardMenuItem {
-            label: "Mention in chat".to_string(),
-            icon: "message-plus".to_string(),
+            label: "Copy reference".to_string(),
+            icon: "hash".to_string(),
+            command: json!({
+                "type": "copyText",
+                "text": if row.copied_reference.is_empty() { &row.reference } else { &row.copied_reference },
+            }),
+            ..BoardMenuItem::default()
+        });
+        menu.push(BoardMenuItem {
+            label: "Reference in chat".to_string(),
+            icon: "quote".to_string(),
             command: json!({"type": "insertBoardReference", "reference": row.reference}),
             ..BoardMenuItem::default()
         });
@@ -941,6 +955,21 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
                 };
                 let questions = asker.tags.len().max(1);
                 let title = crate::questions::form_links::plain_words(&asker.title);
+                // Copy reference and Reference in chat name a page itself, or a form's questions
+                // still waiting, as the dock's row does (work_cards.rs `question_rows`).
+                let shown = if title.is_empty() { "Questions for you" } else { title.as_str() };
+                let (reference, copied_reference) = if matches!(
+                    asker.kind,
+                    crate::transcript::open_questions::AskerKind::Page
+                ) {
+                    let link = crate::transcript::item_references::page_link(shown, &asker.id)
+                        .unwrap_or_default();
+                    (link, String::new())
+                } else {
+                    let waiting = asker.waiting_tags();
+                    let tags = if waiting.is_empty() { asker.tags.clone() } else { waiting };
+                    crate::extras::work_cards::question_links(state, shown, &tags)
+                };
                 (
                     asker.at,
                     BoardRow {
@@ -964,7 +993,8 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
                         needs_approval: false,
                         open_thread: Value::Null,
                         agent_icon: String::new(),
-                        reference: String::new(),
+                        reference,
+                        copied_reference,
                         note: String::new(),
                         answers: Vec::new(),
                         lead: String::new(),
@@ -1782,11 +1812,12 @@ pub const SHOW_ON_BOARD: &str = "Show on the board";
 pub const BOARD_ITEM_GONE: &str = "No longer on the board";
 
 /// The item number of a board link's destination, `board:B4` (what a card's click puts in the chat
-/// box, [`insert_reference`]).
+/// box, [`insert_reference`]). `board:W4` names the same item (W4 and B4 are one item): the Work
+/// panel's menu wrote that form before 2026-11-25 and messages sent then still carry it.
 pub fn board_item(href: &str) -> Option<u64> {
     let number = crate::transcript::jsstr::js_trim(href)
         .strip_prefix("board:")?
-        .strip_prefix(['B', 'b'])?;
+        .strip_prefix(['B', 'b', 'W', 'w'])?;
     if number.is_empty() || !number.bytes().all(|byte| byte.is_ascii_digit()) {
         return None;
     }
@@ -2340,7 +2371,7 @@ mod tests {
         assert_eq!(rows[0].tags[0].label, "Answer in thread");
         assert_eq!(rows[0].tags[0].command["type"], "openCoordinatorThread");
         assert_eq!(rows[0].reference, "[Gask](S90:P:Gask)");
-        assert_eq!(rows[1].reference, "[Delete branch \\[wip\\]](board:B4)");
+        assert_eq!(rows[1].reference, "[Delete branch wip](board:B4)");
         assert_eq!(rows[1].note, "Its commits are on main");
         assert_eq!(
             rows[0].note, "",
@@ -2633,7 +2664,7 @@ mod tests {
         );
     }
 
-    /// The menu: Open, Mention in chat, Tags, Mark done, Remove, with no Move to; the user's tag is
+    /// The menu: Open, Copy reference, Reference in chat, Tags, Mark done, Remove, with no Move to; the user's tag is
     /// the first chip; a question's card only goes to its question.
     #[test]
     fn a_cards_menu_and_tag() {
@@ -2650,7 +2681,8 @@ mod tests {
             labels,
             vec![
                 "Open PR #214",
-                "Mention in chat",
+                "Copy reference",
+                "Reference in chat",
                 "Tag As",
                 "Mark Done",
                 "Remove from board"

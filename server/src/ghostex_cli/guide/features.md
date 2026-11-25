@@ -2258,13 +2258,14 @@ messages, plus Edit message, Back to composer and Delete message while one still
 waits for the agent.
 Message IDs: every message you write in a chat gets an ID that counts up in that
 chat (M1, M2, M3…), so you can point back to it instead of pasting it again. The ID
-is not shown under the message: the ⋯ menu's Copy message ID copies it as a link
-that pastes into any chat box as its pill (`[M12](message:G9jt7.M12)`: the short
-ID, with the session's ID kept in the link so it works from any chat), and
-Reference in chat puts a pill for it in the chat box. Typing #M in the chat box
-lists your messages in this chat, newest first (#M1 narrows them to M1, M10,
-M12…); pick one for its pill. Hover the pill in a sent message to see the
-message's first line, and click it to scroll there. When you send a message that
+is not shown under the message: the ⋯ menu's Copy reference copies it as a link
+that pastes into any chat box as its pill
+(`[Fix the sidebar spacing](message:G9jt7.M12)`: the message's first line that is
+not empty or very short, cut to 25 characters, with the session's ID kept in the
+link so it works from any chat), and Reference in chat puts the same pill in the
+chat box. Typing #M in the chat box lists your messages in this chat, newest
+first (#M1 narrows them to M1, M10, M12…); pick one for its pill. Hover the pill
+to see its ID, and click it in a sent message to scroll there. When you send a message that
 points at one (a pill, #M12, or G9jt7.M12 for another chat's; a bare M12 stays
 plain text), the agent gets the ID and, at the bottom of your message, the start
 of the one you pointed at: up to 6 lines and 600 characters, whole lines first (a
@@ -2275,6 +2276,19 @@ yourself carry quotes: a Collab guest's or another agent's never do. Agents read
 never reused (after Rewind to here the next message gets a new one), a fork keeps
 the numbers up to where it was cut, a queued message gets its number once the
 agent has it, and only messages written after the update that added IDs have one.
+Questions, work items and Live pages have the same two rows, **Copy reference**
+and **Reference in chat**: in the ⋯ and right-click menus of the rows above the
+chat box and of Needs you, on a card in the Work panel, on a question in a form
+(its ⋯ on the computer, a tap on its tag on the phone) and in a Live
+page's ⋯ menu (on a page card on the phone). The pill shows the title, cut to 25
+characters, with the kind's icon (a question's pink, a page's blue, a work
+item's as before); hover it for its tag. Copy reference of a question keeps the
+chat's ID in the link (`question:G9jt7.Q12`), so it works from any chat. Point at
+one in the chat box (one of those rows, or a pasted link) and the agent gets a short quote of
+it at the bottom of your message: a question's words, choices, whether it is
+answered and the answer; a work item's state, latest line and the thread on it; a
+Live page's file and its open questions. Up to 5 are quoted per message, as with
+messages. Agents read a whole question with `ghostex question show Q12`.
 Select words in the chat and right-click them for Copy, Add to Chat (quotes
 them into the chat box) and Reply, which opens a small box for your answer:
 Enter sends the reply right away, as it does in the chat box, and Add to prompt
@@ -4353,7 +4367,7 @@ sent (thread reports included), Message to <session title> for one this
 session's agent sent with `agents send`, `agents create --task` or
 `coordinator start-thread`. Click the title to switch to that session; click the
 rest of the line to read the whole message. A mention of a session in a message
-(from Copy ID or the `+` list) shows as the agent's logo and the session's
+(from Copy Reference or the `+` list) shows as the agent's logo and the session's
 current title with a faint dotted underline, which grows stronger under the
 pointer, and a dot while the session is busy (amber while it works, red when it
 needs you; none when it is idle or asleep); a session on another computer also
@@ -4370,7 +4384,7 @@ An agent can also read or search any other thread, including a sleeping one:
 conversation, and `--grep "<words>" --context 1` finds where a topic came up.
 `<session>` can be any id from the sidebar's Copy Details (right-click a session,
 Copy > Copy Details; its Global Ref is the most precise), or the title. The
-session's menu also has Copy ID, right above Tag As, which copies a mention of
+session's Copy menu starts with Copy Reference (named Copy ID up to 12.1.1), which copies a mention of
 the session, `[<session title>](<Global Ref>)`, to paste into another chat (it
 shows there as the session's underlined name); dragging the session's row from the sidebar
 onto a chat box types the same mention where the cursor is (one per session
@@ -4738,15 +4752,17 @@ version of the Projects features in Cursor and Claude Code.
   "N questions open" with Open. A form's or page's row has **Reply** beside
   Open: your words go to the agent tagged with the questions it still asks
   ("Q2759 Q2760: your words"), and the chat box is left as it was. Its ⋯ and
-  right-click menus have **Mention in chat box**, which puts the form's name (a
-  page's as a link to it) and those tags in the chat box where the cursor is; a
-  work item row's Mention reads Mention in chat box too. A question form's row is
+  right-click menus have **Copy reference** and **Reference in chat** (named
+  Mention in chat box before): Reference in chat puts the form's name (a page's
+  as a link to it) as a pill in the chat box where the cursor is, and Copy
+  reference copies the same link to paste in any chat; a work item row has both
+  too. A question form's row is
   marked with a pink checklist. Every row's ⋯ menu, which a right-click on its
   title line also opens, has **Copy as Markdown** (from 11.6.0): a work item ask
   or one-click question copies its title as a heading, its full text and its
   answers ("Answers: A, B (recommended: A)"); a form copies its title and each
   question it still asks with its text and answers; a page copies its title as a
-  link and the tags it still asks. The phone has Reply, Mention in chat box and
+  link and the tags it still asks. The phone has Reply, Copy reference, Reference in chat and
   Copy as Markdown in the same rows. A question's Reply takes voice and
   pictures: its microphone dictates into the box, and a picture you paste or
   pick with its paperclip (the phone's photo button) goes with your words.
@@ -4790,7 +4806,8 @@ version of the Projects features in Cursor and Claude Code.
   card to open it in place: one that needs you offers **Reply**, **Show in
   chat**, **Dismiss** and **Snooze** beside **Mention**, as a row above the chat
   box does. Right-click a card, or click its ⋯ (long-press on the phone), for
-  **Mention in chat**, **Tag As**, **Mark Thread Done** (**Mark Done** on a
+  **Copy reference**, **Reference in chat** (named Mention in chat before; a
+  work item's link reads `board:B12`, and `board:W12` works too), **Tag As**, **Mark Thread Done** (**Mark Done** on a
   link's card) and **Drop** (**Restore** brings
   it back for 7 days). Drag a card onto another group to move it. The panel
   opens beside the chat (a floating card when the chat is narrow) or as columns

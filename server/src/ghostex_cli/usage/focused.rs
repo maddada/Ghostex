@@ -998,6 +998,21 @@ list: this chat's numbered messages with their first line, newest first (20 unle
         .to_string()
 }
 
+pub fn question_usage() -> String {
+    r#"Usage:
+  ghostex question show <Q12 | G9jt7.Q12> [--json] [--session <alias|id|title>]
+
+Prints one question whole: its words, its detail, its choices, whether it is open, answered,
+skipped or withdrawn, the answer, and where it was asked (a work item's question, a Needs you
+to-do, a question form in the chat or a Live page). In a coordinator's thread the coordinator's
+questions are found too. When the user points at a question, a work item or a Live page in a
+message they send (a pill from Copy reference or Reference in chat, or a pasted link), a short
+quote of each of the first 5 is added at the bottom of the prompt; this prints a question whole.
+show: this chat's Q12, or another chat's G9jt7.Q12 (Q12.Q13 prints both).
+--session: the chat to read. Without it the calling session is used."#
+        .to_string()
+}
+
 pub fn secret_usage() -> String {
     r#"Usage:
   ghostex secret guide              How to ask for a secret and use it safely (sudo, 1Password)

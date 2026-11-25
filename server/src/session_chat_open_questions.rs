@@ -45,6 +45,9 @@ use crate::session_chat_follower::session_chat_agent_for_session;
 use crate::session_status::TURN_COMPLETE_ATTENTION_SOURCE;
 use crate::storage::open_gxserver_database;
 
+mod tag_question;
+pub(crate) use tag_question::chat_question;
+
 /// Where a session's open questions are kept.
 pub(crate) const RUNTIME_KEY: &str = "sessionChatOpenQuestions";
 /// Where the forms and pages the user put off "For later" are kept (form or page ids). They stay

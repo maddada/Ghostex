@@ -159,11 +159,27 @@ pub(super) fn replacements(
                         // Its prompt, and how to edit it (boosts.rs).
                         super::boosts::pill_tooltip(&reference.path)
                     } else if reference.kind == "message" {
-                        // One of the user's earlier messages (gx-chat-core `message_numbers.rs`).
+                        // One of the user's earlier messages (gx-chat-core `message_numbers.rs`):
+                        // its ID, which the pill's words (the message's own) leave out.
                         format!(
                             "Message {}: its start is quoted for the agent",
-                            reference.label
+                            reference
+                                .path
+                                .strip_prefix("message:")
+                                .unwrap_or(&reference.label)
                         )
+                    } else if reference.kind == "questionRef" {
+                        // A question pointed at (gx-chat-core `item_references.rs`): its tag.
+                        format!(
+                            "{}\nQuoted for the agent",
+                            ghostex_gx_chat_core::transcript::item_references::tooltip(
+                                &reference.label,
+                                &reference.path,
+                                &serde_json::Value::Null,
+                            )
+                        )
+                    } else if reference.kind == "pageRef" {
+                        format!("Live page: {}\nQuoted for the agent", reference.label)
                     } else if reference.kind == "board" {
                         format!(
                             "{} on the board",
