@@ -1213,7 +1213,7 @@ pub(crate) async fn run_provider_model_picker_job(
             Some(outcome) => outcome,
             None => driver.drive_dsh(&plan).await,
         },
-        "antigravity" => {
+        "antigravity" | "cursor" => {
             if crate::acp::channel::live(project_id, session_id, "model").is_some() {
                 async {
                     if !plan.model.is_empty() || !plan.effort.is_empty() {
@@ -1228,7 +1228,7 @@ pub(crate) async fn run_provider_model_picker_job(
                     Ok(())
                 }
                 .await
-            } else {
+            } else if plan.provider == "antigravity" {
                 async {
                     if !plan.model.is_empty() {
                         driver.drive_provider(&plan).await?;
@@ -1238,6 +1238,8 @@ pub(crate) async fn run_provider_model_picker_job(
                         .await
                 }
                 .await
+            } else {
+                driver.drive_provider(&plan).await
             }
         }
         _ if crate::acp::channel::live(project_id, session_id, "model").is_some() => {

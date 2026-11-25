@@ -308,6 +308,7 @@ fn acp_terminal_notice(
             "antigravity" => "Antigravity",
             "opencode" => "OpenCode",
             "grok" => "Grok Build",
+            "cursor" => "Cursor CLI",
             _ => "Claude Code",
         };
         return Some(
@@ -353,6 +354,7 @@ fn acp_terminal_notice(
                 "claude" => "Claude Code",
                 "opencode" => "OpenCode",
                 "grok" => "Grok Build",
+                "cursor" => "Cursor CLI",
                 _ => "Agent",
             };
             let lower_code = code.unwrap_or_default().to_ascii_lowercase();
@@ -557,6 +559,9 @@ pub(super) fn acp_family_for_session(agent_id: Option<&str>, session: Option<&Va
     }
     if lower.contains("hermes") {
         return "hermes".to_string();
+    }
+    if lower.contains("cursor") {
+        return "cursor".to_string();
     }
     ghostex_gx_chat_core::menus::catalog::canonical_model_family(raw).to_string()
 }

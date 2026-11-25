@@ -108,6 +108,21 @@ const HERMES_SPEC: AcpAgentSpec = AcpAgentSpec {
     supports_mid_turn_prompt: true,
 };
 
+const CURSOR_SPEC: AcpAgentSpec = AcpAgentSpec {
+    family: "cursor",
+    display_name: "Cursor CLI",
+    // Native Cursor Agent CLI ACP JSON-RPC over stdio (`cursor-agent acp`), driven by
+    // `driver_cursor/` for Cursor's custom RPCs (`cursor/ask_question`, `cursor/create_plan`),
+    // parameterized model picker, isolated approval config, and store/transcript bridging.
+    acp_argv: &["cursor-agent", "acp"],
+    default_cli_bin: "cursor-agent",
+    cli_resume_flag: "--resume",
+    cli_accept_all_flag: Some("--yolo"),
+    // `cursor-agent acp` cancels an in-flight prompt if a second `session/prompt` arrives, so
+    // Ghostex queues mid-turn prompts and delivers them after the active turn finishes.
+    supports_mid_turn_prompt: false,
+};
+
 pub fn spec_for_family(family: &str) -> Option<&'static AcpAgentSpec> {
     match family.trim().to_ascii_lowercase().as_str() {
         "antigravity" | "antigravity-cli" | "agy" => Some(&ANTIGRAVITY_SPEC),
@@ -116,6 +131,7 @@ pub fn spec_for_family(family: &str) -> Option<&'static AcpAgentSpec> {
         "opencode" | "opencode-cli" => Some(&OPENCODE_SPEC),
         "grok" | "grok-build" => Some(&GROK_SPEC),
         "hermes" | "hermes-agent" => Some(&HERMES_SPEC),
+        "cursor" | "cursor-cli" | "cursor-agent" => Some(&CURSOR_SPEC),
         _ => None,
     }
 }
@@ -167,6 +183,16 @@ pub fn transcript_path_for_session(family: &str, native_session_id: &str) -> Opt
             None,
         ),
         "hermes" => super::hermes::expected_transcript_mirror_path(native_session_id),
+        "cursor" => super::driver_cursor::cursor_native_transcript_path(native_session_id)
+            .filter(|p| p.is_file())
+            .or_else(|| {
+                crate::session_chat_paths::resolve_session_chat_transcript_path(
+                    crate::session_chat::SessionChatTranscriptAgent::Cursor,
+                    Some(native_session_id),
+                    None,
+                )
+            })
+            .or_else(|| super::driver_cursor::cursor_native_transcript_path(native_session_id)),
         _ => None,
     }
 }
@@ -714,7 +740,7 @@ pub(crate) fn extract_safe_model_and_effort_from_command(
 ) -> (Option<String>, Option<String>) {
     if !matches!(
         family,
-        "claude" | "codex" | "antigravity" | "opencode" | "grok" | "hermes"
+        "claude" | "codex" | "antigravity" | "opencode" | "grok" | "hermes" | "cursor"
     ) {
         return (None, None);
     }
@@ -786,6 +812,7 @@ pub(crate) fn ignored_owner_command_tokens(
         "opencode" => "opencode",
         "grok" => "grok",
         "hermes" => "hermes",
+        "cursor" => "cursor-agent",
         _ => return Vec::new(),
     };
     let Some(raw) = owner_command.map(str::trim).filter(|s| !s.is_empty()) else {
@@ -897,6 +924,10 @@ fn full_access_flag_width(family: &str, tok: &str, next: Option<&str>) -> usize 
         },
         "hermes" => match tok {
             "--yolo" => 1,
+            _ => 0,
+        },
+        "cursor" => match tok {
+            "--yolo" | "--force" | "-f" => 1,
             _ => 0,
         },
         _ => 0,
@@ -1304,6 +1335,11 @@ pub fn build_cli_switch_argv_with_options(
                 inner_args.push(e.to_string());
             }
         }
+    } else if spec.family == "cursor" {
+        if let Some(m) = model {
+            inner_args.push("--model".to_string());
+            inner_args.push(m.to_string());
+        }
     }
 
     let codex_deny = if spec.family == "codex" {
@@ -1321,6 +1357,9 @@ pub fn build_cli_switch_argv_with_options(
             inner_args.push("read-only".to_string());
             inner_args.push("--ask-for-approval".to_string());
             inner_args.push("on-request".to_string());
+        } else if spec.family == "cursor" {
+            inner_args.push("--mode".to_string());
+            inner_args.push("plan".to_string());
         }
     } else if accept_all {
         if let Some(flag) = spec.cli_accept_all_flag {

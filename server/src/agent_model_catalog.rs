@@ -591,6 +591,84 @@ pub fn resolve_acp_model(
         }
     }
 
+    // Cursor ACP reports parameterized ids like `claude-4.5-opus-high[thinking=true]` or
+    // `gpt-5.3-codex[reasoning=high]`; strip bracketed params, extract any embedded effort,
+    // and match catalog rows (including `cursor-`-prefixed catalog ids).
+    if canonical == "cursor" {
+        let (base_raw, bracket_params) = raw
+            .split_once('[')
+            .map(|(b, rest)| (b.trim(), Some(rest.trim_end_matches(']'))))
+            .unwrap_or((raw, None));
+        if effort.is_none() {
+            if let Some(params) = bracket_params {
+                for pair in params.split(',') {
+                    if let Some((k, v)) = pair.split_once('=') {
+                        let key = k.trim().to_ascii_lowercase();
+                        let val = v.trim().to_ascii_lowercase();
+                        if matches!(
+                            key.as_str(),
+                            "reasoning" | "reasoning_effort" | "effort" | "thought_level"
+                        ) && !val.is_empty()
+                        {
+                            effort = Some(val);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        let lookup = if catalog_model("cursor", base_raw).is_some() {
+            Some(base_raw.to_string())
+        } else {
+            let prefixed = format!("cursor-{base_raw}");
+            if catalog_model("cursor", &prefixed).is_some() {
+                Some(prefixed)
+            } else {
+                None
+            }
+        };
+        if let Some(value) = lookup {
+            let label = catalog_model("cursor", &value)
+                .and_then(|row| row.get("label").and_then(Value::as_str).map(str::to_string))
+                .filter(|label| !is_placeholder_model_label(label))
+                .or_else(|| humanize_raw_model_slug(&value))
+                .unwrap_or_else(|| value.clone());
+            let resolved_effort = effort.or_else(|| default_effort_for_model("cursor", &value));
+            return Some((value, label, resolved_effort));
+        }
+        if bracket_params.is_some() && !base_raw.is_empty() {
+            let label = available_models
+                .and_then(|models| {
+                    models.iter().find_map(|entry| {
+                        let id = entry
+                            .get("modelId")
+                            .or_else(|| entry.get("id"))
+                            .and_then(Value::as_str)?;
+                        if id == raw || id == base_raw {
+                            entry
+                                .get("name")
+                                .or_else(|| entry.get("displayName"))
+                                .and_then(Value::as_str)
+                                .map(str::trim)
+                                .filter(|s| !is_placeholder_model_label(s))
+                                .map(str::to_string)
+                        } else {
+                            None
+                        }
+                    })
+                })
+                .or_else(|| humanize_raw_model_slug(base_raw))
+                .unwrap_or_else(|| base_raw.to_string());
+            let (clean_label, extracted_effort) = split_parenthesized_effort(&label);
+            let final_label =
+                humanize_raw_model_slug(clean_label).unwrap_or_else(|| clean_label.to_string());
+            let resolved_effort = effort
+                .or(extracted_effort)
+                .or_else(|| default_effort_for_model("cursor", base_raw));
+            return Some((base_raw.to_string(), final_label, resolved_effort));
+        }
+    }
+
     // Claude Native reports resolved API ids (`claude-opus-5-5`) whereas the catalog keys Opus 5.5
     // as `opus[1m]` (and Sonnet 5.5 as `sonnet`, Haiku 5.5 as `haiku`). Map to the catalog row so
     // the pill shows "Opus 5.5" and the picker selects that row.

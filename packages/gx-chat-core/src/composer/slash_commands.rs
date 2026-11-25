@@ -6,8 +6,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::composer::slash_catalogs::{
-    ANTIGRAVITY_NATIVE, CLAUDE_CODE, CLAUDE_NATIVE, CODEX, CODEX_NATIVE, COPILOT, CURSOR, FALLBACK,
-    GROK, GROK_NATIVE, HERMES, HERMES_NATIVE, OMP, OPENCODE_NATIVE, PI,
+    ANTIGRAVITY_NATIVE, CLAUDE_CODE, CLAUDE_NATIVE, CODEX, CODEX_NATIVE, COPILOT, CURSOR,
+    CURSOR_NATIVE, FALLBACK, GROK, GROK_NATIVE, HERMES, HERMES_NATIVE, OMP, OPENCODE_NATIVE, PI,
 };
 
 /// One offered `/` command.
@@ -40,8 +40,9 @@ pub fn slash_heading_for_agent(agent: Option<&str>) -> &'static str {
     }
 }
 
-/// The catalog for a chat: a Native Codex, Antigravity or Claude chat has its own (`CODEX_NATIVE`,
-/// `ANTIGRAVITY_NATIVE`, `CLAUDE_NATIVE`), every other chat the agent's.
+/// The catalog for a chat: a Native Codex, Antigravity, Claude or Cursor chat has its own
+/// (`CODEX_NATIVE`, `ANTIGRAVITY_NATIVE`, `CLAUDE_NATIVE`, `CURSOR_NATIVE`), every other chat
+/// the agent's.
 pub fn slash_commands_for_session(agent: Option<&str>, non_cli: bool) -> &'static [SlashCommand] {
     match agent {
         Some("codex") if non_cli => CODEX_NATIVE,
@@ -50,6 +51,7 @@ pub fn slash_commands_for_session(agent: Option<&str>, non_cli: bool) -> &'stati
         Some("opencode") if non_cli => OPENCODE_NATIVE,
         Some("grok") if non_cli => GROK_NATIVE,
         Some("hermes") if non_cli => HERMES_NATIVE,
+        Some("cursor") if non_cli => CURSOR_NATIVE,
         _ => slash_commands_for_agent(agent),
     }
 }

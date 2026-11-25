@@ -22,6 +22,7 @@ pub fn canonical_native_agent(raw: &str) -> Option<(&'static str, &'static str)>
         "claude" | "claude-code" => Some(("claude", "Claude Code")),
         "codex" | "codex-cli" => Some(("codex", "Codex")),
         "opencode" | "opencode-cli" => Some(("opencode", "OpenCode")),
+        "cursor" | "cursor-cli" | "cursor-agent" => Some(("cursor", "Cursor CLI")),
         _ => None,
     }
 }

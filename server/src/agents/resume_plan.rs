@@ -1055,6 +1055,22 @@ pub(crate) fn build_agent_resume_command(
             }
         }
         "cursor" => {
+            if input.acp_mode {
+                return Some(
+                    crate::acp::spec::build_acp_host_launch_command_with_profile(
+                        "cursor",
+                        Some(agent_command),
+                        cursor_reference.as_deref(),
+                        input.acp_approval_level,
+                        &[],
+                        input.acp_model.as_deref(),
+                        input.acp_effort.as_deref(),
+                        false,
+                        input.acp_read_only,
+                        &input.acp_profile,
+                    ),
+                );
+            }
             if let Some(reference) = cursor_reference {
                 return Some(format!(
                     "{agent_command} --resume {}",

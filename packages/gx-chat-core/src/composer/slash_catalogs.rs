@@ -1304,6 +1304,31 @@ pub(crate) const GROK: &[SlashCommand] = &[
     },
 ];
 
+/// A Native Cursor chat talks to `cursor-agent acp`, which advertises these built-in slash
+/// commands over `available_commands_update`. Skills are merged separately from the skills source.
+pub(crate) const CURSOR_NATIVE: &[SlashCommand] = &[
+    SlashCommand {
+        name: "agent",
+        description: "Switch to agent mode",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "ask",
+        description: "Switch to read-only ask mode",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "copy-request-id",
+        description: "Copy the last request ID to the clipboard",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "plan",
+        description: "Switch to plan mode",
+        insert_text: None,
+    },
+];
+
 pub(crate) const CURSOR: &[SlashCommand] = &[
     SlashCommand {
         name: "model",

@@ -23,10 +23,11 @@ use crate::app::window::{
 use crate::GhostexGpuiApp;
 
 const SETTINGS_INTRO_KEY: &str = "nativeModeIntro";
-const NATIVE_FAMILIES: [&str; 6] = [
+const NATIVE_FAMILIES: [&str; 7] = [
     "antigravity",
     "claude",
     "codex",
+    "cursor",
     "grok",
     "hermes",
     "opencode",

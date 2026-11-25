@@ -400,6 +400,7 @@ pub const NATIVE_AGENT_FAMILIES: &[&str] = &[
     "antigravity",
     "claude",
     "codex",
+    "cursor",
     "grok",
     "hermes",
     "opencode",

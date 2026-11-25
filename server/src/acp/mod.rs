@@ -27,6 +27,7 @@ pub(crate) mod channel;
 mod child_lifetime;
 mod driver_claude;
 mod driver_codex;
+pub(crate) mod driver_cursor;
 mod driver_grok;
 pub(crate) mod driver_opencode;
 mod elicitation;
@@ -59,7 +60,7 @@ pub(crate) fn host_process_running(zmx_name: &str) -> bool {
     }
 }
 
-/// Canonical Native-capable agent family (`"antigravity"`, `"claude"`, or `"codex"`).
+/// Canonical Native-capable agent family (`"antigravity"`, `"claude"`, `"codex"`, or `"cursor"`).
 pub fn canonical_native_family(agent_family: &str) -> Option<&'static str> {
     spec::spec_for_family(agent_family).map(|spec| spec.family)
 }

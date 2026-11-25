@@ -1808,6 +1808,9 @@ pub fn run(args: &[String]) -> i32 {
     if spec.family == "grok" {
         return super::driver_grok::run(spec, parsed);
     }
+    if spec.family == "cursor" {
+        return super::driver_cursor::run(spec, parsed);
+    }
     let cwd_path = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let cwd = cwd_path.to_string_lossy().to_string();
     let writable_roots = canonicalize_writable_roots(&cwd_path, &parsed.writable_roots);

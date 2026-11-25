@@ -384,13 +384,14 @@ pub fn switch_existing_settings_to_rail(
 }
 
 /// Agent families that currently support Native mode (`agentSessionMode = "non-cli"`).
-pub const NATIVE_MODE_FAMILIES: [&str; 6] = [
+pub const NATIVE_MODE_FAMILIES: [&str; 7] = [
     "antigravity",
     "claude",
     "codex",
     "opencode",
     "grok",
     "hermes",
+    "cursor",
 ];
 
 /// True when `preferredAgentInterface` selects Chat (or is absent, since Chat is the default).

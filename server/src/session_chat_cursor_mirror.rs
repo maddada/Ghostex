@@ -925,6 +925,8 @@ struct CursorMirrorState {
     store_path: Option<PathBuf>,
     raw_len: u64,
     raw_modified: Option<SystemTime>,
+    native_len: u64,
+    native_modified: Option<SystemTime>,
     root_id: Option<String>,
     output_len: usize,
     output_hash: u64,
@@ -966,6 +968,28 @@ fn write_mirror(
     fs::rename(&temp_path, mirror_path).ok()
 }
 
+fn read_native_seeded_raw_len(session_id: &str) -> u64 {
+    let Some(meta_path) = crate::acp::driver_cursor::cursor_native_transcript_meta_path(session_id)
+    else {
+        return 0;
+    };
+    fs::read_to_string(meta_path)
+        .ok()
+        .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+        .and_then(|v| v.get("seededFromRawLen").and_then(Value::as_u64))
+        .unwrap_or(0)
+}
+
+fn count_user_lines_in_jsonl(bytes: &[u8]) -> usize {
+    bytes
+        .split(|b| *b == b'\n')
+        .filter(|line| {
+            !line.iter().all(u8::is_ascii_whitespace)
+                && matches!(classify_raw_line(line), RawLine::User(_))
+        })
+        .count()
+}
+
 /// One sync pass for one session. `raw_hint` is a hook-supplied transcript
 /// path, used when it exists so the mirror follows the file Cursor named.
 fn sync_cursor_transcript_mirror(session_id: &str, raw_hint: Option<&Path>) -> Option<PathBuf> {
@@ -973,21 +997,63 @@ fn sync_cursor_transcript_mirror(session_id: &str, raw_hint: Option<&Path>) -> O
         return None;
     }
     let mirror_path = cursor_mirror_dir().join(format!("{session_id}.jsonl"));
+    let native_path = crate::acp::driver_cursor::cursor_native_transcript_path(session_id)
+        .filter(|path| path.is_file());
 
     let mut states_guard = MIRROR_STATES.lock().ok()?;
     let states = states_guard.get_or_insert_with(HashMap::new);
     let state = states.entry(session_id.to_string()).or_default();
+    let native_dir = crate::acp::driver_cursor::cursor_native_transcript_dir();
+    let mirror_dir = cursor_mirror_dir();
+    // Never treat our own native transcript or mirror file as the raw Cursor CLI transcript.
+    let filtered_hint = raw_hint.filter(|path| {
+        path.is_file()
+            && !path.starts_with(&native_dir)
+            && !path.starts_with(&mirror_dir)
+            && native_path.as_deref() != Some(*path)
+    });
     // The drain tick knows only the mirror path, so the raw file it shadows
     // is remembered from the resolve that first found it.
-    let raw_path = raw_hint
-        .filter(|path| path.is_file())
+    let raw_path = filtered_hint
         .map(Path::to_path_buf)
-        .or_else(|| state.raw_path.clone().filter(|path| path.is_file()))
-        .or_else(|| find_cursor_chat_transcript(session_id))?;
+        .or_else(|| {
+            state.raw_path.clone().filter(|path| {
+                path.is_file() && !path.starts_with(&native_dir) && !path.starts_with(&mirror_dir)
+            })
+        })
+        .or_else(|| find_cursor_chat_transcript(session_id));
+
+    let seeded_raw_len = if native_path.is_some() {
+        read_native_seeded_raw_len(session_id)
+    } else {
+        0
+    };
+
+    let Some(raw_path) = raw_path else {
+        // Native-only Cursor session: `cursor-agent acp` writes to `acp-sessions/<id>/store.db`
+        // and `driver_cursor` writes the live transcript directly to `native_path`.
+        return native_path;
+    };
+
     state.raw_path = Some(raw_path.clone());
     let raw_meta = fs::metadata(&raw_path).ok()?;
     let raw_len = raw_meta.len();
     let raw_modified = raw_meta.modified().ok();
+
+    if let Some(ref native) = native_path {
+        // While running in Native (or before Terminal appends new turns past the seeded length),
+        // the Native transcript is strictly the authoritative history.
+        if raw_len <= seeded_raw_len {
+            return Some(native.clone());
+        }
+    }
+
+    let (native_len, native_modified) = native_path
+        .as_ref()
+        .and_then(|p| fs::metadata(p).ok())
+        .map(|m| (m.len(), m.modified().ok()))
+        .unwrap_or((0, None));
+
     // A state only counts while the file it describes is still there; a wiped
     // state dir or fresh daemon always rebuilds.
     let mirror_exists = mirror_path.is_file();
@@ -1005,6 +1071,8 @@ fn sync_cursor_transcript_mirror(session_id: &str, raw_hint: Option<&Path>) -> O
         && state.output_len > 0
         && state.raw_len == raw_len
         && state.raw_modified == raw_modified
+        && state.native_len == native_len
+        && state.native_modified == native_modified
         && state.root_id == root_id;
     if up_to_date {
         return Some(mirror_path);
@@ -1031,10 +1099,25 @@ fn sync_cursor_transcript_mirror(session_id: &str, raw_hint: Option<&Path>) -> O
     };
 
     let raw = fs::read(&raw_path).ok()?;
-    let output = merge_cursor_transcript(&raw, &turns, &results);
+    let output = if let Some(ref native) = native_path {
+        let mut combined = fs::read(native).unwrap_or_default();
+        if !combined.is_empty() && !combined.ends_with(b"\n") {
+            combined.push(b'\n');
+        }
+        let native_turn_count = count_user_lines_in_jsonl(&combined);
+        let tail_start = usize::try_from(seeded_raw_len).unwrap_or(0).min(raw.len());
+        let tail_turns = turns.get(native_turn_count..).unwrap_or(&[]);
+        let merged_tail = merge_cursor_transcript(&raw[tail_start..], tail_turns, &results);
+        combined.extend_from_slice(&merged_tail);
+        combined
+    } else {
+        merge_cursor_transcript(&raw, &turns, &results)
+    };
     write_mirror(&mirror_path, &output, state, mirror_exists)?;
     state.raw_len = raw_len;
     state.raw_modified = raw_modified;
+    state.native_len = native_len;
+    state.native_modified = native_modified;
     state.root_id = root_id;
     state.output_len = output.len();
     state.output_hash = content_hash(&output);
