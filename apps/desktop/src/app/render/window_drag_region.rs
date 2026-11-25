@@ -134,6 +134,14 @@ pub(crate) fn window_drag_region<E: InteractiveElement>(element: E) -> E {
                 log_window_drag("startWindowMove", event.position, serde_json::json!({}));
                 set_window_drag_press(None);
                 WINDOW_DRAG_DOUBLE_PRESS.store(false, std::sync::atomic::Ordering::Relaxed);
+                // A child window glides only off its parent (CDXC:AppModal 2026-11-25 in
+                // GpuiGhostexCapture.m); the main window and popped-out sessions have none.
+                #[cfg(all(target_os = "macos", not(ghostex_web)))]
+                if let Ok(native) = crate::app::helpers::cef_parent_native_view(window) {
+                    crate::app::ghostex_capture::platform::detach_from_parent_while_dragged(
+                        native as usize,
+                    );
+                }
                 window.start_window_move();
             }
         })
