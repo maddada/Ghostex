@@ -1330,8 +1330,17 @@ fn launch(server: &Server) -> Res {
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
-        // Its own process group, so the caller's Ctrl+C or shell exit does not take it down.
-        command.process_group(0);
+        // Start gxserver in its own session (and process group) with no controlling terminal so
+        // the caller's Ctrl+C or shell exit does not take it down and Linux job control cannot
+        // SIGTTIN/SIGTTOU-stop it when `test-server start` runs inside a PTY.
+        unsafe {
+            command.pre_exec(|| {
+                if libc::setsid() == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
     }
     let mut child = command.spawn()?;
     let pid = child.id();
