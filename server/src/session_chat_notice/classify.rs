@@ -75,7 +75,7 @@ fn notice_from_rule(
 /// "resets 4pm" from Claude's "You've hit your limit · resets 4pm (Europe/Berlin)",
 /// "resets in 3h16m25s" / "resets in 1h 23m" / "resets in 30 seconds" from Antigravity's banners,
 /// or "retry in 30s" from Antigravity's rate limit banner, without the time zone.
-fn limit_reset(line: &str) -> Option<String> {
+pub(crate) fn limit_reset(line: &str) -> Option<String> {
     let lower = line.to_ascii_lowercase();
     for needle in ["resets in ", "retry in "] {
         if let Some(start) = lower.find(needle) {

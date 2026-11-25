@@ -1388,13 +1388,22 @@ fn spawn_and_init_claude(
                                     s.usage_used_tokens = Some(used);
                                 }
                             }
-                            if msg.get("isApiErrorMessage").and_then(Value::as_bool) == Some(true) {
-                                let err_code = msg
-                                    .get("error")
-                                    .and_then(Value::as_str)
-                                    .map(str::trim)
-                                    .filter(|c| !c.is_empty())
-                                    .map(str::to_string);
+                            let err_code = msg
+                                .get("error")
+                                .and_then(Value::as_str)
+                                .map(str::trim)
+                                .filter(|c| !c.is_empty())
+                                .map(str::to_string);
+                            // CDXC:AgentProviders 2026-11-26 WHY: GitHub #770: `isApiErrorMessage`
+                            // is a transcript field; Claude Code's stream-json `assistant` row
+                            // carries only `error` (`rate_limit`, `server_error`, ...), so a weekly
+                            // limit's code was dropped and the turn read as a generic failure.
+                            // `max_output_tokens` is left out: Claude Code continues past it.
+                            if msg.get("isApiErrorMessage").and_then(Value::as_bool) == Some(true)
+                                || err_code
+                                    .as_deref()
+                                    .is_some_and(|code| code != "max_output_tokens")
+                            {
                                 let err_text = extract_claude_message_text(&msg);
                                 if is_claude_auth_error(err_code.as_deref(), &err_text) {
                                     s.turn_saw_auth_error = Some(if err_text.is_empty() {

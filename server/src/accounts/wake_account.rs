@@ -214,7 +214,7 @@ fn account_unusable(
 }
 
 /// A reading cswap trusts for switching that shows a window this model uses at 100%, with its reset still ahead.
-fn at_limit(account: &DiscoveredAccount, model: &str, now: DateTime<Utc>) -> bool {
+pub(super) fn at_limit(account: &DiscoveredAccount, model: &str, now: DateTime<Utc>) -> bool {
     account.status == "ready"
         && account.usage_error.is_none()
         && account

@@ -25,8 +25,9 @@ fn instance(notice: &SessionChatTerminalNotice) -> String {
     format!("{}\n{}", notice.identity(), notice.detected_at)
 }
 
-/// Whether a transcript error record is the agent reporting a usage limit: Claude's "You've hit your session limit", "You've reached your weekly limit" and "You're out of usage credits", Codex's "hit your usage limit", and a Codex turn that ended on a 429 (the usage-limit screen rule in session_chat_notice/rules.rs says why).
-fn transcript_usage_limit_message(message: &str) -> bool {
+/// Whether an agent's error message is it reporting a usage limit: Claude's "You've hit your session limit", "You've reached your weekly limit" and "You're out of usage credits", Codex's "hit your usage limit", and a Codex turn that ended on a 429 (the usage-limit screen rule in session_chat_notice/rules.rs says why).
+/// Shared by the transcript scan below and the Native chat's failed-turn notice (session_chat_options/detection.rs), so both paths call the same words a limit.
+pub(crate) fn usage_limit_error_message(message: &str) -> bool {
     let text = message.to_lowercase();
     text.contains("usage limit")
         || text.contains("last status: 429")
@@ -259,7 +260,7 @@ fn scan_transcript(text: &str, detail: Option<&str>) -> TranscriptScan {
             {
                 error_at = Some(timestamp);
             }
-            if transcript_usage_limit_message(&message) {
+            if usage_limit_error_message(&message) {
                 usage_limit_error_at = Some(timestamp);
             }
         }

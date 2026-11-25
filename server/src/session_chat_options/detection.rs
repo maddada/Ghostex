@@ -344,16 +344,26 @@ fn acp_terminal_notice(
             let agent_label = crate::acp::startup_error::agent_label(family);
             let lower_code = code.unwrap_or_default().to_ascii_lowercase();
             let lower_msg = message.to_ascii_lowercase();
+            // CDXC:AgentProviders 2026-11-26 WHY: GitHub #770: a Native Claude chat that ended on
+            // "You've hit your weekly limit · resets Nov 30 at 7am" landed here as a generic agent
+            // error, since none of the words below were in it and the stream row's `rate_limit`
+            // code never reached `code`. Recovery then retried it on the full account for hours
+            // instead of switching. The words are now the ones the transcript scan calls a limit.
             let (kind, title, detail) = if lower_code.contains("usagelimit")
                 || lower_code.contains("rate_limit")
-                || lower_msg.contains("usage limit")
                 || lower_msg.contains("rate limit")
+                || crate::session_chat_notice_progress::usage_limit_error_message(message)
             {
                 (
                     crate::session_chat_notice::SESSION_CHAT_NOTICE_USAGE_LIMIT,
                     format!("{agent_label} hit a usage limit"),
-                    "Switch this chat to another account, or wait for the limit to reset."
-                        .to_string(),
+                    match crate::session_chat_notice::limit_reset(message) {
+                        Some(reset) => format!(
+                            "Switch this chat to another account, or wait for the limit to reset ({reset})."
+                        ),
+                        None => "Switch this chat to another account, or wait for the limit to reset."
+                            .to_string(),
+                    },
                 )
             } else if lower_code.contains("unauthorized")
                 || lower_code.contains("authentication_failed")

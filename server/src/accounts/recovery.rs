@@ -870,9 +870,41 @@ pub(crate) fn plan_session(
                 .map(super::api_errors::OpenFailure::notice)
                 .or(other),
         };
-    let Some(notice) = notice else {
+    let Some(mut notice) = notice else {
         return Ok(None);
     };
+    // CDXC:AgentProviders 2026-09-11 WHY:
+    // Restored sessions can display a saved login through its configured home without a persisted accountId. Checking only that field delayed their first usage-limit switch by five minutes even when another account was ready.
+    // Use the same identity as the account panel, exclude it from candidates, and let an available replacement release that initial wait. Failed switch attempts still keep their retry backoff.
+    let current_id = super::session_identity::display_account_id(
+        &registry,
+        provider,
+        &session,
+        &state.paths.home_dir,
+    )
+    .map(str::to_string);
+    let model = detection
+        .options
+        .as_ref()
+        .and_then(|o| o.selection.model.as_ref())
+        .map(|m| m.value.clone())
+        .unwrap_or_default();
+    // CDXC:AgentProviders 2026-11-26 WHY: GitHub #770: Native Claude chats on an account at its
+    // weekly limit ended on an error recovery did not recognise, and it sent "Continue" on that
+    // same full account five times over an hour instead of switching. An agent error from a
+    // session whose account reads 100% in a window this model uses, with that window's reset
+    // still ahead, is that limit whatever its wording: it is handled as one, so the session moves
+    // to an account with room (or waits for the reset) instead of retrying where it cannot run.
+    if notice.kind == crate::session_chat_notice::SESSION_CHAT_NOTICE_AGENT_ERROR
+        && !notice.account_disabled()
+        && snapshot.accounts.iter().any(|account| {
+            Some(endpoint::account_id(account).as_str()) == current_id.as_deref()
+                && super::wake_account::at_limit(account, &model, now)
+        })
+    {
+        notice.kind = crate::session_chat_notice::SESSION_CHAT_NOTICE_USAGE_LIMIT.to_string();
+        notice.title = "Usage limit reached".to_string();
+    }
     // A disabled account that disabled.rs did not act on is not retried here: the same login refuses every continuation.
     if !retryable(&notice)
         || notice.account_disabled()
@@ -968,22 +1000,6 @@ pub(crate) fn plan_session(
         Some(at) => (at - now).max(chrono::Duration::minutes(1)),
         None => delay,
     };
-    // CDXC:AgentProviders 2026-09-11 WHY:
-    // Restored sessions can display a saved login through its configured home without a persisted accountId. Checking only that field delayed their first usage-limit switch by five minutes even when another account was ready.
-    // Use the same identity as the account panel, exclude it from candidates, and let an available replacement release that initial wait. Failed switch attempts still keep their retry backoff.
-    let current_id = super::session_identity::display_account_id(
-        &registry,
-        provider,
-        &session,
-        &state.paths.home_dir,
-    )
-    .map(str::to_string);
-    let model = detection
-        .options
-        .as_ref()
-        .and_then(|o| o.selection.model.as_ref())
-        .map(|m| m.value.clone())
-        .unwrap_or_default();
     let selection = detection.options.as_ref().map(|o| &o.selection);
     let effort = selection
         .and_then(|s| s.effort.as_ref())
