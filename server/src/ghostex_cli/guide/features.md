@@ -8286,7 +8286,11 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   open a terminal that asks for it where there is no password dialog (WSL).
   Tools Ghostex installed get Update (or a check mark to check again),
   Reinstall and Uninstall buttons, and installing an agent that needs npm
-  installs Node.js first on its own.
+  installs Node.js first on its own. When an install of Fast Computer &
+  Browser Use, SpaceO, Hex or an agent CLI fails (in Settings, setup or on the
+  phone), Run in terminal opens a terminal in Main Hub with its install command
+  typed in, so you can run it yourself and answer what it asks (macOS and
+  Linux).
 - Connectors link a workspace to your apps (Gmail, Google Calendar, Slack,
   Notion, GitHub, Linear, Outlook and many more) through Composio. Connectors
   is experimental and off by default: switch it on in Settings > Extensions >

@@ -15,6 +15,10 @@ Usage:
 
 Ids:
   linuxUpdate   The Linux update command Settings > Updates shows (only while an update is out)
+  toolInstall:<trycua|spaceo|hex>
+                The tool's install command (offered after its install failed)
+  agentCli:<agent id>
+                The command of that agent CLI's last install or update (only after it failed)
 
 The command is typed at the new terminal's prompt and not run: press Enter there.
 "
