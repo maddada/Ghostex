@@ -726,6 +726,7 @@ impl ChatOptionMenuPanel {
         let view = state.view.clone();
         let active = state.active;
         let traits = state.display_traits(self.menu.read(cx).model_effort.as_deref());
+        let effort_keys = state.browsed_row().is_some_and(super::state::has_efforts);
         let degraded_note = state.degraded_note(self.menu.read(cx).model_effort.as_deref());
         let shake = state
             .shake_at
@@ -947,7 +948,12 @@ impl ChatOptionMenuPanel {
             ))
             .child(match degraded_note {
                 Some(note) => render_degraded_note(note, &appearance, &palette),
-                None => render_key_hints(view["sessionScope"] == true, &appearance, &palette),
+                None => render_key_hints(
+                    view["sessionScope"] == true,
+                    effort_keys,
+                    &appearance,
+                    &palette,
+                ),
             })
             .into_any_element()
     }
@@ -988,9 +994,12 @@ fn render_degraded_note(
 
 /// The compact key reminder along the card's bottom edge. Option+Enter is listed only where the
 /// agent can apply a pick to this session alone (elsewhere it saves the default like Enter), and
-/// takes the place of Escape, since six hints do not fit the card's width.
+/// takes the place of Escape, since six hints do not fit the card's width. Left and Right are
+/// listed only while the highlighted model has levels to move (CDXC:SessionChat 2026-11-25 in
+/// `reasoning_for`, state.rs).
 fn render_key_hints(
     session_scope: bool,
+    effort_keys: bool,
     appearance: &ChatAppearance,
     palette: &Palette,
 ) -> AnyElement {
@@ -1024,6 +1033,7 @@ fn render_key_hints(
             hints
                 .into_iter()
                 .filter(|(keys, _)| *keys != if session_scope { "esc" } else { session_keys })
+                .filter(|(keys, _)| effort_keys || *keys != "←→")
                 .map(|(keys, label)| {
                     div()
                         .flex()

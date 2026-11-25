@@ -286,6 +286,11 @@ fn reasoning_for(setting: &Value, row: Option<&Value>, effort: Option<&str>) -> 
         .as_array()
         .filter(|efforts| !efforts.is_empty())
     else {
+        // CDXC:SessionChat 2026-11-25 WHY:
+        // User: "doing left/right arrow here doesn't work". Hover moves the keyboard cursor, so with the pointer resting on a model without levels (Antigravity's Orchestrator rows) Left and Right only shook while the button still showed the session's level ("High"), as if they could change it. The button now says that model has no level to move, like a session on such a model shows it.
+        if setting["id"] == "effort" && row["selected"] != true {
+            return no_levels(setting);
+        }
         return setting.clone();
     };
     let selected = row["selected"] == true;
@@ -325,6 +330,26 @@ fn reasoning_for(setting: &Value, row: Option<&Value>, effort: Option<&str>) -> 
     setting["browse"] = row["key"].clone();
     setting["browseCurrent"] = selected.into();
     setting
+}
+
+/// The Reasoning button for a model with no levels: dimmed at Default, as gx-chat-core's
+/// `unavailable` draws it for a session on such a model.
+fn no_levels(setting: &Value) -> Value {
+    let mut setting = setting.clone();
+    setting["disabled"] = true.into();
+    setting["valueLabel"] = "Default".into();
+    setting["choices"] = json!([]);
+    if let Some(object) = setting.as_object_mut() {
+        object.remove("toggle");
+    }
+    setting
+}
+
+/// Whether Left and Right have levels to move on `row`.
+pub(super) fn has_efforts(row: &Value) -> bool {
+    row["efforts"]
+        .as_array()
+        .is_some_and(|efforts| !efforts.is_empty())
 }
 
 fn offers_effort(row: &Value, effort: &str) -> bool {
