@@ -8551,7 +8551,7 @@ step through the last 20 changes, kept across restarts, and `ghostex theme histo
 with when they were made, by which agent or by you, and what changed; Undo is refused once a
 setting it would put back was changed again.
 Settings > Themes shows this in the Themes group, under Appearance. The themes row starts with
-**Default**, Ghostex's own look (it puts the shipped colours, glass and Animated background back),
+**Default**, Ghostex's own clean look (neutral colours on a solid window, with no artwork or glass),
 then the seven **Art** themes, Ghostex's main themes: Moonwater (a quiet mountain night in ink and
 silver), Polar (Polar Night, deep ink navy with a polar mountain artwork and crisp ice-blue accents),
 Glasshouse (a secret garden after dark), Red Earth (sculpted dunes in warm embers), Deep
@@ -8564,7 +8564,7 @@ Dusk) and the twenty presets (Catppuccin, Dracula, Solarized, Tokyo Night,
 Nord, Kanagawa, Everforest, Gruvbox Material), each of which also sets its theme's own text, grey
 text, accent, link, status, message, code and selection colours. Every tile is a screenshot of
 Ghostex in that theme.
-A theme starts with its own backdrop: its still artwork for Default, every Art theme and every Agent-made look
+A theme starts with its own backdrop: a solid window for Default, its still artwork for every Art theme and every Agent-made look
 (you can still switch any of them to Animated in Artwork below), and a preset keeps whatever you had. **Your themes**, under the row, keeps
 looks you save: **Save current theme** names the look on screen (its colours, artwork and
 transparency) and adds it as a tile showing a small Ghostex window in its colours, with its
@@ -8596,9 +8596,9 @@ that, has **Ask an agent**, which opens a Help chat with a starter prompt as its
 looks are dark mode looks: applying one while the app shows light mode switches Appearance to
 Dark. A look never changes your fonts (nor does a preset). The looks share Inkstone's calm way:
 a deep, muted colour, paper-white text, a muted accent, faint borders and an Animated
-background, each in its own hue. Inkstone is also how dark mode looks out of the box: the
-custom colour #46506a, Inkstone's theme colours (a cinnabar accent) and the Ink Animated background
-behind the glass; a computer that already had Ghostex set up keeps the look it had.
+background, each in its own hue. Out of the box Ghostex follows your system's light or dark
+mode with a clean, solid window: Graphite colours, faint borders, no artwork and transparency
+Off; a computer that already had Ghostex set up keeps the look it had.
 Theme colours go further than the colour squares: borders, dividers, text, grey text, the
 accent, links, cards, controls, menus, the selected and hovered rows, the focus ring, your
 messages, the chat box, code blocks and the success, warning and danger colours, each set apart
@@ -8744,9 +8744,8 @@ were.
 Window glass lets the blurred desktop show through the sidebar, the work area,
 terminals, and chat on macOS, Windows and Linux. On macOS and Windows, menus and most dialogs (Rename
 Session, Quick Access and the like) turn frosted to match. The Transparency group's Transparency
-control picks Off, Dark only or Always (Dark only, the default on macOS and Linux,
-keeps light mode solid; Off, so the window is fast and solid, is the default on
-Windows), and
+control picks Off, Dark only or Always (Off, so the window is fast and solid, is the
+default; Dark only keeps light mode solid), and
 Strength sets how see-through it is, from 0 (fully solid) to 100 (fully clear); the default
 is 20, and out of the box the sidebar and the work area get the same tint. The four tint settings
 under More transparency options set them apart by hand, in dark and light mode separately; moving

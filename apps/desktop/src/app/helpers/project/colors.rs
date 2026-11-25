@@ -186,14 +186,11 @@ pub(crate) fn refresh_gpui_visual_settings(
     here so the GPUI titlebar strip fades with the same colors; when custom
     chrome is disabled the stops collapse to the flat titlebar color.
     */
-    let (gradient_left, gradient_right) = if sidebar_uses_light_theme(object) {
-        (titlebar_background, titlebar_background)
-    } else {
-        sidebar_titlebar_gradient_stops_toward_full(
-            titlebar_background,
-            theme_full_colour_fade(object, "themeSidebarContrast"),
-        )
-    };
+    /*
+    CDXC:Theming 2026-11-22 DECISION:
+    User: "polishing the ui to be more like clean ... something like t3". The solid sidebar is one flat colour in dark mode too, as it already was in light mode: the gradient's lighter bottom stop made the lower sidebar (and the gutter around the work area card, which paints the same fill) lighter than the work area beside it. Supersedes the 2026-07-22 gradient stops above; under glass the sidebar takes its glass tint and never used them.
+    */
+    let (gradient_left, gradient_right) = (titlebar_background, titlebar_background);
     GPUI_TITLEBAR_GRADIENT_LEFT_RGB.store(u64::from(gradient_left), Ordering::Relaxed);
     GPUI_TITLEBAR_GRADIENT_RIGHT_RGB.store(u64::from(gradient_right), Ordering::Relaxed);
     GPUI_TITLEBAR_FOREGROUND_RGB.store(u64::from(titlebar_foreground), Ordering::Relaxed);

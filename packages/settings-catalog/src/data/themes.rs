@@ -689,7 +689,7 @@ fn default_theme(platform: Platform) -> Theme {
         dark: true,
         partner: None,
         prompt: Some(
-            "Put Ghostex's own look back: its default colours, artwork, glass and Animated background.".into(),
+            "Put Ghostex's own clean look back: its neutral colours on a solid window, with no artwork or glass.".into(),
         ),
         live: Some((
             shipped("windowGlassLiveStyleDark"),

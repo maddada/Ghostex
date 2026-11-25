@@ -436,6 +436,79 @@ pub const DARK_LOOK_2026_11_21_OLD_DEFAULTS: &[(&str, J)] = &[
     ("windowGlassLiveBrightness", J::Num(60.0)),
 ];
 
+/// The look settings whose default changed when the clean look became the default (2026-11-22),
+/// each with the default it had in the Polar Night look that shipped just before it.
+///
+/// CDXC:Theming 2026-11-22 WHY:
+/// The Polar Night default reached existing users without a keep-old-look step, so a long-time user who never saved these settings has been seeing Polar Night; this step keeps that look for them instead of switching them to the clean one.
+pub const DARK_LOOK_2026_11_22_OLD_DEFAULTS: &[(&str, J)] = &[
+    ("sidebarTheme", J::Str("dark-2")),
+    ("darkThemePreset", J::Str("custom")),
+    ("lightThemePreset", J::Str("custom")),
+    (
+        "customSidebarTitlebarBackgroundTintColor",
+        J::Str("#404e78"),
+    ),
+    (
+        "customSidebarTitlebarLightBackgroundTintColor",
+        J::Str("#fcf3da"),
+    ),
+    (
+        "customSidebarTitlebarLightBackgroundLightnessPercent",
+        J::Num(97.0),
+    ),
+    (
+        "themeRoles",
+        J::Obj(&[
+            (
+                "dark",
+                J::Obj(&[
+                    ("accent", J::Str("#5581a9")),
+                    ("focusRing", J::Str("#5581a9")),
+                    ("border", J::Str("8%")),
+                    ("divider", J::Str("6%")),
+                    ("text", J::Str("#e6e4de")),
+                    ("mutedText", J::Str("#8c95a3")),
+                    ("userMessage", J::Str("base+12%")),
+                    ("chatBox", J::Str("base+6%/80%")),
+                    ("surface", J::Str("base+8%/80%")),
+                    ("control", J::Str("base+10%/80%")),
+                    ("menu", J::Str("base+6%/95%")),
+                    ("selection", J::Str("9%")),
+                    ("hover", J::Str("5%")),
+                    ("success", J::Str("#a3c48e")),
+                    ("warning", J::Str("#dcbd7a")),
+                    ("danger", J::Str("#d9827c")),
+                ]),
+            ),
+            (
+                "light",
+                J::Obj(&[
+                    ("text", J::Str("#5c6a72")),
+                    ("mutedText", J::Str("#939f91")),
+                    ("accent", J::Str("#8da101")),
+                    ("focusRing", J::Str("#8da101")),
+                    ("link", J::Str("#3a94c5")),
+                    ("success", J::Str("#8da101")),
+                    ("warning", J::Str("#dfa000")),
+                    ("danger", J::Str("#f85552")),
+                    ("userMessage", J::Str("#efebd4")),
+                    ("codeBlock", J::Str("#f4f0d9")),
+                    ("selection", J::Str("#eaedc8")),
+                ]),
+            ),
+        ]),
+    ),
+    ("terminalGhosttyTheme", J::Str("Ghostex Nord")),
+    (
+        "terminalGhosttyLightTheme",
+        J::Str("Ghostex Everforest Light"),
+    ),
+    ("windowArt", J::Str("polar-night")),
+    ("windowArtLight", J::Str("gm-light")),
+    ("windowGlass", J::Str("frosted")),
+];
+
 /// The keep-old-look steps, oldest first: the day a dark look became the default and the
 /// defaults it replaced. The desktop runs each once, in this order, behind its own marker file
 /// (`keep_old_dark_look_once` in apps/desktop/src/shared_settings/dark_look_default.rs), so a
@@ -443,6 +516,7 @@ pub const DARK_LOOK_2026_11_21_OLD_DEFAULTS: &[(&str, J)] = &[
 pub const DARK_LOOK_STEPS: &[(&str, &[(&str, J)])] = &[
     ("2026-11-20", DARK_LOOK_2026_11_20_OLD_DEFAULTS),
     ("2026-11-21", DARK_LOOK_2026_11_21_OLD_DEFAULTS),
+    ("2026-11-22-clean", DARK_LOOK_2026_11_22_OLD_DEFAULTS),
 ];
 
 /// Writes the old default of every look setting in `old_defaults` (one of `DARK_LOOK_STEPS`) that
@@ -482,6 +556,10 @@ pub fn keep_old_look_for_existing_settings(
     );
     for (key, old_default) in old_defaults {
         if settings.contains_key(*key) {
+            continue;
+        }
+        // CDXC:Theming 2026-11-22 WHY: a key with its own default on this platform (`windowGlass` is Off on Windows) never took the shared default a step replaced, so writing that old shared default would change the look instead of keeping it.
+        if availability::platform_default(Platform::current(), key).is_some() {
             continue;
         }
         let legacy_tint = match *key {
@@ -710,14 +788,17 @@ mod dark_look_tests {
         );
     }
 
-    /// A new install (nothing saved) draws the 2026-11-22 look: the Custom #404e78 at depth 96.
+    /// A new install (nothing saved) draws the clean 2026-11-22 look: Graphite, neutral at depth 96.
     #[test]
-    fn a_new_install_draws_the_windows_look() {
+    fn a_new_install_draws_the_clean_look() {
         assert_eq!(
             theme_colours::dark_chrome_raw_controls(&Map::new()),
-            (96.0, 0x404e78)
+            (
+                96.0,
+                theme_colours::DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_RGB
+            )
         );
-        assert_eq!(theme_colours::default_custom_dark_tint_rgb(), 0x404e78);
+        assert_eq!(theme_colours::default_custom_dark_tint_rgb(), 0x808080);
     }
 
     /// A file set up on the 2026-11-20 Black look (its first step already ran) keeps Black, its
