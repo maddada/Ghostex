@@ -495,9 +495,18 @@ impl GhostexGpuiApp {
         }
         // A chat box stashes its own draft: no terminal is the target while it shows
         // (CDXC:Hotkeys 2026-10-31, the chat view's Alt+S did nothing). Saved Prompts opens
-        // for the chat on screen the same way (GitHub #756: it did nothing in a Native chat).
-        if matches!(action_id, "stashPrompt" | "stashedPrompts")
-            && self.run_focused_chat_hotkey(action_id, window, cx)
+        // for the chat on screen the same way (GitHub #756: it did nothing in a Native chat),
+        // and so do Export Transcript, Attach, Agent Actions (the chat box's More actions) and
+        // Scroll to Bottom. Scroll to Top stays terminal only: the chat has no such action.
+        if matches!(
+            action_id,
+            "stashPrompt"
+                | "stashedPrompts"
+                | "exportTranscript"
+                | "attachFileOrFolder"
+                | "toggleAgentActions"
+                | "scrollTerminalToBottom"
+        ) && self.run_focused_chat_hotkey(action_id, window, cx)
         {
             return true;
         }

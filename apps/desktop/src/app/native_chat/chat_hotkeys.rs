@@ -213,6 +213,37 @@ impl NativeChatView {
         true
     }
 
+    /// The Attach File or Folder hotkey: what the chat box's Attach button does. Answers false
+    /// where the chat box offers no attaching, so the chord keeps its ordinary meaning.
+    pub(crate) fn attach_from_hotkey(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if !self.composer_control_available("attach") {
+            return false;
+        }
+        let position = self.composer_button_bounds.attach.get().origin;
+        self.perform_composer_action("attachPath", position, window, cx);
+        true
+    }
+
+    /// The Agent Actions hotkey: opens or closes the chat box's More actions menu, the chat's
+    /// counterpart of the terminal's Agent Actions buttons.
+    pub(crate) fn toggle_more_actions_from_hotkey(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let position = self.composer_button_bounds.more_actions.get().origin;
+        self.show_actions(position, window, cx);
+    }
+
+    /// The Scroll Terminal to Bottom hotkey: what the chat's own jump to the newest message does.
+    pub(crate) fn scroll_to_bottom_from_hotkey(&mut self, cx: &mut Context<Self>) {
+        self.jump_to_bottom(cx);
+    }
+
     /// Copies the agent's last reply, or with `code_block` the last fenced code block it wrote.
     /// Returns false when the chat has nothing to copy.
     pub(crate) fn copy_last_reply_from_hotkey(

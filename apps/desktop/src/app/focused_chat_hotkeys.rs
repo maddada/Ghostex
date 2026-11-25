@@ -59,6 +59,29 @@ impl GhostexGpuiApp {
             "stashPrompt" => view.update(cx, |view, cx| view.stash_prompt_from_hotkey(cx)),
             // Like Stash prompt on an empty chat box: Saved Prompts for this chat's project.
             "stashedPrompts" => self.open_gpui_stashed_prompts_modal_for_focused_agents_session(cx),
+            // The chat's own Export transcript (session_chat/host_actions.rs), a daemon call that
+            // needs no terminal.
+            "exportTranscript" => {
+                let _ = self.dispatch_gpui_workspace_terminal_runtime_action(
+                    "exportTranscript",
+                    session_id,
+                    cx,
+                );
+                true
+            }
+            // Like the chat box's Attach button (native_chat/toolbar.rs).
+            "attachFileOrFolder" => view.update(cx, |view, cx| view.attach_from_hotkey(window, cx)),
+            // The chat box's More actions menu stands in for the terminal's Agent Actions buttons.
+            "toggleAgentActions" => {
+                view.update(cx, |view, cx| {
+                    view.toggle_more_actions_from_hotkey(window, cx)
+                });
+                true
+            }
+            "scrollTerminalToBottom" => {
+                view.update(cx, |view, cx| view.scroll_to_bottom_from_hotkey(cx));
+                true
+            }
             // The newest final reply of the chat on screen, from the start (the core picks it).
             "readAloudLastReply" => {
                 view.update(cx, |view, cx| {
