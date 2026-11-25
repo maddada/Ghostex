@@ -2,8 +2,8 @@
 //! packages/settings-catalog/src/theme_roles.rs) one row each, a colour editor per appearance the
 //! app shows (a swatch that opens the Pick Color dialog, the text box, an opacity slider) and a
 //! Reset. The roles the Chat colours group shows (chat_colours.rs) are not repeated here. Borders,
-//! Dividers, Text and Grey text show at once; the rest fold under More theme colours, which opens
-//! by itself while one of them is set.
+//! Dividers, Text and Grey text show at once; the rest fold under More theme colours, which starts
+//! closed and stays as it was left for the rest of the app run (CDXC:Settings 2026-11-25 in mod.rs).
 //!
 //! CDXC:Theming 2026-11-14 DECISION:
 //! User (Q3195, agent theming stage B): "if the user should see the roles, a compact Theme colours section on the Interface page (dependent rows hidden per the AGENTS.md rule), with a Reset to default per role". A role's field for an appearance the app does not show is hidden: Dark mode only shows the dark field, Light mode only the light one, System both. A field takes an opacity (4%) or a colour (#7dd3fc, #7dd3fc80); it saves once what is typed reads as one, and an empty field puts the theme's own colour back.

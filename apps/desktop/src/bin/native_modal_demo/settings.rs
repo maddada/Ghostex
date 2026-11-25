@@ -418,7 +418,8 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         // Settings > Interface scrolled to Theme colours, with a few colours set and More open.
         "theme-colours" => json!({ "initialTab": "theme", "initialSection": "themeColours" }),
         // Settings > Interface with Orchid Dusk's colours: Chat colours (and its Pick Color
-        // dialog), the gallery's applied line at the top, Theme colours with More open by itself.
+        // dialog), the gallery's applied line at the top, Theme colours with More closed and saying
+        // how many of its colours are set.
         "theme-chat-colours" | "theme-role-picker" => {
             json!({ "initialTab": "theme", "initialSection": "chatColours" })
         }

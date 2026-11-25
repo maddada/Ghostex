@@ -113,6 +113,9 @@ impl MoreGroup {
 thread_local! {
     /// `rememberedThemeMoreOptionsOpen`: each group's More options stays as it was left for the rest
     /// of this app run.
+    ///
+    /// CDXC:Settings 2026-11-25 DECISION:
+    /// User: "in the themes page in settings pls always collapse the more colors thing by defualt when i open settings unless that in the current session of the app i had expanded them then they we remember this accross just the current session (cuz maybe someone expanded it cuz he's owrking on a theme dont want to keep closing it on them". More colour options and More theme colours start closed in every app run, and More theme colours no longer opens by itself while one of its colours is set (its summary still says how many are). Opening or closing one is kept here, in memory only, for every Settings window of this run until the app quits; nothing is saved. A search hit inside a fold still shows its rows, and an action that points at the rows (Change them after an agent-made look) still opens it.
     static REMEMBERED_MORE_OPEN: Cell<[bool; 4]> = const { Cell::new([false; 4]) };
 }
 
@@ -252,10 +255,6 @@ impl ThemeTab {
             user_themes: user_themes::UserThemes::default(),
             row_width: Rc::new(Cell::new(f32::INFINITY)),
         };
-        // More theme colours opens by itself while one of its colours is set (roles.rs).
-        if roles::more_roles_set(&page.store.read(cx).values().value("themeRoles")) > 0 {
-            page.more_open[MoreGroup::ThemeColours.index()] = true;
-        }
         // More size options opens by itself while the areas are sized apart, so their sliders show.
         if separately {
             page.more_open[MoreGroup::Size.index()] = true;

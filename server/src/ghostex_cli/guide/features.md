@@ -8708,7 +8708,8 @@ set. Agents set them with `ghostex theme set` ("the borders are too bright" beco
 `ghostex theme set --dark border=4%`), and you can in Settings > Themes. **Chat colours** has Chat theme, a live chat preview and
 Your messages, Chat box, Cards and Accent; Your messages' slider says how see-through your bubble is, so the glass shows through it.
 **Fine-tune colours**, further down, has the rest under More theme colours (Borders, Dividers,
-Text, Grey text and the others), which opens by itself while one of them is set. Every colour
+Text, Grey text and the others), closed each time the app starts; opened or closed, it stays that
+way until you quit, and its summary says how many of them are set. Every colour
 has a swatch that opens the colour picker, a box for an exact value, an opacity slider once it is
 set and Reset, with one line per appearance the app shows. After an agent-made look is applied, the
 line under the themes row says which one and how many colours it set, and Change them opens them. They change the
