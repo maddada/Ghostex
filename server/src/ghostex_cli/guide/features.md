@@ -2254,8 +2254,9 @@ messages, plus Edit message, Back to composer and Delete message while one still
 waits for the agent.
 Message IDs: every message you write in a chat gets an ID that counts up in that
 chat (M1, M2, M3…), so you can point back to it instead of pasting it again. The ID
-is not shown under the message: the ⋯ menu's Copy message ID copies it in a form
-that works from any chat (G9jt7.M12, the session's ID and the number), and
+is not shown under the message: the ⋯ menu's Copy message ID copies it as a link
+that pastes into any chat box as its pill (`[M12](message:G9jt7.M12)`: the short
+ID, with the session's ID kept in the link so it works from any chat), and
 Reference in chat puts a pill for it in the chat box. Typing #M in the chat box
 lists your messages in this chat, newest first (#M1 narrows them to M1, M10,
 M12…); pick one for its pill. Hover the pill in a sent message to see the

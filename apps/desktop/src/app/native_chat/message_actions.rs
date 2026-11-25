@@ -437,16 +437,20 @@ impl NativeChatView {
             "command":{"type":"copyText","text":prompt},
         })];
         // A message the user wrote has an ID (gx-chat-core `message_numbers.rs`): Copy message ID
-        // copies its full form (`G9jt7.M12`) and Reference in chat puts its pill in the chat box.
+        // copies it as a link that pastes as its pill (`[M12](message:G9jt7.M12)`,
+        // CDXC:SessionChat 2026-11-25 there) and Reference in chat puts its pill in the chat box.
         // The ID is shown nowhere else under the message (CDXC:SessionChat 2026-11-20 there).
         if let (Some(number), Some(full)) = (
             message["messageNumber"].as_u64(),
             message["messageRef"].as_str(),
         ) {
-            use ghostex_gx_chat_core::transcript::message_numbers::{MessageRef, message_link};
+            use ghostex_gx_chat_core::transcript::message_numbers::{
+                MessageRef, copied_message_link, message_link,
+            };
+            let copied = copied_message_link(full).unwrap_or_else(|| full.to_string());
             rows.push(json!({
                 "label":"Copy message ID","iconPath":"titlebar/hash.svg",
-                "command":{"type":"copyText","text":full},
+                "command":{"type":"copyText","text":copied},
             }));
             if !self.in_subagent {
                 let pill = message_link(&MessageRef {

@@ -107,6 +107,25 @@ pub fn message_link(reference: &MessageRef) -> String {
     format!("[{written}]({MESSAGE_LINK_SCHEME}{written})")
 }
 
+/// What a message's Copy message ID copies, from its full ID (`G9jt7.M12`): `[M12](message:G9jt7.M12)`,
+/// a link that pastes as the pill. Its words are the short ID, as Reference in chat writes them;
+/// its link keeps the session, so the pill still points at this message pasted in another chat.
+/// `None` for anything that is not a message ID.
+///
+/// CDXC:SessionChat 2026-11-25 DECISION:
+/// User: "when i copy id of message make it actually copy the reference instead of just the id of
+/// it pls (same for all similar cases pls, we copy the reference like this: [M573](message:M573)
+/// not just message:M573 please so when i paste it then it looks better)". Supersedes Copy message
+/// ID copying the bare full form (Q4237): the full form now lives in the link.
+pub fn copied_message_link(full: &str) -> Option<String> {
+    let reference = parse_message_ref(full)?;
+    Some(format!(
+        "[M{}]({MESSAGE_LINK_SCHEME}{})",
+        reference.number,
+        reference.written()
+    ))
+}
+
 /// The chat box after a message's Reference in chat: `current` with `pill` at its end, a space
 /// from the words before it and a space after it, so the user types on.
 pub fn append_inline(current: &str, pill: &str) -> String {
