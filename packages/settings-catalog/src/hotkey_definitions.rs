@@ -71,16 +71,6 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
         action: J::Obj(&[("id", J::Str("inboxOpenItem")), ("kind", J::Str("chatAction"))]),
     },
     HotkeyDefinition {
-        id: "inboxMarkRead",
-        title: "Inbox: Archive / Dismiss",
-        description: "While the Session Inbox has keyboard focus, archive or dismiss the highlighted item.",
-        default_key: "e",
-        windows_linux_default_key: None,
-        alternate_default_keys: &[],
-        retired_default_keys: &[],
-        action: J::Obj(&[("id", J::Str("inboxMarkRead")), ("kind", J::Str("chatAction"))]),
-    },
-    HotkeyDefinition {
         id: "inboxSnooze",
         title: "Inbox: Snooze Item",
         description: "While the Session Inbox has keyboard focus, open the Snooze menu for the highlighted item.",

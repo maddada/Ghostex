@@ -172,7 +172,6 @@ pub const HOTKEY_SETTINGS_SECTIONS: J = J::Arr(&[
                 J::Str("inboxNextItem"),
                 J::Str("inboxPreviousItem"),
                 J::Str("inboxOpenItem"),
-                J::Str("inboxMarkRead"),
                 J::Str("inboxSnooze"),
                 J::Str("copyLastChatCodeBlock"),
                 J::Str("copyLastChatReply"),

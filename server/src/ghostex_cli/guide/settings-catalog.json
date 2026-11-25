@@ -15108,13 +15108,6 @@
       "noTerminalBinding": true
     },
     {
-      "id": "inboxMarkRead",
-      "title": "Inbox: Archive / Dismiss",
-      "description": "While the Session Inbox has keyboard focus, archive or dismiss the highlighted item.",
-      "defaultKey": "e",
-      "noTerminalBinding": true
-    },
-    {
       "id": "inboxSnooze",
       "title": "Inbox: Snooze Item",
       "description": "While the Session Inbox has keyboard focus, open the Snooze menu for the highlighted item.",

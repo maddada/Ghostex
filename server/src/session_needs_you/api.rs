@@ -457,9 +457,13 @@ pub(crate) fn route_board_answer(
             return Ok(Some(json!({ "item": tag, "snoozedUntil": Value::Null })));
         }
         "restore" => {
+            // The Inbox's Undo of Not needed: the agent was going to be told with its next
+            // message; an undone Not needed is never told.
+            let untold = dismissed_name(&record, &tag);
             if record.restore(&tag) {
                 store::write(db, &project_id, &session_id, &record)?;
                 changed(state, db, repository, &project_id, &session_id, &record);
+                crate::session_chat_dismissed::forget(db, &project_id, &session_id, &[untold]);
             }
             return Ok(Some(json!({ "item": tag, "restored": true })));
         }
@@ -492,20 +496,25 @@ pub(crate) fn route_board_answer(
     // Mark as read (the to-do's Dismiss) sends the agent nothing now: its next message says so
     // (session_chat_dismissed.rs, where the user's decision lives).
     if outcome == "dismissed" {
-        let title: String = record
-            .settled_of(&tag)
-            .map(|settled| settled.title.replace('"', "'").chars().take(80).collect())
-            .unwrap_or_default();
-        let name = if title.trim().is_empty() {
-            format!("{tag} (marked read)")
-        } else {
-            format!("{tag} \"{}\" (marked read)", title.trim())
-        };
+        let name = dismissed_name(&record, &tag);
         crate::session_chat_dismissed::record(db, &project_id, &session_id, &name);
     }
     Ok(Some(
         json!({ "item": tag, "answered": words, "settled": true }),
     ))
+}
+
+/// How the agent is told of a to-do marked Not needed ("Q61 \"Sign in\" (marked read)").
+fn dismissed_name(record: &NeedsYouRecord, tag: &str) -> String {
+    let title: String = record
+        .settled_of(tag)
+        .map(|settled| settled.title.replace('"', "'").chars().take(80).collect())
+        .unwrap_or_default();
+    if title.trim().is_empty() {
+        format!("{tag} (marked read)")
+    } else {
+        format!("{tag} \"{}\" (marked read)", title.trim())
+    }
 }
 
 /// A turn ended (`ended_idle` when it ended without attention): the to-dos it added alert once,

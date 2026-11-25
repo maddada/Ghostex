@@ -192,6 +192,58 @@ pub(crate) struct GpuiSwitchRequestToast {
     pub(crate) paused: bool,
 }
 
+/// Undo on a chat's toast (Seen, Not needed or Clear Inbox in the Inbox): the core command that
+/// takes the press back, run in the chat that raised it (native_chat/work_cards.rs
+/// `sync_inbox_undo_toast`). Drawn inline in the toast stack with its Undo button, never in the
+/// notice modal (`GpuiAppToast::has_buttons`).
+#[derive(Clone)]
+pub(crate) struct GpuiChatUndoToast {
+    pub(crate) chat: gpui::WeakEntity<crate::app::native_chat::state::NativeChatView>,
+    pub(crate) command: serde_json::Value,
+}
+
+impl GpuiChatUndoToast {
+    pub(crate) fn run(&self, cx: &mut gpui::App) {
+        let command = self.command.clone();
+        let _ = self.chat.update(cx, |chat, cx| chat.invoke(command, cx));
+    }
+}
+
+impl std::fmt::Debug for GpuiChatUndoToast {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GpuiChatUndoToast")
+            .field("chat", &self.chat.entity_id())
+            .field("command", &self.command)
+            .finish()
+    }
+}
+
+impl PartialEq for GpuiChatUndoToast {
+    fn eq(&self, other: &Self) -> bool {
+        self.chat.entity_id() == other.chat.entity_id() && self.command == other.command
+    }
+}
+
+impl Eq for GpuiChatUndoToast {}
+
+/// A toast from a chat (`{"type":"toast", …}`) whose `chatUndo` command makes it an Undo toast
+/// for `chat`; `None` when the message has no title.
+pub(crate) fn gpui_chat_undo_toast_from_bridge_message(
+    message: &serde_json::Value,
+    generated_id: String,
+    chat: gpui::WeakEntity<crate::app::native_chat::state::NativeChatView>,
+) -> Option<GpuiAppToast> {
+    let mut toast = gpui_app_toast_from_bridge_message(message, generated_id)?;
+    let command = message
+        .get("chatUndo")
+        .filter(|command| command.is_object())?;
+    toast.action = Some(GpuiAppToastAction::ChatUndo(Box::new(GpuiChatUndoToast {
+        chat,
+        command: command.clone(),
+    })));
+    Some(toast)
+}
+
 /// What a notice's button opens. The host runs it (`run_gpui_app_toast_action`) and the notice
 /// closes.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -199,6 +251,8 @@ pub(crate) enum GpuiAppToastAction {
     /// A clickable bottom-center switch-request toast (`Q4705`-`Q4711`). Never routed into the
     /// centered notice modal (`GpuiAppToast::has_buttons` returns `false` for this variant).
     SwitchRequest(Box<GpuiSwitchRequestToast>),
+    /// Undo on a chat's Inbox toast (`GpuiChatUndoToast`), drawn inline like `SwitchRequest`.
+    ChatUndo(Box<GpuiChatUndoToast>),
     /// Settings > Accounts, on this agent's accounts (`claude`, `codex`) when one is named.
     OpenAccounts { provider: Option<String> },
     /// Settings > Extensions, where views are turned on.
@@ -264,7 +318,7 @@ impl GpuiAppToastAction {
             Self::OpenViewSettings => "Open Settings",
             Self::OpenAgentSettings => "Install or pick another agent",
             Self::OpenUpdateDownloadPage => "Open download page",
-            Self::UndoSyncedChange { .. } => "Undo",
+            Self::UndoSyncedChange { .. } | Self::ChatUndo(_) => "Undo",
             Self::ResetInterfaceScale => "Set to 100%",
             Self::RepairSpaceo => "Repair",
             Self::SecurityApproval { deny: false, .. } => "Approve",
@@ -345,8 +399,10 @@ pub(crate) fn gpui_app_toast_without_repeats_at(
     mut toast: GpuiAppToast,
     now: web_time::Instant,
 ) -> Option<GpuiAppToast> {
-    if matches!(toast.action, Some(GpuiAppToastAction::SwitchRequest(_)))
-        || toast.in_progress()
+    if matches!(
+        toast.action,
+        Some(GpuiAppToastAction::SwitchRequest(_) | GpuiAppToastAction::ChatUndo(_))
+    ) || toast.in_progress()
         || shown.iter().any(|existing| existing.id == toast.id)
     {
         return Some(toast);
@@ -977,6 +1033,62 @@ impl GpuiAppToastWindow {
             .into_any_element()
     }
 
+    /// The Undo at the end of a chat's Undo toast (`GpuiChatUndoToast`): runs the chat's undo and
+    /// closes the toast. A small neutral filled button (CDXC:AppModal 2026-10-14 on
+    /// `neutral_button_fills`), as the switch-request toast's buttons sit inline.
+    fn render_chat_undo_button(
+        &self,
+        toast_id: String,
+        undo: GpuiChatUndoToast,
+        light: bool,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        let app = self.app.clone();
+        let fills = super::native_modal_kit::palette::neutral_button_fills(light);
+        let ink: gpui::Hsla = if light {
+            gpui::rgb(0x18181b).into()
+        } else {
+            gpui::rgb(0xfcfcfc).into()
+        };
+        div()
+            .id(format!("ghostex-gpui-app-toast-undo-{toast_id}"))
+            .flex_shrink_0()
+            .h(px(GPUI_APP_TOAST_TITLE_LINE_HEIGHT + 4.0))
+            .mt(px(-2.0))
+            .px(px(10.0))
+            .flex()
+            .items_center()
+            .rounded(px(6.0))
+            .bg(fills.rest)
+            .hover(move |style| style.bg(fills.hover))
+            .active(move |style| style.bg(fills.pressed))
+            .cursor_pointer()
+            .text_size(px(12.0))
+            .font_weight(FontWeight::SEMIBOLD)
+            .text_color(ink)
+            .child("Undo")
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|_this, _event: &MouseDownEvent, window, cx| {
+                    window.prevent_default();
+                    cx.stop_propagation();
+                }),
+            )
+            .on_click(cx.listener(move |_this, _event, _window, cx| {
+                cx.stop_propagation();
+                let app = app.clone();
+                let undo = undo.clone();
+                let toast_id = toast_id.clone();
+                cx.defer(move |cx| {
+                    undo.run(cx);
+                    let _ = app.update(cx, |app, cx| {
+                        app.remove_gpui_app_toast(&toast_id, cx);
+                    });
+                });
+            }))
+            .into_any_element()
+    }
+
     /// `region` collects the button's frame into the window's frosted region, where the window is
     /// clipped to that region (Windows, see `toast_window_glass`), so the × stays visible and
     /// clickable beside its card.
@@ -1229,6 +1341,17 @@ impl Render for GpuiAppToastWindow {
                                         toast, sr, light,
                                     ))
                                 } else {
+                                    let undo = match &toast.action {
+                                        Some(GpuiAppToastAction::ChatUndo(undo)) => {
+                                            Some(self.render_chat_undo_button(
+                                                toast.id.clone(),
+                                                (**undo).clone(),
+                                                light,
+                                                cx,
+                                            ))
+                                        }
+                                        _ => None,
+                                    };
                                     card.child(
                                         div()
                                             .flex()
@@ -1276,7 +1399,8 @@ impl Render for GpuiAppToastWindow {
                                                             )
                                                         },
                                                     ),
-                                            ),
+                                            )
+                                            .children(undo),
                                     )
                                 }
                             }),

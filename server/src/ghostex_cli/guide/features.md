@@ -2628,9 +2628,12 @@ to Send to agent once you type a reply), and until you
 press it the page sits in the list above the chat box of things that need you
 ("Page, not seen yet") and counts in its "need you". Pressing it tells the agent
 you saw the page, with your reply if you wrote one, and the page's card then
-says Seen. Pages an agent showed before this came in don't wait. When two or
-more pages wait only to be seen, Archive all at the bottom of that list clears
-them all at once (their cards say Seen, and nothing is sent to the agent). When
+says Seen. Pages an agent showed before this came in don't wait. In that list,
+a page's row has **Seen** in its ⋯ menu (on the phone, swipe the row), which does
+the same without opening it, and **Clear Inbox** in the Inbox header's ⋯ marks
+every such page seen at once; either way the agent hears it with your next
+message, the page stays in the chat box's Resources pill, and a small toast at the
+bottom of the window offers **Undo** for a few seconds. When
 an agent shows a newer version of the same file, the older cards say Replaced
 and stop counting in every chat that shows them: the newest card is the page.
 An agent can also retire a page it replaced or no longer needs, with its
@@ -4671,7 +4674,7 @@ version of the Projects features in Cursor and Claude Code.
   recommended one has a small star) or **Done**, and how long ago it was asked;
   below them, blocked work, plus collapsible **Snoozed** and **Recent**
   (recently handled questions, asks, approvals, to-dos, and work finished in the
-  latest turn, newest first, with **Archive all** inside) drawers at the bottom. At most four rows show (three on the phone),
+  latest turn, newest first; it clears itself) drawers at the bottom. At most four rows show (three on the phone),
   then **N more need you**: on the computer it opens the rest right there, under
   the first rows, and **Show fewer** folds them back (a long list scrolls inside
   the dock); on the phone it opens the Work panel at Needs you. Something
@@ -4695,7 +4698,15 @@ version of the Projects features in Cursor and Claude Code.
   **Withdrawn**. On the phone a row opens the same ask in a sheet that works
   the same way. On the computer, Mention, Show in chat, Dismiss and Snooze are
   also in the row's own ⋯ menu, which takes the place of the row's time while
-  the pointer is over the row. A
+  the pointer is over the row. A page that only waits to be seen has **Seen** in
+  that menu and a to-do with only Done has **Not needed** (on the phone, swipe
+  the row); a group of pages from one turn has **All seen**. The Inbox header's
+  ⋯ has **Clear Inbox**, which marks every page that only waits to be seen as
+  seen and every such to-do as not needed at once: questions stay, nothing is
+  deleted, and seen pages stay in the chat box's Resources pill. After Seen, Not
+  needed or Clear Inbox, a small toast at the bottom of the window says what was
+  marked ("Marked 2 pages seen") with **Undo** for a few seconds, which brings
+  back exactly those rows and takes back what the agent would have been told. A
   row's answers and Reply always stay on one line: when they don't fit, the
   answers fold into one **Choose an answer** dropdown beside Reply (the same on
   the Work panel's cards). Words you type in a Reply and don't send stay with

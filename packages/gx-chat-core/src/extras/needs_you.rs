@@ -150,17 +150,13 @@ pub fn rows_split(
             "replied": replied,
             "reply": { "item": tag, "key": key, "tag": "", "name": reply_name(title) },
             "mention": "",
-            // Archive: a to-do asks no question, so it is not Dismiss. It sends the
-            // agent nothing; gxserver tells it with its next message
-            // (server/src/session_chat_dismissed.rs, where the quiet-dismiss decision lives).
-            "dismiss": {
-                "type": "coordinatorBoardAnswer",
-                "op": "cancel",
-                "key": key,
-                "item": tag,
-                "label": "Dismissed",
-            },
-            "dismissLabel": "Archive",
+            // Not needed: a to-do asks no question, so it is not Dismiss. It sends the agent
+            // nothing now; gxserver tells it with its next message
+            // (server/src/session_chat_dismissed.rs, where the quiet-dismiss decision lives). It
+            // goes through Clear Inbox's own action for its Undo toast (work_cards.rs, where the
+            // user's decision on these words is).
+            "dismiss": { "type": "markAllInboxRead", "pageIds": [], "todoTags": [tag] },
+            "dismissLabel": "Not needed",
             "snooze": snooze,
             "chips": [],
             "needs": true,

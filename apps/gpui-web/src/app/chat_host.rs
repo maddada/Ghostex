@@ -22,6 +22,14 @@ impl GhostexGpuiApp {
     ) {
         match message["type"].as_str() {
             Some("toast") => {
+                // A chat's Undo toast (native_chat/work_cards.rs `sync_inbox_undo_toast`): its
+                // Undo runs in this session's chat view.
+                if message.get("chatUndo").is_some_and(Value::is_object) {
+                    if let Some((_, chat)) = self.native_chats.get(session).cloned() {
+                        self.receive_chat_undo_toast(message, chat.downgrade(), cx);
+                    }
+                    return;
+                }
                 self.receive_gpui_app_toast_bridge_message(message, cx);
                 return;
             }

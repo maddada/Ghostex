@@ -496,11 +496,13 @@ async fn answer_session_chat_prompt(
             .get("hours")
             .and_then(Value::as_u64)
             .filter(|hours| (1..=24 * 14).contains(hours));
+        // The name a Dismiss or Seen records for the agent; on a restore (the Inbox's Undo), the
+        // name to forget so an undone removal is never told.
         let dismissed = params
             .get("dismissed")
             .and_then(Value::as_str)
             .map(str::trim)
-            .filter(|name| remove && !name.is_empty())
+            .filter(|name| (remove || restore) && !name.is_empty())
             .map(str::to_string);
         let worker_state = state.clone();
         let (project_id, session_id) = (target.project_id.clone(), target.session_id.clone());
@@ -523,7 +525,12 @@ async fn answer_session_chat_prompt(
                     &project_id,
                     &session_id,
                     &question_id,
-                )
+                )?;
+                if let Some(name) = dismissed {
+                    let db = crate::storage::open_gxserver_database(&worker_state.paths)?;
+                    crate::session_chat_dismissed::forget(&db, &project_id, &session_id, &[name]);
+                }
+                Ok(())
             } else {
                 crate::session_chat_open_questions::set_later(
                     &worker_state,

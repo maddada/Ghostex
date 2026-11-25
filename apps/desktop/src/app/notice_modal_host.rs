@@ -40,10 +40,14 @@ pub(crate) struct AppNotices {
 impl GpuiAppToast {
     /// A toast with a button (an action, or Copy details) is shown as a notice modal instead.
     /// Switch-request toasts (`GpuiAppToastAction::SwitchRequest`) stay inline in the bottom-center
-    /// toast stack (CDXC:SwitchRequests 2026-11-23, Q4706).
+    /// toast stack (CDXC:SwitchRequests 2026-11-23, Q4706), and so does a chat's Undo toast
+    /// (`GpuiAppToastAction::ChatUndo`, Q4931: the small toast with Undo the user asked for).
     pub(crate) fn has_buttons(&self) -> bool {
         (self.action.is_some()
-            && !matches!(self.action, Some(GpuiAppToastAction::SwitchRequest(_))))
+            && !matches!(
+                self.action,
+                Some(GpuiAppToastAction::SwitchRequest(_) | GpuiAppToastAction::ChatUndo(_))
+            ))
             || self.copy_text.is_some()
     }
 

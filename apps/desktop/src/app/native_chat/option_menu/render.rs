@@ -586,7 +586,10 @@ impl Render for ChatOptionMenuPanel {
                                 .mt(px(2.0 * scale))
                                 .text_size(px(12.0 * scale))
                                 .line_height(px(16.0 * scale))
-                                .when(!disabled && row["toggle"] != true, |line| line.truncate())
+                                .when(
+                                    !disabled && row["toggle"] != true && row["wrap"] != true,
+                                    |line| line.truncate(),
+                                )
                                 .text_color(foreground.opacity(0.58))
                                 .child(description),
                         )

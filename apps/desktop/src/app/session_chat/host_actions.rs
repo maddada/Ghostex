@@ -143,6 +143,27 @@ impl GhostexGpuiApp {
         would vanish instead of appearing in the workspace toast window.
         */
         if message.get("type").and_then(serde_json::Value::as_str) == Some("toast") {
+            // A chat's Undo toast (native_chat/work_cards.rs `sync_inbox_undo_toast`): its Undo
+            // runs in this session's chat view.
+            if message
+                .get("chatUndo")
+                .is_some_and(serde_json::Value::is_object)
+            {
+                if let Some(chat) = self.native_chat_view_for_shell_session(session_id) {
+                    self.app_toast_id_counter = self.app_toast_id_counter.wrapping_add(1);
+                    let generated_id = format!("gpui-app-toast-{}", self.app_toast_id_counter);
+                    if let Some(toast) =
+                        crate::app::window::toast::gpui_chat_undo_toast_from_bridge_message(
+                            &message,
+                            generated_id,
+                            chat.downgrade(),
+                        )
+                    {
+                        self.upsert_gpui_app_toast(toast, cx);
+                    }
+                }
+                return;
+            }
             self.receive_gpui_app_toast_bridge_message(&message, cx);
             return;
         }

@@ -1276,7 +1276,6 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
     // (when it comes back, row): the snoozed asks, to-dos, forms and pages, folded under the
     // dock's Snoozed row (`snoozed`).
     let mut snoozed_rows: Vec<(i64, Value)> = snoozed_question_rows(state, now_ms);
-    let dismissed = &state.extras.panels.work_dock_dismissed;
     let mut answered_rows: Vec<(i64, Value)> = Vec::new();
     // The session's to-dos (`ghostex needs-you add`), in any agent chat. A chat with no work items
     // has read no turns for its Show in chat, so it reads them here, only while a to-do exists.
@@ -1588,9 +1587,6 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
                 continue;
             }
             let key = format!("answered:approval:{card_key}");
-            if dismissed.contains(&key) {
-                continue;
-            }
             let answer = text(card, "answer").trim();
             let denied = crate::extras::relayed_approvals::tone_of(answer, false) == "deny";
             let (_, title, _, code, _, _) = crate::extras::relayed_approvals::body(card);
@@ -1661,9 +1657,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
             text(item, "ref"),
             turns[turn.unwrap_or(0)].id
         );
-        if !dismissed.contains(&key) {
-            done_entries.push((done_at, work_row(item, &turns, now_ms, Some(key))));
-        }
+        done_entries.push((done_at, work_row(item, &turns, now_ms, Some(key))));
     }
     // Q4682 C: group duplicate rows sharing a Q-tag or pageId under one expandable row.
     let needs = group_duplicate_rows(needs);
@@ -1686,15 +1680,12 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
     // Soonest back first.
     snoozed_rows.sort_by_key(|(back, _)| *back);
     let snoozed_rows: Vec<Value> = snoozed_rows.into_iter().map(|(_, row)| row).collect();
-    // Newest answered first, excluding archived keys, deduplicated, capped at 12.
+    // Newest answered first, deduplicated, capped at 12.
     answered_rows.sort_by(|left, right| right.0.cmp(&left.0));
     let mut seen_answered = std::collections::BTreeSet::new();
     let answered_entries: Vec<(i64, Value)> = answered_rows
         .into_iter()
-        .filter(|(_, row)| {
-            let key = text(row, "key");
-            !dismissed.contains(key) && seen_answered.insert(key.to_string())
-        })
+        .filter(|(_, row)| seen_answered.insert(text(row, "key").to_string()))
         .take(12)
         .collect();
     // Combined Recent drawer: finished work items + recently handled asks/approvals/to-dos, newest first.
@@ -1707,25 +1698,25 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
     let recent_rows: Vec<Value> = recent_entries.into_iter().map(|(_, row)| row).collect();
     let done_rows: Vec<Value> = done_entries.into_iter().map(|(_, row)| row).collect();
     let answered_rows: Vec<Value> = answered_entries.into_iter().map(|(_, row)| row).collect();
-    let undo_mark_all_read = state
+    // The last Seen, Not needed or Clear Inbox press while it can be undone: each renderer shows
+    // one small toast per `id` at the bottom of the window, for the time left, with Undo.
+    let undo_toast = state
         .extras
         .panels
         .last_mark_all_read
         .as_ref()
-        .filter(|undo| undo.expires_at_ms > now_ms && undo.count > 0)
+        .filter(|undo| undo.expires_at_ms > now_ms)
         .map(|undo| {
             json!({
-                "label": format!("Archived {}", undo.count),
+                "id": undo.id,
+                "label": undo.label,
                 "undoLabel": "Undo",
-                "command": { "type": "undoMarkAllInboxRead" },
-                "dismiss": { "type": "dismissMarkAllReadUndo" },
+                "remainingMs": undo.expires_at_ms - now_ms,
+                "command": { "type": "undoMarkAllInboxRead", "id": undo.id },
             })
         })
         .unwrap_or(Value::Null);
-    if rows.is_empty()
-        && recent_rows.is_empty()
-        && snoozed_rows.is_empty()
-        && undo_mark_all_read.is_null()
+    if rows.is_empty() && recent_rows.is_empty() && snoozed_rows.is_empty() && undo_toast.is_null()
     {
         return Value::Null;
     }
@@ -1736,11 +1727,18 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         .work_dock_hidden
         .as_ref()
         .is_some_and(|keys| rows.iter().all(|row| keys.contains(text(row, "key"))))
-        && !rows.iter().any(|row| text(row, "kind") == "approval")
-        && undo_mark_all_read.is_null();
-    // Q4685 A: Mark all read sweeps clearable non-question rows in the main list (seen-only pages
-    // including bundled pages, and plain to-dos with only Done), with a breakdown summary and Undo.
-    // Recent rows keep their own Archive all inside the expanded Recent drawer (`recentArchiveAll`).
+        && !rows.iter().any(|row| text(row, "kind") == "approval");
+    // Clear Inbox, in the Inbox header's ⋯ menu: every row that asks nothing in the main list
+    // (pages that only wait to be seen, bundled ones included, and plain to-dos with only Done)
+    // marked Seen and Not needed at once, with the same Undo toast. Rows with questions stay. The
+    // Recent drawer clears itself (answered rows after `SETTLED_KEPT_MS`, finished work after the
+    // next turn) and has no archive of its own.
+    //
+    // CDXC:Coordinators 2026-11-25 DECISION:
+    // User (Q4915, Q4932): Archive stays on Inbox rows only, the Recent drawer loses its Archive
+    // all, and Archive all moves to a new ⋯ menu in the Inbox header, "named correct so people
+    // understand wtf is archive and that it wont get rid of ones that are seen", with an Undo for
+    // all of them. Supersedes Q4685 A's Mark all read under the list and its "Archived N · Undo" row.
     let mut clear_page_ids: Vec<String> = Vec::new();
     let mut clear_todo_tags: Vec<String> = Vec::new();
     for row in &rows {
@@ -1770,75 +1768,19 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
             }
         }
     }
-    let clear_total = clear_page_ids.len() + clear_todo_tags.len();
-    let mark_all_seen = if clear_total >= 2 {
-        let mut summary_parts = Vec::new();
-        if !clear_page_ids.is_empty() {
-            summary_parts.push(if clear_page_ids.len() == 1 {
-                "1 page".to_string()
-            } else {
-                format!("{} pages", clear_page_ids.len())
-            });
-        }
-        if !clear_todo_tags.is_empty() {
-            summary_parts.push(if clear_todo_tags.len() == 1 {
-                "1 to-do".to_string()
-            } else {
-                format!("{} to-dos", clear_todo_tags.len())
-            });
-        }
+    let clear_inbox = if clear_page_ids.is_empty() && clear_todo_tags.is_empty() {
+        Value::Null
+    } else {
         json!({
-            "label": "Archive all",
-            "summary": summary_parts.join(" \u{b7} "),
-            "count": clear_total,
+            "label": "Clear Inbox",
+            "hint": clear_inbox_hint(clear_page_ids.len(), clear_todo_tags.len()),
+            "count": clear_page_ids.len() + clear_todo_tags.len(),
             "command": {
                 "type": "markAllInboxRead",
                 "pageIds": clear_page_ids,
                 "todoTags": clear_todo_tags,
-                "finishedKeys": [],
             },
         })
-    } else {
-        Value::Null
-    };
-    let clear_recent_keys: Vec<String> = recent_rows
-        .iter()
-        .map(|row| text(row, "key").to_string())
-        .filter(|key| !key.is_empty())
-        .collect();
-    let recent_archive_all = if !clear_recent_keys.is_empty() {
-        json!({
-            "label": "Archive all",
-            "count": clear_recent_keys.len(),
-            "command": {
-                "type": "markAllInboxRead",
-                "pageIds": [],
-                "todoTags": [],
-                "finishedKeys": clear_recent_keys,
-            },
-        })
-    } else {
-        Value::Null
-    };
-    let clear_finished_keys: Vec<String> = done_rows
-        .iter()
-        .filter(|row| row["dismiss"].is_object())
-        .map(|row| text(row, "key").to_string())
-        .filter(|key| !key.is_empty())
-        .collect();
-    let done_archive_all = if clear_finished_keys.len() >= 2 {
-        json!({
-            "label": "Archive all",
-            "count": clear_finished_keys.len(),
-            "command": {
-                "type": "markAllInboxRead",
-                "pageIds": [],
-                "todoTags": [],
-                "finishedKeys": clear_finished_keys,
-            },
-        })
-    } else {
-        Value::Null
     };
     json!({
         "rows": rows,
@@ -1846,15 +1788,39 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         "limit": 4,
         "phoneLimit": 3,
         "more": { "type": "showCoordinatorBoardGroup", "group": "needs" },
-        "markAllSeen": mark_all_seen,
-        "undoMarkAllRead": undo_mark_all_read,
+        "clearInbox": clear_inbox,
+        "undoToast": undo_toast,
         "recent": recent_rows,
-        "recentArchiveAll": recent_archive_all,
         "done": done_rows,
-        "doneArchiveAll": done_archive_all,
         "snoozed": snoozed_rows,
         "answered": answered_rows,
     })
+}
+
+/// The line under Clear Inbox: what it does to which rows, and that nothing is deleted.
+fn clear_inbox_hint(pages: usize, todos: usize) -> String {
+    let count = |n: usize, one: &str, many: &str| {
+        if n == 1 {
+            format!("1 {one}")
+        } else {
+            format!("{n} {many}")
+        }
+    };
+    let what = match (pages, todos) {
+        (0, todos) => format!("Marks {} not needed.", count(todos, "to-do", "to-dos")),
+        (pages, 0) => format!("Marks {} seen.", count(pages, "page", "pages")),
+        (pages, todos) => format!(
+            "Marks {} seen and {} not needed.",
+            count(pages, "page", "pages"),
+            count(todos, "to-do", "to-dos")
+        ),
+    };
+    let kept = if pages > 0 {
+        " Questions stay. Nothing is deleted: seen pages stay in Resources."
+    } else {
+        " Questions stay. Nothing is deleted."
+    };
+    format!("{what}{kept}")
 }
 
 /// Whether `ask` references any page id in `page_ids` (via `/p/<id>` in steps, detail or text).
@@ -2105,8 +2071,8 @@ fn bundle_same_turn_pages(
             "age": crate::transcript::message_time::age_label(now_ms, newest_at),
             "pageIds": page_ids,
             "bundlePages": pages,
-            "dismiss": { "type": "markPagesSeen", "ids": page_ids },
-            "dismissLabel": "Archive all",
+            "dismiss": { "type": "markAllInboxRead", "pageIds": page_ids, "todoTags": [] },
+            "dismissLabel": "All seen",
             "buttons": [],
             "detail": [],
             "needs": true,
@@ -2353,10 +2319,9 @@ fn work_row(item: &Value, turns: &[Turn], now_ms: i64, done_key: Option<String>)
         "detail": [card["line"]],
         "buttons": [],
         "mention": mention_of(item),
-        "dismiss": card["dismiss"],
-        // A finished row asks nothing, so its silent dismiss reads Archive (the desktop's
-        // hover check and both menus, the phone's trailing check).
-        "dismissLabel": if done_key.is_some() { json!("Archive") } else { Value::Null },
+        // A finished row is never archived: the Recent drawer clears itself after the next turn.
+        "dismiss": Value::Null,
+        "dismissLabel": Value::Null,
         "chips": card["chips"],
         "showInChat": show_in_chat(turns, changed_at, &key),
         "needs": false,
@@ -2517,10 +2482,20 @@ fn question_rows_of(
                 "age": crate::transcript::message_time::age_label(now_ms, at),
                 "messageId": asker.message_id,
                 "tags": asker.tags,
-                "dismiss": { "type": "cancelQuestion", "id": asker.id },
-                // A page that only waits to be seen asks no question: Archive, not Dismiss
-                // (server/src/session_chat_dismissed.rs, where the quiet-dismiss decision lives).
-                "dismissLabel": if asker.seen_only { "Archive" } else { "Dismiss" },
+                // A page that only waits to be seen asks no question: Seen, not Dismiss, with the
+                // Undo toast of Clear Inbox (`MarkAllInboxRead`); both are silent now and tell the
+                // agent with its next message (server/src/session_chat_dismissed.rs).
+                //
+                // CDXC:Coordinators 2026-11-25 DECISION:
+                // User (Q4918): the Inbox's Archive says "Seen" on a page and "Not needed" on a
+                // to-do, lives only in the row's menu and the phone's swipe (Q4917), and shows a
+                // small Undo toast instead of the "Archived N · Undo" row.
+                "dismiss": if asker.seen_only {
+                    json!({ "type": "markAllInboxRead", "pageIds": [asker.id], "todoTags": [] })
+                } else {
+                    json!({ "type": "cancelQuestion", "id": asker.id })
+                },
+                "dismissLabel": if asker.seen_only { "Seen" } else { "Dismiss" },
                 // A page that only waits to be seen asks nothing to answer.
                 "markAnswered": if asker.seen_only { Value::Null } else { json!({ "type": "markQuestionAnswered", "id": asker.id }) },
                 "snooze": snooze,
@@ -2867,8 +2842,8 @@ pub fn ask_key_of_tag(state: &ChatState, tag: &str) -> Option<String> {
     })
 }
 
-/// A line of work's card in the dock: blocked, or finished in the latest turn (`done_key`, with
-/// the command that dismisses it).
+/// A line of work's card in the dock: blocked, or finished in the latest turn (`done_key`, its
+/// row's key).
 fn dock_item_card(item: &Value, now_ms: i64, done_key: Option<String>) -> Value {
     let status = text(item, "status");
     let at = at_ms(text(item, "at")).unwrap_or(now_ms);
@@ -2887,7 +2862,7 @@ fn dock_item_card(item: &Value, now_ms: i64, done_key: Option<String>) -> Value 
     let key = done_key
         .clone()
         .unwrap_or_else(|| format!("work-dock:{}:{status}", text(item, "ref")));
-    let mut card = json!({
+    let card = json!({
         "key": key,
         "kind": "item",
         "ref": text(item, "ref"),
@@ -2899,9 +2874,6 @@ fn dock_item_card(item: &Value, now_ms: i64, done_key: Option<String>) -> Value 
         "age": crate::transcript::message_time::age_label(now_ms, at),
         "at": at,
     });
-    if let Some(key) = done_key {
-        card["dismiss"] = json!({ "type": "dismissWorkDockCard", "key": key });
-    }
     card
 }
 

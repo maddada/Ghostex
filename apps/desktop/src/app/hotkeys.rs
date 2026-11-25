@@ -153,7 +153,6 @@ pub(crate) fn gpui_chat_owned_hotkey_action_id(action_id: &str) -> bool {
             | "inboxNextItem"
             | "inboxPreviousItem"
             | "inboxOpenItem"
-            | "inboxMarkRead"
             | "inboxSnooze"
             | "newChatPickProject"
             | "newChatPickComputer"
@@ -323,7 +322,6 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("inboxNextItem", "down"),
     ("inboxPreviousItem", "up"),
     ("inboxOpenItem", "enter"),
-    ("inboxMarkRead", "e"),
     ("inboxSnooze", "s"),
     ("copyLastChatCodeBlock", "cmd+shift+;"),
     ("copyLastChatReply", "cmd+shift+c"),

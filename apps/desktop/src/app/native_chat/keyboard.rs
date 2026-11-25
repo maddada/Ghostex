@@ -736,12 +736,6 @@ impl NativeChatView {
             }
             return true;
         }
-        if matches_configured_inbox_hotkey("inboxMarkRead", &event.keystroke) {
-            if row["dismiss"].is_object() {
-                self.invoke(row["dismiss"].clone(), cx);
-            }
-            return true;
-        }
         if matches_configured_inbox_hotkey("inboxSnooze", &event.keystroke) {
             let snooze: Vec<serde_json::Value> = row["snooze"]
                 .as_array()

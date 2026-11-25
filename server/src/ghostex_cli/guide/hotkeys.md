@@ -14,7 +14,6 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | Inbox: Next Item | `down` |  | none |  | While the Session Inbox has keyboard focus, move to the next item. | `inboxNextItem` |
 | Inbox: Previous Item | `up` |  | none |  | While the Session Inbox has keyboard focus, move to the previous item. | `inboxPreviousItem` |
 | Inbox: Open Item | `enter` |  | none |  | While the Session Inbox has keyboard focus, open the highlighted item. | `inboxOpenItem` |
-| Inbox: Archive / Dismiss | `e` |  | none |  | While the Session Inbox has keyboard focus, archive or dismiss the highlighted item. | `inboxMarkRead` |
 | Inbox: Snooze Item | `s` |  | none |  | While the Session Inbox has keyboard focus, open the Snooze menu for the highlighted item. | `inboxSnooze` |
 | Copy Last Code Block | `cmd+shift+;` |  | none |  | Copy the last code block the agent wrote in the chat session you are in. | `copyLastChatCodeBlock` |
 | Copy Last Reply | `cmd+shift+c` |  | none |  | Copy the agent's last reply in the chat session you are in. | `copyLastChatReply` |

@@ -223,57 +223,30 @@ pub fn handle_with_ids(
             state.core.request_publish();
             Vec::new()
         }
-        // A finished-work card leaves the dock (work_cards.rs `dock`).
-        ActionKind::DismissWorkDockCard => {
-            state
-                .extras
-                .panels
-                .work_dock_dismissed
-                .insert(text(action, "key").to_string());
-            state.core.request_publish();
-            Vec::new()
-        }
-        // Mark all read clears all clearable non-question rows with Undo (Q4685 A).
+        // Seen on a page, Not needed on a to-do, and Clear Inbox for all of them at once: each
+        // leaves the Inbox as its own Dismiss would (the agent hears of it with its next message),
+        // and the press is kept for its Undo toast (`MarkAllReadUndo`, work_cards.rs `undoToast`).
         ActionKind::MarkAllInboxRead => {
-            let page_ids: Vec<String> = action
-                .param("pageIds")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter_map(Value::as_str)
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(str::to_string)
-                .collect();
-            let todo_tags: Vec<String> = action
-                .param("todoTags")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter_map(Value::as_str)
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(str::to_string)
-                .collect();
-            let finished_keys: Vec<String> = action
-                .param("finishedKeys")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter_map(Value::as_str)
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(str::to_string)
-                .collect();
-            let count = page_ids.len() + todo_tags.len() + finished_keys.len();
-            if count == 0 {
+            let list = |key: &str| -> Vec<String> {
+                action
+                    .param(key)
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string)
+                    .collect()
+            };
+            let page_ids = list("pageIds");
+            let todo_tags = list("todoTags");
+            if page_ids.is_empty() && todo_tags.is_empty() {
                 return Vec::new();
             }
-            let mut effects = Vec::new();
-            if !page_ids.is_empty() {
-                let refs: Vec<&str> = page_ids.iter().map(String::as_str).collect();
-                effects.extend(crate::questions::later::mark_seen(state, &refs));
-            }
+            let refs: Vec<&str> = page_ids.iter().map(String::as_str).collect();
+            let (mut effects, pages) = crate::questions::later::mark_seen(state, &refs);
+            let mut cleared_tags = Vec::new();
             for tag in &todo_tags {
                 let mut params = serde_json::Map::new();
                 params.insert("op".to_string(), json!("cancel"));
@@ -284,31 +257,46 @@ pub fn handle_with_ids(
                     crate::extras::coordinator_board::answer(state, &params, next_request_id())
                 {
                     effects.push(effect);
+                    cleared_tags.push(tag.clone());
                 }
             }
-            for key in &finished_keys {
-                state.extras.panels.work_dock_dismissed.insert(key.clone());
+            if pages.is_empty() && cleared_tags.is_empty() {
+                return effects;
             }
+            let label = undo_label(pages.len(), cleared_tags.len());
             state.extras.panels.last_mark_all_read = Some(crate::state::MarkAllReadUndo {
-                page_ids,
-                todo_tags,
-                finished_keys,
-                count,
-                expires_at_ms: context.now_millis() + 10_000,
+                id: next_request_id(),
+                pages,
+                todo_tags: cleared_tags,
+                label,
+                expires_at_ms: context.now_millis() + UNDO_TOAST_MS,
             });
             state.core.request_publish();
             effects
         }
+        // The toast's Undo: everything that press cleared comes back, and gxserver forgets the
+        // names it was going to tell the agent, so an undone press is never told.
         ActionKind::UndoMarkAllInboxRead => {
+            // An Undo names the press it undoes; one from an older toast, after a newer press
+            // replaced the kept undo, does nothing rather than undo the newer press.
+            let asked = action.params.get("id").and_then(Value::as_u64);
+            if asked.is_some_and(|asked| {
+                state
+                    .extras
+                    .panels
+                    .last_mark_all_read
+                    .as_ref()
+                    .map(|undo| undo.id)
+                    != Some(asked)
+            }) {
+                return Vec::new();
+            }
             let Some(undo) = state.extras.panels.last_mark_all_read.take() else {
                 return Vec::new();
             };
             let mut effects = Vec::new();
-            for key in &undo.finished_keys {
-                state.extras.panels.work_dock_dismissed.remove(key);
-            }
-            for id in &undo.page_ids {
-                effects.extend(crate::questions::later::restore(state, id));
+            for (id, name) in &undo.pages {
+                effects.extend(crate::questions::later::restore(state, id, Some(name)));
             }
             for tag in &undo.todo_tags {
                 let key = format!("needs-you:{tag}");
@@ -328,11 +316,6 @@ pub fn handle_with_ids(
             }
             state.core.request_publish();
             effects
-        }
-        ActionKind::DismissMarkAllReadUndo => {
-            state.extras.panels.last_mark_all_read = None;
-            state.core.request_publish();
-            Vec::new()
         }
         ActionKind::CoordinatorBoardAnswer => {
             crate::extras::coordinator_board::answer(state, &action.params, next_request_id())
@@ -534,4 +517,27 @@ fn text<'a>(action: &'a UserAction, name: &str) -> &'a str {
 fn label(action: &UserAction, name: &str) -> Option<String> {
     let value = action.param(name)?.as_str()?;
     (!crate::extras::agent_tasks::js_trim(value).is_empty()).then(|| value.to_string())
+}
+
+/// How long a Seen, Not needed or Clear Inbox press can be undone: the renderers show its toast
+/// for the time that is left (work_cards.rs `undoToast`).
+pub(crate) const UNDO_TOAST_MS: i64 = 6_000;
+
+/// What the Undo toast says for a press that cleared `pages` pages and `todos` to-dos: "Marked 1
+/// page seen", "Marked 2 to-dos not needed", "Marked 2 pages seen and 1 to-do not needed".
+fn undo_label(pages: usize, todos: usize) -> String {
+    let count = |n: usize, one: &str, many: &str| {
+        if n == 1 {
+            format!("1 {one}")
+        } else {
+            format!("{n} {many}")
+        }
+    };
+    let pages = (pages > 0).then(|| format!("{} seen", count(pages, "page", "pages")));
+    let todos = (todos > 0).then(|| format!("{} not needed", count(todos, "to-do", "to-dos")));
+    match (pages, todos) {
+        (Some(pages), Some(todos)) => format!("Marked {pages} and {todos}"),
+        (Some(one), None) | (None, Some(one)) => format!("Marked {one}"),
+        (None, None) => String::new(),
+    }
 }

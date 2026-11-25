@@ -221,8 +221,10 @@ pub fn remove(state: &mut ChatState, id: &str) -> Vec<Effect> {
     remove_naming(state, id, None)
 }
 
-/// `questionRestore {id}`: restores a page removed by Mark all read (Undo, Q4685 A).
-pub fn restore(state: &mut ChatState, id: &str) -> Vec<Effect> {
+/// `questionRestore {id}`: restores a page marked Seen from the Inbox (its Undo toast). `dismissed`
+/// is the name its removal recorded for the agent (`dismissal_name`): gxserver forgets it, so an
+/// undone Seen is never told.
+pub fn restore(state: &mut ChatState, id: &str, dismissed: Option<&str>) -> Vec<Effect> {
     let id = id.trim();
     if id.is_empty() {
         return Vec::new();
@@ -234,15 +236,19 @@ pub fn restore(state: &mut ChatState, id: &str) -> Vec<Effect> {
         .retain(|known| !known.eq_ignore_ascii_case(id));
     let request_id = state.core.allocate_request_id();
     state.core.request_publish();
+    let mut params = json!({
+        "kind": "questionRestore",
+        "questionId": id,
+        "projectId": state.identity.project_id,
+        "sessionId": state.identity.session_id,
+    });
+    if let Some(name) = dismissed.map(str::trim).filter(|name| !name.is_empty()) {
+        params["dismissed"] = json!(name);
+    }
     vec![Effect::SendRpc {
         request_id,
         method: ChatRpcMethod::AnswerSessionChatPrompt,
-        params: Box::new(json!({
-            "kind": "questionRestore",
-            "questionId": id,
-            "projectId": state.identity.project_id,
-            "sessionId": state.identity.session_id,
-        })),
+        params: Box::new(params),
     }]
 }
 
@@ -347,6 +353,13 @@ pub fn snooze(state: &mut ChatState, id: &str, hours: u64) -> Vec<Effect> {
 /// and a row with no questions reads Mark as read. Supersedes the 2026-11-10 rule above that
 /// Cancel also tells the agent. The full decision is in server/src/session_chat_dismissed.rs.
 pub fn cancel(state: &mut ChatState, id: &str) -> Vec<Effect> {
+    let name = dismissal_name(state, id);
+    remove_naming(state, id, Some(name))
+}
+
+/// How the agent is told of a form or page the reader dismissed or marked Seen ("\"Release
+/// plan\" (Q12 to Q14)", "\"Notes\" (marked read)").
+pub fn dismissal_name(state: &ChatState, id: &str) -> String {
     let asker = state
         .transcript_view
         .askers
@@ -385,12 +398,11 @@ pub fn cancel(state: &mut ChatState, id: &str) -> Vec<Effect> {
         (true, false) => tags,
         (true, true) => "an untitled form or page".to_string(),
     };
-    let name = if seen_only {
+    if seen_only {
         format!("{name} (marked read)")
     } else {
         name
-    };
-    remove_naming(state, id, Some(name))
+    }
 }
 
 /// `markQuestionAnswered {id}`: a dock row's ⋯ Mark answered on a form, page or one-click question
@@ -447,10 +459,15 @@ pub fn mark_answered(state: &mut ChatState, id: &str) -> Vec<Effect> {
     effects
 }
 
-/// `markPagesSeen {ids}`: the dock's Mark all read. Each page that waits only to be looked at
-/// ("not seen yet") is removed as `remove` does, so it leaves the dock, the counts and the
-/// sidebar's dot on every client and gxserver keeps it across restarts. Nothing reaches the agent:
-/// a page's own Mark as read tells it, but one message per page would bury it.
+/// `markPagesSeen {ids}` and the Inbox's Seen and Clear Inbox (`MarkAllInboxRead`). Each page that
+/// waits only to be looked at ("not seen yet") is removed as `cancel` does, so it leaves the dock,
+/// the counts and the sidebar's dot on every client and gxserver keeps it across restarts, and the
+/// agent hears of it as of a single row's Seen: by name, with the next message it gets anyway.
+/// Returns the pages cleared with those names, for the Undo toast.
+///
+/// CDXC:Coordinators 2026-11-25 DECISION:
+/// User: Clear Inbox on pages must tell the agent "like a single row does", where it used to tell
+/// it nothing. Supersedes the 2026-11-16 rule that Mark all read reached the agent not at all.
 ///
 /// CDXC:Coordinators 2026-11-16 DECISION:
 /// User picked "reply and build" on issue #626 (a dock with 16 page cards "not seen yet", most of
@@ -459,7 +476,7 @@ pub fn mark_answered(state: &mut ChatState, id: &str) -> Vec<Effect> {
 ///
 /// Only a page still waiting to be seen is cleared: one that asks questions keeps waiting for its
 /// answers.
-pub fn mark_seen(state: &mut ChatState, ids: &[&str]) -> Vec<Effect> {
+pub fn mark_seen(state: &mut ChatState, ids: &[&str]) -> (Vec<Effect>, Vec<(String, String)>) {
     let unseen: Vec<String> = crate::questions::open_questions::all_waiting(state)
         .into_iter()
         .filter(|asker| asker.seen_only)
@@ -469,7 +486,17 @@ pub fn mark_seen(state: &mut ChatState, ids: &[&str]) -> Vec<Effect> {
         })
         .map(|asker| asker.id)
         .collect();
-    unseen.iter().flat_map(|id| remove(state, id)).collect()
+    let mut effects = Vec::new();
+    let mut cleared = Vec::new();
+    for id in unseen {
+        let name = dismissal_name(state, &id);
+        let sent = remove_naming(state, &id, Some(name.clone()));
+        if !sent.is_empty() {
+            effects.extend(sent);
+            cleared.push((id, name));
+        }
+    }
+    (effects, cleared)
 }
 
 /// The pages that wait only to be looked at which the reader opened: gxserver's list with this

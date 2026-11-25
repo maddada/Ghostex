@@ -31,34 +31,11 @@ pub(super) const DETAILS_ICON: &str = "titlebar/message-question.svg";
 pub(super) const PAGE_OPEN_ICON: &str = "titlebar/external-link.svg";
 /// A Needs you row's Jump to context: matches Show in chat.
 pub(super) const CONTEXT_ICON: &str = "titlebar/message-share.svg";
-/// A Needs you row's Archive action: a check mark (`dock_mark_read_icon`).
-pub(super) const MARK_READ_ICON: &str = "titlebar/check.svg";
-/// Whether a dock row carries a question the reader must answer, so it has no Archive button: an
-/// ask with answers, a one-click question, a form or a page with open questions, an approval with
-/// buttons, a to-do that offers its own choices. A page that only waits to be seen (its dismiss
-/// reads "Archive"), a to-do with only Done, a blocked line of work and a notice with no
-/// answers ask nothing. The phone has the same rule (workItemParts.tsx `rowAsksQuestion`).
-///
-/// CDXC:Coordinators 2026-11-21 DECISION:
-/// User, of a Live page row with a question: "dont show mark as read on this one because it's a
-/// question and i need to answer it so it's not a page that just has a 'mark as seen' at the end".
-pub(super) fn row_asks_question(row: &Value) -> bool {
-    let key = text(row, "key");
-    let buttons = row["buttons"].as_array().map_or(&[][..], Vec::as_slice);
-    if key.starts_with("work-ask:") {
-        return true;
-    }
-    if key.starts_with("dock-questions:") {
-        let label = text(row, "dismissLabel");
-        return !matches!(label.as_str(), "Archive" | "Done" | "Mark as read");
-    }
-    // A to-do with no choices of its own has only Done.
-    let only_done =
-        buttons.is_empty() || (buttons.len() == 1 && text(&buttons[0], "label") == "Done");
-    if key.starts_with("needs-you:") {
-        return !only_done;
-    }
-    !buttons.is_empty()
+/// Whether a row's `dismissLabel` clears something that asks nothing (Seen on a page, Not needed on
+/// a to-do, All seen on a group of pages), as against a question's Dismiss: it takes the check
+/// icon in menus.
+pub(super) fn is_clear_label(label: &str) -> bool {
+    matches!(label, "Seen" | "Not needed" | "All seen")
 }
 
 /// Its dropdown grows to its longest answer up to this (unscaled), and the window's edge.
@@ -494,51 +471,6 @@ impl NativeChatView {
         )
     }
 
-    /// Done as an icon button, left of a dock row's other buttons: runs the row's own
-    /// `dismiss`, the command its ⋯ and right-click menus' Dismiss / Done run (a page's
-    /// `cancelQuestion`, an ask's cancel, a to-do's `coordinatorBoardAnswer` cancel, a terminal
-    /// notice's `dismissNotice`), so the agent is told exactly what it is told today: nothing at
-    /// the time, the dismissal with its next message. `None` for a row with no dismiss, for a
-    /// finished row, whose hover check in the age's place already is its Done button, and for a
-    /// row that asks a question (`row_asks_question`).
-    ///
-    /// CDXC:Coordinators 2026-11-24 DECISION:
-    /// Opening a page already marks it read, so the Inbox row's clear button means "I'm done with
-    /// this one": renamed to "Done" with a check-mark icon (`titlebar/check.svg`), superseding the
-    /// 2026-11-21 open-envelope "Mark as read" wording and icon.
-    pub(super) fn dock_mark_read_icon(
-        &self,
-        key: &str,
-        row: &Value,
-        p: &ChatAppearance,
-        cx: &Context<Self>,
-    ) -> Option<AnyElement> {
-        let dismiss = row["dismiss"].clone();
-        if !dismiss.is_object() || row["kind"] == "finished" || row_asks_question(row) {
-            return None;
-        }
-        Some(
-            self.tone_square_icon_button(
-                gpui::SharedString::from(format!("work-row-read:{key}")),
-                "Archive",
-                MARK_READ_ICON,
-                false,
-                p,
-            )
-            .tooltip(|window, cx| {
-                gpui_component::tooltip::Tooltip::new("Archive")
-                    .keys(super::composer::hotkey_chord(Some("inboxMarkRead")))
-                    .build(window, cx)
-            })
-            .on_click(cx.listener(move |this, _, _, cx| {
-                cx.stop_propagation();
-                this.close_board_card_menu(cx);
-                this.invoke(dismiss.clone(), cx);
-            }))
-            .into_any_element(),
-        )
-    }
-
     /// Reply as an icon button (`reply_answer`'s answer): the reply box at the press; once sent from
     /// here a check, its words in the tooltip.
     pub(super) fn dock_reply_icon(
@@ -938,15 +870,16 @@ impl NativeChatView {
                 )),
             );
         }
-        // Dismiss reads Archive on one that asks no question (gx-chat-core's `dismissLabel`).
-        let is_archive = matches!(
-            actions["dismissLabel"].as_str(),
-            Some("Archive" | "Archive all" | "Done" | "Mark all done" | "Mark as read")
-        );
-        let (dismiss_icon, dismiss_label): (&'static str, &'static str) = if is_archive {
-            ("titlebar/check.svg", "Archive")
-        } else {
-            ("titlebar/x.svg", "Dismiss")
+        // Dismiss reads Seen or Not needed on one that asks no question (gx-chat-core's
+        // `dismissLabel`).
+        let clear_label = actions["dismissLabel"]
+            .as_str()
+            .filter(|label| is_clear_label(label));
+        let (dismiss_icon, dismiss_label): (&'static str, &'static str) = match clear_label {
+            Some("Not needed") => ("titlebar/check.svg", "Not needed"),
+            Some("All seen") => ("titlebar/check.svg", "All seen"),
+            Some(_) => ("titlebar/check.svg", "Seen"),
+            None => ("titlebar/x.svg", "Dismiss"),
         };
         for (field, icon, label) in [
             ("open", "titlebar/external-link.svg", "Open"),

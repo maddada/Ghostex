@@ -220,7 +220,7 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                 .flatten()
                 .filter_map(Value::as_str)
                 .collect();
-            effects.extend(crate::questions::later::mark_seen(state, &ids));
+            effects.extend(crate::questions::later::mark_seen(state, &ids).0);
         }
         ActionKind::PageStar => {
             let id = action
@@ -245,7 +245,7 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                 .param("id")
                 .and_then(Value::as_str)
                 .unwrap_or_default();
-            effects.extend(crate::questions::later::restore(state, id));
+            effects.extend(crate::questions::later::restore(state, id, None));
         }
         ActionKind::FormNotes => {
             let id = action

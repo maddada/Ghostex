@@ -224,6 +224,7 @@ impl GhostexGpuiApp {
             GpuiAppToastAction::SwitchRequest(_) => {
                 self.accept_gpui_switch_request_toast(None, cx);
             }
+            GpuiAppToastAction::ChatUndo(undo) => undo.run(cx),
             GpuiAppToastAction::OpenAccounts { provider } => {
                 self.open_gpui_settings_accounts_page_for_provider(provider.as_deref(), None, cx);
             }

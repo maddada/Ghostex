@@ -211,10 +211,8 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::CoordinatorBoardAnswer
         | ActionKind::JumpToWorkCard
         | ActionKind::LoadPageQuestionCounts
-        | ActionKind::DismissWorkDockCard
         | ActionKind::MarkAllInboxRead
         | ActionKind::UndoMarkAllInboxRead
-        | ActionKind::DismissMarkAllReadUndo
         | ActionKind::SnoozeWorkAsk
         | ActionKind::SetWorkTopic
         | ActionKind::UnsnoozeWorkAsk
@@ -411,10 +409,8 @@ fn clears_error(kind: &ActionKind) -> bool {
             | ActionKind::CoordinatorBoardAnswer
         | ActionKind::JumpToWorkCard
         | ActionKind::LoadPageQuestionCounts
-        | ActionKind::DismissWorkDockCard
         | ActionKind::MarkAllInboxRead
         | ActionKind::UndoMarkAllInboxRead
-        | ActionKind::DismissMarkAllReadUndo
         | ActionKind::SnoozeWorkAsk
         | ActionKind::SetWorkTopic
         | ActionKind::UnsnoozeWorkAsk
@@ -500,7 +496,6 @@ fn publishes_at_once(kind: &ActionKind) -> bool {
             | ActionKind::CoordinatorBoardChange
             | ActionKind::CoordinatorBoardAnswer
             | ActionKind::JumpToWorkCard
-            | ActionKind::DismissWorkDockCard
             | ActionKind::SnoozeWorkAsk
             | ActionKind::SetWorkTopic
             | ActionKind::UnsnoozeWorkAsk

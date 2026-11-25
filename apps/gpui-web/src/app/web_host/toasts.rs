@@ -78,6 +78,25 @@ impl GhostexGpuiApp {
         }
     }
 
+    /// A chat's Undo toast (`gpui_chat_undo_toast_from_bridge_message`), whose Undo runs in `chat`.
+    pub(crate) fn receive_chat_undo_toast(
+        &mut self,
+        message: &serde_json::Value,
+        chat: gpui::WeakEntity<crate::app::native_chat::state::NativeChatView>,
+        cx: &mut Context<Self>,
+    ) {
+        let toasts = &mut self.web_host.toasts;
+        toasts.id_counter = toasts.id_counter.wrapping_add(1);
+        let generated_id = format!("gpui-app-toast-{}", toasts.id_counter);
+        if let Some(toast) = crate::app::window::toast::gpui_chat_undo_toast_from_bridge_message(
+            message,
+            generated_id,
+            chat,
+        ) {
+            self.upsert_gpui_app_toast(toast, cx);
+        }
+    }
+
     /// The desktop's `upsert_gpui_app_toast`: same id replaces in place, at most four shown, auto-dismiss guarded by the epoch.
     pub(crate) fn upsert_gpui_app_toast(
         &mut self,
@@ -145,6 +164,7 @@ impl GhostexGpuiApp {
             GpuiAppToastAction::SwitchRequest(_) => {
                 let _ = self.accept_gpui_switch_request_toast(None, cx);
             }
+            GpuiAppToastAction::ChatUndo(undo) => undo.run(cx),
             GpuiAppToastAction::OpenAccounts { .. } => self.dispatch_gpui_workspace_action_toast(
                 "info",
                 "Not in the browser",

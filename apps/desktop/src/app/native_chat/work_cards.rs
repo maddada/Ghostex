@@ -125,14 +125,13 @@ fn page_row_menu(row: &Value) -> Vec<Value> {
     if row["markAnswered"].is_object() {
         rows.push(json!({ "label": "Mark answered", "iconPath": "titlebar/circle-check.svg", "command": row["markAnswered"] }));
     }
-    // Dismiss, or Archive on a row that asks no question (a to-do, a page that only
-    // waits to be seen): gx-chat-core's `dismissLabel`. Both send the agent nothing.
+    // Dismiss, or on a row that asks no question gx-chat-core's `dismissLabel`: Seen on a page
+    // that only waits to be seen, Not needed on a to-do. None sends the agent anything now; Seen
+    // and Not needed show an Undo toast. This menu (and the phone's swipe) is the only place they
+    // live: the row has no button of its own for them (gx-chat-core work_cards.rs, Q4917).
     if row["dismiss"].is_object() {
         let label = row["dismissLabel"].as_str().unwrap_or("Dismiss");
-        let icon = if matches!(
-            label,
-            "Archive" | "Archive all" | "Done" | "Mark all done" | "Mark as read"
-        ) {
+        let icon = if super::work_actions::is_clear_label(label) {
             "titlebar/check.svg"
         } else {
             "titlebar/x.svg"
@@ -140,7 +139,6 @@ fn page_row_menu(row: &Value) -> Vec<Value> {
         rows.push(json!({
             "label": label,
             "iconPath": icon,
-            "hotkeyAction": "inboxMarkRead",
             "command": row["dismiss"],
         }));
     }
@@ -707,19 +705,7 @@ impl NativeChatView {
             merged.extend(dock["done"].as_array().cloned().unwrap_or_default());
             merged
         };
-        let recent_archive_all = dock["recentArchiveAll"]["command"]
-            .is_object()
-            .then(|| dock["recentArchiveAll"]["command"].clone())
-            .or_else(|| {
-                dock["doneArchiveAll"]["command"]
-                    .is_object()
-                    .then(|| dock["doneArchiveAll"]["command"].clone())
-            });
-        let undo = dock["undoMarkAllRead"]
-            .is_object()
-            .then(|| dock["undoMarkAllRead"].clone());
-        let has_dock_content =
-            !rows.is_empty() || !snoozed.is_empty() || !recent.is_empty() || undo.is_some();
+        let has_dock_content = !rows.is_empty() || !snoozed.is_empty() || !recent.is_empty();
         if !has_dock_content && !board.is_object() {
             return None;
         }
@@ -803,81 +789,9 @@ impl NativeChatView {
                 let focused = self.board.inbox_focus == Some(idx);
                 list = list.child(self.dock_row_at(row, focused, p, cx));
             }
-            // Archive all (Q4685 A / Q4758): breakdown summary on left + "Archive all" + count badge on right.
-            let mark_all_summary = text(&dock["markAllSeen"], "summary");
-            let mark_all_seen = dock["markAllSeen"]["command"].is_object().then(|| {
-                let command = dock["markAllSeen"]["command"].clone();
-                let label = dock["markAllSeen"]["label"]
-                    .as_str()
-                    .unwrap_or("Archive all")
-                    .to_string();
-                let count = dock["markAllSeen"]["count"].as_u64().filter(|n| *n > 0);
-                let aria = match count {
-                    Some(n) => format!("{label}, {n}"),
-                    None => label.clone(),
-                };
-                div()
-                    .id("work-dock-mark-all-seen")
-                    .role(gpui::Role::Button)
-                    .aria_label(aria)
-                    .flex_shrink_0()
-                    .flex()
-                    .items_center()
-                    .gap(px(6.0 * s))
-                    .pl(px(9.0 * s))
-                    .pr(px(if count.is_some() { 6.0 } else { 9.0 } * s))
-                    .py(px(3.0 * s))
-                    .rounded(px(6.0 * s))
-                    .border_1()
-                    .border_color(p.foreground.opacity(0.10))
-                    .bg(p.foreground.opacity(0.04))
-                    .text_size(px(PROSE_SIZE * 0.92 * s))
-                    .text_color(p.foreground)
-                    .chat_cursor_pointer()
-                    .hover(|style| style.bg(p.foreground.opacity(0.09)))
-                    .tooltip(|window, cx| {
-                        gpui_component::tooltip::Tooltip::new("Archive all pages and plain to-dos")
-                            .build(window, cx)
-                    })
-                    .child(label)
-                    .when_some(count, |btn, n| {
-                        btn.child(crate::app::element::count_badge(
-                            n.to_string(),
-                            p.foreground,
-                            s,
-                        ))
-                    })
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.invoke(command.clone(), cx);
-                    }))
-            });
-            if hidden == 0 {
-                if let Some(button) = mark_all_seen {
-                    list = list.child(
-                        div()
-                            .w_full()
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .gap(px(8.0 * s))
-                            .px(px(DOCK_ROW_PAD_X * s))
-                            .pt(px(5.0 * s))
-                            .pb(px(4.0 * s))
-                            .mt(px(2.0 * s))
-                            .border_t_1()
-                            .border_color(p.foreground.opacity(0.06))
-                            .child(
-                                div()
-                                    .min_w_0()
-                                    .truncate()
-                                    .text_size(px(PROSE_SIZE * 0.90 * s))
-                                    .text_color(p.muted)
-                                    .child(mark_all_summary),
-                            )
-                            .child(button),
-                    );
-                }
-            } else {
+            // Clear Inbox lives in the header's ⋯ menu (`work_dock_header_menu`), and its Undo, like
+            // a row's Seen or Not needed, is a toast (`sync_inbox_undo_toast`).
+            if hidden > 0 {
                 list = list.child(
                     div()
                         .w_full()
@@ -909,40 +823,18 @@ impl NativeChatView {
                                     }
                                     cx.notify();
                                 })),
-                        )
-                        .child(div().flex_1().min_w_0())
-                        .when(
-                            !mark_all_summary.is_empty() && mark_all_seen.is_some(),
-                            |row| {
-                                row.child(
-                                    div()
-                                        .min_w_0()
-                                        .truncate()
-                                        .text_size(px(PROSE_SIZE * 0.90 * s))
-                                        .text_color(p.muted)
-                                        .child(mark_all_summary),
-                                )
-                            },
-                        )
-                        .children(mark_all_seen),
+                        ),
                 );
-            }
-            if let Some(undo_bar) = undo {
-                list = list.child(self.work_dock_undo_bar(&undo_bar, p, cx));
             }
             // CDXC:Coordinators 2026-11-24 DECISION:
             // User: combine Handled and Done into one Recent drawer ordered after Snoozed,
-            // newest first, with Archive all inside and the same row left inset for all drawers.
+            // newest first, with the same row left inset for all drawers. Since 2026-11-25 it has no
+            // Archive all: it clears itself (gx-chat-core work_cards.rs, Q4915).
             if !snoozed.is_empty() {
                 list = list.children(self.work_dock_snoozed(&snoozed, p, cx));
             }
             if !recent.is_empty() {
-                list = list.children(self.work_dock_recent(
-                    &recent,
-                    recent_archive_all.as_ref(),
-                    p,
-                    cx,
-                ));
+                list = list.children(self.work_dock_recent(&recent, p, cx));
             }
             surface = surface.child(self.disclosure_body_motion(
                 DOCK_MOTION_KEY,
@@ -981,93 +873,6 @@ impl NativeChatView {
                 )
                 .into_any_element(),
         )
-    }
-
-    /// The inline Undo bar shown right after Mark all read (Q4685 A): restores cleared pages,
-    /// plain to-dos, and finished rows.
-    fn work_dock_undo_bar(
-        &self,
-        undo: &Value,
-        p: &ChatAppearance,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let s = p.scale;
-        let label = text(undo, "label");
-        let command = undo["command"].clone();
-        let dismiss = undo["dismiss"].clone();
-        div()
-            .id("work-dock-undo-bar")
-            .w_full()
-            .min_w_0()
-            .mt(px(3.0 * s))
-            .px(px(DOCK_ROW_PAD_X * s))
-            .py(px(5.0 * s))
-            .rounded(px(8.0 * s))
-            .border_1()
-            .border_color(p.foreground.opacity(0.08))
-            .bg(p.foreground.opacity(0.04))
-            .flex()
-            .items_center()
-            .gap(px(8.0 * s))
-            .child(
-                svg()
-                    .path("titlebar/archive.svg")
-                    .flex_shrink_0()
-                    .size(px(13.0 * s))
-                    .text_color(p.muted),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .truncate()
-                    .text_color(p.foreground)
-                    .child(label),
-            )
-            .child(
-                div()
-                    .id("work-dock-undo-button")
-                    .role(gpui::Role::Button)
-                    .flex_shrink_0()
-                    .px(px(8.0 * s))
-                    .py(px(2.0 * s))
-                    .rounded(px(6.0 * s))
-                    .border_1()
-                    .border_color(p.foreground.opacity(0.12))
-                    .bg(p.foreground.opacity(0.06))
-                    .text_color(p.foreground)
-                    .font_weight(FontWeight::MEDIUM)
-                    .chat_cursor_pointer()
-                    .hover(|style| style.bg(p.foreground.opacity(0.12)))
-                    .child("Undo")
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.invoke(command.clone(), cx);
-                    })),
-            )
-            .child(
-                div()
-                    .id("work-dock-undo-dismiss")
-                    .role(gpui::Role::Button)
-                    .aria_label("Dismiss")
-                    .flex_shrink_0()
-                    .size(px(20.0 * s))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .rounded(px(5.0 * s))
-                    .text_color(p.muted)
-                    .chat_cursor_pointer()
-                    .hover(|style| {
-                        style
-                            .bg(p.foreground.opacity(0.08))
-                            .text_color(p.foreground)
-                    })
-                    .child(svg().path("titlebar/x.svg").size(px(12.0 * s)))
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.invoke(dismiss.clone(), cx);
-                    })),
-            )
-            .into_any_element()
     }
 
     /// The dock's Snoozed row under the others (Q4686 A): "Snoozed" and its count badge with a
@@ -1155,12 +960,11 @@ impl NativeChatView {
 
     /// The collapsible Recent drawer below Snoozed: combines recently handled asks/approvals/to-dos
     /// and work finished in the latest turn, newest first, with the Done check icon, "Recent",
-    /// count badge, "Archive all" on the expanded header, and chevron. Collapsed by default;
-    /// migrates legacy Done/Handled open state on read and toggle.
+    /// count badge and chevron. Collapsed by default; migrates legacy Done/Handled open state on
+    /// read and toggle.
     fn work_dock_recent(
         &self,
         recent: &[Value],
-        archive_all: Option<&Value>,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
@@ -1171,7 +975,6 @@ impl NativeChatView {
         let (done_icon, done_color) = status_look("finished", p);
         let green: gpui::Hsla = gpui::rgb(0x2fa865).into();
         let red: gpui::Hsla = gpui::rgb(crate::app::native_sidebar::status::APPROVAL_COLOR).into();
-        let archive_all_cmd = archive_all.cloned();
         let line = div()
             .id("work-dock-recent")
             .role(gpui::Role::Button)
@@ -1213,35 +1016,6 @@ impl NativeChatView {
                         s,
                     )),
             )
-            .when_some(archive_all_cmd.filter(|_| open), |row, command| {
-                row.child(
-                    div()
-                        .id("work-dock-recent-archive-all")
-                        .role(gpui::Role::Button)
-                        .aria_label(format!("Archive all, {}", recent.len()))
-                        .flex_shrink_0()
-                        .px(px(8.0 * s))
-                        .py(px(1.0 * s))
-                        .rounded(px(6.0 * s))
-                        .border_1()
-                        .border_color(p.foreground.opacity(0.10))
-                        .bg(p.foreground.opacity(0.04))
-                        .text_size(px(PROSE_SIZE * 0.90 * s))
-                        .line_height(px((PROSE_LINE_HEIGHT - 4.0) * s))
-                        .text_color(p.foreground)
-                        .chat_cursor_pointer()
-                        .hover(|style| style.bg(p.foreground.opacity(0.09)))
-                        .tooltip(|window, cx| {
-                            gpui_component::tooltip::Tooltip::new("Archive all recent items")
-                                .build(window, cx)
-                        })
-                        .child("Archive all")
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            cx.stop_propagation();
-                            this.invoke(command.clone(), cx);
-                        })),
-                )
-            })
             .child(
                 svg()
                     .path("titlebar/chevron-down.svg")
@@ -1410,7 +1184,12 @@ impl NativeChatView {
         } - 12.0
             - 5.0
             - 8.0
-            - if collapsible { 24.0 + 6.0 } else { 0.0 };
+            - if collapsible { 24.0 + 6.0 } else { 0.0 }
+            - if self.snapshot["workDock"]["clearInbox"].is_object() {
+                crate::app::window::page_band_geometry::CONTROL_SIZE + 6.0
+            } else {
+                0.0
+            };
         let bar_font = crate::assets::chat_working::VISUAL.font_size;
         let inbox_label_width = 14.0 + 5.0 + dock_text_width(INBOX_NAME, bar_font, p, cx) + 10.0;
         let named_width: f32 = counts
@@ -1632,7 +1411,8 @@ impl NativeChatView {
             )
             .when(status_card.is_none(), |head| {
                 head.child(div().flex_1().min_w(px(8.0 * s)))
-            });
+            })
+            .children(self.work_dock_header_menu(p, cx));
         if collapsible {
             head = head
                 .role(gpui::Role::Button)
@@ -1681,6 +1461,87 @@ impl NativeChatView {
                 }));
         }
         head.into_any_element()
+    }
+
+    /// The Inbox header's ⋯: the round control the Work item pop-up and the page window wear
+    /// (page_controls.rs `control_button`), with one item, Clear Inbox, and the line under it saying
+    /// what it marks and that nothing is deleted (gx-chat-core `clear_inbox_hint`). It shows only
+    /// while some row asks nothing. Its Undo is the toast (`sync_inbox_undo_toast`).
+    ///
+    /// CDXC:Coordinators 2026-11-25 DECISION:
+    /// User (Q4932): Archive all moves to a new ⋯ in the Inbox header; "pls name it correct so
+    /// people understand wtf is archive and that it wont get rid of ones that are seen and it should
+    /// have undo button also when i click this to undo all the ones archived pls". The item is
+    /// "Clear Inbox", its line names what it marks and that seen pages stay in Resources.
+    fn work_dock_header_menu(
+        &self,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let clear = self.snapshot["workDock"]["clearInbox"].clone();
+        if !clear.is_object() {
+            return None;
+        }
+        let controls = crate::app::window::page_controls::ControlGlass::for_theme(p.light);
+        let button = crate::app::window::page_controls::control_button(
+            "work-dock-head-more",
+            "titlebar/dots.svg",
+            "More Inbox actions",
+            controls,
+        )
+        .on_click(
+            cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                cx.stop_propagation();
+                let rows = vec![json!({
+                    "label": text(&clear, "label"),
+                    "description": text(&clear, "hint"),
+                    "wrap": true,
+                    "iconPath": "titlebar/check.svg",
+                    "command": clear["command"],
+                })];
+                let in_main = this
+                    .open_main_window(cx)
+                    .is_none_or(|main| main == window.window_handle());
+                if in_main {
+                    this.show_chat_menu_at(rows, event.position(), 300.0, window, cx);
+                } else {
+                    this.show_chat_menu_in_window_at(rows, event.position(), 300.0, window, cx);
+                }
+            }),
+        );
+        Some(div().flex_shrink_0().child(button).into_any_element())
+    }
+
+    /// Raises the app's toast with Undo (window/toast.rs `GpuiAppToastAction::ChatUndo`) once for
+    /// each new press of Seen, Not needed or Clear Inbox (gx-chat-core `workDock.undoToast`), for
+    /// as long as the core keeps the undo. The host finds this view by its session and makes the
+    /// toast's Undo run the core's command here, so it restores exactly what that press hid and
+    /// takes back the note for the agent.
+    ///
+    /// CDXC:Coordinators 2026-11-25 DECISION:
+    /// User (Q4931): undo with a toast; of the full-width "Archived N · Undo" row: "i dont want to
+    /// see that undo item when i archive something please it's too big ... the placement of that
+    /// undo list item is bad too". The row is gone; the small toast at the bottom of the window
+    /// says what was marked, with Undo, for a few seconds.
+    pub(super) fn sync_inbox_undo_toast(&self, before: &Value, cx: &mut Context<Self>) {
+        let undo = &self.snapshot["workDock"]["undoToast"];
+        let id = &undo["id"];
+        if !undo.is_object() || id.is_null() || *id == before["workDock"]["undoToast"]["id"] {
+            return;
+        }
+        let shown_ms = undo["remainingMs"].as_u64().unwrap_or(0);
+        if shown_ms < 500 {
+            return;
+        }
+        cx.emit(super::state::NativeChatEvent::Host(json!({
+            "type": "toast",
+            // One id: the core keeps one undo, so a newer press's toast takes the older's place.
+            "toastId": "inbox-undo",
+            "level": "success",
+            "title": text(undo, "label"),
+            "durationMs": shown_ms,
+            "chatUndo": undo["command"],
+        })));
     }
 
     /// One dock row: its mark, its question on one line, its answers and Reply beside it (folded
@@ -1743,8 +1604,8 @@ impl NativeChatView {
         )
     }
 
-    /// A bundled same-turn page burst row (Q4683 A): stack icon, "N pages from last turn", Expand
-    /// and Read all buttons, and indented sub-rows for each page when expanded.
+    /// A bundled same-turn page burst row (Q4683 A): stack icon, "N pages from last turn", Expand,
+    /// the age with its hover ⋯ (All seen), and indented sub-rows for each page when expanded.
     fn dock_page_bundle_row(
         &self,
         row: &Value,
@@ -1759,7 +1620,7 @@ impl NativeChatView {
         let unread = row["unread"] == true;
         let bundle_key = format!("dock-bundle:{key}");
         let open = self.expanded.contains(&bundle_key);
-        let dismiss = row["dismiss"].clone();
+        let hover = gpui::SharedString::from(format!("dock-row-hover:{key}"));
         let pages: Vec<Value> = row["bundlePages"].as_array().cloned().unwrap_or_default();
         let pink: gpui::Hsla = gpui::rgb(crate::app::native_sidebar::status::QUESTION_COLOR).into();
         let toggle_key_btn = bundle_key.clone();
@@ -1821,41 +1682,13 @@ impl NativeChatView {
                                 }
                                 cx.notify();
                             })),
-                    )
-                    .when(dismiss.is_object(), |controls| {
-                        controls.child(
-                            div()
-                                .id(gpui::SharedString::from(format!(
-                                    "dock-bundle-read-all:{key}"
-                                )))
-                                .role(gpui::Role::Button)
-                                .px(px(8.0 * s))
-                                .py(px(2.0 * s))
-                                .rounded(px(6.0 * s))
-                                .border_1()
-                                .border_color(p.foreground.opacity(0.10))
-                                .bg(p.foreground.opacity(0.04))
-                                .text_size(px(PROSE_SIZE * 0.90 * s))
-                                .text_color(p.foreground)
-                                .chat_cursor_pointer()
-                                .hover(|style| style.bg(p.foreground.opacity(0.09)))
-                                .tooltip(|window, cx| {
-                                    gpui_component::tooltip::Tooltip::new("Archive all pages")
-                                        .keys(super::composer::hotkey_chord(Some("inboxMarkRead")))
-                                        .build(window, cx)
-                                })
-                                .child("Archive all")
-                                .on_click(cx.listener(move |this, _, _, cx| {
-                                    cx.stop_propagation();
-                                    this.invoke(dismiss.clone(), cx);
-                                })),
-                        )
-                    }),
+                    ),
             )
-            .when(!age.is_empty(), |row_el| {
-                row_el.child(div().flex_shrink_0().text_color(p.muted).child(age))
-            });
+            // All seen is in the ⋯ that takes the age's place on hover, as on every other row
+            // (`row_age_menu`, gx-chat-core work_cards.rs Q4917).
+            .child(self.row_age_menu(&key, &age, &hover, row, p, cx));
         let press = Self::dock_row_press(&key, line, p)
+            .group(hover.clone())
             .when(focused, |el| {
                 el.bg(pink.opacity(if p.light { 0.10 } else { 0.14 }))
                     .border_l_2()
@@ -2073,14 +1906,6 @@ impl NativeChatView {
             self.dock_context_icon(&key, row, p, cx)
         };
         let reply_width = reply_width + context_button.as_ref().map_or(0.0, |_| icon_width + 6.0);
-        // Mark as read (an open envelope) leads a dock row's buttons, on any row with a Dismiss or
-        // Mark as read in its menu (`dock_mark_read_icon`). A Work panel card keeps its own ⋯.
-        let mark_read = if look.age.is_some() || look.buttons.is_some() || settled {
-            None
-        } else {
-            self.dock_mark_read_icon(&key, row, p, cx)
-        };
-        let reply_width = reply_width + mark_read.as_ref().map_or(0.0, |_| icon_width + 6.0);
         let all_width = buttons_width(&widths) + reply_width;
         // The answers and Reply are one line, never wrapped: when they do not all fit beside the
         // title, the answers fold into one Choose an answer dropdown in their place. Measured, with
@@ -2101,7 +1926,7 @@ impl NativeChatView {
             && !answers.is_empty()
             && buttons_width(&widths) > choose_width
             && all_width > beside_room;
-        let mut buttons: Vec<AnyElement> = mark_read.into_iter().collect();
+        let mut buttons: Vec<AnyElement> = Vec::new();
         buttons.extend(match &action {
             _ if look.buttons.is_some() => look.buttons.into_iter().collect::<Vec<_>>(),
             Some(_) => self
@@ -3703,43 +3528,24 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
-        // A row for what the newest turn finished asks nothing: its hover button is Mark as read
-        // itself (the app's check, as a notification card's), not the ⋯. It runs the row's own
-        // silent `dismissWorkDockCard`, the same as its right-click menu's Mark as read: the row
-        // leaves the dock, the agent is sent nothing and the item stays Done in the Work panel.
-        //
-        // CDXC:Coordinators 2026-11-18 DECISION:
-        // User, of a Done row in the dock: "i need a button on the right there to mark this one as
-        // read pls. since it's just telling me something is done but i saw it so i wanna get rid
-        // of this. should be an icon button on the right side shown only when hovered".
-        let mark_read = row["kind"] == "finished" && row["dismiss"].is_object();
-        let pinned = !mark_read
-            && self
-                .board
-                .dock_menu_row
-                .as_ref()
-                .is_some_and(|(row, menu)| {
-                    row == key
-                        && self
-                            .option_menu
-                            .as_ref()
-                            .is_some_and(|open| open.entity_id() == *menu)
-                });
+        let pinned = self
+            .board
+            .dock_menu_row
+            .as_ref()
+            .is_some_and(|(row, menu)| {
+                row == key
+                    && self
+                        .option_menu
+                        .as_ref()
+                        .is_some_and(|open| open.entity_id() == *menu)
+            });
         let row = row.clone();
         let menu_key = key.to_owned();
-        let (button_id, label, icon) = if mark_read {
-            (
-                format!("dock-row-read:{key}"),
-                "Archive",
-                "titlebar/check.svg",
-            )
-        } else {
-            (
-                format!("dock-row-menu:{key}"),
-                "More actions",
-                "titlebar/dots.svg",
-            )
-        };
+        let (button_id, label, icon) = (
+            format!("dock-row-menu:{key}"),
+            "More actions",
+            "titlebar/dots.svg",
+        );
         div()
             .relative()
             .flex_shrink_0()
@@ -3781,10 +3587,6 @@ impl NativeChatView {
                     .on_click(
                         cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
                             cx.stop_propagation();
-                            if mark_read {
-                                this.invoke(row["dismiss"].clone(), cx);
-                                return;
-                            }
                             let rows = this.row_menu(&row, cx);
                             this.show_dock_row_menu(rows, event.position(), window, cx);
                             this.board.dock_menu_row = this
@@ -3932,38 +3734,6 @@ impl NativeChatView {
                     .line_height(px(PROSE_LINE_HEIGHT * s))
                     .text_color(p.muted)
                     .child(right),
-            );
-        }
-        // A finished card in the dock goes away with its check (gx-chat-core `dock`). It asks no
-        // question, so it reads Archive, as the dock's finished row does; it sends nothing.
-        let dismiss = card["dismiss"].clone();
-        if dismiss.is_object() {
-            top = top.child(
-                div()
-                    .id(gpui::SharedString::from(format!("work-dismiss:{key}")))
-                    .role(gpui::Role::Button)
-                    .aria_label("Archive")
-                    .flex_shrink_0()
-                    .size(px(20.0 * s))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .rounded(px(5.0 * s))
-                    .chat_cursor_pointer()
-                    .hover(|style| style.bg(p.foreground.opacity(0.08)))
-                    .tooltip(|window, cx| {
-                        gpui_component::tooltip::Tooltip::new("Archive").build(window, cx)
-                    })
-                    .child(
-                        svg()
-                            .path("titlebar/check.svg")
-                            .size(px(12.0 * s))
-                            .text_color(p.muted),
-                    )
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        cx.stop_propagation();
-                        this.invoke(dismiss.clone(), cx);
-                    })),
             );
         }
         let mut column = div()

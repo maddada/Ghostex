@@ -71,7 +71,6 @@ pub const VIEW_SCOPED_HOTKEY_IDS: &[&str] = &[
     "inboxNextItem",
     "inboxPreviousItem",
     "inboxOpenItem",
-    "inboxMarkRead",
     "inboxSnooze",
     // Active only while a switch-request toast is on screen, so Cmd+Shift+J still focuses the
     // sidebar whenever no switch-request toast is visible.

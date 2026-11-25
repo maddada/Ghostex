@@ -106,9 +106,6 @@ pub struct PanelsState {
     /// The coordinator board's groups the reader folded or unfolded against their default (Done and
     /// Ideas start folded), per chat (`extras::coordinator_board`).
     pub board_toggled: std::collections::BTreeSet<String>,
-    /// The finished-work cards the reader dismissed from the dock above the chat box, by card key
-    /// (`extras::work_cards::dock`).
-    pub work_dock_dismissed: std::collections::BTreeSet<String>,
     /// Work asks snoozed here, by card key, until when (epoch ms): shown at once, before gxserver's
     /// `snoozedUntil` comes back. A negative value is an Unsnooze sent from here, held until the
     /// minus of it (`extras::work_cards::snoozed`).
@@ -150,7 +147,8 @@ pub struct PanelsState {
     pub board_focus: Option<(String, u64)>,
     /// The Work panel group briefly highlighted when a count in the Inbox header was clicked (Q4681).
     pub board_focus_group: Option<String>,
-    /// What the last "Mark all read" cleared, kept briefly so Undo can restore every item (Q4685 A).
+    /// What the last Seen, Not needed or Clear Inbox press cleared, kept for its Undo toast so Undo
+    /// brings back exactly those (`extras::actions`, `MarkAllInboxRead`).
     pub last_mark_all_read: Option<MarkAllReadUndo>,
     /// "Don't show again" was clicked on the coordinator tips here: the pill goes before gxserver
     /// confirms (`extras::coordinator_intro`), and comes back if it refuses.
@@ -190,7 +188,6 @@ impl Default for PanelsState {
             secret_request_errors: Default::default(),
             background_tasks_open: false,
             board_toggled: Default::default(),
-            work_dock_dismissed: Default::default(),
             work_snoozed: Default::default(),
             work_dock_hidden: None,
             board_expanded: Default::default(),
@@ -219,13 +216,18 @@ impl Default for PanelsState {
     }
 }
 
-/// Snapshot of items cleared by "Mark all read" so Undo can restore them cleanly (Q4685 A).
+/// What one Seen, Not needed or Clear Inbox press cleared, so its Undo toast restores exactly
+/// those: each page with the name the agent was going to be told (`later::dismissal_name`), and
+/// each to-do by its tag.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MarkAllReadUndo {
-    pub page_ids: Vec<String>,
+    /// Which press this is, so a renderer shows one toast per press.
+    pub id: u64,
+    /// `(page id, dismissal name)`.
+    pub pages: Vec<(String, String)>,
     pub todo_tags: Vec<String>,
-    pub finished_keys: Vec<String>,
-    pub count: usize,
+    /// What the toast says ("Marked 2 pages seen").
+    pub label: String,
     pub expires_at_ms: i64,
 }
 

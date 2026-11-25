@@ -77,6 +77,9 @@ pub(super) fn width_for_details(
     width.max(natural_width(&detailed, appearance, cx))
 }
 
+/// How wide a `wrap` row's line may make the menu before it wraps (the Inbox header's Clear Inbox).
+const WRAP_LINE_MAX: f32 = 280.0;
+
 /// The width that shows every row of `rows` unclipped, with no floor or ceiling.
 fn natural_width(rows: &[Value], appearance: &ChatAppearance, cx: &App) -> f32 {
     let m = MenuMetrics::CONTEXT;
@@ -123,9 +126,12 @@ fn natural_width(rows: &[Value], appearance: &ChatAppearance, cx: &App) -> f32 {
             } else {
                 0.0
             };
-            // A switch row's line wraps (`measure_rows`), so it never widens the menu.
+            // A switch row's line wraps (`measure_rows`), so it never widens the menu. A `wrap`
+            // row's line wraps too, past `WRAP_LINE_MAX`, so it widens the menu only up to there.
             let description = if row["toggle"] == true {
                 0.0
+            } else if row["wrap"] == true {
+                description.min(WRAP_LINE_MAX)
             } else {
                 description
             };
@@ -215,7 +221,10 @@ pub(super) fn measure_rows(
             // A greyed row's line is how to turn it on, so it is read whole (chat core's
             // `unavailable_modes`).
             // A switch row's line says what the switch is waiting on, so it is read whole too.
-            let wraps = heading || row["disabled"] == true || row["toggle"] == true;
+            // A `wrap` row's line explains what the row does (the Inbox header's Clear Inbox), so
+            // it is read whole too.
+            let wraps =
+                heading || row["disabled"] == true || row["toggle"] == true || row["wrap"] == true;
             let description_height = if row["description"].is_string() && !wraps {
                 // A row's subtitle is one truncated 16px line under a 2px gap (`render.rs`). Its
                 // shaped text is one wrapped line whose height counts every wrap, so a subtitle
