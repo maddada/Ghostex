@@ -8,11 +8,13 @@
 //! `CDXC:SessionChat 2026-10-11 DECISION` on `file_change_card` there); this file only lays it out.
 //! The phone draws the same card in `apps/mobile/app/src/chat/native/transcript/FileChanges.tsx`.
 
-use super::cards::SINGLE_LINE_CARD;
+use super::cards::{SINGLE_LINE_CARD, TITLE_ROW_GAP, card_hover_fill};
 use super::chat_text_look::PROSE_SIZE;
 use super::disclosure_body::{DisclosureRail, disclosure_body};
 use super::quiet_work::{QuietEdit, file_names};
-use super::tool_run::{DESCRIBED_LABEL_OPACITY, ROW_PAD_X, TILE};
+use super::tool_run::{
+    DESCRIBED_LABEL_OPACITY, ROW_PAD_X, TILE, boxed_card_body, boxed_header_corners,
+};
 use super::{
     appearance::{ChatAppearance, ChatFilledButton as _},
     state::NativeChatView,
@@ -218,6 +220,7 @@ impl NativeChatView {
                 rows.push(self.disclosure_body_motion(&simple_key, motion, 8.0 * p.scale, card));
                 return rows;
             }
+            let boxed = self.quiet_boxed_here();
             rows.push(self.files_fold_row(
                 &simple_key,
                 &id,
@@ -225,6 +228,7 @@ impl NativeChatView {
                 &message["fileCard"],
                 &files,
                 simple_expanded,
+                boxed,
                 p,
                 cx,
             ));
@@ -304,13 +308,17 @@ impl NativeChatView {
             files_card,
             files,
             expanded,
+            false,
             p,
             cx,
         ))
     }
 
     /// The "Edited N files" fold row styled like the tool and thought rows around it, expanding on
-    /// a rail from the pencil tile's centre into per-file rows in the same style.
+    /// a rail from the pencil tile's centre into per-file rows in the same style. `boxed` draws it
+    /// as an opened Quiet View line's one-line card instead.
+    ///
+    /// CDXC:SessionChat 2026-11-25 DECISION: User, of an opened Working line where the thoughts and a background command were one-line cards and the "Edited 1 file" rows between them were bare tool rows: "file editing looks different from the others pls fix". Inside an opened Quiet View line the fold is the same `SINGLE_LINE_CARD` as the "N tool calls" and thought cards there (`boxed_card_heading`, `boxed_thinking_card`): its shell, height, inset and title type, the pencil in the card's tile, the +N −N counts and the check where those cards keep their pill; opened, its files sit under the card's hairline with no rail, as the tool card's calls do. A finished turn's "N files changed" fold stays a row like the log rows beside it. The phone matches (`FileChanges.tsx`).
     #[allow(clippy::too_many_arguments)]
     fn files_fold_row(
         &mut self,
@@ -320,17 +328,20 @@ impl NativeChatView {
         summary: &Value,
         files: &[Value],
         expanded: bool,
+        boxed: bool,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
         let palette = Palette::of(p);
         let motion = self.disclosure_frame(key, expanded, cx);
+        let body_shown = expanded || motion.is_some();
         let any_failed = files.iter().any(|file| file["failed"] == true);
         let all_failed = !files.is_empty() && files.iter().all(|file| file["failed"] == true);
         let added = summary["added"].as_u64().unwrap_or(0);
         let removed = summary["removed"].as_u64().unwrap_or(0);
         let toggle_key = key.to_string();
+        let shape = &*SINGLE_LINE_CARD;
         let trigger = div()
             .id(SharedString::from(key.to_string()))
             .role(gpui::Role::Button)
@@ -341,42 +352,65 @@ impl NativeChatView {
             .items_center()
             .min_w_0()
             .w_full()
-            .gap(px(8.0 * s))
-            .px(px(ROW_PAD_X * s))
-            .py(px(5.0 * s))
-            .rounded(px(8.0 * s))
-            .text_size(px(PROSE_SIZE * s))
             .when(all_failed, |this| this.bg(p.error().opacity(0.06)))
-            .chat_cursor_pointer()
-            .hover(|style| style.bg(p.foreground.opacity(0.03)))
+            .chat_cursor_pointer();
+        let trigger = if boxed {
+            let hover = card_hover_fill(p);
+            boxed_header_corners(
+                trigger
+                    .gap(px(TITLE_ROW_GAP * s))
+                    .px(px(shape.padding_x * s))
+                    .h(px(shape.header_height(s)))
+                    .text_color(p.foreground)
+                    .hover(move |style| style.bg(hover)),
+                body_shown,
+                p,
+            )
+            .child(shape.tile("titlebar/pencil.svg", p))
+            .child(
+                shape
+                    .title(div().flex_1().min_w_0().truncate(), p)
+                    .when(all_failed, |this| this.text_color(p.error()))
+                    .child(self.find_label(key, label)),
+            )
+        } else {
+            trigger
+                .gap(px(8.0 * s))
+                .px(px(ROW_PAD_X * s))
+                .py(px(5.0 * s))
+                .rounded(px(8.0 * s))
+                .text_size(px(PROSE_SIZE * s))
+                .hover(|style| style.bg(p.foreground.opacity(0.03)))
+                .child(
+                    div()
+                        .size(px(TILE * s))
+                        .rounded(px(6.0 * s))
+                        .bg(p.foreground.opacity(0.05))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .flex_shrink_0()
+                        .child(icon("titlebar/pencil.svg", 13.0 * s, p.muted)),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .font_weight(FontWeight::NORMAL)
+                        .text_size(px(PROSE_SIZE * s))
+                        .text_color(if all_failed {
+                            p.error()
+                        } else {
+                            p.prose.opacity(DESCRIBED_LABEL_OPACITY)
+                        })
+                        .child(self.find_label(key, label)),
+                )
+        };
+        let trigger = trigger
             .on_click(cx.listener(move |view, _, _, cx| {
                 view.toggle_marker_disclosure(toggle_key.clone(), expanded, cx);
             }))
-            .child(
-                div()
-                    .size(px(TILE * s))
-                    .rounded(px(6.0 * s))
-                    .bg(p.foreground.opacity(0.05))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .flex_shrink_0()
-                    .child(icon("titlebar/pencil.svg", 13.0 * s, p.muted)),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .truncate()
-                    .font_weight(FontWeight::NORMAL)
-                    .text_size(px(PROSE_SIZE * s))
-                    .text_color(if all_failed {
-                        p.error()
-                    } else {
-                        p.prose.opacity(DESCRIBED_LABEL_OPACITY)
-                    })
-                    .child(self.find_label(key, label)),
-            )
             .when(added + removed > 0, |this| {
                 this.child(counts(added, removed, &palette, s))
             })
@@ -389,6 +423,43 @@ impl NativeChatView {
                 13.0 * s,
                 if any_failed { p.error() } else { p.success() },
             ));
+        let review_paths: Vec<String> = summary["paths"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|path| path.as_str().map(str::to_string))
+            .collect();
+
+        if boxed {
+            let mut parts = vec![trigger.into_any_element()];
+            if body_shown {
+                let entry_rows: Vec<AnyElement> = files
+                    .iter()
+                    .enumerate()
+                    .map(|(index, file)| {
+                        self.file_fold_entry_row(
+                            stack_id,
+                            index,
+                            file,
+                            &review_paths,
+                            &palette,
+                            p,
+                            cx,
+                        )
+                    })
+                    .collect();
+                let body = boxed_card_body(entry_rows, p);
+                parts.push(self.disclosure_body_motion(key, motion, 0.0, body));
+            }
+            let column = div()
+                .w_full()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .overflow_hidden()
+                .children(parts);
+            return shape.shell(column, p).into_any_element();
+        }
 
         let mut group = div()
             .flex()
@@ -397,13 +468,7 @@ impl NativeChatView {
             .min_w_0()
             .gap(px(4.0 * s))
             .child(trigger);
-        if expanded || motion.is_some() {
-            let review_paths: Vec<String> = summary["paths"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(|path| path.as_str().map(str::to_string))
-                .collect();
+        if body_shown {
             let entry_rows: Vec<AnyElement> = files
                 .iter()
                 .enumerate()

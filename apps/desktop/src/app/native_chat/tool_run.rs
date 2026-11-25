@@ -58,6 +58,23 @@ pub(super) fn boxed_header_corners<E: gpui::Styled>(
         element.rounded(radius)
     }
 }
+
+/// The rows an opened Quiet View card shows under its header: full width under the card's
+/// hairline, padded as the tool card's rows are, with no rail (the "N tool calls" card, a Working
+/// thought's calls, the "Edited N files" card's files).
+pub(super) fn boxed_card_body(rows: Vec<AnyElement>, p: &ChatAppearance) -> AnyElement {
+    div()
+        .w_full()
+        .min_w_0()
+        .flex()
+        .flex_col()
+        .gap(px(ROW_GAP * p.scale))
+        .p(px(BOXED_BODY_PAD * p.scale))
+        .border_t_1()
+        .border_color(super::cards::SINGLE_LINE_CARD.hairline(p))
+        .children(rows)
+        .into_any_element()
+}
 /// The glyph tile's side.
 pub(super) const TILE: f32 = 22.0;
 /// A described tool row's label: the agent's prose colour, 20% dimmer.
@@ -265,17 +282,7 @@ impl NativeChatView {
                 // gone". Only this boxed card drops it; every other open tool group keeps its
                 // rail (`disclosure_body`). The phone matches (ToolRows.tsx).
                 let body = if card_header {
-                    div()
-                        .w_full()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .gap(px(ROW_GAP * p.scale))
-                        .p(px(BOXED_BODY_PAD * p.scale))
-                        .border_t_1()
-                        .border_color(super::cards::SINGLE_LINE_CARD.hairline(p))
-                        .children(body)
-                        .into_any_element()
+                    boxed_card_body(body, p)
                 } else {
                     disclosure_body(
                         p,
@@ -715,19 +722,7 @@ impl NativeChatView {
             return None;
         }
         let rows = self.tool_row_list(&id, tools, &visible, p, cx);
-        Some(
-            div()
-                .w_full()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .gap(px(ROW_GAP * p.scale))
-                .p(px(BOXED_BODY_PAD * p.scale))
-                .border_t_1()
-                .border_color(super::cards::SINGLE_LINE_CARD.hairline(p))
-                .children(rows)
-                .into_any_element(),
-        )
+        Some(boxed_card_body(rows, p))
     }
 
     /// A folded or opened group's "3 tool calls" as the header of its Quiet View card, filling it.
