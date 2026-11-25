@@ -396,7 +396,14 @@ Native mode adoption tracking (no PII: closed enums and counts only).
 - `session_mode.daily_rollup`: daily counts of live sessions by agent family x mode plus switch
   counts by direction x entry point since the last rollup.
 */
-pub const NATIVE_AGENT_FAMILIES: &[&str] = &["antigravity", "claude", "codex", "grok", "hermes"];
+pub const NATIVE_AGENT_FAMILIES: &[&str] = &[
+    "antigravity",
+    "claude",
+    "codex",
+    "grok",
+    "hermes",
+    "opencode",
+];
 pub const SESSION_MODES: &[&str] = &["native", "terminal"];
 pub const SESSION_MODE_STATE_TRIGGERS: &[&str] = &["app_start", "changed"];
 pub const SESSION_MODE_SWITCH_DIRECTIONS: &[&str] = &["native_to_terminal", "terminal_to_native"];

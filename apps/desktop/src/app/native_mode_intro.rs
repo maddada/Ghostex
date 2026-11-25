@@ -12,18 +12,25 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use gpui::{AppContext as _, Context};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
-use crate::GhostexGpuiApp;
 use crate::app::model::GpuiAppModalKind;
 use crate::app::window::{
-    GpuiNativeModeIntroModalWindow, NATIVE_MODE_INTRO_MODAL_INITIAL_HEIGHT,
-    NATIVE_MODE_INTRO_MODAL_WIDTH, NativeModeIntroCommand, NativeModeIntroHost,
-    NativeModeIntroModalConfig,
+    GpuiNativeModeIntroModalWindow, NativeModeIntroCommand, NativeModeIntroHost,
+    NativeModeIntroModalConfig, NATIVE_MODE_INTRO_MODAL_INITIAL_HEIGHT,
+    NATIVE_MODE_INTRO_MODAL_WIDTH,
 };
+use crate::GhostexGpuiApp;
 
 const SETTINGS_INTRO_KEY: &str = "nativeModeIntro";
-const NATIVE_FAMILIES: [&str; 5] = ["antigravity", "claude", "codex", "grok", "hermes"];
+const NATIVE_FAMILIES: [&str; 6] = [
+    "antigravity",
+    "claude",
+    "codex",
+    "grok",
+    "hermes",
+    "opencode",
+];
 
 /// Opened in this run already (by any window), so a second window never opens it twice before the
 /// settings file catches up.
