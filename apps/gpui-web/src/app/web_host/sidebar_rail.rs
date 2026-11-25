@@ -1,6 +1,7 @@
 //! The rail's items in the web build: what a page can open. The desktop's are in
 //! apps/desktop/src/app/sidebar_rail/host.rs; a page has no Claude or Grok embed, no Hubs, no
-//! side panel views and no bell, so those items do not apply here.
+//! side panel views and no bell, so those items do not apply here. Nor do Settings and Theme: a
+//! page opens no Settings window and no Theme editor, so the rail's gear and those ⋯ rows stay out.
 
 use gpui::Window;
 use serde_json::json;

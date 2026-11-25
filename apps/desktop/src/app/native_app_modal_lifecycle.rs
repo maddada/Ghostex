@@ -129,10 +129,23 @@ impl GhostexGpuiApp {
         } else if kind == GpuiAppModalKind::ThemeEditor {
             // Compact floating Theme Editor opens near the right edge of the main window so the
             // user can see the sidebar and work area update live while dragging it anywhere.
-            let origin = gpui::point(
-                self.main_window_bounds.right() - window_size.width - px(16.0),
-                self.main_window_bounds.top() + px(48.0),
-            );
+            // From the rail (its ⋯ menu's Theme row or a pinned Theme button) it opens beside that
+            // button instead, its top level with it, kept 8pt inside the window (CDXC:Sidebar
+            // 2026-11-25 on gx-core `RAIL_MENU_GROUPS`).
+            let main = self.main_window_bounds;
+            let origin = match self.sidebar_rail.theme_editor_anchor.take() {
+                Some(anchor) => {
+                    let lowest = main.bottom() - window_size.height - px(8.0);
+                    gpui::point(
+                        main.left() + anchor.right() + px(6.0),
+                        (main.top() + anchor.top()).min(lowest).max(main.top() + px(8.0)),
+                    )
+                }
+                None => gpui::point(
+                    main.right() - window_size.width - px(16.0),
+                    main.top() + px(48.0),
+                ),
+            };
             self.gpui_native_modal_frame_on_screen(gpui::Bounds::new(origin, window_size), cx)
         } else {
             self.gpui_native_modal_frame_on_screen(

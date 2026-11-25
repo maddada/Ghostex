@@ -538,6 +538,27 @@ pub fn drop_retired_rail_pins(settings: &mut serde_json::Map<String, serde_json:
     pins.len() != before
 }
 
+/// Pins Settings (the gear at the rail's very bottom) on saved rail pins that lack it. Returns
+/// whether it changed anything; a file without saved pins already gets it from the defaults.
+///
+/// CDXC:Sidebar 2026-11-25 DECISION:
+/// The gear is on by default (gx-core `RAIL_FOOT_ITEM`), but a saved `sidebarRailPins` cannot tell
+/// a gear never offered from one unpinned on purpose. The desktop runs this once, behind its own
+/// marker file, at start-up (`migrate_sidebar_rail_settings_once`), so everyone gets the gear once
+/// and unpinning it afterwards sticks.
+pub fn pin_settings_on_saved_rail_pins(
+    settings: &mut serde_json::Map<String, serde_json::Value>,
+) -> bool {
+    let Some(serde_json::Value::Array(pins)) = settings.get_mut("sidebarRailPins") else {
+        return false;
+    };
+    if pins.iter().any(|pin| pin.as_str() == Some("settings")) {
+        return false;
+    }
+    pins.push(serde_json::Value::String("settings".to_string()));
+    true
+}
+
 /// The look settings whose default changed on 2026-11-20 (the user's own dark look became the
 /// default), each with the default it had before.
 pub const DARK_LOOK_2026_11_20_OLD_DEFAULTS: &[(&str, J)] = &[

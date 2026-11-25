@@ -728,8 +728,10 @@ The rail is a narrow column of icons at the window's left edge, left of the
 sidebar. It stays when you hide the sidebar. By default it holds Search,
 Main Hub, Agents Hub, All Automations, Hermes, Claude and Grok Bot (each only
 while its feature is on), then ⋯. The rail is for agents, hubs and your own links:
-its ⋯ menu, which opens right beside ⋯, lists those, Commands, Voice Call,
-Links and Layout (Add separator / Add separator at bottom). The side panel views (Files, Changes, Browser, Project
+its ⋯ menu, which opens right beside ⋯, lists those, Commands, Settings, Voice Call,
+Links, Layout (Add separator / Add separator at bottom) and, last, Appearance
+with Theme. Theme opens the compact Theme editor right beside ⋯ (beside its own
+icon when you pin Theme to the rail); drag it anywhere from there. The side panel views (Files, Changes, Browser, Project
 Board, Dev servers, Resources, Extensions) are not on the rail, not even while
 one is open, and Notifications is not either: the bell is in the sidebar's top
 bar. Views or a bell pinned by an earlier version come off the rail once.
@@ -753,7 +755,11 @@ an account is starred): one click pins or unpins the usage tiles at the bottom
 of the sidebar, and pointing at it shows them there while they are not pinned
 (they stay while you move onto them, and hide again when the pointer leaves).
 With the rail on, the pinned tiles have no hide chevron above them; use the
-rail's switch or right-click them for Hide account usage. With the rail on,
+rail's switch or right-click them for Hide account usage. The very last button
+on the rail, under the usage switch, is the Settings gear, which opens Settings
+like the ☰ menu's Settings row. It is on by default and always stays at the
+bottom; right-click it for Unpin from rail, and pin it again from Settings in
+⋯. With the rail on,
 Toggle sidebar is the rail's top button, above Search, whether the sidebar is
 shown, hidden or sliding out (on macOS, Windows and Linux), and the sidebar's
 top bar and the work area header have none. On macOS the window buttons sit at
@@ -782,7 +788,8 @@ it because of this one. To see it again (for a check or a screenshot),
 `ghostex debug show-modal rail-intro` opens it on this computer's window as a
 preview: Switch only flips the pop-up, and nothing is saved. The pinned icons are saved per computer
 (`sidebarRailPins`). The web app shows the rail with the items a browser can
-open; pinning, dragging and moving icons are on the computer only.
+open (no Settings gear and no Theme row, since a browser page has neither
+window); pinning, dragging and moving icons are on the computer only.
 
 ### Project and Unified sidebars
 

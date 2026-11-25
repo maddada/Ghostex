@@ -1,7 +1,8 @@
 //! With the rail on, the notifications bell sits in the sidebar's top bar (app/native_sidebar/
 //! navigation.rs). 11.12.0 pinned it on the rail by default and saved it with the pins, so this
 //! takes it off the saved pins once. Since 2026-11-21 the side panel views and Notifications are
-//! not rail items at all, and a second step takes them off the saved pins once.
+//! not rail items at all, and a second step takes them off the saved pins once. Since 2026-11-25 a
+//! third step pins the Settings gear on saved pins once.
 
 use std::fs;
 
@@ -38,6 +39,22 @@ pub fn migrate_sidebar_rail_views_once() {
             "no saved rail pins with views",
         ),
         "unpin the views from the rail",
+    );
+}
+
+/// Pins Settings (the gear at the rail's very bottom) on `sidebarRailPins` in an existing settings
+/// file, once, when the gear arrived (CDXC:Sidebar 2026-11-25 DECISION on
+/// `pin_settings_on_saved_rail_pins` in packages/settings-catalog/src/lib.rs). The same shape as
+/// the bell's step, with its own marker, `sidebar-rail-settings-pinned`.
+pub fn migrate_sidebar_rail_settings_once() {
+    edit_rail_pins_once(
+        ghostex_storage_paths().sidebar_rail_settings_marker_file(),
+        ghostex_settings_catalog::pin_settings_on_saved_rail_pins,
+        (
+            "saved rail pins, settings pinned",
+            "no saved rail pins without settings",
+        ),
+        "pin Settings on the rail",
     );
 }
 

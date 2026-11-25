@@ -190,6 +190,12 @@ impl GhostexPaths {
         self.state_dir.join("sidebar-rail-views-unpinned")
     }
 
+    /// Written once Settings (the gear at the rail's very bottom) has been pinned on the rail's
+    /// saved pins (`migrate_sidebar_rail_settings_once` in the desktop app).
+    pub fn sidebar_rail_settings_marker_file(&self) -> PathBuf {
+        self.state_dir.join("sidebar-rail-settings-pinned")
+    }
+
     pub fn hub_secret_folders_marker_file(&self) -> PathBuf {
         self.state_dir.join("hub-secret-folders-added")
     }

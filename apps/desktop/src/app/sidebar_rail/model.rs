@@ -133,6 +133,8 @@ pub(crate) fn rail_item_icon(key: &str) -> &'static str {
         "claude" => "agent-icons/claude.svg",
         "grok" => "agent-icons/grok-build.svg",
         "voiceCall" => "titlebar/headset.svg",
+        "settings" => "titlebar/settings.svg",
+        "theme" => "titlebar/palette.svg",
         _ => "titlebar/dots.svg",
     }
 }
@@ -231,6 +233,11 @@ pub(crate) type RailBounds = Rc<Cell<Option<Bounds<Pixels>>>>;
 pub(crate) struct SidebarRailState {
     /// The ⋯ button.
     pub(crate) more_bounds: RailBounds,
+    /// Where the next compact Theme editor opens beside: the pinned Theme button just clicked, or
+    /// ⋯ for its menu's Theme row (host.rs); taken when the editor opens
+    /// (native_app_modal_lifecycle.rs). None opens it at its usual place.
+    #[cfg_attr(ghostex_web, allow(dead_code))]
+    pub(crate) theme_editor_anchor: Cell<Option<Bounds<Pixels>>>,
     items: RefCell<HashMap<String, RailBounds>>,
     /// Which half of the rail has the pointer (`Some(true)`: the top), for the hidden sidebar's
     /// reveal (`sidebar_rail_reveal_hover` in host.rs). None off the rail.

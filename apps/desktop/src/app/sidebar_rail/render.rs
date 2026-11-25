@@ -1,6 +1,7 @@
 //! Drawing the rail: a 52pt column at the window's left, Toggle sidebar in the slot at its top
 //! (the sidebar's top row's height), the pinned icons, an unpinned item while its view shows
-//! (under a dashed line), ⋯, and at its foot the account usage toggle.
+//! (under a dashed line), ⋯, and at its foot the account usage toggle with the Settings gear under
+//! it.
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -13,7 +14,7 @@ use gpui_component::tooltip::ManagedTooltipExt as _;
 use gpui_component::tooltip::ManagedTooltipPlacement;
 use gpui_component::v_flex;
 
-use ghostex_gx_core::sidebar_rail::{RAIL_ITEMS, RailSection, rail_item};
+use ghostex_gx_core::sidebar_rail::{RAIL_FOOT_ITEM, RAIL_ITEMS, RailSection, rail_item};
 
 use super::model::*;
 use crate::GhostexGpuiApp;
@@ -262,7 +263,8 @@ impl GhostexGpuiApp {
                 ));
                 continue;
             }
-            let Some(item) = rail_item(key) else {
+            // The gear's pin shows it at the foot, wherever it sits in the list.
+            let Some(item) = rail_item(key).filter(|item| item.key != RAIL_FOOT_ITEM) else {
                 continue;
             };
             let state = self.sidebar_rail_item_state(item.key, cx);
@@ -357,7 +359,29 @@ impl GhostexGpuiApp {
         let more = self.render_sidebar_rail_more_button(layout.top.len(), &appearance, cx);
         let usage = (!self.account_usage_meters().is_empty())
             .then(|| self.render_sidebar_rail_usage_toggle(&appearance, cx));
-        let has_foot = usage.is_some();
+        // CDXC:Sidebar 2026-11-25 DECISION in gx-core `RAIL_MENU_GROUPS`: while pinned, the
+        // Settings gear is the rail's very last button, under the usage switch; it neither drags
+        // nor takes drops, and its own menu only unpins it.
+        let gear = layout
+            .contains(RAIL_FOOT_ITEM)
+            .then(|| self.sidebar_rail_item_state(RAIL_FOOT_ITEM, cx))
+            .filter(|state| state.available)
+            .map(|state| {
+                self.render_sidebar_rail_button(
+                    RAIL_FOOT_ITEM.to_string(),
+                    rail_item_face(RAIL_FOOT_ITEM),
+                    state,
+                    RailButtonLook {
+                        on: state.showing,
+                        temporary: false,
+                    },
+                    None,
+                    &appearance,
+                    cx,
+                )
+            });
+        let has_gear = gear.is_some();
+        let has_foot = usage.is_some() || has_gear;
         let foot_drop_target = RailDropTarget {
             section: RailSection::Bottom,
             index: layout.bottom.len(),
@@ -367,8 +391,15 @@ impl GhostexGpuiApp {
                 .id("ghostex-gpui-sidebar-rail-foot")
                 .w(px(RAIL_BUTTON))
                 .items_center()
-                .gap(px(RAIL_GAP))
+                // The gear comes in its slot (`rail_drop_slot`), whose top pad and line make up
+                // the rest of the rail's gap.
+                .gap(px(if has_gear {
+                    RAIL_GAP - RAIL_SLOT_PAD_Y - RAIL_DROP_LINE_HEIGHT
+                } else {
+                    RAIL_GAP
+                }))
                 .children(usage)
+                .children(gear)
                 .into_any_element();
             rail_drop_slot(foot, Some(foot_drop_target), cx)
         } else {
@@ -412,7 +443,14 @@ impl GhostexGpuiApp {
             .h_full()
             .flex_shrink_0()
             .items_center()
-            .pb(px(if has_foot { 5.0 } else { 2.0 }))
+            // The gear's slot has its own bottom pad, so the rail keeps the same 5pt under it.
+            .pb(px(if has_gear {
+                5.0 - RAIL_SLOT_PAD_Y
+            } else if has_foot {
+                5.0
+            } else {
+                2.0
+            }))
             // In the Floating sidebar layout the rail is the card's left half and paints what the
             // sidebar paints, so the two read as one card (`render_rail_card`).
             .bg(if crate::app::helpers::floating_sidebar_layout() {
@@ -636,8 +674,13 @@ impl GhostexGpuiApp {
             .when_some(state.badge, |button, badge| button.child(rail_badge(badge)))
             .on_click({
                 let key = key.clone();
+                let bounds = bounds.clone();
                 cx.listener(move |app, _, window, cx| {
                     cx.stop_propagation();
+                    // A pinned Theme button opens the Theme editor beside itself (host.rs).
+                    if key == "theme" {
+                        app.sidebar_rail.theme_editor_anchor.set(bounds.get());
+                    }
                     if let Some(item) = rail_item(&key) {
                         app.run_sidebar_rail_item(item.key, window, cx);
                     } else if let Some(id) = ghostex_gx_core::sidebar_rail::rail_link_pin_id(&key) {

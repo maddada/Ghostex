@@ -29,7 +29,9 @@ impl GhostexGpuiApp {
             return state;
         }
         match key {
-            "search" | "findPrompts" | "commands" => state.available = true,
+            // Settings and the compact Theme editor are windows over the app, never a view on the
+            // rail, so neither shows as on (CDXC:Sidebar 2026-11-25 on gx-core `RAIL_FOOT_ITEM`).
+            "search" | "findPrompts" | "commands" | "settings" | "theme" => state.available = true,
             "mainHub" => {
                 let chief = snapshot
                     .and_then(|snapshot| snapshot.chiefs.iter().find(|chief| chief.is_local));
@@ -135,6 +137,20 @@ impl GhostexGpuiApp {
             "allAutomations" => self.toggle_takeover_page(TakeoverPage::AllAutomations, window, cx),
             "hermes" => self.toggle_native_sidebar_bots_mode(cx),
             "voiceCall" => self.toggle_voice_agent_conversation(cx),
+            // The ☰ menu's Settings row and the Settings hotkey open it the same way.
+            "settings" => {
+                self.open_app_modal_from_bridge(json!({ "modal": "settings", "type": "open" }), cx)
+            }
+            // Beside the pinned Theme button that was clicked (render.rs), or beside ⋯ for its
+            // menu's Theme row; the editor keeps inside the window (native_app_modal_lifecycle.rs).
+            "theme" => {
+                if self.sidebar_rail.theme_editor_anchor.get().is_none() {
+                    self.sidebar_rail
+                        .theme_editor_anchor
+                        .set(self.sidebar_rail.more_bounds.get());
+                }
+                self.open_gpui_theme_editor_modal(&serde_json::Value::Null, cx);
+            }
             _ => {}
         }
     }

@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 
 use ghostex_gx_core::custom_links::CUSTOM_LINK_COMMAND_TYPE;
 use ghostex_gx_core::sidebar_rail::{
-    RAIL_COMMAND_TYPE, RAIL_ITEMS, RAIL_MENU_GROUPS, RailLayout, RailSection,
+    RAIL_COMMAND_TYPE, RAIL_FOOT_ITEM, RAIL_ITEMS, RAIL_MENU_GROUPS, RailLayout, RailSection,
     is_rail_separator_key, rail_item, rail_layout, rail_link_pin_id,
 };
 
@@ -130,51 +130,17 @@ fn push_position_rows(
 impl GhostexGpuiApp {
     /// The ⋯ menu: every item that applies here, under its group, each with its pin (filled while
     /// pinned; an unpinned row's shows on hover, "Pin to rail"), plus Links and Layout (separators)
-    /// on desktop.
+    /// on desktop, then Appearance.
     pub(crate) fn sidebar_rail_more_menu(&self, cx: &gpui::App) -> Value {
         let layout = sidebar_rail_layout_now();
         let mut rows = Vec::new();
-        for group in RAIL_MENU_GROUPS {
-            let items: Vec<_> = RAIL_ITEMS
-                .iter()
-                .filter(|item| item.group == group)
-                .filter(|item| self.sidebar_rail_item_state(item.key, cx).available)
-                .collect();
-            if items.is_empty() {
-                continue;
-            }
-            rows.push(
-                json!({ "label": group, "heading": true, "checked": false, "disabled": false }),
-            );
-            for item in items {
-                let pinned = layout.contains(item.key);
-                let (icon, agent_icon) = menu_icon(item.key);
-                let mut row = json!({
-                    "label": item.label,
-                    "icon": icon,
-                    "command": command("run", item.key),
-                    "checked": false,
-                    "disabled": false,
-                    "secondary": pin_button(item.key, pinned),
-                });
-                // The agents' coloured logos, as the agent launcher draws them.
-                if let Some(agent_icon) = agent_icon {
-                    row["agentIcon"] = json!(agent_icon);
-                    if let Some(logo) = ghostex_gx_core::colored_agent_logo(agent_icon) {
-                        row["imageDataUrl"] = json!(logo);
-                        // The logo stands in for the glyph; a row draws both when it has both.
-                        if let Some(row) = row.as_object_mut() {
-                            row.remove("icon");
-                        }
-                    }
-                }
-                if cfg!(ghostex_web) {
-                    if let Some(row) = row.as_object_mut() {
-                        row.remove("secondary");
-                    }
-                }
-                rows.push(row);
-            }
+        // Appearance ends the menu, after Links and Layout (CDXC:Sidebar 2026-11-25 on gx-core
+        // `RAIL_MENU_GROUPS`).
+        let (last, first): (Vec<&str>, Vec<&str>) = RAIL_MENU_GROUPS
+            .into_iter()
+            .partition(|group| *group == "Appearance");
+        for group in first {
+            self.push_sidebar_rail_menu_group(&mut rows, group, &layout, cx);
         }
         // The user's links and Add link… under their own heading (app/custom_links/), plus
         // Layout separators. A page in a browser cannot edit rail pins or open custom links.
@@ -197,7 +163,61 @@ impl GhostexGpuiApp {
                 RailSection::Bottom,
             ));
         }
+        for group in last {
+            self.push_sidebar_rail_menu_group(&mut rows, group, &layout, cx);
+        }
         Value::Array(rows)
+    }
+
+    /// One ⋯ menu group: its heading and every item of it that applies here, each with its pin
+    /// (none in the web build, which cannot save pins). Nothing when no item applies.
+    fn push_sidebar_rail_menu_group(
+        &self,
+        rows: &mut Vec<Value>,
+        group: &str,
+        layout: &RailLayout,
+        cx: &gpui::App,
+    ) {
+        let items: Vec<_> = RAIL_ITEMS
+            .iter()
+            .filter(|item| item.group == group)
+            .filter(|item| self.sidebar_rail_item_state(item.key, cx).available)
+            .collect();
+        if items.is_empty() {
+            return;
+        }
+        rows.push(
+            json!({ "label": group, "heading": true, "checked": false, "disabled": false }),
+        );
+        for item in items {
+            let pinned = layout.contains(item.key);
+            let (icon, agent_icon) = menu_icon(item.key);
+            let mut row = json!({
+                "label": item.label,
+                "icon": icon,
+                "command": command("run", item.key),
+                "checked": false,
+                "disabled": false,
+                "secondary": pin_button(item.key, pinned),
+            });
+            // The agents' coloured logos, as the agent launcher draws them.
+            if let Some(agent_icon) = agent_icon {
+                row["agentIcon"] = json!(agent_icon);
+                if let Some(logo) = ghostex_gx_core::colored_agent_logo(agent_icon) {
+                    row["imageDataUrl"] = json!(logo);
+                    // The logo stands in for the glyph; a row draws both when it has both.
+                    if let Some(row) = row.as_object_mut() {
+                        row.remove("icon");
+                    }
+                }
+            }
+            if cfg!(ghostex_web) {
+                if let Some(row) = row.as_object_mut() {
+                    row.remove("secondary");
+                }
+            }
+            rows.push(row);
+        }
     }
 
     /// The right-click menu on empty space in the rail (or on ⋯): lets the user add a separator
@@ -268,6 +288,22 @@ impl GhostexGpuiApp {
                 "disabled": false,
             }));
             return Value::Array(rows);
+        }
+        // The Settings gear stays at the rail's very bottom: its menu only unpins it (CDXC:Sidebar
+        // 2026-11-25 on gx-core `RAIL_FOOT_ITEM`); ⋯ pins it again.
+        if key == RAIL_FOOT_ITEM {
+            return json!([{
+                "label": "Unpin from rail",
+                "icon": "pin-outline",
+                "command": {
+                    "type": SIDEBAR_RAIL_COMMAND_TYPE,
+                    "op": "pin",
+                    "key": key,
+                    "pinned": false,
+                },
+                "checked": false,
+                "disabled": false,
+            }]);
         }
         let mut rows = Vec::new();
         if let Some(id) = rail_link_pin_id(key) {

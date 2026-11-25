@@ -36,7 +36,15 @@ const fn item(key: &'static str, label: &'static str, group: &'static str) -> Ra
 /// CDXC:Sidebar 2026-11-22 DECISION:
 /// User: remove Connect a Phone and Settings from the rail's ⋯ menu (they stay in the ☰ main menu)
 /// and drop the now-empty "This computer" heading.
-pub const RAIL_MENU_GROUPS: [&str; 2] = ["Go to", "Agents"];
+///
+/// CDXC:Sidebar 2026-11-25 DECISION:
+/// User: "please add by default settings as a button to the bottom of the left side rail of the app" and "please add theme to the 3 dots so i click on it and it shows the mini theming thingy we have", then picked from the rail-settings mockups: the gear fixed at the very bottom of the rail under the Account usage switch, on by default (Q4953 B); Theme under its own Appearance heading at the end of ⋯, after Links and Layout (Q4954 B), opening the compact Theme editor beside ⋯; and both pinnable (Q4955): Theme gets a pin like every other row, so it can sit on the rail too, and Settings comes back to ⋯ (last in Go to) with its pin, so a gear that was unpinned can be pinned again. Pinned, the gear shows at the very bottom whatever its place in `sidebarRailPins` (`RAIL_FOOT_ITEM`); unpinned, it is hidden. Supersedes the 2026-11-22 removal of Settings from ⋯; Connect a Phone stays out.
+pub const RAIL_MENU_GROUPS: [&str; 3] = ["Go to", "Agents", "Appearance"];
+
+/// The item that, while pinned, sits at the very bottom of the rail under the Account usage switch
+/// rather than among the pins (CDXC:Sidebar 2026-11-25 above): it is never dragged or moved, and
+/// its own menu only unpins it.
+pub const RAIL_FOOT_ITEM: &str = "settings";
 
 /// Every item, in ⋯ menu order.
 ///
@@ -50,10 +58,12 @@ pub const RAIL_ITEMS: &[RailItem] = &[
     item("agentsHub", "Agents Hub", "Go to"),
     item("allAutomations", "All Automations", "Go to"),
     item("commands", "Commands", "Go to"),
+    item("settings", "Settings", "Go to"),
     item("hermes", "Hermes bots", "Agents"),
     item("claude", "Claude", "Agents"),
     item("grok", "Grok Bot", "Agents"),
     item("voiceCall", "Voice Call", "Agents"),
+    item("theme", "Theme", "Appearance"),
 ];
 
 /// Pinned when `sidebarRailPins` is missing.
@@ -68,6 +78,7 @@ pub const RAIL_DEFAULT_PINS: &[&str] = &[
     "hermes",
     "claude",
     "grok",
+    "settings",
 ];
 
 /// The item with `key`.

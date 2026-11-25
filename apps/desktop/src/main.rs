@@ -341,6 +341,9 @@ fn main() {
     // The side panel views and Notifications left the rail; their saved pins come off once (the
     // same file).
     shared_settings::sidebar_rail_bell::migrate_sidebar_rail_views_once();
+    // The Settings gear arrived at the rail's very bottom, on by default; saved pins get it once
+    // (the same file), so unpinning it afterwards sticks.
+    shared_settings::sidebar_rail_bell::migrate_sidebar_rail_settings_once();
     // The 2026-11-21 dark look is the default for a new install; an existing, set-up settings file
     // keeps the look it had (shared_settings/dark_look_default.rs). Before the first settings read too.
     shared_settings::dark_look_default::keep_old_dark_look_once();
