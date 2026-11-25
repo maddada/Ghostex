@@ -723,8 +723,7 @@ impl GpuiVisualPageModalWindow {
         } else {
             "Refresh"
         };
-        div()
-            .id("visual-page-refresh")
+        super::page_controls::control_fill(div().id("visual-page-refresh"), glass)
             .role(gpui::Role::Button)
             .aria_label("Refresh the page: its file changed")
             .flex_shrink_0()
@@ -734,14 +733,10 @@ impl GpuiVisualPageModalWindow {
             .h(px(CONTROL_SIZE))
             .px(px(10.0))
             .rounded_full()
-            .bg(glass.fill)
-            .border_1()
-            .border_color(glass.border)
             .text_size(px(12.0))
             .font_weight(FontWeight::MEDIUM)
             .text_color(glass.text)
             .cursor_pointer()
-            .hover(move |style| style.bg(glass.hover))
             .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .tooltip(|window, cx| {
                 gpui_component::tooltip::Tooltip::new("The page's file changed. Reload it")
