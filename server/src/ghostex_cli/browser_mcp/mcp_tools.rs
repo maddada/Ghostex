@@ -297,17 +297,16 @@ fn note_who_took_the_click(clicked: &mut Value, seen: &Value, mouse: bool) {
     }
 }
 
-/// Whether the page reported a file chooser (intercepted while the agent drives it,
-/// devtools_relay.rs) since the last call.
+/// Whether Ghostex cancelled a file chooser the agent's input opened on the page since the last
+/// call (apps/desktop/src/cef/shell/hidden_page_dialogs.rs).
 fn file_chooser_opened(state: &mut McpState, page_id: &str) -> bool {
     let Some(client) = state.clients.get_mut(page_id) else {
         return false;
     };
     client.pump_events();
-    let opened = client
-        .events
-        .iter()
-        .any(|event| event.get("method").and_then(Value::as_str) == Some("Page.fileChooserOpened"));
+    let opened = client.events.iter().any(|event| {
+        event.get("method").and_then(Value::as_str) == Some("Ghostex.fileChooserCancelled")
+    });
     pump_client_events(state, page_id);
     opened
 }

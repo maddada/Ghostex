@@ -734,17 +734,29 @@ pub(crate) async fn handle_renderer_command_http(
         &action,
         &mut payload,
     );
-    let background_url = background_open.then(|| {
-        payload
+    let asks_first =
+        !background_open && crate::switch_requests::is_agent_switch_request_action(&action);
+    let opens_allowed =
+        asks_first && crate::switch_requests::agent_page_opens_allowed(state, &action);
+    // The opens no toast asks about go into the security log once the app answered
+    // (browser_agent_limits.rs): background ones, and on-screen ones the user's setting allows.
+    let logged_open = if background_open {
+        Some(crate::browser_agent_limits::AgentOpen::Background)
+    } else if opens_allowed && crate::switch_requests::caller_agent_session(state, caller).is_some()
+    {
+        Some(crate::browser_agent_limits::AgentOpen::OnScreen)
+    } else {
+        None
+    }
+    .map(|kind| {
+        let url = payload
             .get("url")
             .and_then(Value::as_str)
             .unwrap_or_default()
-            .to_string()
+            .to_string();
+        (kind, url)
     });
-    if !background_open
-        && crate::switch_requests::is_agent_switch_request_action(&action)
-        && !crate::switch_requests::agent_page_opens_allowed(state, &action)
-    {
+    if asks_first && !opens_allowed {
         if let Some((caller_project_id, caller_session_id)) =
             crate::switch_requests::caller_agent_session(state, caller)
         {
@@ -786,8 +798,9 @@ pub(crate) async fn handle_renderer_command_http(
                 message: error.message,
             })
     };
-    if let Some(url) = &background_url {
-        crate::browser_agent_limits::record_background_open(
+    if let Some((kind, url)) = &logged_open {
+        crate::browser_agent_limits::record_agent_open(
+            *kind,
             url,
             answer.as_ref().map_err(|error| error.message.as_str()),
         );

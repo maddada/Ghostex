@@ -3,6 +3,7 @@
 //!
 //! CDXC:Browser 2026-11-26 DECISION:
 //! Coordinator, on the user's behalf (security review of #762, findings B2, B8 and B9): an agent session (`Principal::Session`) opens and navigates to web pages only: `file://` and every other scheme but http, https and about:blank are refused, both for its opens through the app (`openBrowser`, `openBrowserPane`) and for its DevTools navigations (server/src/server/cef_devtools_scope.rs), so a file the upload check refuses cannot be read as a page instead. The agent session the app keeps a page for (`agentSessionId`) is always the caller's own, whatever its payload said, so one agent cannot steer the page another agent's next tool call drives. A background open goes into the security log after the app answered, with the page's host first and its whole normalised address, and the real outcome.
+//! Coordinator, on the user's behalf (#762 follow-up): an on-screen open that "Let agents open and switch pages without asking" let through without a toast is logged the same way (`browser.agentOpen`), quietly like the background one (audit/notify.rs), so every page an agent opened without the user's click is in the log.
 //! SEE-ALSO: apps/desktop/src/app/helpers/titlebar/urls_and_sessions.rs (`normalize_address`, which `normalized_browser_address` mirrors), apps/desktop/src/app/browser_agent_pages.rs (the agent's page, keyed by `agentSessionId`).
 
 use serde_json::{json, Map, Value};
@@ -122,7 +123,9 @@ pub(crate) fn pin_agent_browser_request(
 
 /// What the security log names for an opened address: its host, then the whole address.
 pub(crate) fn logged_address(url: &str) -> String {
-    let address = normalized_browser_address(url).unwrap_or_default();
+    let Some(address) = normalized_browser_address(url) else {
+        return "no address".to_string();
+    };
     let host = url::Url::parse(&address)
         .ok()
         .and_then(|parsed| parsed.host_str().map(str::to_string))
@@ -136,8 +139,30 @@ pub(crate) fn logged_address(url: &str) -> String {
     }
 }
 
-/// Writes an agent's background open into the security log, after the app answered.
-pub(crate) fn record_background_open(url: &str, answer: Result<&Value, &str>) {
+/// An agent's page open that no toast asked the user about.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AgentOpen {
+    /// A background open: the page loads in a tab that is not shown.
+    Background,
+    /// An open "Let agents open and switch pages without asking" let through: the page is shown.
+    OnScreen,
+}
+
+impl AgentOpen {
+    /// The security log's action id and line for this open.
+    fn action(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Background => (
+                "browser.backgroundOpen",
+                "Opened a Browser page in the background",
+            ),
+            Self::OnScreen => ("browser.agentOpen", "Opened a Browser page without asking"),
+        }
+    }
+}
+
+/// Writes an agent's open that no toast asked about into the security log, after the app answered.
+pub(crate) fn record_agent_open(kind: AgentOpen, url: &str, answer: Result<&Value, &str>) {
     let outcome = match answer {
         Ok(result) if result.get("ok") == Some(&Value::Bool(false)) => {
             crate::audit::Outcome::Failed(
@@ -151,12 +176,9 @@ pub(crate) fn record_background_open(url: &str, answer: Result<&Value, &str>) {
         Ok(_) => crate::audit::Outcome::Done,
         Err(message) => crate::audit::Outcome::Failed(message.to_string()),
     };
+    let (id, line) = kind.action();
     crate::audit::record(
-        crate::audit::Action::new(
-            "browser.backgroundOpen",
-            "Opened a Browser page in the background",
-        )
-        .target(logged_address(url)),
+        crate::audit::Action::new(id, line).target(logged_address(url)),
         crate::audit::Actor::current(),
         outcome,
         None,
@@ -204,5 +226,15 @@ mod tests {
             logged_address("localhost:3000"),
             "localhost (http://localhost:3000)"
         );
+        assert_eq!(logged_address("  "), "no address");
+    }
+
+    #[test]
+    fn both_kinds_of_open_are_quiet_log_lines() {
+        assert_eq!(AgentOpen::Background.action().0, "browser.backgroundOpen");
+        assert_eq!(AgentOpen::OnScreen.action().0, "browser.agentOpen");
+        for kind in [AgentOpen::Background, AgentOpen::OnScreen] {
+            assert!(crate::audit::is_quiet_agent_action(kind.action().0));
+        }
     }
 }

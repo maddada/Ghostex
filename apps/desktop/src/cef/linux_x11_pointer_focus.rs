@@ -177,6 +177,8 @@ fn receive_press(app: &gpui::AsyncApp, owner: X11Window, child: X11Window, time:
     if super::super::shell::cef_native_view_is_hidden(native_view) {
         return;
     }
+    // A person's press, which a file chooser the page opens next may answer (hidden_page_dialogs.rs).
+    super::super::shell::note_real_user_press();
     let Some(host) = embed_host_for_cef_window(owner) else {
         return;
     };

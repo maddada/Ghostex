@@ -23,8 +23,6 @@ use tokio_tungstenite::tungstenite::{
 const RELAY_MESSAGE_BYTES: usize = 128 * 1024 * 1024;
 /// The first id a session's commands get, above Ghostex's own counter.
 const RELAY_FIRST_MESSAGE_ID: i64 = 1_500_000_000;
-/// The id of the relay's own file chooser command; its answer stays in the app.
-const RELAY_FILE_CHOOSER_MESSAGE_ID: i64 = RELAY_FIRST_MESSAGE_ID - 1;
 
 /// The sender to the current gxserver connection; `None` while disconnected.
 static RELAY_OUTBOX: Mutex<Option<tokio::sync::mpsc::UnboundedSender<String>>> = Mutex::new(None);
@@ -44,6 +42,37 @@ thread_local! {
     static RELAY_NEXT_ID: Cell<i64> = const { Cell::new(RELAY_FIRST_MESSAGE_ID) };
     /// CEF browser id -> the DevTools target id the app learned for that page.
     static RELAY_TARGET_IDS: RefCell<HashMap<c_int, String>> = RefCell::new(HashMap::new());
+    /// CEF browser id -> when a DevTools session last sent the page input or a script, either of
+    /// which can open a file chooser (hidden_page_dialogs.rs).
+    static RELAY_AGENT_INPUT: RefCell<HashMap<c_int, Instant>> = RefCell::new(HashMap::new());
+}
+
+/// The DevTools commands that act as a person would (a press, a key, a touch, a drag) or run the
+/// page's script, which can then open a file chooser with the activation such input gave it.
+fn acts_on_the_page(method: &str) -> bool {
+    method.starts_with("Input.") || matches!(method, "Runtime.evaluate" | "Runtime.callFunctionOn")
+}
+
+/// How long ago a DevTools session last sent `browser_id`'s page input or a script.
+pub(crate) fn cef_devtools_relay_agent_input_age(browser_id: c_int) -> Option<std::time::Duration> {
+    RELAY_AGENT_INPUT.with(|input| input.borrow().get(&browser_id).map(Instant::elapsed))
+}
+
+/// Tells the DevTools sessions of `browser_id`'s page that Ghostex cancelled a file chooser their
+/// input opened, so the tool can say so (`ghostex_click`).
+pub(crate) fn cef_devtools_relay_note_file_chooser_cancelled(browser_id: c_int) {
+    let sessions: Vec<u64> = RELAY_SESSIONS.with(|sessions| {
+        sessions
+            .borrow()
+            .iter()
+            .filter(|(_, attached)| attached.browser_id == browser_id)
+            .map(|(id, _)| *id)
+            .collect()
+    });
+    let event = json!({ "method": "Ghostex.fileChooserCancelled", "params": {} }).to_string();
+    for session in sessions {
+        relay_send(json!({ "type": "message", "session": session, "message": event }));
+    }
 }
 
 /// The app learned a page's DevTools target id (page_target_id.rs); the page is listed under it.
@@ -303,7 +332,6 @@ fn attach_session(session: u64, page_id: &str, scoped: bool) {
         };
         RELAY_OBSERVERS.with(|observers| observers.borrow_mut().insert(browser_id, registration));
     }
-    intercept_file_chooser(&browser, true);
     RELAY_SESSIONS.with(|sessions| {
         sessions.borrow_mut().insert(
             session,
@@ -313,25 +341,6 @@ fn attach_session(session: u64, page_id: &str, scoped: bool) {
             },
         )
     });
-}
-
-/// CDXC:Browser 2026-11-26 DECISION:
-/// Coordinator, on the user's behalf (security review of #762, B4): while an agent's DevTools
-/// session drives a page, the page's file choosers are intercepted and cancelled
-/// (`Page.setInterceptFileChooserDialog`), so no click of the agent's, or script the page runs from
-/// it, opens a native Open panel on the user's screen; the session gets `Page.fileChooserOpened`
-/// and fills the field with `DOM.setFileInputFiles` (`ghostex_set_input_files`). Interception ends
-/// with the page's last session, so the user's own uploads work again afterwards. Pages not on
-/// screen never show the panel at all (hidden_page_dialogs.rs).
-fn intercept_file_chooser(browser: &cef::Browser, enabled: bool) {
-    let command = json!({
-        "id": RELAY_FILE_CHOOSER_MESSAGE_ID,
-        "method": "Page.setInterceptFileChooserDialog",
-        "params": { "enabled": enabled, "cancel": true },
-    });
-    if let Some(host) = browser.host() {
-        host.send_dev_tools_message(Some(command.to_string().as_bytes()));
-    }
 }
 
 fn send_to_page(session: u64, message: &str) {
@@ -356,6 +365,14 @@ fn send_to_page(session: u64, message: &str) {
         id
     });
     command["id"] = json!(relay_id);
+    if command
+        .get("method")
+        .and_then(Value::as_str)
+        .is_some_and(acts_on_the_page)
+    {
+        let browser_id = browser.identifier();
+        RELAY_AGENT_INPUT.with(|input| input.borrow_mut().insert(browser_id, Instant::now()));
+    }
     RELAY_PENDING.with(|pending| pending.borrow_mut().insert(relay_id, (session, client_id)));
     let sent = browser
         .host()
@@ -383,7 +400,6 @@ fn detach_session(session: u64) {
             .any(|attached| attached.browser_id == detached.browser_id)
     });
     if !still_attached {
-        intercept_file_chooser(&detached.browser, false);
         RELAY_OBSERVERS.with(|observers| observers.borrow_mut().remove(&detached.browser_id));
     }
 }
@@ -391,6 +407,7 @@ fn detach_session(session: u64) {
 /// A browser went away: its session ends.
 pub(crate) fn cef_devtools_relay_browser_closed(browser_id: c_int) {
     RELAY_TARGET_IDS.with(|ids| ids.borrow_mut().remove(&browser_id));
+    RELAY_AGENT_INPUT.with(|input| input.borrow_mut().remove(&browser_id));
     let sessions: Vec<u64> = RELAY_SESSIONS.with(|sessions| {
         sessions
             .borrow()

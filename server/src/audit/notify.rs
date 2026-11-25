@@ -88,8 +88,19 @@ const OTHER_ACTORS: &[&str] = &[
 /// CDXC:Browser 2026-11-26 DECISION:
 /// User (Q4999, #762): an agent's background Browser open goes into the security log quietly, with
 /// no bell and no phone; its uploads into a page's file field are logged the same way (security
-/// review of #762). A refusal repeated three times still notifies (above).
-const QUIET_AGENT_ACTIONS: &[&str] = &["browser.backgroundOpen", "browser.upload"];
+/// review of #762), and so is an on-screen open "Let agents open and switch pages without asking"
+/// let through without a toast (#762 follow-up). A refusal repeated three times still notifies
+/// (above).
+const QUIET_AGENT_ACTIONS: &[&str] = &[
+    "browser.agentOpen",
+    "browser.backgroundOpen",
+    "browser.upload",
+];
+
+/// Whether `action` is an agent's browser action that is logged without a bell.
+pub(crate) fn is_quiet_agent_action(action: &str) -> bool {
+    QUIET_AGENT_ACTIONS.contains(&action)
+}
 
 /// What Chief's head role does without an approval (`SecurityState::skips_approval`), logged with the
 /// `allowed` outcome.
@@ -129,7 +140,7 @@ pub(crate) fn notifies(entry: &StoredEntry, earlier: &[StoredEntry]) -> bool {
         _ if entry.action.starts_with("approval.") => false,
         // CDXC:Chief 2026-11-08 DECISION: Coordinator, on the user's behalf: Chief's approval-free steering goes into the security log with a quiet outcome and never reaches the bell or the phone, although it is done with an agent's session token (which otherwise always notifies).
         "allowed" if HEAD_STEERING_ACTIONS.contains(&entry.action.as_str()) => false,
-        _ if QUIET_AGENT_ACTIONS.contains(&entry.action.as_str()) => false,
+        _ if is_quiet_agent_action(&entry.action) => false,
         _ if OTHER_ACTORS.contains(&entry.actor.kind.as_str()) => true,
         _ if !ended => false,
         _ if OPENING_ACTIONS.contains(&entry.action.as_str()) => true,

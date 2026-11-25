@@ -42,7 +42,7 @@ pub(crate) fn is_agent_switch_request_action(action: &str) -> bool {
 /// in apps/desktop/src/app/workspace_events.rs). Every other open keeps the toast. To keep that
 /// power narrow the open is pinned to the caller's own project, whatever project, group or folder
 /// its payload named, and it goes into the security log (quietly: no bell, no phone) once the app
-/// answered (`record_background_open` in browser_agent_limits.rs).
+/// answered (`record_agent_open` in browser_agent_limits.rs).
 ///
 /// Returns true when `payload` is an agent session's background open, pinned in place.
 pub(crate) fn pin_agent_background_browser_open(
@@ -74,7 +74,8 @@ pub(crate) fn pin_agent_background_browser_open(
 /// Browser, or the toast's Always), an agent's page open needs no toast: it opens and comes on
 /// screen as if the user had clicked Open. Only page opens: switching chats, projects, settings
 /// and paths still asks. The setting is the user's alone (`agent_denied_key` in the settings
-/// catalog keeps agents from turning it on).
+/// catalog keeps agents from turning it on). Such an open is still logged, quietly
+/// (`record_agent_open` in browser_agent_limits.rs, #762 follow-up).
 pub(crate) fn agent_page_opens_allowed(state: &AppState, action: &str) -> bool {
     matches!(action, "openBrowser" | "openBrowserPane")
         && crate::shared_settings_file::read_shared_settings(&state.paths).and_then(|settings| {

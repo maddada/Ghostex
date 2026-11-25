@@ -44,6 +44,8 @@ pub(crate) use caller::{
 pub use chain::{AuditLog, ChainCheck, ChainProblem, StoredEntry};
 pub(crate) use http::{handle_security_log_http, SECURITY_LOG_ENDPOINT};
 pub(crate) use notify::install_notifier;
+#[cfg(test)]
+pub(crate) use notify::is_quiet_agent_action;
 pub use types::{Action, Actor, ApprovalRef, Outcome};
 
 use std::sync::{Arc, OnceLock};
