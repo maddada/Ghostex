@@ -7,7 +7,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, LazyLock, Mutex, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
 
@@ -197,17 +197,81 @@ pub(crate) async fn request(
     .unwrap_or(Err(ChannelError::NoAnswer))
 }
 
+const SESSION_TITLE_CACHE_TTL: Duration = Duration::from_secs(2);
+
+static SESSION_TITLE_CACHE: LazyLock<Mutex<HashMap<(String, String), (Instant, Option<String>)>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn extract_state_session_title(state: &Value) -> Option<String> {
+    state
+        .get("sessionTitle")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|title| !title.is_empty())
+        .map(str::to_string)
+}
+
+fn record_session_title(project_id: &str, session_id: &str, state: &Value) -> Option<String> {
+    let title = extract_state_session_title(state);
+    if let Ok(mut cache) = SESSION_TITLE_CACHE.lock() {
+        if cache.len() >= 512 {
+            cache.clear();
+        }
+        cache.insert(
+            (project_id.to_string(), session_id.to_string()),
+            (Instant::now(), title.clone()),
+        );
+    }
+    title
+}
+
 /// Blocking state probe used by `session_chat_options::detection`.
 pub(crate) fn channel_state(project_id: &str, session_id: &str) -> Option<Value> {
     live(project_id, session_id, "state")?;
-    crate::pi_chat_channel::request(
+    let state = crate::pi_chat_channel::request(
         project_id,
         session_id,
         "state",
         json!({}),
         Duration::from_secs(3),
     )
-    .ok()
+    .ok()?;
+    let _ = record_session_title(project_id, session_id, &state);
+    Some(state)
+}
+
+/// Read the latest `sessionTitle` reported by a live Native host, probing `state` at most once
+/// every `SESSION_TITLE_CACHE_TTL`. Safe to call outside SQLite write transactions to warm the
+/// cache before `reconcile_agent_metadata_title`.
+pub(crate) fn session_title(project_id: &str, session_id: &str) -> Option<String> {
+    if live(project_id, session_id, "state").is_none() {
+        if let Ok(mut cache) = SESSION_TITLE_CACHE.lock() {
+            cache.remove(&(project_id.to_string(), session_id.to_string()));
+        }
+        return None;
+    }
+    if let Ok(cache) = SESSION_TITLE_CACHE.lock() {
+        if let Some((fetched_at, title)) =
+            cache.get(&(project_id.to_string(), session_id.to_string()))
+        {
+            if fetched_at.elapsed() < SESSION_TITLE_CACHE_TTL {
+                return title.clone();
+            }
+        }
+    }
+    let state = channel_state(project_id, session_id)?;
+    extract_state_session_title(&state)
+}
+
+/// Non-blocking cache lookup for a live Native host's latest `sessionTitle` (used inside SQLite
+/// transactions after `session_title` has warmed the cache).
+pub(crate) fn cached_session_title(project_id: &str, session_id: &str) -> Option<String> {
+    live(project_id, session_id, "state")?;
+    SESSION_TITLE_CACHE.lock().ok().and_then(|cache| {
+        cache
+            .get(&(project_id.to_string(), session_id.to_string()))
+            .and_then(|(_, title)| title.clone())
+    })
 }
 
 /// Send a user prompt (text + optional image file paths) to an ACP session.
