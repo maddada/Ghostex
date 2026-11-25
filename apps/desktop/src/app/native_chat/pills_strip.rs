@@ -62,8 +62,9 @@ pub(super) const STRIP_PAD_X: f32 = 10.0;
 /// The width of the fade at an edge that hides pills (unscaled).
 pub(super) const PILLS_FADE: f32 = 24.0;
 
-/// The band's tint over the box's fill.
-const STRIP_TINT: f32 = 0.035;
+/// The band's tint over the box's fill; the open Inbox card's header bar takes it too
+/// (`work_dock_header` in work_cards.rs).
+pub(super) const STRIP_TINT: f32 = 0.035;
 
 /// The ramp over a sideways scroller's edge that hides more: `edge`'s colour at the edge, clear
 /// `width` in. The read-picture strips fade the same way (read_pictures.rs).

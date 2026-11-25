@@ -758,7 +758,12 @@ impl NativeChatView {
             .rounded(px(12.0 * s))
             .border_1()
             .border_color(p.input_border)
-            .bg(p.card_panel)
+            // CDXC:SessionChat 2026-11-25 DECISION: User, of the Inbox card over the chat box: "the
+            // bg here vs here look diff to me ... i want both like chat's bg if there's actually a
+            // diff. same for the bg of the top bar for each one". The card takes the chat box's
+            // own fill (a theme's Chat box colour, not its Cards colour, which the default theme
+            // sets 2% lighter), and its header bar the pills bar's tint over it (`STRIP_TINT`).
+            .bg(p.composer_background)
             .text_size(px(PROSE_SIZE * s))
             .line_height(px(PROSE_LINE_HEIGHT * s))
             .when_some(self.board.inbox_focus_handle.as_ref(), |surface, handle| {
@@ -1377,7 +1382,7 @@ impl NativeChatView {
                     head.h(px(34.0 * s + 1.0))
                         .border_b_1()
                         .border_color(p.input_border)
-                        .bg(p.foreground.opacity(0.035))
+                        .bg(p.foreground.opacity(super::pills_strip::STRIP_TINT))
                         .rounded_t(px(11.0 * s))
                 } else {
                     head.h(px(34.0 * s)).rounded(px(11.0 * s))
