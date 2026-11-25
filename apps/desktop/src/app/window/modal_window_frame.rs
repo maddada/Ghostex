@@ -193,10 +193,15 @@ impl Render for ModalWindowFrame {
         #[cfg(all(target_os = "macos", not(ghostex_web)))]
         crate::app::helpers::apply_frosted_menu_blur(window);
         let show_close = (self.shows_corner_close)(cx);
-        let reveal = self.corner_close_reveal(window, cx);
-        set_reveal(&reveal, cx, |r| &mut r.enabled, show_close);
-        let always = (self.always_shows_corner_close)(cx);
-        set_reveal(&reveal, cx, |r| &mut r.always, always);
+        // CDXC:AppModal 2026-11-26 WHY:
+        // The X's window opens only once the modal shows the X. A Live page never does (it draws its own close), yet on Windows its frame still opened an invisible 42px X window owned by the page window: it sat over the main window's Minimize button and ate clicks there, stayed at the old corner when the page was moved or resized (Windows moves no owned window with its owner), and stayed on screen when the page was put aside (Windows hides no owned window with its owner).
+        let reveal =
+            (show_close || self.reveal.is_some()).then(|| self.corner_close_reveal(window, cx));
+        if let Some(reveal) = &reveal {
+            set_reveal(reveal, cx, |r| &mut r.enabled, show_close);
+            let always = (self.always_shows_corner_close)(cx);
+            set_reveal(reveal, cx, |r| &mut r.always, always);
+        }
         /*
         CDXC:AppModal 2026-11-16 DECISION:
         User: on Linux "pls put a thin border around the settings and other modals like it on arch, cuz the edge of the modal blends with the bg of the main window". Settings, Connect a computer, Add a computer and every other app modal draw a square surface tinted from the app chrome, and a Linux window gets no edge of its own from Ghostex (Hyprland's own border is the user's theme, often invisible), so each modal draws a 1px inner edge in `ModalPalette::window_border`, the colour Windows modals already get from DWM (`frame_app_modal_window`): the foreground mixed 16% into the modal surface, a soft gray in dark mode, never black or an accent. Linux only: macOS draws its rim and shadow around these windows, and Windows 11 draws the DWM border in this same colour, so a second line there would double the edge.
@@ -211,7 +216,7 @@ impl Render for ModalWindowFrame {
             .when_some(linux_edge, |this, edge| {
                 this.child(div().absolute().inset_0().border_1().border_color(edge))
             })
-            .when(show_close, |this| {
+            .when_some(reveal.filter(|_| show_close), |this, reveal| {
                 this.child(Self::top_band_tracker(reveal))
             })
     }
