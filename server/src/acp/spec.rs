@@ -97,6 +97,17 @@ const GROK_SPEC: AcpAgentSpec = AcpAgentSpec {
     supports_mid_turn_prompt: true,
 };
 
+const HERMES_SPEC: AcpAgentSpec = AcpAgentSpec {
+    family: "hermes",
+    display_name: "Hermes Agent",
+    // Native Hermes ACP server over stdio, sharing the Hermes profile gateway and state.db.
+    acp_argv: &["hermes", "acp"],
+    default_cli_bin: "hermes",
+    cli_resume_flag: "--resume",
+    cli_accept_all_flag: Some("--yolo"),
+    supports_mid_turn_prompt: true,
+};
+
 pub fn spec_for_family(family: &str) -> Option<&'static AcpAgentSpec> {
     match family.trim().to_ascii_lowercase().as_str() {
         "antigravity" | "antigravity-cli" | "agy" => Some(&ANTIGRAVITY_SPEC),
@@ -104,6 +115,7 @@ pub fn spec_for_family(family: &str) -> Option<&'static AcpAgentSpec> {
         "codex" | "codex-cli" => Some(&CODEX_SPEC),
         "opencode" | "opencode-cli" => Some(&OPENCODE_SPEC),
         "grok" | "grok-build" => Some(&GROK_SPEC),
+        "hermes" | "hermes-agent" => Some(&HERMES_SPEC),
         _ => None,
     }
 }
@@ -154,6 +166,7 @@ pub fn transcript_path_for_session(family: &str, native_session_id: &str) -> Opt
             Some(native_session_id),
             None,
         ),
+        "hermes" => super::hermes::expected_transcript_mirror_path(native_session_id),
         _ => None,
     }
 }
@@ -201,6 +214,7 @@ pub struct AcpLaunchProfile {
     pub gbot_api_chat: bool,
     pub gbot_computer_use_off: bool,
     pub lean_worker: bool,
+    pub hermes_profile: Option<String>,
 }
 
 /// Build the `ghostex acp-host` launch command with Ghostex's server-generated structured profile.
@@ -359,6 +373,15 @@ fn build_acp_host_launch_command_for_platform(
     }
     if profile.lean_worker {
         parts.push("--lean-worker".to_string());
+    }
+    if let Some(hermes_profile) = profile
+        .hermes_profile
+        .as_deref()
+        .map(str::trim)
+        .filter(|p| super::hermes::is_valid_hermes_profile(p))
+    {
+        parts.push("--hermes-profile".to_string());
+        parts.push(quote_acp_launch_arg(hermes_profile, windows));
     }
     parts.join(" ")
 }
@@ -691,7 +714,7 @@ pub(crate) fn extract_safe_model_and_effort_from_command(
 ) -> (Option<String>, Option<String>) {
     if !matches!(
         family,
-        "claude" | "codex" | "antigravity" | "opencode" | "grok"
+        "claude" | "codex" | "antigravity" | "opencode" | "grok" | "hermes"
     ) {
         return (None, None);
     }
@@ -716,15 +739,26 @@ pub(crate) fn extract_safe_model_and_effort_from_command(
                 }
                 i += 1;
             }
-        } else if let Some(v) = tok.strip_prefix("--effort=").or_else(|| {
-            (family == "grok")
-                .then(|| tok.strip_prefix("--reasoning-effort="))
-                .flatten()
-        }) {
+        } else if let Some(v) = tok
+            .strip_prefix("--effort=")
+            .or_else(|| {
+                (family == "grok")
+                    .then(|| tok.strip_prefix("--reasoning-effort="))
+                    .flatten()
+            })
+            .or_else(|| {
+                (family == "hermes")
+                    .then(|| tok.strip_prefix("--reasoning="))
+                    .flatten()
+            })
+        {
             if effort.is_none() && is_safe_model_or_effort_token(v) {
                 effort = Some(v.trim().to_string());
             }
-        } else if tok == "--effort" || (family == "grok" && tok == "--reasoning-effort") {
+        } else if tok == "--effort"
+            || (family == "grok" && tok == "--reasoning-effort")
+            || (family == "hermes" && tok == "--reasoning")
+        {
             if let Some(next) = base_tokens.get(i + 1) {
                 if effort.is_none() && is_safe_model_or_effort_token(next) {
                     effort = Some(next.trim().to_string());
@@ -751,6 +785,7 @@ pub(crate) fn ignored_owner_command_tokens(
         "antigravity" => "agy",
         "opencode" => "opencode",
         "grok" => "grok",
+        "hermes" => "hermes",
         _ => return Vec::new(),
     };
     let Some(raw) = owner_command.map(str::trim).filter(|s| !s.is_empty()) else {
@@ -788,15 +823,36 @@ pub(crate) fn ignored_owner_command_tokens(
                     .then(|| tok.strip_prefix("--reasoning-effort="))
                     .flatten()
             })
+            .or_else(|| {
+                (family == "hermes")
+                    .then(|| tok.strip_prefix("--reasoning="))
+                    .flatten()
+            })
         {
             if !is_safe_model_or_effort_token(v) {
                 ignored.push(tok.to_string());
             }
         } else if matches!(tok, "--model" | "-m" | "--effort")
             || (family == "grok" && tok == "--reasoning-effort")
+            || (family == "hermes" && tok == "--reasoning")
         {
             if let Some(next) = base_tokens.get(i + 1) {
                 if !is_safe_model_or_effort_token(next) {
+                    ignored.push(tok.to_string());
+                    ignored.push(next.clone());
+                }
+                i += 1;
+            } else {
+                ignored.push(tok.to_string());
+            }
+        } else if family == "hermes" && tok.starts_with("--profile=") {
+            let v = tok.trim_start_matches("--profile=");
+            if !super::hermes::is_valid_hermes_profile(v) {
+                ignored.push(tok.to_string());
+            }
+        } else if family == "hermes" && matches!(tok, "-p" | "--profile") {
+            if let Some(next) = base_tokens.get(i + 1) {
+                if !super::hermes::is_valid_hermes_profile(next) {
                     ignored.push(tok.to_string());
                     ignored.push(next.clone());
                 }
@@ -837,6 +893,10 @@ fn full_access_flag_width(family: &str, tok: &str, next: Option<&str>) -> usize 
         "grok" => match tok {
             "--always-approve" | "--permission-mode=bypassPermissions" => 1,
             "--permission-mode" if next == Some("bypassPermissions") => 2,
+            _ => 0,
+        },
+        "hermes" => match tok {
+            "--yolo" => 1,
             _ => 0,
         },
         _ => 0,
@@ -938,7 +998,19 @@ pub fn build_acp_server_argv(
 
     let program =
         windows_batch_program(default_prog).unwrap_or_else(|| (*default_prog).to_string());
-    let args: Vec<String> = acp_args.iter().map(|s| (*s).to_string()).collect();
+    let mut args: Vec<String> = Vec::with_capacity(acp_args.len() + 2);
+    if spec.family == "hermes" {
+        if let Some(hermes_profile) = profile
+            .hermes_profile
+            .as_deref()
+            .map(str::trim)
+            .filter(|p| super::hermes::is_valid_hermes_profile(p))
+        {
+            args.push("-p".to_string());
+            args.push(hermes_profile.to_string());
+        }
+    }
+    args.extend(acp_args.iter().map(|s| (*s).to_string()));
     Some((envs, program, args))
 }
 
@@ -1112,6 +1184,17 @@ pub fn build_cli_switch_argv_with_options(
     }
 
     let mut inner_args: Vec<String> = Vec::new();
+    if spec.family == "hermes" {
+        if let Some(hermes_profile) = profile
+            .hermes_profile
+            .as_deref()
+            .map(str::trim)
+            .filter(|p| super::hermes::is_valid_hermes_profile(p))
+        {
+            inner_args.push("-p".to_string());
+            inner_args.push(hermes_profile.to_string());
+        }
+    }
     if let Some(id) = native_session_id.map(str::trim).filter(|s| !s.is_empty()) {
         inner_args.push(spec.cli_resume_flag.to_string());
         inner_args.push(id.to_string());
@@ -1204,6 +1287,22 @@ pub fn build_cli_switch_argv_with_options(
         if let Some(e) = effort {
             inner_args.push("--reasoning-effort".to_string());
             inner_args.push(e.to_string());
+        }
+    } else if spec.family == "hermes" {
+        // Hermes refuses `-m/--model` and `--reasoning` when `--resume` is passed because
+        // the gateway session already retains its switched model and reasoning policy.
+        let is_resume = native_session_id
+            .map(str::trim)
+            .is_some_and(|s| !s.is_empty());
+        if !is_resume {
+            if let Some(m) = model {
+                inner_args.push("--model".to_string());
+                inner_args.push(super::hermes::strip_hermes_provider_prefix(m).to_string());
+            }
+            if let Some(e) = effort.filter(|e| !e.eq_ignore_ascii_case("default")) {
+                inner_args.push("--reasoning".to_string());
+                inner_args.push(e.to_string());
+            }
         }
     }
 

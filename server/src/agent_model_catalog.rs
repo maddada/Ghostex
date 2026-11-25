@@ -570,6 +570,11 @@ pub fn resolve_acp_model(
         return Some((value, label, effort.or(default_effort)));
     };
 
+    if canonical == "hermes" {
+        let label = crate::acp::hermes::strip_hermes_provider_prefix(raw).to_string();
+        return Some((raw.to_string(), label, effort));
+    }
+
     // Antigravity ACP reports flattened `<base>-<effort>` ids (e.g. `gemini-4-neon-high`); split
     // them so the model pill and picker match the catalog's base model + effort.
     if canonical == "antigravity" {

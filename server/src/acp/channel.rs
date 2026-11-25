@@ -1261,18 +1261,20 @@ pub(crate) async fn switch_to_cli(
                 crate::agent_model_pins::SESSION_PIN_KEY.to_string(),
                 Value::Object(pin_json),
             );
-            if let Some(existing_cmd) = runtime_settings
-                .get("agentCommand")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-            {
-                if let Ok(updated_cmd) = crate::agents::with_agent_model_options(
-                    &existing_cmd,
-                    fam,
-                    Some(model),
-                    effort.as_deref(),
-                ) {
-                    runtime_settings.insert("agentCommand".to_string(), json!(updated_cmd));
+            if fam != "hermes" {
+                if let Some(existing_cmd) = runtime_settings
+                    .get("agentCommand")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                {
+                    if let Ok(updated_cmd) = crate::agents::with_agent_model_options(
+                        &existing_cmd,
+                        fam,
+                        Some(model),
+                        effort.as_deref(),
+                    ) {
+                        runtime_settings.insert("agentCommand".to_string(), json!(updated_cmd));
+                    }
                 }
             }
         }

@@ -653,6 +653,8 @@ pub fn is_auto_or_bypass_mode_id(raw: &str) -> bool {
         || lower.contains("accept_edit")
         || lower.contains("auto-edit")
         || lower.contains("auto_edit")
+        || lower.contains("dont_ask")
+        || lower.contains("dont-ask")
 }
 
 /// Find the agent's advertised automatic ACP mode (e.g. `id: "auto"`), excluding edit-only or
@@ -1514,6 +1516,7 @@ fn is_known_non_path_key(norm: &str) -> bool {
                 | "editmode"
                 | "expectedreplacements"
                 | "occurrence"
+                | "tool"
         )
 }
 
@@ -1649,13 +1652,29 @@ fn collect_patch_paths(patch: &str, paths: &mut Vec<String>) -> bool {
         // `+`/`-`/` ` hunk body line).
         if !in_apply_hunk || raw_line.starts_with("*** ") {
             let mut matched_apply = false;
+            let candidate = if in_apply_patch { raw_line } else { trimmed };
+            if let Some(rest) = candidate.strip_prefix("*** Move File:") {
+                let Some((src, dst)) = rest.split_once("->") else {
+                    return false;
+                };
+                let src = src.trim();
+                let dst = dst.trim();
+                if src.is_empty() || dst.is_empty() || src.contains('"') || dst.contains('"') {
+                    return false;
+                }
+                push_unique(paths, src);
+                push_unique(paths, dst);
+                found += 2;
+                in_apply_patch = true;
+                in_apply_hunk = false;
+                continue;
+            }
             for prefix in [
                 "*** Update File:",
                 "*** Add File:",
                 "*** Delete File:",
                 "*** Move to:",
             ] {
-                let candidate = if in_apply_patch { raw_line } else { trimmed };
                 if let Some(rest) = candidate.strip_prefix(prefix) {
                     let target = rest.trim();
                     if target.is_empty() || target.contains('"') {
@@ -1978,6 +1997,31 @@ fn collect_allowlisted_value(
                                 val,
                                 is_edit_kind,
                                 true,
+                                in_raw_input,
+                                out,
+                                depth + 1,
+                            ) {
+                                return false;
+                            }
+                        }
+                        _ => return false,
+                    }
+                } else if in_raw_input && norm == "arguments" {
+                    // Hermes ACP wraps file mutation inputs as `{ tool: "write_file"|"patch",
+                    // arguments: { path, ... } }`: accept only a nested object (or null) and
+                    // validate every inner key through the same allowlist.
+                    let nested_is_patch = is_patch_tool
+                        || obj
+                            .get("tool")
+                            .and_then(Value::as_str)
+                            .is_some_and(|t| t.to_ascii_lowercase().contains("patch"));
+                    match val {
+                        Value::Null => {}
+                        Value::Object(_) => {
+                            if !collect_allowlisted_value(
+                                val,
+                                is_edit_kind,
+                                nested_is_patch,
                                 in_raw_input,
                                 out,
                                 depth + 1,

@@ -1177,10 +1177,28 @@ pub(crate) async fn run_provider_model_picker_job(
     let outcome = match plan.provider.as_str() {
         // Hermes 0.22 switches through its gateway's `session.mutate`; the typed `/model` stays for
         // Hermes 0.21 and older (CDXC:HermesGateway 2026-11-05 in hermes_gateway.rs).
-        "hermes" => match hermes_gateway_pick(project_id, session_id, &plan).await {
-            Some(outcome) => outcome,
-            None => driver.drive_hermes(&plan).await,
-        },
+        "hermes" => {
+            if crate::acp::channel::live(project_id, session_id, "model").is_some() {
+                async {
+                    if !plan.model.is_empty() || !plan.effort.is_empty() {
+                        crate::acp::channel::set_model(
+                            project_id,
+                            session_id,
+                            &plan.model,
+                            &plan.effort,
+                        )
+                        .await?;
+                    }
+                    Ok(())
+                }
+                .await
+            } else {
+                match hermes_gateway_pick(project_id, session_id, &plan).await {
+                    Some(outcome) => outcome,
+                    None => driver.drive_hermes(&plan).await,
+                }
+            }
+        }
         // A Pi or OMP with Ghostex's chat channel open switches through its own API; the screen
         // drivers stay for one still running an older extension (CDXC:PiChatChannel 2026-11-05).
         "pi" | "omp" => match pi_channel_pick(project_id, session_id, &plan).await {

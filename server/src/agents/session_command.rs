@@ -386,21 +386,23 @@ pub(crate) fn with_agent_model_options(
         let (remove, takes_value) = match (agent, word.as_str()) {
             _ if !is_flag => (false, false),
             (
-                "claude" | "codex" | "cursor" | "antigravity" | "copilot" | "grok" | "hermes-agent",
+                "claude" | "codex" | "cursor" | "antigravity" | "copilot" | "grok" | "hermes"
+                | "hermes-agent",
                 "--model",
             )
-            | ("codex" | "grok" | "hermes-agent", "-m")
+            | ("codex" | "grok" | "hermes" | "hermes-agent", "-m")
                 if model.is_some() =>
             {
                 (true, true)
             }
             (
-                "claude" | "codex" | "cursor" | "antigravity" | "copilot" | "grok" | "hermes-agent",
+                "claude" | "codex" | "cursor" | "antigravity" | "copilot" | "grok" | "hermes"
+                | "hermes-agent",
                 value,
             ) if model.is_some() && value.starts_with("--model=") => (true, false),
             ("claude" | "antigravity" | "grok", "--effort")
             | ("copilot" | "grok", "--reasoning-effort")
-            | ("hermes-agent", "--reasoning")
+            | ("hermes" | "hermes-agent", "--reasoning")
                 if effort.is_some() =>
             {
                 (true, true)
@@ -415,7 +417,9 @@ pub(crate) fn with_agent_model_options(
             {
                 (true, false)
             }
-            ("hermes-agent", value) if effort.is_some() && value.starts_with("--reasoning=") => {
+            ("hermes" | "hermes-agent", value)
+                if effort.is_some() && value.starts_with("--reasoning=") =>
+            {
                 (true, false)
             }
             // Ghostex's Pi model is `provider/id`, so a pinned `--provider` goes with the old model.
@@ -470,7 +474,12 @@ pub(crate) fn with_agent_model_options(
     }
     let mut result = result.trim().to_string();
     if let Some(model) = model {
-        result.push_str(&format!(" --model {}", shell_word(model)));
+        let cli_model = if matches!(agent, "hermes" | "hermes-agent") {
+            crate::acp::hermes::strip_hermes_provider_prefix(model)
+        } else {
+            model
+        };
+        result.push_str(&format!(" --model {}", shell_word(cli_model)));
     }
     if let Some(effort) = effort {
         match agent {
@@ -482,7 +491,11 @@ pub(crate) fn with_agent_model_options(
             "copilot" | "grok" => {
                 result.push_str(&format!(" --reasoning-effort {}", shell_word(effort)))
             }
-            "hermes-agent" => result.push_str(&format!(" --reasoning {}", shell_word(effort))),
+            "hermes" | "hermes-agent" => {
+                if !effort.eq_ignore_ascii_case("default") {
+                    result.push_str(&format!(" --reasoning {}", shell_word(effort)));
+                }
+            }
             // Cursor takes no effort flag; the launch plan refuses an effort for it before here.
             "cursor" => {}
             _ => result.push_str(&format!(" --effort {}", shell_word(effort))),

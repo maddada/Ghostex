@@ -555,6 +555,9 @@ pub(super) fn acp_family_for_session(agent_id: Option<&str>, session: Option<&Va
     if lower.contains("grok") {
         return "grok".to_string();
     }
+    if lower.contains("hermes") {
+        return "hermes".to_string();
+    }
     ghostex_gx_chat_core::menus::catalog::canonical_model_family(raw).to_string()
 }
 
@@ -815,15 +818,27 @@ pub fn detect_session_chat_terminal_state(
                 _ => None,
             }
         });
-        let model_catalog = acp_state
-            .get("modelCatalog")
-            .filter(|v| v.is_object())
-            .cloned();
+        let hermes_sel = (family == "hermes")
+            .then(|| {
+                crate::session_chat_hermes_status::read_hermes_status_selection(
+                    repository, project_id, session_id,
+                )
+            })
+            .flatten();
+        let model_catalog = if family == "hermes" {
+            crate::acp::hermes::build_native_model_catalog(Some(&acp_state), hermes_sel.as_ref())
+        } else {
+            acp_state
+                .get("modelCatalog")
+                .filter(|v| v.is_object())
+                .cloned()
+        };
         let selection = SessionChatDetectedSelection {
             model,
             effort,
             mode,
             context_usage,
+            hermes_status: hermes_sel.and_then(|sel| sel.hermes_status),
             model_catalog,
             ..SessionChatDetectedSelection::default()
         };
@@ -1022,6 +1037,16 @@ pub fn detect_session_chat_terminal_state(
                     label: crate::agent_model_catalog::effort_display_label(value),
                     source: SessionChatOptionEvidence::Launch,
                 });
+            let hermes_sel = (family == "hermes")
+                .then(|| {
+                    crate::session_chat_hermes_status::read_hermes_status_selection(
+                        repository, project_id, session_id,
+                    )
+                })
+                .flatten();
+            let model_catalog = (family == "hermes")
+                .then(|| crate::acp::hermes::build_native_model_catalog(None, hermes_sel.as_ref()))
+                .flatten();
             let selection = SessionChatDetectedSelection {
                 model,
                 effort,
@@ -1030,6 +1055,8 @@ pub fn detect_session_chat_terminal_state(
                     label: level.label().to_string(),
                     source: SessionChatOptionEvidence::Launch,
                 }),
+                hermes_status: hermes_sel.and_then(|sel| sel.hermes_status),
+                model_catalog,
                 ..SessionChatDetectedSelection::default()
             };
             let options = Some(SessionChatDetectedOptions::new(selection));

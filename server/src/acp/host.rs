@@ -188,6 +188,16 @@ fn parse_args(args: &[String]) -> Result<HostArgs, String> {
             "--gbot-api-chat" => profile.gbot_api_chat = true,
             "--gbot-computer-use-off" => profile.gbot_computer_use_off = true,
             "--lean-worker" => profile.lean_worker = true,
+            "--hermes-profile" => {
+                i += 1;
+                if let Some(raw) = args
+                    .get(i)
+                    .map(|s| s.trim())
+                    .filter(|s| super::hermes::is_valid_hermes_profile(s))
+                {
+                    profile.hermes_profile = Some(raw.to_string());
+                }
+            }
             "--channel-secret-file" => {
                 i += 1;
                 channel_secret_file = args.get(i).cloned();
@@ -756,6 +766,51 @@ pub(super) fn append_bounded(buf: &mut String, chunk: &str, max_bytes: usize) {
     }
 }
 
+#[derive(Clone, Debug)]
+struct HostPendingPermission {
+    perm: PendingPermission,
+    elicitation: Option<super::elicitation::PendingElicitation>,
+}
+
+impl HostPendingPermission {
+    fn from_permission(perm: PendingPermission) -> Self {
+        Self {
+            perm,
+            elicitation: None,
+        }
+    }
+
+    fn from_elicitation(
+        rpc_id: Value,
+        tool_use_id: String,
+        elicitation: super::elicitation::PendingElicitation,
+    ) -> Self {
+        let prompt = elicitation.to_ghostex_prompt(Some(&tool_use_id));
+        let title = elicitation.title().to_string();
+        Self {
+            perm: PendingPermission {
+                rpc_id,
+                tool_name: title.clone(),
+                summary: title,
+                tool_use_id: Some(tool_use_id),
+                reason: None,
+                is_question: true,
+                options: Vec::new(),
+                custom_prompt_override: Some(prompt),
+            },
+            elicitation: Some(elicitation),
+        }
+    }
+
+    fn cancel_response(&self) -> Value {
+        if self.elicitation.is_some() {
+            json!({ "action": "cancel" })
+        } else {
+            json!({ "outcome": { "outcome": "cancelled" } })
+        }
+    }
+}
+
 struct HostState {
     family: String,
     native_session_id: Option<String>,
@@ -774,7 +829,7 @@ struct HostState {
     available_models: Value,
     available_modes: Value,
     config_options: Value,
-    pending_permissions: VecDeque<PendingPermission>,
+    pending_permissions: VecDeque<HostPendingPermission>,
     live_stream_text: String,
     live_stream_started_at: Option<String>,
     live_thought_text: String,
@@ -910,7 +965,7 @@ impl HostState {
             "availableModels": self.available_models,
             "availableModes": self.available_modes,
             "configOptions": self.config_options,
-            "pendingPermission": self.pending_permissions.front().map(|p| p.to_ghostex_prompt()),
+            "pendingPermission": self.pending_permissions.front().map(|p| p.perm.to_ghostex_prompt()),
             "pendingPermissionCount": self.pending_permissions.len(),
             "liveActivity": self.live_activity_json(),
             "contextUsage": self.context_usage_json(),
@@ -1119,8 +1174,35 @@ fn apply_session_metadata(state: &mut HostState, result: &Value) {
         }
     }
     if let Some(configs) = result.get("configOptions") {
-        state.config_options = configs.clone();
+        apply_config_options(state, configs, false);
     }
+}
+
+fn apply_config_options(state: &mut HostState, configs: &Value, overwrite_model: bool) {
+    state.config_options = configs.clone();
+    let (effort, model) = super::hermes::extract_config_option_state(configs);
+    if let Some(eff) = effort {
+        state.current_effort = Some(eff);
+    }
+    if let Some(m) = model {
+        if overwrite_model || state.current_model.is_none() {
+            state.current_model = Some(m);
+        }
+    }
+}
+
+fn find_effort_config_option_id(config_options: &Value) -> Option<String> {
+    config_options.as_array().and_then(|arr| {
+        arr.iter().find_map(|item| {
+            let cid = item.get("id").and_then(Value::as_str)?;
+            let cat = item.get("category").and_then(Value::as_str).unwrap_or("");
+            (cat.contains("thought")
+                || cat.contains("effort")
+                || cid.contains("effort")
+                || cid.contains("thinking"))
+            .then(|| cid.to_string())
+        })
+    })
 }
 
 /// Resolves `(model, effort)` to the exact ACP `modelId` that `session/set_model` expects.
@@ -1129,6 +1211,7 @@ fn apply_session_metadata(state: &mut HostState, result: &Value) {
 fn resolve_acp_target_model_id(
     family: &str,
     available_models: &Value,
+    current_model: Option<&str>,
     model: Option<&str>,
     effort: Option<&str>,
 ) -> Option<(String, Option<String>)> {
@@ -1154,6 +1237,14 @@ fn resolve_acp_target_model_id(
         .map(|e| e.to_ascii_lowercase());
 
     if let Some(model) = model {
+        if family == "hermes" {
+            let resolved = super::hermes::resolve_hermes_target_model_id(
+                available_models,
+                current_model,
+                model,
+            );
+            return Some((resolved, effort));
+        }
         if family == "antigravity" {
             if has_id(model) {
                 let parsed_effort = crate::agent_model_catalog::split_antigravity_model_id(model)
@@ -1222,7 +1313,7 @@ fn parse_permission_request(rpc_id: Value, params: &Value) -> PendingPermission 
         .map(str::to_string);
     let is_question = tool_use_id
         .as_deref()
-        .is_some_and(|id| id.starts_with("interaction_"));
+        .is_some_and(|id| id.starts_with("interaction_") || id.starts_with("clarify-"));
     let tool_name = if is_question {
         tool_call
             .get("title")
@@ -1232,13 +1323,15 @@ fn parse_permission_request(rpc_id: Value, params: &Value) -> PendingPermission 
             .unwrap_or("Question")
             .to_string()
     } else {
-        tool_call
-            .get("name")
-            .or_else(|| tool_call.get("kind"))
-            .or_else(|| tool_call.get("title"))
-            .and_then(Value::as_str)
-            .unwrap_or("Tool")
-            .to_string()
+        super::hermes::extract_permission_tool_name(tool_call).unwrap_or_else(|| {
+            tool_call
+                .get("name")
+                .or_else(|| tool_call.get("kind"))
+                .or_else(|| tool_call.get("title"))
+                .and_then(Value::as_str)
+                .unwrap_or("Tool")
+                .to_string()
+        })
     };
     let summary = tool_call
         .get("rawInput")
@@ -1259,6 +1352,7 @@ fn parse_permission_request(rpc_id: Value, params: &Value) -> PendingPermission 
             .find_map(|key| v.get(*key).and_then(Value::as_str))
             .filter(|s| !s.trim().is_empty())
             .map(str::to_string)
+            .or_else(|| super::hermes::extract_permission_summary(tool_call))
             .or_else(|| {
                 tool_call
                     .pointer("/locations/0/path")
@@ -1268,6 +1362,7 @@ fn parse_permission_request(rpc_id: Value, params: &Value) -> PendingPermission 
             })
             .or_else(|| serde_json::to_string(v).ok())
         })
+        .or_else(|| super::hermes::extract_permission_summary(tool_call))
         .or_else(|| {
             tool_call
                 .pointer("/locations/0/path")
@@ -1366,7 +1461,7 @@ impl ActivityReporter {
                 while rx.try_recv().is_ok() {}
                 let (act, sid, perm, interrupted) = {
                     let s = state.lock().unwrap_or_else(|p| p.into_inner());
-                    let front = s.pending_permissions.front().cloned();
+                    let front = s.pending_permissions.front().map(|p| p.perm.clone());
                     let act = if front.is_some() {
                         "attention"
                     } else if s.working {
@@ -1393,7 +1488,7 @@ impl ActivityReporter {
                         Err(mpsc::RecvTimeoutError::Timeout) => {
                             let (act, sid, perm, interrupted) = {
                                 let s = state.lock().unwrap_or_else(|p| p.into_inner());
-                                let front = s.pending_permissions.front().cloned();
+                                let front = s.pending_permissions.front().map(|p| p.perm.clone());
                                 let act = if front.is_some() {
                                     "attention"
                                 } else if s.working {
@@ -1583,15 +1678,13 @@ fn apply_approval_level_and_sync_native_mode_locked(
 }
 
 fn cancel_all_pending_permissions(transport: &AcpTransport, state: &Mutex<HostState>) {
-    let drained: Vec<PendingPermission> = {
+    let drained: Vec<HostPendingPermission> = {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
         s.pending_permissions.drain(..).collect()
     };
-    for perm in drained {
-        let _ = transport.respond_to_agent(
-            perm.rpc_id,
-            json!({ "outcome": { "outcome": "cancelled" } }),
-        );
+    for entry in drained {
+        let cancel_body = entry.cancel_response();
+        let _ = transport.respond_to_agent(entry.perm.rpc_id, cancel_body);
     }
 }
 
@@ -1924,11 +2017,40 @@ pub fn run(args: &[String]) -> i32 {
                             let was_empty = {
                                 let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
                                 let empty = s.pending_permissions.is_empty();
-                                s.pending_permissions.push_back(perm);
+                                s.pending_permissions
+                                    .push_back(HostPendingPermission::from_permission(perm));
                                 empty
                             };
                             if was_empty {
                                 act_out.sync();
+                            }
+                        } else if method == "elicitation/create" {
+                            if let Some(form) =
+                                super::elicitation::parse_elicitation_request(&params)
+                            {
+                                let tool_use_id = format!("elicitation-{}", now_ms());
+                                println!(
+                                    "\r\n[Native] Waiting for question answer: {}",
+                                    form.title()
+                                );
+                                let _ = std::io::stdout().flush();
+                                let entry = HostPendingPermission::from_elicitation(
+                                    rpc_id,
+                                    tool_use_id,
+                                    form,
+                                );
+                                let was_empty = {
+                                    let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                    let empty = s.pending_permissions.is_empty();
+                                    s.pending_permissions.push_back(entry);
+                                    empty
+                                };
+                                if was_empty {
+                                    act_out.sync();
+                                }
+                            } else {
+                                let _ =
+                                    t_out.respond_to_agent(rpc_id, json!({ "action": "decline" }));
                             }
                         } else {
                             t_out.respond_error_to_agent(
@@ -1984,7 +2106,7 @@ pub fn run(args: &[String]) -> i32 {
                             "config_option_update" => {
                                 if let Some(opts) = update.get("configOptions") {
                                     let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                                    s.config_options = opts.clone();
+                                    apply_config_options(&mut s, opts, true);
                                 }
                             }
                             "agent_message_chunk" => {
@@ -2110,6 +2232,7 @@ pub fn run(args: &[String]) -> i32 {
         "clientCapabilities": {
             "fs": { "readTextFile": false, "writeTextFile": false },
             "terminal": false,
+            "elicitation": { "form": {} },
         },
         "clientInfo": {
             "name": "ghostex",
@@ -2195,12 +2318,16 @@ pub fn run(args: &[String]) -> i32 {
     }
 
     {
-        let (avail, current_is_concrete) = {
+        let (avail, existing_model, current_is_concrete) = {
             let s = state.lock().unwrap_or_else(|p| p.into_inner());
             let concrete = s.current_model.as_deref().is_some_and(|m| {
                 !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(m)
             });
-            (s.available_models.clone(), concrete)
+            (
+                s.available_models.clone(),
+                s.current_model.clone(),
+                concrete,
+            )
         };
         let requested_model = parsed
             .model
@@ -2210,6 +2337,7 @@ pub fn run(args: &[String]) -> i32 {
             resolve_acp_target_model_id(
                 spec.family,
                 &avail,
+                existing_model.as_deref(),
                 requested_model,
                 parsed.effort.as_deref(),
             )
@@ -2218,13 +2346,17 @@ pub fn run(args: &[String]) -> i32 {
         };
         if let Some((target_id, resolved_effort)) = target {
             if let Some(sid) = native_session_id.as_deref() {
-                if transport
-                    .call(
-                        "session/set_model",
-                        json!({ "sessionId": sid, "modelId": target_id }),
-                        ACP_RPC_TIMEOUT,
-                    )
-                    .is_ok()
+                let already_same = existing_model
+                    .as_deref()
+                    .is_some_and(|cur| cur == target_id);
+                if already_same
+                    || transport
+                        .call(
+                            "session/set_model",
+                            json!({ "sessionId": sid, "modelId": target_id }),
+                            ACP_RPC_TIMEOUT,
+                        )
+                        .is_ok()
                 {
                     let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                     s.current_model = Some(target_id);
@@ -2236,9 +2368,31 @@ pub fn run(args: &[String]) -> i32 {
         }
     }
     if let Some(effort) = parsed.effort.as_deref().filter(|e| !e.is_empty()) {
-        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-        if s.current_effort.is_none() {
-            s.current_effort = Some(effort.to_string());
+        let effort_cfg_id = {
+            let s = state.lock().unwrap_or_else(|p| p.into_inner());
+            find_effort_config_option_id(&s.config_options)
+        };
+        if let (Some(sid), Some(cfg_id)) = (native_session_id.as_deref(), effort_cfg_id) {
+            if let Ok(resp) = transport.call(
+                "session/set_config_option",
+                json!({
+                    "sessionId": sid,
+                    "configId": cfg_id,
+                    "value": effort,
+                }),
+                ACP_RPC_TIMEOUT,
+            ) {
+                let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                if let Some(opts) = resp.get("configOptions") {
+                    apply_config_options(&mut s, opts, false);
+                }
+                s.current_effort = Some(effort.to_string());
+            }
+        } else {
+            let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+            if s.current_effort.is_none() {
+                s.current_effort = Some(effort.to_string());
+            }
         }
     }
     {
@@ -2427,14 +2581,17 @@ pub fn run(args: &[String]) -> i32 {
                             s.pending_permissions
                                 .iter()
                                 .position(|p| {
-                                    !p.is_question && p.tool_use_id.as_deref() == Some(wanted_id)
+                                    !p.perm.is_question
+                                        && p.perm.tool_use_id.as_deref() == Some(wanted_id)
                                 })
                                 .and_then(|idx| s.pending_permissions.remove(idx))
+                                .map(|entry| entry.perm)
                         } else {
                             s.pending_permissions
                                 .iter()
-                                .position(|p| !p.is_question)
+                                .position(|p| !p.perm.is_question)
                                 .and_then(|idx| s.pending_permissions.remove(idx))
+                                .map(|entry| entry.perm)
                         }
                     };
                     let Some(perm) = perm else {
@@ -2474,33 +2631,40 @@ pub fn run(args: &[String]) -> i32 {
                         .and_then(Value::as_str)
                         .map(str::trim)
                         .filter(|s| !s.is_empty());
-                    let perm = {
+                    let entry = {
                         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                         if let Some(wanted_id) = target_tool_use_id {
                             s.pending_permissions
                                 .iter()
                                 .position(|p| {
-                                    p.is_question && p.tool_use_id.as_deref() == Some(wanted_id)
+                                    p.perm.is_question
+                                        && p.perm.tool_use_id.as_deref() == Some(wanted_id)
                                 })
                                 .and_then(|idx| s.pending_permissions.remove(idx))
                         } else {
                             s.pending_permissions
                                 .iter()
-                                .position(|p| p.is_question)
+                                .position(|p| p.perm.is_question)
                                 .and_then(|idx| s.pending_permissions.remove(idx))
                         }
                     };
-                    let Some(perm) = perm else {
+                    let Some(entry) = entry else {
                         ep.ack(id, false, Value::Null, Some("NO_PENDING_QUESTION"));
                         continue;
                     };
-                    let outcome = if let Some(opt_id) = perm.resolve_question_option_id(&selections)
-                    {
-                        json!({ "outcome": "selected", "optionId": opt_id })
+                    let response_body = if let Some(form) = entry.elicitation {
+                        form.build_response(&selections)
                     } else {
-                        json!({ "outcome": "cancelled" })
+                        let outcome = if let Some(opt_id) =
+                            entry.perm.resolve_question_option_id(&selections)
+                        {
+                            json!({ "outcome": "selected", "optionId": opt_id })
+                        } else {
+                            json!({ "outcome": "cancelled" })
+                        };
+                        json!({ "outcome": outcome })
                     };
-                    match transport.respond_to_agent(perm.rpc_id, json!({ "outcome": outcome })) {
+                    match transport.respond_to_agent(entry.perm.rpc_id, response_body) {
                         Ok(()) => {
                             activity.sync();
                             ep.ack(id, true, json!({ "answered": true }), None);
@@ -2546,72 +2710,88 @@ pub fn run(args: &[String]) -> i32 {
                         None
                     };
                     let effective_model = if !model.is_empty() {
-                        Some(model.as_str())
+                        Some(model.clone())
                     } else {
-                        base_for_antigravity.as_deref()
+                        base_for_antigravity
                     };
-                    if let Some((target_id, resolved_effort)) = effective_model.and_then(|m| {
+                    let target_model = effective_model.as_deref().and_then(|m| {
                         resolve_acp_target_model_id(
                             spec.family,
                             &avail,
+                            existing_model.as_deref(),
                             Some(m),
                             (!effort.is_empty()).then_some(effort.as_str()),
                         )
-                    }) {
-                        if let Err(err) = transport.call(
-                            "session/set_model",
-                            json!({ "sessionId": sid, "modelId": target_id }),
-                            ACP_RPC_TIMEOUT,
-                        ) {
-                            ep.ack(id, false, Value::Null, Some(&err));
-                            continue;
+                    });
+                    // Run `session/set_model` + `session/set_config_option` off the poll loop
+                    // thread so an agent that requests confirmation via `session/request_permission`
+                    // (such as Hermes guarded model switches) cannot deadlock the poll loop.
+                    let t_model = transport.clone();
+                    let st_model = state.clone();
+                    let ep_model = ep.clone();
+                    let cmd_id = id.to_string();
+                    thread::spawn(move || {
+                        if let Some((target_id, resolved_effort)) = target_model {
+                            let same_model = existing_model
+                                .as_deref()
+                                .is_some_and(|cur| cur == target_id);
+                            if !same_model {
+                                if let Err(err) = t_model.call(
+                                    "session/set_model",
+                                    json!({ "sessionId": sid, "modelId": target_id }),
+                                    ACP_RPC_TIMEOUT,
+                                ) {
+                                    ep_model.ack(&cmd_id, false, Value::Null, Some(&err));
+                                    return;
+                                }
+                            }
+                            let mut s = st_model.lock().unwrap_or_else(|p| p.into_inner());
+                            s.current_model = Some(target_id);
+                            if let Some(eff) = resolved_effort {
+                                s.current_effort = Some(eff);
+                            }
                         }
-                        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-                        s.current_model = Some(target_id);
-                        if let Some(eff) = resolved_effort {
-                            s.current_effort = Some(eff);
+                        if !effort.is_empty() {
+                            let effort_cfg_id = {
+                                let s = st_model.lock().unwrap_or_else(|p| p.into_inner());
+                                find_effort_config_option_id(&s.config_options)
+                            };
+                            if let Some(cfg_id) = effort_cfg_id {
+                                match t_model.call(
+                                    "session/set_config_option",
+                                    json!({
+                                        "sessionId": sid,
+                                        "configId": cfg_id,
+                                        "value": effort,
+                                    }),
+                                    ACP_RPC_TIMEOUT,
+                                ) {
+                                    Ok(resp) => {
+                                        let mut s =
+                                            st_model.lock().unwrap_or_else(|p| p.into_inner());
+                                        if let Some(opts) = resp.get("configOptions") {
+                                            apply_config_options(&mut s, opts, false);
+                                        }
+                                        s.current_effort = Some(effort);
+                                    }
+                                    Err(err) => {
+                                        ep_model.ack(&cmd_id, false, Value::Null, Some(&err));
+                                        return;
+                                    }
+                                }
+                            } else {
+                                st_model
+                                    .lock()
+                                    .unwrap_or_else(|p| p.into_inner())
+                                    .current_effort = Some(effort);
+                            }
                         }
-                    }
-                    if !effort.is_empty() {
-                        // Best-effort effort config option update if exposed by the agent.
-                        let effort_cfg_id = state
+                        let snap = st_model
                             .lock()
                             .unwrap_or_else(|p| p.into_inner())
-                            .config_options
-                            .as_array()
-                            .and_then(|arr| {
-                                arr.iter().find_map(|item| {
-                                    let cid = item.get("id").and_then(Value::as_str)?;
-                                    let cat =
-                                        item.get("category").and_then(Value::as_str).unwrap_or("");
-                                    (cat.contains("thought")
-                                        || cat.contains("effort")
-                                        || cid.contains("effort")
-                                        || cid.contains("thinking"))
-                                    .then(|| cid.to_string())
-                                })
-                            });
-                        if let Some(cfg_id) = effort_cfg_id {
-                            let _ = transport.call(
-                                "session/set_config_option",
-                                json!({
-                                    "sessionId": sid,
-                                    "configId": cfg_id,
-                                    "value": effort,
-                                }),
-                                ACP_RPC_TIMEOUT,
-                            );
-                        }
-                        state
-                            .lock()
-                            .unwrap_or_else(|p| p.into_inner())
-                            .current_effort = Some(effort);
-                    }
-                    let snap = state
-                        .lock()
-                        .unwrap_or_else(|p| p.into_inner())
-                        .snapshot_json();
-                    ep.ack(id, true, snap, None);
+                            .snapshot_json();
+                        ep_model.ack(&cmd_id, true, snap, None);
+                    });
                 }
                 "mode" => {
                     let mode = params
@@ -2810,18 +2990,16 @@ pub fn run(args: &[String]) -> i32 {
                                     s.last_turn_interrupted = true;
                                 }
                                 s.clear_live_turn_output();
-                                let drained: Vec<PendingPermission> =
+                                let drained: Vec<HostPendingPermission> =
                                     s.pending_permissions.drain(..).collect();
                                 (true, drained)
                             } else {
                                 (false, Vec::new())
                             }
                         };
-                        for perm in orphaned_perms {
-                            let _ = t_turn.respond_to_agent(
-                                perm.rpc_id,
-                                json!({ "outcome": { "outcome": "cancelled" } }),
-                            );
+                        for entry in orphaned_perms {
+                            let cancel_body = entry.cancel_response();
+                            let _ = t_turn.respond_to_agent(entry.perm.rpc_id, cancel_body);
                         }
                         if is_current_turn {
                             println!("[Native] Turn finished ({stop_reason}).");
@@ -2847,6 +3025,12 @@ pub fn run(args: &[String]) -> i32 {
                                     (Some(raw.to_string()), s.current_effort.clone())
                                 }
                             }
+                            Some(raw) if spec.family == "hermes" => (
+                                Some(super::hermes::strip_hermes_provider_prefix(raw).to_string()),
+                                s.current_effort
+                                    .clone()
+                                    .filter(|e| !e.eq_ignore_ascii_case("default")),
+                            ),
                             Some(raw) => (Some(raw.to_string()), s.current_effort.clone()),
                             None => (None, s.current_effort.clone()),
                         };
@@ -2928,6 +3112,12 @@ pub fn run(args: &[String]) -> i32 {
                         (Some(raw.to_string()), s.current_effort.clone())
                     }
                 }
+                Some(raw) if spec.family == "hermes" => (
+                    Some(super::hermes::strip_hermes_provider_prefix(raw).to_string()),
+                    s.current_effort
+                        .clone()
+                        .filter(|e| !e.eq_ignore_ascii_case("default")),
+                ),
                 Some(raw) => (Some(raw.to_string()), s.current_effort.clone()),
                 None => (None, s.current_effort.clone()),
             };

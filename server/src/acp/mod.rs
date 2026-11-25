@@ -29,6 +29,8 @@ mod driver_claude;
 mod driver_codex;
 mod driver_grok;
 pub(crate) mod driver_opencode;
+mod elicitation;
+pub(crate) mod hermes;
 pub mod host;
 pub(crate) mod host_mode_switching;
 pub(crate) mod pending_switch;
@@ -133,13 +135,11 @@ pub fn agent_acp_setting(
     settings: &serde_json::Map<String, Value>,
     agent_family: &str,
 ) -> Option<bool> {
-    if !supports_acp(agent_family) {
-        return None;
-    }
+    let canonical = canonical_native_family(agent_family)?;
     if let Some(mode) = settings
         .get(SESSION_MODE_SETTING_KEY)
         .and_then(Value::as_object)
-        .and_then(|map| map.get(agent_family))
+        .and_then(|map| map.get(canonical).or_else(|| map.get(agent_family)))
         .and_then(Value::as_str)
     {
         return Some(mode.eq_ignore_ascii_case("non-cli"));
@@ -147,7 +147,7 @@ pub fn agent_acp_setting(
     settings
         .get(ACP_MODE_SETTING_KEY)
         .and_then(Value::as_object)
-        .and_then(|map| map.get(agent_family))
+        .and_then(|map| map.get(canonical).or_else(|| map.get(agent_family)))
         .and_then(Value::as_bool)
 }
 

@@ -1563,6 +1563,80 @@ pub(crate) const CURSOR: &[SlashCommand] = &[
     },
 ];
 
+/// Hermes ACP's advertised built-in slash commands (`available_commands_update`).
+pub(crate) const HERMES_NATIVE: &[SlashCommand] = &[
+    SlashCommand {
+        name: "help",
+        description: "Show available commands",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "model",
+        description: "Show or switch the active model",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "tools",
+        description: "List available tools",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "context",
+        description: "Show context window breakdown",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "reset",
+        description: "Reset conversation history",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "compress",
+        description: "Compress conversation context",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "steer",
+        description: "Queue an immediate steering note for the active turn",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "queue",
+        description: "Queue a follow-up prompt after the active turn",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "usage",
+        description: "Show token and cost usage",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "status",
+        description: "Show session status",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "version",
+        description: "Show Hermes version",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "title",
+        description: "Set or show the session title",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "undo",
+        description: "Rewind N turns",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "retry",
+        description: "Retry the last turn",
+        insert_text: None,
+    },
+];
+
 pub(crate) const HERMES: &[SlashCommand] = &[
     SlashCommand {
         name: "new",

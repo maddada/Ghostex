@@ -290,6 +290,7 @@ fn acp_profile_from_plan(plan: &Value, fam: &str) -> crate::acp::spec::AcpLaunch
         gbot_computer_use_off: plan.get("acpGbotComputerUseOff").and_then(Value::as_bool)
             == Some(true),
         lean_worker: plan.get("acpLeanWorker").and_then(Value::as_bool) == Some(true),
+        hermes_profile: None,
     }
 }
 
@@ -501,6 +502,7 @@ pub(crate) fn build_agent_fork_plan(
             gbot_api_chat: is_gbot_api_chat(source_runtime),
             gbot_computer_use_off: super::gbot_computer_use(source_runtime) == Some(false),
             lean_worker: super::is_lean_worker(source_runtime),
+            hermes_profile: None,
         }
     };
     let mut acp_fork_family: Option<String> = None;

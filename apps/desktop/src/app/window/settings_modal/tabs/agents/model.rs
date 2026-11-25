@@ -287,6 +287,7 @@ pub(super) fn non_cli_mode_family(agent_id: &str, icon: Option<&str>) -> Option<
         "codex" | "codex-cli" => Some("codex"),
         "opencode" | "opencode-cli" => Some("opencode"),
         "grok" | "grok-build" => Some("grok"),
+        "hermes" | "hermes-agent" => Some("hermes"),
         _ => None,
     };
     check(agent_id).or_else(|| icon.and_then(check))

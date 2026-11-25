@@ -941,7 +941,7 @@ impl SessionChatQueueRuntime {
         // Hermes 0.22's gateway says whether a typed message would start a turn, instead of its
         // input box on screen; Hermes 0.21 keeps the screen (CDXC:HermesGateway 2026-11-05 in
         // hermes_gateway.rs).
-        let hermes_gate = (composer_agent.as_deref() == Some("hermes-agent"))
+        let hermes_gate = (!acp_session && composer_agent.as_deref() == Some("hermes-agent"))
             .then(|| crate::hermes_gateway::typed_message_gate(&session))
             .flatten();
         match hermes_gate {

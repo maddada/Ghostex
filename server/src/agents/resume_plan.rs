@@ -509,8 +509,12 @@ pub(crate) fn to_agent_resume_input(
     let acp_approval_level = if force_ask {
         Some(crate::acp::AcpApprovalLevel::Ask)
     } else {
+        let canonical_fam = agent_id
+            .as_deref()
+            .and_then(crate::acp::canonical_native_family)
+            .unwrap_or_else(|| agent_id.as_deref().unwrap_or_default());
         crate::acp::approval::resolve_explicit_starting_level(
-            agent_id.as_deref().unwrap_or_default(),
+            canonical_fam,
             &runtime_settings,
             &agent_config,
             &launch_settings,
@@ -537,7 +541,8 @@ pub(crate) fn to_agent_resume_input(
             }),
         };
     let (acp_profile, acp_model, acp_effort) = if acp_mode {
-        if let Some(fam) = agent_id.as_deref() {
+        if let Some(raw_fam) = agent_id.as_deref() {
+            let fam = crate::acp::canonical_native_family(raw_fam).unwrap_or(raw_fam);
             let stored_account_cmd = read_text_from_map(&runtime_settings, "accountCommand");
             let account_wrapper = crate::acp::spec::account_wrapper_from_ghostex_account(
                 fam,
@@ -606,6 +611,15 @@ pub(crate) fn to_agent_resume_input(
                 .or(runtime_cmd_effort)
                 .or(cmd_effort)
                 .or_else(|| default_pin.as_ref().and_then(|p| p.effort.clone()));
+            let hermes_profile = (fam == "hermes")
+                .then(|| {
+                    crate::acp::hermes::resolve_hermes_profile_for_resume(
+                        &runtime_settings,
+                        &launch_settings,
+                        runtime_command.as_deref(),
+                    )
+                })
+                .flatten();
             (
                 crate::acp::spec::AcpLaunchProfile {
                     account_wrapper,
@@ -618,6 +632,7 @@ pub(crate) fn to_agent_resume_input(
                     gbot_computer_use_off: super::gbot_computer_use(Some(&runtime_settings))
                         == Some(false),
                     lean_worker: super::is_lean_worker(Some(&runtime_settings)),
+                    hermes_profile,
                 },
                 acp_model,
                 acp_effort,
@@ -853,7 +868,32 @@ pub(crate) fn build_agent_resume_command(
                 )
             }
         }),
-        "codebuddy" | "copilot" | "droid" | "dsh" | "hermes-agent" | "qoder" | "zcode" => {
+        "hermes-agent" => {
+            if input.acp_mode {
+                Some(
+                    crate::acp::spec::build_acp_host_launch_command_with_profile(
+                        "hermes",
+                        Some(agent_command),
+                        exact_reference.as_deref(),
+                        input.acp_approval_level,
+                        &[],
+                        input.acp_model.as_deref(),
+                        input.acp_effort.as_deref(),
+                        false,
+                        input.acp_read_only,
+                        &input.acp_profile,
+                    ),
+                )
+            } else {
+                exact_reference.map(|reference| {
+                    format!(
+                        "{agent_command} --resume {}",
+                        quote_shell_double_arg(&reference)
+                    )
+                })
+            }
+        }
+        "codebuddy" | "copilot" | "droid" | "dsh" | "qoder" | "zcode" => {
             exact_reference.map(|reference| {
                 format!(
                     "{agent_command} --resume {}",

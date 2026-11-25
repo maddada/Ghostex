@@ -727,7 +727,8 @@ pub(crate) fn create_agent_session_params_for_project(
                             }
                     });
                 if use_acp {
-                    if let Some(fam) = family.as_deref() {
+                    if let Some(raw_fam) = family.as_deref() {
+                        let fam = crate::acp::canonical_native_family(raw_fam).unwrap_or(raw_fam);
                         let base_cli_cmd = plan
                             .get("command")
                             .and_then(Value::as_str)
@@ -880,6 +881,14 @@ pub(crate) fn create_agent_session_params_for_project(
                                 thread_marked_handovers,
                                 workspace_note.as_ref(),
                             );
+                        let hermes_profile = (fam == "hermes")
+                            .then(|| {
+                                crate::acp::hermes::resolve_hermes_profile_for_launch(
+                                    &launch_settings,
+                                    raw_owner_configured_command.as_deref(),
+                                )
+                            })
+                            .flatten();
                         let acp_profile = crate::acp::spec::AcpLaunchProfile {
                             account_wrapper,
                             hub_id: crate::accounts::hub::launch::picked_hub(&runtime_settings),
@@ -892,6 +901,7 @@ pub(crate) fn create_agent_session_params_for_project(
                                 &runtime_settings,
                             )) == Some(false),
                             lean_worker: super::is_lean_worker(Some(&runtime_settings)),
+                            hermes_profile,
                         };
                         let acp_cmd = crate::acp::spec::build_acp_host_launch_command_with_profile(
                             fam,
