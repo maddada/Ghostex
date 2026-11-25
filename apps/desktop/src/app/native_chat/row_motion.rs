@@ -37,7 +37,6 @@ enum MotionKind {
     /// The label with the tool card's band of light sweeping across it (`shimmer_text`).
     Shimmer {
         label: SharedString,
-        font: SharedString,
         dim: Hsla,
         bright: Hsla,
     },
@@ -153,9 +152,15 @@ impl RowMotion {
     }
 }
 
-/// What lays a label out (its runs carry the font and colours): the size, line and wrapping.
+/// What lays a label out (its runs carry only the colours): the font, size, line and wrapping,
+/// so the label drawn over the row has the same glyphs as the one laid out in the row.
 fn text_layout(style: &TextStyle) -> TextStyleRefinement {
     TextStyleRefinement {
+        font_family: Some(style.font_family.clone()),
+        font_features: Some(style.font_features.clone()),
+        font_fallbacks: style.font_fallbacks.clone(),
+        font_weight: Some(style.font_weight),
+        font_style: Some(style.font_style),
         font_size: Some(style.font_size),
         line_height: Some(style.line_height),
         font_smoothing: Some(style.font_smoothing),
@@ -173,7 +178,6 @@ impl MotionKind {
         match self.clone() {
             MotionKind::Shimmer {
                 label,
-                font,
                 dim,
                 bright,
             } => div()
@@ -182,7 +186,7 @@ impl MotionKind {
                 .overflow_hidden()
                 .opacity(opacity)
                 .with_throttled_animation(id, SHIMMER, move |title, phase| {
-                    title.child(shimmer_text(&label, &font, phase, dim, bright))
+                    title.child(shimmer_text(&label, phase, dim, bright))
                 })
                 .keep_phase()
                 .into_any_element(),
@@ -213,10 +217,8 @@ impl NativeChatView {
         p: &ChatAppearance,
     ) -> AnyElement {
         let (dim, bright) = (p.muted.opacity(0.8), p.foreground);
-        let font = SharedString::from(p.font.clone());
         let kind = MotionKind::Shimmer {
             label: label.clone().into(),
-            font: font.clone(),
             dim,
             bright,
         };
@@ -226,13 +228,13 @@ impl NativeChatView {
                 let clear = gpui::transparent_black();
                 container
                     .relative()
-                    .child(shimmer_text(&label, &font, 0.0, clear, clear))
+                    .child(shimmer_text(&label, 0.0, clear, clear))
                     .child(place)
                     .into_any_element()
             }
             None => container
                 .with_throttled_animation(id, SHIMMER, move |title, phase| {
-                    title.child(shimmer_text(&label, &font, phase, dim, bright))
+                    title.child(shimmer_text(&label, phase, dim, bright))
                 })
                 .keep_phase()
                 .into_any_element(),

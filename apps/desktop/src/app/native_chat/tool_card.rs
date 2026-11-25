@@ -125,40 +125,41 @@ fn stack_colors(surface: Hsla, p: &ChatAppearance) -> (Hsla, Hsla, f32) {
     (disc, Hsla { a: 1.0, ..surface }, STACK_RING)
 }
 
-/// `text` in `font` with a band of light sweeping across it from left to right, `phase` running
-/// 0 to 1.
-pub(super) fn shimmer_text(
-    text: &str,
-    font: &str,
-    phase: f32,
-    dim: Hsla,
-    bright: Hsla,
-) -> StyledText {
+/// `text` with a band of light sweeping across it from left to right, `phase` running 0 to 1.
+///
+/// CDXC:SessionChat 2026-11-26 WHY: User, of the shimmer on a running tool call line: "please dont
+/// make the text itself shift in size, keep it same size, just do the actual scrolling highlight
+/// only". The runs used to name their own font (`gpui::font(family)`), which dropped the weight,
+/// features and fallbacks the line's text style carries, so a Medium line (tool_run.rs
+/// `name_weight`, cards.rs `title_weight`) shimmered in Normal and changed weight and width when the
+/// call started and finished. Only the colour is set here; every glyph takes the font, size and
+/// weight of the text style around it, exactly as the still line does.
+pub(super) fn shimmer_text(text: &str, phase: f32, dim: Hsla, bright: Hsla) -> StyledText {
     let count = text.chars().count().max(1) as f32;
     // The band is about a quarter of the text wide and starts and ends off it.
     let band = (count * 0.25).max(4.0);
     let center = -band + phase * (count + band * 2.0);
-    let runs = text
-        .chars()
+    let highlights = text
+        .char_indices()
         .enumerate()
-        .map(|(index, character)| {
+        .map(|(index, (start, character))| {
             let light = (1.0 - ((index as f32 - center).abs() / band)).clamp(0.0, 1.0);
-            gpui::TextRun {
-                len: character.len_utf8(),
-                font: gpui::font(font.to_string()),
-                color: Hsla {
-                    h: bright.h,
-                    s: dim.s + (bright.s - dim.s) * light,
-                    l: dim.l + (bright.l - dim.l) * light,
-                    a: dim.a + (bright.a - dim.a) * light,
+            let color = Hsla {
+                h: bright.h,
+                s: dim.s + (bright.s - dim.s) * light,
+                l: dim.l + (bright.l - dim.l) * light,
+                a: dim.a + (bright.a - dim.a) * light,
+            };
+            (
+                start..start + character.len_utf8(),
+                gpui::HighlightStyle {
+                    color: Some(color),
+                    ..Default::default()
                 },
-                background_color: None,
-                underline: None,
-                strikethrough: None,
-            }
+            )
         })
         .collect::<Vec<_>>();
-    StyledText::new(text.to_string()).with_runs(runs)
+    StyledText::new(text.to_string()).with_highlights(highlights)
 }
 
 impl NativeChatView {
