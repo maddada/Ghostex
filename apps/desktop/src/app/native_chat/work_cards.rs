@@ -110,8 +110,9 @@ pub(super) fn answers_divider(p: &ChatAppearance) -> AnyElement {
 }
 
 /// The hairline across the Inbox drawer above a Snoozed or Recent group header (Q4969 C), in
-/// the open header's divider colour and reaching the drawer's sides past the rows' inset.
-fn dock_group_divider(p: &ChatAppearance) -> AnyElement {
+/// the open header's divider colour and reaching the drawer's sides past the rows' inset. Clear
+/// (same space) while the group is closed.
+fn dock_group_divider(open: bool, p: &ChatAppearance) -> AnyElement {
     let s = p.scale;
     div()
         .flex_shrink_0()
@@ -119,7 +120,7 @@ fn dock_group_divider(p: &ChatAppearance) -> AnyElement {
         .mx(px(-DOCK_LIST_PAD * s))
         .mt(px(4.0 * s))
         .mb(px(2.0 * s))
-        .bg(p.composer_border)
+        .when(open, |line| line.bg(p.composer_border))
         .into_any_element()
 }
 
@@ -878,21 +879,22 @@ impl NativeChatView {
             // above it) with the header as a small uppercase label, and the group's rows a step
             // quieter (`DockRowLook::quiet`). Icons and titles keep the pings' columns.
             // Then, of the lines: "let's please not show the lines when it's collapsed, show only
-            // when expanded". A group's line shows only while that group is open.
+            // when expanded". A group's line shows only while that group is open; a closed group
+            // keeps the line's space with a clear line, so opening or closing never moves a header.
             let shown_above = rows.len().min(if all { rows.len() } else { limit }) > 0;
             let snoozed_open = self.expanded.contains(DOCK_SNOOZED_ROWS);
             let recent_open = self.expanded.contains(DOCK_RECENT_ROWS)
                 || self.expanded.contains(DOCK_LEGACY_DONE_ROWS)
                 || self.expanded.contains(DOCK_LEGACY_ANSWERED_ROWS);
             if !snoozed.is_empty() {
-                if shown_above && snoozed_open {
-                    list = list.child(dock_group_divider(p));
+                if shown_above {
+                    list = list.child(dock_group_divider(snoozed_open, p));
                 }
                 list = list.children(self.work_dock_snoozed(&snoozed, p, cx));
             }
             if !recent.is_empty() {
-                if recent_open && (shown_above || !snoozed.is_empty()) {
-                    list = list.child(dock_group_divider(p));
+                if shown_above || !snoozed.is_empty() {
+                    list = list.child(dock_group_divider(recent_open, p));
                 }
                 list = list.children(self.work_dock_recent(&recent, p, cx));
             }
