@@ -1972,9 +1972,13 @@ pub fn run(args: &[String]) -> i32 {
     let stderr = child.stderr.take();
 
     let transport = Arc::new(AcpTransport::new(stdin, &spool_session_id));
+    // Keep default (no `--approval-level`): Antigravity's own `toolPermission` names the level
+    // its `--cli_dir_name ghostex-acp` host would otherwise hide (CDXC:NativeApprovals 2026-11-25
+    // in `acp/cli_default.rs`); other agents start in the mode they report.
     let initial_explicit_level = parsed
         .approval_level
-        .or_else(|| parsed.read_only.then_some(AcpApprovalLevel::Ask));
+        .or_else(|| parsed.read_only.then_some(AcpApprovalLevel::Ask))
+        .or_else(|| super::cli_default::cli_default_level(spec.family));
     let state = Arc::new(Mutex::new(HostState::new(
         spec.family,
         initial_explicit_level.unwrap_or(AcpApprovalLevel::Ask),

@@ -79,6 +79,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     } else {
         parsed.approval_level.unwrap_or(AcpApprovalLevel::Ask)
     };
+    let cli_default = parsed.approval_level.is_none() && !parsed.read_only;
 
     let record_target = endpoint
         .as_ref()
@@ -111,7 +112,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         (None, None) => None,
     };
 
-    let state = Arc::new(Mutex::new(OpenCodeState::new(
+    let mut initial_state = OpenCodeState::new(
         initial_approval_level,
         parsed.read_only,
         combined_developer_instructions,
@@ -119,7 +120,9 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         writable_roots,
         parsed.model.clone(),
         parsed.effort.clone(),
-    )));
+    );
+    initial_state.cli_default = cli_default;
+    let state = Arc::new(Mutex::new(initial_state));
     let activity = OpenCodeActivityReporter::start(endpoint.clone(), state.clone());
     let shutting_down = Arc::new(AtomicBool::new(false));
     let child_pid = Arc::new(AtomicU32::new(0));
@@ -297,8 +300,8 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     let current = state
                         .lock()
                         .unwrap_or_else(|p| p.into_inner())
-                        .approval_level;
-                    if desired != current {
+                        .enforced_level();
+                    if Some(desired) != current {
                         if let Some(proc) = proc_opt.as_ref() {
                             if let Err(err) =
                                 apply_approval_level(&proc.http, &state, &activity, desired)

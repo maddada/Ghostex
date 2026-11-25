@@ -91,9 +91,12 @@ pub(super) fn run(spec: &'static AcpAgentSpec, parsed: HostArgs) -> i32 {
     let (initial_session_args, used_existing_session_flag) =
         resolve_pi_launch_session_args(parsed.resume_session_id.as_deref());
 
+    // Keep default (no `--approval-level`): Pi has no approvals of its own, so it runs every
+    // tool as it does in Terminal-based (CDXC:NativeApprovals 2026-11-25 in `acp/cli_default.rs`).
     let initial_approval = parsed
         .approval_level
         .or_else(|| parsed.read_only.then_some(AcpApprovalLevel::Ask))
+        .or_else(|| super::cli_default::cli_default_level(spec.family))
         .unwrap_or(AcpApprovalLevel::Ask);
 
     // Spawn Pi RPC subprocess and run initial `get_state` handshake. If resuming a stale/missing

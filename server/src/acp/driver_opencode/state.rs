@@ -208,6 +208,10 @@ pub(super) struct OpenCodeState {
     pub(super) fatal_error: Option<String>,
     pub(super) external_form_url: Option<String>,
     pub(super) approval_level: AcpApprovalLevel,
+    /// Keep default with no Mode-menu pick yet: OpenCode's own `permission` config decides what
+    /// asks, so Ghostex adds no rules of its own (CDXC:NativeApprovals 2026-11-25 in
+    /// `acp/cli_default.rs`).
+    pub(super) cli_default: bool,
     pub(super) read_only: bool,
     pub(super) current_agent: String,
     pub(super) plan_agent_paths: Vec<String>,
@@ -243,6 +247,11 @@ pub(super) struct OpenCodeState {
 }
 
 impl OpenCodeState {
+    /// The level Ghostex's session rules enforce, `None` while OpenCode's own config decides.
+    pub(super) fn enforced_level(&self) -> Option<AcpApprovalLevel> {
+        (!self.cli_default).then_some(self.approval_level)
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
         approval_level: AcpApprovalLevel,
@@ -269,6 +278,7 @@ impl OpenCodeState {
             fatal_error: None,
             external_form_url: None,
             approval_level,
+            cli_default: false,
             read_only,
             current_agent: if read_only { "plan" } else { "build" }.to_string(),
             plan_agent_paths: Vec::new(),

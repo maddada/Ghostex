@@ -376,7 +376,7 @@ pub(super) fn spawn_and_init_opencode(
     let (approval_level, read_only, plan_paths, grants, req_model, req_effort, dev_instr) = {
         let s = state.lock().unwrap_or_else(|p| p.into_inner());
         (
-            s.approval_level,
+            s.enforced_level(),
             s.read_only,
             s.plan_agent_paths.clone(),
             s.session_grants.clone(),

@@ -25,6 +25,7 @@ pub mod approval;
 pub(crate) mod approval_migration;
 pub(crate) mod channel;
 mod child_lifetime;
+mod cli_default;
 mod driver_claude;
 mod driver_codex;
 pub(crate) mod driver_cursor;

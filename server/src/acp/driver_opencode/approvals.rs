@@ -139,7 +139,7 @@ pub(super) fn extract_plan_agent_paths(agents_resp: &Value) -> Vec<String> {
 /// Build OpenCode 2 session permission rules (last match wins) for Ghostex's approval level,
 /// optional `--read-only` mode, and in-memory session-scoped grants.
 pub(super) fn build_session_rules(
-    level: AcpApprovalLevel,
+    level: Option<AcpApprovalLevel>,
     read_only: bool,
     plan_paths: &[String],
     grants: &[(String, String)],
@@ -159,6 +159,12 @@ pub(super) fn build_session_rules(
         }
         return rules;
     }
+    let Some(level) = level else {
+        for (action, resource) in grants {
+            rules.push(json!({ "action": action, "resource": resource, "effect": "allow" }));
+        }
+        return rules;
+    };
     match level {
         AcpApprovalLevel::FullAccess => {
             rules.push(json!({ "action": "*", "resource": "*", "effect": "allow" }));
@@ -560,12 +566,13 @@ pub(super) fn apply_approval_level(
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
         let was_read_only = s.read_only;
         s.approval_level = desired;
+        s.cli_default = false;
         if desired != AcpApprovalLevel::Ask {
             s.read_only = false;
         }
         let leave_plan = was_read_only && !s.read_only && s.current_agent == "plan";
         let rules = build_session_rules(
-            s.approval_level,
+            s.enforced_level(),
             s.read_only,
             &s.plan_agent_paths,
             &s.session_grants,

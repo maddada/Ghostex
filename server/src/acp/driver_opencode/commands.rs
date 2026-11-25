@@ -167,7 +167,7 @@ pub(super) fn dispatch_command(
                                 }
                             }
                             let rules = build_session_rules(
-                                s.approval_level,
+                                s.enforced_level(),
                                 s.read_only,
                                 &s.plan_agent_paths,
                                 &s.session_grants,
@@ -723,7 +723,7 @@ pub(super) fn dispatch_command(
                                     s.current_agent = target_agent.to_string();
                                     s.read_only = target_agent.eq_ignore_ascii_case("plan");
                                     build_session_rules(
-                                        s.approval_level,
+                                        s.enforced_level(),
                                         s.read_only,
                                         &s.plan_agent_paths,
                                         &s.session_grants,

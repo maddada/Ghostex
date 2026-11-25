@@ -27,7 +27,8 @@ use std::time::{Duration, SystemTime};
 use serde_json::{json, Value};
 
 pub(crate) use config_and_store::{
-    cursor_native_transcript_dir, cursor_native_transcript_meta_path, cursor_native_transcript_path,
+    cursor_native_transcript_dir, cursor_native_transcript_meta_path,
+    cursor_native_transcript_path, user_cli_default_level,
 };
 
 use config_and_store::{
@@ -71,7 +72,10 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     let _ = std::io::stdout().flush();
 
     let gx_paths = crate::paths::get_gxserver_paths(None);
-    let isolated_config = match CursorIsolatedConfig::create(&gx_paths) {
+    // Keep default (no `--approval-level`): start at the user's own `cli-config.json` level
+    // (CDXC:NativeApprovals 2026-11-25 in `acp/cli_default.rs`).
+    let keep_cli_default = parsed.approval_level.is_none() && !parsed.read_only;
+    let isolated_config = match CursorIsolatedConfig::create(&gx_paths, keep_cli_default) {
         Ok(cfg) => cfg,
         Err(err) => {
             let msg = format!("Failed preparing Cursor Native config: {err}");
@@ -146,7 +150,10 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     let initial_level = if parsed.read_only {
         AcpApprovalLevel::Ask
     } else {
-        parsed.approval_level.unwrap_or(AcpApprovalLevel::Ask)
+        parsed
+            .approval_level
+            .or_else(|| super::cli_default::cli_default_level("cursor"))
+            .unwrap_or(AcpApprovalLevel::Ask)
     };
     let state = Arc::new(Mutex::new(CursorState::new(
         initial_level,

@@ -51,12 +51,18 @@ pub(crate) fn cursor_native_transcript_meta_path(session_id: &str) -> Option<Pat
 /// `session/request_permission` even when the user's own config has `approvalMode: "unrestricted"`.
 /// Symlinks `acp-sessions`, `skills`, `skills-cursor`, `commands`, `rules`, `plugins`, and
 /// `mcp.json` from `~/.cursor/` so sessions, skills, and MCP servers remain shared.
+/// Under Keep default (`keep_user_rules`), the user's own `permissions.allow` and
+/// `autoAcceptWebSearch` stay, so commands they allowed run as they do in Terminal-based
+/// (CDXC:NativeApprovals 2026-11-25 in `acp/cli_default.rs`).
 pub(super) struct CursorIsolatedConfig {
     pub(super) dir: PathBuf,
 }
 
 impl CursorIsolatedConfig {
-    pub(super) fn create(paths: &crate::paths::GxserverPaths) -> Result<Self, String> {
+    pub(super) fn create(
+        paths: &crate::paths::GxserverPaths,
+        keep_user_rules: bool,
+    ) -> Result<Self, String> {
         let base = paths.root_dir.join("cursor-acp-config");
         fs::create_dir_all(&base)
             .map_err(|err| format!("Failed creating Cursor config dir: {err}"))?;
@@ -96,7 +102,8 @@ impl CursorIsolatedConfig {
             }
         }
 
-        let sanitized = build_sanitized_cli_config(&user_cursor_dir.join("cli-config.json"));
+        let sanitized =
+            build_sanitized_cli_config(&user_cursor_dir.join("cli-config.json"), keep_user_rules);
         let config_path = dir.join("cli-config.json");
         let encoded = serde_json::to_string_pretty(&sanitized)
             .map_err(|err| format!("Failed encoding Cursor cli-config.json: {err}"))?;
@@ -154,29 +161,48 @@ pub(super) fn user_cursor_config_dir() -> PathBuf {
     crate::resume_lookup::home_dir().join(".cursor")
 }
 
-pub(super) fn build_sanitized_cli_config(user_config_path: &Path) -> Value {
+/// The level the user's own `cli-config.json` starts Cursor in under Keep default:
+/// `approvalMode: unrestricted` runs everything (CDXC:NativeApprovals 2026-11-25 in
+/// `acp/cli_default.rs`).
+pub(crate) fn user_cli_default_level() -> Option<crate::acp::AcpApprovalLevel> {
+    let raw = fs::read_to_string(user_cursor_config_dir().join("cli-config.json")).ok()?;
+    let cfg = serde_json::from_str::<Value>(&raw).ok()?;
+    (cfg.get("approvalMode")?.as_str()?.trim() == "unrestricted")
+        .then_some(crate::acp::AcpApprovalLevel::FullAccess)
+}
+
+pub(super) fn build_sanitized_cli_config(user_config_path: &Path, keep_user_rules: bool) -> Value {
     let mut cfg = fs::read_to_string(user_config_path)
         .ok()
         .and_then(|raw| serde_json::from_str::<Map<String, Value>>(&raw).ok())
         .unwrap_or_default();
 
-    let deny = cfg
-        .get("permissions")
-        .and_then(Value::as_object)
-        .and_then(|p| p.get("deny"))
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
+    let rules = |key: &str| {
+        cfg.get("permissions")
+            .and_then(Value::as_object)
+            .and_then(|p| p.get(key))
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    };
+    let deny = rules("deny");
+    let allow = if keep_user_rules {
+        rules("allow")
+    } else {
+        Vec::new()
+    };
+    let web_search =
+        keep_user_rules && cfg.get("autoAcceptWebSearch").and_then(Value::as_bool) == Some(true);
 
     cfg.insert(
         "permissions".to_string(),
         json!({
-            "allow": [],
+            "allow": allow,
             "deny": deny,
         }),
     );
     cfg.insert("approvalMode".to_string(), json!("allowlist"));
-    cfg.insert("autoAcceptWebSearch".to_string(), json!(false));
+    cfg.insert("autoAcceptWebSearch".to_string(), json!(web_search));
     if !cfg.contains_key("version") {
         cfg.insert("version".to_string(), json!(1));
     }

@@ -50,9 +50,13 @@ pub(in crate::acp) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     let gx_paths = crate::paths::get_gxserver_paths(None);
     let signal_guard = TerminationSignalGuard::install();
 
+    // Keep default (no `--approval-level`): start in the mode Grok's own `[ui] permission_mode`
+    // starts its TUI in, since `grok agent` alone always starts in ask (CDXC:NativeApprovals
+    // 2026-11-25 in `acp/cli_default.rs`).
     let initial_level = parsed
         .approval_level
         .or_else(|| parsed.read_only.then_some(AcpApprovalLevel::Ask))
+        .or_else(|| crate::acp::cli_default::cli_default_level(spec.family))
         .unwrap_or(AcpApprovalLevel::Ask);
     let initial_launch_mode = GrokLaunchMode::from_approval_level(initial_level, parsed.read_only);
 
