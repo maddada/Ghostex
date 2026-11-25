@@ -243,7 +243,7 @@ fn ends_in_host(address: &str, end: char, after: Option<char>) -> bool {
 
 /// Whether what follows a dot look-alike makes it a sentence's full stop: nothing (the end of the
 /// text), whitespace, or a CJK character (ideographs, kana, Hangul, CJK and full-width
-/// punctuation).
+/// punctuation, not full-width letters or digits).
 fn dot_ends_sentence(after: Option<char>) -> bool {
     after.is_none_or(|character| {
         is_js_space(character)
@@ -253,7 +253,12 @@ fn dot_ends_sentence(after: Option<char>) -> bool {
                 '\u{2E80}'..='\u{9FFF}'
                     | '\u{AC00}'..='\u{D7AF}'
                     | '\u{F900}'..='\u{FAFF}'
-                    | '\u{FF00}'..='\u{FFEF}'
+                    // Full-width forms, but not their letters and digits (０-９, Ａ-Ｚ, ａ-ｚ),
+                    // which a browser folds to ASCII in a host (re-check 2 of #762, R4).
+                    | '\u{FF00}'..='\u{FF0F}'
+                    | '\u{FF1A}'..='\u{FF20}'
+                    | '\u{FF3B}'..='\u{FF40}'
+                    | '\u{FF5B}'..='\u{FFEF}'
                     | '\u{20000}'..='\u{3FFFF}'
             )
     })
@@ -479,6 +484,14 @@ mod tests {
         }
         assert!(autolinks("https://example.com。au").is_empty());
         assert!(autolinks("https://example.com。1/x").is_empty());
+        // Full-width letters and digits are folded to ASCII in a host: still the host.
+        assert!(autolinks("https://bank.com。ａｕ/login").is_empty());
+        assert!(autolinks("https://bank.com．ＡＵ").is_empty());
+        assert!(autolinks("https://bank.com。１/x").is_empty());
+        assert_eq!(
+            autolinks("见 https://example.com。（下）"),
+            ["https://example.com"]
+        );
     }
 
     #[test]

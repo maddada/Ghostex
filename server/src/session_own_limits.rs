@@ -3,6 +3,7 @@
 //!
 //! CDXC:Security 2026-11-26 DECISION:
 //! Coordinator, on the user's behalf (re-check of #762, findings N1 and N4): the folders a session's browser tools may upload from are its project's folder and its own (server/src/server/cef_devtools_scope.rs `session_upload_roots`), and a session without an agent mark counts as the user's plain terminal, which gets no switch toasts and no pinned or logged opens (server/src/switch_requests.rs `caller_agent_session`). So a session token (`Principal::Session`, agents, GBot API chats and coordinator threads) may not change those fields through `/api/updateSession` and `/api/updateProject`: a request that would is refused, while one that sends the value already stored (a whole row sent back) passes. The user's devices (the desktop app and its token file, the web build, paired phones and computers) keep changing them, and gxserver's own moves (a session moved into or out of a worktree, a renamed worktree, a draft's run folder) write them directly, so those keep working. A session may still start another session or project in a folder of its choice (`create-session --cwd`, `create-agent --path`); that session's folder is then its own, as its shell's already is.
+//! Coordinator, on the user's behalf (re-check 2 of #762, R1): the update turns any id into text (an array of one string becomes that string), while the guards look the stored row up only for string ids, so an id sent another way skipped every guard that needs the row: these, the GBot marks, the refusal to park or pin a coordinator's thread, and the kept approval level and read-only mark. Both update routes now refuse ids that are not strings, for every caller (`require_string_ids`), and a session token's limited field is refused when no stored row was found.
 
 use serde_json::{Map, Value};
 
@@ -38,6 +39,31 @@ fn changed_fields<'a>(
         .collect()
 }
 
+/// Refuses an update whose `ids` are not JSON strings (each must be sent): the guards before the
+/// update read the stored row with them as text, and anything else would let the update find a
+/// row the guards did not.
+pub(crate) fn require_string_ids(
+    params: &Map<String, Value>,
+    ids: &[&str],
+) -> Result<(), DomainStateError> {
+    match ids
+        .iter()
+        .find(|id| !params.get(**id).is_some_and(Value::is_string))
+    {
+        Some(id) => Err(DomainStateError::bad_request(format!("Give {id} as text."))),
+        None => Ok(()),
+    }
+}
+
+/// The limited fields `params` sends, when no stored row was found to compare them with.
+fn sent_fields<'a>(limited: &[&'a str], params: &Map<String, Value>) -> Vec<&'a str> {
+    limited
+        .iter()
+        .copied()
+        .filter(|field| params.contains_key(*field))
+        .collect()
+}
+
 fn refusal(kind: &str, fields: &[&str]) -> DomainStateError {
     DomainStateError::bad_request(format!(
         "An agent session cannot change a {kind}'s {}: Ghostex reads what its tools may reach from it. Ask the user to change it in Ghostex.",
@@ -55,7 +81,10 @@ pub(crate) fn refuse_session_limit_changes(
     if !matches!(caller, Principal::Session { .. }) {
         return Ok(());
     }
-    let changed = changed_fields(SESSION_FIELDS, current, params);
+    let changed = match current {
+        Some(_) => changed_fields(SESSION_FIELDS, current, params),
+        None => sent_fields(SESSION_FIELDS, params),
+    };
     if changed.is_empty() {
         return Ok(());
     }
@@ -72,7 +101,10 @@ pub(crate) fn refuse_project_limit_changes(
     if !matches!(caller, Principal::Session { .. }) {
         return Ok(());
     }
-    let changed = changed_fields(PROJECT_FIELDS, current, params);
+    let changed = match current {
+        Some(_) => changed_fields(PROJECT_FIELDS, current, params),
+        None => sent_fields(PROJECT_FIELDS, params),
+    };
     if changed.is_empty() {
         return Ok(());
     }
@@ -148,6 +180,34 @@ mod tests {
             &params(json!({ "projectId": "P1", "name": "App", "path": "/work/app" }))
         )
         .is_ok());
+    }
+
+    #[test]
+    fn ids_must_be_text_and_no_row_means_no_limited_field() {
+        let ids = ["projectId", "sessionId"];
+        assert!(require_string_ids(
+            &params(json!({ "projectId": "P1", "sessionId": "G1" })),
+            &ids
+        )
+        .is_ok());
+        for update in [
+            json!({ "projectId": ["P1"], "sessionId": ["G1"], "agentId": null }),
+            json!({ "projectId": "P1", "sessionId": 7 }),
+            json!({ "projectId": "P1" }),
+            json!({ "projectId": { "id": "P1" }, "sessionId": "G1" }),
+        ] {
+            assert!(
+                require_string_ids(&params(update.clone()), &ids).is_err(),
+                "{update}"
+            );
+        }
+        // No stored row: a limited field is refused even when it clears the value.
+        let cleared = params(json!({ "projectId": "P1", "sessionId": "G9", "agentId": null }));
+        assert!(refuse_session_limit_changes(&session_caller(), None, &cleared).is_err());
+        let title = params(json!({ "projectId": "P1", "sessionId": "G9", "title": "x" }));
+        assert!(refuse_session_limit_changes(&session_caller(), None, &title).is_ok());
+        let path = params(json!({ "projectId": "P9", "path": null }));
+        assert!(refuse_project_limit_changes(&session_caller(), None, &path).is_err());
     }
 
     #[test]

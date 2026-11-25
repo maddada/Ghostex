@@ -410,6 +410,9 @@ pub(super) async fn route_sessions_http(
             request_id,
             &body_json,
             |repository, db, params, _| {
+                // Every guard below reads the stored session by these ids as text, so they must be
+                // text (session_own_limits.rs, re-check 2 of #762, R1).
+                crate::session_own_limits::require_string_ids(params, &["projectId", "sessionId"])?;
                 // gxserver's own GBot marks stay as they are (gbots/markers.rs).
                 let params = crate::gbots::keep_gbot_marks(db, repository, params);
                 crate::coordinators::refuse_shelving_thread(db, &params)?;

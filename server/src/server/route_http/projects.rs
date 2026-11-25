@@ -50,6 +50,9 @@ pub(super) async fn route_projects_http(
             request_id,
             &body_json,
             |repository, db, params, _| {
+                // The guards read the stored project by this id as text, so it must be text
+                // (session_own_limits.rs, re-check 2 of #762, R1).
+                crate::session_own_limits::require_string_ids(params, &["projectId"])?;
                 // A session's token may not move a project's folder (session_own_limits.rs).
                 if params.contains_key("path") {
                     let current = params
