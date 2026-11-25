@@ -124,13 +124,13 @@ fn dock_group_divider(open: bool, p: &ChatAppearance) -> AnyElement {
         .into_any_element()
 }
 
-/// A Snoozed or Recent group header's label (Q4969 C): small, uppercase and medium weight, in
-/// the header's muted colour.
+/// A Snoozed or Recent group header's label (Q4969 C): small and medium weight, in the header's
+/// muted colour, written as is ("Snoozed", "Recent"): the user doesn't want all caps (26 Nov).
 fn dock_group_label(label: &str, p: &ChatAppearance) -> gpui::Div {
     div()
         .text_size(px(PROSE_SIZE * GROUP_LABEL_SCALE * p.scale))
         .font_weight(FontWeight::MEDIUM)
-        .child(label.to_uppercase())
+        .child(label.to_string())
 }
 
 /// A page row's ⋯ menu (`dock_row_look`): Show in chat, Mark answered, Dismiss (or Mark as read) and Snooze with its lengths, as the
@@ -417,7 +417,7 @@ const GROUP_ROW_TITLE_SCALE: f32 = 0.93;
 /// A Snoozed or Recent group row's title alpha over the row's own dimming (works in light and
 /// dark, where the muted colours differ).
 const GROUP_ROW_TITLE_ALPHA: f32 = 0.82;
-/// A group header's label size against a ping's title (Q4969 C: a small uppercase label).
+/// A group header's label size against a ping's title (Q4969 C: a small label).
 const GROUP_LABEL_SCALE: f32 = 0.80;
 
 /// How wide `label` is in the chat's font at `size` (both unscaled).
@@ -876,7 +876,7 @@ impl NativeChatView {
             // wish there was a way to tell that the items under snoozed and recent are part of
             // that group? i wanna still keep the alignment between all tho". They picked Q4969 C
             // and D: a hairline across the drawer above each group header (when something sits
-            // above it) with the header as a small uppercase label, and the group's rows a step
+            // above it) with the header as a small label, and the group's rows a step
             // quieter (`DockRowLook::quiet`). Icons and titles keep the pings' columns.
             // Then, of the lines: "let's please not show the lines when it's collapsed, show only
             // when expanded". A group's line shows only while that group is open; a closed group
