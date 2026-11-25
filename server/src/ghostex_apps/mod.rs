@@ -4,8 +4,8 @@
 //! (sending to its chat, and in later phases notifications, always on top, a menu bar item, a
 //! global shortcut and connectors), each one only after the user allowed it.
 //!
-//! `store` keeps the apps, `manifest` reads what an app's HTML declares, `icon` checks the icon the
-//! agent drew, `publish` and `api` are the authenticated routes, `serve` answers the app itself,
+//! `store` keeps the apps, `manifest` reads what an app's HTML declares, `icon` draws the icon the
+//! agent made into the PNG gxserver keeps, `publish` and `api` are the authenticated routes, `serve` answers the app itself,
 //! `bridge` is the app's own calls (`window.ghostex.app`) and `tokens` the launch tokens they need.
 
 mod api;
@@ -23,7 +23,7 @@ pub(crate) use api::{
     LIST_GHOSTEX_APPS_ENDPOINT, OPEN_GHOSTEX_APP_ENDPOINT, READ_GHOSTEX_APP_ENDPOINT,
     SET_GHOSTEX_APP_GRANT_ENDPOINT,
 };
-pub(crate) use bridge::{handle as bridge_call, is_bridge_route};
-pub(crate) use feature::agent_note;
+pub(crate) use bridge::{handle as bridge_call, is_bridge_route, preflight as bridge_preflight};
+pub(crate) use feature::{agent_note, settings_read};
 pub(crate) use publish::{PUBLISH_GHOSTEX_APP_BODY_LIMIT_BYTES, PUBLISH_GHOSTEX_APP_ENDPOINT};
-pub(crate) use serve::{is_app_route, serve};
+pub(crate) use serve::{is_app_route, serve, APP_ROUTE_PREFIX};

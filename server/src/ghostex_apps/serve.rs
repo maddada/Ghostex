@@ -21,15 +21,16 @@ const ICON_SUFFIX: &str = "/icon";
 
 /// What `window.ghostex.app` is in an app: its own data, sending to its chat, and asking whether a
 /// power is allowed. Every call is a POST to the app's own `/bridge` route with the launch token
-/// Ghostex put in the URL fragment when it opened the app (tokens.rs); without one (the app opened
+/// Ghostex put in the URL fragment when it opened the app (tokens.rs), in the `X-Ghostex-App-Token`
+/// header so gxserver checks it before it reads the call; without one (the app opened
 /// from a plain link, an old phone, a browser) `available` is false and every call is refused with
 /// a reason the app can show.
 ///
 /// CDXC:GhostexApps 2026-11-25 SEE-ALSO:
 /// The calls are answered by server/src/ghostex_apps/bridge.rs and described to agents in server/src/ghostex_cli/ghostex_app_guide.md. Change them together.
 const APP_API: &str = r#"<script>(function(){var tok="",base=location.pathname.replace(/\/+$/,"");try{var m=/[#&]gx-app-token=(gxa_[0-9a-f]{32})/.exec(location.hash);if(m)tok=m[1];}catch(e){}
-function call(op,args){return new Promise(function(resolve,reject){if(!tok){var n=new Error("Open this app from Ghostex to use ghostex.app.");n.permission=null;reject(n);return;}var b={token:tok,op:op};for(var k in args)b[k]=args[k];
-fetch(base+"/bridge",{method:"POST",body:JSON.stringify(b)}).then(function(r){return r.json().catch(function(){return{};}).then(function(j){if(r.ok&&j.ok){resolve(j);return;}var e=new Error(j.error||"Ghostex did not answer.");e.permission=j.permission||null;reject(e);});},function(){reject(new Error("Could not reach Ghostex."));});});}
+function call(op,args){return new Promise(function(resolve,reject){if(!tok){var n=new Error("Open this app from Ghostex to use ghostex.app.");n.permission=null;reject(n);return;}var b={op:op};for(var k in args)b[k]=args[k];
+fetch(base+"/bridge",{method:"POST",headers:{"X-Ghostex-App-Token":tok},body:JSON.stringify(b)}).then(function(r){return r.json().catch(function(){return{};}).then(function(j){if(r.ok&&j.ok){resolve(j);return;}var e=new Error(j.error||"Ghostex did not answer.");e.permission=j.permission||null;reject(e);});},function(){reject(new Error("Could not reach Ghostex."));});});}
 var app={available:!!tok,
 data:{get:function(k){return call("data.get",{key:String(k)}).then(function(j){return j.value;});},
 set:function(k,v){return call("data.set",{key:String(k),value:v===undefined?null:v}).then(function(){});},
@@ -94,14 +95,10 @@ pub(crate) async fn serve(
             .await
             .ok()
             .flatten();
-        let Some((kind, bytes)) = found else {
+        let Some(bytes) = found else {
             return status(StatusCode::NOT_FOUND);
         };
-        return respond(
-            bytes,
-            kind.mime(),
-            "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:",
-        );
+        return respond(bytes, "image/png", "sandbox; default-src 'none'");
     }
     let policy = served_policy(&id, host.as_deref());
     let header_policy = format!("sandbox allow-scripts allow-forms allow-popups; {policy}");

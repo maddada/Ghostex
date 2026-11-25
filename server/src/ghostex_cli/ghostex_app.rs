@@ -16,7 +16,7 @@ use super::built_in_extensions::{built_in_extension_enabled, require_built_in_ex
 use super::rpc::{
     call_gxserver_rpc, request_gxserver_rpc, resolve_gxserver_server_target, CliError, CliResult,
 };
-use super::show::{absolute_path, calling_session_ref, json_string, read_source, source_key};
+use super::show::{absolute_path, json_string, read_source, source_key};
 use crate::ghostex_apps::{icon, manifest};
 
 const GUIDE: &str = include_str!("ghostex_app_guide.md");
@@ -95,7 +95,7 @@ fn show(args: &[String]) -> CliResult<()> {
                     .to_string(),
             )
         })?;
-    let mut params = json!({
+    let params = json!({
         "name": name,
         "html": prepared.html,
         "sourcePath": path.to_string_lossy(),
@@ -104,9 +104,6 @@ fn show(args: &[String]) -> CliResult<()> {
             "base64": base64::engine::general_purpose::STANDARD.encode(&icon_bytes),
         },
     });
-    if let Some(session_ref) = calling_session_ref() {
-        params["sessionRef"] = Value::String(session_ref);
-    }
     let target = resolve_gxserver_server_target(&parsed.flags, &params)?;
     let result = request_gxserver_rpc(
         &target,

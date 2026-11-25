@@ -8,6 +8,9 @@
 //!
 //! CDXC:GhostexApps 2026-11-25 DECISION:
 //! The brief: "never grant anything without the user's click". Opening an app with its powers, changing a grant and deleting an app are for the user's own Ghostex (the desktop app, the web build and the `ghostex` CLI in the user's own terminal on the token file, and paired phones: `Principal::is_owner_device`); an agent's session token, another computer, a Collab guest and an extension are refused, so an agent can build and publish an app but never allow it anything or call its bridge.
+//!
+//! CDXC:GhostexApps 2026-11-26 WHY:
+//! Fable's security review (finding 3, proven live): an agent that sends the token file instead of its own session token passed as the user and allowed its own app's powers. These three routes now take the stricter rule of server/src/server/autopilot_http.rs `is_user`: the token file counts as the user only from a terminal that names no Ghostex session (the CLI inside a session sends the one it runs in). Every grant change, open and delete, and every refusal of one, goes to the security log. What stays open is the same-user limit Ghostex can't close: an agent that sends the token file without the session header, or edits app.json. Finding 9: list and read show an agent only its own project's apps.
 
 use std::sync::Arc;
 
@@ -26,7 +29,7 @@ use super::{
     manifest::{Power, ALL_POWERS},
     publish::{publish_app, PUBLISH_GHOSTEX_APP_ENDPOINT},
     serve::APP_ROUTE_PREFIX,
-    store::{delete, list_records, power_state, read_record, set_grant},
+    store::{delete, list_records, owner_project, power_state, read_record, set_grant},
     tokens,
 };
 
@@ -56,6 +59,69 @@ fn users_only(endpoint: &str) -> bool {
     )
 }
 
+/// Whether the caller is the user: the owner session, a paired phone, or the token file from a
+/// terminal that names no Ghostex session (`token_file_names_session`).
+fn is_user(caller: &Principal, token_file_names_session: bool) -> bool {
+    caller.is_owner_device()
+        && !(matches!(caller, Principal::LocalAgent) && token_file_names_session)
+}
+
+/// Which apps a caller may see: every app for the user, its own project's for a session, none for
+/// anyone else.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Sees {
+    All,
+    Project(String),
+    Nothing,
+}
+
+fn sees(caller: &Principal) -> Sees {
+    match caller {
+        Principal::Session { project_id, .. } => Sees::Project(project_id.clone()),
+        caller if caller.is_owner_device() => Sees::All,
+        _ => Sees::Nothing,
+    }
+}
+
+fn visible(record: &Value, sees: &Sees) -> bool {
+    match sees {
+        Sees::All => true,
+        Sees::Project(project) => owner_project(record).as_deref() == Some(project.as_str()),
+        Sees::Nothing => false,
+    }
+}
+
+fn audit_kind(endpoint: &str) -> &'static str {
+    match endpoint {
+        OPEN_GHOSTEX_APP_ENDPOINT => "ghostexApps.open",
+        SET_GHOSTEX_APP_GRANT_ENDPOINT => "ghostexApps.grant",
+        _ => "ghostexApps.delete",
+    }
+}
+
+/// The security log's sentence for a call to one of the user's routes.
+fn audit_summary(endpoint: &str, params: &Value) -> (String, String) {
+    let params = params.get("params").unwrap_or(params);
+    let field = |key: &str| {
+        params
+            .get(key)
+            .and_then(Value::as_str)
+            .map(|value| super::store::clip_chars(value.trim(), 40))
+            .unwrap_or_default()
+    };
+    let id = field("id");
+    let summary = match endpoint {
+        OPEN_GHOSTEX_APP_ENDPOINT => format!("Open the Ghostex App {id}"),
+        SET_GHOSTEX_APP_GRANT_ENDPOINT => format!(
+            "Set the Ghostex App {id}'s \"{}\" permission to {}",
+            field("permission"),
+            field("decision")
+        ),
+        _ => format!("Delete the Ghostex App {id}"),
+    };
+    (summary, id)
+}
+
 pub(crate) async fn handle_ghostex_apps_http(
     state: Arc<AppState>,
     endpoint_path: String,
@@ -71,13 +137,27 @@ pub(crate) async fn handle_ghostex_apps_http(
             DomainStateError::bad_request(apps_off_message()),
         );
     }
-    if users_only(&endpoint_path) && !caller.is_owner_device() {
+    let users = users_only(&endpoint_path);
+    let audit = users.then(|| audit_summary(&endpoint_path, &body));
+    let record = |outcome: crate::audit::Outcome| {
+        if let Some((summary, id)) = audit.clone() {
+            crate::audit::record(
+                crate::audit::Action::new(audit_kind(&endpoint_path), summary).target(id),
+                crate::audit::Actor::current(),
+                outcome,
+                None,
+            );
+        }
+    };
+    if users && !is_user(&caller, crate::audit::token_file_names_session()) {
+        let message = "Only you can do this, from Ghostex itself; an agent can't.";
+        record(crate::audit::Outcome::Refused(message.to_string()));
         return domain_error_response(
             endpoint_path,
             request_id,
             DomainStateError {
                 code: "forbidden",
-                message: "Only you can do this, from Ghostex itself; an agent can't.".to_string(),
+                message: message.to_string(),
             },
         );
     }
@@ -87,13 +167,16 @@ pub(crate) async fn handle_ghostex_apps_http(
     };
     let state_dir = state.paths.root_dir.clone();
     let endpoint = endpoint_path.clone();
-    let result = tokio::task::spawn_blocking(move || run(&state_dir, &endpoint, &params))
+    let result = tokio::task::spawn_blocking(move || run(&state_dir, &endpoint, &params, &caller))
         .await
         .unwrap_or_else(|error| {
             Err(DomainStateError::corrupt_state(format!(
                 "Ghostex Apps stopped unexpectedly: {error}"
             )))
         });
+    record(crate::audit::Outcome::of(
+        &result.as_ref().map_err(|error| &error.message),
+    ));
     match result {
         Ok(value) => routed_json(
             Some(endpoint_path),
@@ -108,12 +191,18 @@ fn run(
     state_dir: &std::path::Path,
     endpoint: &str,
     params: &Map<String, Value>,
+    caller: &Principal,
 ) -> Result<Value, DomainStateError> {
     if endpoint == PUBLISH_GHOSTEX_APP_ENDPOINT {
-        return publish_app(state_dir, params);
+        return publish_app(state_dir, params, caller);
     }
+    let sees = sees(caller);
     if endpoint == LIST_GHOSTEX_APPS_ENDPOINT {
-        let apps: Vec<Value> = list_records(state_dir).iter().map(summary).collect();
+        let apps: Vec<Value> = list_records(state_dir)
+            .iter()
+            .filter(|record| visible(record, &sees))
+            .map(summary)
+            .collect();
         return Ok(json!({"apps": apps}));
     }
     let id = params
@@ -122,8 +211,9 @@ fn run(
         .map(str::trim)
         .unwrap_or_default()
         .to_string();
-    let record =
-        read_record(state_dir, &id).ok_or_else(|| DomainStateError::not_found("No such app."))?;
+    let record = read_record(state_dir, &id)
+        .filter(|record| visible(record, &sees))
+        .ok_or_else(|| DomainStateError::not_found("No such app."))?;
     match endpoint {
         READ_GHOSTEX_APP_ENDPOINT => Ok(summary(&record)),
         OPEN_GHOSTEX_APP_ENDPOINT => {
@@ -183,11 +273,56 @@ fn summary(record: &Value) -> Value {
         "version": record.get("version").cloned().unwrap_or(Value::Null),
         "createdAt": record.get("createdAt").cloned().unwrap_or(Value::Null),
         "updatedAt": record.get("updatedAt").cloned().unwrap_or(Value::Null),
-        "sessionRef": record.get("sessionRef").cloned().unwrap_or(Value::Null),
+        "publisher": record.get("publisher").cloned().unwrap_or(Value::Null),
         "sourcePath": record.get("sourcePath").cloned().unwrap_or(Value::Null),
         "path": format!("{APP_ROUTE_PREFIX}{id}"),
         "iconPath": format!("{APP_ROUTE_PREFIX}{id}/icon"),
         "permissions": permissions,
         "pendingAsks": pending,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn session(project: &str) -> Principal {
+        Principal::Session {
+            project_id: project.to_string(),
+            session_id: "S1".to_string(),
+            role: crate::security::SessionRole::Agent,
+        }
+    }
+
+    #[test]
+    fn an_agent_with_the_token_file_is_not_the_user() {
+        // Review finding 3: the token file with the session header the CLI sends inside a session.
+        assert!(!is_user(&Principal::LocalAgent, true));
+        assert!(is_user(&Principal::LocalAgent, false));
+        assert!(!is_user(&session("P1"), false));
+        assert!(is_user(
+            &Principal::Owner {
+                device_id: "d".to_string()
+            },
+            true
+        ));
+        assert!(!is_user(&Principal::Anonymous, false));
+    }
+
+    #[test]
+    fn a_session_sees_only_its_own_projects_apps() {
+        let mine = json!({"id": "a", "publisher": {"projectId": "P1", "sessionId": "S1"}});
+        let theirs = json!({"id": "b", "publisher": {"projectId": "P2", "sessionId": "S2"}});
+        let local = json!({"id": "c", "publisher": null});
+        let agent = sees(&session("P1"));
+        assert!(visible(&mine, &agent));
+        assert!(!visible(&theirs, &agent));
+        assert!(!visible(&local, &agent));
+        let user = sees(&Principal::LocalAgent);
+        assert!(visible(&theirs, &user) && visible(&local, &user));
+        let guest = sees(&Principal::Guest {
+            share_id: "g".to_string(),
+        });
+        assert!(!visible(&mine, &guest));
+    }
 }

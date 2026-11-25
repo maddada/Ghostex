@@ -22,6 +22,15 @@ pub(crate) fn apps_on(paths: &GxserverPaths) -> bool {
     on_in(settings.as_ref())
 }
 
+/// Called by the settings watch (server/shared_settings_watch.rs) with every settings read that
+/// changed something: while Ghostex Apps is off no launch token survives, so turning it off and on
+/// again never brings back a window opened before (review finding 7).
+pub(crate) fn settings_read(settings: Option<&Value>) {
+    if !on_in(settings) {
+        super::tokens::revoke_all();
+    }
+}
+
 /// What a caller is told while Ghostex Apps is off.
 pub(crate) fn apps_off_message() -> String {
     let computer = crate::connected_computers::this_computer_name();

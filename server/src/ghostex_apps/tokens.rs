@@ -2,6 +2,9 @@
 //!
 //! CDXC:GhostexApps 2026-11-25 WHY:
 //! A Live page's only grant is its unguessable id, and an app's id is printed into the chat that made it, so the id alone must not let anyone use an app's data or powers. Ghostex mints a token when it opens the app itself (`/api/openGhostexApp`, refused to agents' session tokens) and hands it to the page in the URL fragment, which no request, log or Referer carries. gxserver keeps tokens only in memory: a restart, the app's delete, or turning Ghostex Apps off drops them, and a token unused for 12 hours expires. The app's own script can read its token, which is fine: it only opens that app's own bridge.
+//!
+//! CDXC:GhostexApps 2026-11-26 WHY:
+//! Fable's security review (finding 7): the 12 hours were counted from the last call, so a polling app kept its token for good, and a token outlived turning Ghostex Apps off and on and a new version of the app. Now a token lasts at most 12 hours from its mint and 2 hours unused, a publish drops the app's tokens (publish.rs), and the settings watch drops every token the moment it reads the switch off (server/shared_settings_watch.rs), besides the check on every call. Ghostex opens the app again for a fresh one.
 
 use std::{
     collections::HashMap,
@@ -11,7 +14,10 @@ use std::{
 
 use rand::TryRng;
 
-const IDLE_EXPIRY: Duration = Duration::from_secs(12 * 60 * 60);
+/// A token stops working this long after it was minted, however much it is used.
+const LIFETIME: Duration = Duration::from_secs(12 * 60 * 60);
+/// And this long after its last use.
+const IDLE_EXPIRY: Duration = Duration::from_secs(2 * 60 * 60);
 /// At most this many live tokens per app (each open of the app makes one); the oldest goes first.
 const PER_APP: usize = 16;
 
@@ -29,8 +35,12 @@ fn with_tokens<T>(run: impl FnOnce(&mut HashMap<String, Entry>) -> T) -> T {
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let tokens = guard.get_or_insert_with(HashMap::new);
     let now = Instant::now();
-    tokens.retain(|_, entry| now.duration_since(entry.last_used) < IDLE_EXPIRY);
+    tokens.retain(|_, entry| live(entry, now));
     run(tokens)
+}
+
+fn live(entry: &Entry, now: Instant) -> bool {
+    now.duration_since(entry.minted) < LIFETIME && now.duration_since(entry.last_used) < IDLE_EXPIRY
 }
 
 /// A new token for `app_id`: 128 random bits as hex, prefixed so it is recognisable in a report.
@@ -85,7 +95,7 @@ pub(super) fn check(app_id: &str, token: &str) -> bool {
     })
 }
 
-/// Drops every token of `app_id` (the app was deleted).
+/// Drops every token of `app_id` (the app was deleted or published again).
 pub(super) fn revoke_app(app_id: &str) {
     with_tokens(|tokens| tokens.retain(|_, entry| entry.app_id != app_id));
 }
@@ -120,5 +130,26 @@ mod tests {
             mint(&app);
         }
         assert!(!check(&app, &first));
+    }
+
+    #[test]
+    fn use_does_not_keep_a_token_past_its_lifetime() {
+        let now = Instant::now();
+        let Some(old) = now.checked_sub(LIFETIME + Duration::from_secs(1)) else {
+            return;
+        };
+        let entry = Entry {
+            app_id: String::new(),
+            minted: old,
+            last_used: now,
+        };
+        assert!(!live(&entry, now));
+        let idle = Entry {
+            app_id: String::new(),
+            minted: now,
+            last_used: now,
+        };
+        assert!(live(&idle, now));
+        assert!(!live(&idle, now + IDLE_EXPIRY));
     }
 }

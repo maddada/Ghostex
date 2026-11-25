@@ -30,9 +30,7 @@ mod theme;
 mod thumbnail;
 mod version;
 
-pub(crate) use answers::{
-    deliver as deliver_to_chat, is_answers_route, submit as submit_answers, submit_outside_answers,
-};
+pub(crate) use answers::{is_answers_route, submit as submit_answers, submit_outside_answers};
 pub(crate) use builtin::with_app_block;
 pub(crate) use drafts::{is_draft_route, read as read_draft, save as save_draft};
 pub(crate) use exported::{

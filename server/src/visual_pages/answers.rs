@@ -146,7 +146,7 @@ pub(crate) async fn submit(
 /// Sends a `<ghostex-page-answers>` message to the session, the way the page's own Send does:
 /// queued until the agent is idle when the Advanced setting asks for it, else sent normally.
 /// Returns the error that kept it from the agent, if any, and whether it was queued.
-pub(crate) async fn deliver(
+pub(super) async fn deliver(
     state: &Arc<AppState>,
     project_id: String,
     session_id: String,

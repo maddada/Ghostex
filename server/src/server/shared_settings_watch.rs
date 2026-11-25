@@ -107,6 +107,7 @@ pub(crate) fn start_shared_settings_watch(state: Arc<AppState>) {
             let before_modes =
                 crate::telemetry::resolve_install_session_modes(watch.published.as_ref());
             if watch.read_done(identity, read) {
+                crate::ghostex_apps::settings_read(watch.published.as_ref());
                 let analytics_off = watch
                     .published
                     .as_ref()

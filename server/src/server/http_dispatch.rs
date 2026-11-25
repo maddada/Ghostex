@@ -65,6 +65,14 @@ async fn handle_http_request_inner(
     // cross-origin headers either: with the API's rule (origin `null` allowed) the page's own script
     // could fetch it, follow the redirect and read the linked page, its id and its saved draft.
     let page_link = crate::visual_pages::is_link_route(request.uri().path());
+    // A Ghostex App, its icon and its bridge (`/app/<id>…`) answer with their own cross-origin rule
+    // (ghostex_apps/bridge.rs allows only the app's own sandboxed page), never the API's: with the
+    // API's rule (origin `null` allowed) one app's page could read another app's HTML (review
+    // finding 9).
+    let app_route = request
+        .uri()
+        .path()
+        .starts_with(crate::ghostex_apps::APP_ROUTE_PREFIX);
     let request_id = request_id(&headers);
     let gzip_wanted = super::link_compression::wants_gzip(&headers);
     // Who asked, for the security log (server/src/audit/caller.rs).
@@ -81,7 +89,7 @@ async fn handle_http_request_inner(
         Box::pin(route_http(state.clone(), request, request_id)),
     )
     .await;
-    if !file_link && !page_link {
+    if !file_link && !page_link && !app_route {
         apply_cors_headers(&headers, &mut routed.response, &state.config);
     }
     let status = routed.response.status().as_u16();

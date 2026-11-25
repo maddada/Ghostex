@@ -1,11 +1,16 @@
 //! The icon an agent draws for its app: a square SVG or PNG file beside the app's HTML, named by
-//! `<link rel="icon">`. Checked by `ghostex app show` before it publishes and again by gxserver
-//! before it stores it.
+//! `<link rel="icon">`. `ghostex app show` checks it before it publishes, and gxserver draws it
+//! into the PNG it keeps.
 //!
 //! CDXC:GhostexApps 2026-11-25 DECISION:
-//! User picked "the agent draws it" for an installed app's icon (Q4975), not an icon Ghostex makes up and not one the user picks. So an app must carry its own icon: `ghostex app show` refuses an app without a usable one and says how to add it, instead of falling back to a made-up icon. The checks keep it something the Dock, the taskbar and Settings can show: square, small, and an SVG with no scripts, embedded objects or outside references.
+//! User picked "the agent draws it" for an installed app's icon (Q4975), not an icon Ghostex makes up and not one the user picks. So an app must carry its own icon: `ghostex app show` refuses an app without a usable one and says how to add it, instead of falling back to a made-up icon.
+//!
+//! CDXC:GhostexApps 2026-11-26 WHY:
+//! Fable's security review (finding 6) beat the first check, a list of things an SVG must not contain (`<svg/onload=…>`, `java&#115;cript:`, CSS `url(//host)`, `<feImage href="file:///…">`, an outside DOCTYPE, a PNG header claiming 60000 px). So the agent's file is never kept or served: gxserver draws it once into a 1024 px PNG and keeps only that. An SVG is drawn by resvg with no fonts, no outside files and no linked or embedded images (every picture `href` resolves to nothing), so nothing in it can run or reach anything; a PNG is decoded whole under a size cap and written out again. The Dock, the taskbar, `.icns` and Settings all start from that PNG.
 
-/// The two kinds of icon an app may have.
+use std::{io::Cursor, sync::Arc};
+
+/// The two kinds of icon an agent may draw.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum IconKind {
     Svg,
@@ -17,13 +22,6 @@ impl IconKind {
         match self {
             IconKind::Svg => "svg",
             IconKind::Png => "png",
-        }
-    }
-
-    pub(crate) fn mime(self) -> &'static str {
-        match self {
-            IconKind::Svg => "image/svg+xml",
-            IconKind::Png => "image/png",
         }
     }
 
@@ -40,19 +38,30 @@ pub(crate) const SVG_ICON_MAX_BYTES: usize = 64 * 1024;
 pub(crate) const PNG_ICON_MAX_BYTES: usize = 512 * 1024;
 /// A PNG icon must be at least this wide (and as tall), so the Dock's large sizes stay sharp.
 pub(crate) const PNG_ICON_MIN_SIDE: u32 = 256;
+/// And at most this wide, so decoding it stays small.
+pub(crate) const PNG_ICON_MAX_SIDE: u32 = 2048;
+/// The side of the PNG gxserver keeps (the largest `.icns` size, 512 pt at 2x).
+pub(crate) const ICON_SIDE: u32 = 1024;
+/// How far from square a drawing may be (its width against its height).
+const SQUARE_TOLERANCE: f32 = 0.01;
 
 /// What an agent is told when its app has no usable icon.
-pub(crate) const ICON_HOW_TO: &str = "Draw the app's icon as a square SVG file (a viewBox like \"0 0 512 512\") beside the HTML and name it in the head: <link rel=\"icon\" href=\"icon.svg\">. A square PNG of at least 256 px works too. See `ghostex app guide icon`.";
+pub(crate) const ICON_HOW_TO: &str = "Draw the app's icon as a square SVG file (a viewBox like \"0 0 512 512\") beside the HTML and name it in the head: <link rel=\"icon\" href=\"icon.svg\">. A square PNG of 256 to 2048 px works too. See `ghostex app guide`.";
 
-/// Checks an icon's bytes, and gives the reason when it cannot be used.
+/// Checks an icon, and gives the reason when it cannot be used.
 pub(crate) fn check_icon(kind: IconKind, bytes: &[u8]) -> Result<(), String> {
+    icon_png(kind, bytes).map(|_| ())
+}
+
+/// The icon drawn into the [`ICON_SIDE`] px PNG gxserver keeps.
+pub(crate) fn icon_png(kind: IconKind, bytes: &[u8]) -> Result<Vec<u8>, String> {
     match kind {
-        IconKind::Svg => check_svg(bytes),
-        IconKind::Png => check_png(bytes),
+        IconKind::Svg => svg_png(bytes),
+        IconKind::Png => png_png(bytes),
     }
 }
 
-fn check_svg(bytes: &[u8]) -> Result<(), String> {
+fn svg_png(bytes: &[u8]) -> Result<Vec<u8>, String> {
     if bytes.len() > SVG_ICON_MAX_BYTES {
         return Err(format!(
             "The icon is {} KiB; an SVG icon may be at most {} KiB.",
@@ -62,102 +71,46 @@ fn check_svg(bytes: &[u8]) -> Result<(), String> {
     }
     let text =
         std::str::from_utf8(bytes).map_err(|_| "The SVG icon is not UTF-8 text.".to_string())?;
-    let lower = text.to_ascii_lowercase();
-    let Some(open) = lower.find("<svg") else {
-        return Err("The icon file has no <svg> element.".to_string());
+    let options = resvg::usvg::Options {
+        resources_dir: None,
+        // No fonts: text in an icon is not drawn (the guide says no words).
+        fontdb: Arc::new(resvg::usvg::fontdb::Database::new()),
+        image_href_resolver: resvg::usvg::ImageHrefResolver {
+            resolve_data: Box::new(|_, _, _| None),
+            resolve_string: Box::new(|_, _| None),
+        },
+        style_sheet: None,
+        ..Default::default()
     };
-    for (needle, what) in [
-        ("<script", "a script"),
-        ("<foreignobject", "a foreignObject"),
-        ("<iframe", "an iframe"),
-        ("javascript:", "a javascript: link"),
-        ("<image", "an embedded image"),
-        ("<use", "a <use> reference"),
-        ("@import", "an @import"),
-        ("<!entity", "an entity declaration"),
-    ] {
-        if lower.contains(needle) {
-            return Err(format!(
-                "The SVG icon holds {what}; draw it with shapes, paths, gradients and text only."
-            ));
-        }
+    let tree = resvg::usvg::Tree::from_str(text, &options)
+        .map_err(|error| format!("The SVG icon could not be read: {error}."))?;
+    let size = tree.size();
+    let (width, height) = (size.width(), size.height());
+    if (width - height).abs() > width.max(height) * SQUARE_TOLERANCE {
+        return Err(format!(
+            "The icon is {width}x{height}; it must be square (a viewBox like \"0 0 512 512\")."
+        ));
     }
-    if has_event_attribute(&lower) {
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(ICON_SIDE, ICON_SIDE)
+        .ok_or_else(|| "The icon could not be drawn.".to_string())?;
+    let scale = ICON_SIDE as f32 / width.max(height);
+    resvg::render(
+        &tree,
+        resvg::tiny_skia::Transform::from_scale(scale, scale),
+        &mut pixmap.as_mut(),
+    );
+    if pixmap.pixels().iter().all(|pixel| pixel.alpha() == 0) {
         return Err(
-            "The SVG icon has an event attribute (onload= and the like); remove it.".to_string(),
-        );
-    }
-    if lower.contains("href=\"http") || lower.contains("href='http") || lower.contains("url(http") {
-        return Err(
-            "The SVG icon refers to an outside address; keep everything inside the file."
+            "The icon draws nothing: only shapes, paths and gradients are drawn, no text or images."
                 .to_string(),
         );
     }
-    let head = &lower[open..lower[open..]
-        .find('>')
-        .map_or(lower.len(), |end| open + end)];
-    let square = view_box(head)
-        .map(|(width, height)| (width - height).abs() < 0.01 && width > 0.0)
-        .or_else(|| {
-            let width = number_attribute(head, "width")?;
-            let height = number_attribute(head, "height")?;
-            Some((width - height).abs() < 0.01 && width > 0.0)
-        });
-    match square {
-        Some(true) => Ok(()),
-        Some(false) => Err(
-            "The SVG icon is not square; give it a square viewBox such as \"0 0 512 512\"."
-                .to_string(),
-        ),
-        None => Err(
-            "The SVG icon has no viewBox; give it a square one such as \"0 0 512 512\"."
-                .to_string(),
-        ),
-    }
+    pixmap
+        .encode_png()
+        .map_err(|error| format!("The icon could not be written: {error}."))
 }
 
-/// Whether an attribute such as `onload=` or `onclick =` appears in the lowercased SVG text.
-fn has_event_attribute(lower: &str) -> bool {
-    let bytes = lower.as_bytes();
-    lower.match_indices("on").any(|(at, _)| {
-        let before = at.checked_sub(1).map(|index| bytes[index]);
-        if !before.is_some_and(|byte| byte.is_ascii_whitespace() || byte == b'"' || byte == b'\'') {
-            return false;
-        }
-        let rest = &lower[at + 2..];
-        let name_len = rest.bytes().take_while(u8::is_ascii_alphabetic).count();
-        name_len > 0 && rest[name_len..].trim_start().starts_with('=')
-    })
-}
-
-fn view_box(head: &str) -> Option<(f64, f64)> {
-    let at = head.find("viewbox")?;
-    let rest = head[at + "viewbox".len()..]
-        .trim_start()
-        .strip_prefix('=')?
-        .trim_start();
-    let quote = rest.chars().next().filter(|c| *c == '"' || *c == '\'')?;
-    let body = &rest[1..];
-    let value = &body[..body.find(quote)?];
-    let numbers: Vec<f64> = value
-        .split(|c: char| c.is_whitespace() || c == ',')
-        .filter(|part| !part.is_empty())
-        .filter_map(|part| part.parse().ok())
-        .collect();
-    (numbers.len() == 4).then(|| (numbers[2], numbers[3]))
-}
-
-fn number_attribute(head: &str, name: &str) -> Option<f64> {
-    let needle = format!(" {name}=");
-    let at = head.find(&needle)?;
-    let rest = &head[at + needle.len()..];
-    let quote = rest.chars().next().filter(|c| *c == '"' || *c == '\'')?;
-    let body = &rest[1..];
-    let value = body[..body.find(quote)?].trim_end_matches("px");
-    value.trim().parse().ok()
-}
-
-fn check_png(bytes: &[u8]) -> Result<(), String> {
+fn png_png(bytes: &[u8]) -> Result<Vec<u8>, String> {
     if bytes.len() > PNG_ICON_MAX_BYTES {
         return Err(format!(
             "The icon is {} KiB; a PNG icon may be at most {} KiB.",
@@ -165,55 +118,112 @@ fn check_png(bytes: &[u8]) -> Result<(), String> {
             PNG_ICON_MAX_BYTES / 1024
         ));
     }
-    const SIGNATURE: &[u8] = b"\x89PNG\r\n\x1a\n";
-    if bytes.len() < 24 || &bytes[..8] != SIGNATURE || &bytes[12..16] != b"IHDR" {
-        return Err("The icon file is not a PNG image.".to_string());
-    }
-    let width = u32::from_be_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]);
-    let height = u32::from_be_bytes([bytes[20], bytes[21], bytes[22], bytes[23]]);
-    if width != height {
+    let mut reader = image::ImageReader::with_format(Cursor::new(bytes), image::ImageFormat::Png);
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(PNG_ICON_MAX_SIDE);
+    limits.max_image_height = Some(PNG_ICON_MAX_SIDE);
+    limits.max_alloc = Some(64 * 1024 * 1024);
+    reader.limits(limits);
+    let decoded = reader.decode().map_err(|_| {
+        format!("The icon is not a PNG that can be read (at most {PNG_ICON_MAX_SIDE} px a side).")
+    })?;
+    let (width, height) = (decoded.width(), decoded.height());
+    if width != height || width < PNG_ICON_MIN_SIDE {
         return Err(format!(
-            "The PNG icon is {width}x{height}; it must be square."
+            "The icon is {width}x{height}; a PNG icon must be square and at least {PNG_ICON_MIN_SIDE} px."
         ));
     }
-    if width < PNG_ICON_MIN_SIDE {
-        return Err(format!(
-            "The PNG icon is {width}x{height}; it must be at least {PNG_ICON_MIN_SIDE}x{PNG_ICON_MIN_SIDE}."
-        ));
-    }
-    Ok(())
+    let resized = image::imageops::resize(
+        &decoded.to_rgba8(),
+        ICON_SIDE,
+        ICON_SIDE,
+        image::imageops::FilterType::Lanczos3,
+    );
+    let mut out = Vec::new();
+    image::DynamicImage::ImageRgba8(resized)
+        .write_to(&mut Cursor::new(&mut out), image::ImageFormat::Png)
+        .map_err(|error| format!("The icon could not be written: {error}."))?;
+    Ok(out)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn takes_a_plain_square_svg() {
-        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="110" fill="#f4b24c"/></svg>"##;
-        assert_eq!(check_icon(IconKind::Svg, svg), Ok(()));
+    const PLAIN: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="118" fill="#f4b24c"/></svg>"##;
+
+    fn is_png(bytes: &[u8]) -> bool {
+        bytes.starts_with(b"\x89PNG\r\n\x1a\n")
     }
 
     #[test]
-    fn refuses_scripts_events_outside_links_and_odd_shapes() {
+    fn draws_a_plain_square_svg_into_a_png() {
+        let png = icon_png(IconKind::Svg, PLAIN).unwrap();
+        assert!(is_png(&png));
+        let image = image::load_from_memory(&png).unwrap();
+        assert_eq!((image.width(), image.height()), (ICON_SIDE, ICON_SIDE));
+    }
+
+    #[test]
+    fn what_slipped_past_the_old_check_comes_out_as_a_plain_png_or_is_refused() {
+        // Each of these got through the old deny-list (finding 6). Now what is kept is a PNG
+        // gxserver drew, whatever the SVG held, so nothing of the SVG is ever served.
         for svg in [
-            r#"<svg viewBox="0 0 10 10"><script>alert(1)</script></svg>"#,
-            r#"<svg viewBox="0 0 10 10" onload="x()"></svg>"#,
-            r#"<svg viewBox="0 0 10 10"><a href="https://x.test">x</a></svg>"#,
-            r#"<svg viewBox="0 0 20 10"></svg>"#,
-            r#"<svg></svg>"#,
+            r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"/onload="alert(1)"><rect width="1" height="1"/></svg>"##,
+            r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><a href="java&#115;cript:alert(1)"><rect width="8" height="8"/></a></svg>"##,
+            r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><style>rect{fill:url("//example.com/x")}</style><rect width="8" height="8" fill="red"/></svg>"##,
+            r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><filter id="f"><feImage href="file:///etc/hosts"/></filter><rect width="8" height="8" fill="red" filter="url(#f)"/></svg>"##,
+            r##"<!DOCTYPE svg SYSTEM "http://example.com/x.dtd"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8"/></svg>"##,
+            r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><image href="file:///etc/hosts" width="8" height="8"/><rect width="8" height="8"/></svg>"##,
         ] {
-            assert!(check_icon(IconKind::Svg, svg.as_bytes()).is_err(), "{svg}");
+            if let Ok(png) = icon_png(IconKind::Svg, svg.as_bytes()) {
+                assert!(is_png(&png), "{svg}");
+            }
         }
     }
 
     #[test]
-    fn checks_png_size() {
-        let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
-        png.extend_from_slice(&512u32.to_be_bytes());
-        png.extend_from_slice(&512u32.to_be_bytes());
-        assert_eq!(check_icon(IconKind::Png, &png), Ok(()));
-        png[20..24].copy_from_slice(&256u32.to_be_bytes());
-        assert!(check_icon(IconKind::Png, &png).is_err());
+    fn refuses_odd_shapes_empty_drawings_and_big_files() {
+        let wide = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50"><rect width="100" height="50"/></svg>"#;
+        assert!(icon_png(IconKind::Svg, wide).is_err());
+        let text_only = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><text y="8">Hi</text></svg>"#;
+        assert!(icon_png(IconKind::Svg, text_only).is_err());
+        let image_only = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><image href="file:///etc/hosts" width="8" height="8"/></svg>"#;
+        assert!(icon_png(IconKind::Svg, image_only).is_err());
+        assert!(icon_png(IconKind::Svg, b"not svg").is_err());
+        let big = format!(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1 1\"><!--{}--></svg>",
+            "x".repeat(SVG_ICON_MAX_BYTES)
+        );
+        assert!(icon_png(IconKind::Svg, big.as_bytes()).is_err());
+    }
+
+    fn png_of(width: u32, height: u32) -> Vec<u8> {
+        let mut out = Vec::new();
+        image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+            width,
+            height,
+            image::Rgba([10, 20, 30, 255]),
+        ))
+        .write_to(&mut Cursor::new(&mut out), image::ImageFormat::Png)
+        .unwrap();
+        out
+    }
+
+    #[test]
+    fn decodes_pngs_whole_and_checks_their_size() {
+        let png = icon_png(IconKind::Png, &png_of(256, 256)).unwrap();
+        assert_eq!(image::load_from_memory(&png).unwrap().width(), ICON_SIDE);
+        assert!(icon_png(IconKind::Png, &png_of(128, 128)).is_err());
+        assert!(icon_png(IconKind::Png, &png_of(300, 256)).is_err());
+        // A header claiming 60000 px followed by junk (the review's case).
+        let mut lying = png_of(256, 256)[..33].to_vec();
+        lying[16..20].copy_from_slice(&60000u32.to_be_bytes());
+        lying[20..24].copy_from_slice(&60000u32.to_be_bytes());
+        lying.extend_from_slice(&[0u8; 64]);
+        assert!(icon_png(IconKind::Png, &lying).is_err());
+        let mut truncated = png_of(256, 256);
+        truncated.truncate(truncated.len() / 2);
+        assert!(icon_png(IconKind::Png, &truncated).is_err());
     }
 }

@@ -118,10 +118,20 @@ pub(in crate::server) async fn route_http(
             .get(axum::http::header::HOST)
             .and_then(|value| value.to_str().ok())
             .map(str::to_string);
-        return crate::ghostex_apps::serve(state.clone(), path, host).await;
+        return Box::pin(crate::ghostex_apps::serve(state.clone(), path, host)).await;
+    }
+    if method == Method::OPTIONS && crate::ghostex_apps::is_bridge_route(&path) {
+        return crate::ghostex_apps::bridge_preflight(&parts.headers);
     }
     if method == Method::POST && crate::ghostex_apps::is_bridge_route(&path) {
-        return crate::ghostex_apps::bridge_call(state.clone(), path, body).await;
+        // Boxed: the routing future is large (see http_dispatch.rs).
+        return Box::pin(crate::ghostex_apps::bridge_call(
+            state.clone(),
+            path,
+            parts.headers.clone(),
+            body,
+        ))
+        .await;
     }
 
     if method == Method::POST && crate::visual_pages::is_answers_route(&path) {
