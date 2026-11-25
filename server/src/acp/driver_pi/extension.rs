@@ -17,8 +17,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-pub(super) const READ_ONLY_TOOLS = new Set(["read", "grep", "find", "ls", "tool_search"]);
-pub(super) const OPENROUTER_MAX_TOKENS_CAP = 32768;
+const READ_ONLY_TOOLS = new Set(["read", "grep", "find", "ls", "tool_search"]);
+const OPENROUTER_MAX_TOKENS_CAP = 32768;
 
 function stripFrontmatter(content: string): string {
   const normalized = content.replace(/\r\n/g, "\n");

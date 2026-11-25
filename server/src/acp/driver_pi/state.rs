@@ -359,27 +359,40 @@ impl PiState {
     }
 
     pub(super) fn apply_model_object(&mut self, model: &Map<String, Value>) {
-        if let Some(provider) = model
-            .get("provider")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-        {
-            self.current_provider = Some(provider.to_string());
-        }
-        if let Some(id) = model
+        let id = model
             .get("id")
             .and_then(Value::as_str)
             .map(str::trim)
-            .filter(|s| !s.is_empty())
-        {
+            .filter(|s| !s.is_empty());
+        let provider = model
+            .get("provider")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        // Pi reports `{"id":"unknown","provider":"unknown","name":"unknown"}` when no provider
+        // is authenticated yet; ignore placeholder values so Ghostex never pins `unknown/unknown`
+        // as the default Pi model (which breaks `pi --model unknown/unknown`) or renders `Unknown`.
+        let is_placeholder = |val: &str| {
+            val.eq_ignore_ascii_case("unknown")
+                || ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(val)
+        };
+        if id.is_some_and(is_placeholder) {
+            self.current_provider = None;
+            self.current_model_id = None;
+            self.current_model_name = None;
+            return;
+        }
+        if let Some(provider) = provider.filter(|p| !is_placeholder(p)) {
+            self.current_provider = Some(provider.to_string());
+        }
+        if let Some(id) = id {
             self.current_model_id = Some(id.to_string());
         }
         if let Some(name) = model
             .get("name")
             .and_then(Value::as_str)
             .map(str::trim)
-            .filter(|s| !s.is_empty())
+            .filter(|s| !s.is_empty() && !is_placeholder(s))
         {
             self.current_model_name = Some(name.to_string());
         }
