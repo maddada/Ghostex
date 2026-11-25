@@ -248,11 +248,10 @@ pub(super) enum Checked {
 }
 
 /// Checks one client frame against `limits`. A full caller's frames go on as they are, except
-/// that its uploads are checked against the refused folders and logged.
+/// that its uploads are checked against the refused folders and logged. Every frame is parsed
+/// before its method is read, so a method name written with JSON escapes is the method the page
+/// runs (re-check of #762, N7).
 pub(super) fn check_command(text: &str, limits: &RelayLimits) -> Checked {
-    if !limits.scoped && !text.contains("DOM.setFileInputFiles") {
-        return Checked::Forward(text.to_string());
-    }
     let Ok(mut command) = serde_json::from_str::<Value>(text) else {
         if !limits.scoped {
             return Checked::Forward(text.to_string());
@@ -298,6 +297,18 @@ pub(super) fn check_command(text: &str, limits: &RelayLimits) -> Checked {
             if let Some(message) = crate::browser_agent_limits::agent_navigation_refusal(url) {
                 return refuse(message);
             }
+        }
+        // A key event's editor commands (paste, copy, cut, ...) would reach the system clipboard,
+        // which a sandboxed agent cannot otherwise read or replace (re-check of #762, N6).
+        "Input.dispatchKeyEvent"
+            if command
+                .pointer("/params/commands")
+                .is_some_and(|commands| !commands.is_null()) =>
+        {
+            return refuse(
+                "An agent's key presses cannot carry editor commands (commands); type the keys instead."
+                    .to_string(),
+            );
         }
         "Runtime.evaluate" => {
             let params = command.get("params");
@@ -549,6 +560,40 @@ mod tests {
         };
         assert!(matches!(upload(&anywhere), Checked::Upload { .. }));
         assert!(refused(&upload(&key)));
+        // A method name written with JSON escapes is still the upload it decodes to.
+        let escaped = format!(
+            r#"{{"id":8,"method":"DOM.setFileInputFiles","params":{{"files":[{}],"objectId":"1"}}}}"#,
+            json!(key.to_string_lossy())
+        );
+        assert!(refused(&check_command(&escaped, &limits)));
+        let escaped_anywhere = escaped.replace(
+            &json!(key.to_string_lossy()).to_string(),
+            &json!(anywhere.to_string_lossy()).to_string(),
+        );
+        assert!(matches!(
+            check_command(&escaped_anywhere, &limits),
+            Checked::Upload { .. }
+        ));
+    }
+
+    #[test]
+    fn a_sessions_key_presses_carry_no_editor_commands() {
+        let limits = session_limits(vec![], vec![]);
+        for commands in [json!(["paste"]), json!(["copy"]), json!([])] {
+            let text = command(
+                "Input.dispatchKeyEvent",
+                json!({ "type": "keyDown", "key": "v", "commands": commands }),
+            );
+            assert!(refused(&check_command(&text, &limits)), "{commands}");
+        }
+        let plain = command(
+            "Input.dispatchKeyEvent",
+            json!({ "type": "keyDown", "key": "v", "text": "v" }),
+        );
+        assert_eq!(
+            check_command(&plain, &limits),
+            Checked::Forward(plain.clone())
+        );
     }
 
     #[test]

@@ -50,6 +50,23 @@ pub(super) async fn route_projects_http(
             request_id,
             &body_json,
             |repository, db, params, _| {
+                // A session's token may not move a project's folder (session_own_limits.rs).
+                if params.contains_key("path") {
+                    let current = params
+                        .get("projectId")
+                        .and_then(serde_json::Value::as_str)
+                        .and_then(|project_id| {
+                            repository
+                                .get_project_without_session_history(project_id)
+                                .ok()
+                                .flatten()
+                        });
+                    crate::session_own_limits::refuse_project_limit_changes(
+                        &caller,
+                        current.as_ref(),
+                        params,
+                    )?;
+                }
                 // A project's workspace is its `launchSettings.workspaceId`, or a worktree's
                 // parent's (`worktree.parentProjectId`): an update that sets either is placed like a
                 // move, under the ticket command store's writer lock (`place_projects_after`).

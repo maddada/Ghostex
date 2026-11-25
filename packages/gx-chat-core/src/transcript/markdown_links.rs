@@ -216,12 +216,15 @@ pub(crate) fn ends_bare_link(character: char) -> bool {
 }
 
 /// Whether `address` written up to a dot look-alike (。 ． ｡) is still in its host: past any
-/// `scheme://` and before the first `/`, `?` or `#`. Ending the address there would link another
-/// domain (`https://example.com。au/login` is not `https://example.com`), so such an address is
-/// not linked at all. The native renderer applies the same rule (`ends_in_host` in
-/// gpui-component's text/format/markdown.rs).
-fn ends_in_host(address: &str, end: char) -> bool {
-    if !matches!(end, '\u{3002}' | '\u{FF0E}' | '\u{FF61}') {
+/// `scheme://` and before the first `/`, `?` or `#`, with a letter, digit or other address
+/// character after the dot (`after`). Ending the address there would link another domain
+/// (`https://example.com。au/login` is not `https://example.com`), so such an address is not
+/// linked at all. A dot that ends the sentence (whitespace, the end of the text, or a CJK
+/// character after it, as in `见 https://example.com。` or `https://example.com。我们`) is
+/// punctuation, and the address before it is linked (re-check of #762). The native renderer
+/// applies the same rule (`ends_in_host` in gpui-component's text/format/markdown.rs).
+fn ends_in_host(address: &str, end: char, after: Option<char>) -> bool {
+    if !matches!(end, '\u{3002}' | '\u{FF0E}' | '\u{FF61}') || dot_ends_sentence(after) {
         return false;
     }
     let host = match address.split_once("://") {
@@ -236,6 +239,24 @@ fn ends_in_host(address: &str, end: char) -> bool {
         _ => address,
     };
     !host.contains(['/', '?', '#'])
+}
+
+/// Whether what follows a dot look-alike makes it a sentence's full stop: nothing (the end of the
+/// text), whitespace, or a CJK character (ideographs, kana, Hangul, CJK and full-width
+/// punctuation).
+fn dot_ends_sentence(after: Option<char>) -> bool {
+    after.is_none_or(|character| {
+        is_js_space(character)
+            || ends_bare_link(character)
+            || matches!(
+                character,
+                '\u{2E80}'..='\u{9FFF}'
+                    | '\u{AC00}'..='\u{D7AF}'
+                    | '\u{F900}'..='\u{FAFF}'
+                    | '\u{FF00}'..='\u{FFEF}'
+                    | '\u{20000}'..='\u{3FFFF}'
+            )
+    })
 }
 
 /// `(^|[\s*_~(])(https?:\/\/[^\s<]+)` case-insensitively, every match, where wide punctuation
@@ -276,8 +297,10 @@ fn autolink_candidates(markdown: &str) -> Vec<&str> {
             .map(char::len_utf8)
             .sum();
         let address = &markdown[start..start + run];
-        let ended_by = markdown[start + run..].chars().next();
-        if !ended_by.is_some_and(|end| ends_in_host(address, end)) {
+        let mut rest = markdown[start + run..].chars();
+        let ended_by = rest.next();
+        let after = rest.next();
+        if !ended_by.is_some_and(|end| ends_in_host(address, end, after)) {
             found.push(address);
         }
         cursor = start + run;
@@ -441,6 +464,21 @@ mod tests {
         ] {
             assert!(autolinks(markdown).is_empty(), "{markdown}");
         }
+    }
+
+    #[test]
+    fn bare_link_before_a_sentences_wide_full_stop_is_linked() {
+        for markdown in [
+            "见 https://example.com。",
+            "见 https://example.com。 然后",
+            "见 https://example.com。我们",
+            "see https://example.com． next",
+            "https://example.com｡\nnext line",
+        ] {
+            assert_eq!(autolinks(markdown), ["https://example.com"], "{markdown}");
+        }
+        assert!(autolinks("https://example.com。au").is_empty());
+        assert!(autolinks("https://example.com。1/x").is_empty());
     }
 
     #[test]

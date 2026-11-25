@@ -676,16 +676,19 @@ pub(crate) async fn handle_renderer_command_http(
     // Only settings an agent may write pass the API (settings_agent_writable.rs);
     // owner devices (including paired phones) may also sync owner-only UI toggles
     // like `analyticsEnabled`.
+    // CDXC:Security 2026-11-26 DECISION: Coordinator, on the user's behalf (re-check of #762,
+    // N5): the token file counts as the user only from a terminal that names no Ghostex session,
+    // the rule Autopilot uses (autopilot_http.rs `is_user`), so `env -u GHOSTEX_SESSION_TOKEN
+    // ghostex actions dispatch updateSettingsPatch` inside a session cannot turn on "Let agents
+    // open and switch pages without asking".
     if action == "updateSettingsPatch" {
+        let is_user = caller.is_owner_device()
+            && !(matches!(caller, crate::security::Principal::LocalAgent)
+                && crate::audit::token_file_names_session());
         let refused = payload
             .get("patch")
             .and_then(Value::as_object)
-            .map(|patch| {
-                crate::settings_agent_writable::refused_keys_for_caller(
-                    patch,
-                    caller.is_owner_device(),
-                )
-            })
+            .map(|patch| crate::settings_agent_writable::refused_keys_for_caller(patch, is_user))
             .unwrap_or_default();
         if !refused.is_empty() {
             let message = crate::settings_agent_writable::refusal_message(&refused);

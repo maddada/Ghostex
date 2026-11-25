@@ -42,19 +42,43 @@ thread_local! {
     static RELAY_NEXT_ID: Cell<i64> = const { Cell::new(RELAY_FIRST_MESSAGE_ID) };
     /// CEF browser id -> the DevTools target id the app learned for that page.
     static RELAY_TARGET_IDS: RefCell<HashMap<c_int, String>> = RefCell::new(HashMap::new());
-    /// CEF browser id -> when a DevTools session last sent the page input or a script, either of
-    /// which can open a file chooser (hidden_page_dialogs.rs).
+    /// CEF browser id -> when a DevTools session last acted on the page (sent it a command that
+    /// can run page script, or got that command's answer), which can open a file chooser
+    /// (hidden_page_dialogs.rs).
     static RELAY_AGENT_INPUT: RefCell<HashMap<c_int, Instant>> = RefCell::new(HashMap::new());
+    /// Renumbered command id -> CEF browser id, for those acting commands the page has not
+    /// answered yet: while one waits, the agent counts as acting now.
+    static RELAY_AGENT_PENDING: RefCell<HashMap<i64, c_int>> = RefCell::new(HashMap::new());
 }
 
-/// The DevTools commands that act as a person would (a press, a key, a touch, a drag) or run the
-/// page's script, which can then open a file chooser with the activation such input gave it.
+/// The DevTools commands that can run the page's script: input as a person would give it (a
+/// press, a key, a touch, a drag), scripts, DOM changes and file fields (their events), and
+/// navigations (a same-page one fires the page's handlers). Script can open a file chooser with
+/// the activation such input gave the page.
 fn acts_on_the_page(method: &str) -> bool {
-    method.starts_with("Input.") || matches!(method, "Runtime.evaluate" | "Runtime.callFunctionOn")
+    ["Input.", "Runtime.", "DOM.", "Page.navigate"]
+        .iter()
+        .any(|prefix| method.starts_with(prefix))
+        || method == "Page.reload"
 }
 
-/// How long ago a DevTools session last sent `browser_id`'s page input or a script.
+/// The agent acted on `browser_id`'s page now.
+fn stamp_agent_input(browser_id: c_int) {
+    RELAY_AGENT_INPUT.with(|input| input.borrow_mut().insert(browser_id, Instant::now()));
+}
+
+/// How long ago a DevTools session last acted on `browser_id`'s page: no time at all while one of
+/// its acting commands still waits for the page.
 pub(crate) fn cef_devtools_relay_agent_input_age(browser_id: c_int) -> Option<std::time::Duration> {
+    let waiting = RELAY_AGENT_PENDING.with(|pending| {
+        pending
+            .borrow()
+            .values()
+            .any(|pending_browser| *pending_browser == browser_id)
+    });
+    if waiting {
+        return Some(std::time::Duration::ZERO);
+    }
     RELAY_AGENT_INPUT.with(|input| input.borrow().get(&browser_id).map(Instant::elapsed))
 }
 
@@ -371,7 +395,8 @@ fn send_to_page(session: u64, message: &str) {
         .is_some_and(acts_on_the_page)
     {
         let browser_id = browser.identifier();
-        RELAY_AGENT_INPUT.with(|input| input.borrow_mut().insert(browser_id, Instant::now()));
+        stamp_agent_input(browser_id);
+        RELAY_AGENT_PENDING.with(|pending| pending.borrow_mut().insert(relay_id, browser_id));
     }
     RELAY_PENDING.with(|pending| pending.borrow_mut().insert(relay_id, (session, client_id)));
     let sent = browser
@@ -379,6 +404,7 @@ fn send_to_page(session: u64, message: &str) {
         .is_some_and(|host| host.send_dev_tools_message(Some(command.to_string().as_bytes())) != 0);
     if !sent {
         RELAY_PENDING.with(|pending| pending.borrow_mut().remove(&relay_id));
+        RELAY_AGENT_PENDING.with(|pending| pending.borrow_mut().remove(&relay_id));
         close_session(session, "The page closed.");
     }
 }
@@ -393,6 +419,21 @@ fn detach_session(session: u64) {
             .borrow_mut()
             .retain(|_, (owner, _)| *owner != session)
     });
+    // A command the page had not answered may still run: it counts as acting now.
+    let dropped: Vec<c_int> = RELAY_AGENT_PENDING.with(|agent_pending| {
+        let mut agent_pending = agent_pending.borrow_mut();
+        let ids: Vec<i64> = agent_pending
+            .keys()
+            .copied()
+            .filter(|id| !RELAY_PENDING.with(|pending| pending.borrow().contains_key(id)))
+            .collect();
+        ids.iter()
+            .filter_map(|id| agent_pending.remove(id))
+            .collect()
+    });
+    for browser_id in dropped {
+        stamp_agent_input(browser_id);
+    }
     let still_attached = RELAY_SESSIONS.with(|sessions| {
         sessions
             .borrow()
@@ -408,6 +449,11 @@ fn detach_session(session: u64) {
 pub(crate) fn cef_devtools_relay_browser_closed(browser_id: c_int) {
     RELAY_TARGET_IDS.with(|ids| ids.borrow_mut().remove(&browser_id));
     RELAY_AGENT_INPUT.with(|input| input.borrow_mut().remove(&browser_id));
+    RELAY_AGENT_PENDING.with(|pending| {
+        pending
+            .borrow_mut()
+            .retain(|_, pending_browser| *pending_browser != browser_id)
+    });
     let sessions: Vec<u64> = RELAY_SESSIONS.with(|sessions| {
         sessions
             .borrow()
@@ -444,6 +490,14 @@ wrap_dev_tools_message_observer! {
                     else {
                         return 0;
                     };
+                    // The page handled an acting command just now (a press it queued behind a
+                    // busy script lands only now): the agent's time starts again
+                    // (hidden_page_dialogs.rs).
+                    if let Some(browser_id) =
+                        RELAY_AGENT_PENDING.with(|pending| pending.borrow_mut().remove(&id))
+                    {
+                        stamp_agent_input(browser_id);
+                    }
                     parsed["id"] = client_id;
                     session
                 }

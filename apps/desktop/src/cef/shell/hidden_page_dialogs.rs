@@ -4,7 +4,8 @@
 //!
 //! CDXC:Browser 2026-11-26 DECISION:
 //! Coordinator, on the user's behalf (security review of #762, findings B4 and B12): a page the user cannot see (an agent's background page, a tab behind another, a parked project's Browser) must not bring a native panel up in front of them, because a file they pick in an Open panel goes to that page, and a Save panel they did not ask for reads as their own download. So a hidden page's file chooser is cancelled (the page gets the same answer as a person pressing Cancel; an agent fills upload fields with `ghostex_set_input_files` instead), and its download is held, without a panel, until the page is shown, when the Save panel opens as usual. One download waits per page; another one while it waits is cancelled. A sign-in popup from a hidden page opens as a background tab instead of its own window (browser_handlers.rs).
-//! Coordinator, on the user's behalf (#762 follow-up, replacing the DevTools interception that cancelled every chooser while an agent was attached): on a page on screen, a file chooser opens normally when a person opened it, and is cancelled when the agent's own input did. The page cannot tell them apart (DevTools input is trusted and gives the page user activation), so the app compares when a DevTools session last sent the page input or a script (devtools_relay.rs) with when a real person last pressed a key or mouse button: the system's own input clock on macOS (`CGEventSourceSecondsSinceLastEventType`, which DevTools input never reaches) and Windows (`GetLastInputInfo`), and on Linux the presses Ghostex already watches on Chromium's windows (linux_x11_pointer_focus.rs). The agent's input being the newer one, within the 10 seconds a page's activation can last, cancels the chooser, and the agent's tools are told (`Ghostex.fileChooserCancelled`).
+//! Coordinator, on the user's behalf (#762 follow-up, replacing the DevTools interception that cancelled every chooser while an agent was attached): on a page on screen, a file chooser opens normally when a person opened it, and is cancelled when the agent's own input did. The page cannot tell them apart (DevTools input is trusted and gives the page user activation), so the app compares when a DevTools session last acted on the page (devtools_relay.rs) with when a real person last pressed a key or mouse button on that same page's view. The agent's input being the newer one, within the 10 seconds a page's activation can last, cancels the chooser, and the agent's tools are told (`Ghostex.fileChooserCancelled`).
+//! Coordinator, on the user's behalf (re-check of #762, N3): the agent's time is when the page answered its command, not only when it was sent, and counts as now while the command waits, so a page kept busy until a queued press lands cannot let that press open a chooser; every command that can run page script counts (input, scripts, DOM changes, navigations). A real press counts only on the page's own view, never anywhere else on the computer: macOS reports mouse-downs from the page's view and key-downs from the app's `sendEvent:` observer for the view holding focus, Windows from input hooks on the thread that owns Chromium's windows (mouse moves do not count), and Linux from the XI2 presses on Chromium's window (mouse only; a chooser opened with the keyboard soon after an agent's input is cancelled, as on Wayland, where no press is seen).
 //! SEE-ALSO: apps/desktop/src/cef/shell/devtools_relay.rs (when an agent's DevTools session last acted on each page), apps/desktop/src/cef/shell/browser.rs (`set_visible`, which marks a page hidden and lets its held download go).
 
 use super::*;
@@ -17,78 +18,52 @@ use cef::{
 /// activation lasts about five seconds, so this leaves room.
 const AGENT_GESTURE_WINDOW: std::time::Duration = std::time::Duration::from_secs(10);
 
-/// When a real person last pressed a mouse button on a page, where the system keeps no input clock
-/// Ghostex can read (Linux: linux_x11_pointer_focus.rs records it).
-static LAST_REAL_PRESS: Mutex<Option<Instant>> = Mutex::new(None);
-
-/// A real person pressed a mouse button on a page (not DevTools input).
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-pub(crate) fn note_real_user_press() {
-    *LAST_REAL_PRESS
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Instant::now());
+thread_local! {
+    /// When a real person last pressed a key or mouse button on each page, by the page's native
+    /// view: the presses the app's own views receive, which DevTools input never reaches.
+    static REAL_PRESSES: RefCell<HashMap<usize, Instant>> = RefCell::new(HashMap::new());
 }
 
-/// How long ago a real person last pressed a key or mouse button, or `None` when unknown.
-#[cfg(target_os = "macos")]
-fn since_real_user_input() -> Option<std::time::Duration> {
-    #[link(name = "CoreGraphics", kind = "framework")]
-    unsafe extern "C" {
-        fn CGEventSourceSecondsSinceLastEventType(state: i32, event_type: u32) -> f64;
+/// A real person pressed a key or mouse button on `native_view` (macOS: native_view.rs and the
+/// app's `sendEvent:` observer; Windows: the thread's input hooks in cef/windows.rs; Linux: the XI2
+/// presses in linux_x11_pointer_focus.rs). Views that are not a page are ignored, so a caller may
+/// report every view from the one pressed up to its window.
+pub(crate) fn note_real_user_press(native_view: *mut c_void) {
+    if native_view.is_null() {
+        return;
     }
-    // kCGEventSourceStateCombinedSessionState: hardware input and input other apps post (such as
-    // assistive tools); DevTools input is delivered inside Chromium and never reaches it.
-    const COMBINED_SESSION_STATE: i32 = 0;
-    // Left, right and other mouse buttons down and up, and key down.
-    const PRESSES: [u32; 7] = [1, 2, 3, 4, 10, 25, 26];
-    let seconds = PRESSES
-        .iter()
-        .map(|&event_type| unsafe {
-            CGEventSourceSecondsSinceLastEventType(COMBINED_SESSION_STATE, event_type)
-        })
-        .filter(|seconds| seconds.is_finite() && *seconds >= 0.0)
-        .fold(f64::INFINITY, f64::min);
-    seconds
-        .is_finite()
-        .then(|| std::time::Duration::from_secs_f64(seconds))
-}
-
-/// How long ago a real person last gave the computer input, or `None` when unknown.
-#[cfg(target_os = "windows")]
-fn since_real_user_input() -> Option<std::time::Duration> {
-    use windows_sys::Win32::System::SystemInformation::GetTickCount;
-    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
-    let mut info = LASTINPUTINFO {
-        cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
-        dwTime: 0,
-    };
-    if unsafe { GetLastInputInfo(&mut info) } == 0 {
-        return None;
+    let key = native_view as usize;
+    if !CEF_BROWSERS_BY_NATIVE_VIEW.with(|browsers| browsers.borrow().contains_key(&key)) {
+        return;
     }
-    let now = unsafe { GetTickCount() };
-    Some(std::time::Duration::from_millis(u64::from(
-        now.wrapping_sub(info.dwTime),
-    )))
+    REAL_PRESSES.with(|presses| presses.borrow_mut().insert(key, Instant::now()));
 }
 
-/// How long ago a real person last pressed a mouse button on a page, or `None` when unknown.
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-fn since_real_user_input() -> Option<std::time::Duration> {
-    LAST_REAL_PRESS
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .map(|at| at.elapsed())
+/// The page of `native_view` closed: its press record goes with it.
+pub(crate) fn forget_real_user_presses(native_view: *mut c_void) {
+    REAL_PRESSES.with(|presses| presses.borrow_mut().remove(&(native_view as usize)));
+}
+
+/// How long ago a real person last pressed a key or mouse button on `browser`'s own page.
+fn since_real_press_on(browser: &cef::Browser) -> Option<std::time::Duration> {
+    let native_view = platform::native_view_ptr(browser.host()?.window_handle());
+    REAL_PRESSES.with(|presses| {
+        presses
+            .borrow()
+            .get(&(native_view as usize))
+            .map(Instant::elapsed)
+    })
 }
 
 /// Whether a file chooser `browser` asks for now came from an agent's input rather than a
-/// person's: an agent's DevTools session acted on the page within `AGENT_GESTURE_WINDOW`, and no
-/// real press came after it.
+/// person's: an agent's DevTools session acted on the page within `AGENT_GESTURE_WINDOW` (or still
+/// waits for the page to answer it), and no real press on this page came after it.
 fn opened_by_agent_input(browser: &cef::Browser) -> bool {
     let Some(agent) = cef_devtools_relay_agent_input_age(browser.identifier()) else {
         return false;
     };
     agent < AGENT_GESTURE_WINDOW
-        && !since_real_user_input().is_some_and(|since_person| since_person < agent)
+        && !since_real_press_on(browser).is_some_and(|since_person| since_person < agent)
 }
 
 thread_local! {

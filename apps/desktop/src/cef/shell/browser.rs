@@ -1092,6 +1092,7 @@ pub(crate) fn unregister_native_view_browser(native_view: *mut c_void) {
     });
     set_cef_native_view_hidden(native_view, false);
     forget_held_download(native_view);
+    forget_real_user_presses(native_view);
     clear_active_native_view_if_matching(native_view);
 }
 

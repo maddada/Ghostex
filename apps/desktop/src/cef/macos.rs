@@ -553,6 +553,14 @@ pub extern "C" fn GhostexGpuiCEFNativePagePointerDown(native_view: *mut c_void) 
     super::shell::receive_native_page_pointer_down(native_view);
 }
 
+/// A real key press reached the app while `native_view` held, or contained, the focused view:
+/// the AppKit `sendEvent:` observer reports every view from the focused one up to its window, and
+/// only a page's own view is kept (hidden_page_dialogs.rs).
+#[unsafe(no_mangle)]
+pub extern "C" fn GhostexGpuiCEFNativePageKeyDown(native_view: *mut c_void) {
+    super::shell::note_real_user_press(native_view);
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn GhostexGpuiCEFLogNativeMouseDown(
     native_view: *mut c_void,

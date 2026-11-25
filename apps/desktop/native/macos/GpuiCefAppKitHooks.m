@@ -54,6 +54,7 @@ void GhostexGpuiCEFRefreshSystemPageAppearances(void);
 void GhostexGpuiSidebarRevealFocusEditable(void *sidebar);
 void GhostexGpuiFirstResponderDidChange(void *gpuiRootView, void *responder);
 void GhostexGpuiCEFNativePagePointerDown(void *nativeView);
+void GhostexGpuiCEFNativePageKeyDown(void *nativeView);
 int GhostexGpuiKeyboardRouteNativeEvent(void *gpuiRootView, int action,
                                         uint32_t keyCode, uint64_t modifiers,
                                         const char *shortcutCharacters,
@@ -543,6 +544,26 @@ GhostexGpuiEditHistoryMenuTargetShared(void) {
   // Observe-only sidebar pointer tracking (see GPUISidebarPointerTracking
   // above); the event continues unchanged to its normal target.
   GhostexGpuiSidebarPointerTrackingObserveEvent(event);
+
+  /*
+   CDXC:Browser 2026-11-26 DECISION:
+   Coordinator, on the user's behalf (re-check of #762, N3): a file chooser
+   on a page an agent drives opens only when a real person's press on that
+   same page came after the agent's input (cef/shell/hidden_page_dialogs.rs).
+   Key presses are observed here, at the app's single event entry point, for
+   the view holding focus: every view from it up to its window is reported,
+   and Rust keeps only a page's own view. DevTools input never passes here.
+   Observe only; the event continues unchanged.
+  */
+  if (event.type == NSEventTypeKeyDown) {
+    NSWindow *keyWindow = event.window ?: NSApp.keyWindow;
+    id focused = keyWindow.firstResponder;
+    if ([focused isKindOfClass:NSView.class]) {
+      for (NSView *view = (NSView *)focused; view; view = view.superview) {
+        GhostexGpuiCEFNativePageKeyDown((__bridge void *)view);
+      }
+    }
+  }
 
   /*
    CDXC:Hotkeys 2026-07-24:

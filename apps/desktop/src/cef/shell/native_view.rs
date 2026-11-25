@@ -146,6 +146,9 @@ pub(crate) fn receive_native_page_pointer_down(native_view: *mut c_void) {
     if native_view.is_null() {
         return;
     }
+    // A person's press on this page, which a file chooser the page opens next may answer
+    // (hidden_page_dialogs.rs).
+    note_real_user_press(native_view);
     let handler = PAGE_POINTER_DOWN_HANDLERS
         .with(|handlers| handlers.borrow().get(&(native_view as usize)).cloned());
     if let Some(handler) = handler {

@@ -422,6 +422,13 @@ pub(super) async fn route_sessions_http(
                     (Some(pid), Some(sid)) => repository.get_session(pid, sid).ok().flatten(),
                     _ => None,
                 };
+                // A session's token may not move its own folder or drop its agent mark
+                // (session_own_limits.rs).
+                crate::session_own_limits::refuse_session_limit_changes(
+                    &caller,
+                    current_session.as_ref(),
+                    &params,
+                )?;
                 let params = with_direct_title_as_users(current_session.as_ref(), params);
                 let global_accept_all_enabled =
                     crate::acp::approval::global_accept_all_enabled_in_shared_settings(

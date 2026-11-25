@@ -26,16 +26,19 @@ use windows_sys::Win32::Graphics::Gdi::{
     FillRect, GetDCEx, HBRUSH, HRGN, RGN_AND, RGN_DIFF, RGN_OR, ReleaseDC, SetWindowRgn,
 };
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows_sys::Win32::System::Threading::GetCurrentThreadId;
 use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetActiveWindow, GetFocus, SetFocus};
 use windows_sys::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, GA_ROOT, GWL_EXSTYLE, GetAncestor,
-    GetClientRect, GetWindowLongPtrW, HWND_MESSAGE, HWND_TOP, IsChild, IsWindow, KillTimer,
-    LWA_ALPHA, PostMessageW, RegisterClassW, SW_HIDE, SW_SHOWNA, SWP_NOACTIVATE, SWP_NOMOVE,
-    SWP_NOSIZE, SWP_NOZORDER, SetLayeredWindowAttributes, SetTimer, SetWindowLongPtrW,
-    SetWindowPos, ShowWindow, USER_DEFAULT_SCREEN_DPI, WM_APP, WM_NCDESTROY, WM_SIZE, WM_TIMER,
-    WNDCLASSW, WS_EX_LAYERED, WS_EX_NOREDIRECTIONBITMAP,
+    CallNextHookEx, CreateWindowExW, DefWindowProcW, DestroyWindow, GA_ROOT, GWL_EXSTYLE,
+    GetAncestor, GetClientRect, GetParent, GetWindowLongPtrW, HC_ACTION, HWND_MESSAGE, HWND_TOP,
+    IsChild, IsWindow, KillTimer, LWA_ALPHA, MOUSEHOOKSTRUCT, PostMessageW, RegisterClassW,
+    SW_HIDE, SW_SHOWNA, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+    SetLayeredWindowAttributes, SetTimer, SetWindowLongPtrW, SetWindowPos, SetWindowsHookExW,
+    ShowWindow, USER_DEFAULT_SCREEN_DPI, WH_KEYBOARD, WH_MOUSE, WM_APP, WM_LBUTTONDOWN,
+    WM_MBUTTONDOWN, WM_NCDESTROY, WM_RBUTTONDOWN, WM_SIZE, WM_TIMER, WM_XBUTTONDOWN, WNDCLASSW,
+    WS_EX_LAYERED, WS_EX_NOREDIRECTIONBITMAP,
 };
 
 const PUMP_WINDOW_CLASS_NAME: &str = "GhostexGpuiCefMessagePump";
@@ -133,6 +136,70 @@ pub(super) fn install_application_hooks() {
     // no Windows counterpart: Chromium's Windows message pump needs no host
     // application protocol, and edit-command dispatch (Ctrl+A/C/V/X) reaches
     // the focused Chromium child HWND through normal Win32 key routing.
+    install_real_press_hooks();
+}
+
+static REAL_PRESS_HOOKS_INSTALLED: AtomicBool = AtomicBool::new(false);
+
+/// CDXC:Browser 2026-11-26 DECISION:
+/// Coordinator, on the user's behalf (re-check of #762, N3): a file chooser on a page an agent drives opens only when a real person's press on that same page came after the agent's input (cef/shell/hidden_page_dialogs.rs). Chromium's windows belong to this, the main, thread (CEF runs on the external pump here), so a mouse and a keyboard hook on this thread see every press the user gives them, as window messages that DevTools input never becomes. A mouse button going down reports the window it lands on and its parents, a key going down the window holding focus and its parents; only a page's own host window is kept. Mouse moves do not count, unlike the system-wide `GetLastInputInfo` this replaces.
+fn install_real_press_hooks() {
+    if REAL_PRESS_HOOKS_INSTALLED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    unsafe {
+        let thread = GetCurrentThreadId();
+        SetWindowsHookExW(
+            WH_MOUSE,
+            Some(real_mouse_press_hook),
+            std::ptr::null_mut(),
+            thread,
+        );
+        SetWindowsHookExW(
+            WH_KEYBOARD,
+            Some(real_key_press_hook),
+            std::ptr::null_mut(),
+            thread,
+        );
+    }
+}
+
+unsafe extern "system" fn real_mouse_press_hook(
+    code: i32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    if code == HC_ACTION as i32
+        && matches!(
+            wparam as u32,
+            WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN
+        )
+        && lparam != 0
+    {
+        let hwnd = unsafe { (*(lparam as *const MOUSEHOOKSTRUCT)).hwnd };
+        note_real_press_in(hwnd);
+    }
+    unsafe { CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam) }
+}
+
+unsafe extern "system" fn real_key_press_hook(
+    code: i32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    // Bit 31 of the key's flags is its transition: 0 while it goes down.
+    if code == HC_ACTION as i32 && (lparam as u32) >> 31 == 0 {
+        note_real_press_in(unsafe { GetFocus() });
+    }
+    unsafe { CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam) }
+}
+
+/// Reports a real press in `hwnd` for it and each of its parents; only a page's host is kept.
+fn note_real_press_in(mut hwnd: HWND) {
+    while !hwnd.is_null() {
+        super::shell::note_real_user_press(hwnd.cast());
+        hwnd = unsafe { GetParent(hwnd) };
+    }
 }
 
 /// Brings this process's main window to the front when Ghostex is launched while it already runs: the largest
