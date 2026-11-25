@@ -444,6 +444,7 @@ impl NativeChatView {
         Some(json!({
             "label": "Switch to Native",
             "iconPath": "titlebar/bolt.svg",
+            "info": ghostex_gx_chat_core::extras::native_switch::SWITCH_TO_NATIVE_INFO,
             "command": {
                 "type": "host",
                 "action": "switchToNative",
@@ -482,6 +483,11 @@ impl NativeChatView {
                     (label, icon)
                 };
                 let mut row = json!({"label":label,"iconPath":icon,"command":{"type":"composerHost","action":action}});
+                if id == "terminal" && self.snapshot["nonCliMode"] == true {
+                    row["info"] = json!(
+                        ghostex_gx_chat_core::extras::native_switch::SWITCH_TO_TERMINAL_BASED_INFO
+                    );
+                }
                 if id == "maximize" {
                     row["hotkeyAction"] = json!("toggleChatComposerMaximized");
                 }

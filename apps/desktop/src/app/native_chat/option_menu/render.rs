@@ -8,6 +8,8 @@ use gpui::{
 
 /// The diameter of a row's count badge, unscaled.
 pub(super) const BADGE_SIZE: f32 = 14.0;
+/// The glyph of a row's (i), unscaled; it sits in 2px of padding.
+pub(super) const INFO_ICON: f32 = 14.0;
 
 impl ChatOptionMenuPanel {
     fn activate(
@@ -766,6 +768,38 @@ impl Render for ChatOptionMenuPanel {
                         )
                     }),
             );
+            // A row's (i) (Switch to Terminal-based, Switch to Native): its `info` text in the
+            // app's card tooltip on hover. A press on it stays on it, so the row does not run
+            // (CDXC:AgentProviders 2026-11-26 in gx-chat-core extras/native_switch.rs).
+            if let Some(info) = row["info"].as_str().map(str::to_owned) {
+                item = item.child(
+                    div()
+                        .id(format!("option-menu-row-info-{index}"))
+                        .role(gpui::Role::Button)
+                        .aria_label(info.replace('\n', " "))
+                        .flex_shrink_0()
+                        .p(px(2.0 * scale))
+                        .rounded(px(4.0 * scale))
+                        .hover(move |button| button.bg(hover))
+                        .child(
+                            svg()
+                                .path(crate::app::consts::TITLEBAR_ICON_INFO)
+                                .size(px(INFO_ICON * scale))
+                                .text_color(foreground.opacity(0.58)),
+                        )
+                        .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                        .on_mouse_up(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                        .on_click(|_, _, cx| cx.stop_propagation())
+                        .tooltip(move |window, cx| {
+                            crate::app::native_sidebar::tooltips::compact_card_tooltip(
+                                info.clone(),
+                                280.0,
+                                window,
+                                cx,
+                            )
+                        }),
+                );
+            }
             if let Some(detail) = row["detail"].as_str() {
                 item = item.child(
                     div()

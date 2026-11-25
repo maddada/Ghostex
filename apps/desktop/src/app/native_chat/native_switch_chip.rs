@@ -104,8 +104,15 @@ impl NativeChatView {
                 .text_color(p.foreground)
                 .chat_cursor_pointer()
                 .hover(|style| style.bg(p.foreground.opacity(0.06)))
-                .tooltip(move |window, cx| {
-                    gpui_component::tooltip::Tooltip::new(tooltip_text.clone()).build(window, cx)
+                // Queued, the whole chip says what the switch waits on. Otherwise only its (i)
+                // has a tooltip, the Native and Terminal-based explainer, which holds the old
+                // "faster replies and live approvals" line (CDXC:AgentProviders 2026-11-26 in
+                // gx-chat-core extras/native_switch.rs).
+                .when(queued, |chip| {
+                    chip.tooltip(move |window, cx| {
+                        gpui_component::tooltip::Tooltip::new(tooltip_text.clone())
+                            .build(window, cx)
+                    })
                 })
                 .child(
                     svg()
@@ -122,6 +129,39 @@ impl NativeChatView {
                             .size(px(13.0 * s))
                             .flex_shrink_0()
                             .text_color(p.foreground.opacity(0.9)),
+                    )
+                })
+                .when(!queued, |chip| {
+                    let info = ghostex_gx_chat_core::extras::native_switch::SWITCH_TO_NATIVE_INFO;
+                    chip.child(
+                        div()
+                            .id("chat-native-switch-chip-info")
+                            .role(gpui::Role::Button)
+                            .aria_label(info.replace('\n', " "))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .size(px(18.0 * s))
+                            .rounded_full()
+                            .hover(|style| style.bg(p.foreground.opacity(0.14)))
+                            .child(
+                                svg()
+                                    .path(crate::app::consts::TITLEBAR_ICON_INFO)
+                                    .size(px(13.0 * s))
+                                    .text_color(p.foreground.opacity(0.65)),
+                            )
+                            .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| {
+                                cx.stop_propagation();
+                            })
+                            .on_click(|_, _, cx| cx.stop_propagation())
+                            .tooltip(move |window, cx| {
+                                crate::app::native_sidebar::tooltips::compact_card_tooltip(
+                                    info.to_owned(),
+                                    280.0,
+                                    window,
+                                    cx,
+                                )
+                            }),
                     )
                 })
                 .child(

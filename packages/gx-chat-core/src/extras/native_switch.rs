@@ -23,6 +23,16 @@
 use crate::document::NativeSwitchOffer;
 use crate::state::ChatState;
 
+/*
+CDXC:AgentProviders 2026-11-26 DECISION:
+User: "put a i icon next to switch to terminal based and switch to native chat to explain wtf this is. say we're going to remove switching to terminal based later". Every Switch to Terminal-based and Switch to Native row (the chat's `•••` menu on the computer, the web and the phone) and the Switch to Native chip carry an (i) whose hover (a tap on the phone) shows one of these; a click on the (i) never switches. The first line is the card's heading. The facts behind the words: Native is gxserver's ACP host, so Ghostex talks to the agent directly (the chip's old tooltip, "faster replies and live approvals"); Terminal-based runs the agent's own CLI in a terminal Ghostex reads; either switch resumes the same session (`claude --resume <id>`, the driver docs in server/src/acp), and the chat view stays in both. The phone keeps the same words in apps/mobile/app/src/chat/native/composer/switchInfo.ts.
+*/
+/// The (i) beside Switch to Terminal-based.
+pub const SWITCH_TO_TERMINAL_BASED_INFO: &str = "Native and Terminal-based\nNative: Ghostex talks to this agent directly, for faster replies and live approvals.\nTerminal-based: the agent's own app runs in a terminal instead. The conversation stays the same.\nSwitching to Terminal-based will be removed in a later version.";
+
+/// The (i) beside Switch to Native.
+pub const SWITCH_TO_NATIVE_INFO: &str = "Native and Terminal-based\nNative: Ghostex talks to this agent directly, for faster replies and live approvals. The conversation stays the same.\nTerminal-based: the agent's own app runs in a terminal.\nSwitching to Terminal-based will be removed in a later version, so Native is where things are going.";
+
 /// Canonical family and user-facing display name for Native-capable agents.
 pub fn canonical_native_agent(raw: &str) -> Option<(&'static str, &'static str)> {
     match raw.trim().to_ascii_lowercase().as_str() {
