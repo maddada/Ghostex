@@ -552,7 +552,7 @@ fn resolve_windows_portable_desktop_launch(copy: &ghostex_paths::portable::Porta
 }
 
 #[cfg(any(target_os = "linux", test))]
-fn resolve_linux_desktop_launch_from_cli(executable: &Path) -> CliResult<Launch> {
+pub(super) fn resolve_linux_desktop_launch_from_cli(executable: &Path) -> CliResult<Launch> {
     let owning_app = executable
         .parent()
         .map(|bin_dir| js_path_resolve(&bin_dir.join("..").join("..").join("Ghostex")));
@@ -589,7 +589,7 @@ pub fn open_session_link_command(link: &str) -> CliResult<()> {
 }
 
 #[cfg(any(target_os = "linux", test))]
-fn is_wsl() -> bool {
+pub(super) fn is_wsl() -> bool {
     std::env::var_os("WSL_INTEROP").is_some()
         || std::env::var_os("WSL_DISTRO_NAME").is_some()
         || std::fs::read_to_string("/proc/sys/kernel/osrelease")
@@ -638,7 +638,7 @@ fn spawn_detached_desktop(launch: &Launch) -> CliResult<()> {
 /// The bare `Ghostex` name is only trusted next to the CEF helper so an
 /// unrelated binary with that name does not count as the app.
 #[cfg(any(target_os = "linux", test))]
-fn is_linux_ghostex_desktop_executable(exe: &Path) -> bool {
+pub(super) fn is_linux_ghostex_desktop_executable(exe: &Path) -> bool {
     let Some(name) = exe.file_name().and_then(|name| name.to_str()) else {
         return false;
     };
@@ -684,7 +684,7 @@ fn linux_ghostex_desktop_process_running() -> bool {
 /// A Ghostex app started for another Ghostex home (a throwaway test gxserver's app, which runs with its own `GHOSTEX_HOME`) is not this user's app, so it must not count as "already running".
 /// On 2026-11-14 three test-server apps from dev builds made the desktop entry print "already running" and exit, so the installed app would not start at all.
 #[cfg(any(target_os = "linux", test))]
-fn linux_environ_ghostex_home(environ: &[u8]) -> Option<&[u8]> {
+pub(super) fn linux_environ_ghostex_home(environ: &[u8]) -> Option<&[u8]> {
     environ
         .split(|byte| *byte == 0)
         .find_map(|entry| entry.strip_prefix(b"GHOSTEX_HOME="))

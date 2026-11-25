@@ -288,8 +288,11 @@ impl LinuxUpdate {
     /// The card's line: what Update does, or what to do instead.
     fn line(&self) -> String {
         match (&self.command, self.appimage, self.here) {
-            (Some(_), _, true) => "To update, run this in a terminal:".to_string(),
-            (Some(_), _, false) => format!("Run this command in a terminal on {}.", self.computer),
+            (Some(_), _, true) => "This command needs your password, so Ghostex can't run it for you. Run it in a terminal; any agent can check it first.".to_string(),
+            (Some(_), _, false) => format!(
+                "This command needs a password on {}, so Ghostex can't run it for you. Run it in a terminal there; any agent can check it first.",
+                self.computer
+            ),
             (None, true, true) => {
                 "Update downloads the new version and restarts Ghostex.".to_string()
             }

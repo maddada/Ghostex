@@ -20,6 +20,7 @@ pub fn app_update_command(args: &[String]) -> CliResult<()> {
         Some("check") => simple_command(&args[1..], "/api/appUpdateCheck", json!({})),
         Some("install") => install_command(&args[1..]),
         Some("auto") => auto_command(&args[1..]),
+        Some("restart") => crate::ghostex_cli::app_restart::app_restart_command(&args[1..]),
         None | Some("help") | Some("-h") | Some("--help") => {
             println!("{}", usage());
             Ok(())

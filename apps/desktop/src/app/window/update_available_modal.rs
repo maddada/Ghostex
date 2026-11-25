@@ -34,9 +34,12 @@ const OPEN_DOWNLOAD_PAGE: &str = "Open download page";
 const COPY_COMMAND: &str = "Copy command";
 const COPIED: &str = "Copied";
 const RELEASE_PAGE: &str = "Release page";
-const COMMAND_HINT: &str = "To update, run this in a terminal:";
-/// The hint line plus the command box under the notes, without its lines of 12/16 mono.
-const COMMAND_BLOCK_HEIGHT: f32 = 12.0 + 19.5 + 8.0 + 14.0 + 2.0;
+const COMMAND_HINT: &str = "This command needs your password, so Ghostex can't run it for you. Run it in a terminal; any agent can check it first.";
+/// The command box under the notes and the gaps around it, without the hint's lines of 13/19.5 and
+/// the command's lines of 12/16 mono.
+const COMMAND_BLOCK_HEIGHT: f32 = 12.0 + 8.0 + 14.0 + 2.0;
+/// An upper bound on one 13px hint character's width, to count the hint's wrapped lines.
+const COMMAND_HINT_CHAR_WIDTH: f32 = 7.0;
 /// An upper bound on one 12px mono character's width, to count the command's wrapped lines (a
 /// .deb or .rpm download and install takes two or three).
 const COMMAND_CHAR_WIDTH: f32 = 7.4;
@@ -89,7 +92,7 @@ pub(crate) enum UpdateAvailableState {
     Available,
     Ready,
     /// CDXC:Release 2026-11-18 DECISION:
-    /// User (Q83, "Show the command and a link", which replaced Autopilot's earlier Q81 pick "Update runs the right command"): a Linux package install's dialog shows the command that updates it (`linux_command`, from gxserver) under "To update, run this in a terminal:", with Later, Release page and Copy command; Ghostex runs nothing itself. With no command (a tarball, an install no package manager owns) its one button opens the download page, as since 2026-09-22. Native only: the React twin is never opened on Linux.
+    /// User (Q83, "Show the command and a link", which replaced Autopilot's earlier Q81 pick "Update runs the right command"): a Linux package install's dialog shows the command that updates it (`linux_command`, from gxserver) under a line saying it needs the password, so Ghostex can't run it, and any agent can check it first (2026-11-25, replacing "To update, run this in a terminal:"; user: "mention it requires sudo password so we can't run it for them but they can check the command with any agent"), with Later, Release page and Copy command; Ghostex runs nothing itself. With no command (a tarball, an install no package manager owns) its one button opens the download page, as since 2026-09-22. Native only: the React twin is never opened on Linux.
     Notify,
 }
 
@@ -780,7 +783,11 @@ impl GpuiUpdateAvailableModalWindow {
             let lines = (command.chars().count() as f32 / per_line)
                 .ceil()
                 .clamp(1.0, 4.0);
-            COMMAND_BLOCK_HEIGHT + 16.0 * lines
+            let hint_per_line = (text_width / COMMAND_HINT_CHAR_WIDTH).floor().max(1.0);
+            let hint_lines = (COMMAND_HINT.chars().count() as f32 / hint_per_line)
+                .ceil()
+                .clamp(1.0, 3.0);
+            COMMAND_BLOCK_HEIGHT + 19.5 * hint_lines + 16.0 * lines
         });
         let notes_height = (f32::from(window.viewport_size().height)
             - MODAL_FIT_EXTRA_HEIGHT

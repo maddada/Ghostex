@@ -43,7 +43,9 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             demo_release_notes()
         },
         portable: demo.state == "portable",
-        linux_command: (demo.state == "notify-command").then(|| "yay -S ghostex-bin".to_string()),
+        linux_command: (demo.state == "notify-command").then(|| {
+            "yay -S --noconfirm --answerclean All --answerdiff None --answeredit None ghostex-bin && /opt/ghostex/gxserver/bin/ghostex app-update restart".to_string()
+        }),
         palette: demo.palette,
     };
     super::open_modal_window(

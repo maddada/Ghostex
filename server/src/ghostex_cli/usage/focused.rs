@@ -73,10 +73,15 @@ Commands:
                         --wait follows it through the restart and prints how it ended
   auto on|off           Keep this computer up to date: install updates on their own while
                         no agent there is working
+  restart [--dry-run]   Linux packages: quit Ghostex on this computer and open it again on
+                        the version just installed; terminals and agents keep running.
+                        Does nothing when Ghostex is not open. --dry-run only says what
+                        it would do
 
 Ghostex must be open on that computer (macOS and Windows). Linux packages only report the
-new version; install it the way Ghostex was installed. Use --server <profile> for another
-computer with a saved connection profile.
+new version; install it with the command Settings > Updates shows, which ends with
+`ghostex app-update restart`. Use --server <profile> for another computer with a saved
+connection profile.
 "
     .to_string()
 }

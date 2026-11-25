@@ -2,6 +2,9 @@
 //!
 //! CDXC:Updates 2026-11-18 DECISION:
 //! User (Q83, "Show the command and a link", after "i really dont know how to update"; it replaced Autopilot's earlier Q81 pick "Update runs the right command"): on Linux the Ghostex card works out how Ghostex was installed and shows the command that updates it, in words ("To update, run this in a terminal:") with Copy command, and the release page link is always shown; Ghostex does not run the command or open a terminal. The titlebar's Linux update dialog shows the same line and command with Later, Release page and Copy command. gxserver answers it because it runs from the same package as the app (`/opt/ghostex/gxserver/bin`), so the package that owns the app next to it is the one to update, and every client (this desktop, another computer's Settings > Updates, the phone) reads the same answer in `/api/appUpdateStatus` (`linuxUpdate`). The AppImage keeps its own download and swap (linux_updater.rs); a tarball, or an install no package manager owns, gets the release page link only.
+//!
+//! CDXC:Updates 2026-11-25 DECISION:
+//! User, after `yay -S --overwrite '/opt/ghostex/*' ghostex-bin` stopped at the clean-build menu, the diff menu and "Proceed with installation?" and then left the old app running: "make it not need these answers by adding something to the command" and "make the command quit ghostex and start it again after finishing install". The command now answers every prompt itself (yay `--noconfirm --answerclean All --answerdiff None --answeredit None`, paru `--noconfirm --skipreview`, pacman and makepkg `--noconfirm`, apt `-y`, dnf `-y`, zypper `--non-interactive`; only the sudo password is left) and ends with `&& <app>/gxserver/bin/ghostex app-update restart`, which quits a Ghostex that was running and opens it on the installed version (server/src/ghostex_cli/app_restart.rs). It is still only shown, never run: "mention it requires sudo password so we can't run it for them but they can check the command with any agent", so the card and the dialog say so above it. This supersedes the 2026-11-18 command text (the plain install commands) and its line "To update, run this in a terminal:", not the rest of that decision.
 //! SEE-ALSO: apps/desktop/src/app/os_integration/linux_update_command.rs (the dialog), apps/desktop/src/app/window/settings_modal/tabs/updates/card.rs, apps/desktop/src/linux_updater.rs, tooling/release-gpui/customer-downloads.mjs (the asset names).
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -158,9 +161,16 @@ fn safe_version(version: &str) -> Option<&str> {
     .then_some(version)
 }
 
-/// The command that updates Ghostex installed as `kind` to `version`, or `None` when only the
-/// release page can (the AppImage updates itself; a tarball has no package manager).
-fn update_command(kind: &InstallKind, version: Option<&str>) -> Option<String> {
+/// The command that updates Ghostex installed as `kind` to `version` without asking anything but
+/// the sudo password, then opens the installed version when Ghostex was running (`restart`), or
+/// `None` when only the release page can (the AppImage updates itself; a tarball has no package
+/// manager).
+fn update_command(kind: &InstallKind, version: Option<&str>, restart: &str) -> Option<String> {
+    let install = install_command(kind, version)?;
+    Some(format!("{install} && {restart}"))
+}
+
+fn install_command(kind: &InstallKind, version: Option<&str>) -> Option<String> {
     match kind {
         InstallKind::Pacman { package, overwrite } => {
             if !package
@@ -182,38 +192,57 @@ fn update_command(kind: &InstallKind, version: Option<&str>) -> Option<String> {
                 }
                 None => String::new(),
             };
-            if let Some(helper) = first_on_path(&["yay", "paru"]) {
-                Some(format!("{helper} -S{overwrite} {package}"))
-            } else if package == AUR_PACKAGE && overwrite.is_empty() {
-                Some(format!(
-                    "cd \"$(mktemp -d)\" && git clone https://aur.archlinux.org/{AUR_PACKAGE}.git && cd {AUR_PACKAGE} && makepkg -si"
-                ))
-            } else if package == AUR_PACKAGE {
+            match first_on_path(&["yay", "paru"]) {
+                Some("yay") => Some(format!(
+                    "yay -S --noconfirm --answerclean All --answerdiff None --answeredit None{overwrite} {package}"
+                )),
+                Some(helper) => Some(format!(
+                    "{helper} -S --noconfirm --skipreview{overwrite} {package}"
+                )),
+                None if package == AUR_PACKAGE && overwrite.is_empty() => Some(format!(
+                    "cd \"$(mktemp -d)\" && git clone https://aur.archlinux.org/{AUR_PACKAGE}.git && cd {AUR_PACKAGE} && makepkg -si --noconfirm"
+                )),
                 // makepkg -i cannot pass --overwrite on to pacman, so the built package is installed by hand.
-                Some(format!(
-                    "cd \"$(mktemp -d)\" && git clone https://aur.archlinux.org/{AUR_PACKAGE}.git && cd {AUR_PACKAGE} && makepkg -s && sudo pacman -U{overwrite} ./{AUR_PACKAGE}-*.pkg.tar.zst"
-                ))
-            } else {
-                Some(format!("sudo pacman -S{overwrite} {package}"))
+                None if package == AUR_PACKAGE => Some(format!(
+                    "cd \"$(mktemp -d)\" && git clone https://aur.archlinux.org/{AUR_PACKAGE}.git && cd {AUR_PACKAGE} && makepkg -s --noconfirm && sudo pacman -U --noconfirm{overwrite} ./{AUR_PACKAGE}-*.pkg.tar.zst"
+                )),
+                None => Some(format!("sudo pacman -S --noconfirm{overwrite} {package}")),
             }
         }
         InstallKind::Deb => {
             let version = safe_version(version?)?;
             let file = format!("ghostex_{version}_{}.deb", asset_arch(true)?);
-            download_then(version, &file, "sudo apt install")
+            download_then(version, &file, "sudo apt install -y")
         }
         InstallKind::Rpm => {
             let version = safe_version(version?)?;
             let file = format!("ghostex-{version}-1.{}.rpm", asset_arch(false)?);
             // Release rpms are not GPG signed; zypper refuses those unless told.
             let install = match first_on_path(&["dnf", "zypper"])? {
-                "dnf" => "sudo dnf install",
-                _ => "sudo zypper install --allow-unsigned-rpm",
+                "dnf" => "sudo dnf install -y",
+                _ => "sudo zypper --non-interactive install --allow-unsigned-rpm",
             };
             download_then(version, &file, install)
         }
         InstallKind::AppImage | InstallKind::Manual => None,
     }
+}
+
+/// The `ghostex` CLI beside this gxserver (`<app>/gxserver/bin/ghostex`, the file the package's
+/// `/usr/bin/ghostex` wrapper runs), so the restart runs the CLI the install just put there even
+/// when another `ghostex` comes first on the terminal's PATH.
+fn restart_command() -> String {
+    let cli = std::env::current_exe()
+        .ok()
+        .and_then(|exe| Some(exe.parent()?.join("ghostex")))
+        .filter(|cli| cli.is_file())
+        .and_then(|cli| cli.to_str().map(str::to_string))
+        .filter(|cli| {
+            cli.bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"-_.+@/".contains(&byte))
+        })
+        .unwrap_or_else(|| "ghostex".to_string());
+    format!("{cli} app-update restart")
 }
 
 fn release_url(version: Option<&str>) -> String {
@@ -230,7 +259,9 @@ pub(super) fn linux_update(app_platform: Option<&str>, available_version: Option
         return Value::Null;
     }
     let kind = install_kind();
-    let command = available_version.and_then(|version| update_command(kind, Some(version)));
+    let restart = restart_command();
+    let command =
+        available_version.and_then(|version| update_command(kind, Some(version), &restart));
     json!({
         "kind": kind.name(),
         "command": command,
@@ -246,7 +277,9 @@ pub(super) fn unsupported_reason(
 ) -> Option<String> {
     available_version?;
     if let Some(command) = linux_update["command"].as_str() {
-        return Some(format!("Update it in a terminal: {command}"));
+        return Some(format!(
+            "Update it in a terminal (it asks for your password, so Ghostex can't run it for you): {command}"
+        ));
     }
     match linux_update["kind"].as_str()? {
         "appimage" => Some("Use the update button in Ghostex's window there.".to_string()),

@@ -9,6 +9,7 @@ mod agent_hooks;
 pub mod agent_sync;
 mod agentbox_cli;
 mod agents;
+mod app_restart;
 pub mod app_update;
 pub mod args;
 pub mod attach;

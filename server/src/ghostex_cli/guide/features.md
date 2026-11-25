@@ -73,12 +73,16 @@ sliding sidebar's top row starts with the sidebar button there as well).
 The sidebar's top row also moves the window when you drag it. When an update is available, a download button
 appears just before the project name. On Linux the button opens the release
 notes with the command that updates Ghostex the way it was installed (for
-example `yay -S ghostex-bin` for the AUR package, or a download plus
-`sudo apt install` for the .deb or `sudo dnf install` for the .rpm), with
-**Release page** and **Copy command**: run the command in a terminal, type your
-password when it asks, then restart Ghostex. Settings > Updates shows the same
-command on Ghostex's card, with Copy command and a Release page link; another
-Linux computer's card shows its command the same way, to run on that computer.
+example `yay -S --noconfirm … ghostex-bin` for the AUR package, or a download
+plus `sudo apt install -y` for the .deb or `sudo dnf install -y` for the .rpm),
+with **Release page** and **Copy command**. Ghostex can't run it for you because
+it needs your password; run it in a terminal (any agent can check it first) and
+type your password when it asks. It answers every other question itself, and
+when the install finishes it ends with `ghostex app-update restart`, which
+quits Ghostex and opens the new version (only if Ghostex was open; terminals
+and agents keep running). Settings > Updates shows the same command on
+Ghostex's card, with Copy command and a Release page link; another Linux
+computer's card shows its command the same way, to run on that computer.
 The tarball, or a copy no package manager installed, gets only the release page
 (**Open download page**). Linux downloads come
 for x64 and for ARM64 (aarch64) computers, each as a .deb, an .rpm, a portable
@@ -6625,7 +6629,9 @@ agents, a connection from either side is enough.
   be open on that computer (macOS or Windows, also with WSL); a Linux machine
   shows the new version, which you install with its package manager. From a
   terminal: `ghostex app-update status`, `check`, `install --wait` and
-  `auto on|off`, with `--server <profile>` for another computer. On the
+  `auto on|off`, with `--server <profile>` for another computer; on Linux,
+  `ghostex app-update restart` quits Ghostex on this computer and opens the
+  version a package install just put there. On the
   phone, a computer's card in the Machines list shows an Update button when a
   newer version is out; swipe left on it and tap Edit to see the version it
   runs, **Update to <version>** with its progress, and the same **Keep this
