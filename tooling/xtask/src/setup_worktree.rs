@@ -25,6 +25,9 @@ Prepares this worktree for `cargo xtask start`, `web-build` and `test-server`:
     main checkout's .git/config is never written
   - reuses the main checkout's CEF download (apps/desktop/build/cef-cache) and Ghostty's Zig
     package cache, so no build downloads them again
+  - macOS: copies the main checkout's built GhosttyKit.xcframework (a copy-on-write clone), which
+    every desktop link needs (`cargo test`, `cargo build`, `cargo xtask start`) and no dev build
+    makes; says how to build it when the main checkout has none
   - runs `bun install --frozen-lockfile`
   - builds zmx (ReleaseSafe), which the start and `cargo xtask test-server` need
 
@@ -71,6 +74,9 @@ pub fn run(args: &[String]) -> Res<i32> {
 
     if let Some(main) = &main {
         reuse_caches(main)?;
+    }
+    if cfg!(target_os = "macos") {
+        reuse_ghosttykit(main.as_deref())?;
     }
 
     println!("==> bun install --frozen-lockfile");
@@ -278,6 +284,54 @@ fn reuse_caches(main: &Path) -> Res {
         println!("==> .dependencies/ghostty/zig-pkg copied from the main checkout");
     }
     Ok(())
+}
+
+/// The Ghostty library every desktop link reads (`apps/desktop/build.rs`, `GHOSTTYKIT_ARCHIVE`).
+///
+/// CDXC:Build 2026-11-25 WHY: GhosttyKit.xcframework is an ignored build output that no dev build makes (`validate_ghosttykit_archive` in apps/desktop/scripts/build-macos-app.sh only checks for it), so `cargo test` and `cargo build` in apps/desktop failed to link in every fresh worktree. The main checkout's copy is cloned, not linked: a rebuild here must not overwrite the main checkout's.
+fn reuse_ghosttykit(main: Option<&Path>) -> Res {
+    const KIT: &str = ".dependencies/ghostty/macos/GhosttyKit.xcframework";
+    const ARCHIVE: &str = "macos-arm64_x86_64/ghostty-internal.a";
+    let target = root().join(KIT);
+    if target.join(ARCHIVE).is_file() {
+        println!("==> {KIT}: already here");
+        return Ok(());
+    }
+    let source = main.map(|main| main.join(KIT));
+    match source.filter(|source| source.join(ARCHIVE).is_file()) {
+        Some(source) => {
+            if fs::symlink_metadata(&target).is_ok() {
+                bail!(
+                    "{} exists without {ARCHIVE}. Move it away, then run setup-worktree again.",
+                    target.display()
+                );
+            }
+            check(Command::new("cp").arg("-cR").arg(&source).arg(&target))?;
+            println!("==> {KIT} copied from the main checkout");
+            let ghostty_tree =
+                |dir: &Path| git_stdout(dir, &["rev-parse", "HEAD:.dependencies/ghostty"]).ok();
+            if main.is_some_and(|main| ghostty_tree(main) != ghostty_tree(root())) {
+                println!(
+                    "    Note: the main checkout's Ghostty source differs from this worktree's; rebuild GhosttyKit here if the difference matters (command below)."
+                );
+                print_ghosttykit_build_hint();
+            }
+        }
+        None => {
+            println!(
+                "==> {KIT}: missing, and the main checkout has no built copy. Desktop links (`cargo test`, `cargo build`, `cargo xtask start`) fail until it is built."
+            );
+            print_ghosttykit_build_hint();
+        }
+    }
+    Ok(())
+}
+
+fn print_ghosttykit_build_hint() {
+    println!(
+        "    Build it (needs the Zig Ghostty pins and the Metal toolchain, see apps/desktop/scripts/build-macos-app.sh `validate_ghosttykit_archive`):
+      (cd .dependencies/ghostty && DEVELOPER_DIR=\"$(xcode-select -p)\" SDKROOT=\"$(xcrun --sdk macosx --show-sdk-path)\" GHOSTTY_METAL_DEVELOPER_DIR=\"$(xcode-select -p)\" zig build -Demit-xcframework -Dxcframework-target=universal -Demit-macos-app=false -Doptimize=ReleaseSafe)"
+    );
 }
 
 /// A ReleaseSafe zmx in `.dependencies/zmx/zig-out/bin`, where the start and `test-server` look for it. On macOS the start's own script builds it, so the SDK workarounds stay in one place.
