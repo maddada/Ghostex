@@ -102,7 +102,8 @@ pub(crate) fn gpui_read_remote_ssh_password_from_keychain(
 }
 
 /// The saved password reaches ssh's askpass helper through a named pipe in a private (0700)
-/// folder: the helper reads the answer from it with `/bin/cat`, and this app's broker
+/// folder: the helper reads the answer from it with `/bin/cat` (the shell's own `read` where there
+/// is no `/bin/cat`, as on NixOS), and this app's broker
 /// thread answers each read with the password from the system keyring (askpass_broker.rs).
 /// `serve` says how long: terminals until they close, tunnels and one-shot commands only while
 /// their ssh signs in.
@@ -110,9 +111,10 @@ pub(crate) fn gpui_read_remote_ssh_password_from_keychain(
 /// CDXC:RemoteMachines 2026-11-14 WHY: The helper used to read a Unix socket with `nc -U`, which
 /// Linux distributions don't install by default (Arch/Omarchy has no `nc` at all), so a computer
 /// added through Easy Connect, which signs in with its saved SSH password, failed with "requires
-/// netcat-openbsd" until the user installed it by hand. A pipe needs only `cat`, on macOS and on
-/// every Linux, with the same access rule (only this user can open the folder) and
-/// nothing written to disk. Don't bring back a helper that needs a program the system may lack.
+/// netcat-openbsd" until the user installed it by hand. A pipe needs only the shell, on macOS and
+/// on every Linux (`/bin/cat` where it exists, which NixOS lacks), with the same access rule (only
+/// this user can open the folder) and nothing written to disk. Don't bring back a helper that
+/// needs a program the system may lack.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) fn gpui_remote_ssh_askpass_script(
     config: &GpuiRemoteMachineConfig,
@@ -122,7 +124,9 @@ pub(crate) fn gpui_remote_ssh_askpass_script(
         return Ok(None);
     }
     let failed = || "Could not prepare SSH password helper.".to_string();
-    let folder = GpuiAskpassFolder::create(&gpui_askpass_base_directory()).map_err(|_| failed())?;
+    let base = gpui_askpass_base_directory()
+        .ok_or_else(|| GPUI_ASKPASS_NO_EXEC_FOLDER_TEXT.to_string())?;
+    let folder = GpuiAskpassFolder::create(&base).map_err(|_| failed())?;
     let remote_machine_id = config.remote_machine_id.clone();
     let mut askpass = GpuiRemoteAskpassScript {
         broker: None,

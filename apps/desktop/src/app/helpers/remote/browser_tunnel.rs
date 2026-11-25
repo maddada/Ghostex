@@ -3,10 +3,13 @@ mod tcp_proxy;
 use crate::app::helpers::*;
 use crate::*;
 use std::{
-    io::{Read, Write},
+    io::{BufRead, BufReader, Read, Write},
     net::{TcpListener, TcpStream},
     process::{Child, Stdio},
-    sync::Mutex,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -142,14 +145,18 @@ pub(crate) fn start_remote_browser_tunnel(
                 dynamic_forward.as_str(),
             )),
         };
-        gpui_wait_for_remote_browser_forward(&transport, forward_port)?;
+        // The master reported the forward as made (`ssh -O forward` fails otherwise), so the
+        // listener on the port is its own.
+        gpui_wait_for_remote_browser_forward(&transport, forward_port, None)?;
         return start_proxy(
             reservation,
             tcp_proxy::BrowserUpstream::Socks(forward_port),
             transport,
         );
     }
-    let mut args = gpui_remote_ssh_tunnel_options(config);
+    // `-v` makes ssh say when its own listener is up (see `gpui_wait_for_remote_browser_forward`).
+    let mut args = vec!["-v".to_string()];
+    args.extend(gpui_remote_ssh_tunnel_options(config));
     args.extend([
         "-N".into(),
         "-o".into(),
@@ -163,19 +170,34 @@ pub(crate) fn start_remote_browser_tunnel(
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stderr(Stdio::piped());
     if let Some(environment) = gpui_remote_ssh_askpass_environment(askpass.as_ref()) {
         command.envs(environment);
     }
-    let child = command
+    let mut child = command
         .spawn()
         .map_err(|_| "Could not start the browser SSH tunnel.")?;
     gpui_record_remote_tunnel(child.id(), dynamic_forward.as_str());
+    let listening = Arc::new(AtomicBool::new(false));
+    if let Some(stderr) = child.stderr.take() {
+        let listening = listening.clone();
+        // Drained for the tunnel's whole life, so ssh's log can never fill the pipe and stall it.
+        // Without this thread the tunnel never counts as ready and is stopped.
+        let _ = std::thread::Builder::new()
+            .name("ghostex-remote-browser-tunnel".into())
+            .spawn(move || {
+                for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                    if ssh_reported_own_listener(&line, forward_port) {
+                        listening.store(true, Ordering::Release);
+                    }
+                }
+            });
+    }
     let transport = BrowserTransport::Ssh {
         child: Mutex::new(Some(child)),
         forward: Mutex::new(None),
     };
-    gpui_wait_for_remote_browser_forward(&transport, forward_port)?;
+    gpui_wait_for_remote_browser_forward(&transport, forward_port, Some(&listening))?;
     // The forward answers, so ssh has signed in and never asks again: the saved-password helper
     // stops answering now rather than at the end of its window (askpass_broker.rs).
     drop(askpass);
@@ -186,15 +208,34 @@ pub(crate) fn start_remote_browser_tunnel(
     )
 }
 
+/// Whether an ssh log line says ssh itself is listening on `127.0.0.1:port`. ssh logs it at `-v`
+/// only after its bind succeeded.
+fn ssh_reported_own_listener(line: &str, port: u16) -> bool {
+    line.trim_end().ends_with(&format!(
+        "Local forwarding listening on 127.0.0.1 port {port}."
+    ))
+}
+
 /// Waits until SSH's dynamic forward on `port` answers SOCKS, the proof that it works. On failure
 /// the caller drops `transport`, which stops it.
+///
+/// CDXC:RemoteMachines 2026-11-26 WHY: the port is reserved and released before ssh binds it, so
+/// another local program could take it first and answer SOCKS; with `ExitOnForwardFailure` ssh
+/// only exits after it has signed in, and until then that program counted as the tunnel and saw
+/// the machine's browser traffic. When ssh's own process is the tunnel, `listening` says ssh
+/// logged its bind of this exact port; once it holds the port nobody else can listen there.
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 fn gpui_wait_for_remote_browser_forward(
     transport: &BrowserTransport,
     port: u16,
+    listening: Option<&AtomicBool>,
 ) -> Result<(), String> {
     let deadline = Instant::now() + Duration::from_secs(12);
     while Instant::now() < deadline && transport.is_alive() {
+        if listening.is_some_and(|listening| !listening.load(Ordering::Acquire)) {
+            std::thread::sleep(Duration::from_millis(50));
+            continue;
+        }
         if let Ok(mut stream) =
             TcpStream::connect_timeout(&([127, 0, 0, 1], port).into(), Duration::from_millis(150))
         {
@@ -220,4 +261,25 @@ pub(crate) fn start_remote_browser_tunnel(
     _: RemoteBrowserRoute,
 ) -> Result<RemoteBrowserTunnel, String> {
     Err("Remote SSH browsing is not available on this desktop platform yet.".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ssh_reported_own_listener;
+
+    #[test]
+    fn only_ssh_s_own_bind_of_this_port_counts() {
+        let line = "debug1: Local forwarding listening on 127.0.0.1 port 51234.";
+        assert!(ssh_reported_own_listener(line, 51234));
+        assert!(ssh_reported_own_listener(&format!("{line}\r"), 51234));
+        assert!(!ssh_reported_own_listener(line, 5123));
+        assert!(!ssh_reported_own_listener(
+            "debug1: Local forwarding listening on ::1 port 51234.",
+            51234
+        ));
+        assert!(!ssh_reported_own_listener(
+            "bind [127.0.0.1]:51234: Address already in use",
+            51234
+        ));
+    }
 }

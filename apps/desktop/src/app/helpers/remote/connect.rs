@@ -531,6 +531,10 @@ pub(crate) const GPUI_REMOTE_RUNTIME_BROKEN_MESSAGE: &str = "Ghostex on that mac
 pub(crate) const GPUI_ASKPASS_WINDOW_ENDED_TEXT: &str =
     "Ghostex had stopped answering this connection's sign-in when SSH asked for the password.";
 
+/// Why a saved-password sign-in cannot start on a Linux computer whose candidate folders are all
+/// mounted `noexec` (app/helpers/remote/askpass_broker.rs). Shown as is, below.
+pub(crate) const GPUI_ASKPASS_NO_EXEC_FOLDER_TEXT: &str = "Ghostex could not set up the saved-password sign-in: every folder it can put its sign-in helper in ($XDG_RUNTIME_DIR, its own state folder and the temporary folder) is mounted noexec, so ssh could not run it.";
+
 pub(crate) fn gpui_remote_sanitized_process_failure(
     default_message: &str,
     result: &GpuiRemoteProcessResult,
@@ -550,6 +554,9 @@ pub(crate) fn gpui_remote_sanitized_process_failure(
         return format!(
             "{who}, so Ghostex did not send it the access token. Stop that program on the machine (an administrator can find it with `sudo lsof -nP -iTCP:58744 -sTCP:LISTEN`), then reconnect."
         );
+    }
+    if stderr.contains(&GPUI_ASKPASS_NO_EXEC_FOLDER_TEXT.to_ascii_lowercase()) {
+        return GPUI_ASKPASS_NO_EXEC_FOLDER_TEXT.to_string();
     }
     if stderr.contains(&GPUI_ASKPASS_WINDOW_ENDED_TEXT.to_ascii_lowercase()) {
         return "SSH took more than a minute to ask for the password, so Ghostex no longer answered it. The saved password is fine; connect again.".to_string();

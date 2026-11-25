@@ -503,7 +503,12 @@ pub(crate) struct GpuiRemoteSpawnedTunnel {
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 impl Drop for GpuiRemoteAskpassScript {
     fn drop(&mut self) {
-        drop(self.broker.take());
-        let _ = fs::remove_dir_all(&self.directory);
+        let directory = std::mem::take(&mut self.directory);
+        match self.broker.take() {
+            Some(broker) => broker.stop_and_remove_folder(directory),
+            None => {
+                let _ = fs::remove_dir_all(&directory);
+            }
+        }
     }
 }

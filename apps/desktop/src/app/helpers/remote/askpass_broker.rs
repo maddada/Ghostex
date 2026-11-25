@@ -53,9 +53,11 @@ const LONGEST_PAUSE: Duration = Duration::from_millis(500);
 /// checks `cancel` before writing, so it can only stop).
 const STOP_WAIT: Duration = Duration::from_secs(2);
 
-/// How long a retired pipe stays open for reading and writing, so a helper that opened it in the
-/// instant it was taken away gets an empty answer rather than waiting for a writer forever.
-const RETIRED_PIPE_HOLD: Duration = Duration::from_millis(100);
+/// For about 100 ms after a pipe is retired, a writer opens and closes it this many times, this
+/// far apart, so a helper that opened it in the instant it was taken away gets an empty answer
+/// rather than waiting for a writer forever (see `hold_retired_pipe`).
+const RETIRED_PIPE_RELEASES: u32 = 25;
+const RETIRED_PIPE_RELEASE_GAP: Duration = Duration::from_millis(4);
 
 const FOLDER_PREFIX: &str = "gxap-";
 const SCRIPT_NAME: &str = "a";
@@ -94,20 +96,36 @@ impl GpuiAskpassFolder {
     fn fill(&self) -> io::Result<()> {
         // `/bin/cat` takes the answer in one read: the broker writes it in one write and answers
         // each helper once, so two readers at the same moment get the whole line or nothing,
-        // never a part (the shell's `read` took one byte at a time, 2026-11-26). A pipe that is
-        // gone means the sign-in window ended, which gets its own message
-        // (`GPUI_ASKPASS_WINDOW_ENDED_TEXT`, mapped in connect.rs).
+        // never a part (the shell's `read` takes one byte at a time). NixOS has no `/bin/cat`, and
+        // there the shell's `read` is used. A pipe that is gone, before the read or after an
+        // empty one, means the sign-in window ended, which gets its own message
+        // (`GPUI_ASKPASS_WINDOW_ENDED_TEXT`, mapped in connect.rs); the readers' own errors would
+        // only show the helper's path, so they go nowhere.
         let pipe = gpui_shell_single_quote(gpui_path_string(self.pipe.as_path()).as_str());
         let contents = format!(
             concat!(
                 "#!/bin/sh\n",
-                "if [ ! -p {pipe} ]; then\n",
+                "pipe={pipe}\n",
+                "if [ ! -p \"$pipe\" ]; then\n",
                 "  printf '%s\\n' {ended} >&2\n",
                 "  exit 1\n",
                 "fi\n",
-                "password=$(/bin/cat {pipe} </dev/null) || password=\n",
+                "password=\n",
+                "if [ -x /bin/cat ]; then\n",
+                "  password=$(/bin/cat \"$pipe\" </dev/null 2>/dev/null) || password=\n",
+                "else\n",
+                "  IFS= read -r password 2>/dev/null <\"$pipe\" || password=\n",
+                "fi\n",
+                // Only the first line: two readers racing can leave two whole answers in one.
+                "newline='\n",
+                "'\n",
+                "password=${{password%%\"$newline\"*}}\n",
                 "if [ -z \"$password\" ]; then\n",
-                "  printf '%s\\n' 'Ghostex saved SSH password unavailable.' >&2\n",
+                "  if [ ! -p \"$pipe\" ]; then\n",
+                "    printf '%s\\n' {ended} >&2\n",
+                "  else\n",
+                "    printf '%s\\n' 'Ghostex saved SSH password unavailable.' >&2\n",
+                "  fi\n",
                 "  exit 1\n",
                 "fi\n",
                 "printf '%s\\n' \"$password\"\n",
@@ -164,26 +182,45 @@ fn create_private_directory(base: &Path) -> io::Result<PathBuf> {
     Err(last_error)
 }
 
-/// Where helper folders are made: on Linux the user's private runtime folder when there is one
-/// (`/tmp` is shared there), else the temporary folder (per user on macOS).
-pub(crate) fn gpui_askpass_base_directory() -> PathBuf {
+/// Where helper folders are made. macOS: the temporary folder, which is per user. Linux: the first
+/// of the user's private runtime folder (`/tmp` is shared there), this app's state folder and the
+/// temporary folder that ssh can run a program from; `None` when every one is mounted `noexec`.
+pub(crate) fn gpui_askpass_base_directory() -> Option<PathBuf> {
     #[cfg(target_os = "linux")]
-    if let Some(runtime) = linux_runtime_directory() {
-        return runtime;
-    }
-    env::temp_dir()
+    return askpass_base_candidates()
+        .into_iter()
+        .find(|directory| mounted_with_exec(directory));
+    #[cfg(not(target_os = "linux"))]
+    Some(env::temp_dir())
 }
 
+/// Every folder a helper folder may be in, best first, before the `noexec` check.
+fn askpass_base_candidates() -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    #[cfg(target_os = "linux")]
+    {
+        let runtime = env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from);
+        candidates.extend(runtime.filter(|directory| owned_directory(directory, 0o077)));
+        let state = ghostex_paths::GhostexPaths::resolve().state_dir;
+        if owned_directory(&state, 0o022) {
+            candidates.push(state);
+        }
+    }
+    let temp = env::temp_dir();
+    if !candidates.contains(&temp) {
+        candidates.push(temp);
+    }
+    candidates
+}
+
+/// An absolute folder of this user's that nobody else can write to (`closed` are the mode bits
+/// that must be clear).
 #[cfg(target_os = "linux")]
-fn linux_runtime_directory() -> Option<PathBuf> {
-    let directory = PathBuf::from(env::var_os("XDG_RUNTIME_DIR")?);
-    let metadata = fs::symlink_metadata(&directory).ok()?;
-    (directory.is_absolute()
-        && metadata.is_dir()
-        && metadata.uid() == effective_uid()
-        && metadata.mode() & 0o077 == 0
-        && mounted_with_exec(&directory))
-    .then_some(directory)
+fn owned_directory(directory: &Path, closed: u32) -> bool {
+    directory.is_absolute()
+        && fs::symlink_metadata(directory).is_ok_and(|metadata| {
+            metadata.is_dir() && metadata.uid() == effective_uid() && metadata.mode() & closed == 0
+        })
 }
 
 /// ssh runs the helper from this folder, so a `noexec` mount cannot hold it.
@@ -209,12 +246,7 @@ fn effective_uid() -> u32 {
 /// Removes the helper folders of runs that are no longer alive. A folder only ever holds the
 /// helper and the pipe, never a secret; this keeps them from piling up after a crash.
 pub(crate) fn gpui_sweep_stale_askpass_directories() {
-    let mut bases = vec![env::temp_dir()];
-    let current = gpui_askpass_base_directory();
-    if !bases.contains(&current) {
-        bases.push(current);
-    }
-    for base in bases {
+    for base in askpass_base_candidates() {
         sweep_stale_askpass_directories_in(&base);
     }
 }
@@ -302,6 +334,8 @@ struct BrokerState {
     stopped: bool,
     /// The owner is dropping the broker; the window watcher leaves.
     dropping: bool,
+    /// The thread letting helpers go from the retired pipe; the folder is removed after it.
+    retire_hold: Option<thread::JoinHandle<()>>,
 }
 
 struct Shared {
@@ -399,6 +433,30 @@ impl Drop for GpuiAskpassBroker {
     }
 }
 
+impl GpuiAskpassBroker {
+    /// Stops the broker and removes its folder: at once, or after the retired pipe has let its
+    /// last helpers go (on a short-lived thread, so the caller never waits for it).
+    pub(crate) fn stop_and_remove_folder(self, directory: PathBuf) {
+        let shared = self.shared.clone();
+        drop(self);
+        let hold = shared.state().retire_hold.take();
+        let Some(hold) = hold.filter(|hold| !hold.is_finished()) else {
+            let _ = fs::remove_dir_all(&directory);
+            return;
+        };
+        let later = directory.clone();
+        let removal = thread::Builder::new()
+            .name("gpui-askpass-cleanup".to_string())
+            .spawn(move || {
+                let _ = hold.join();
+                let _ = fs::remove_dir_all(&later);
+            });
+        if removal.is_err() {
+            let _ = fs::remove_dir_all(&directory);
+        }
+    }
+}
+
 struct ServerDone(Arc<Shared>);
 
 impl Drop for ServerDone {
@@ -477,7 +535,7 @@ fn answer_helpers(shared: &Shared, mut secret: GpuiAskpassSecret) {
 
 /// Ends the broker: sets `cancel`, wakes it from its pause or its open, waits for it when it
 /// could be woken, and takes the pipe away so a later helper fails at once. Runs once.
-fn stop(shared: &Shared, server: &thread::Thread) {
+fn stop(shared: &Arc<Shared>, server: &thread::Thread) {
     {
         let mut state = shared.state();
         if state.stopped {
@@ -513,11 +571,9 @@ fn stop(shared: &Shared, server: &thread::Thread) {
     retire_pipe(shared);
 }
 
-/// Moves the pipe aside, so no new helper can open it, and removes it. A helper that opened it
-/// just before would wait for a writer forever: the pipe is held open for reading and writing for
-/// `RETIRED_PIPE_HOLD`, which lets a helper already waiting, or one whose open lands in that time,
-/// through to an empty read when it closes. Nothing is ever written to it.
-fn retire_pipe(shared: &Shared) {
+/// Moves the pipe aside, so no new helper can open it, and lets go the helpers that opened it just
+/// before (`hold_retired_pipe`), which then removes it.
+fn retire_pipe(shared: &Arc<Shared>) {
     // Only the FIFO made for this broker is moved; anything else at the path is left for the
     // owner's removal of the folder.
     let ours = fs::symlink_metadata(&shared.pipe)
@@ -531,23 +587,46 @@ fn retire_pipe(shared: &Shared) {
     if fs::rename(&shared.pipe, &retired).is_err() {
         return;
     }
-    let hold = fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .custom_flags(libc::O_NONBLOCK | libc::O_NOFOLLOW)
-        .open(&retired)
-        .ok()
-        .filter(|hold| shared.identity.is(hold));
-    let _ = fs::remove_file(&retired);
-    if let Some(hold) = hold {
-        // Held off the caller's thread: a drop may run on the UI thread.
-        let _ = thread::Builder::new()
-            .name("gpui-askpass-retire".to_string())
-            .spawn(move || {
-                thread::sleep(RETIRED_PIPE_HOLD);
-                drop(hold);
-            });
+    // Off the caller's thread: a drop may run on the UI thread.
+    let hold = thread::Builder::new()
+        .name("gpui-askpass-retire".to_string())
+        .spawn({
+            let shared = shared.clone();
+            let retired = retired.clone();
+            move || hold_retired_pipe(&shared, &retired)
+        });
+    match hold {
+        Ok(hold) => shared.state().retire_hold = Some(hold),
+        Err(_) => {
+            let _ = fs::remove_file(&retired);
+        }
     }
+}
+
+/// A helper that opened the pipe just before it was moved would wait for a writer forever. A
+/// writer that opens and closes once ends one waiting read, but on macOS only one: the end of the
+/// stream goes to the first reader that sees it, and any other reader waits again. So a reader is
+/// kept open here (each writer then opens without waiting) while a writer opens and closes
+/// `RETIRED_PIPE_RELEASES` times, `RETIRED_PIPE_RELEASE_GAP` apart, which lets every helper in
+/// that time through to an empty read (none left waiting with 2, 3 and 6 at once in the review's
+/// test). Nothing is ever written. The retired name is removed after the last one.
+fn hold_retired_pipe(shared: &Shared, retired: &Path) {
+    let reader = open_for_reading(retired).filter(|reader| shared.identity.is(reader));
+    if reader.is_some() {
+        for _ in 0..RETIRED_PIPE_RELEASES {
+            let writer = fs::OpenOptions::new()
+                .write(true)
+                .custom_flags(libc::O_NONBLOCK | libc::O_NOFOLLOW)
+                .open(retired);
+            match writer {
+                Ok(writer) if shared.identity.is(&writer) => drop(writer),
+                _ => break,
+            }
+            thread::sleep(RETIRED_PIPE_RELEASE_GAP);
+        }
+    }
+    let _ = fs::remove_file(retired);
+    drop(reader);
 }
 
 /// Opens the pipe for writing, sleeping in the kernel until a reader has it open. Rust's `open`
@@ -732,6 +811,65 @@ mod tests {
         assert!(read.is_empty());
         assert!(started.elapsed() < Duration::from_secs(2));
         assert_eq!(fixture.reads(), 0);
+    }
+
+    #[test]
+    fn several_helpers_that_open_as_the_pipe_is_retired_are_all_let_go() {
+        let fixture = Fixture::new("retire-many");
+        let broker = fixture.broker(GpuiAskpassServe::UntilDropped, Duration::ZERO);
+        let late = fixture.folder.directory.join("late");
+        fs::hard_link(&fixture.folder.pipe, &late).unwrap();
+        let started = Instant::now();
+        drop(broker);
+        // Several readers land on the retired pipe at once. macOS gives the end of the stream to
+        // one reader only, so a single writer close would leave the others waiting.
+        let readers: Vec<_> = (0..4)
+            .map(|_| {
+                let late = late.clone();
+                thread::spawn(move || {
+                    let mut reader = fs::File::open(&late).unwrap();
+                    let mut read = Vec::new();
+                    io::Read::read_to_end(&mut reader, &mut read).unwrap();
+                    read
+                })
+            })
+            .collect();
+        for reader in readers {
+            assert!(reader.join().unwrap().is_empty());
+        }
+        assert!(started.elapsed() < Duration::from_secs(2));
+        assert_eq!(fixture.reads(), 0);
+    }
+
+    #[test]
+    fn the_helper_works_where_there_is_no_bin_cat() {
+        let fixture = Fixture::new("nocat");
+        let broker = fixture.broker(GpuiAskpassServe::UntilDropped, Duration::ZERO);
+        // The same helper on a system without `/bin/cat`, as on NixOS.
+        let script = fs::read_to_string(&fixture.folder.script).unwrap();
+        assert!(script.contains("[ -x /bin/cat ]"));
+        let without_cat = fixture.folder.directory.join("a-nocat");
+        fs::write(&without_cat, script.replace("/bin/cat", "/no/such/cat")).unwrap();
+        fs::set_permissions(&without_cat, fs::Permissions::from_mode(0o700)).unwrap();
+        let output = Command::new(&without_cat).output().unwrap();
+        assert!(output.status.success());
+        assert_eq!(output.stdout, answer());
+        drop(broker);
+    }
+
+    #[test]
+    fn the_folder_goes_once_the_retired_pipe_has_let_its_helpers_go() {
+        let fixture = Fixture::new("cleanup");
+        let broker = fixture.broker(GpuiAskpassServe::UntilDropped, Duration::ZERO);
+        let directory = fixture.folder.directory.clone();
+        let started = Instant::now();
+        broker.stop_and_remove_folder(directory.clone());
+        assert!(started.elapsed() < Duration::from_millis(500));
+        let gone = Instant::now() + Duration::from_secs(2);
+        while directory.exists() && Instant::now() < gone {
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(!directory.exists());
     }
 
     #[test]
