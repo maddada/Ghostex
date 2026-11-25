@@ -138,6 +138,14 @@ fn is_wrapper(text: &str) -> bool {
 
 /// A transcript's rows as `lead_turn_reply` reads them: what someone typed (a tool result, a
 /// background job's notice or a Ghostex note is nobody's message) and the agent's words.
+///
+/// CDXC:LeadLinks 2026-11-25 WHY:
+/// GitHub #755: Claude Code gets `agents send --with-next` notes inside the releasing message's
+/// `<ghostex-system>` block, after the sender block (session_chat_send/with_next.rs). The lead's
+/// message is found by its sender block ending the row, so that block hid it: the turn was
+/// reported with the previous turn's words when the lead's last message was under 30 seconds
+/// older, and otherwise never, with `reportOwed` left on. A user row is read as what was sent,
+/// without Ghostex's blocks, the way every chat shows it.
 fn turn_rows(messages: &[crate::session_chat::SessionChatMessage]) -> Vec<TurnRow> {
     use crate::session_chat::{SessionChatBlock, SessionChatRole};
     messages
@@ -157,7 +165,7 @@ fn turn_rows(messages: &[crate::session_chat::SessionChatMessage]) -> Vec<TurnRo
             match message.role {
                 SessionChatRole::User if !text.is_empty() && !is_wrapper(&text) => Some(TurnRow {
                     user: true,
-                    text,
+                    text: ghostex_gx_chat_core::session::appended_notes::without_notes(&text),
                     at: message.timestamp,
                 }),
                 SessionChatRole::Assistant if !text.is_empty() => Some(TurnRow {
