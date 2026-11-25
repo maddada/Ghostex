@@ -92,7 +92,7 @@ fn tool_icon(icon: &Value, size: f32, round: bool, p: &ChatAppearance) -> gpui::
 }
 
 /// `base` moved `amount` of the way to `toward`, opaque.
-fn mix(base: Hsla, toward: Hsla, amount: f32) -> Hsla {
+pub(super) fn mix(base: Hsla, toward: Hsla, amount: f32) -> Hsla {
     let (from, to) = (base.to_rgb(), toward.to_rgb());
     gpui::Rgba {
         r: from.r + (to.r - from.r) * amount,
@@ -134,6 +134,11 @@ fn stack_colors(surface: Hsla, p: &ChatAppearance) -> (Hsla, Hsla, f32) {
 /// `name_weight`, cards.rs `title_weight`) shimmered in Normal and changed weight and width when the
 /// call started and finished. Only the colour is set here; every glyph takes the font, size and
 /// weight of the text style around it, exactly as the still line does.
+///
+/// CDXC:SessionChat 2026-11-26 WHY: The user still read the bright word as heavier. The band also
+/// ran from the muted colour at 80% opacity to the full foreground, and a glyph drawn more opaque
+/// has fuller, darker-edged strokes, so it looked bolder. The opacity is now one value across the
+/// band (the caller passes opaque ends) and only the shade blends from `dim` to `bright`.
 pub(super) fn shimmer_text(text: &str, phase: f32, dim: Hsla, bright: Hsla) -> StyledText {
     let count = text.chars().count().max(1) as f32;
     // The band is about a quarter of the text wide and starts and ends off it.
@@ -144,11 +149,10 @@ pub(super) fn shimmer_text(text: &str, phase: f32, dim: Hsla, bright: Hsla) -> S
         .enumerate()
         .map(|(index, (start, character))| {
             let light = (1.0 - ((index as f32 - center).abs() / band)).clamp(0.0, 1.0);
+            // Only the shade moves; the opacity stays `dim`'s across the band (see below).
             let color = Hsla {
-                h: bright.h,
-                s: dim.s + (bright.s - dim.s) * light,
-                l: dim.l + (bright.l - dim.l) * light,
-                a: dim.a + (bright.a - dim.a) * light,
+                a: dim.a,
+                ..mix(dim, bright, light)
             };
             (
                 start..start + character.len_utf8(),

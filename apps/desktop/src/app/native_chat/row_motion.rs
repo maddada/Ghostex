@@ -176,11 +176,7 @@ impl MotionKind {
     /// The part as drawn over its place, `size`, at `opacity`.
     fn element(&self, id: SharedString, size: gpui::Size<Pixels>, opacity: f32) -> AnyElement {
         match self.clone() {
-            MotionKind::Shimmer {
-                label,
-                dim,
-                bright,
-            } => div()
+            MotionKind::Shimmer { label, dim, bright } => div()
                 .w(size.width)
                 .h(size.height)
                 .overflow_hidden()
@@ -216,7 +212,13 @@ impl NativeChatView {
         label: String,
         p: &ChatAppearance,
     ) -> AnyElement {
-        let (dim, bright) = (p.muted.opacity(0.8), p.foreground);
+        // Opaque ends, so only the shade sweeps (`shimmer_text`): the dim end is the muted colour
+        // as it looked at 80% opacity over the chat's background, which keeps the band as clear in
+        // light themes (dark band on light text) as in dark ones.
+        let (dim, bright) = (
+            super::tool_card::mix(p.muted, p.background, 0.2),
+            p.foreground,
+        );
         let kind = MotionKind::Shimmer {
             label: label.clone().into(),
             dim,
