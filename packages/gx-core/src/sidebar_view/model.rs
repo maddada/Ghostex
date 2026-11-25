@@ -922,6 +922,7 @@ impl SidebarViewModel {
             settings: &effective.settings,
             host: &effective.host,
             spaces: merged_documents.0,
+            joined_spaces: super::workspaces::joined_space_workspaces(store, effective, &machine),
             spaces_enabled: super::machine_spaces::spaces_enabled_on(store, effective, &machine),
             collections: merged_documents.1,
             local_machine_loaded: store.loaded(&MachineId::Local).is_some(),

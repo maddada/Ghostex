@@ -102,6 +102,17 @@ pub fn plan_new_project_placement(
         )),
         _ => None,
     };
+    // The Spaces a new project may go to: the window's own, or, while another workspace's Space
+    // shown here is open, that workspace's (a project made there lands in that workspace,
+    // CDXC:Workspaces 2026-11-26 in gx-protocol side_state.rs).
+    let open_joined = match (&selection, spaces, &workspace) {
+        (Some(SpaceSelection::Space(space_id)), Some(spaces), Some(workspace)) => {
+            spaces.state.spaces.get(space_id).and_then(|space| {
+                workspace.joined_workspace_of_space(space.workspace_id.as_deref())
+            })
+        }
+        _ => None,
+    };
     let space_choices = spaces.map(|spaces| {
         spaces
             .state
@@ -110,7 +121,12 @@ pub fn plan_new_project_placement(
             .filter(|space| {
                 workspace
                     .as_ref()
-                    .is_none_or(|workspace| workspace.shows_space(space.workspace_id.as_deref()))
+                    .is_none_or(|workspace| match open_joined {
+                        Some(joined) => {
+                            workspace.state.resolve(space.workspace_id.as_deref()) == joined
+                        }
+                        None => workspace.shows_space(space.workspace_id.as_deref()),
+                    })
             })
             .map(|space| NewProjectPlaceChoice {
                 id: space.space_id.clone(),

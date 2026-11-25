@@ -195,7 +195,8 @@ impl GhostexGpuiApp {
         let mut profile = slot_key.cef_profile_id();
         let website_view = slot_key.titlebar_mode().website_provider().is_some();
         if website_view {
-            profile = self.browser_tab_cef_profile(self.browser_profiles.active_profile_id());
+            profile =
+                self.browser_project_tab_cef_profile(self.browser_profiles.active_profile_id());
         }
         // A workspace Browser profile, and the Code view's own (`CODE_VIEW_CEF_PROFILE`), open a page
         // only once their disk-backed context is ready; any other profile passes straight through.

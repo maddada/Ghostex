@@ -144,8 +144,9 @@ impl GhostexGpuiApp {
             Some(name) => json!({ "name": name, "path": path }),
             None => json!({ "path": path }),
         };
-        // A project added in a window joins that window's workspace (gx_store/workspaces.rs).
-        if let Some(workspace_id) = self.gx_store_window_non_default_workspace_id() {
+        // A project added in a window joins that window's workspace, or the open Space's when it is
+        // another workspace's shown here (gx_store/workspaces.rs `gx_store_placement_workspace_id`).
+        if let Some(workspace_id) = self.gx_store_placement_workspace_id() {
             params["workspaceId"] = json!(workspace_id);
         }
         cx.spawn(async move |this, cx| {

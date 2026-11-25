@@ -413,6 +413,7 @@ pub(super) fn snapshot_from_view(
                     approval_count: space.approval_count,
                     failed_count: space.failed_count,
                     hidden: space.hidden,
+                    joined_workspace: space.joined_workspace.clone(),
                 },
             )
             .collect(),

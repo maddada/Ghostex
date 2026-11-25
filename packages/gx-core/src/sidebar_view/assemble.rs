@@ -36,6 +36,9 @@ pub(crate) struct AssembleInput<'a> {
     pub(crate) settings: &'a SidebarSettings,
     pub(crate) host: &'a SidebarHostInputs,
     pub(crate) spaces: Option<SpacesState>,
+    /// The joined workspaces' Spaces in `spaces`: space id → that workspace's id and name
+    /// (`workspaces::joined_space_workspaces`).
+    pub(crate) joined_spaces: BTreeMap<String, (String, String)>,
     /// The section's machine shows Spaces (`machine_spaces::spaces_enabled_on`).
     pub(crate) spaces_enabled: bool,
     pub(crate) collections: CollectionsState,
@@ -303,16 +306,26 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
                 icon: space.icon.clone(),
                 color: space.color.clone(),
                 hidden: space.hidden,
+                joined_workspace: input.joined_spaces.get(&space.space_id).cloned(),
                 ..SpaceView::default()
             })
             .collect();
-        rows.push(SpaceView {
-            id: OTHER_SPACE_ID.to_string(),
-            name: OTHER_SPACE_LABEL.to_string(),
-            icon: OTHER_SPACE_ICON.to_string(),
-            color: String::new(),
-            ..SpaceView::default()
-        });
+        // Other closes the window's own Spaces; a joined workspace's Spaces follow it, after the
+        // row's hairline (CDXC:Workspaces 2026-11-26 in gx-protocol side_state.rs).
+        let other_at = rows
+            .iter()
+            .position(|row| row.joined_workspace.is_some())
+            .unwrap_or(rows.len());
+        rows.insert(
+            other_at,
+            SpaceView {
+                id: OTHER_SPACE_ID.to_string(),
+                name: OTHER_SPACE_LABEL.to_string(),
+                icon: OTHER_SPACE_ICON.to_string(),
+                color: String::new(),
+                ..SpaceView::default()
+            },
+        );
         // The Active projects star leads the row, left of every Space.
         if active_projects_on {
             rows.insert(

@@ -182,7 +182,8 @@ impl GhostexGpuiApp {
                 GpuiAddProjectDialogOperation::Add | GpuiAddProjectDialogOperation::StartClone
             )
             && let (Some(workspace_id), Some(params)) = (
-                self.gx_store_window_non_default_workspace_id(),
+                // The open Space's workspace when it is another workspace's shown here.
+                self.gx_store_placement_workspace_id(),
                 params.as_object_mut(),
             )
         {

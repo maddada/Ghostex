@@ -85,6 +85,35 @@ impl GhostexGpuiApp {
         browser_cef_profile_for_workspace(profile_id, workspace_id.as_deref())
     }
 
+    /// The CEF profile the open project's Browser tabs and website views use: the window's
+    /// (`browser_tab_cef_profile`), except for another workspace's project this window lists
+    /// through that workspace's Spaces, whose pages sign in with that workspace's own profile, as
+    /// they would in its own window.
+    ///
+    /// CDXC:Workspaces 2026-11-26 DECISION:
+    /// User: a Work project opened from Work's Spaces shown in Personal keeps Work's accounts, so
+    /// its Browser sign-ins are Work's, not Personal's (the parked tabs already follow their
+    /// project's workspace, browser_parked_runtime.rs).
+    pub(crate) fn browser_project_tab_cef_profile(&self, profile_id: BrowserProfileId) -> String {
+        let joined_workspace = self
+            .browser_tabs_project_id
+            .as_deref()
+            .and_then(|id| ghostex_gx_core::ProjectKey::parse_workspace_project_id(id.trim()))
+            .filter(|project| project.machine.is_local())
+            .filter(|project| self.gx_store_local_project_joined(&project.project_id))
+            .and_then(|project| self.gx_store_local_project_workspace_id(&project.project_id));
+        match joined_workspace {
+            Some(workspace_id) => {
+                let non_default = self
+                    .gx_store_workspaces_state()
+                    .filter(|state| state.default_id() != workspace_id)
+                    .map(|_| workspace_id);
+                browser_cef_profile_for_workspace(profile_id, non_default.as_deref())
+            }
+            None => self.browser_tab_cef_profile(profile_id),
+        }
+    }
+
     /// True when `profile` can create a browser now. A workspace profile whose
     /// disk-backed context is still initializing returns false and re-runs the
     /// Browser and website-view reconcile when CEF reports it initialized.

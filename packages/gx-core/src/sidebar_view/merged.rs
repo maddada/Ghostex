@@ -1198,7 +1198,7 @@ fn local_spaces_in_other_workspaces(
         return found;
     };
     for space in local.spaces.values() {
-        let (ids, names) = match workspace.shows_space(space.workspace_id.as_deref()) {
+        let (ids, names) = match workspace.row_shows_space(space.workspace_id.as_deref()) {
             true => (&mut found.shown_ids, &mut found.shown_names),
             false => (&mut found.ids, &mut found.names),
         };

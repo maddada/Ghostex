@@ -353,6 +353,9 @@ impl GhostexGpuiApp {
         if self.gx_store_run_sidebar_space_hide(&command, cx) {
             return;
         }
+        if self.gx_store_run_sidebar_space_hide_here(&command, cx) {
+            return;
+        }
         // The bulk menu, a collection's lifecycle items and a project's Sleep, Wake and Close
         // resolve their set here and fan out into the per-session actions above, paced when the
         // action is a sleep (gx_store/sidebar_bulk.rs).

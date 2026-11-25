@@ -66,6 +66,31 @@ impl GhostexGpuiApp {
         (resolved != state.default_id()).then(|| resolved.to_string())
     }
 
+    /// Where a new Space or a project added from this window goes: the workspace of the open
+    /// Space when it is another workspace's shown here (Settings > Workspaces > Show Work's
+    /// Spaces), else the window's (`gx_store_window_non_default_workspace_id`); the default
+    /// workspace is written as no id.
+    ///
+    /// CDXC:Workspaces 2026-11-26 DECISION:
+    /// User: New Space, Add Project and the folder picker use the open Space's workspace, so what
+    /// is made from Work's Space lands in Work, with Work's accounts, and shows in that Space.
+    pub(crate) fn gx_store_placement_workspace_id(&self) -> Option<String> {
+        let joined = self
+            .native_sidebar
+            .snapshot
+            .as_ref()
+            .filter(|snapshot| snapshot.selected_machine_id == ghostex_gx_core::LOCAL_MACHINE_ID)
+            .and_then(|snapshot| snapshot.spaces.iter().find(|space| space.selected))
+            .and_then(|space| space.joined_workspace.as_ref())
+            .map(|(workspace_id, _)| workspace_id.clone());
+        let Some(workspace_id) = joined else {
+            return self.gx_store_window_non_default_workspace_id();
+        };
+        let state = self.gx_store_workspaces_state()?;
+        (state.workspaces.contains_key(&workspace_id) && workspace_id != state.default_id())
+            .then_some(workspace_id)
+    }
+
     /// `params` for a route that adds a project, with this window's workspace on it, so the
     /// project lands in the window it was added from (gxserver `place_added_project`).
     pub(crate) fn gx_store_with_window_workspace(&self, mut params: Value) -> Value {
@@ -94,6 +119,17 @@ impl GhostexGpuiApp {
             .loaded(&MachineId::Local)
             .filter(|loaded| loaded.project(project_id).is_some())
             .is_some_and(|loaded| !workspace.shows_project(loaded, project_id))
+    }
+
+    /// Whether this computer's project `project_id` is another workspace's that this window lists
+    /// through that workspace's Spaces (Settings > Workspaces > Show Work's Spaces).
+    pub(crate) fn gx_store_local_project_joined(&self, project_id: &str) -> bool {
+        ghostex_gx_core::window_workspace(
+            self.gx_store.core.presentation(),
+            &self.gx_store.sidebar_list.last_inputs,
+            &MachineId::Local,
+        )
+        .is_some_and(|workspace| workspace.is_joined_project(project_id))
     }
 
     /// The workspace this computer's project `project_id` belongs to; `None` while the daemon has

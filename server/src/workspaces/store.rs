@@ -13,6 +13,8 @@ const MAX_NAME_CHARS: usize = 128;
 const MAX_MACHINE_ASSIGNMENTS: usize = 256;
 const MAX_REMOTE_PROJECT_ASSIGNMENTS: usize = 2048;
 const MAX_WORKSPACE_CLAUDE_ACCOUNTS: usize = 32;
+/// How many Spaces one workspace may hide from its row with Hide Here.
+const MAX_HIDDEN_SPACE_IDS: usize = 256;
 
 /// The workspace every project and Space without a `workspaceId` belongs to. It always exists
 /// and cannot be deleted.
@@ -337,8 +339,8 @@ pub(crate) fn create_workspace_in(
 }
 
 /// Applies `params` (`name`, `color`, `letter`, `icon`, `kind`, `claudeAccountId`,
-/// `claudeAccountIds`, `tracker`; `null` clears the icon, the account(s) or the tracker) to one
-/// workspace.
+/// `claudeAccountIds`, `tracker`, `showSpacesFrom`, `hiddenSpaceIds`; `null` clears the icon, the
+/// account(s), the tracker or a list) to one workspace.
 pub(crate) fn update_workspace_in(
     state: &Value,
     workspace_id: &str,
@@ -369,6 +371,8 @@ pub(crate) fn update_workspace_in(
         "homeMachineId",
         "homeMachineName",
         "tracker",
+        "showSpacesFrom",
+        "hiddenSpaceIds",
     ] {
         match params.get(key) {
             Some(Value::Null) => {
@@ -442,6 +446,23 @@ pub(crate) fn delete_workspace_in(
         workspaces.remove(workspace_id);
     }
     Ok(normalize_sidebar_workspaces_state(&next))
+}
+
+/// A list of ids as text, trimmed, bounded, each once, at most `max` of them; anything else is
+/// dropped.
+fn bounded_id_list(value: Option<&Value>, max: usize) -> Vec<String> {
+    let mut ids: Vec<String> = Vec::new();
+    for item in value.and_then(Value::as_array).into_iter().flatten() {
+        if let Some(id) = bounded_text(Some(item), MAX_ID_CHARS) {
+            if !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+        if ids.len() >= max {
+            break;
+        }
+    }
+    ids
 }
 
 /// Bounds every field, drops what does not fit, and always keeps the default workspace first in
@@ -573,6 +594,20 @@ pub fn normalize_sidebar_workspaces_state(state: &Value) -> Value {
             })
         {
             workspace.insert("tracker".into(), json!(tracker));
+        }
+        // The other workspaces whose Spaces this one shows too (CDXC:Workspaces 2026-11-26 in
+        // gx-protocol side_state.rs): only workspaces that exist, never itself, each once.
+        let show_spaces_from = bounded_id_list(source.get("showSpacesFrom"), MAX_WORKSPACES)
+            .into_iter()
+            .filter(|id| id != workspace_id && ordered_ids.contains(id))
+            .collect::<Vec<_>>();
+        if !show_spaces_from.is_empty() {
+            workspace.insert("showSpacesFrom".into(), json!(show_spaces_from));
+        }
+        // Their Spaces hidden from this workspace's row only (Hide Here).
+        let hidden_space_ids = bounded_id_list(source.get("hiddenSpaceIds"), MAX_HIDDEN_SPACE_IDS);
+        if !hidden_space_ids.is_empty() {
+            workspace.insert("hiddenSpaceIds".into(), json!(hidden_space_ids));
         }
         workspaces.insert(workspace_id.clone(), Value::Object(workspace));
     }

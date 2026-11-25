@@ -68,6 +68,11 @@ pub(crate) fn workspaces() -> Section {
                 "Slack, Linear and other apps seen on claude.ai per Claude account, with one-click setup in that account's isolated Browser profile.",
             ),
             row(
+                "workspaceShowSpaces",
+                "Show another workspace's Spaces",
+                "Adds another workspace's Spaces after yours in this workspace's Spaces row, after a line, so you open them without switching; their sessions keep that workspace's accounts and sign-ins. Off by default.",
+            ),
+            row(
                 "workspaceBrowserSignins",
                 "Browser sign-ins",
                 "Each workspace's Browser keeps its own cookies; sign out of every site here.",

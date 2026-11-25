@@ -667,7 +667,7 @@ impl GhostexGpuiApp {
                 Some(profile) => profile,
                 None => self
                     .claude_cloud_tab_profile(tab_id, &url)
-                    .unwrap_or_else(|| self.browser_tab_cef_profile(profile_id)),
+                    .unwrap_or_else(|| self.browser_project_tab_cef_profile(profile_id)),
             };
             if !self.prepare_workspace_browser_context(&profile, cx) {
                 return None;

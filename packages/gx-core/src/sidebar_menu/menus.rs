@@ -45,6 +45,8 @@ pub struct SidebarMenus<'a> {
     workspaces: Option<ghostex_gx_protocol::SidebarWorkspacesState>,
     /// The workspace each of this computer's projects is in (worktrees follow their parent).
     project_workspaces: std::collections::BTreeMap<String, String>,
+    /// The workspace this window shows, while `workspaces` is set.
+    window_workspace_id: Option<String>,
     /// While a remote machine's section is drawn and this computer's daemon has workspaces: those
     /// workspaces, and for each of that machine's projects the project its placement follows (a
     /// worktree's parent) and the workspace it shows in.
@@ -117,6 +119,8 @@ impl<'a> SidebarMenus<'a> {
                 .map(|spaces| SpacesState::from_wire(&spaces)),
             workspaces: crate::sidebar_view::window_workspace(store, inputs, &machine)
                 .map(|workspace| workspace.state.clone()),
+            window_workspace_id: crate::sidebar_view::window_workspace(store, inputs, &machine)
+                .map(|workspace| workspace.workspace_id.to_string()),
             project_workspaces: match (
                 crate::sidebar_view::window_workspace(store, inputs, &machine),
                 store.loaded(&machine),
@@ -213,6 +217,7 @@ impl<'a> SidebarMenus<'a> {
         self.collections.hash(&mut hasher);
         self.workspaces.hash(&mut hasher);
         self.project_workspaces.hash(&mut hasher);
+        self.window_workspace_id.hash(&mut hasher);
         self.server_id.hash(&mut hasher);
         self.server_ids.hash(&mut hasher);
         hasher.finish()
@@ -489,6 +494,14 @@ impl<'a> SidebarMenus<'a> {
                 (label, folded.group_id.clone())
             })
             .collect();
+        let project_spaces = self.spaces_of_workspace(
+            group
+                .core
+                .project_context
+                .as_ref()
+                .and_then(|context| self.project_workspaces.get(&context.project_id))
+                .map(String::as_str),
+        );
         project::project_menu(&project::ProjectMenuInput {
             header: header::project_header_rows(
                 &self.action_menu_group(group),
@@ -500,7 +513,7 @@ impl<'a> SidebarMenus<'a> {
             sessions: &group.core.sessions,
             collection_id: group.collection_id.as_deref(),
             collections: &self.collections,
-            spaces: self.spaces.as_ref(),
+            spaces: project_spaces.as_deref(),
             hidden_group: self
                 .inputs
                 .ui
@@ -559,6 +572,7 @@ impl<'a> SidebarMenus<'a> {
 
     /// A collection's context menu.
     pub fn collection_menu(&self, collection: &CollectionView) -> Vec<MenuItem> {
+        let own_spaces = self.spaces_of_workspace(None);
         let sessions: Vec<&SessionView> =
             crate::sidebar_view::collection_groups(&self.view.groups, &collection.group_ids)
                 .flat_map(|group| group.core.sessions.iter())
@@ -575,8 +589,36 @@ impl<'a> SidebarMenus<'a> {
                 .contains(&collection.storage_id),
             tag_list_items: &self.inputs.settings.tag_list_items,
             catalog: &self.catalog,
-            spaces: self.spaces.as_ref(),
+            spaces: own_spaces.as_deref(),
         })
+    }
+
+    /// The Spaces a project or group may move into: those of its own workspace (`workspace_id`,
+    /// `None` = the window's), never another workspace's Spaces the row shows too
+    /// (CDXC:Workspaces 2026-11-26 in gx-protocol side_state.rs). Every Space while nothing is
+    /// joined or this machine has no workspaces.
+    fn spaces_of_workspace(
+        &self,
+        workspace_id: Option<&str>,
+    ) -> Option<std::borrow::Cow<'_, SpacesState>> {
+        let spaces = self.spaces.as_ref()?;
+        let (Some(state), Some(window)) = (&self.workspaces, self.window_workspace_id.as_deref())
+        else {
+            return Some(std::borrow::Cow::Borrowed(spaces));
+        };
+        let wanted = workspace_id.map_or(window, |id| state.resolve(Some(id)));
+        if spaces
+            .spaces
+            .values()
+            .all(|space| state.resolve(space.workspace_id.as_deref()) == wanted)
+        {
+            return Some(std::borrow::Cow::Borrowed(spaces));
+        }
+        let mut kept = spaces.clone();
+        kept.spaces
+            .retain(|_, space| state.resolve(space.workspace_id.as_deref()) == wanted);
+        kept.order.retain(|id| kept.spaces.contains_key(id));
+        Some(std::borrow::Cow::Owned(kept))
     }
 
     /// The sidebar's own "more" menu.

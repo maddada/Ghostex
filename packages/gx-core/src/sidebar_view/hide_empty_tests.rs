@@ -101,6 +101,7 @@ fn view_of(
         ui,
         settings,
         host: &host,
+        joined_spaces: Default::default(),
         spaces: None,
         spaces_enabled: false,
         collections: CollectionsState::default(),

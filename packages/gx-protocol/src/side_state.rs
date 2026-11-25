@@ -166,6 +166,24 @@ pub struct SidebarWorkspace {
     /// tracker.rs). Absent = never picked; a team's own choice is not in this document.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tracker: Option<String>,
+    /// The other workspaces whose Spaces this workspace's windows (and the phone's list of it)
+    /// show too, after a hairline in the Spaces row (Settings > Workspaces > Show Work's Spaces).
+    /// Empty: only its own Spaces, as before.
+    ///
+    /// CDXC:Workspaces 2026-11-26 DECISION:
+    /// User: "i want the option to merge the spaces from workspaces to my main workspaces so i dont
+    /// need to switch between the work workspace and regular workspace ... put a separator between
+    /// the work workspace spaces and the regular ones ... when i hover on spaces we need to show
+    /// in this case which workspace they're part of". From the mockup they picked a hairline (Q5011
+    /// A), no label with the hover card naming the workspace (Q5012 A), the switch on the viewing
+    /// workspace's section in Settings > Workspaces, per workspace (Q5013 A), reorder only inside
+    /// the other workspace's group and Hide Here for one Space (Q5014 A + B). Off by default.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub show_spaces_from: Vec<String>,
+    /// Spaces of the workspaces in `show_spaces_from` hidden from this workspace's row only (a
+    /// Space's Hide Here); the Space's own `hidden` (Hide Space) still hides it everywhere.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hidden_space_ids: Vec<String>,
 }
 
 /// The icons a workspace can wear (Settings > Workspaces > Icon), in the picker's order. None of
@@ -280,6 +298,23 @@ impl SidebarWorkspacesState {
     /// Workspaces in display order.
     pub fn ordered(&self) -> impl Iterator<Item = &SidebarWorkspace> {
         self.order.iter().filter_map(|id| self.workspaces.get(id))
+    }
+
+    /// The other workspaces whose Spaces `workspace_id` shows too (its `show_spaces_from`), in
+    /// display order, leaving out itself and ids that name no workspace.
+    pub fn joined_workspace_ids(&self, workspace_id: &str) -> Vec<&str> {
+        let Some(workspace) = self.workspaces.get(workspace_id) else {
+            return Vec::new();
+        };
+        self.order
+            .iter()
+            .map(String::as_str)
+            .filter(|id| {
+                *id != workspace_id
+                    && self.workspaces.contains_key(*id)
+                    && workspace.show_spaces_from.iter().any(|shown| shown == id)
+            })
+            .collect()
     }
 
     /// `id` when it names a workspace, else the default workspace's id.

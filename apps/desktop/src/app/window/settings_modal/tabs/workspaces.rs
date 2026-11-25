@@ -26,6 +26,7 @@ use super::super::fields::notice::{greyed_out, is_service_unreachable, service_u
 use super::super::fields::{
     ButtonVariant, FieldStates, RowSpec, SettingsPage, setting_row, settings_button, settings_icon,
     settings_section, settings_segmented, settings_select, settings_text_input, static_note,
+    switch_control,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -505,6 +506,9 @@ impl WorkspacesTab {
             cx,
         ));
 
+        // Show another workspace's Spaces in this one's Spaces row.
+        rows.extend(self.show_spaces_rows(p, workspace, cx));
+
         // Primary tracker (and the GitHub Projects scope while `gh` lacks it).
         rows.extend(self.tracker_rows(p, &workspace_id, cx));
 
@@ -833,6 +837,77 @@ impl WorkspacesTab {
             card.into_any_element(),
             cx,
         )
+    }
+
+    /// One switch per other workspace: "Show Work's Spaces" adds that workspace's Spaces after
+    /// this one's in its windows' Spaces row (gx-protocol `SidebarWorkspace::show_spaces_from`).
+    ///
+    /// CDXC:Workspaces 2026-11-26 DECISION:
+    /// User (Q5013 A): the switch lives on the viewing workspace's own section here, per
+    /// workspace, worded "Show Work's Spaces"; no shortcut in the workspace menu. Off by default.
+    fn show_spaces_rows(
+        &mut self,
+        p: &SettingsPalette,
+        workspace: &Value,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
+        let workspace_id = text(workspace, "workspaceId");
+        let shown: Vec<String> = workspace
+            .get("showSpacesFrom")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect();
+        let mut rows = Vec::new();
+        for other in self.ordered_workspaces() {
+            let other_id = text(&other, "workspaceId");
+            if other_id == workspace_id || other_id.is_empty() {
+                continue;
+            }
+            let other_name = match text(&other, "name") {
+                name if name.is_empty() => other_id.clone(),
+                name => name,
+            };
+            let on = shown.contains(&other_id);
+            let title = format!("Show {other_name}'s Spaces");
+            let target = workspace_id.clone();
+            let current = shown.clone();
+            let toggled = other_id.clone();
+            let control = switch_control(
+                p,
+                SharedString::from(format!("workspace-show-spaces-{workspace_id}-{other_id}")),
+                title.clone(),
+                on,
+                false,
+                None,
+                move |page: &mut Self, next, _window, cx| {
+                    let mut ids: Vec<String> = current
+                        .iter()
+                        .filter(|id| **id != toggled)
+                        .cloned()
+                        .collect();
+                    if next {
+                        ids.push(toggled.clone());
+                    }
+                    page.update_workspace(&target, json!({ "showSpacesFrom": ids }), cx);
+                },
+                cx,
+            )
+            .into_any_element();
+            rows.push(setting_row(
+                p,
+                format!("workspace-show-spaces-{workspace_id}-{other_id}"),
+                RowSpec::new(title).description(format!(
+                    "Adds {other_name}'s Spaces after yours in the Spaces row, after a line. Their sessions keep {other_name}'s accounts and sign-ins."
+                )),
+                None,
+                control,
+                cx,
+            ));
+        }
+        rows
     }
 
     fn linear_key_row(

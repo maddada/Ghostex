@@ -263,7 +263,16 @@ pub fn plan_project_move(
     let plan = match command.get("type").and_then(Value::as_str)? {
         "moveGroup" => plan_move_group(&section, collections, spaces, command),
         "moveSpace" => plan_move_space(spaces, command),
-        "moveToSpace" => plan_move_to_space(&section, collections, section_spaces, command),
+        "moveToSpace" => refuse_space_of_another_workspace(
+            core,
+            inputs,
+            &machine,
+            &section,
+            collections,
+            section_spaces,
+            command,
+        )
+        .or_else(|| plan_move_to_space(&section, collections, section_spaces, command)),
         "moveToCollection" => plan_move_to_collection(&section, collections, spaces, command),
         "moveCollection" => plan_move_collection(&section, collections, command),
         "projectMembership" => {
@@ -355,6 +364,49 @@ fn collection_writes(
         writes.push(ProjectWrite::EditSpaces { document });
     }
     writes
+}
+
+/// A project or group dropped onto a Space of another workspace than its own, which this row
+/// shows only because the window shows that workspace's Spaces too: refused, so a Space never
+/// claims another workspace's project (CDXC:Workspaces 2026-11-26 in gx-protocol side_state.rs).
+/// `None` lets the drop through, which it always does while no other workspace's Spaces are shown.
+fn refuse_space_of_another_workspace(
+    core: &Core,
+    inputs: &SidebarInputs,
+    machine: &crate::keys::MachineId,
+    section: &ProjectSection,
+    collections: &CollectionsDocument,
+    spaces: Option<&SpacesDocument>,
+    command: &Value,
+) -> Option<ProjectMovePlan> {
+    let workspace =
+        crate::sidebar_view::workspaces::window_workspace(core.presentation(), inputs, machine)?;
+    if workspace.joined.is_empty() {
+        return None;
+    }
+    let space_id = command.get("spaceId")?.as_str()?;
+    let space_workspace = match space_id {
+        OTHER_SPACE_ID => workspace.workspace_id,
+        _ => workspace
+            .state
+            .resolve(spaces?.state.spaces.get(space_id)?.workspace_id.as_deref()),
+    };
+    let source_id = command.get("sourceId")?.as_str()?;
+    let moved_group_ids = match command.get("sourceKind")?.as_str()? {
+        "collection" => section.collection_groups(collections, source_id),
+        _ => section.project_family(source_id),
+    };
+    let loaded = core.presentation().loaded(machine)?;
+    let other_workspace = section
+        .project_ids_of(&moved_group_ids)
+        .iter()
+        .filter_map(|project_id| loaded.project(project_id))
+        .filter(|project| !project.every_workspace)
+        .any(|project| {
+            crate::sidebar_view::workspaces::project_workspace_id(workspace.state, loaded, project)
+                != space_workspace
+        });
+    other_workspace.then(|| ProjectMovePlan::refused("otherWorkspaceSpace"))
 }
 
 /// `runNativeProjectDrop`'s `moveToSpace` arm.
@@ -518,6 +570,21 @@ fn plan_move_space(spaces: Option<&SpacesDocument>, command: &Value) -> Option<P
         .collect();
     if !visible.contains(&space_id.to_string()) {
         return Some(ProjectMovePlan::refused("spaceNotVisible"));
+    }
+    // Another workspace's Spaces shown in this row move only among themselves, never across the
+    // hairline into the window's own (CDXC:Workspaces 2026-11-26, Q5014 A). Spaces of one
+    // workspace, the only ones a row held before, always pass.
+    let workspace_of = |id: &str| {
+        spaces.state.spaces.get(id).map(|space| {
+            // No id and the default workspace's id name the same workspace.
+            space
+                .workspace_id
+                .clone()
+                .filter(|id| !id.is_empty() && id != "personal")
+        })
+    };
+    if workspace_of(space_id) != workspace_of(target_space_id) {
+        return Some(ProjectMovePlan::refused("otherWorkspaceSpace"));
     }
     let mut order: Vec<String> = visible
         .iter()

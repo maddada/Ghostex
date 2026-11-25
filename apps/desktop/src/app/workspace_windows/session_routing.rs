@@ -27,11 +27,20 @@ pub(crate) enum ProjectWindowRoute {
 
 impl GhostexGpuiApp {
     /// The workspace of this computer's project `project_id` when it is not the one this window
-    /// shows; `None` for a project in this window's workspace, in every workspace, or unknown.
+    /// shows; `None` for a project in this window's workspace, in every workspace, or unknown, and
+    /// for another workspace's project this window lists through that workspace's Spaces.
+    ///
+    /// CDXC:Workspaces 2026-11-26 DECISION:
+    /// User: with another workspace's Spaces shown here (Settings > Workspaces > Show Work's
+    /// Spaces), opening one of those Spaces' sessions stays in this window, so they "dont need to
+    /// switch between the work workspace and regular workspace". Only those projects count as here
+    /// (gx-core `WindowWorkspace::shows_project`): the other workspace's projects in none of its
+    /// Spaces still open in a window that shows it, as before.
     fn foreign_workspace_of_local_project(&self, project_id: &str) -> Option<String> {
         let workspace_id = self.gx_store_local_project_workspace_id(project_id)?;
-        (self.gx_store_resolved_window_workspace_id().as_deref() != Some(workspace_id.as_str()))
-            .then_some(workspace_id)
+        (self.gx_store_resolved_window_workspace_id().as_deref() != Some(workspace_id.as_str())
+            && self.gx_store_project_outside_window_workspace(project_id))
+        .then_some(workspace_id)
     }
 
     /// Routes an open of this computer's project `project_id` to the window that shows its

@@ -57,8 +57,10 @@ impl GhostexGpuiApp {
         };
         // CDXC:Workspaces 2026-10-09 WHY: a Space made in a window belongs to the workspace that
         // window shows on this computer; the default workspace is written as no id.
+        // Since 2026-11-26 the open Space's workspace when it is another workspace's shown here
+        // (`gx_store_placement_workspace_id`).
         if result.remote_machine_id.is_none() && result.workspace_id.is_none() {
-            result.workspace_id = self.gx_store_window_non_default_workspace_id();
+            result.workspace_id = self.gx_store_placement_workspace_id();
         }
         // The dialog names the machine whose document it edits; the selected tab is not asked,
         // because the dialog can outlive a tab switch.

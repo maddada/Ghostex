@@ -14373,6 +14373,17 @@
       "agentWritable": false
     },
     {
+      "key": "workspaceShowSpaces",
+      "title": "Show another workspace's Spaces",
+      "subtitle": "Adds another workspace's Spaces after yours in this workspace's Spaces row, after a line, so you open them without switching; their sessions keep that workspace's accounts and sign-ins. Off by default.",
+      "tab": "workspaces",
+      "tabTitle": "Workspaces",
+      "section": "workspaces",
+      "sectionTitle": "Workspaces",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
       "key": "workspaceBrowserSignins",
       "title": "Browser sign-ins",
       "subtitle": "Each workspace's Browser keeps its own cookies; sign out of every site here.",

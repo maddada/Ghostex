@@ -792,6 +792,10 @@ export interface GxserverSidebarWorkspace {
   kind: 'work' | 'personal';
   letter: string;
   name: string;
+  /** Spaces of the workspaces listed in `showSpacesFrom` hidden from this workspace's row only (Hide Here). */
+  hiddenSpaceIds?: readonly string[];
+  /** The other workspaces whose Spaces this one shows too, after a separator (Settings > Workspaces). */
+  showSpacesFrom?: readonly string[];
   /** The primary tracker picked on this computer (server/src/work_mode/tracker.rs); absent = never picked. */
   tracker?: 'linear' | 'github';
   workspaceId: string;
