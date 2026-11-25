@@ -319,7 +319,8 @@ impl OpenChat {
 }
 
 /// OMP's Auto after a fixed Low: gxserver reports Auto as `auto`, and Low is no longer marked or
-/// named as OMP's level.
+/// named as OMP's level. The reasoning row reads Auto, and the pill names no level, as for every
+/// placeholder level (`catalog::is_placeholder_effort_value`).
 #[test]
 fn auto_after_a_fixed_level_unmarks_the_old_level_in_an_open_chat() {
     let mut chat = OpenChat::omp();
@@ -330,7 +331,7 @@ fn auto_after_a_fixed_level_unmarks_the_old_level_in_an_open_chat() {
     assert_eq!(own_row(&menu)["effort"], "");
     assert!(marked_levels(&menu).is_empty());
     assert_eq!(reasoning(&menu)["valueLabel"], "Auto");
-    assert_eq!(menu["pill"]["suffix"], "Auto");
+    assert_eq!(menu["pill"]["suffix"], Value::Null);
 }
 
 /// Terminal evidence keeps the same priority over transcript evidence as for every other agent.
