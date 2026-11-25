@@ -989,6 +989,15 @@ impl NativeChatView {
             gpui::size(px(width * scale), px(0.0)),
         );
         self.menu_side = Some(super::option_menu::MenuSide::Right);
+        // Owned by the columns trigger whichever way they open (the header's Work button, the
+        // List/Columns switch, the dock's pill), so the Work button shows lit while they are up
+        // and its next press shuts them (`work_panel_shown`, `chat_menu_toggled_shut`).
+        //
+        // CDXC:Coordinators 2026-11-25 WHY: opened from the switch or after the dock's delay, the
+        // columns had no owner: the Work button stayed unlit, and its press, which dismissed
+        // them as an outside click, found nothing of its own and opened them again. With the
+        // panel's × gone (Q4867 B) that left only Escape or a click elsewhere.
+        self.menu_toggle.arm(BOARD_COLUMNS_TRIGGER);
         self.show_chat_menu(
             vec![json!({"pillMenu": {"id": BOARD_COLUMNS_MENU, "height": height}})],
             trigger,
