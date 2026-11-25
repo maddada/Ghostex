@@ -32,11 +32,11 @@ impl NativeChatView {
     /// sits on a calm ground. `None` without an artwork.
     ///
     /// CDXC:Theming 2026-11-25 DECISION:
-    /// User, of the ASCII artwork showing through behind the chat's text and tables: "it is looking quite good actually ... do something to improve the visibility of this chat window". The chat keeps the artwork around it and draws its reading column on a panel of the theme's work area colour that fades out at its sides; 60% since the user's "the fede in the middle make it a little reansparent" (82% first).
+    /// User, of the ASCII artwork showing through behind the chat's text and tables: "it is looking quite good actually ... do something to improve the visibility of this chat window". The chat keeps the artwork around it and draws its reading column on a panel of the theme's work area colour that fades out at its sides: 70% over a 160-point fade, after "the fede in the middle make it a little reansparent" (82%, then 60%) and "a litttle more fade for the chat".
     fn art_reading_panel(&self, p: &ChatAppearance) -> Option<gpui::AnyElement> {
         const MARGIN: f32 = 40.0;
-        const FADE: f32 = 120.0;
-        const STRENGTH: f32 = 0.6;
+        const FADE: f32 = 160.0;
+        const STRENGTH: f32 = 0.7;
         if !crate::app::helpers::window_art_active() {
             return None;
         }
