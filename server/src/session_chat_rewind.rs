@@ -1317,7 +1317,7 @@ async fn rewind_session_chat(
     }
     let target = resolve_session_chat_send_target(state, params, "rewindSessionChat")?;
     let agent = crate::session_chat_follower::session_chat_agent_for_session(&target.session);
-    if agent.as_deref() == Some("opencode") {
+    if agent.as_deref() == Some("opencode") && !crate::acp::session_is_acp(&target.session) {
         let id = crate::session_chat_opencode::session_id(&target.session)?;
         let result = tokio::task::spawn_blocking(move || {
             crate::session_chat_opencode::rewind(&id, &message_id)
@@ -1332,7 +1332,8 @@ async fn rewind_session_chat(
         return Ok(result);
     }
     // CDXC:SessionChat 2026-11-24 WHY: Claude Code and Codex rewinds type into the agent's own terminal dialog, and a Native chat's pane runs `ghostex acp-host` instead (driving it timed out with "Codex is not showing its input box"), so a Native chat asks its host instead (session_chat_rewind_native.rs).
-    if let Some(native_agent @ ("codex" | "claude" | "openclaude")) = agent.as_deref() {
+    if let Some(native_agent @ ("codex" | "claude" | "openclaude" | "opencode")) = agent.as_deref()
+    {
         if crate::acp::session_is_acp(&target.session) {
             return native::rewind(state, target, &message_id, native_agent).await;
         }

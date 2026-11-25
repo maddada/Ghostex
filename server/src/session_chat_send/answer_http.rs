@@ -578,6 +578,8 @@ async fn answer_session_chat_prompt(
     // conversation, which may not exist yet (session_chat_agent_restart.rs).
     if session_chat_agent_for_session(&target.session).as_deref() == Some("opencode")
         && kind != "restartAgent"
+        && !crate::acp::session_is_acp(&target.session)
+        && crate::acp::channel::live(&target.project_id, &target.session_id, "approve").is_none()
     {
         let id = match crate::session_chat_opencode::session_id(&target.session) {
             Ok(id) => id,

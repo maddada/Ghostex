@@ -914,7 +914,10 @@ async fn send_session_chat_message_locked(
     let terminal_agent =
         crate::session_chat_composer::session_chat_composer_agent_id(&target.session)
             .or_else(|| agent.clone());
-    if agent.as_deref() == Some("opencode") {
+    if agent.as_deref() == Some("opencode")
+        && !crate::acp::session_is_acp(&target.session)
+        && crate::acp::channel::live(&target.project_id, &target.session_id, "send").is_none()
+    {
         let conversation = crate::session_chat_opencode::chat_conversation(
             state,
             &target.project_id,

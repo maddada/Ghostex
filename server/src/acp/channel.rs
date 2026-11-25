@@ -1223,7 +1223,11 @@ pub(crate) async fn switch_to_cli(
             .map(str::to_string);
         if let Some(native_id) = native_for_db.as_deref() {
             runtime_settings.insert("agentSessionId".to_string(), json!(native_id));
-            if let Some(family) = family.as_deref() {
+            if family.as_deref() == Some("opencode") {
+                // Terminal-based OpenCode reads through its shared service mirror, not the
+                // stopped Native host's `acp-opencode-mirror` file.
+                runtime_settings.remove("agentSessionPath");
+            } else if let Some(family) = family.as_deref() {
                 if let Some(transcript) =
                     super::spec::transcript_path_for_session(family, native_id)
                 {

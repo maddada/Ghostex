@@ -1018,6 +1018,22 @@ pub(crate) fn build_agent_resume_command(
             }
         }
         "opencode" => {
+            if input.acp_mode {
+                return Some(
+                    crate::acp::spec::build_acp_host_launch_command_with_profile(
+                        "opencode",
+                        Some(agent_command),
+                        opencode_reference.as_deref(),
+                        input.acp_approval_level,
+                        &[],
+                        input.acp_model.as_deref(),
+                        input.acp_effort.as_deref(),
+                        false,
+                        input.acp_read_only,
+                        &input.acp_profile,
+                    ),
+                );
+            }
             if let Some(reference) = opencode_reference {
                 return Some(format!(
                     "{agent_command} --session {}",
@@ -1147,6 +1163,9 @@ pub(crate) fn build_agent_resume_fallback_command(input: &AgentResumeInput) -> O
             ))
         }
         "opencode" => {
+            if input.acp_mode {
+                return None;
+            }
             let exact = get_opencode_session_reference(input)?;
             (exact != resume_title).then(|| {
                 build_opencode_resume_command(agent_command, &resume_title, agent_lookup_command)

@@ -546,6 +546,26 @@ pub(crate) fn build_agent_fork_plan(
                     &profile,
                 )
             }),
+        (Some("opencode"), Some(command)) if is_acp_source => exact_reference
+            .clone()
+            .filter(|id| crate::session_chat_opencode::safe_id(id))
+            .map(|reference| {
+                acp_fork_family = Some("opencode".to_string());
+                acp_fork_reference = Some(reference.clone());
+                let profile = build_fork_profile("opencode");
+                crate::acp::spec::build_acp_host_launch_command_with_profile(
+                    "opencode",
+                    Some(command),
+                    Some(&reference),
+                    source_acp_level,
+                    &[],
+                    acp_model.as_deref(),
+                    acp_effort.as_deref(),
+                    true,
+                    source_read_only,
+                    &profile,
+                )
+            }),
         (Some("codex"), Some(command)) => exact_reference
             .as_deref()
             .and_then(normalize_codex_session_id)

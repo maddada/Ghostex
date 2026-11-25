@@ -268,10 +268,29 @@ pub(crate) async fn handle_read_subagent(
         };
         let child = match family {
             SessionChatTranscriptAgent::OpenCode => {
-                let info=crate::session_chat_opencode::child(&root_id,&selector).map_err(|e|anyhow::anyhow!(e.message))?;
-                ChildTranscript {id:selector.clone(), name:info["title"].as_str().unwrap_or(&selector).into(),
-                    path:crate::session_chat_opencode::resolve_transcript(&selector).ok_or_else(||anyhow::anyhow!("OpenCode child is unavailable."))?,
-                    agent_type:info["agent"].as_str().map(str::to_string)}
+                if crate::acp::driver_opencode::is_mirror_path(&root) {
+                    let (path, name, agent_type) =
+                        crate::acp::driver_opencode::resolve_subagent_mirror(&root_id, &selector)
+                            .ok_or_else(|| {
+                                anyhow::anyhow!("OpenCode subagent transcript is not available yet.")
+                            })?;
+                    ChildTranscript {
+                        id: selector.clone(),
+                        name,
+                        path,
+                        agent_type,
+                    }
+                } else {
+                    let info = crate::session_chat_opencode::child(&root_id, &selector)
+                        .map_err(|e| anyhow::anyhow!(e.message))?;
+                    ChildTranscript {
+                        id: selector.clone(),
+                        name: info["title"].as_str().unwrap_or(&selector).into(),
+                        path: crate::session_chat_opencode::resolve_transcript(&selector)
+                            .ok_or_else(|| anyhow::anyhow!("OpenCode child is unavailable."))?,
+                        agent_type: info["agent"].as_str().map(str::to_string),
+                    }
+                }
             },
             SessionChatTranscriptAgent::Codex => codex_child(&root, &root_id, &selector)?,
             SessionChatTranscriptAgent::Hermes => ChildTranscript {

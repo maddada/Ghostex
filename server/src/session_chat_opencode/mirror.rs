@@ -192,6 +192,9 @@ pub(crate) fn resolve_transcript(id: &str) -> Option<PathBuf> {
 }
 
 pub(crate) fn refresh_for_path(path: &Path) {
+    if crate::acp::driver_opencode::is_mirror_path(path) {
+        return;
+    }
     if let Some(id) = path.file_stem().and_then(|s| s.to_str()) {
         let _ = snapshot(id);
     }

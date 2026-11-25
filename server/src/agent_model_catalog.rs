@@ -620,6 +620,35 @@ pub fn resolve_acp_model(
         }
     }
 
+    if canonical == "opencode" {
+        let available_name = available_models.and_then(|models| {
+            models.iter().find_map(|entry| {
+                let id = entry
+                    .get("modelId")
+                    .or_else(|| entry.get("id"))
+                    .and_then(Value::as_str)?;
+                if id == raw {
+                    entry
+                        .get("name")
+                        .or_else(|| entry.get("displayName"))
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|s| !is_placeholder_model_label(s))
+                        .map(str::to_string)
+                } else {
+                    None
+                }
+            })
+        });
+        let catalog_label = catalog_model("opencode", raw)
+            .and_then(|row| row.get("label").and_then(Value::as_str).map(str::to_string))
+            .filter(|label| !is_placeholder_model_label(label));
+        let label = available_name
+            .or(catalog_label)
+            .unwrap_or_else(|| raw.split_once('/').map_or(raw, |(_, id)| id).to_string());
+        return Some((raw.to_string(), label, effort));
+    }
+
     let available_name = available_models.and_then(|models| {
         models.iter().find_map(|entry| {
             let id = entry

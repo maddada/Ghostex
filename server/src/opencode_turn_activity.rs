@@ -126,7 +126,9 @@ fn refresh(state: &AppState, seen: &mut HashMap<String, Seen>) {
     };
     let mut watched = HashSet::new();
     for session in &sessions {
-        if read_session_text(session, "agentId").as_deref() != Some("opencode") {
+        if read_session_text(session, "agentId").as_deref() != Some("opencode")
+            || crate::acp::session_is_acp(session)
+        {
             continue;
         }
         let (Some(project_id), Some(session_id), Ok(conversation)) = (

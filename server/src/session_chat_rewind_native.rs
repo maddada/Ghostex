@@ -19,10 +19,10 @@ pub(super) async fn rewind(
     message_id: &str,
     agent: &str,
 ) -> Result<Value, DomainStateError> {
-    let label = if agent == "codex" {
-        "Codex"
-    } else {
-        "Claude Code"
+    let label = match agent {
+        "codex" => "Codex",
+        "opencode" => "OpenCode",
+        _ => "Claude Code",
     };
     if crate::acp::channel::live(&target.project_id, &target.session_id, "rewind").is_none() {
         if crate::acp::channel::live(&target.project_id, &target.session_id, "state").is_some() {
@@ -39,10 +39,10 @@ pub(super) async fn rewind(
     let Some(_guard) = RewindInFlightGuard::claim(&target.project_id, &target.session_id) else {
         return Err(agent_busy("A rewind is already running for this session."));
     };
-    let result = if agent == "codex" {
-        rewind_codex(state, &target, message_id).await?
-    } else {
-        rewind_claude(state, &target, message_id).await?
+    let result = match agent {
+        "codex" => rewind_codex(state, &target, message_id).await?,
+        "opencode" => ask_host(&target, json!({ "messageId": message_id }), "OpenCode").await?,
+        _ => rewind_claude(state, &target, message_id).await?,
     };
     crate::session_chat_follower::request_session_chat_resnapshot(
         state,

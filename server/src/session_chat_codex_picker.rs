@@ -1759,6 +1759,18 @@ pub(crate) async fn select_session_chat_model(
         if model_change {
             crate::acp::channel::set_model(&target.project_id, &target.session_id, &model, &effort)
                 .await?;
+            if agent.as_deref() == Some("opencode") && !session_only && !model.is_empty() {
+                if let Some((provider, name)) = model
+                    .split_once('/')
+                    .filter(|(p, n)| !p.is_empty() && !n.is_empty())
+                {
+                    let mut saved = json!({ "providerID": provider, "model": name });
+                    if !effort.is_empty() {
+                        saved["variant"] = json!(effort);
+                    }
+                    let _ = crate::session_chat_opencode::save_default_model(saved);
+                }
+            }
             // Remember the pick as this session's choice and (unless session-only) as the agent's
             // default for new chats and threads, matching Terminal mode.
             if let Err(error) =

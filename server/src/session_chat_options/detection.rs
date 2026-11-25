@@ -306,6 +306,7 @@ fn acp_terminal_notice(
         let agent_label = match family {
             "codex" => "Codex",
             "antigravity" => "Antigravity",
+            "opencode" => "OpenCode",
             _ => "Claude Code",
         };
         return Some(
@@ -349,6 +350,7 @@ fn acp_terminal_notice(
                 "codex" => "Codex",
                 "antigravity" => "Antigravity",
                 "claude" => "Claude Code",
+                "opencode" => "OpenCode",
                 _ => "Agent",
             };
             let lower_code = code.unwrap_or_default().to_ascii_lowercase();
@@ -392,6 +394,34 @@ fn acp_terminal_notice(
                 .with_input_blocking(false),
             );
         }
+    }
+
+    if let Some(ext_url) = acp_state
+        .and_then(|s| s.get("externalFormUrl"))
+        .and_then(Value::as_str)
+    {
+        let detail = if ext_url.trim().is_empty() {
+            "This form includes an external sign-in step. Switch to Terminal to finish it."
+                .to_string()
+        } else {
+            format!(
+                "It includes a sign-in step: open {}, then switch to Terminal to finish the form.",
+                ext_url.trim()
+            )
+        };
+        return Some(
+            SessionChatTerminalNotice::new(
+                crate::session_chat_notice::SESSION_CHAT_NOTICE_AGENT_ERROR,
+                SessionChatTerminalNoticeSeverity::Warning,
+                SessionChatTerminalNoticeSource::Watchdog,
+                "Complete this OpenCode form",
+            )
+            .with_detail(detail)
+            .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
+                "Switch to Terminal",
+            )])
+            .with_input_blocking(false),
+        );
     }
 
     let ignored = session
@@ -516,6 +546,9 @@ pub(super) fn acp_family_for_session(agent_id: Option<&str>, session: Option<&Va
     }
     if lower.contains("antigravity") || lower == "agy" {
         return "antigravity".to_string();
+    }
+    if lower.contains("opencode") {
+        return "opencode".to_string();
     }
     ghostex_gx_chat_core::menus::catalog::canonical_model_family(raw).to_string()
 }
@@ -777,11 +810,16 @@ pub fn detect_session_chat_terminal_state(
                 _ => None,
             }
         });
+        let model_catalog = acp_state
+            .get("modelCatalog")
+            .filter(|v| v.is_object())
+            .cloned();
         let selection = SessionChatDetectedSelection {
             model,
             effort,
             mode,
             context_usage,
+            model_catalog,
             ..SessionChatDetectedSelection::default()
         };
         let options = Some(SessionChatDetectedOptions::new(selection));
@@ -805,6 +843,74 @@ pub fn detect_session_chat_terminal_state(
         detection.options = options;
         detection.activity = activity;
         detection.notice = notice;
+        if let Some(tasks_arr) = acp_state.pointer("/tasks/tasks").and_then(Value::as_array) {
+            let tasks: Vec<crate::session_chat_agent_tasks::SessionChatAgentTask> = tasks_arr
+                .iter()
+                .filter_map(|t| {
+                    Some(crate::session_chat_agent_tasks::SessionChatAgentTask {
+                        id: t.get("id").and_then(Value::as_str)?.to_string(),
+                        subject: t.get("subject").and_then(Value::as_str)?.to_string(),
+                        active_form: t
+                            .get("activeForm")
+                            .and_then(Value::as_str)
+                            .map(str::to_string),
+                        status: t
+                            .get("status")
+                            .and_then(Value::as_str)
+                            .unwrap_or("pending")
+                            .to_string(),
+                        blocked_by: t
+                            .get("blockedBy")
+                            .and_then(Value::as_array)
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(Value::as_str)
+                                    .map(str::to_string)
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
+                    })
+                })
+                .collect();
+            if !tasks.is_empty() {
+                detection.tasks =
+                    Some(crate::session_chat_agent_tasks::SessionChatAgentTasks { tasks });
+            }
+        }
+        if family == "opencode" {
+            detection.fleet_observed = true;
+            if let Some(agents_arr) = acp_state.pointer("/fleet/agents").and_then(Value::as_array) {
+                let agents: Vec<crate::session_chat_agent_fleet::SessionChatSubAgent> = agents_arr
+                    .iter()
+                    .filter_map(|a| {
+                        let status = a.get("status").and_then(Value::as_str).unwrap_or("idle");
+                        let working = status == "working";
+                        Some(crate::session_chat_agent_fleet::SessionChatSubAgent {
+                            id: a.get("id").and_then(Value::as_str).map(str::to_string),
+                            started_at: a.get("startedAt").and_then(Value::as_i64).unwrap_or(0),
+                            working,
+                            done: !working && a.get("done").and_then(Value::as_bool) == Some(true),
+                            name: a
+                                .get("name")
+                                .and_then(Value::as_str)
+                                .unwrap_or("OpenCode agent")
+                                .to_string(),
+                            model: a.get("model").and_then(Value::as_str).map(str::to_string),
+                            effort: a.get("effort").and_then(Value::as_str).map(str::to_string),
+                            task: a.get("task").and_then(Value::as_str).map(str::to_string),
+                            elapsed_seconds: a.get("elapsedSeconds").and_then(Value::as_u64),
+                            tokens: a.get("tokens").and_then(Value::as_str).map(str::to_string),
+                            nested: a.get("nested").and_then(Value::as_u64).map(|n| n as u32),
+                        })
+                    })
+                    .collect();
+                if !agents.is_empty() {
+                    detection.fleet = Some(
+                        crate::session_chat_agent_fleet::SessionChatAgentFleet::new(agents),
+                    );
+                }
+            }
+        }
         detection.composer.state =
             if child_exited || has_fatal_error || is_working || has_pending_permission {
                 crate::session_chat_composer::SessionChatComposerState::NotReady

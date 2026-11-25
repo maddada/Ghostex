@@ -75,11 +75,23 @@ const CODEX_SPEC: AcpAgentSpec = AcpAgentSpec {
     supports_mid_turn_prompt: true,
 };
 
+const OPENCODE_SPEC: AcpAgentSpec = AcpAgentSpec {
+    family: "opencode",
+    display_name: "OpenCode",
+    // Native OpenCode 2 local HTTP+SSE server (`opencode serve`).
+    acp_argv: &["opencode", "serve"],
+    default_cli_bin: "opencode",
+    cli_resume_flag: "--session",
+    cli_accept_all_flag: Some("--auto"),
+    supports_mid_turn_prompt: true,
+};
+
 pub fn spec_for_family(family: &str) -> Option<&'static AcpAgentSpec> {
     match family.trim().to_ascii_lowercase().as_str() {
         "antigravity" | "antigravity-cli" | "agy" => Some(&ANTIGRAVITY_SPEC),
         "claude" | "claude-code" => Some(&CLAUDE_SPEC),
         "codex" | "codex-cli" => Some(&CODEX_SPEC),
+        "opencode" | "opencode-cli" => Some(&OPENCODE_SPEC),
         _ => None,
     }
 }
@@ -123,6 +135,8 @@ pub fn transcript_path_for_session(family: &str, native_session_id: &str) -> Opt
             Some(native_session_id),
             None,
         ),
+        "opencode" => crate::session_chat_opencode::safe_id(native_session_id)
+            .then(|| super::driver_opencode::mirror_path(native_session_id)),
         _ => None,
     }
 }
@@ -658,7 +672,7 @@ pub(crate) fn extract_safe_model_and_effort_from_command(
     family: &str,
     cmd: &str,
 ) -> (Option<String>, Option<String>) {
-    if !matches!(family, "claude" | "codex" | "antigravity") {
+    if !matches!(family, "claude" | "codex" | "antigravity" | "opencode") {
         return (None, None);
     }
     let tokens = tokenize_cli_command(cmd);
@@ -711,6 +725,7 @@ pub(crate) fn ignored_owner_command_tokens(
         "claude" => "claude",
         "codex" => "codex",
         "antigravity" => "agy",
+        "opencode" => "opencode",
         _ => return Vec::new(),
     };
     let Some(raw) = owner_command.map(str::trim).filter(|s| !s.is_empty()) else {
@@ -781,6 +796,10 @@ fn full_access_flag_width(family: &str, tok: &str, next: Option<&str>) -> usize 
         },
         "codex" => match tok {
             "--dangerously-bypass-approvals-and-sandbox" | "--yolo" => 1,
+            _ => 0,
+        },
+        "opencode" => match tok {
+            "--auto" | "--yolo" | "--dangerously-skip-permissions" => 1,
             _ => 0,
         },
         _ => 0,
@@ -1240,5 +1259,14 @@ pub fn build_cli_switch_argv_with_options(
         return (envs, wrapper.bin, args);
     }
 
-    (envs, spec.default_cli_bin.to_string(), inner_args)
+    let cli_bin = if spec.family == "opencode" {
+        let home = crate::resume_lookup::home_dir();
+        crate::agent_cli::opencode::opencode2_program(&home)
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| spec.default_cli_bin.to_string())
+    } else {
+        spec.default_cli_bin.to_string()
+    };
+
+    (envs, cli_bin, inner_args)
 }

@@ -888,6 +888,41 @@ pub(crate) static CLAUDE_NATIVE: std::sync::LazyLock<Vec<SlashCommand>> =
             .collect()
     });
 
+/// Commands handled directly by OpenCode 2's Native server host (`/compact`, `/model`, `/agent`,
+/// `/init`, `/review`) plus `/btw`, which the composer handles itself.
+pub(crate) const OPENCODE_NATIVE: &[SlashCommand] = &[
+    SlashCommand {
+        name: "agent",
+        description: "Switch OpenCode agent (build or plan)",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "btw",
+        description: "Ask a quick side question without interrupting",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "compact",
+        description: "Compact conversation history",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "init",
+        description: "Initialize project instructions (AGENTS.md)",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "model",
+        description: "Switch model (/model provider/model [variant])",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "review",
+        description: "Review changes in the repository",
+        insert_text: None,
+    },
+];
+
 /// CDXC:SessionChat 2026-10-17 WHY:
 /// Grok Build 1.0.62's own built-in commands (its `slash/commands/` registry, checked against the live `/` menu); skills and workflows reach the chat through the `$` picker. The earlier list named commands Grok never had (`/editor`, `/init`, `/models`, `/status`) or renamed (`/mcp` is `/mcps`).
 pub(crate) const GROK: &[SlashCommand] = &[

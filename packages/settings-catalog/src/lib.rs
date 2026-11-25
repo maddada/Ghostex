@@ -384,7 +384,7 @@ pub fn switch_existing_settings_to_rail(
 }
 
 /// Agent families that currently support Native mode (`agentSessionMode = "non-cli"`).
-pub const NATIVE_MODE_FAMILIES: [&str; 3] = ["antigravity", "claude", "codex"];
+pub const NATIVE_MODE_FAMILIES: [&str; 4] = ["antigravity", "claude", "codex", "opencode"];
 
 /// True when `preferredAgentInterface` selects Chat (or is absent, since Chat is the default).
 pub fn preferred_interface_is_chat(settings: &serde_json::Map<String, serde_json::Value>) -> bool {

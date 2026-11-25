@@ -21,7 +21,22 @@ pub fn resolve_session_chat_transcript_path(
         .filter(|value| !value.is_empty())
         .map(expand_home);
     if agent == SessionChatTranscriptAgent::OpenCode {
-        return crate::session_chat_opencode::resolve_transcript(agent_session_id?);
+        if let Some(ref path) = supplied_path {
+            if crate::acp::driver_opencode::is_mirror_path(path) && path.is_file() {
+                return Some(path.clone());
+            }
+        }
+        let sid = agent_session_id?;
+        if let Some(path) = crate::session_chat_opencode::resolve_transcript(sid) {
+            return Some(path);
+        }
+        if crate::session_chat_opencode::safe_id(sid) {
+            let native_mirror = crate::acp::driver_opencode::mirror_path(sid);
+            if native_mirror.is_file() {
+                return Some(native_mirror);
+            }
+        }
+        return None;
     }
     if agent == SessionChatTranscriptAgent::Zcode {
         return crate::session_chat_zcode::resolve_zcode_chat_transcript_path(

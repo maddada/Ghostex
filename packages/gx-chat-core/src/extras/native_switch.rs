@@ -21,6 +21,7 @@ pub fn canonical_native_agent(raw: &str) -> Option<(&'static str, &'static str)>
         "antigravity" | "antigravity-cli" | "agy" => Some(("antigravity", "Antigravity")),
         "claude" | "claude-code" => Some(("claude", "Claude Code")),
         "codex" | "codex-cli" => Some(("codex", "Codex")),
+        "opencode" | "opencode-cli" => Some(("opencode", "OpenCode")),
         _ => None,
     }
 }

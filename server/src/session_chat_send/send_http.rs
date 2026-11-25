@@ -743,7 +743,10 @@ pub(crate) async fn handle_interrupt_session_chat_http(
     // Cancel first so queued sends (and an in-flight sequence's remaining
     // steps) drop, then deliver ESC through the queue's new generation.
     crate::session_chat_send::cancel_session_chat_sends(&target.project_id, &target.session_id);
-    if session_chat_agent_for_session(&target.session).as_deref() == Some("opencode") {
+    if session_chat_agent_for_session(&target.session).as_deref() == Some("opencode")
+        && !crate::acp::session_is_acp(&target.session)
+        && crate::acp::channel::live(&target.project_id, &target.session_id, "abort").is_none()
+    {
         let id = crate::session_chat_opencode::session_id(&target.session);
         let prompt_id = params
             .get("toolUseId")

@@ -27,6 +27,7 @@ pub(crate) mod channel;
 mod child_lifetime;
 mod driver_claude;
 mod driver_codex;
+pub(crate) mod driver_opencode;
 pub mod host;
 pub(crate) mod host_mode_switching;
 pub(crate) mod pending_switch;

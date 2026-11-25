@@ -445,9 +445,10 @@ pub(crate) fn dispatch_agent_http_blocking(
                             .flatten(),
                     )
                     .filter(|(_, session)| {
-                        crate::session_chat_follower::session_chat_agent_for_session(session)
-                            .as_deref()
-                            == Some("opencode")
+                        !crate::acp::session_is_acp(session)
+                            && crate::session_chat_follower::session_chat_agent_for_session(session)
+                                .as_deref()
+                                == Some("opencode")
                     })
                     .is_some_and(|(title, session)| {
                         crate::session_chat_opencode::session_id(&session)
