@@ -844,8 +844,12 @@ pub(crate) fn create_agent_session_params_for_project(
                             fam,
                             owner_notice_command.as_deref(),
                         );
-                        if !ignored_owner_tokens.is_empty() {
-                            let joined = ignored_owner_tokens.join(" ");
+                        let joined = ignored_owner_tokens.join(" ");
+                        // Dismissed for this agent while it named these flags: no card
+                        // (acp/ignored_flags.rs).
+                        if !ignored_owner_tokens.is_empty()
+                            && !crate::acp::ignored_flags::dismissed(db, &agent_id, &joined)
+                        {
                             eprintln!(
                                 "[Native] Ignoring extra flags/env in command string for {fam} ({agent_id}): {joined}"
                             );

@@ -953,7 +953,7 @@ pub(crate) fn ignored_owner_command_tokens(
 
 /// How many tokens at `tok` (1, or 2 for `--permission-mode bypassPermissions`) start the
 /// family's CLI with approvals off; 0 when `tok` is not such a flag.
-fn full_access_flag_width(family: &str, tok: &str, next: Option<&str>) -> usize {
+pub(crate) fn full_access_flag_width(family: &str, tok: &str, next: Option<&str>) -> usize {
     match family {
         "claude" => match tok {
             "--dangerously-skip-permissions" | "--permission-mode=bypassPermissions" => 1,

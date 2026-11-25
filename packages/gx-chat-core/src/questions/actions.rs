@@ -482,6 +482,14 @@ fn dismiss_notice(
             &serde_json::json!({ "kind": "restartAgent", "actionId": "dismissSendFailure" }),
         ));
     }
+    // "Custom flags ignored" stays dismissed for the agent, in every chat and on every client
+    // (server/src/acp/ignored_flags.rs).
+    if notice.kind == "nonCliIgnoredCommand" {
+        effects.extend(answer_prompt(
+            state,
+            &serde_json::json!({ "kind": "restartAgent", "actionId": "dismissIgnoredFlags" }),
+        ));
+    }
     // Dismissing a quota-blocked card (Q4461) dismisses the sidebar red dot on gxserver without
     // arming auto-resume. While already in `quotaWaiting`, Dismiss only hides the card locally
     // (Stop cancels the wait).

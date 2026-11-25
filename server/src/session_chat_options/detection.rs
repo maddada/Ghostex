@@ -413,13 +413,18 @@ fn acp_terminal_notice(
         );
     }
 
+    let family = acp_state
+        .and_then(|s| s.get("family"))
+        .and_then(Value::as_str)
+        .filter(|s| !s.trim().is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| acp_family_for_session(None, session));
     let ignored = session
         .and_then(|s| s.get("runtimeSettings"))
         .and_then(Value::as_object)
         .and_then(|rt| rt.get(crate::acp::SESSION_NON_CLI_IGNORED_COMMAND_KEY))
         .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|s| !s.is_empty())?;
+        .and_then(|saved| crate::acp::ignored_flags::still_ignored(&family, saved))?;
     let mut notice = SessionChatTerminalNotice::new(
         "nonCliIgnoredCommand",
         SessionChatTerminalNoticeSeverity::Info,
@@ -429,7 +434,7 @@ fn acp_terminal_notice(
     .with_detail(
         "Native mode skipped extra flags or environment settings from this agent's command. Switch to Terminal if you need them.",
     )
-    .with_details(Some(ignored.to_string()))
+    .with_details(Some(ignored))
     .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
         "Switch to Terminal",
     )])

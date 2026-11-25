@@ -36,6 +36,7 @@ mod elicitation;
 pub(crate) mod hermes;
 pub mod host;
 pub(crate) mod host_mode_switching;
+pub(crate) mod ignored_flags;
 mod omp_elicitation;
 pub(crate) mod pending_switch;
 pub(crate) mod spec;
