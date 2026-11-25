@@ -3156,8 +3156,8 @@
     },
     {
       "key": "browserPagesInViewRow",
-      "title": "Show pages in their own row",
-      "subtitle": "Show the Browser as one tab in the side panel's tab bar, with its pages as a row of tabs under it, instead of each page as a tab beside the views. Pages open, close, sleep and drag as before.",
+      "title": "Browser pages",
+      "subtitle": "Beside the views: each page is a tab beside the views in the side panel's tab bar. In their own row: the Browser is one tab there, with its pages as a row of tabs under it. Pages open, close, sleep and drag as before either way.",
       "tab": "browser",
       "tabTitle": "Browser",
       "section": "browserPages",

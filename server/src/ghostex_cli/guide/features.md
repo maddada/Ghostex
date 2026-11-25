@@ -37,7 +37,7 @@ clicking one opens it, or switches to its tab if it is already open. Then comes
 back in a click, then **Customize**. Close a tab with its **x**, with a middle
 click, or from its menu. Browser has no view tab of its own: the same row
 carries its page tabs, one per open page, so a page you have open reads as a tab
-beside the views (with Show pages in their own row on, see Browser below, it has
+beside the views (with Browser pages set to In their own row, see Browser below, it has
 one tab instead). The row is one order: drag any tab, a view or a page, anywhere
 in it, and it scrolls sideways once the tabs run out of room. Right-click a tab
 and choose **Pin tab** to shrink it to its icon and keep it at the left of the
@@ -398,7 +398,7 @@ view from the strip.
   with its last tab on) when Browser was the last one. **Browser Tab** at the top of the strip's **+** menu opens
   another tab. A tab with no address yet is blank: type or paste an address, or
   pick a running server from the Dev servers panel (Tools in the sidebar's menu).
-  Turn on Show pages in their own row (Settings > Files & Links > Browser) to
+  Set Browser pages to In their own row (Settings > Browser > Pages) to
   show one Browser tab in the strip instead, with the pages as a row of tabs
   under it, like VS Code's window tabs and Files' tabs: click a tab to show its
   page, close it with its × or a middle click, right-click it for the same menu,

@@ -108,12 +108,13 @@ fn pages_section(
         return None;
     }
     let mut rows: Vec<AnyElement> = Vec::new();
-    rows.extend(page.toggle(
+    rows.extend(page.bool_choice(
         g,
         s,
         "browserPagesInViewRow",
-        "Show pages in their own row",
-        "Show the Browser as one tab in the side panel's tab bar, with its pages as a row of tabs under it, instead of each page as a tab beside the views.",
+        "Browser pages",
+        "Beside the views: each page is a tab beside the views in the side panel's tab bar. In their own row: the Browser is one tab there, with its pages as a row of tabs under it.",
+        [("Beside the views", false), ("In their own row", true)],
         false,
         cx,
     ));

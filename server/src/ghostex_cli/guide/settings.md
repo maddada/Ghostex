@@ -209,7 +209,7 @@ How to use this file:
 - **Open session links in** `sessionLinkOpenTarget` (one of embedded | external; default embedded): Open a session's pull requests, issues and Linear tickets (the chips after its title and its links list) in the project Browser view or the system default browser. The phone follows this setting too. Option labels: embedded = Internal Browser, external = System Default Browser.
 ### Pages
 
-- **Show pages in their own row** `browserPagesInViewRow` (boolean, default false): Show the Browser as one tab in the side panel's tab bar, with its pages as a row of tabs under it, instead of each page as a tab beside the views. Pages open, close, sleep and drag as before.
+- **Browser pages** `browserPagesInViewRow` (boolean, default false): Beside the views: each page is a tab beside the views in the side panel's tab bar. In their own row: the Browser is one tab there, with its pages as a row of tabs under it. Pages open, close, sleep and drag as before either way.
 - **Reload open pages on launch** `reloadBrowserTabsOnStartup` (boolean, default false) [advanced]: Automatically reload the open project's browser tabs when Ghostex starts so pages are ready before you click them.
 - **Browser sleeps after** `autoSleepBrowserIdleMinutes` (number one of 0 | 5 | 10 | 15 | 30 | 60 | 120 | 300; default 10) [advanced]: Choose when inactive browser panes sleep, or turn Auto Sleep off. Off also keeps the Browser awake when more than three views are open. Power & Sleep's Views auto sleep after sets it too. Option labels: 0 = Off, 5 = 5 minutes, 10 = 10 minutes, 15 = 15 minutes, 30 = 30 minutes, 60 = 1 hour, 120 = 2 hours, 300 = 5 hours.
 ### Web runtime

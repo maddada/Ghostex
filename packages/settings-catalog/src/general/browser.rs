@@ -4,7 +4,7 @@
 //! User (Q5021-Q5023, #762): a Settings > Browser page gathers the Browser's settings, right after
 //! Files & Links in the rail's Working group. Agents holds the new Let agents open and switch pages
 //! without asking (`agentPagesOpenWithoutAsking`) and Agents open pages in; Links holds Open links in
-//! and Open session links in; Pages holds Show pages in their own row, Reload open pages on launch
+//! and Open session links in; Pages holds Browser pages (Beside the views / In their own row), Reload open pages on launch
 //! and Browser sleeps after (both advanced; Power & Sleep keeps Views auto sleep after, which still
 //! sets it); Web runtime holds the Chromium runtime (CEF) row from Integrations > Embedded browser;
 //! Sign-ins holds this window's workspace's Browser sign-ins and Site permissions (Workspaces keeps
@@ -41,7 +41,7 @@ pub(crate) fn pages() -> Section {
         "browserPages",
         "Pages",
         vec![
-            row("browserPagesInViewRow", "Show pages in their own row", "Show the Browser as one tab in the side panel's tab bar, with its pages as a row of tabs under it, instead of each page as a tab beside the views. Pages open, close, sleep and drag as before."),
+            row("browserPagesInViewRow", "Browser pages", "Beside the views: each page is a tab beside the views in the side panel's tab bar. In their own row: the Browser is one tab there, with its pages as a row of tabs under it. Pages open, close, sleep and drag as before either way."),
             row("reloadBrowserTabsOnStartup", "Reload open pages on launch", "Automatically reload the open project's browser tabs when Ghostex starts so pages are ready before you click them."),
             row(
                 "autoSleepBrowserIdleMinutes",
