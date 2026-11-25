@@ -765,19 +765,20 @@ impl NativeChatView {
                     .gap(px(10.0 * s))
                     .w_full()
                     .min_w_0()
-                    .child(div().flex_1().min_w_0().child(self.link_words(
-                        &format!("question-form-title:{id}:{index}"),
-                        LinkWords {
-                            plain: text(question, "title"),
-                            runs: &question["titleRuns"],
-                            size: 15.0,
-                            line_height: 22.0,
-                            weight: FontWeight::MEDIUM,
-                            color: p.foreground,
-                        },
-                        p,
-                        cx,
-                    )))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .font_weight(FontWeight::MEDIUM)
+                            .child(self.form_words(
+                                format!("question-form-title:{id}:{index}"),
+                                &text(question, "title"),
+                                &question["titleRuns"],
+                                (15.0, 22.0, p.foreground),
+                                p,
+                                cx,
+                            )),
+                    )
                     .when(!tag.is_empty(), |header| {
                         header.child(
                             div()
@@ -796,16 +797,11 @@ impl NativeChatView {
                     }),
             )
             .when(!detail.is_empty(), |column| {
-                column.child(self.link_words(
-                    &format!("question-form-detail:{id}:{index}"),
-                    LinkWords {
-                        plain: detail,
-                        runs: &question["detailRuns"],
-                        size: 13.0,
-                        line_height: 19.0,
-                        weight: FontWeight::NORMAL,
-                        color: p.card_muted,
-                    },
+                column.child(self.form_words(
+                    format!("question-form-detail:{id}:{index}"),
+                    &detail,
+                    &question["detailRuns"],
+                    (13.0, 19.0, p.card_muted),
                     p,
                     cx,
                 ))
@@ -930,6 +926,47 @@ impl NativeChatView {
     /// "Skip all", beside the send button while the form is open: it skips every question, whatever
     /// is picked, and sends at once (the core's `skip_all`). It is a soft-fill button (see
     /// `ask_soft_button`), and its shortcut shows in a quick tooltip rather than on the button.
+    /// A question's title or description as the chat's selectable text: drag, double-click and
+    /// Cmd+C select and copy it the way a message's words do, and a press there never picks an
+    /// answer. Its links keep the text's own colour, underlined, as the floating ask panel's title
+    /// does (dock_ask_modal.rs `title_markdown`, which escapes the words and links the runs).
+    ///
+    /// CDXC:SessionChat 2026-11-25 DECISION: User: "allow me to select text in the title and in
+    /// the description in question forms". Drawn by the chat's Markdown view instead of word by
+    /// word (link_words.rs), in the transcript and in the form's popup (resource_modal.rs) alike;
+    /// the popup's view gets its own id so its selection never shares the transcript's.
+    fn form_words(
+        &self,
+        id: String,
+        words: &str,
+        runs: &Value,
+        (size, line_height, color): (f32, f32, Hsla),
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let id = if self.form_in_modal.get() {
+            format!("{id}:modal")
+        } else {
+            id
+        };
+        self.text_view_look(
+            id,
+            super::dock_ask_modal::title_markdown(words, runs),
+            &Value::Null,
+            p,
+            super::rich_markdown::TextLook {
+                color,
+                semibold: false,
+                size,
+                line_height,
+                // The I-beam, as over a message's words.
+                arrow: false,
+                quiet_links: true,
+            },
+            cx,
+        )
+    }
+
     fn skip_all_button(
         &self,
         id: &str,

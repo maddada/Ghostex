@@ -1195,7 +1195,7 @@ impl NativeChatView {
 /// rather than word by word (link_words.rs), so its links are underlined in the title's own colour
 /// there instead of dotted. A press that ends on an answer or a link closes the panel only when it
 /// began there, so a drag to select never does.
-fn title_markdown(title: &str, runs: &Value) -> String {
+pub(super) fn title_markdown(title: &str, runs: &Value) -> String {
     /// `words` with every Markdown character escaped, except its code spans (`` `npm test` ``),
     /// kept whole so the chat's view draws them as code, a command among them with its Copy and
     /// Paste in terminal (`ask_markdown` below).
