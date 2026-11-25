@@ -148,10 +148,7 @@ pub(super) fn user_cursor_config_dir() -> PathBuf {
     if let Ok(xdg) = env::var("XDG_CONFIG_HOME") {
         let trimmed = xdg.trim();
         if !trimmed.is_empty() {
-            let candidate = PathBuf::from(trimmed).join("cursor");
-            if candidate.exists() {
-                return candidate;
-            }
+            return PathBuf::from(trimmed).join("cursor");
         }
     }
     crate::resume_lookup::home_dir().join(".cursor")
