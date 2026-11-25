@@ -82,13 +82,10 @@ async fn handle_http_request_inner(
         &state.device_api_tokens,
         &state.security.session_tokens,
     );
-    // Boxed: the routing future is large, and moving it through the caller scope by value took
-    // over a megabyte of stack in debug builds (a route test overflowed).
-    let mut routed = crate::audit::with_caller(
-        caller,
-        Box::pin(route_http(state.clone(), request, request_id)),
-    )
-    .await;
+    // `route_http` returns its future boxed (route_http/dispatch.rs): moving it through the caller
+    // scope by value took over a megabyte of stack in debug builds.
+    let mut routed =
+        crate::audit::with_caller(caller, route_http(state.clone(), request, request_id)).await;
     if !file_link && !page_link && !app_route {
         apply_cors_headers(&headers, &mut routed.response, &state.config);
     }

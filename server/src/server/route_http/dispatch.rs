@@ -34,7 +34,22 @@ pub(super) struct RouteHttpRequest {
     pub(super) caller: Principal,
 }
 
-pub(in crate::server) async fn route_http(
+/*
+CDXC:ServerApi 2026-11-26 WHY:
+The routing future is over 30 KB, and a debug build gives every `.await` of it its own copy in the
+caller's frame, so a test that routes about twenty requests in one body took 1.1 MB of its 2 MB
+thread and overflowed (connected_computers_routes). It is boxed here, once, so every caller
+(http_dispatch.rs, peer_http.rs, autopilot_judge.rs and the route tests) holds only a pointer.
+*/
+pub(in crate::server) fn route_http(
+    state: Arc<AppState>,
+    request: Request<Body>,
+    request_id: String,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = RoutedResponse> + Send>> {
+    Box::pin(route_http_unboxed(state, request, request_id))
+}
+
+async fn route_http_unboxed(
     state: Arc<AppState>,
     request: Request<Body>,
     request_id: String,
