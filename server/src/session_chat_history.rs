@@ -347,9 +347,10 @@ struct Turn {
     /// failed (rows arrive newest first, so a result is seen before its call).
     images: Vec<String>,
     failed_calls: BTreeSet<String>,
-    /// Failure flags of results with no `call_id` (newest first, popped by the `call_id: None`
-    /// call immediately before them).
-    unlinked_result_failed: Vec<bool>,
+    /// Failure flags of results with no `call_id`, newest first. Each call with no `call_id` takes
+    /// the newest flag still waiting: read backwards, that is the chat's own first-in first-out
+    /// pairing (`tool_fold::pair_tool_blocks`), so of two parallel calls each keeps its own result.
+    unlinked_result_failed: std::collections::VecDeque<bool>,
 }
 
 impl Turn {
@@ -379,7 +380,7 @@ impl Turn {
                         self.failed_calls.insert(id.clone());
                     }
                     None => {
-                        self.unlinked_result_failed.push(errored);
+                        self.unlinked_result_failed.push_back(errored);
                     }
                     _ => {}
                 }
@@ -395,7 +396,7 @@ impl Turn {
                 // (CDXC:SessionChat 2026-11-02 in packages/gx-chat-core/src/transcript/read_images.rs).
                 let failed = match call_id {
                     Some(id) => self.failed_calls.contains(id),
-                    None => self.unlinked_result_failed.pop().unwrap_or(false),
+                    None => self.unlinked_result_failed.pop_front().unwrap_or(false),
                 };
                 if !failed {
                     collect_file_paths(name, input, &mut self.files);
