@@ -240,11 +240,13 @@ pub fn tool_fold(pairs: &[ToolPair<'_>]) -> Value {
 /// One card per file a turn wrote.
 ///
 /// Only the projected card ships: the raw result block would ship the whole write
-/// output again.
+/// output again. `edits_run` is `presentation::edits_run` for the message: an edit with no
+/// result yet is `running` only while it holds.
 pub fn file_rows(
     changes: &[FileChange<'_>],
     message_id: &str,
     working_directory: Option<&str>,
+    edits_run: bool,
 ) -> Vec<Value> {
     changes
         .iter()
@@ -254,8 +256,8 @@ pub fn file_rows(
             let failed = change.result_is_error();
             let call_status = match (change.result.is_some(), failed) {
                 (_, true) => "failed",
-                (true, false) => "done",
-                (false, false) => "running",
+                (false, false) if edits_run => "running",
+                (_, false) => "done",
             };
             // The same opt-out React's card took: the renderer shortens the folder half against
             // the row's real width, so a character budget on top of that only cuts folders that

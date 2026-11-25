@@ -252,6 +252,9 @@ pub struct ProjectedMessage {
     /// `source` has a call that never answered (`tool_card::has_unanswered_call`), so its tool card
     /// follows whether the session is working.
     pub unanswered: bool,
+    /// What `presentation::edits_run` said when `model` was projected: an edit with no result
+    /// draws as running only while it holds.
+    pub edits_run: bool,
     /// The tag-shaped words of the reply's prose (`transcript/open_questions.rs`), and those of
     /// them the model links to a question; a question asking one of the others re-projects.
     pub tag_words: Vec<String>,

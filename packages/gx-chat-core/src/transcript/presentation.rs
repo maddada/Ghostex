@@ -190,6 +190,7 @@ pub fn project_message(
     question_tags: &[QuestionTag],
     tool_cards: bool,
     working: bool,
+    edits_run: bool,
 ) -> Value {
     let durations: std::collections::HashMap<String, i64> = spans
         .iter()
@@ -286,8 +287,8 @@ pub fn project_message(
         file_edit_paths(changes.iter().map(|change| {
             let status = match (change.result.is_some(), change.result_is_error()) {
                 (_, true) => FileCallStatus::Failed,
-                (true, false) => FileCallStatus::Done,
-                (false, false) => FileCallStatus::Running,
+                (false, false) if edits_run => FileCallStatus::Running,
+                (_, false) => FileCallStatus::Done,
             };
             (change.path.as_str(), status)
         }));
@@ -515,7 +516,7 @@ pub fn project_message(
             other => other,
         },
     );
-    let files = file_rows(&changes, &message.id, working_directory);
+    let files = file_rows(&changes, &message.id, working_directory, edits_run);
     // Settings > Chat > Tool call cards: the message's calls and edits as one card
     // (`tool_card.rs`); off, the rows draw as before.
     if tool_cards {
@@ -1014,6 +1015,7 @@ fn project_entry(
         &scope.question_tags,
         scope.tool_cards,
         scope.working,
+        edits_run(scope, &arrived.id),
     );
     let words = if message.role == ChatRole::Assistant {
         tag_words(&prose_markdown(&message.blocks))
@@ -1023,6 +1025,7 @@ fn project_entry(
     ProjectedMessage {
         arrived: arrived_row,
         unanswered: crate::transcript::tool_card::has_unanswered_call(&message.blocks),
+        edits_run: edits_run(scope, &arrived.id),
         source: source_row,
         model: Arc::new(model),
         in_work_fold: None,
@@ -1042,6 +1045,22 @@ fn fresh(entry: &ProjectedMessage, message: &ChatRow, scope: &ProjectionScope<'_
         && entry.line_breaks == scope.line_breaks
         && linked_words(&entry.tag_words, &scope.question_tags) == entry.linked_tags
         && crate::transcript::tool_card::card_fresh(&entry.model, entry.unanswered, scope.working)
+        && (!entry.unanswered || entry.edits_run == edits_run(scope, &message.id))
+}
+
+/// Whether an edit of the row `id` that has no result yet draws as running: the row is in the
+/// running turn (after the newest prompt the agent took) and the agent works or waits on an
+/// approval. Otherwise the edit draws as it did before it waited for its result.
+///
+/// CDXC:SessionChat 2026-11-25 WHY: An edit whose result never comes (the agent stopped or was killed, an agent that records no result for edits, a Deny written after a message the reader typed, which lands in the next turn) read "Editing 1 file" with no mark for good once the turn was over. A turn a newer prompt closed is settled once (`settled_build.rs`) while the agent works on that prompt, so judging by `working` alone would keep its edit running too.
+fn edits_run(scope: &ProjectionScope<'_>, id: &str) -> bool {
+    (scope.working || scope.approval_wait.is_some())
+        && scope
+            .messages
+            .iter()
+            .rev()
+            .take_while(|message| !crate::transcript::turns::opens_turn(message))
+            .any(|message| message.id == id)
 }
 
 /// `pruneModels`: once the cache is well past the transcript's size, drop every entry whose id is

@@ -38,6 +38,7 @@ fn projected(message: &ChatMessage) -> Value {
         &[],
         false,
         false,
+        false,
     )
 }
 

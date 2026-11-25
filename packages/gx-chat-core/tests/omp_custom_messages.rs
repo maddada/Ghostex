@@ -155,6 +155,7 @@ fn projected(message: &ChatMessage) -> Value {
         &[],
         false,
         false,
+        false,
     )
 }
 
@@ -320,6 +321,7 @@ fn a_cancelled_job_reads_as_stopped_neither_done_nor_failed() {
         &[],
         true,
         false,
+        false,
     );
     assert_eq!(card["toolCard"]["entries"][0]["status"], "stopped");
     // A Claude background task that was stopped is not an OMP cancelled job: its row is unchanged.
@@ -335,6 +337,7 @@ fn a_cancelled_job_reads_as_stopped_neither_done_nor_failed() {
         &context(),
         &HashMap::new(),
         &[],
+        false,
         false,
         false,
     );

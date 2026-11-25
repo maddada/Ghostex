@@ -34,7 +34,7 @@ fn card_with(blocks: &[ChatBlock], spans: &HashMap<String, (i64, i64)>, working:
     let (remaining, changes) = split_file_changes(tools.iter().copied());
     let pairs = pair_tool_blocks(remaining);
     let rows = tool_rows(&pairs, "", Some(WD), &HashMap::new());
-    let files = file_rows(&changes, "m1", Some(WD));
+    let files = file_rows(&changes, "m1", Some(WD), working);
     tool_card(
         &tools,
         &rows,

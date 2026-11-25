@@ -114,9 +114,7 @@ impl RunningThinking {
 /// the exact condition under which renderers would otherwise fall back to the legacy multi-line
 /// reasoning headline disclosure (`native_chat/transcript.rs`, phone `MessageRow.tsx`).
 fn owns_unflattened_tools(row: &Value) -> bool {
-    row["text"]
-        .as_str()
-        .is_some_and(|text| !text.is_empty())
+    row["text"].as_str().is_some_and(|text| !text.is_empty())
         && row["toolsFlat"] != true
         && !row["toolCard"].is_object()
         && row["tools"]
@@ -269,6 +267,7 @@ mod tests {
             &Default::default(),
             &[],
             false,
+            true,
             true,
         ))
     }
