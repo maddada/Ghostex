@@ -378,13 +378,14 @@ impl NativeChatView {
         if reference.kind == "comment" {
             return true;
         }
-        // A Boost pill opens its prompt for editing on a double click, as its hover says
-        // (boosts.rs); a single click does nothing.
+        // A Boost pill turns into its prompt's text on a double click, as its hover says
+        // (boosts.rs, CDXC:Boosts 2026-11-25 in gx-chat-core extras/boosts.rs); a single click
+        // does nothing.
         if reference.kind == "boost" {
             if event.click_count >= 2
                 && let Some(id) = super::boosts::boost_id(&reference.path)
             {
-                self.open_boost_settings(Some(format!("boost:{id}")), None, cx);
+                self.expand_boost_pill(reference.range.clone(), &id, cx);
             }
             return true;
         }

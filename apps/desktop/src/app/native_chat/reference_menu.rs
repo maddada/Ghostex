@@ -48,11 +48,11 @@ impl NativeChatView {
         let Some(range) = input.read(cx).inline_replacement_at(event.position) else {
             return false;
         };
-        let Some(href) = self
+        let Some(reference) = self
             .composer_references
             .iter()
             .find(|reference| reference.range == range)
-            .map(|reference| reference.path.clone())
+            .cloned()
         else {
             return false;
         };
@@ -60,6 +60,14 @@ impl NativeChatView {
         // the menu cannot be followed by a view opening behind it.
         self.composer_reference_click += 1;
         self.composer_reference_task = None;
-        self.show_reference_menu(href, event.position, window, cx)
+        // A Boost pill's own menu: Expand, Edit Boost and Remove (boosts.rs).
+        if reference.kind == "boost"
+            && let Some(id) = super::boosts::boost_id(&reference.path)
+        {
+            let rows = self.boost_pill_menu_rows(&reference.range, &id);
+            self.show_chat_menu_at(rows, event.position, 200.0, window, cx);
+            return true;
+        }
+        self.show_reference_menu(reference.path, event.position, window, cx)
     }
 }

@@ -1,8 +1,9 @@
 //! Settings > Boosts: Boosts on or off, every Boost's prompt (edit and reset), and the user's own
 //! Boosts (new, edit, move, delete). Everything here is gxserver's (`/api/boosts`,
 //! server/src/boosts.rs), read when the page opens and after each change. The chat's Boost menu,
-//! a Boost pill's double click and Save as Boost open this page (`initialSection: "boost:<id>"`
-//! opens that Boost's editor, `"newBoost"` with `initialBoostText` a new Boost holding the text).
+//! Edit Boost in a Boost pill's right-click menu and Save as Boost open this page
+//! (`initialSection: "boost:<id>"` opens that Boost's editor, `"newBoost"` with
+//! `initialBoostText` a new Boost holding the text).
 //!
 //! CDXC:Boosts 2026-11-20 DECISION:
 //! User, with the menu and hint answers: "a new Settings page for Boosts, where editing happens

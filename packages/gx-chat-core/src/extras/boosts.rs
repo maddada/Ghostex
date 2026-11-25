@@ -8,9 +8,11 @@
 //! opens the same Boosts as a picker above the chat box. gxserver adds each Boost's prompt under
 //! the message on its way to the agent, inside a `<ghostex-system>` block every chat already hides
 //! (server/src/boosts.rs `with_boosts`), so the bubble shows the user's words and the pill. A
-//! Boost lasts that one message. Hovering a pill shows its prompt; a double click opens Settings >
-//! Boosts, where every Boost's prompt is edited or reset and the user's own Boosts are made,
-//! edited, ordered and deleted. gxserver keeps all of it per computer.
+//! Boost lasts that one message. Hovering a pill in the chat box shows its prompt; a double click
+//! turns the pill into its prompt as ordinary text for this message (Cmd+Z turns it back), and a
+//! right click offers Expand, Edit Boost and Remove (`expand_pill`, `pill_menu_rows`). Edit Boost
+//! opens Settings > Boosts, where every Boost's prompt is edited or reset and the user's own
+//! Boosts are made, edited, ordered and deleted. gxserver keeps all of it per computer.
 //!
 //! CDXC:Boosts 2026-11-20 DECISION:
 //! The user answered the Boosts design page (Q4213 to Q4218): the name is Boosts; the first ones
@@ -830,9 +832,91 @@ pub fn handle(
     }
 }
 
-/// The words a Boost pill's hover shows: its prompt, then how to edit it.
+/// The words a Boost pill's hover shows: its prompt, then what a double click and a right click do.
 pub fn pill_tooltip(prompt: &str) -> String {
-    format!("{}\n\nDouble click to edit prompt", prompt.trim())
+    format!("{}\n\n{PILL_HINT}", prompt.trim())
+}
+
+/// The last line of a chat box Boost pill's hover.
+pub const PILL_HINT: &str = "Double-click to expand \u{b7} Right-click for more";
+
+/// The command type of a chat box Boost pill's right-click menu rows; the host adds the pill's
+/// byte range in the draft (`start`, `end`) before it shows them.
+pub const PILL_COMMAND: &str = "boostPill";
+
+/// The Boost pill at `range` in `draft`, if `range` is exactly one `[label](boost:id)` link: its id.
+fn pill_at(draft: &str, range: &std::ops::Range<usize>) -> Option<String> {
+    boost_links(draft)
+        .into_iter()
+        .find(|(found, _, _)| found == range)
+        .map(|(_, id, _)| id)
+}
+
+/// A Boost pill's double click (or Expand in its right-click menu) in the chat box: the pill at
+/// `range` becomes `prompt` as ordinary text, so the user edits it for this message and the agent
+/// gets it as typed, not as a Boost. Returns the new draft and the caret (UTF-16) after the text;
+/// `None` when `range` is no longer a Boost pill or the prompt is empty.
+///
+/// CDXC:Boosts 2026-11-25 DECISION:
+/// The user answered the expand page (Q4957 "inline"): "i want double click to expand it in place
+/// please / also i want undo cmd + z to revert that / also i want right click on it to show other
+/// options like edit for ex". Double click expands the pill in place into its prompt (this
+/// message only; the saved Boost is untouched), Cmd+Z right after turns it back into the pill as
+/// one undo step, and a right click offers Expand, Edit Boost (Settings > Boosts, what a double
+/// click did before) and Remove. Chat box only: sent messages and the phone are unchanged.
+/// Supersedes the 2026-11-20 "Double click to edit prompt".
+pub fn expand_pill(
+    draft: &str,
+    range: std::ops::Range<usize>,
+    prompt: &str,
+) -> Option<(String, usize)> {
+    pill_at(draft, &range)?;
+    let prompt = prompt.trim();
+    if prompt.is_empty() {
+        return None;
+    }
+    let mut next = String::with_capacity(draft.len() + prompt.len());
+    next.push_str(&draft[..range.start]);
+    next.push_str(prompt);
+    let caret = next.encode_utf16().count();
+    next.push_str(&draft[range.end..]);
+    Some((next, caret))
+}
+
+/// Remove in a Boost pill's right-click menu: the pill at `range` leaves the draft, with the one
+/// space that followed it when nothing but a space or the start came before it. Returns the new
+/// draft and the caret (UTF-16) where the pill was.
+pub fn remove_pill(draft: &str, range: std::ops::Range<usize>) -> Option<(String, usize)> {
+    pill_at(draft, &range)?;
+    let before = &draft[..range.start];
+    let mut end = range.end;
+    if draft[end..].starts_with(' ') && (before.is_empty() || before.ends_with(char::is_whitespace))
+    {
+        end += 1;
+    }
+    let next = format!("{before}{}", &draft[end..]);
+    Some((next, before.encode_utf16().count()))
+}
+
+/// A chat box Boost pill's right-click menu: Expand (off when the Boost has no prompt here, a
+/// deleted Boost), Edit Boost and Remove, in the chat menus' row shape.
+pub fn pill_menu_rows(id: &str, can_expand: bool) -> Vec<Value> {
+    let row = |action: &str, icon: &str, label: &str| {
+        json!({
+            "command": { "action": action, "id": id, "type": PILL_COMMAND },
+            "iconPath": icon,
+            "label": label,
+        })
+    };
+    let mut expand = row("expand", "titlebar/arrows-diagonal.svg", "Expand");
+    if !can_expand {
+        expand["disabled"] = json!(true);
+    }
+    vec![
+        expand,
+        row("edit", "titlebar/pencil.svg", "Edit Boost"),
+        row("remove", "titlebar/trash.svg", "Remove"),
+    ]
 }
 
 /// The Boost pill's id in the strip.

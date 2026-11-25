@@ -2621,8 +2621,12 @@ preview of what comes back, with its whole description. You can also type `*` at
 to pick one, your own Boosts included (`*ch` finds Chart it; a space right after the `*` closes the list, so lists
 and sums type as before). A pick adds a Boost pill
 to your message; pick it again, or delete the pill, to take it out. A Boost lasts that
-one message. Point at the pill in the chat box to read the instruction the agent gets;
-double-click it to change that instruction. Settings > Boosts turns Boosts on or off,
+one message. Point at the pill in the chat box to read the instruction the agent gets.
+Double-click it to turn it into that instruction as ordinary text you can edit for this
+message only (the agent then gets your text instead of the Boost, and the saved Boost stays as
+it was); Cmd+Z (Ctrl+Z on Windows and Linux) right after turns it back into the pill.
+Right-click the pill for Expand (the same as a double-click), Edit Boost (opens that Boost in
+Settings > Boosts to change it for every message) and Remove. Settings > Boosts turns Boosts on or off,
 edits or resets the instruction of every Boost, and adds, edits, reorders and deletes
 your own Boosts; select words in a message or the chat box and choose Save as Boost (on
 the small bar by the selection, or in the right-click menu) to start one from them. All of it is kept on this computer for every chat and device that

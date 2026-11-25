@@ -1,9 +1,10 @@
 //! Boosts in the chat (gx-chat-core `extras/boosts.rs` has the user's decisions and the rules): the
 //! Boost pill at the right of the pill strip; its menu, one 460px list in Show, Actions, Work and
 //! Custom sections with section chips and Edit at its bottom, and a preview card beside it; the
-//! one-time hint chip inside the composer's top-right corner on a new chat; the Boost pills' hover
-//! and double click; and Save as Boost. Editing is Settings > Boosts
-//! (window/settings_modal/tabs/boosts.rs), which the menu's Edit button, a pill's double click and
+//! one-time hint chip inside the composer's top-right corner on a new chat; the chat box Boost
+//! pills' hover, double click (expand into the prompt's text) and right-click menu (Expand, Edit
+//! Boost, Remove); and Save as Boost. Editing is Settings > Boosts
+//! (window/settings_modal/tabs/boosts.rs), which the menu's Edit button, a pill's Edit Boost and
 //! Save as Boost open.
 //!
 //! The core's `boosts` document key holds it all; `null` (an older gxserver, no answer yet, or
@@ -75,7 +76,7 @@ thread_local! {
 }
 
 /// The hover words of the Boost pill whose link points at `href` (`boost:live-page`): its prompt,
-/// then "Double click to edit prompt".
+/// then what a double click and a right click do (`extras::boosts::PILL_HINT`).
 pub(super) fn pill_tooltip(href: &str) -> String {
     let Some(id) = ghostex_gx_chat_core::extras::boosts::boost_id_of_href(href) else {
         return href.to_string();
@@ -86,10 +87,15 @@ pub(super) fn pill_tooltip(href: &str) -> String {
             ghostex_gx_chat_core::extras::boosts::boost(id)
                 .map(|boost| ghostex_gx_chat_core::extras::boosts::pill_tooltip(boost.prompt))
         })
-        .unwrap_or_else(|| "Your Boost\n\nDouble click to edit prompt".to_string())
+        .unwrap_or_else(|| {
+            format!(
+                "Your Boost\n\n{}",
+                ghostex_gx_chat_core::extras::boosts::PILL_HINT
+            )
+        })
 }
 
-/// The Boost a chat box pill's link names, for its double click.
+/// The Boost a chat box pill's link names, for its double click and right-click menu.
 pub(super) fn boost_id(href: &str) -> Option<String> {
     ghostex_gx_chat_core::extras::boosts::boost_id_of_href(href).map(str::to_string)
 }
@@ -141,6 +147,97 @@ impl NativeChatView {
             .collect();
         if !tips.is_empty() {
             TOOLTIPS.with(|current| *current.borrow_mut() = tips);
+        }
+    }
+
+    /// The prompt a Boost sends from this computer (the user's edit or Ghostex's own), from the
+    /// core's `boosts` list; `None` for a Boost that is gone or while Boosts are off.
+    fn boost_prompt(&self, id: &str) -> Option<String> {
+        self.boosts()?["list"]
+            .as_array()?
+            .iter()
+            .find(|row| row["id"] == id)
+            .map(|row| text(row, "prompt"))
+            .or_else(|| {
+                ghostex_gx_chat_core::extras::boosts::boost(id)
+                    .map(|boost| boost.prompt.to_string())
+            })
+            .filter(|prompt| !prompt.trim().is_empty())
+    }
+
+    /// A chat box Boost pill's double click, or Expand in its right-click menu: the pill becomes
+    /// its prompt as ordinary text (`extras::boosts::expand_pill`). It goes through the field as
+    /// one replacement, so the field's own Cmd+Z (Ctrl+Z) right after puts the pill back.
+    pub(super) fn expand_boost_pill(
+        &mut self,
+        range: std::ops::Range<usize>,
+        id: &str,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(prompt) = self.boost_prompt(id) else {
+            return;
+        };
+        if let Some((draft, caret)) =
+            ghostex_gx_chat_core::extras::boosts::expand_pill(&self.draft, range, &prompt)
+        {
+            self.insert_prompt(&draft, cx);
+            self.input_caret = Some(caret);
+        }
+    }
+
+    /// The right-click menu on a chat box Boost pill at `range`: Expand, Edit Boost and Remove,
+    /// each command carrying the pill's range so its pick acts on that pill
+    /// (`boost_pill_command`).
+    pub(super) fn boost_pill_menu_rows(
+        &self,
+        range: &std::ops::Range<usize>,
+        id: &str,
+    ) -> Vec<Value> {
+        let can_expand = self.boost_prompt(id).is_some();
+        ghostex_gx_chat_core::extras::boosts::pill_menu_rows(id, can_expand)
+            .into_iter()
+            .map(|mut row| {
+                row["command"]["start"] = json!(range.start);
+                row["command"]["end"] = json!(range.end);
+                row
+            })
+            .collect()
+    }
+
+    /// Whether `position` is over a Boost pill in the chat box.
+    pub(super) fn boost_pill_at(&self, position: gpui::Point<Pixels>, cx: &gpui::App) -> bool {
+        let Some(range) = self
+            .input
+            .as_ref()
+            .and_then(|input| input.read(cx).inline_replacement_at(position))
+        else {
+            return false;
+        };
+        self.composer_references
+            .iter()
+            .any(|reference| reference.range == range && reference.kind == "boost")
+    }
+
+    /// A pick in a Boost pill's right-click menu. The pill must still sit at the range the menu
+    /// was opened on; an edit to the draft since then leaves the pick doing nothing.
+    pub(super) fn boost_pill_command(&mut self, command: &Value, cx: &mut Context<Self>) {
+        let id = command["id"].as_str().unwrap_or_default().to_string();
+        let (Some(start), Some(end)) = (command["start"].as_u64(), command["end"].as_u64()) else {
+            return;
+        };
+        let range = start as usize..end as usize;
+        match command["action"].as_str().unwrap_or_default() {
+            "expand" => self.expand_boost_pill(range, &id, cx),
+            "edit" => self.open_boost_settings(Some(format!("boost:{id}")), None, cx),
+            "remove" => {
+                if let Some((draft, caret)) =
+                    ghostex_gx_chat_core::extras::boosts::remove_pill(&self.draft, range)
+                {
+                    self.insert_prompt(&draft, cx);
+                    self.input_caret = Some(caret);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -844,11 +941,16 @@ impl NativeChatView {
         &mut gpui::App,
     ) -> gpui_component::native_menu::NativeMenu
     + 'static {
-        move |menu, _, cx| {
+        move |menu, window, cx| {
             let Some(chat) = chat.upgrade() else {
                 return menu;
             };
             let chat = chat.read(cx);
+            // A right click on a Boost pill opens the pill's own menu (Expand, Edit Boost,
+            // Remove; reference_menu.rs) instead: an empty menu here leaves the field's closed.
+            if chat.boost_pill_at(window.mouse_position(), cx) {
+                return menu;
+            }
             let has_selection = chat
                 .input
                 .as_ref()

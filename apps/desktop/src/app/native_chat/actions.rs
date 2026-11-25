@@ -733,6 +733,9 @@ impl NativeChatView {
             self.invoke(json!({"type": "saveAsBoost", "text": text}), cx);
             #[cfg(not(ghostex_web))]
             self.open_boost_settings(Some("newBoost".to_string()), Some(text), cx);
+        } else if action.command["type"] == ghostex_gx_chat_core::extras::boosts::PILL_COMMAND {
+            // Expand, Edit Boost or Remove on a chat box Boost pill's right-click menu (boosts.rs).
+            self.boost_pill_command(&action.command, cx);
         } else if action.command["type"] == "copyText" {
             // Copy Path, Copy URL and the transcript's Copy, with the feedback every other chat copy gives.
             if let Some(text) = action.command["text"].as_str() {
