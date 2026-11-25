@@ -30,12 +30,19 @@ pub(crate) fn rebuild_launch(
     let draft_status = runtime
         .get(agents::FIRST_USER_INPUT_DRAFT_STATUS_KEY)
         .cloned();
+    // A create takes a coordinator thread's marks only from its own params (never from runtime
+    // settings a client sends), so the rebuild passes the ones the session's row already holds:
+    // a thread keeps its marked handovers and Lean Codex workers after an account change.
+    let saved_flag = |key: &str| session.pointer(&format!("/runtimeSettings/{key}")).cloned();
+    let marked = |key: &str| saved_flag(key).and_then(|v| v.as_bool()) == Some(true);
     let params = json!({
         "agentId": session["agentId"],
         "draft": is_draft,
         "requireLaunchCommand": true,
         "runtimeSettings": runtime,
         "launchSettings": settings,
+        "markedHandovers": marked("markedHandovers"),
+        agents::codex_lean::COORDINATOR_THREAD_KEY: marked(agents::codex_lean::COORDINATOR_THREAD_KEY),
     });
     let fresh = agents::create_agent_session_params_for_project(
         repository.db,
@@ -46,6 +53,10 @@ pub(crate) fn rebuild_launch(
         .as_object()
         .cloned()
         .unwrap_or_default();
+    // A lead's worker gets its mark from its link, never from a create (codex_lean.rs).
+    if let Some(saved) = saved_flag(agents::codex_lean::LEAD_WORKER_KEY) {
+        runtime.insert(agents::codex_lean::LEAD_WORKER_KEY.to_string(), saved);
+    }
     // CDXC:NativeApprovals 2026-11-25 WHY: GitHub #750, a create drops the approval level a
     // client sends, so an account change put a Native session back on its settings' level (Ask
     // under Keep default) and lost a level picked in the Mode menu. This is the session's own saved
