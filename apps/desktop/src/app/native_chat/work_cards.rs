@@ -109,7 +109,30 @@ pub(super) fn answers_divider(p: &ChatAppearance) -> AnyElement {
         .into_any_element()
 }
 
-/// A page row's ⋯ menu (`dock_row`): Show in chat, Mark answered, Dismiss (or Mark as read) and Snooze with its lengths, as the
+/// The hairline across the Inbox drawer above a Snoozed or Recent group header (Q4969 C), in
+/// the open header's divider colour and reaching the drawer's sides past the rows' inset.
+fn dock_group_divider(p: &ChatAppearance) -> AnyElement {
+    let s = p.scale;
+    div()
+        .flex_shrink_0()
+        .h(px(1.0))
+        .mx(px(-DOCK_LIST_PAD * s))
+        .mt(px(4.0 * s))
+        .mb(px(2.0 * s))
+        .bg(p.composer_border)
+        .into_any_element()
+}
+
+/// A Snoozed or Recent group header's label (Q4969 C): small, uppercase and medium weight, in
+/// the header's muted colour.
+fn dock_group_label(label: &str, p: &ChatAppearance) -> gpui::Div {
+    div()
+        .text_size(px(PROSE_SIZE * GROUP_LABEL_SCALE * p.scale))
+        .font_weight(FontWeight::MEDIUM)
+        .child(label.to_uppercase())
+}
+
+/// A page row's ⋯ menu (`dock_row_look`): Show in chat, Mark answered, Dismiss (or Mark as read) and Snooze with its lengths, as the
 /// app's dropdown rows (`{label, command}`, a submenu's under `children`).
 fn page_row_menu(row: &Value) -> Vec<Value> {
     let mut rows = Vec::new();
@@ -383,7 +406,18 @@ pub(super) struct DockRowLook {
     pub reference: String,
     /// Keyboard-focused row in Session Inbox triage mode (Q4687).
     pub focused: bool,
+    /// A row under a Snoozed or Recent group header: its title one step smaller and dimmer
+    /// (`GROUP_ROW_TITLE_SCALE`), in the same columns as the pings above (Q4969 D).
+    pub quiet: bool,
 }
+
+/// A Snoozed or Recent group row's title size against a ping's (Q4969 D: one step quieter).
+const GROUP_ROW_TITLE_SCALE: f32 = 0.93;
+/// A Snoozed or Recent group row's title alpha over the row's own dimming (works in light and
+/// dark, where the muted colours differ).
+const GROUP_ROW_TITLE_ALPHA: f32 = 0.82;
+/// A group header's label size against a ping's title (Q4969 C: a small uppercase label).
+const GROUP_LABEL_SCALE: f32 = 0.80;
 
 /// How wide `label` is in the chat's font at `size` (both unscaled).
 pub(super) fn dock_text_width(label: &str, size: f32, p: &ChatAppearance, cx: &gpui::App) -> f32 {
@@ -837,10 +871,23 @@ impl NativeChatView {
             // User: combine Handled and Done into one Recent drawer ordered after Snoozed,
             // newest first, with the same row left inset for all drawers. Since 2026-11-25 it has no
             // Archive all: it clears itself (gx-chat-core work_cards.rs, Q4915).
+            // CDXC:Coordinators 2026-11-25 DECISION: User, of the Snoozed and Recent groups: "i
+            // wish there was a way to tell that the items under snoozed and recent are part of
+            // that group? i wanna still keep the alignment between all tho". They picked Q4969 C
+            // and D: a hairline across the drawer above each group header (when something sits
+            // above it) with the header as a small uppercase label, and the group's rows a step
+            // quieter (`DockRowLook::quiet`). Icons and titles keep the pings' columns.
+            let shown_above = rows.len().min(if all { rows.len() } else { limit }) > 0;
             if !snoozed.is_empty() {
+                if shown_above {
+                    list = list.child(dock_group_divider(p));
+                }
                 list = list.children(self.work_dock_snoozed(&snoozed, p, cx));
             }
             if !recent.is_empty() {
+                if shown_above || !snoozed.is_empty() {
+                    list = list.child(dock_group_divider(p));
+                }
                 list = list.children(self.work_dock_recent(&recent, p, cx));
             }
             surface = surface.child(self.disclosure_body_motion(
@@ -927,7 +974,7 @@ impl NativeChatView {
                     .flex()
                     .items_center()
                     .gap(px(6.0 * s))
-                    .child("Snoozed")
+                    .child(dock_group_label("Snoozed", p))
                     .child(crate::app::element::count_badge(
                         snoozed.len().to_string(),
                         p.foreground,
@@ -958,7 +1005,7 @@ impl NativeChatView {
                 div()
                     .w_full()
                     .opacity(0.72)
-                    .child(self.dock_row(row, p, cx))
+                    .child(self.dock_group_row(row, p, cx))
                     .into_any_element()
             }));
         }
@@ -1016,7 +1063,7 @@ impl NativeChatView {
                     .flex()
                     .items_center()
                     .gap(px(6.0 * s))
-                    .child("Recent")
+                    .child(dock_group_label("Recent", p))
                     .child(crate::app::element::count_badge(
                         recent.len().to_string(),
                         p.foreground,
@@ -1052,7 +1099,7 @@ impl NativeChatView {
                         div()
                             .w_full()
                             .opacity(0.72)
-                            .child(self.dock_row(row, p, cx))
+                            .child(self.dock_group_row(row, p, cx))
                             .into_any_element(),
                     );
                     continue;
@@ -1100,7 +1147,8 @@ impl NativeChatView {
                                 .flex_1()
                                 .min_w_0()
                                 .truncate()
-                                .text_color(p.card_muted)
+                                .text_size(px(PROSE_SIZE * GROUP_ROW_TITLE_SCALE * s))
+                                .text_color(p.card_muted.opacity(GROUP_ROW_TITLE_ALPHA))
                                 .child(title),
                         )
                         .when(
@@ -1562,14 +1610,32 @@ impl NativeChatView {
     /// title, description, answers and actions are a modal over the chat. Supersedes the opened
     /// row card (2026-11-11 and 2026-11-12 decisions, now on the modal in dock_ask_modal.rs) and
     /// its scrolling into view past the dock's height cap.
-    fn dock_row(&self, row: &Value, p: &ChatAppearance, cx: &mut Context<Self>) -> AnyElement {
-        self.dock_row_at(row, false, p, cx)
+    ///
+    /// A row under the Snoozed or Recent header: drawn quiet (`DockRowLook::quiet`, Q4969 D).
+    fn dock_group_row(
+        &self,
+        row: &Value,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        self.dock_row_in(row, false, true, p, cx)
     }
 
     fn dock_row_at(
         &self,
         row: &Value,
         focused: bool,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        self.dock_row_in(row, focused, false, p, cx)
+    }
+
+    fn dock_row_in(
+        &self,
+        row: &Value,
+        focused: bool,
+        quiet: bool,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -1594,6 +1660,7 @@ impl NativeChatView {
                 DockRowLook {
                     wrap: true,
                     focused,
+                    quiet,
                     ..DockRowLook::default()
                 },
                 p,
@@ -1604,6 +1671,7 @@ impl NativeChatView {
             row,
             DockRowLook {
                 focused,
+                quiet,
                 ..DockRowLook::default()
             },
             p,
@@ -2029,7 +2097,9 @@ impl NativeChatView {
                     cx.notify();
                 }))
         });
-        let title_color = if settled {
+        let title_color = if look.quiet {
+            p.card_muted.opacity(GROUP_ROW_TITLE_ALPHA)
+        } else if settled {
             p.card_muted
         } else if in_dock {
             if unread { p.foreground } else { p.card_muted }
@@ -2099,7 +2169,11 @@ impl NativeChatView {
                 !wrap,
                 FontWeight::NORMAL,
                 title_color,
-                PROSE_SIZE,
+                if look.quiet {
+                    PROSE_SIZE * GROUP_ROW_TITLE_SCALE
+                } else {
+                    PROSE_SIZE
+                },
                 PROSE_LINE_HEIGHT,
                 p,
                 cx,

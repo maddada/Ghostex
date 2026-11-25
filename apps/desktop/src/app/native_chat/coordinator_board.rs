@@ -2096,6 +2096,7 @@ impl NativeChatView {
                 .map(|relayed| self.board_relay_buttons(relayed, CHIP_SIZE, true, p, cx)),
             reference: text(row, "reference"),
             focused: false,
+            quiet: false,
         };
         let move_to = row["moveTo"].clone();
         let menu_key = key.clone();
