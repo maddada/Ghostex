@@ -33,7 +33,38 @@ pub(crate) struct GpuiCustomView {
     pub(crate) definition: serde_json::Value,
 }
 
-pub(crate) fn gpui_custom_views_from_settings() -> Vec<GpuiCustomView> {
+/// CDXC:Workarea 2026-11-26 WHY:
+/// The rail asks for one view per web-place button on every frame, and building the list takes
+/// the settings lock several times, builds each built-in view's JSON and parses every custom view
+/// and saved link (most of the rail's render cost in a profile). The list depends only on the
+/// settings and on the link the link page shows, so it is built once per settings revision and
+/// picked link on each thread (the picked link is per thread too: custom_links/store.rs).
+pub(crate) fn gpui_custom_views_from_settings() -> std::rc::Rc<[GpuiCustomView]> {
+    type Key = (u64, u64, Option<String>);
+    thread_local! {
+        static CACHE: std::cell::RefCell<Option<(Key, std::rc::Rc<[GpuiCustomView]>)>> =
+            const { std::cell::RefCell::new(None) };
+    }
+    let settings = shared_settings::shared_sidebar_settings_snapshot();
+    let key: Key = (
+        settings.revision(),
+        settings.content_hash(),
+        crate::app::custom_links::custom_link_page_link_id(),
+    );
+    if let Some(views) = CACHE.with_borrow(|cache| {
+        cache
+            .as_ref()
+            .filter(|(cached, _)| *cached == key)
+            .map(|(_, views)| views.clone())
+    }) {
+        return views;
+    }
+    let views: std::rc::Rc<[GpuiCustomView]> = build_gpui_custom_views().into();
+    CACHE.set(Some((key, views.clone())));
+    views
+}
+
+fn build_gpui_custom_views() -> Vec<GpuiCustomView> {
     std::iter::once(crate::app::storybook::storybook_view())
         .chain(crate::app::project_websites::website_views())
         .chain(std::iter::once(crate::app::claude_web::claude_web_view()))
@@ -91,8 +122,9 @@ pub(crate) fn gpui_custom_views_from_settings() -> Vec<GpuiCustomView> {
 
 pub(crate) fn gpui_custom_view(id: ExtensionId) -> Option<GpuiCustomView> {
     gpui_custom_views_from_settings()
-        .into_iter()
+        .iter()
         .find(|view| view.id == id)
+        .cloned()
 }
 
 pub(crate) fn gpui_enabled_custom_view(id: ExtensionId) -> Option<GpuiCustomView> {

@@ -163,7 +163,7 @@ impl GhostexGpuiApp {
         }
         items.extend(
             gpui_custom_views_from_settings()
-                .into_iter()
+                .iter()
                 // A link's page opens from its row of the sidebar's ⋯ menu only (app/custom_links/).
                 .filter(|view| !TitlebarMode::Extension(view.id).is_link_web())
                 .filter(|view| self.custom_project_view_visible(view))

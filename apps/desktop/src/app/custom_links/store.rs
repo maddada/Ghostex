@@ -81,6 +81,12 @@ fn picked_link_id() -> Option<String> {
     with_page_file(|file| file.link_id.clone())
 }
 
+/// The id of the link the page shows, saved or not; part of the custom-view list's cache key
+/// (helpers/titlebar/mode_switcher.rs).
+pub(crate) fn custom_link_page_link_id() -> Option<String> {
+    picked_link_id()
+}
+
 pub(crate) fn set_custom_link_page_link(id: Option<&str>) {
     with_page_file(|file| file.link_id = id.map(str::to_string));
     save_page_file();

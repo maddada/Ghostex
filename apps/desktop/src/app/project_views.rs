@@ -350,7 +350,7 @@ impl GhostexGpuiApp {
                 .map(|r| gpui_remote_scoped_project_id(&r.remote_machine_id, &id))
                 .unwrap_or(id)
         });
-        for view in gpui_custom_views_from_settings().into_iter().filter(|v| {
+        for view in gpui_custom_views_from_settings().iter().filter(|v| {
             v.enabled
                 && v.definition.get("source").is_some()
                 && super::project_websites::website_provider(v.id).is_none()
