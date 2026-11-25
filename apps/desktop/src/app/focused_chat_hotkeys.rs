@@ -57,6 +57,8 @@ impl GhostexGpuiApp {
             "toggleDictation" => self.dictate_hotkey_pressed(session_id, view, window, cx),
             // Like Stash prompt in the chat box's More actions menu (native_chat/toolbar.rs).
             "stashPrompt" => view.update(cx, |view, cx| view.stash_prompt_from_hotkey(cx)),
+            // Like Stash prompt on an empty chat box: Saved Prompts for this chat's project.
+            "stashedPrompts" => self.open_gpui_stashed_prompts_modal_for_focused_agents_session(cx),
             // The newest final reply of the chat on screen, from the start (the core picks it).
             "readAloudLastReply" => {
                 view.update(cx, |view, cx| {
