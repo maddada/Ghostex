@@ -197,12 +197,52 @@ impl GhostexGpuiApp {
         Some((row.non_cli_mode, row.activity.as_str() == "working"))
     }
 
+    /// The store's key for the gxserver session behind this tab, on its own machine.
+    fn agents_session_store_key(
+        &self,
+        session_id: TerminalSessionId,
+    ) -> Option<ghostex_gx_core::SessionKey> {
+        Some(
+            match self.workspace_terminal_key_for_shell_session(session_id)? {
+                GpuiWorkspaceTerminalSessionKey::Local(key) => {
+                    ghostex_gx_core::SessionKey::local(key.project_id, key.session_id)
+                }
+                GpuiWorkspaceTerminalSessionKey::Remote(key) => key.attention_session_key(),
+            },
+        )
+    }
+
+    /// CDXC:SessionChat 2026-11-25 WHY:
+    /// A switch to Native sleeps and wakes the session on gxserver, which kills the attach client
+    /// the tab's chat keeps on its terminal. The exit closed the tab, the sidebar's tab list then
+    /// opened it again as a plain terminal tab while the row was still asleep, and the user landed
+    /// on the sleeping pill and its Resume button instead of the chat. While this app's own switch
+    /// runs, or a queued switch waits or runs (`switch_to_native_queued`), the workspace keeps the
+    /// tab, its chat view and its viewer recipe (gpui_engine_terminal_sync.rs), the way a Full
+    /// Reload keeps its row's tab.
+    pub(crate) fn agents_session_switching_host_mode(&self, session_id: TerminalSessionId) -> bool {
+        let Some(key) = self.agents_session_store_key(session_id) else {
+            return false;
+        };
+        self.gx_store.switching_host_sessions.contains(&key)
+            || self
+                .gx_store
+                .core
+                .presentation()
+                .session(&key)
+                .is_some_and(|row| row.switch_to_native_queued)
+    }
+
     /// Asks for confirmation before switching a Non-CLI session into Agent CLI (Terminal) view.
     /// Returns `true` if a confirmation dialog was opened and the caller should wait for it.
+    /// `stay_in_chat` is the chat's own Switch to Terminal-based (its Terminal View button, the
+    /// `•••` row, the view toggle): the session keeps its chat view and the chat box keeps its
+    /// draft. Without it (a model picked in the CLI, the core's own `switchToTerminal`) the tab
+    /// shows the terminal afterwards, where that work happens.
     pub(crate) fn ask_and_switch_non_cli_session_to_terminal(
         &mut self,
         session_id: TerminalSessionId,
-        handoff_draft: bool,
+        stay_in_chat: bool,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         let Some((true, is_working)) = self.session_non_cli_mode_info(session_id) else {
@@ -224,7 +264,7 @@ impl GhostexGpuiApp {
         self.gx_store_confirm_in_app(
             confirmation,
             Box::new(move |app, cx| {
-                app.confirm_switch_session_non_cli_to_terminal(session_id, handoff_draft, cx);
+                app.confirm_switch_session_non_cli_to_terminal(session_id, stay_in_chat, cx);
             }),
             cx,
         );
@@ -262,7 +302,7 @@ impl GhostexGpuiApp {
     fn confirm_switch_session_non_cli_to_terminal(
         &mut self,
         session_id: TerminalSessionId,
-        handoff_draft: bool,
+        stay_in_chat: bool,
         cx: &mut gpui::Context<Self>,
     ) {
         if !self.agents_chat_mode_sessions.contains(&session_id) {
@@ -302,23 +342,23 @@ impl GhostexGpuiApp {
                 )
             })
         } else {
-            if handoff_draft {
+            // No gxserver session behind the tab any more, so nothing to switch: the plain view
+            // switch the Terminal View button makes, draft and all.
+            if stay_in_chat {
                 self.start_session_chat_draft_handoff_for_terminal(session_id, cx);
             }
             self.toggle_agents_session_chat_mode(session_id, cx);
             return;
         };
-        // Defer the composer draft handoff until `/api/switchSessionAcpToCli` succeeds so the
-        // async handoff never bounces back while the session is still in Chat mode, and a failed
-        // switch leaves the draft untouched in the composer.
         cx.spawn(async move |this, cx| {
             let result = request.await;
             let _ = this.update(cx, |this, cx| match result {
+                /*
+                CDXC:SessionChat 2026-11-25 DECISION:
+                User: switching a chat to Terminal-based "shows the terminal view, but it should show the chat view". The chat's own Switch to Terminal-based keeps the session in its chat view, now over the Terminal-based agent with the same conversation, and the chat box keeps its draft; it used to flip the tab to the terminal and hand the draft to it, which also put up the sleeping pill and its Resume button while the terminal came back. A switch made to work in the CLI (a model picked there, the core's `switchToTerminal`) still shows the terminal.
+                */
                 Ok(_) => {
-                    if this.agents_chat_mode_sessions.contains(&session_id) {
-                        if handoff_draft {
-                            this.start_session_chat_draft_handoff_for_terminal(session_id, cx);
-                        }
+                    if !stay_in_chat && this.agents_chat_mode_sessions.contains(&session_id) {
                         this.toggle_agents_session_chat_mode(session_id, cx);
                     }
                 }
@@ -488,8 +528,22 @@ impl GhostexGpuiApp {
             );
             return;
         };
+        // Held until gxserver answers, which is after its sleep and wake, so the tab and its chat
+        // view outlive the attach client the sleep kills (`agents_session_switching_host_mode`).
+        let switching = self.agents_session_store_key(session_id);
+        if let Some(key) = switching.clone() {
+            self.gx_store.switching_host_sessions.push(key);
+        }
         cx.spawn(async move |this, cx| {
             let result = request.await;
+            let _ = this.update(cx, |this, _| {
+                if let Some(key) = switching.as_ref() {
+                    let held = &mut this.gx_store.switching_host_sessions;
+                    if let Some(index) = held.iter().position(|held| held == key) {
+                        held.remove(index);
+                    }
+                }
+            });
             let _ = this.update(cx, |this, cx| match result {
                 Ok(value) => {
                     if value.get("queued").and_then(serde_json::Value::as_bool) == Some(true) {

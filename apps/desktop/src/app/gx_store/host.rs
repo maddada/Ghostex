@@ -138,6 +138,10 @@ pub(crate) struct GxStoreHost {
     /// Local rows a Full Reload is cycling, once per reload in flight (sidebar_reload.rs). The
     /// workspace keeps their tabs when the sleep kills the attach client.
     pub(crate) reloading_sessions: Vec<ghostex_gx_core::SessionKey>,
+    /// Rows this app is switching to Native, once per switch in flight
+    /// (session_chat/drafts_and_attachments.rs). The workspace keeps their tabs and chat views
+    /// when the switch's sleep kills the attach client.
+    pub(crate) switching_host_sessions: Vec<ghostex_gx_core::SessionKey>,
     pub(super) sidebar_flags: super::sidebar_flags::SidebarFlagsCounters,
     pub(super) sidebar_modals: super::sidebar_modals::SidebarModalCounters,
     pub(super) sidebar_open: super::sidebar_open::SidebarOpenCounters,

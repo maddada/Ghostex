@@ -51,7 +51,10 @@ impl GhostexGpuiApp {
             // The composer's terminal button: the same session, as a terminal. For Native
             // sessions, ask for confirmation (warning if a turn is active) before switching the
             // host into interactive Terminal mode, matching desktop.
-            Some("terminalView" | "switchToTerminal") => {
+            Some(action @ ("terminalView" | "switchToTerminal")) => {
+                // The chat's own Switch to Terminal-based stays in the chat; the core's
+                // `switchToTerminal` asks for the terminal to work there (desktop's `stay_in_chat`).
+                let stay_in_chat = action == "terminalView";
                 let non_cli_info = self
                     .gx_store
                     .core
@@ -106,7 +109,12 @@ impl GhostexGpuiApp {
                     self.gx_store_confirm_in_app(
                         confirmation,
                         Box::new(move |app, cx| {
-                            app.web_confirm_switch_non_cli_to_terminal(target, params, cx);
+                            app.web_confirm_switch_non_cli_to_terminal(
+                                target,
+                                params,
+                                stay_in_chat,
+                                cx,
+                            );
                         }),
                         cx,
                     );
@@ -1051,18 +1059,25 @@ impl GhostexGpuiApp {
     }
 
     /// Runs `/api/switchSessionAcpToCli` after the user confirms switching a Native session to
-    /// Terminal, matching desktop's `confirm_switch_session_non_cli_to_terminal`.
+    /// Terminal, matching desktop's `confirm_switch_session_non_cli_to_terminal`: the chat's own
+    /// switch stays in the chat, now over the Terminal-based agent (CDXC:SessionChat 2026-11-25
+    /// in apps/desktop/src/app/session_chat/drafts_and_attachments.rs).
     fn web_confirm_switch_non_cli_to_terminal(
         &mut self,
         target: Option<crate::app::model::GpuiRemoteGxserverRequestTarget>,
         params: Value,
+        stay_in_chat: bool,
         cx: &mut gpui::Context<Self>,
     ) {
         cx.spawn(async move |this, cx| {
             let res =
                 crate::app::gx_store::gx_rpc(target, "/api/switchSessionAcpToCli", params).await;
             let _ = this.update(cx, |this, cx| match res {
-                Ok(_) => this.web_show_terminal(true, cx),
+                Ok(_) => {
+                    if !stay_in_chat {
+                        this.web_show_terminal(true, cx);
+                    }
+                }
                 Err(err) => this.dispatch_gpui_app_modal_toast(
                     "warning",
                     "Could not switch to Terminal-based",

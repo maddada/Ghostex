@@ -122,6 +122,15 @@ impl GhostexGpuiApp {
                 cx.notify();
                 continue;
             }
+            // A switch to Native sleeps and wakes the session the same way, but nothing remounts
+            // it afterwards: the tab keeps its chat view and its viewer recipe, so the viewer
+            // re-attaches to the woken daemon (CDXC:SessionChat 2026-11-25 in
+            // session_chat/drafts_and_attachments.rs).
+            if self.agents_session_switching_host_mode(session_id) {
+                self.agents_terminal_chat_claims.remove(&session_id);
+                cx.notify();
+                continue;
+            }
             let Some(pane_id) = self.agents_workspace.pane_id_for_session(session_id) else {
                 continue;
             };
