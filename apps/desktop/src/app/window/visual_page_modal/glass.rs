@@ -2,8 +2,8 @@
 //! window's page so the page's backdrop looks like the window it floats over: the reader's own
 //! wallpaper or custom picture under the same tint (server/src/visual_pages/theme.rs paints it
 //! under the page's glass cards). While the window is open it follows the app: a new wallpaper,
-//! another glass setting, a new tint or the app's theme reach the page within a second, a resize
-//! of the window at once and a move held by the mouse on release. The window paints the same picture, placed the same way,
+//! another glass setting, a new tint or the app's theme reach the page within a second, and a
+//! move or resize of the window at once. The window paints the same picture, placed the same way,
 //! behind its own header (`Backdrop`), so the header and the page read as one surface.
 //!
 //! CDXC:SessionChat 2026-11-02 DECISION:
@@ -13,7 +13,7 @@
 //! CDXC:SessionChat 2026-11-04 WHY:
 //! User: "why are the bgs of inline htmls still not showing my real wallpaper but blurred like we agreed?". The scripts above never took: a script added for new documents (`Page.addScriptToEvaluateOnNewDocument`) runs before the parser has made `<html>`, so `document.documentElement` was null and both scripts threw (`TypeError: Cannot read properties of null (reading 'setAttribute')`, reproduced in Chromium with the same DevTools call), and the page kept the painted dusk. They were only ever sent again when the picture or the look changed, so the page window never showed the picture unless the wallpaper changed while it was open. Each script now waits for `<html>` (`on_root`), which still comes before the page's first script and first paint.
 //! CDXC:SessionChat 2026-11-04 DECISION:
-//! User: "can we make the titlebar part of the inline html instead of being a different color?" and "want to be able to resize and move them". The window paints the page's backdrop behind its header too: this picture under this tint at the same place on screen, or the page's own top colour without one (`PAGE_TOP_DARK` / `PAGE_TOP_LIGHT`). The picture is placed for the whole window and the page is told its part of it (`picture_rect`), so it runs on unbroken from the header into the page. A resize places the picture at once, straight into the current page (`execute_app_owned_script`); a move held by the mouse places it on release (`follow_window_bounds`); the scripts kept for later documents are only added again on the once-a-second check, so a long drag does not pile them up.
+//! User: "can we make the titlebar part of the inline html instead of being a different color?" and "want to be able to resize and move them". The window paints the page's backdrop behind its header too: this picture under this tint at the same place on screen, or the page's own top colour without one (`PAGE_TOP_DARK` / `PAGE_TOP_LIGHT`). The picture is placed for the whole window and the page is told its part of it (`picture_rect`), so it runs on unbroken from the header into the page. While the window moves or is resized the new placement goes straight into the current page (`execute_app_owned_script`); the scripts kept for later documents are only added again on the once-a-second check, so a long drag does not pile them up.
 //! CDXC:SessionChat 2026-11-05 DECISION:
 //! User: "please make the bg more blurred (can't be changed by user basically), let's just set a heavier blur once here that we decide on". The main window's picture comes with the reader's own Blur setting (theirs is 3 points, so the picture was nearly sharp under the page's text), so the page window softens it once more itself: made small and blurred by a fixed `PICTURE_BLUR_POINTS` points of the screen (`soften`), the same for every reader. The window's band paints the same softened picture, so the two still match exactly.
 //! CDXC:SessionChat 2026-11-22 DECISION:
@@ -40,9 +40,6 @@ const SOFT_PICTURE_WIDTH: u32 = 320;
 /// How often the open window checks whether the app's glass or theme changed.
 const GLASS_CHECK_EVERY: Duration = Duration::from_secs(1);
 
-/// How often a held move checks whether the mouse button is up, to place the picture once it is.
-const MOVE_END_CHECK_EVERY: Duration = Duration::from_millis(30);
-
 /// The top of the page's painted dusk (dark) and dawn (light), which the header paints when there
 /// is no picture: `--gx-backdrop-top` in server/src/visual_pages/theme.rs, where the floating
 /// window's page fades its backdrop into this colour at its top edge.
@@ -64,10 +61,6 @@ pub(super) struct PageGlass {
     pub(super) light: bool,
     /// Whether the window's controls sat on the left at the last check (`close_buttons_on_left`).
     controls_on_left: bool,
-    /// The window's size when the page was last handed its glass, which tells a move from a resize.
-    size: Option<Size<Pixels>>,
-    /// A held move the picture waits out (`follow_window_bounds`), placed once the button is up.
-    move_end: Option<gpui::Task<()>>,
 }
 
 /// The picture behind the header: the page's own, at the same place, under the same tint.
@@ -108,8 +101,9 @@ impl GpuiVisualPageModalWindow {
                 cx.background_executor().timer(GLASS_CHECK_EVERY).await;
                 if this
                     .update_in(cx, |this, window, cx| {
-                        // A hidden page is only ordered out: nothing to check until it is shown again.
-                        if !this.hidden && this.glass.move_end.is_none() {
+                        // A hidden page is only ordered out: nothing to check until it is shown
+                        // again, and the next check after that brings it up to date.
+                        if !this.hidden {
                             this.sync_page_glass(true, window, cx)
                         }
                     })
@@ -119,34 +113,12 @@ impl GpuiVisualPageModalWindow {
                 }
             }
         }));
+        // CDXC:SessionChat 2026-11-26 WHY: PR #761 also held the picture still through a move and
+        // placed it on release. That changed every Mac's page window, including ones whose drag
+        // never lagged, against the 11-04 DECISION above (a move places it at once), so a move
+        // still places it at once; the drag itself glides through `child_window_drag_region`.
         self._glass_bounds = Some(cx.observe_window_bounds(window, |this, window, cx| {
-            this.follow_window_bounds(window, cx);
-        }));
-    }
-
-    /// CDXC:SessionChat 2026-11-25 WHY:
-    /// User: "resizing doesnt lag only moving does". While the window is dragged by its band, macOS moves it itself and tells the app only about ten times a second; each of those re-placed the picture, held against the screen, through three calls to the system's wallpaper service, a script into the page and a redraw, so the picture jumped behind a window that glides. A move held by the mouse now leaves the picture where it is on the window and places it once the button is up. A resize (the size changed) still follows every step, which the user finds smooth.
-    fn follow_window_bounds(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let held_move = self.glass.size == Some(window.bounds().size)
-            && crate::app::ghostex_capture::platform::primary_mouse_button_down();
-        if !held_move {
-            self.sync_page_glass(false, window, cx);
-            return;
-        }
-        if self.glass.move_end.is_some() {
-            return;
-        }
-        self.glass.move_end = Some(cx.spawn_in(window, async move |this, cx| {
-            loop {
-                cx.background_executor().timer(MOVE_END_CHECK_EVERY).await;
-                if !crate::app::ghostex_capture::platform::primary_mouse_button_down() {
-                    break;
-                }
-            }
-            let _ = this.update_in(cx, |this, window, cx| {
-                this.glass.move_end = None;
-                this.sync_page_glass(false, window, cx);
-            });
+            this.sync_page_glass(false, window, cx);
         }));
     }
 
@@ -156,7 +128,6 @@ impl GpuiVisualPageModalWindow {
         let Some(surface) = self.surface.clone() else {
             return;
         };
-        self.glass.size = Some(window.bounds().size);
         let light = crate::app::helpers::chrome_uses_light_appearance();
         let controls_on_left = crate::app::window::round_close_button::close_buttons_on_left();
         let glass = page_glass(window, cx);

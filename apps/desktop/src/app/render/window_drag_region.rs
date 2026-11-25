@@ -83,6 +83,20 @@ fn window_drag_double_click_action(_window: &mut gpui::Window) {}
 /// on the region: the tabs stop only their presses and the sidebar's buttons only their clicks, and
 /// double-clicking either must stay theirs.
 pub(crate) fn window_drag_region<E: InteractiveElement>(element: E) -> E {
+    drag_region(element, false)
+}
+
+/// A drag region for a child window that moves on its own (the page window, a dock row's
+/// question): on macOS the window comes off its parent for the drag (CDXC:AppModal 2026-11-25 in
+/// GpuiGhostexCapture.m). Every other region keeps `window_drag_region`, and with it the drag it
+/// always had.
+pub(crate) fn child_window_drag_region<E: InteractiveElement>(element: E) -> E {
+    drag_region(element, true)
+}
+
+fn drag_region<E: InteractiveElement>(element: E, child_window: bool) -> E {
+    #[cfg(not(all(target_os = "macos", not(ghostex_web))))]
+    let _ = child_window;
     element
         .window_control_area(WindowControlArea::Drag)
         .on_mouse_down(MouseButton::Left, |event, window, _| {
@@ -107,7 +121,7 @@ pub(crate) fn window_drag_region<E: InteractiveElement>(element: E) -> E {
                 window_drag_double_click_action(window);
             }
         })
-        .on_mouse_move(|event, window, _| {
+        .on_mouse_move(move |event, window, _| {
             let Some(press) = WINDOW_DRAG_PRESS.lock().ok().and_then(|slot| *slot) else {
                 return;
             };
@@ -137,7 +151,10 @@ pub(crate) fn window_drag_region<E: InteractiveElement>(element: E) -> E {
                 // A child window glides only off its parent (CDXC:AppModal 2026-11-25 in
                 // GpuiGhostexCapture.m); the main window and popped-out sessions have none.
                 #[cfg(all(target_os = "macos", not(ghostex_web)))]
-                if let Ok(native) = crate::app::helpers::cef_parent_native_view(window) {
+                if let Some(native) = child_window
+                    .then(|| crate::app::helpers::cef_parent_native_view(window).ok())
+                    .flatten()
+                {
                     crate::app::ghostex_capture::platform::detach_from_parent_while_dragged(
                         native as usize,
                     );

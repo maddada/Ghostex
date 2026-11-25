@@ -368,10 +368,11 @@ void GhostexGpuiDetachChildWindow(void *native_view) {
 
 /// CDXC:AppModal 2026-11-25 WHY:
 /// User: "even with pilot closed popups and questions lag, its a ghostex bug". A child window dragged by its own band (the page window, a dock row's question) trailed the pointer, while the main window and a popped-out session, the same window-server drag without a parent, glided. The window comes off its parent for the drag and goes back on at its new place once the button is up, at the parent's level and above it as before, so it moves with the main window again. `performDrag(with:)` returns at once and a mouse-up may never reach the app, so the button is polled. A window hidden or attached again meanwhile (app/visual_page_hidden.rs) is left as it is.
+/// Only the page window's and the dock question's bands ask for this (`child_window_drag_region`); every other drag region keeps the drag it always had. A parent in full screen keeps its child for the drag too: the child is in the parent's full-screen Space only as its child, so taking it off there could move it out of that Space.
 void GhostexGpuiDetachChildWindowWhileDragged(void *native_view) {
   NSWindow *window = GhostexGpuiCaptureWindowOfView(native_view);
   NSWindow *parent = window.parentWindow;
-  if (!window || !parent) {
+  if (!window || !parent || (parent.styleMask & NSWindowStyleMaskFullScreen) != 0) {
     return;
   }
   [parent removeChildWindow:window];

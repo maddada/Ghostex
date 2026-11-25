@@ -822,7 +822,7 @@ impl NativeChatView {
                 )
             })
             .child(
-                crate::app::render::window_drag_region::window_drag_region(
+                crate::app::render::window_drag_region::child_window_drag_region(
                     div().id("dock-ask-drag-band"),
                 )
                 .flex_1()

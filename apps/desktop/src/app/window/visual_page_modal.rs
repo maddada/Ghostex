@@ -824,7 +824,7 @@ impl GpuiVisualPageModalWindow {
                 )
             })
             .child(
-                crate::app::render::window_drag_region::window_drag_region(
+                crate::app::render::window_drag_region::child_window_drag_region(
                     div().id("visual-page-drag-band").on_mouse_down(
                         gpui::MouseButton::Left,
                         cx.listener(|this, _, _, cx| this.close_more_menu(cx)),
