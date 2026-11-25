@@ -531,8 +531,8 @@ pub struct SessionView {
     pub nesting: RowNesting,
     /// Per-computer fold role for Main Hub's Ask Ghostex AI and Autopilot supervisor rows.
     pub machine_fold: Option<MachineFold>,
-    /// A coordinator's thread drawn outside its coordinator's tree (its coordinator is in another
-    /// group, or the thread is parked or snoozed): the coordinator's title, which the row's thread
+    /// A coordinator's thread drawn outside its coordinator's tree (parked, snoozed, its
+    /// coordinator closed, or in a worktree project listed on its own): the coordinator's title, which the row's thread
     /// mark names (`sidebar_view/threads.rs` `threads_drawn_apart`). `None` on every other row.
     pub thread_of: Option<String>,
 }

@@ -148,7 +148,7 @@ pub(crate) fn tally_threads<'a>(
 }
 
 /// Every coordinator's title, by its key, over all rows (a thread can sit in another group than
-/// its coordinator: a worktree thread is in its worktree's group).
+/// its coordinator: a thread in a worktree project listed on its own is in that worktree's group).
 pub(crate) fn coordinator_titles<'a>(
     rows: impl Iterator<Item = &'a Arc<SessionRow>>,
 ) -> HashMap<SessionKey, String> {
@@ -162,7 +162,7 @@ pub(crate) fn coordinator_titles<'a>(
 /// closed). `None` for a nested thread, a lead's linked session and every other row.
 ///
 /// CDXC:Coordinators 2026-11-25 WHY:
-/// A user could not tell which sessions were a coordinator's workers: a thread nests under its coordinator only when both are in the same group, so a worktree thread (its worktree's group), a parked or snoozed thread, or one whose coordinator is gone is drawn flat and looks like any other session. Such a row carries a thread mark that names its coordinator (apps/desktop/src/app/native_sidebar/threads.rs `thread_apart_mark`); a nested thread's tree line already says it.
+/// A user could not tell which sessions were a coordinator's workers: a thread nests under its coordinator only when both are in the same group, and a thread in another project of the same computer is moved there (`thread_fold.rs`), but a parked or snoozed thread, one whose coordinator is closed, or one in a worktree project listed on its own (`thread_fold.rs` leaves those to `worktree_fold.rs`) is drawn flat and looks like any other session. Such a row carries a thread mark that names its coordinator (apps/desktop/src/app/native_sidebar/threads.rs `thread_apart_mark`); a nested thread's tree line already says it.
 pub(crate) fn thread_drawn_apart(
     row: &SessionRow,
     nesting: &RowNesting,

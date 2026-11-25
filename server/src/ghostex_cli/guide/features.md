@@ -4525,9 +4525,9 @@ version of the Projects features in Cursor and Claude Code.
   (a thread waiting on a question or approval keeps its dot); otherwise opening
   its chat leaves the fold and the older threads as you set them; opening one of its threads
   unfolds the coordinator so the thread shows. A thread listed apart from its
-  coordinator (in its worktree's project, parked or snoozed, or left by a closed
-  coordinator) shows a small ↳ arrow before its title, and its tooltip names
-  the coordinator. Click a thread to watch it or
+  coordinator (parked or snoozed, left by a closed coordinator, or in a worktree
+  listed as its own project) shows a small ↳ arrow before its title, and its
+  tooltip names the coordinator. Click a thread to watch it or
   talk to it directly; answer its questions and approvals there. A thread is
   named after its latest task and keeps that name, like the coordinator keeps
   its own (the agent's automatic naming never replaces it); when its

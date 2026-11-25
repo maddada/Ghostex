@@ -211,7 +211,7 @@ pub(crate) fn thread_apart_tooltip_line(session: &NativeSidebarSession) -> Optio
 /// muted ink of the row's other quiet badges; the row's title tooltip names the coordinator.
 ///
 /// CDXC:Coordinators 2026-11-25 WHY:
-/// A coordinator's workers in another group (a worktree), parked, snoozed or left by a closed coordinator were drawn exactly like plain sessions, so nothing tied them to their coordinator (gx-core `thread_drawn_apart`). The mark sits where a nested thread's tree line ends, so both read as "under a coordinator"; its name goes in the title tooltip like a row's computer and worktree (`render_native_sidebar_session`), so it is not said twice.
+/// A coordinator's workers that were parked, snoozed, left by a closed coordinator or in a worktree project listed on its own were drawn exactly like plain sessions, so nothing tied them to their coordinator (gx-core `thread_drawn_apart`). The mark sits where a nested thread's tree line ends, so both read as "under a coordinator"; its name goes in the title tooltip like a row's computer and worktree (`render_native_sidebar_session`), so it is not said twice.
 pub(crate) fn thread_apart_mark(
     session: &NativeSidebarSession,
     appearance: &SidebarAppearance,
