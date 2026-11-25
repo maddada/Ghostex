@@ -36,15 +36,24 @@ struct ArtChoice {
     tone: ArtTone,
 }
 
-/// How the artwork is drawn: `ascii` (`windowArtStyle`) characters over a soft blur of it, else
-/// halftone dots; in `ink` (the theme's text colour) while `monochrome` (`windowArtMonochrome`,
-/// Black and white) is on, else in the artwork's own colours; on `base` (the work area colour).
+/// How the artwork is drawn (`windowArtStyle`): as the picture itself (the default), as ASCII
+/// characters over a soft blur of it, or as halftone dots.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+enum ArtStyle {
+    Picture,
+    Ascii,
+    Dither,
+}
+
+/// How the artwork is drawn: its `style`; in `ink` (the theme's text colour; greys for a picture)
+/// while `monochrome` (`windowArtMonochrome`, Black and white) is on, else in the artwork's own
+/// colours; on `base` (the work area colour).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 struct ArtTone {
     ink: u32,
     base: u32,
     monochrome: bool,
-    ascii: bool,
+    style: ArtStyle,
 }
 
 /// A decoded artwork's identity: the artwork (or Your image's picture), its blur, its tone and the
@@ -205,8 +214,8 @@ pub(crate) fn refresh_window_art(object: &serde_json::Map<String, serde_json::Va
 }
 
 /// How the artwork is drawn: the theme's text colour (the Text theme role, else the chat's own text
-/// grey), its work area colour, whether Black and white (`windowArtMonochrome`, on by default)
-/// draws in that text colour, and the style (`windowArtStyle`, ASCII by default).
+/// grey), its work area colour, whether Black and white (`windowArtMonochrome`, off by default)
+/// draws in that text colour, and the style (`windowArtStyle`, Picture by default).
 fn art_tone(object: &serde_json::Map<String, serde_json::Value>, light: bool) -> ArtTone {
     let monochrome = object
         .get("windowArtMonochrome")
@@ -231,25 +240,40 @@ fn art_tone(object: &serde_json::Map<String, serde_json::Value>, light: bool) ->
             channel(r, under[0]) << 16 | channel(g, under[1]) << 8 | channel(b, under[2])
         })
         .unwrap_or(if light { 0x262626 } else { 0xe6e6e6 });
-    let ascii = object
+    let style = match object
         .get("windowArtStyle")
         .and_then(serde_json::Value::as_str)
         .or_else(|| {
             ghostex_settings_catalog::default_value("windowArtStyle")
                 .and_then(ghostex_settings_catalog::J::as_str)
-        })
-        != Some("dither");
+        }) {
+        Some("ascii") => ArtStyle::Ascii,
+        Some("dither") => ArtStyle::Dither,
+        _ => ArtStyle::Picture,
+    };
     ArtTone {
         ink,
         base,
         monochrome,
-        ascii,
+        style,
     }
 }
 
 /// Whether the window paints an artwork behind its surfaces now.
 pub(crate) fn window_art_active() -> bool {
     WINDOW_ART_ACTIVE.load(Ordering::Relaxed)
+}
+
+/// Whether the artwork on screen is drawn as ASCII or Dither (`windowArtStyle`), the styles the
+/// chat's reading panel and the frosted glass surfaces are made for; a Picture draws the window as
+/// it was before them (CDXC:Theming 2026-11-25 DECISION on `stylise_artwork`).
+pub(crate) fn window_art_stylised() -> bool {
+    window_art_active()
+        && WINDOW_ART
+            .lock()
+            .ok()
+            .and_then(|art| *art)
+            .is_some_and(|art| art.tone.style != ArtStyle::Picture)
 }
 
 /// How much of the artwork the sidebar's tint covers.
@@ -278,6 +302,11 @@ pub(crate) fn window_art_redraw_key() -> u64 {
         .hash(&mut hasher);
     hasher.finish()
 }
+
+/// How much of its colour saturation a built-in artwork keeps behind the window in the Picture
+/// style (CDXC:Theming 2026-11-21, Q4388 subtle rule: Art backgrounds dimmed to 45% and shown at
+/// 70% of their colour).
+const ART_COLOUR_SATURATION: f32 = 0.70;
 
 /// The halftone grid: one dot per `HALFTONE_CELL` artwork pixels (6 points on a 1920-point window
 /// for a 2560-pixel artwork); a full dot's radius is `HALFTONE_RADIUS` of the cell, so the brightest
@@ -389,10 +418,34 @@ fn luma_range(rgba: &image::RgbaImage) -> (f32, f32) {
 /// theme's text colour (`tone.ink`), else each cell's own colour at one brightness.
 ///
 /// CDXC:Theming 2026-11-25 DECISION:
-/// User: "change the artwork into black and white detail reading from bottom to top ... clean and minimal", "the bg should be changed to the b/w of that perticular theme and also ditering + fade and also add a option to remvoe that b/w", "the black and whte there is dither but colorfull threr is no dither why?", then, of the first dithers (an ordered Bayer pattern that read as a mesh, then error-diffused dots that read as random): "it's just some random drop. What we can do instead is have some ASCII effect and a little blur effect" (pointing at ascii-magic.com) "add a variant in the settings ... toggle between ASCII and Dither and the fixed dither as well". Every artwork, and Your image, is drawn in one of two styles (`windowArtStyle`): ASCII (the default; ascii-magic's Standard ramp, a soft blurred copy behind, a faint glow) or Dither (an even halftone grid of round dots). Black and white (`windowArtMonochrome`, the default) draws in the theme's text colour; off in the artwork's own colours. Dimming washes it toward the work area colour, so the window around it stays exactly the theme's colour. Supersedes the 2026-11-21 rule that showed the artwork as a picture at 70% of its colour.
+/// User: "change the artwork into black and white detail reading from bottom to top ... clean and minimal", "the bg should be changed to the b/w of that perticular theme and also ditering + fade and also add a option to remvoe that b/w", "the black and whte there is dither but colorfull threr is no dither why?", then, of the first dithers (an ordered Bayer pattern that read as a mesh, then error-diffused dots that read as random): "it's just some random drop. What we can do instead is have some ASCII effect and a little blur effect" (pointing at ascii-magic.com) "add a variant in the settings ... toggle between ASCII and Dither and the fixed dither as well". Every artwork, and Your image, can be drawn in ASCII (ascii-magic's Standard ramp, a soft blurred copy behind, a faint glow) or Dither (an even halftone grid of round dots) (`windowArtStyle`). Black and white (`windowArtMonochrome`) draws them in the theme's text colour; off in the artwork's own colours. Dimming washes them toward the work area colour, so the window around them stays exactly the theme's colour.
+/// CDXC:Theming 2026-11-25 DECISION:
+/// User, when PR 757 was merged: "please let's not change the default for people who install the app newly, i like my current default theme. i'll tell u if i wanna add one of those asciis as default for new users", and existing users keep their artwork as pictures. Picture (`ART_COLOUR_SATURATION`, the 2026-11-21 rule, under a black or white dimming wash) is the default style and Black and white is off by default; ASCII and Dither are choices in Settings > Themes. Black and white on a Picture draws it in greys.
 fn stylise_artwork(rgba: &mut image::RgbaImage, tone: ArtTone, light: bool) {
     let (width, height) = rgba.dimensions();
     if width == 0 || height == 0 {
+        return;
+    }
+    if tone.style == ArtStyle::Picture {
+        let saturation = if tone.monochrome {
+            0.0
+        } else {
+            ART_COLOUR_SATURATION
+        };
+        for pixel in rgba.pixels_mut() {
+            let r = f32::from(pixel.0[0]);
+            let g = f32::from(pixel.0[1]);
+            let b = f32::from(pixel.0[2]);
+            let luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            let tone = |channel: f32| {
+                (luma + (channel - luma) * saturation)
+                    .round()
+                    .clamp(0.0, 255.0) as u8
+            };
+            pixel.0[0] = tone(r);
+            pixel.0[1] = tone(g);
+            pixel.0[2] = tone(b);
+        }
         return;
     }
     let strength = if light { LIGHT_STRENGTH } else { 1.0 };
@@ -420,7 +473,7 @@ fn stylise_artwork(rgba: &mut image::RgbaImage, tone: ArtTone, light: bool) {
         if light { 1.0 - level } else { level }
     };
     let mut out = image::RgbaImage::new(width, height);
-    if tone.ascii {
+    if tone.style == ArtStyle::Ascii {
         let soft = image::imageops::fast_blur(&*rgba, ASCII_BACKDROP_BLUR);
         let backdrop_alpha = if tone.monochrome {
             ASCII_BACKDROP_ALPHA_MONO
@@ -658,7 +711,8 @@ fn frost_artwork(flat: &image::RgbaImage) -> Arc<RenderImage> {
 }
 
 /// The frosted copy of the artwork on screen and its dimming, for a glass surface over it (the chat
-/// box, native_chat/composer.rs), or `None` without an artwork or while it loads. Draw it where the
+/// box, native_chat/composer.rs), or `None` without an ASCII or Dither artwork (a Picture keeps the
+/// surfaces as they were) or while it loads. Draw it where the
 /// artwork itself is drawn (the window, cropped to fill) clipped to the surface, then the dimming
 /// in the work area colour, then the surface's own tint.
 pub(crate) struct FrostedArt {
@@ -667,7 +721,7 @@ pub(crate) struct FrostedArt {
 }
 
 pub(crate) fn window_art_frosted() -> Option<FrostedArt> {
-    if !window_art_active() {
+    if !window_art_stylised() {
         return None;
     }
     let choice = (*WINDOW_ART.lock().ok()?)?;
@@ -841,7 +895,8 @@ pub(crate) fn window_art_snapshot(cx: &mut App) -> Option<WindowArtSnapshot> {
 
 /// The window's bottom layer while an artwork shows: the theme's own colour, the artwork covering
 /// the window (centred, cropped to fill) fading in the first time it is drawn, and the dimming over
-/// it (the theme's own colour again, so only the dots fade). Put it first in a window's root (`relative`),
+/// it (black in dark mode and white in light mode for a Picture, the theme's own colour for ASCII
+/// and Dither, so only the characters or dots fade). Put it first in a window's root (`relative`),
 /// under everything else.
 pub(crate) fn window_art_backdrop(cx: &mut App) -> Option<AnyElement> {
     if !window_art_active() {
@@ -850,9 +905,13 @@ pub(crate) fn window_art_backdrop(cx: &mut App) -> Option<AnyElement> {
     let choice = (*WINDOW_ART.lock().ok()?)?;
     let image = artwork_image(choice, cx);
     let base = crate::app::helpers::workspace_background_color().opacity(1.0);
-    // The dithered artwork dims toward the theme's own colour, so the window around the dots
-    // stays it.
-    let wash = base;
+    // A picture dims under black (dark mode) or white (light mode); an ASCII or Dither artwork
+    // dims toward the theme's own colour, so the window around the characters or dots stays it.
+    let wash = match choice.tone.style {
+        ArtStyle::Picture if choice.light => gpui::white(),
+        ArtStyle::Picture => gpui::black(),
+        ArtStyle::Ascii | ArtStyle::Dither => base,
+    };
     let still = crate::app::helpers::gpui_macos_reduce_motion_enabled();
     let dim = f32::from(choice.dim) / 100.0;
     let picture = image.map(|image| {
@@ -885,12 +944,12 @@ pub(crate) fn window_art_backdrop(cx: &mut App) -> Option<AnyElement> {
                 .with_animation(
                     gpui::ElementId::Name(
                         format!(
-                            "window-art-{}-{}-{}-{}-{}",
+                            "window-art-{}-{}-{}-{}-{:?}",
                             choice.id,
                             choice.picture,
                             choice.blur,
                             choice.tone.monochrome,
-                            choice.tone.ascii
+                            choice.tone.style
                         )
                         .into(),
                     ),

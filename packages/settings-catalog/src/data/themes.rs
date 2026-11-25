@@ -15,6 +15,40 @@ use crate::json::{Json, J};
 use crate::theme_roles::THEME_ROLES;
 use crate::Platform;
 
+/// The clean fills every theme takes for the colours it does not set itself (`fill_roles`): faint
+/// borders and dividers, opaque card, control, menu and chat box fills a small step off the window
+/// colour, and quiet hover and selection washes (PR 757's clean look).
+const CLEAN_THEME_FILLS: &[(&str, &[(&str, &str)])] = &[
+    (
+        "dark",
+        &[
+            ("border", "8%"),
+            ("divider", "6%"),
+            ("userMessage", "base+6%"),
+            ("chatBox", "base+3%"),
+            ("surface", "base+3%"),
+            ("control", "base+5%"),
+            ("menu", "base+4%"),
+            ("selection", "7%"),
+            ("hover", "4%"),
+        ],
+    ),
+    (
+        "light",
+        &[
+            ("border", "9%"),
+            ("divider", "7%"),
+            ("userMessage", "base+4%"),
+            ("chatBox", "base-60%"),
+            ("surface", "base-60%"),
+            ("control", "base+3%"),
+            ("menu", "base-60%"),
+            ("selection", "6%"),
+            ("hover", "4%"),
+        ],
+    ),
+];
+
 /// The id and name of the theme that puts Ghostex's shipped look back.
 pub const DEFAULT_LOOK_ID: &str = "default";
 pub const DEFAULT_LOOK_NAME: &str = "Default";
@@ -385,21 +419,24 @@ impl Changes {
             .map(|(_, value)| value.as_str())
     }
 
-    /// Every theme colour of `appearance` that is not set yet takes the shipped clean value (the
-    /// catalog's default `themeRoles`), or goes back to the theme's own where none ships, so a
-    /// colour an earlier theme set never lingers.
+    /// Every theme colour of `appearance` that is not set yet takes the clean fill
+    /// (`CLEAN_THEME_FILLS`), or goes back to the theme's own where there is none, so a colour an
+    /// earlier theme set never lingers.
     ///
     /// CDXC:Theming 2026-11-25 DECISION:
     /// User: "fix the color scheme for all the themes and make them look good ... clean and minimal", choosing "Clean pass, keep identity": every theme (Default, the art themes, the agent-made looks and the presets) takes the clean Default's borders, dividers, card, control, menu and chat box fills, hover and selected row for the colours it does not set itself, and keeps its own window colour, text, grey text, accent, links, status colours and terminal palette. Before, a colour a preset or look left unset was taken off (`default`), which fell back to the older built-in fills.
+    /// CDXC:Theming 2026-11-25 WHY: the clean fills were the catalog's default `themeRoles` in PR 757, but the user kept their own default look (Polar Night's colours in `themeRoles`) when it was merged, so the fills have their own list here instead of following the default.
     fn fill_roles(&mut self, appearance: &str) {
-        let shipped = crate::default_value(crate::theme_roles::THEME_ROLES_SETTING)
-            .and_then(|roles| roles.get(appearance));
+        let clean = CLEAN_THEME_FILLS
+            .iter()
+            .find(|(mode, _)| *mode == appearance)
+            .map(|(_, fills)| *fills);
         for role in THEME_ROLES {
             let key = format!("{appearance}.{}", role.id);
             if self.get(&key).is_none() {
-                let value = shipped
-                    .and_then(|mode| mode.get(role.id))
-                    .and_then(J::as_str)
+                let value = clean
+                    .and_then(|fills| fills.iter().find(|(id, _)| *id == role.id))
+                    .map(|(_, value)| *value)
                     .unwrap_or("default");
                 self.set(&key, value);
             }
@@ -699,7 +736,7 @@ fn default_theme(platform: Platform) -> Theme {
         dark: true,
         partner: None,
         prompt: Some(
-            "Put Ghostex's own clean look back: its neutral colours on a solid window, with no artwork or glass.".into(),
+            "Put Ghostex's own look back: its default colours, artwork, glass and Animated background.".into(),
         ),
         live: Some((
             shipped("windowGlassLiveStyleDark"),

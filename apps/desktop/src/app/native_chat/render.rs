@@ -29,7 +29,8 @@ impl NativeChatView {
     /// A soft panel of the work area colour behind the transcript's reading column while an art
     /// theme's artwork shows behind the window: solid across the column (plus a margin), fading out
     /// to clear over `FADE` on each side, so the artwork stays sharp beside the chat and the text
-    /// sits on a calm ground. `None` without an artwork.
+    /// sits on a calm ground. `None` without an ASCII or Dither artwork (a Picture keeps the chat as
+    /// it was, CDXC:Theming 2026-11-25 DECISION on `stylise_artwork` in helpers/window_art.rs).
     ///
     /// CDXC:Theming 2026-11-25 DECISION:
     /// User, of the ASCII artwork showing through behind the chat's text and tables: "it is looking quite good actually ... do something to improve the visibility of this chat window". The chat keeps the artwork around it and draws its reading column on a panel of the theme's work area colour that fades out at its sides: 70% over a 160-point fade, after "the fede in the middle make it a little reansparent" (82%, then 60%) and "a litttle more fade for the chat".
@@ -37,7 +38,7 @@ impl NativeChatView {
         const MARGIN: f32 = 40.0;
         const FADE: f32 = 160.0;
         const STRENGTH: f32 = 0.7;
-        if !crate::app::helpers::window_art_active() {
+        if !crate::app::helpers::window_art_stylised() {
             return None;
         }
         let s = p.scale;

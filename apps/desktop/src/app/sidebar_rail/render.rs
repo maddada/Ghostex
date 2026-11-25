@@ -416,7 +416,7 @@ impl GhostexGpuiApp {
             // In the Floating sidebar layout the rail is the card's left half and paints what the
             // sidebar paints, so the two read as one card (`render_rail_card`).
             .bg(if crate::app::helpers::floating_sidebar_layout() {
-                if crate::app::helpers::window_art_active() {
+                if crate::app::helpers::window_art_frosted().is_some() {
                     // The card's frosted glass shows, as behind the sidebar (CDXC:Workarea
                     // 2026-11-25 in native_sidebar/host.rs).
                     gpui::transparent_black().into()

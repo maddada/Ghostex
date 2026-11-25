@@ -36,12 +36,14 @@ pub(crate) const WORK_AREA_FRAME_INNER_RADIUS: f32 =
     WORK_AREA_FRAME_RADIUS - WORK_AREA_FRAME_BORDER;
 
 /// Whether the window uses the Floating sidebar layout (`windowLayout`).
-static FLOATING_SIDEBAR: AtomicBool = AtomicBool::new(true);
+static FLOATING_SIDEBAR: AtomicBool = AtomicBool::new(false);
 
-/// Reads `windowLayout`: Floating sidebar (the default) or Framed work area.
+/// Reads `windowLayout`: Framed work area (the default) or Floating sidebar.
 ///
 /// CDXC:Workarea 2026-11-25 DECISION:
-/// User: "re design the layout the sidebar is floting and the chat is back inverted of current layout", then, told it goes against the 2026-11-20 decision below ("make it framed for everyone"), chose "Floating sidebar as default" with the framed work area kept as an option. Settings > Window & Layout > Layout (`windowLayout`): Floating sidebar (the default) draws the sidebar as the card, inset by the gutter with the card's radius and border, and the work area flat behind it, running to the window's right and bottom edges with no border, its panes and web pages square; the gutter around the sidebar and the rail take the work area's colour (under glass and art its tint, `work_area_frame_glass_gutter`). Framed work area is the 2026-11-20 look. Supersedes, as the default, the 2026-11-20 always-framed rule.
+/// User: "re design the layout the sidebar is floting and the chat is back inverted of current layout", then, told it goes against the 2026-11-20 decision below ("make it framed for everyone"), chose "Floating sidebar as default" with the framed work area kept as an option. Settings > Window & Layout > Layout (`windowLayout`): Floating sidebar (the default until the decision below) draws the sidebar as the card, inset by the gutter with the card's radius and border, and the work area flat behind it, running to the window's right and bottom edges with no border, its panes and web pages square; the gutter around the sidebar and the rail take the work area's colour (under glass and art its tint, `work_area_frame_glass_gutter`). Framed work area is the 2026-11-20 look.
+/// CDXC:Workarea 2026-11-25 DECISION:
+/// User, when PR 757 was merged: "please let's not change the default for people who install the app newly, i like my current default theme", and existing users keep their current sidebar layout. Framed work area (the 2026-11-20 look) stays the default for everyone; Floating sidebar is a choice in Settings > Window & Layout > Layout.
 pub(crate) fn refresh_window_layout(object: &serde_json::Map<String, serde_json::Value>) {
     let layout = object
         .get("windowLayout")
@@ -50,7 +52,7 @@ pub(crate) fn refresh_window_layout(object: &serde_json::Map<String, serde_json:
             ghostex_settings_catalog::default_value("windowLayout")
                 .and_then(ghostex_settings_catalog::J::as_str)
         });
-    FLOATING_SIDEBAR.store(layout != Some("framedWorkArea"), Ordering::Relaxed);
+    FLOATING_SIDEBAR.store(layout == Some("floatingSidebar"), Ordering::Relaxed);
 }
 
 /// Whether the sidebar is the floating card and the work area flat behind it (`windowLayout`).

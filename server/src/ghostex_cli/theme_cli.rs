@@ -84,9 +84,10 @@ Backgrounds:
   windowArt picks the dark-mode artwork and windowArtLight the light-mode one
   (none turns it off), windowArtDim darkens it
   (0-90%) and windowArtBlur softens it (0-40 points). windowArtStyle draws
-  it as ascii characters over a soft blur (the default) or dither halftone
-  dots, fading toward the top; windowArtMonochrome (on by default) draws
-  them in the theme's text colour, false in the artwork's colours. The glass tints
+  it as the picture itself (picture, the default), ascii characters over a
+  soft blur or dither halftone dots, those two fading toward the top;
+  windowArtMonochrome (off by default) draws them in the theme's text colour
+  and a picture in greys. The glass tints
   (windowGlassSidebarOpacityDark, windowGlassWorkAreaTintDark) set how much
   of it shows through the sidebar and the work area. No artwork ships inside
   Ghostex: each downloads from GitHub the first time it shows and is kept.

@@ -3787,7 +3787,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "system",
+      "default": "dark-2",
       "options": [
         {
           "label": "Dark",
@@ -3815,7 +3815,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "gray",
+      "default": "custom",
       "options": [
         {
           "label": "Graphite",
@@ -3899,7 +3899,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "string",
-      "default": "#808080",
+      "default": "#404e78",
       "agentWritable": true
     },
     {
@@ -3913,7 +3913,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "gray",
+      "default": "custom",
       "options": [
         {
           "label": "Graphite",
@@ -3997,7 +3997,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "string",
-      "default": "#808080",
+      "default": "#fcf3da",
       "agentWritable": true
     },
     {
@@ -4039,7 +4039,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "none",
+      "default": "polar-night",
       "options": [
         {
           "label": "None",
@@ -4191,7 +4191,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "none",
+      "default": "gm-light",
       "options": [
         {
           "label": "None",
@@ -4369,7 +4369,7 @@
     {
       "key": "windowArtStyle",
       "title": "Art style",
-      "subtitle": "How the artwork is drawn behind the window: ASCII (characters over a soft blurred copy of it) or Dither (halftone dots). Both rise from the bottom of the window and fade out toward the top, and a chat's text sits on a soft panel of the theme's colour.",
+      "subtitle": "How the artwork is drawn behind the window: Picture (the picture itself), ASCII (characters over a soft blurred copy of it) or Dither (halftone dots). ASCII and Dither rise from the bottom of the window and fade out toward the top, and a chat's text sits on a soft panel of the theme's colour.",
       "tab": "theme",
       "tabTitle": "Themes",
       "group": "appearance",
@@ -4377,8 +4377,12 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "ascii",
+      "default": "picture",
       "options": [
+        {
+          "label": "Picture",
+          "value": "picture"
+        },
         {
           "label": "ASCII",
           "value": "ascii"
@@ -4393,7 +4397,7 @@
     {
       "key": "windowArtMonochrome",
       "title": "Black and white art",
-      "subtitle": "Draw the artwork's characters or dots in the theme's own text colour. Turn off to draw them in the artwork's own colours.",
+      "subtitle": "Draw the artwork's characters or dots in the theme's own text colour, and a Picture in greys. Off draws them in the artwork's own colours.",
       "tab": "theme",
       "tabTitle": "Themes",
       "group": "appearance",
@@ -4401,7 +4405,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "boolean",
-      "default": true,
+      "default": false,
       "agentWritable": true
     },
     {
@@ -4457,7 +4461,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "opaque",
+      "default": "frosted",
       "options": [
         {
           "label": "Dark only",
@@ -4909,26 +4913,35 @@
       "type": "json",
       "default": {
         "dark": {
+          "accent": "#95d7f6",
+          "focusRing": "#5581a9",
           "border": "8%",
           "divider": "6%",
-          "userMessage": "base+6%",
-          "chatBox": "base+3%",
-          "surface": "base+3%",
-          "control": "base+5%",
-          "menu": "base+4%",
-          "selection": "7%",
-          "hover": "4%"
+          "text": "#e6e4de",
+          "mutedText": "#8c95a3",
+          "userMessage": "base+12%",
+          "chatBox": "base+6%/80%",
+          "surface": "base+8%/80%",
+          "control": "base+10%/80%",
+          "menu": "base+6%/95%",
+          "selection": "9%",
+          "hover": "5%",
+          "success": "#a3c48e",
+          "warning": "#dcbd7a",
+          "danger": "#d9827c"
         },
         "light": {
-          "border": "9%",
-          "divider": "7%",
-          "userMessage": "base+4%",
-          "chatBox": "base-60%",
-          "surface": "base-60%",
-          "control": "base+3%",
-          "menu": "base-60%",
-          "selection": "6%",
-          "hover": "4%"
+          "text": "#5c6a72",
+          "mutedText": "#939f91",
+          "accent": "#0c74a6",
+          "focusRing": "#8da101",
+          "link": "#3a94c5",
+          "success": "#8da101",
+          "warning": "#dfa000",
+          "danger": "#f85552",
+          "userMessage": "#efebd4",
+          "codeBlock": "#f4f0d9",
+          "selection": "#eaedc8"
         }
       },
       "agentWritable": false
@@ -4976,7 +4989,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "GitHub Dark",
+      "default": "Ghostex Nord",
       "options": [
         {
           "label": "Use terminal config file",
@@ -7020,7 +7033,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "GitHub Light Default",
+      "default": "Ghostex Everforest Light",
       "options": [
         {
           "label": "0x96f",
@@ -9160,7 +9173,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "number",
-      "default": 96,
+      "default": 97,
       "agentWritable": true
     },
     {
@@ -9484,7 +9497,7 @@
     {
       "key": "windowLayout",
       "title": "Layout",
-      "subtitle": "Floating sidebar draws the sidebar as a card floating over the work area, which runs to the window's edges. Framed work area draws the work area as the card beside the sidebar.",
+      "subtitle": "Framed work area draws the work area as a card beside the sidebar. Floating sidebar draws the sidebar as the card, floating over the work area, which runs to the window's edges.",
       "tab": "windowLayout",
       "tabTitle": "Window & Layout",
       "group": "appearance",
@@ -9492,15 +9505,15 @@
       "section": "windowLayout",
       "sectionTitle": "Window & Layout",
       "type": "enum",
-      "default": "floatingSidebar",
+      "default": "framedWorkArea",
       "options": [
-        {
-          "label": "Floating sidebar",
-          "value": "floatingSidebar"
-        },
         {
           "label": "Framed work area",
           "value": "framedWorkArea"
+        },
+        {
+          "label": "Floating sidebar",
+          "value": "floatingSidebar"
         }
       ],
       "agentWritable": true
