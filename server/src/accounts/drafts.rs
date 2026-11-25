@@ -46,6 +46,19 @@ pub(crate) fn rebuild_launch(
         .as_object()
         .cloned()
         .unwrap_or_default();
+    // CDXC:NativeApprovals 2026-11-25 WHY: GitHub #750, a create drops the approval level a
+    // client sends, so an account change put a Native session back on its settings' level (Ask
+    // under Keep default) and lost a level picked in the Mode menu. This is the session's own saved
+    // level, read from its row, so it stays; a newly started Native host is handed it
+    // (`pi_chat_channel.rs`).
+    for key in [
+        crate::acp::SESSION_ACP_APPROVAL_LEVEL_KEY,
+        crate::acp::approval::SESSION_ACP_APPROVAL_LEVEL_PICKED_KEY,
+    ] {
+        if let Some(saved) = session.pointer(&format!("/runtimeSettings/{key}")) {
+            runtime.insert(key.to_string(), saved.clone());
+        }
+    }
     *settings = fresh["launchSettings"]
         .as_object()
         .cloned()

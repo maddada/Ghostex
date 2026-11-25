@@ -421,6 +421,7 @@ pub(super) async fn route_sessions_http(
                     (Some(pid), Some(sid)) => repository.get_session(pid, sid).ok().flatten(),
                     _ => None,
                 };
+                let params = with_direct_title_as_users(current_session.as_ref(), params);
                 let global_accept_all_enabled =
                     crate::acp::approval::global_accept_all_enabled_in_shared_settings(
                         &state.paths,
@@ -1067,6 +1068,48 @@ pub(super) async fn route_sessions_http(
             })
         }
     })
+}
+
+/// CDXC:SessionTitles 2026-11-25 WHY: GitHub #750, "Names restored with `ghostex rename-session`
+/// revert to '∗ Claude Session' a few minutes later while the session works." `rename-session`
+/// (and a Board command terminal's rename) writes only `title` here, so the session kept the
+/// `placeholder` source it was created with: the sidebar kept showing the agent's default name,
+/// identity updates wrote that default back, and auto-naming and the agent's own title could
+/// replace the name. A title written straight to a session without its runtime settings is a
+/// name someone chose, so it is recorded as the user's (`titleSource: "user"`), as a Rename from
+/// the sidebar of a Native session is (`agents/fork.rs` `request_session_rename`).
+fn with_direct_title_as_users(
+    current_session: Option<&Value>,
+    mut params: serde_json::Map<String, Value>,
+) -> serde_json::Map<String, Value> {
+    let titled = params
+        .get("title")
+        .and_then(Value::as_str)
+        .is_some_and(|title| !title.trim().is_empty());
+    let Some(stored) =
+        current_session.filter(|_| titled && !params.contains_key("runtimeSettings"))
+    else {
+        return params;
+    };
+    let mut runtime = stored
+        .get("runtimeSettings")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    runtime.insert("titleSource".to_string(), json!("user"));
+    // A rename still waiting on the agent is replaced by this one. Who asked for the last one
+    // (`pendingAgentTitleRequestTitleSource`) stays: a thread the user renamed keeps refusing
+    // its own renames (coordinators/rename.rs).
+    for key in [
+        "pendingAgentTitleRequestRequestedAt",
+        "pendingAgentTitleRequestStatus",
+        "pendingAgentTitleRequestTitle",
+        "pendingAgentTitleRequestFailedAt",
+    ] {
+        runtime.remove(key);
+    }
+    params.insert("runtimeSettings".to_string(), Value::Object(runtime));
+    params
 }
 
 /// The thread a board card's Mark done names (`op: done`, `resolve: true`, a thread on this

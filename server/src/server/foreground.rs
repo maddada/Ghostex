@@ -278,6 +278,20 @@ pub async fn run_gxserver_foreground(
             details: Some(json!({ "cleared": cleared, "givenSettingsLevel": resolved })),
         });
     }
+    if let Some(filled) =
+        crate::acp::approval_migration::fill_settings_level_once(&paths, &metadata.server_id)
+    {
+        let _ = logger.log(GxserverLogInput {
+            level: crate::logging::LogLevel::Warn,
+            event: "nativeSettingsLevelFilled".to_string(),
+            server_id: None,
+            request_id: None,
+            client: None,
+            duration_ms: None,
+            error: None,
+            details: Some(json!({ "givenSettingsLevel": filled })),
+        });
+    }
     let event_hub = GxserverEventHub::new(metadata.server_id.clone());
     crate::agent_model_catalog::start(
         paths.clone(),

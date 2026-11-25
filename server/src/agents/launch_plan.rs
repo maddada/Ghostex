@@ -1494,12 +1494,9 @@ fn apply_thread_marked_handovers(
 /// CDXC:AgentLauncher 2026-10-17 WHY:
 /// The agent list is one global list (the sidebar reads it from the first project that has one, and an agent edit writes it to every project), but a project added after the last agent edit keeps an empty copy. The New session menu offered a custom agent there and worked only because it sends the command along; an id-only start (`ghostex create-agent`, board work, automations) failed with "no launch command", and the row was titled with the raw custom id. A project with no agent list of its own launches from the global one.
 /// SEE-ALSO: server/src/sidebar_hud/buttons.rs (`sidebar_agent_state_from_projects`), server/src/sidebar_hud/mutations.rs.
-fn project_with_global_agent_list(db: &Connection, project: &Value) -> Option<Value> {
+pub(crate) fn project_with_global_agent_list(db: &Connection, project: &Value) -> Option<Value> {
     let non_empty = |value: &Value| value.as_array().is_some_and(|items| !items.is_empty());
-    if ["customAgents", "customAgentOrder"]
-        .iter()
-        .any(|key| project.get(*key).is_some_and(non_empty))
-    {
+    if project_has_own_agent_list(project) {
         return None;
     }
     let mut statement = db
@@ -1524,6 +1521,26 @@ fn project_with_global_agent_list(db: &Connection, project: &Value) -> Option<Va
         }
     }
     None
+}
+
+fn project_has_own_agent_list(project: &Value) -> bool {
+    ["customAgents", "customAgentOrder"].iter().any(|key| {
+        project
+            .get(*key)
+            .and_then(Value::as_array)
+            .is_some_and(|items| !items.is_empty())
+    })
+}
+
+/// [`project_with_global_agent_list`] for a caller that holds no database connection (the resume
+/// plan); the database is opened only for a project with an empty agent list.
+pub(crate) fn project_with_global_agent_list_from_state(project: &Value) -> Option<Value> {
+    if cfg!(test) || project_has_own_agent_list(project) {
+        return None;
+    }
+    let paths = crate::paths::get_gxserver_paths(None);
+    let db = crate::storage::open_gxserver_database(&paths).ok()?;
+    project_with_global_agent_list(&db, project)
 }
 
 pub(crate) fn create_agent_session_default_title(

@@ -305,6 +305,11 @@ pub(crate) fn to_agent_resume_input(
     session: &Value,
     settings: &Map<String, Value>,
 ) -> AgentResumeInput {
+    // CDXC:NativeApprovals 2026-11-25 WHY: GitHub #750, a session in a project added after the
+    // last agent edit (an empty agent list) resumed without its agent's Full permissions or
+    // bypass flag and came back in Ask; it resumes from the global list a new session starts from.
+    let global_agents_project = project_with_global_agent_list_from_state(project);
+    let project = global_agents_project.as_ref().unwrap_or(project);
     let configured_agent_id = read_text_value(session, "agentId");
     let runtime_settings = object_field(session, "runtimeSettings");
     let launch_settings = object_field(session, "launchSettings");
