@@ -361,9 +361,9 @@ impl NativeChatView {
             .into_any_element()
     }
 
-    /// The opened card's rows: the reader's own note as a quoted line, each answered question once
-    /// (one line of question, its picks as quiet pills or its words, its note), then one "N skipped"
-    /// row that opens onto the skipped questions.
+    /// The opened card's rows: each answered question once (one line of question, its picks as quiet
+    /// pills or its words, its note), then one "N skipped" row that opens onto the skipped questions,
+    /// then the reader's own note as a quoted line, last as on the page.
     ///
     /// CDXC:SessionChat 2026-11-17 DECISION:
     /// User, of the opened card for a 9-question form skipped with a note: the note was big and bold, every skipped question was crammed into one comma-joined run after "Skipped" with mono Q tags and whole long titles, the links were flattened to plain text, and there was no structure. They picked Q3764 B from ~/.local/share/agent-work/Ghostex/answers-card/page.html ("Answers as pills, skips folded") and Q3765 "Yes, the same look on the phone". The reader's notes box ("Anything else?") leads as "Your note" over a quoted line in normal type (two lines, then More); each answered question shows its question on one muted line with no tag (the tag and the whole question are in its tooltip), then each pick as a quiet neutral pill (the core's `picks`), or the reader's own words in quotes with "Your own answer" when they picked Other, or the answer's words when it is text; skipped questions fold into one "N skipped" row, shut by default, that opens onto one dimmed line each with their links kept. Supersedes, on this card, the 2026-11-13 tags beside each question and the one line of skipped questions. The phone matches (PageAnswersCard.tsx).
@@ -418,31 +418,6 @@ impl NativeChatView {
                 label
             }
         };
-        // The reader's own notes come first: what they said about the whole form.
-        for (index, row) in rows
-            .iter()
-            .enumerate()
-            .filter(|(_, row)| row["extra"] == true)
-        {
-            column = column.child(
-                row_box(drawn)
-                    .child(
-                        div()
-                            .text_size(px(11.5 * s))
-                            .line_height(px(16.0 * s))
-                            .text_color(p.muted)
-                            .child(note_label.clone()),
-                    )
-                    .child(self.answers_note(
-                        text(row, "value"),
-                        &format!("{key}:note:{index}"),
-                        true,
-                        p,
-                        cx,
-                    )),
-            );
-            drawn += 1;
-        }
         for (index, row) in rows.iter().enumerate() {
             if row["skipped"] == true || row["extra"] == true {
                 continue;
@@ -520,6 +495,7 @@ impl NativeChatView {
             .collect();
         if !skipped.is_empty() {
             column = column.child(self.answers_skipped(answers, key, &skipped, drawn > 0, p, cx));
+            drawn += 1;
         }
         if more > 0 {
             column = column.child(div().pt(px(4.0 * s)).child(answer_aside(
@@ -527,6 +503,31 @@ impl NativeChatView {
                 false,
                 p,
             )));
+        }
+        // The reader's own notes come last, as on the page itself: what they said about the whole form.
+        for (index, row) in rows
+            .iter()
+            .enumerate()
+            .filter(|(_, row)| row["extra"] == true)
+        {
+            column = column.child(
+                row_box(drawn)
+                    .child(
+                        div()
+                            .text_size(px(11.5 * s))
+                            .line_height(px(16.0 * s))
+                            .text_color(p.muted)
+                            .child(note_label.clone()),
+                    )
+                    .child(self.answers_note(
+                        text(row, "value"),
+                        &format!("{key}:note:{index}"),
+                        true,
+                        p,
+                        cx,
+                    )),
+            );
+            drawn += 1;
         }
         column.into_any_element()
     }

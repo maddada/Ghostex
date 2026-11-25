@@ -553,13 +553,21 @@ pub fn project_page_answers(answers: &PageAnswers, form: Option<&QuestionForm>) 
             .collect(),
         other => vec![json!({"label": "", "value": display_value(other)})],
     };
-    let more = rows.len().saturating_sub(MAX_ROWS);
     let summary = answers_summary(&rows);
+    // CDXC:SessionChat 2026-11-25 DECISION: The user asked for their overall note ("Anything else?")
+    // at the bottom of the opened card, "where it actually goes in the real live page". The notes
+    // row comes after every question's row (and is never the one cut off by the row cap), so the
+    // desktop, web and phone cards, which draw rows in this order, all agree.
+    let (mut rows, notes): (Vec<Value>, Vec<Value>) =
+        rows.into_iter().partition(|row| row["extra"] != true);
+    let more = rows.len().saturating_sub(MAX_ROWS);
+    rows.truncate(MAX_ROWS);
+    rows.extend(notes);
     let mut out = json!({
         "pageId": answers.page_id,
         "title": plain_words(&answers.title),
         "summary": summary,
-        "rows": rows.into_iter().take(MAX_ROWS).collect::<Vec<_>>(),
+        "rows": rows,
         "more": more,
     });
     if let Some(by) = &answers.by {
