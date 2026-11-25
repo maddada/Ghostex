@@ -93,7 +93,9 @@ pub(super) const GHOSTEX_CLICK_SCRIPT: &str = r##"function ghostexClickScript(se
   return { bounds: { height: rect.height, width: rect.width, x: rect.x, y: rect.y }, selector };
 }"##;
 
-/// Where `ghostex_click` presses the mouse (#762): the element scrolled at once (never smoothly) to
+/// Where `ghostex_click` would press the mouse (#762), as the page's own script sees it: a hint
+/// only, since the page can change what this script sees; DevTools decides the press
+/// (click_hit_test.rs). The element scrolled at once (never smoothly) to
 /// the middle of the view, and its centre. `reachable` says that point reaches the element: inside
 /// the view, and the topmost element there is the element itself or inside it, but not a frame,
 /// object or embed inside it (a press there would go to the framed page, not the element).
@@ -145,19 +147,6 @@ pub(super) const GHOSTEX_CLICK_POINT_SCRIPT: &str = r##"function ghostexClickPoi
     setTimeout(remove, 15000);
   }
   return { bounds: { height: rect.height, width: rect.width, x: rect.x, y: rect.y }, fileUpload, inView, reachable, selector, x, y };
-}"##;
-
-/// Whether the point `ghostex_click` moved the mouse to still reaches the element, checked after
-/// the move and right before the press, so a page that slides a frame or another element under the
-/// pointer on the move (or scrolls on its own) gets the script click instead of the press.
-pub(super) const GHOSTEX_CLICK_RECHECK_SCRIPT: &str = r##"function ghostexClickRecheckScript(selector, x, y) {
-  const element = document.querySelector(selector);
-  if (!element) return false;
-  const embedded = (node) => node instanceof HTMLIFrameElement || node instanceof HTMLFrameElement || node instanceof HTMLObjectElement || node instanceof HTMLEmbedElement;
-  const rect = element.getBoundingClientRect();
-  const inside = x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom;
-  const hit = document.elementFromPoint(x, y);
-  return inside && Boolean(hit && (hit === element || (element.contains(hit) && !embedded(hit))));
 }"##;
 
 /// What the guard `GHOSTEX_CLICK_POINT_SCRIPT` set up saw (and removes it): which element each

@@ -47,8 +47,14 @@ thread_local! {
     /// (hidden_page_dialogs.rs).
     static RELAY_AGENT_INPUT: RefCell<HashMap<c_int, Instant>> = RefCell::new(HashMap::new());
     /// Renumbered command id -> CEF browser id, for those acting commands the page has not
-    /// answered yet: while one waits, the agent counts as acting now.
+    /// answered yet: while one of a live session waits, the agent counts as acting now. They stay
+    /// after their session ends (an orphan), so a press the page queued still re-stamps when it
+    /// lands.
     static RELAY_AGENT_PENDING: RefCell<HashMap<i64, c_int>> = RefCell::new(HashMap::new());
+    /// CEF browser id -> when the page's last session ended with acting commands unanswered: until
+    /// they are answered, a chooser on the page is the agent's unless a real press on that page
+    /// came after this.
+    static RELAY_ORPHANED: RefCell<HashMap<c_int, Instant>> = RefCell::new(HashMap::new());
 }
 
 /// The DevTools commands that can run the page's script: input as a person would give it (a
@@ -67,19 +73,46 @@ fn stamp_agent_input(browser_id: c_int) {
     RELAY_AGENT_INPUT.with(|input| input.borrow_mut().insert(browser_id, Instant::now()));
 }
 
-/// How long ago a DevTools session last acted on `browser_id`'s page: no time at all while one of
-/// its acting commands still waits for the page.
-pub(crate) fn cef_devtools_relay_agent_input_age(browser_id: c_int) -> Option<std::time::Duration> {
+/// What the DevTools sessions did on a page, for its file chooser rule (hidden_page_dialogs.rs).
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct AgentInput {
+    /// An acting command of a live session waits for the page: the agent acts now.
+    pub(crate) waiting: bool,
+    /// How long ago a session last acted on the page (sent or got the answer to an acting command).
+    pub(crate) last: Option<std::time::Duration>,
+    /// How long ago the page's last session ended with acting commands still unanswered.
+    pub(crate) orphaned: Option<std::time::Duration>,
+}
+
+/// Whether `relay_id` belongs to a session that is still attached.
+fn has_live_session(relay_id: i64) -> bool {
+    RELAY_PENDING.with(|pending| pending.borrow().contains_key(&relay_id))
+}
+
+/// Whether an acting command whose session ended still waits for `browser_id`'s page.
+fn has_orphans(browser_id: c_int) -> bool {
+    RELAY_AGENT_PENDING.with(|pending| {
+        pending
+            .borrow()
+            .iter()
+            .any(|(id, pending_browser)| *pending_browser == browser_id && !has_live_session(*id))
+    })
+}
+
+/// What DevTools sessions did on `browser_id`'s page.
+pub(crate) fn cef_devtools_relay_agent_input(browser_id: c_int) -> AgentInput {
     let waiting = RELAY_AGENT_PENDING.with(|pending| {
         pending
             .borrow()
-            .values()
-            .any(|pending_browser| *pending_browser == browser_id)
+            .iter()
+            .any(|(id, pending_browser)| *pending_browser == browser_id && has_live_session(*id))
     });
-    if waiting {
-        return Some(std::time::Duration::ZERO);
+    AgentInput {
+        waiting,
+        last: RELAY_AGENT_INPUT.with(|input| input.borrow().get(&browser_id).map(Instant::elapsed)),
+        orphaned: RELAY_ORPHANED
+            .with(|orphaned| orphaned.borrow().get(&browser_id).map(Instant::elapsed)),
     }
-    RELAY_AGENT_INPUT.with(|input| input.borrow().get(&browser_id).map(Instant::elapsed))
 }
 
 /// Tells the DevTools sessions of `browser_id`'s page that Ghostex cancelled a file chooser their
@@ -419,29 +452,47 @@ fn detach_session(session: u64) {
             .borrow_mut()
             .retain(|_, (owner, _)| *owner != session)
     });
-    // A command the page had not answered may still run: it counts as acting now.
-    let dropped: Vec<c_int> = RELAY_AGENT_PENDING.with(|agent_pending| {
-        let mut agent_pending = agent_pending.borrow_mut();
-        let ids: Vec<i64> = agent_pending
-            .keys()
-            .copied()
-            .filter(|id| !RELAY_PENDING.with(|pending| pending.borrow().contains_key(id)))
-            .collect();
-        ids.iter()
-            .filter_map(|id| agent_pending.remove(id))
-            .collect()
-    });
-    for browser_id in dropped {
-        stamp_agent_input(browser_id);
+    // A command the page had not answered may still run (a press queued behind a busy script):
+    // it stays pending, so its answer re-stamps, and until then the page's choosers are the
+    // agent's unless a real press on it comes after this hang-up.
+    let browser_id = detached.browser_id;
+    if has_orphans(browser_id) {
+        RELAY_ORPHANED.with(|orphaned| orphaned.borrow_mut().insert(browser_id, Instant::now()));
     }
-    let still_attached = RELAY_SESSIONS.with(|sessions| {
+    forget_observer_when_idle(browser_id);
+}
+
+/// Whether a session is attached to `browser_id`'s page.
+fn page_has_session(browser_id: c_int) -> bool {
+    RELAY_SESSIONS.with(|sessions| {
         sessions
             .borrow()
             .values()
-            .any(|attached| attached.browser_id == detached.browser_id)
-    });
-    if !still_attached {
-        RELAY_OBSERVERS.with(|observers| observers.borrow_mut().remove(&detached.browser_id));
+            .any(|attached| attached.browser_id == browser_id)
+    })
+}
+
+/// Once no orphaned command waits for an answer, the page's hang-up mark goes, and so does its
+/// message observer when no session is attached either.
+fn forget_observer_when_idle(browser_id: c_int) {
+    if has_orphans(browser_id) {
+        return;
+    }
+    RELAY_ORPHANED.with(|orphaned| orphaned.borrow_mut().remove(&browser_id));
+    if !page_has_session(browser_id) {
+        RELAY_OBSERVERS.with(|observers| observers.borrow_mut().remove(&browser_id));
+    }
+}
+
+wrap_task! {
+    struct GhostexDevtoolsRelayIdleCheck {
+        browser_id: c_int,
+    }
+
+    impl Task {
+        fn execute(&self) {
+            forget_observer_when_idle(self.browser_id);
+        }
     }
 }
 
@@ -449,6 +500,7 @@ fn detach_session(session: u64) {
 pub(crate) fn cef_devtools_relay_browser_closed(browser_id: c_int) {
     RELAY_TARGET_IDS.with(|ids| ids.borrow_mut().remove(&browser_id));
     RELAY_AGENT_INPUT.with(|input| input.borrow_mut().remove(&browser_id));
+    RELAY_ORPHANED.with(|orphaned| orphaned.borrow_mut().remove(&browser_id));
     RELAY_AGENT_PENDING.with(|pending| {
         pending
             .borrow_mut()
@@ -485,19 +537,25 @@ wrap_dev_tools_message_observer! {
             let session = match parsed.get("id").and_then(Value::as_i64) {
                 // A reply: only to a command a session sent; Ghostex's own stay here.
                 Some(id) => {
+                    // The page handled an acting command just now (a press it queued behind a
+                    // busy script lands only now), also one whose session already hung up: the
+                    // agent's time starts again (hidden_page_dialogs.rs).
+                    let acted =
+                        RELAY_AGENT_PENDING.with(|pending| pending.borrow_mut().remove(&id));
+                    if let Some(browser_id) = acted {
+                        stamp_agent_input(browser_id);
+                    }
                     let Some((session, client_id)) =
                         RELAY_PENDING.with(|pending| pending.borrow_mut().remove(&id))
                     else {
+                        // An orphan's answer goes nowhere; the observer goes once none is left
+                        // (later, not from inside its own call).
+                        if acted.is_some() && !has_orphans(self.browser_id) {
+                            let mut task = GhostexDevtoolsRelayIdleCheck::new(self.browser_id);
+                            post_task(ThreadId::UI, Some(&mut task));
+                        }
                         return 0;
                     };
-                    // The page handled an acting command just now (a press it queued behind a
-                    // busy script lands only now): the agent's time starts again
-                    // (hidden_page_dialogs.rs).
-                    if let Some(browser_id) =
-                        RELAY_AGENT_PENDING.with(|pending| pending.borrow_mut().remove(&id))
-                    {
-                        stamp_agent_input(browser_id);
-                    }
                     parsed["id"] = client_id;
                     session
                 }

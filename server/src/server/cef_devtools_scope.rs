@@ -3,6 +3,7 @@
 //!
 //! CDXC:Browser 2026-11-26 DECISION:
 //! Coordinator, on the user's behalf (security review of #762, findings B1 and B2): the relay is the one place every DevTools caller passes, so the limits live here and not in `ghostex browser mcp`, which an agent can skip by opening the page socket itself. A session's own token (`gxs_`) reaches only its own project's Browser tabs (the app's `listBrowserPages` answer, never Ghostex's own pages, Live pages or another project's tabs) and only the commands the browser tools send (`SESSION_METHODS`); `Browser.*`, `Target.*`, cookie reads, download behaviour and file drags are refused, a navigation must be http, https or about:blank, and an upload may only name files in the session's project folder, its own folder (worktree) or Ghostex's attachment folders, resolved after symlinks and checked with gxserver's own paths, never the CLI's `HOME` or `GHOSTEX_HOME`. The token file, the owner session and a paired phone keep the full protocol (the same user, by design). Every upload goes into the security log with its files, the page's host and who asked.
+//! Coordinator, on the user's behalf (re-check of #762, N2): `ghostex_click` decides its mouse press through DevTools' DOM domain instead of the page's script (server/src/ghostex_cli/browser_mcp/click_hit_test.rs), so a session may also read the DOM: find an element (`DOM.getDocument` without piercing, `DOM.querySelector`), describe a node and its subtree (`DOM.describeNode`, which may pierce shadow roots and the documents of frames the page holds in its own process, that is same-site frames: cross-site frames run in other processes and stay out of reach), its boxes (`DOM.getContentQuads`), the node at a point (`DOM.getNodeForLocation`), and the page's frames and view size (`Page.getFrameTree`, `Page.getLayoutMetrics`). All of them only read.
 //! SEE-ALSO: server/src/ghostex_cli/browser_mcp/mcp_tools.rs (the tools these commands serve), apps/desktop/src/cef/shell/devtools_relay.rs (the host, which attaches a scoped session only by the page's DevTools target id).
 
 use super::*;
@@ -14,12 +15,19 @@ const PROJECT_PAGES_TIMEOUT_MS: u64 = 5_000;
 
 /// The commands a session's own token may send: the ones `ghostex browser mcp` uses.
 const SESSION_METHODS: &[&str] = &[
+    "DOM.describeNode",
+    "DOM.getContentQuads",
+    "DOM.getDocument",
+    "DOM.getNodeForLocation",
+    "DOM.querySelector",
     "DOM.setFileInputFiles",
     "Input.dispatchKeyEvent",
     "Input.dispatchMouseEvent",
     "Log.enable",
     "Page.captureScreenshot",
     "Page.enable",
+    "Page.getFrameTree",
+    "Page.getLayoutMetrics",
     "Page.navigate",
     "Runtime.enable",
     "Runtime.evaluate",
@@ -307,6 +315,13 @@ pub(super) fn check_command(text: &str, limits: &RelayLimits) -> Checked {
         {
             return refuse(
                 "An agent's key presses cannot carry editor commands (commands); type the keys instead."
+                    .to_string(),
+            );
+        }
+        // The whole document at once, through frames, is more than finding an element needs.
+        "DOM.getDocument" if command.pointer("/params/pierce") == Some(&Value::Bool(true)) => {
+            return refuse(
+                "An agent's browser tools read the document without piercing (pierce); describe one node with DOM.describeNode instead."
                     .to_string(),
             );
         }

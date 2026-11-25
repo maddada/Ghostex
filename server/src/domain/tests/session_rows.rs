@@ -637,3 +637,49 @@ fn update_and_remove_crud_paths_report_not_found_for_unvalidated_ids() {
         "Session undefined/undefined does not exist."
     );
 }
+
+#[test]
+fn a_list_id_names_no_row_even_with_one_matching_item() {
+    let (_temp, db) = open_test_database();
+    let repository = DomainRepository::new(&db, "S7k");
+    let project = repository
+        .create_project(
+            json!({ "name": "List IDs", "path": std::env::temp_dir() })
+                .as_object()
+                .expect("project params"),
+        )
+        .expect("project created");
+    let project_id = value_str(&project, "projectId").to_string();
+    let session = repository
+        .create_session(
+            json!({ "projectId": project_id, "title": "Agent" })
+                .as_object()
+                .expect("session params"),
+            false,
+        )
+        .expect("session created");
+    let session_id = value_str(&session, "sessionId").to_string();
+    let listed = json!({ "projectId": [project_id], "sessionId": [session_id], "agentId": null });
+    let listed = listed.as_object().expect("list id params");
+    for error in [
+        repository.update_session(listed).expect_err("update"),
+        repository.remove_session(listed).expect_err("remove"),
+        repository
+            .read_session_agent_note(listed)
+            .expect_err("note"),
+        repository
+            .update_project(
+                json!({ "projectId": [project_id], "path": "/" })
+                    .as_object()
+                    .unwrap(),
+            )
+            .expect_err("project"),
+    ] {
+        assert_eq!(error.code, "notFound", "{}", error.message);
+    }
+    // The plain ids still find the row.
+    let plain = json!({ "projectId": project_id, "sessionId": session_id, "title": "Renamed" });
+    repository
+        .update_session(plain.as_object().unwrap())
+        .expect("plain ids update");
+}

@@ -250,7 +250,10 @@ fn dot_ends_sentence(after: Option<char>) -> bool {
             || ends_bare_link(character)
             || matches!(
                 character,
-                '\u{2E80}'..='\u{9FFF}'
+                // Not the enclosed and squared forms (U+3200 to U+33FF: ㏄, ㎏, ㉑), which a
+                // browser also folds to ASCII in a host (re-check 3 of #762).
+                '\u{2E80}'..='\u{31FF}'
+                    | '\u{3400}'..='\u{9FFF}'
                     | '\u{AC00}'..='\u{D7AF}'
                     | '\u{F900}'..='\u{FAFF}'
                     // Full-width forms, but not their letters and digits (０-９, Ａ-Ｚ, ａ-ｚ),
@@ -488,6 +491,18 @@ mod tests {
         assert!(autolinks("https://bank.com。ａｕ/login").is_empty());
         assert!(autolinks("https://bank.com．ＡＵ").is_empty());
         assert!(autolinks("https://bank.com。１/x").is_empty());
+        // So are the enclosed and squared forms (㏄ is "cc", ㉑ is "21").
+        for text in [
+            "https://bank.com。㏄/login",
+            "https://bank.com。㎏",
+            "https://bank.com．㉑/x",
+        ] {
+            assert!(autolinks(text).is_empty(), "{text}");
+        }
+        assert_eq!(
+            autolinks("见 https://example.com。中国"),
+            ["https://example.com"]
+        );
         assert_eq!(
             autolinks("见 https://example.com。（下）"),
             ["https://example.com"]

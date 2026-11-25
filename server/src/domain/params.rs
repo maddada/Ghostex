@@ -75,7 +75,7 @@ pub(crate) fn read_unvalidated_project_lookup_id(params: &Map<String, Value>) ->
         .get("projectId")
         .and_then(Value::as_str)
         .map(str::to_string)
-        .unwrap_or_else(|| js_string(params.get("projectId")))
+        .unwrap_or_else(|| lookup_text(params.get("projectId")))
 }
 
 pub fn read_session_id(params: &Map<String, Value>) -> DomainResult<String> {
@@ -97,7 +97,19 @@ pub(crate) fn read_unvalidated_session_lookup_id(params: &Map<String, Value>) ->
         .get("sessionId")
         .and_then(Value::as_str)
         .map(str::to_string)
-        .unwrap_or_else(|| js_string(params.get("sessionId")))
+        .unwrap_or_else(|| lookup_text(params.get("sessionId")))
+}
+
+/// The text a lookup id that is not a string is looked up as: JavaScript's `String(value)`, except
+/// that a list keeps its brackets, so no list (`["G1"]`) names the row its one item names.
+///
+/// CDXC:Security 2026-11-26 DECISION:
+/// Coordinator, on the user's behalf (re-checks 2 and 3 of #762): guards before a domain call read ids only when they are strings, so an id the lookup turned into a row's id another way (an array of one string) reached a row the guards never saw: on `/api/updateSession` that skipped the agent mark, GBot mark, thread shelf and approval guards. Every route that looks a session or project up through these two helpers (updates, removes, relocations, session notes, the notification feed) now finds no row for a list, the same as its guards; the route-level refusal of non-text ids stays on the two update routes (server/src/session_own_limits.rs).
+fn lookup_text(value: Option<&Value>) -> String {
+    match value {
+        Some(list @ Value::Array(_)) => list.to_string(),
+        other => js_string(other),
+    }
 }
 
 pub(crate) fn js_string(value: Option<&Value>) -> String {

@@ -17,6 +17,7 @@ Runtime.evaluate, so they must not be "translated" to Rust.
 mod agent_pages;
 mod cdp_client;
 mod cdp_pages;
+mod click_hit_test;
 mod command;
 mod js_values;
 mod mcp_server;
@@ -26,6 +27,7 @@ mod page_scripts;
 use agent_pages::*;
 use cdp_client::*;
 use cdp_pages::*;
+use click_hit_test::*;
 pub use command::*;
 use js_values::*;
 use mcp_server::*;

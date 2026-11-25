@@ -6,6 +6,7 @@
 //! Coordinator, on the user's behalf (security review of #762, findings B4 and B12): a page the user cannot see (an agent's background page, a tab behind another, a parked project's Browser) must not bring a native panel up in front of them, because a file they pick in an Open panel goes to that page, and a Save panel they did not ask for reads as their own download. So a hidden page's file chooser is cancelled (the page gets the same answer as a person pressing Cancel; an agent fills upload fields with `ghostex_set_input_files` instead), and its download is held, without a panel, until the page is shown, when the Save panel opens as usual. One download waits per page; another one while it waits is cancelled. A sign-in popup from a hidden page opens as a background tab instead of its own window (browser_handlers.rs).
 //! Coordinator, on the user's behalf (#762 follow-up, replacing the DevTools interception that cancelled every chooser while an agent was attached): on a page on screen, a file chooser opens normally when a person opened it, and is cancelled when the agent's own input did. The page cannot tell them apart (DevTools input is trusted and gives the page user activation), so the app compares when a DevTools session last acted on the page (devtools_relay.rs) with when a real person last pressed a key or mouse button on that same page's view. The agent's input being the newer one, within the 10 seconds a page's activation can last, cancels the chooser, and the agent's tools are told (`Ghostex.fileChooserCancelled`).
 //! Coordinator, on the user's behalf (re-check of #762, N3): the agent's time is when the page answered its command, not only when it was sent, and counts as now while the command waits, so a page kept busy until a queued press lands cannot let that press open a chooser; every command that can run page script counts (input, scripts, DOM changes, navigations). A real press counts only on the page's own view, never anywhere else on the computer: macOS reports mouse-downs from the page's view and key-downs from the app's `sendEvent:` observer for the view holding focus, Windows from input hooks on the thread that owns Chromium's windows (mouse moves do not count), and Linux from the XI2 presses on Chromium's window (mouse only; a chooser opened with the keyboard soon after an agent's input is cancelled, as on Wayland, where no press is seen).
+//! Coordinator, on the user's behalf (re-check 2 of #762, R2): hanging up while a press is still queued does not end the agent's time. Its unanswered acting commands stay pending after the session ends, and their answers re-stamp; until they come, a chooser on that page is the agent's unless a real press on that page came after the hang-up.
 //! SEE-ALSO: apps/desktop/src/cef/shell/devtools_relay.rs (when an agent's DevTools session last acted on each page), apps/desktop/src/cef/shell/browser.rs (`set_visible`, which marks a page hidden and lets its held download go).
 
 use super::*;
@@ -56,14 +57,81 @@ fn since_real_press_on(browser: &cef::Browser) -> Option<std::time::Duration> {
 }
 
 /// Whether a file chooser `browser` asks for now came from an agent's input rather than a
-/// person's: an agent's DevTools session acted on the page within `AGENT_GESTURE_WINDOW` (or still
-/// waits for the page to answer it), and no real press on this page came after it.
+/// person's: an agent's live DevTools session still waits for the page to answer an acting
+/// command; or a session acted on the page within `AGENT_GESTURE_WINDOW` and no real press on this
+/// page came after it; or the page's last session hung up with acting commands still unanswered
+/// and no real press on this page came after the hang-up.
 fn opened_by_agent_input(browser: &cef::Browser) -> bool {
-    let Some(agent) = cef_devtools_relay_agent_input_age(browser.identifier()) else {
-        return false;
-    };
-    agent < AGENT_GESTURE_WINDOW
-        && !since_real_press_on(browser).is_some_and(|since_person| since_person < agent)
+    agent_owns_chooser(
+        cef_devtools_relay_agent_input(browser.identifier()),
+        since_real_press_on(browser),
+    )
+}
+
+/// `opened_by_agent_input` given what the sessions did and how long ago a real press on the page
+/// came (`pressed`).
+fn agent_owns_chooser(agent: AgentInput, pressed: Option<std::time::Duration>) -> bool {
+    if agent.waiting {
+        return true;
+    }
+    let no_press_since = |age: std::time::Duration| !pressed.is_some_and(|since| since < age);
+    agent
+        .last
+        .is_some_and(|last| last < AGENT_GESTURE_WINDOW && no_press_since(last))
+        || agent.orphaned.is_some_and(no_press_since)
+}
+
+#[cfg(test)]
+mod chooser_rule_tests {
+    use super::*;
+    use std::time::Duration;
+
+    const fn secs(value: u64) -> Option<Duration> {
+        Some(Duration::from_secs(value))
+    }
+
+    #[test]
+    fn a_person_s_chooser_opens_and_an_agent_s_does_not() {
+        let acted = |last| AgentInput {
+            last,
+            ..AgentInput::default()
+        };
+        // No agent, or an agent long ago: the person's.
+        assert!(!agent_owns_chooser(AgentInput::default(), None));
+        assert!(!agent_owns_chooser(acted(secs(30)), None));
+        // The agent just acted and nobody pressed since: the agent's.
+        assert!(agent_owns_chooser(acted(secs(2)), None));
+        assert!(agent_owns_chooser(acted(secs(2)), secs(5)));
+        // A real press on the page came after it: the person's.
+        assert!(!agent_owns_chooser(acted(secs(2)), secs(1)));
+        // A live session's command still waits: the agent's, whatever was pressed.
+        let waiting = AgentInput {
+            waiting: true,
+            ..AgentInput::default()
+        };
+        assert!(agent_owns_chooser(waiting, Some(Duration::ZERO)));
+    }
+
+    #[test]
+    fn a_hang_up_with_a_queued_press_stays_the_agent_s_until_a_real_press() {
+        // R2: the session hung up 15 s ago with a press still queued, past the 10 s window.
+        let orphaned = AgentInput {
+            last: secs(15),
+            orphaned: secs(15),
+            waiting: false,
+        };
+        assert!(agent_owns_chooser(orphaned, None));
+        assert!(agent_owns_chooser(orphaned, secs(20)));
+        // The person pressed on the page after the hang-up: theirs.
+        assert!(!agent_owns_chooser(orphaned, secs(3)));
+        // The queued press was answered just now (re-stamped), after the person's press: the agent's.
+        let answered = AgentInput {
+            last: secs(0),
+            orphaned: None,
+            waiting: false,
+        };
+        assert!(agent_owns_chooser(answered, secs(3)));
+    }
 }
 
 thread_local! {

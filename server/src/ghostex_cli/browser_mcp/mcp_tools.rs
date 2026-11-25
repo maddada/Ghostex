@@ -201,6 +201,10 @@ pub(super) fn browser_mcp_snapshot(args: &Value, state: &mut McpState) -> CliRes
 /// once rather than smoothly, the point is checked again after the mouse moved there and right
 /// before the press, a guard in the page swallows a press that lands outside the element, and the
 /// answer says which element took the click.
+/// Coordinator, on the user's behalf (re-check of #762, N2): whether the press goes is decided
+/// through DevTools' DOM domain, out of the page script's reach (click_hit_test.rs); the page
+/// script's own answers (its hit test, its guard) can only make the tool fall back to the script
+/// click, never make it press.
 pub(super) fn browser_mcp_click(args: &Value, state: &mut McpState) -> CliResult<Value> {
     let page = get_ghostex_cdp_client(args, state)?;
     let page_id = page_id_of(&page);
@@ -213,17 +217,27 @@ pub(super) fn browser_mcp_click(args: &Value, state: &mut McpState) -> CliResult
         json!([selector, guard]),
     )?
     .unwrap_or(Value::Null);
-    if point.get("fileUpload") == Some(&Value::Bool(true)) {
+    let target = click_target(state, &page_id, &selector)?;
+    if point.get("fileUpload") == Some(&Value::Bool(true))
+        || target.as_ref().is_some_and(|target| target.file_field)
+    {
         return Err(CliError::Other(format!(
             "{selector} is a file upload field (or holds one). Use ghostex_set_input_files with absolute paths: clicking it would open a file chooser on the user's screen."
         )));
     }
-    let reachable = point.get("reachable") == Some(&Value::Bool(true));
-    let pressed = if reachable {
-        press_mouse_at(state, &page_id, &selector, &point)?
-    } else {
-        Pressed::NotTried
+    let page_says_reachable = point.get("reachable") == Some(&Value::Bool(true));
+    let mut refusal = None;
+    let pressed = match (&target, target.as_ref().and_then(|target| target.point)) {
+        (Some(target), Some(at)) if page_says_reachable => {
+            refusal = press_refusal(state, &page_id, target, at)?;
+            match refusal {
+                None => press_mouse_at(state, &page_id, target, at, &mut refusal)?,
+                Some(_) => Pressed::NotTried,
+            }
+        }
+        _ => Pressed::NotTried,
     };
+    let reachable = page_says_reachable;
     let mut clicked = if pressed == Pressed::Pressed {
         json!({ "method": "mouse" })
     } else {
@@ -232,12 +246,23 @@ pub(super) fn browser_mcp_click(args: &Value, state: &mut McpState) -> CliResult
                 .unwrap_or_else(|| json!({}));
         clicked["method"] = json!("script");
         clicked["reason"] = json!(match pressed {
-            Pressed::Moved => "Something else came under the pointer after it moved there",
-            Pressed::Refused => "The page did not take the mouse",
-            _ if point.get("inView") == Some(&Value::Bool(false)) => {
-                "The element has no size or is outside the view"
+            Pressed::Moved => refusal.map_or(
+                "Something else came under the pointer after it moved there".to_string(),
+                |why| format!("{why} after the pointer moved there"),
+            ),
+            Pressed::Refused => "The page did not take the mouse".to_string(),
+            Pressed::Covered => refusal.map_or(
+                "Something else came under the pointer while the button was down".to_string(),
+                |why| format!("{why} while the button was down (released elsewhere)"),
+            ),
+            _ if target.as_ref().is_some_and(|target| target.point.is_none())
+                || point.get("inView") == Some(&Value::Bool(false)) =>
+            {
+                "The element has no size or is outside the view".to_string()
             }
-            _ => "Another element or a frame covers the element's centre",
+            _ => refusal
+                .unwrap_or("Another element or a frame covers the element's centre")
+                .to_string(),
         });
         clicked
     };
@@ -320,25 +345,26 @@ enum Pressed {
     Refused,
     /// After the move the point no longer reached the element; nothing was pressed.
     Moved,
+    /// While the button was down the point no longer reached the element: it was released far
+    /// away, so no click came of it.
+    Covered,
     /// Pressed and released on the element.
     Pressed,
 }
 
-/// Moves the mouse to `point`, checks the point still reaches the element, then presses and
-/// releases the left button there. Nothing is pressed unless the check passed, so the caller's
-/// script click cannot click twice.
+/// Moves the mouse to `at`, waits a moment, checks through DevTools that the point still reaches
+/// the element (click_hit_test.rs), then presses the left button there at once, checks again while
+/// it is down and releases it there, or far away when something else came under it (a click needs
+/// the release on what took the press). Only a press that passed both checks counts, so the
+/// caller's script click cannot click twice; `refusal` says why it did not.
 fn press_mouse_at(
     state: &mut McpState,
     page_id: &str,
-    selector: &str,
-    point: &Value,
+    target: &ClickTarget,
+    at: (i64, i64),
+    refusal: &mut Option<&'static str>,
 ) -> CliResult<Pressed> {
-    let (Some(x), Some(y)) = (
-        point.get("x").and_then(Value::as_f64),
-        point.get("y").and_then(Value::as_f64),
-    ) else {
-        return Ok(Pressed::Refused);
-    };
+    let (x, y) = at;
     let event = |kind: &str, button: &str, buttons: u64, click_count: u64| {
         json!({
             "type": kind,
@@ -360,13 +386,9 @@ fn press_mouse_at(
     {
         return Ok(Pressed::Refused);
     }
-    let still_reachable = evaluate_function(
-        state,
-        page_id,
-        GHOSTEX_CLICK_RECHECK_SCRIPT,
-        json!([selector, x, y]),
-    )?;
-    if still_reachable != Some(Value::Bool(true)) {
+    settle_after_move();
+    *refusal = press_refusal(state, page_id, target, at)?;
+    if refusal.is_some() {
         return Ok(Pressed::Moved);
     }
     client_call(
@@ -375,6 +397,23 @@ fn press_mouse_at(
         "Input.dispatchMouseEvent",
         event("mousePressed", "left", 1, 1),
     )?;
+    *refusal = press_refusal(state, page_id, target, at)?;
+    if refusal.is_some() {
+        let (far_x, far_y) = target.far_corner(at);
+        for kind in ["mouseMoved", "mouseReleased"] {
+            client_call(
+                state,
+                page_id,
+                "Input.dispatchMouseEvent",
+                json!({
+                    "type": kind, "x": far_x, "y": far_y, "button": "left",
+                    "buttons": if kind == "mouseMoved" { 1 } else { 0 },
+                    "clickCount": 1, "pointerType": "mouse",
+                }),
+            )?;
+        }
+        return Ok(Pressed::Covered);
+    }
     client_call(
         state,
         page_id,
