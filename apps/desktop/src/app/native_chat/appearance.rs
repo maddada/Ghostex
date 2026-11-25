@@ -112,7 +112,9 @@ impl ChatAppearance {
             self.card_background = wash(true, 0.5);
             self.card_panel = wash(true, 0.5);
             self.card_footer = wash(true, 0.3);
-            self.composer_background = self.input;
+            // The Inbox card's wash, as without glass (CDXC:SessionChat 2026-11-25 on
+            // `composer_background` in `derive`); dark mode's input wash already matches it.
+            self.composer_background = self.card_panel;
             self.composer_border = wash(false, 0.08);
             self.card_row = self.input;
         } else {
@@ -416,8 +418,12 @@ impl ChatAppearance {
             },
             lane_heading: None,
             composer_border: lifted(0.08, 0.067),
+            // CDXC:SessionChat 2026-11-25 DECISION: User, of the chat box under the Inbox: "pls
+            // revert the chat box to look similar to the inbox above it ... 2- bg color". Light
+            // mode takes the cards' panel tone (`card_panel`, 60% toward white), the Inbox card's,
+            // instead of 30%; dark mode was already within half a percent of it and stays.
             composer_background: if light {
-                raised(0.3)
+                raised(0.6)
             } else {
                 lifted(0.03, 0.0)
             },
