@@ -577,9 +577,33 @@ pub fn omp_permission_dialog_shows(text: &str, summary: &str) -> Option<bool> {
     Some(shown_command.is_some_and(|command| wanted.starts_with(&command)))
 }
 
+/// What OMP's live approval dialog asks about: the tool its `Allow tool: <name>` title names, and
+/// whether it shows anything of the request besides that title, the MCP origin and the reason
+/// (OMP 18.21 draws a tool's `formatApprovalDetails`, an MCP tool's `Arguments:`, or nothing).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OmpPermissionDialog {
+    pub tool: String,
+    pub shows_request: bool,
+}
+
+/// The live approval dialog, `None` when none is up (or it reads as "deny and send").
+pub fn read_omp_permission_dialog(text: &str) -> Option<OmpPermissionDialog> {
+    read_omp_approval_frame(text).map(|(_, _, dialog)| dialog)
+}
+
 fn read_omp_permission_picker(
     text: &str,
 ) -> Option<(SessionChatTerminalPicker, std::ops::Range<usize>)> {
+    read_omp_approval_frame(text).map(|(picker, request, _)| (picker, request))
+}
+
+fn read_omp_approval_frame(
+    text: &str,
+) -> Option<(
+    SessionChatTerminalPicker,
+    std::ops::Range<usize>,
+    OmpPermissionDialog,
+)> {
     let (lines, composer, on_composer, raw_rows) = scan_lines(text);
     let (start, end) = rounded_frames(&lines).into_iter().find(|&(start, end)| {
         composer != Some(start)
@@ -633,6 +657,16 @@ fn read_omp_permission_picker(
         .filter(|line| !line.is_empty())
         .collect::<Vec<_>>()
         .join(" ");
+    let title = inner(&lines[start])
+        .trim_matches(|c| matches!(c, '\u{256d}' | '\u{256e}' | '\u{2500}'))
+        .trim()
+        .to_string();
+    let shows_request = lines[start + 1..divider - rows.len()]
+        .iter()
+        .map(|line| inner(line))
+        .any(|line| {
+            !line.is_empty() && !line.starts_with("Origin:") && !line.starts_with("Reason:")
+        });
     Some((
         SessionChatTerminalPicker {
             kind: SessionChatTerminalPickerKind::OmpPermission,
@@ -641,6 +675,14 @@ fn read_omp_permission_picker(
             selected_index,
         },
         request,
+        OmpPermissionDialog {
+            tool: title
+                .strip_prefix("Allow tool:")
+                .map(str::trim)
+                .unwrap_or_default()
+                .to_string(),
+            shows_request,
+        },
     ))
 }
 

@@ -53,11 +53,7 @@ async fn verify_answer_targets_shown_prompt(
     target: &SessionChatSendTarget,
     params: &serde_json::Map<String, Value>,
 ) -> Result<(), DomainStateError> {
-    let changed = || DomainStateError {
-        code: "invalidState",
-        message: "The prompt changed before your answer arrived. Answer the one showing now."
-            .to_string(),
-    };
+    let changed = prompt_changed;
     if let Some(shown) = params
         .get("noticeDetectedAt")
         .and_then(Value::as_str)
@@ -111,6 +107,104 @@ async fn verify_answer_targets_shown_prompt(
         }
     }
     Ok(())
+}
+
+fn prompt_changed() -> DomainStateError {
+    DomainStateError {
+        code: "invalidState",
+        message: "The prompt changed before your answer arrived. Answer the one showing now."
+            .to_string(),
+    }
+}
+
+/*
+CDXC:SessionChat 2026-11-25 DECISION:
+User: Ghostex applies an approval card's answer only where it can tell the answer belongs to the
+request on screen; where it cannot, the card points to the terminal instead of offering buttons
+that do nothing. OMP's approval dialog shows its request only when the tool draws one (bash's
+`Command:`, an MCP tool's `Arguments:`, a tool's own approval details); for every other tool it
+shows just "Allow tool: <name>", the same for any two calls of that tool, and OMP's keys answer
+whichever dialog is up. So the hook card's Allow and Deny reach OMP only through a dialog that
+shows the card's tool and request. A dialog that shows no request is answered in the terminal, a
+dialog for another tool or request refuses the answer as changed, and a card that names neither
+its tool nor (by its call id) the stored card cannot be told apart from another. With no dialog on
+screen the card's prompt is gone (changed), and a screen Ghostex could not read is answered in the
+terminal: either way no key is typed, since Deny's Escape would land in whatever OMP shows (a
+dialog the capture missed, or its running turn). Since 2026-11-07 this held for Allow only; Deny
+went to whatever dialog was up.
+SEE-ALSO: server/src/session_chat_omp_blocking.rs (`read_omp_permission_dialog`), packages/gx-chat-core/src/questions/actions.rs (`with_shown_approval`).
+*/
+fn verify_omp_hook_answer_targets_dialog(
+    session: &Value,
+    params: &serde_json::Map<String, Value>,
+    screen: Option<&str>,
+) -> Result<(), DomainStateError> {
+    let answer_in_terminal = |message: &str| DomainStateError {
+        code: crate::session_chat_send::ANSWER_IN_TERMINAL,
+        message: message.to_string(),
+    };
+    let Some(screen) = screen else {
+        return Err(answer_in_terminal(
+            "Ghostex couldn't read OMP's terminal. Answer it in the terminal.",
+        ));
+    };
+    let Some(dialog) = crate::session_chat_omp_blocking::read_omp_permission_dialog(screen) else {
+        return Err(prompt_changed());
+    };
+    let not_shown = || {
+        answer_in_terminal(
+            "OMP's approval doesn't show what it asks for, so Ghostex can't tell it's this card's. Answer it in the terminal.",
+        )
+    };
+    let card = match params.get("promptTool").and_then(Value::as_str) {
+        Some(tool) => Some((
+            tool.to_string(),
+            params
+                .get("promptSummary")
+                .and_then(Value::as_str)
+                .map(str::to_string),
+        )),
+        // A card that names no tool (a Deny from an older chat) is the stored card only when it
+        // names that card's call, or is relayed, which its coordinator checked against the card.
+        None => crate::agents::session_chat_prompt_setting(session)
+            .as_deref()
+            .and_then(crate::session_chat::parse_stored_session_chat_prompt)
+            .and_then(|stored| match stored {
+                crate::session_chat::SessionChatInteractivePrompt::Approval {
+                    tool,
+                    summary,
+                    tool_use_id,
+                    ..
+                } if params.contains_key("relayedFrom")
+                    || tool_use_id.is_some()
+                        && params.get("toolUseId").and_then(Value::as_str)
+                            == tool_use_id.as_deref() =>
+                {
+                    Some((tool, summary))
+                }
+                _ => None,
+            }),
+    };
+    if !dialog.shows_request {
+        return Err(not_shown());
+    }
+    let Some((tool, summary)) = card else {
+        return Err(not_shown());
+    };
+    if crate::session_chat::normalize_session_chat_tool_name(&dialog.tool)
+        != crate::session_chat::normalize_session_chat_tool_name(&tool)
+    {
+        return Err(prompt_changed());
+    }
+    match summary {
+        Some(summary)
+            if crate::session_chat_omp_blocking::omp_permission_dialog_shows(screen, &summary)
+                != Some(true) =>
+        {
+            Err(prompt_changed())
+        }
+        _ => Ok(()),
+    }
 }
 
 /*
@@ -1056,6 +1150,30 @@ async fn answer_session_chat_prompt(
                 })
                 .as_deref()
                 == Some("omp");
+            // The hook's approval card (no `noticeDetectedAt`) is applied to OMP's dialog only when
+            // that dialog shows the card's request (`verify_omp_hook_answer_targets_dialog`), its
+            // Deny included: OMP's Deny is an Escape into whatever dialog is up.
+            let omp_screen = if omp && !params.contains_key("noticeDetectedAt") {
+                if approval_send.is_empty() {
+                    if let Err(error) =
+                        verify_answer_targets_shown_prompt(state, &target, &params).await
+                    {
+                        return domain_error_response(endpoint_path, request_id, error);
+                    }
+                }
+                let screen =
+                    crate::session_chat_send::capture_session_terminal_text(&target.zmx_name).await;
+                if let Err(error) = verify_omp_hook_answer_targets_dialog(
+                    &target.session,
+                    &params,
+                    screen.as_deref(),
+                ) {
+                    return domain_error_response(endpoint_path, request_id, error);
+                }
+                Some(screen)
+            } else {
+                None
+            };
             if approval_send.is_empty() {
                 vec![crate::session_chat_send::SessionChatSendStep::Write(
                     crate::session_chat_send::SESSION_CHAT_INTERRUPT.to_string(),
@@ -1063,33 +1181,13 @@ async fn answer_session_chat_prompt(
             } else if omp {
                 // OMP reads a typed "1" as the start of a "deny and send" message, so its Allow is
                 // the Approve row of the dialog it shows now (`detect_omp_permission_picker`).
-                let screen =
-                    crate::session_chat_send::capture_session_terminal_text(&target.zmx_name).await;
-                // A card that names its request is applied only to the dialog showing that request
-                // (CDXC:SessionChat 2026-11-07 WHY in session_chat_omp_blocking.rs).
-                if let Some(shown_summary) = params
-                    .get("promptTool")
-                    .and(params.get("promptSummary"))
-                    .and_then(Value::as_str)
-                {
-                    let shows = screen.as_deref().and_then(|text| {
-                        crate::session_chat_omp_blocking::omp_permission_dialog_shows(
-                            text,
-                            shown_summary,
-                        )
-                    });
-                    if shows == Some(false) {
-                        return domain_error_response(
-                            endpoint_path,
-                            request_id,
-                            DomainStateError {
-                                code: "invalidState",
-                                message: "The prompt changed before your answer arrived. Answer the one showing now."
-                                    .to_string(),
-                            },
-                        );
+                let screen = match omp_screen {
+                    Some(screen) => screen,
+                    None => {
+                        crate::session_chat_send::capture_session_terminal_text(&target.zmx_name)
+                            .await
                     }
-                }
+                };
                 let Some(answer_key) = screen
                     .as_deref()
                     .and_then(crate::session_chat_omp_blocking::detect_omp_permission_picker)

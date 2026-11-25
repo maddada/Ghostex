@@ -877,17 +877,13 @@ fn async_submit(
     }]
 }
 
-/// The approval card's Allow, naming the approval it showed (its tool and summary), so gxserver
-/// refuses it when the session asks for something else by then (CDXC:SessionChat 2026-11-05 in
-/// server/src/session_chat_send/answer_http.rs). Deny, and a notice's key action (which names its
-/// notice), go as they are.
+/// The approval card's Allow and Deny, naming the approval it showed (its tool and summary), so
+/// gxserver refuses it when the session asks for something else by then (CDXC:SessionChat
+/// 2026-11-05 and, for OMP's Deny, 2026-11-25 in server/src/session_chat_send/answer_http.rs). A
+/// notice's key action (which names its notice) goes as it is.
 fn with_shown_approval(state: &ChatState, kind: &str, answer: &Value) -> Value {
     let mut answer = answer.clone();
-    let allows = answer
-        .get("approvalSend")
-        .and_then(Value::as_str)
-        .is_some_and(|send| !send.is_empty());
-    if kind != "approval" || !allows || answer.get("noticeDetectedAt").is_some() {
+    if kind != "approval" || answer.get("noticeDetectedAt").is_some() {
         return answer;
     }
     let Some(prompt) = state
