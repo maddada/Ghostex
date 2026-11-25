@@ -171,10 +171,16 @@ pub(crate) fn gpui_remote_ssh_askpass_script(
     let server_pipe = pipe.clone();
     let password_server = thread::spawn(move || {
         while !server_cancel.load(Ordering::Acquire) {
-            // A non-blocking open for writing succeeds only while the helper has the pipe open
-            // for reading (ENXIO otherwise), so the loop never blocks and stops when cancelled.
-            match gpui_open_askpass_pipe_for_writing(server_pipe.as_path()) {
+            // CDXC:RemoteMachines 2026-11-26 WHY: this used to retry a non-blocking open every
+            // 10 ms for the life of the tunnel (100 wakeups a second per tunnel, a third of the
+            // app's samples with four tunnels). The open now blocks, with no wakeups, until the
+            // helper opens the pipe for reading; dropping the script wakes it by opening the pipe
+            // for reading itself after setting `cancel` (types.rs), so nothing is written then.
+            match gpui_wait_for_askpass_pipe_reader(server_pipe.as_path()) {
                 Ok(mut stream) => {
+                    if server_cancel.load(Ordering::Acquire) {
+                        break;
+                    }
                     if let Ok(mut password) =
                         gpui_read_remote_ssh_password_from_keychain(remote_machine_id.as_str())
                     {
@@ -187,9 +193,6 @@ pub(crate) fn gpui_remote_ssh_askpass_script(
                     drop(stream);
                     // CDXC:RemoteMachines 2026-09-23 WHY:
                     // The retained terminal wrapper retries SSH after a disconnect. Keep this broker available until its owner drops it so every handshake can read the current saved password.
-                }
-                Err(error) if error.raw_os_error() == Some(libc::ENXIO) => {
-                    thread::sleep(Duration::from_millis(10));
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
                 Err(_) => break,
@@ -211,6 +214,34 @@ pub(crate) fn gpui_open_askpass_pipe_for_writing(pipe: &Path) -> std::io::Result
     use std::os::unix::fs::OpenOptionsExt as _;
     fs::OpenOptions::new()
         .write(true)
+        .custom_flags(libc::O_NONBLOCK)
+        .open(pipe)
+}
+
+/// Opens the askpass pipe for writing, sleeping in the kernel until a reader has it open: the
+/// helper, or the drop that wakes the broker (`gpui_open_askpass_pipe_for_reading`). The pipe is
+/// then switched to non-blocking writes, as it was opened before, so a helper that stops reading
+/// can never hold the broker, or the drop that joins it.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) fn gpui_wait_for_askpass_pipe_reader(pipe: &Path) -> std::io::Result<fs::File> {
+    use std::os::fd::AsRawFd as _;
+    let stream = fs::OpenOptions::new().write(true).open(pipe)?;
+    let fd = stream.as_raw_fd();
+    // SAFETY: `fd` is the open descriptor `stream` owns for the duration of both calls.
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+    if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(stream)
+}
+
+/// Opens the askpass pipe for reading without waiting for a writer, which wakes a broker asleep in
+/// `gpui_wait_for_askpass_pipe_reader`. Nothing ever reads from it.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) fn gpui_open_askpass_pipe_for_reading(pipe: &Path) -> std::io::Result<fs::File> {
+    use std::os::unix::fs::OpenOptionsExt as _;
+    fs::OpenOptions::new()
+        .read(true)
         .custom_flags(libc::O_NONBLOCK)
         .open(pipe)
 }

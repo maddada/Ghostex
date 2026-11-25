@@ -504,7 +504,16 @@ impl Drop for GpuiRemoteAskpassScript {
     fn drop(&mut self) {
         self.cancel.store(true, Ordering::Release);
         if let Some(password_server) = self.password_server.take() {
-            let _ = password_server.join();
+            // The broker sleeps in a blocking open until the pipe has a reader. This reader wakes
+            // it, and it sees `cancel` and stops without writing. The reader is held until the
+            // broker has exited: on macOS a reader that comes and goes before the broker runs
+            // leaves it asleep. If the pipe is gone nothing can wake the broker, so it is left
+            // asleep rather than holding up this drop.
+            let wake = gpui_open_askpass_pipe_for_reading(self.directory.join("p").as_path());
+            if wake.is_ok() || password_server.is_finished() {
+                let _ = password_server.join();
+            }
+            drop(wake);
         }
         // A helper that opened the pipe just as the broker stopped would wait forever for a
         // writer: opening and closing it once ends that read empty, and the helper exits.
