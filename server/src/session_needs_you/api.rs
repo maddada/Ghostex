@@ -555,6 +555,69 @@ pub(crate) fn route_board_answer(
     ))
 }
 
+/// The to-dos a message answers with Reply in chat box pills (`[<title>](answering:Q61) words`,
+/// gx-chat-core `questions::answer_pills`): each pill's question tags with the words after it. A
+/// pill that names a work item (`W7.Q12`) is a coordinator ask's (`coordinators::chat_replies`).
+pub(crate) fn todo_pill_answers(text: &str) -> Vec<(String, String)> {
+    ghostex_gx_chat_core::questions::answer_pills::answers_in(text)
+        .into_iter()
+        .filter(|(pill, _)| pill.settles && pill.item().is_none())
+        .flat_map(|(pill, words)| {
+            pill.questions()
+                .into_iter()
+                .map(move |tag| (tag, words.clone()))
+        })
+        .collect()
+}
+
+/// Settles the open to-dos of this session that a message the user sent it answers with Reply in
+/// chat box pills ([`todo_pill_answers`]), as the row's own Reply records them: answered, with the
+/// words after the pill. Says whether any changed; a tag that is not an open to-do of this session
+/// is left alone.
+///
+/// CDXC:SessionChat 2026-11-26 DECISION:
+/// A tester (issue #771) wants to reply to a to-do in the chat, "and the to-do leaves the Inbox once
+/// I send it". A Reply in chat box pill settled a coordinator's work ask (`W7.Q12`) and a chat
+/// question, but a session's own to-do (`Q61`, `ghostex needs-you add`) stayed in the Inbox after
+/// the message went. The coordinator, for the user: a sent `answering:Q<n>` pill for an ordinary
+/// session's to-do settles that to-do, the same way W/Q asks settle.
+pub(crate) fn settle_chat_answers(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    project_id: &str,
+    session_id: &str,
+    text: &str,
+    pictures: usize,
+) -> Result<bool, DomainStateError> {
+    let answers = todo_pill_answers(text);
+    if answers.is_empty() {
+        return Ok(false);
+    }
+    let _lock = store::write_lock();
+    let repository = DomainRepository::new(db, state.metadata.server_id.as_str());
+    let Some(session) = repository.get_session(project_id, session_id)? else {
+        return Ok(false);
+    };
+    let mut record = NeedsYouRecord::of(&session);
+    let now = crate::coordinators::now_iso();
+    let mut settled = false;
+    for (tag, words) in answers {
+        let answer = if !words.is_empty() {
+            words
+        } else if pictures > 0 {
+            "Sent a picture".to_string()
+        } else {
+            "Answered in the chat".to_string()
+        };
+        settled |= record.settle(&tag, "answered", &answer, &now).is_some();
+    }
+    if settled {
+        store::write(db, project_id, session_id, &record)?;
+        changed(state, db, &repository, project_id, session_id, &record);
+    }
+    Ok(settled)
+}
+
 /// How the agent is told of a to-do marked Not needed ("Q61 \"Sign in\" (marked read)").
 fn dismissed_name(record: &NeedsYouRecord, tag: &str) -> String {
     let title: String = record

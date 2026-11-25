@@ -726,8 +726,10 @@ async fn agent_still_working(state: &AppState, project_id: &str, session_id: &st
 }
 
 /// A user's message that reached a coordinator answers its open work asks named "W7 Q12: …"
-/// (coordinators/work.rs `settle_chat_replies`). Not a message from another agent, which may quote
-/// such a line, and not a recovery or account-switch resend of one already sent.
+/// (coordinators/work.rs `settle_chat_replies`), and one that reached any session answers its own
+/// to-dos named by Reply in chat box pills (`answering:Q61`, session_needs_you
+/// `settle_chat_answers`). Not a message from another agent, which may quote such a line, and not a
+/// recovery or account-switch resend of one already sent.
 fn settle_work_replies(
     state: &AppState,
     project_id: &str,
@@ -742,8 +744,10 @@ fn settle_work_replies(
             | SessionChatMessageSource::AutomaticQueue
             | SessionChatMessageSource::ManualQueue
     );
+    let work_replies = !crate::coordinators::chat_replies(text).is_empty();
+    let todo_answers = !crate::session_needs_you::todo_pill_answers(text).is_empty();
     if !from_user
-        || crate::coordinators::chat_replies(text).is_empty()
+        || (!work_replies && !todo_answers)
         || text
             .lines()
             .any(|line| line.trim() == crate::coordinators::AGENT_MESSAGE_OPENER)
@@ -759,8 +763,20 @@ fn settle_work_replies(
         return;
     }
     if let Ok(db) = open_gxserver_database(&state.paths) {
-        let key = (project_id.to_string(), session_id.to_string());
-        let _ = crate::coordinators::settle_chat_replies(&db, &key, text, image_paths.len());
+        if work_replies {
+            let key = (project_id.to_string(), session_id.to_string());
+            let _ = crate::coordinators::settle_chat_replies(&db, &key, text, image_paths.len());
+        }
+        if todo_answers {
+            let _ = crate::session_needs_you::settle_chat_answers(
+                state,
+                &db,
+                project_id,
+                session_id,
+                text,
+                image_paths.len(),
+            );
+        }
     }
 }
 
