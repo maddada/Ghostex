@@ -1261,6 +1261,12 @@ pub struct PresentationSession {
     /// A Terminal -> Native switch is queued until the active reply ends (`Q4771`).
     #[serde(default, skip_serializing_if = "is_false")]
     pub switch_to_native_queued: bool,
+    /// gxserver is switching the session between Terminal-based and Native right now, whoever
+    /// asked (this app, another device, the bulk "Turn on Native mode", a queued switch); clients
+    /// keep its tab and chat view through the restart (server/src/acp/host_mode_switching.rs).
+    /// Absent otherwise and from an older gxserver.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub switching_host_mode: bool,
     /// Its project's main coordinator on this computer (server/src/coordinators/main_coordinator.rs):
     /// the one agents contact by default. Absent from an older gxserver.
     #[serde(default, skip_serializing_if = "is_false")]

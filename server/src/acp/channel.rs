@@ -840,16 +840,27 @@ pub(crate) fn reconcile_live_host_activity(
 
 struct ActiveSwitchGuard {
     key: (String, String),
+    // Dropped after `Drop::drop` below, so clients hear the switch ended once the chat queue may
+    // run again.
+    _published: super::host_mode_switching::HostModeSwitchFlag,
 }
 
 impl ActiveSwitchGuard {
-    fn enter(project_id: &str, session_id: &str) -> Self {
+    /// Marks the switch for the chat queue and publishes it to clients before it returns, so
+    /// they hear of it before the switch's sleep ends the session's terminal.
+    async fn enter(state: &AppState, project_id: &str, session_id: &str) -> Self {
+        let published =
+            super::host_mode_switching::HostModeSwitchFlag::raise(state, project_id, session_id)
+                .await;
         let key = (project_id.to_string(), session_id.to_string());
         ACTIVE_SWITCHES
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .insert(key.clone());
-        Self { key }
+        Self {
+            key,
+            _published: published,
+        }
     }
 }
 
@@ -1079,7 +1090,7 @@ pub(crate) async fn switch_to_cli(
     let _switch_guard = session_switch_lock(project_id, session_id)
         .lock_owned()
         .await;
-    let _active_switch = ActiveSwitchGuard::enter(project_id, session_id);
+    let _active_switch = ActiveSwitchGuard::enter(state, project_id, session_id).await;
     let (native_session_id, switched_live, switched_model, switched_effort) = if live(
         project_id,
         session_id,
@@ -1948,7 +1959,7 @@ pub(crate) async fn execute_switch_to_acp(
         }
         SwitchOrigin::Single => lock.lock_owned().await,
     };
-    let _active_switch = ActiveSwitchGuard::enter(project_id, session_id);
+    let _active_switch = ActiveSwitchGuard::enter(state, project_id, session_id).await;
 
     // 1. Read fresh session state under the lock and validate structural eligibility.
     let paths = state.paths.clone();

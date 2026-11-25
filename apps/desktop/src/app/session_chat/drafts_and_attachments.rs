@@ -216,10 +216,13 @@ impl GhostexGpuiApp {
     /// A switch to Native sleeps and wakes the session on gxserver, which kills the attach client
     /// the tab's chat keeps on its terminal. The exit closed the tab, the sidebar's tab list then
     /// opened it again as a plain terminal tab while the row was still asleep, and the user landed
-    /// on the sleeping pill and its Resume button instead of the chat. While this app's own switch
-    /// runs, or a queued switch waits or runs (`switch_to_native_queued`), the workspace keeps the
-    /// tab, its chat view and its viewer recipe (gpui_engine_terminal_sync.rs), the way a Full
-    /// Reload keeps its row's tab.
+    /// on the sleeping pill and its Resume button instead of the chat. While gxserver says the row
+    /// is switching (`switching_host_mode`, server/src/acp/host_mode_switching.rs: any switch,
+    /// whoever asked, the bulk "Turn on Native mode" included), a queued switch waits
+    /// (`switch_to_native_queued`), or this app's own switch request is out (which also covers a
+    /// gxserver from before the flag), the workspace keeps the tab, its chat view and its viewer
+    /// recipe (gpui_engine_terminal_sync.rs), the way a Full Reload keeps its row's tab. This
+    /// replaces the first version of this fix, which saw only this app's own and queued switches.
     pub(crate) fn agents_session_switching_host_mode(&self, session_id: TerminalSessionId) -> bool {
         let Some(key) = self.agents_session_store_key(session_id) else {
             return false;
@@ -230,7 +233,7 @@ impl GhostexGpuiApp {
                 .core
                 .presentation()
                 .session(&key)
-                .is_some_and(|row| row.switch_to_native_queued)
+                .is_some_and(|row| row.switching_host_mode || row.switch_to_native_queued)
     }
 
     /// Asks for confirmation before switching a Non-CLI session into Agent CLI (Terminal) view.
