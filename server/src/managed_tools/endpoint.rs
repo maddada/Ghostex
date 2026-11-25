@@ -125,9 +125,19 @@ pub(super) fn still_checking(tool: ToolId) -> Value {
         ),
     });
     if let Some(job) = jobs::get(tool.id()) {
-        value["job"] = job.view();
+        value["job"] = job_view(tool, &job);
     }
     value
+}
+
+/// A tool's job as clients read it, with Run in terminal's id once an install failed
+/// (server/src/shown_commands/installs.rs).
+fn job_view(tool: ToolId, job: &jobs::Job) -> Value {
+    let mut view = job.view();
+    if let Some(id) = crate::shown_commands::failed_tool_job_id(tool, &view) {
+        view["runInTerminal"] = json!(id);
+    }
+    view
 }
 
 /// The status, and for an installed desktop-control tool the grants it still lacks.
@@ -213,7 +223,7 @@ pub(crate) fn state(tool: ToolId, home: &Path, fresh: bool) -> Value {
         }
     }
     if let Some(job) = job {
-        value["job"] = job.view();
+        value["job"] = job_view(tool, &job);
     }
     value
 }

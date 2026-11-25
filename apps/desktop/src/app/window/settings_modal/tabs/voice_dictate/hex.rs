@@ -19,7 +19,8 @@
 //! SEE-ALSO: server/src/voice_agent/speech/hex.rs (CDXC:Dictate 2026-11-07), server/src/managed_tools/hex.rs.
 
 use super::super::super::fields::{
-    SettingsDialogSpec, dialog_footer, settings_dialog, tooltip_text,
+    SettingsDialogSpec, dialog_footer, local_tool_install_id, run_in_terminal_button,
+    settings_dialog, tooltip_text,
 };
 use super::hex_install_plan::{HEX_HOST, HEX_SITE, plan};
 use super::*;
@@ -318,13 +319,24 @@ impl VoiceAgentTab {
                 check_again,
                 self.hex_link(p, BREW_SITE, "brew.sh", "dictate-brew-site", cx),
             ],
-            (Some("failed"), _) => vec![
-                self.hex_install_button(p, "Try again", false, cx),
-                check_again,
-                hex_link,
-            ],
-            (_, "notInstalled") => vec![
-                self.hex_install_button(
+            (Some("failed"), _) => {
+                let mut buttons = vec![self.hex_install_button(p, "Try again", false, cx)];
+                // Run in terminal beside the failed install (this computer's, run by the app).
+                if local && let Some(command_id) = local_tool_install_id("hex") {
+                    buttons.push(run_in_terminal_button(
+                        p,
+                        "dictate-hex-run-in-terminal",
+                        &self.store,
+                        command_id,
+                        None,
+                        cx,
+                    ));
+                }
+                buttons.extend([check_again, hex_link]);
+                buttons
+            }
+            (_, "notInstalled") => {
+                let mut buttons = vec![self.hex_install_button(
                     p,
                     if installing {
                         "Installing…"
@@ -335,9 +347,26 @@ impl VoiceAgentTab {
                     },
                     installing,
                     cx,
-                ),
-                hex_link,
-            ],
+                )];
+                // Another computer's failed install, when its gxserver offers Run in terminal.
+                if let Some((_, command_id)) = self
+                    .dictate
+                    .hex_failed_run_in_terminal
+                    .clone()
+                    .filter(|(machine, _)| !installing && *machine == self.dictate.machine)
+                {
+                    buttons.push(run_in_terminal_button(
+                        p,
+                        "dictate-hex-run-in-terminal",
+                        &self.store,
+                        command_id,
+                        self.dictate.machine.clone(),
+                        cx,
+                    ));
+                }
+                buttons.push(hex_link);
+                buttons
+            }
             (_, "ready") => {
                 let options: Vec<SettingOption> = hex["models"]
                     .as_array()
@@ -642,6 +671,7 @@ impl VoiceAgentTab {
             return;
         }
         self.dictate.action_error = None;
+        self.dictate.hex_failed_run_in_terminal = None;
         let machine = self.picked_machine(cx);
         let (sender, receiver) = futures::channel::oneshot::channel();
         store_machine_gxserver_rpc(
@@ -660,6 +690,7 @@ impl VoiceAgentTab {
                 .await
                 .unwrap_or_else(|_| Err("The install could not start.".into()));
             let mut failure = started.err();
+            let mut run_in_terminal = None;
             while failure.is_none() {
                 cx.background_executor().timer(INSTALL_POLL).await;
                 let asked = page.update(cx, |page, cx| {
@@ -687,6 +718,10 @@ impl VoiceAgentTab {
                 match tool["job"]["status"].as_str() {
                     Some("queued" | "running") => continue,
                     Some("failed") => {
+                        run_in_terminal = tool["job"]["runInTerminal"]
+                            .as_str()
+                            .filter(|id| !id.is_empty())
+                            .map(|id| (machine.clone(), id.to_string()));
                         failure = Some(
                             tool["job"]["error"]
                                 .as_str()
@@ -699,6 +734,7 @@ impl VoiceAgentTab {
             }
             let _ = page.update(cx, |page, cx| {
                 page.dictate.hex_install = None;
+                page.dictate.hex_failed_run_in_terminal = run_in_terminal;
                 if let Some(error) = failure {
                     page.dictate.action_error = Some(format!("Hex wasn't installed: {error}"));
                 }

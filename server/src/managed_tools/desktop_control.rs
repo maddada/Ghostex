@@ -24,7 +24,8 @@ use super::{
 };
 
 /// The official one-liner, which the status plan shows.
-const TRYCUA_INSTALL: &str = "/bin/bash -c \"$(curl -fsSL https://cua.ai/driver/install.sh)\"";
+pub(crate) const TRYCUA_INSTALL: &str =
+    "/bin/bash -c \"$(curl -fsSL https://cua.ai/driver/install.sh)\"";
 /// What the job runs: the official one-liner, or the same installer from GitHub when `cua.ai`
 /// does not answer.
 ///
@@ -52,7 +53,7 @@ else
 fi"#;
 const TRYCUA_START: &str = "/usr/bin/open -n -g -a CuaDriver --args serve";
 const TRYCUA_APP_BINARY: &str = "/Applications/CuaDriver.app/Contents/MacOS/cua-driver";
-const SPACEO_INSTALL: &str = "curl -fsSL https://raw.githubusercontent.com/ParthJadhav/SpaceO/main/install.sh | bash -s -- --no-clients";
+pub(crate) const SPACEO_INSTALL: &str = "curl -fsSL https://raw.githubusercontent.com/ParthJadhav/SpaceO/main/install.sh | bash -s -- --no-clients";
 const SPACEO_UNINSTALL: &str = "curl -fsSL https://raw.githubusercontent.com/ParthJadhav/SpaceO/main/install.sh | bash -s -- --uninstall --yes";
 /// SpaceO runs as its own LaunchAgent so its grants belong to one stable identity
 /// (CDXC:ManagedTools 2026-10-01 in spaceo_job.rs).

@@ -406,6 +406,34 @@ impl GpuiOnboardingWindow {
                             },
                         )
                     });
+                    // Run in terminal beside a failed install (server/src/shown_commands/installs.rs).
+                    let run_in_terminal = row
+                        .filter(|_| failed)
+                        .and_then(|row| row.run_in_terminal())
+                        .map(|command_id| {
+                            let id = SharedString::from(format!(
+                                "guide-run-in-terminal-{}",
+                                entry.agent_id
+                            ));
+                            self.control(
+                                s,
+                                ghost(s, id.clone(), "Run in terminal", 13.0, false)
+                                    .h(s.px(30.0))
+                                    .px(s.px(4.0)),
+                                id,
+                                interact::Ring::new(7.0, 0.0),
+                                interact::Keys::EnterSpace,
+                                cx,
+                                move |this, _, cx| {
+                                    this.send(
+                                        OnboardingCommand::OpenShownCommandTerminal(
+                                            command_id.clone(),
+                                        ),
+                                        cx,
+                                    )
+                                },
+                            )
+                        });
                     Some(
                         div()
                             .flex()
@@ -413,6 +441,7 @@ impl GpuiOnboardingWindow {
                             .items_center()
                             .gap(s.px(6.0))
                             .children(details)
+                            .children(run_in_terminal)
                             .child(install)
                             .into_any_element(),
                     )

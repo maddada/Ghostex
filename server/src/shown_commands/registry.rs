@@ -10,11 +10,15 @@ pub(crate) const LINUX_UPDATE: &str = "linuxUpdate";
 
 pub(crate) struct ShownCommand {
     /// The new terminal's title in the sidebar.
-    pub(crate) title: &'static str,
+    pub(crate) title: String,
     pub(crate) command: String,
 }
 
 pub(crate) async fn resolve(state: &AppState, id: &str) -> Result<ShownCommand, DomainStateError> {
+    // A failed install's command (installs.rs).
+    if let Some(resolved) = super::installs::resolve(state, id) {
+        return resolved;
+    }
     match id {
         LINUX_UPDATE => {
             let command = crate::app_update::shown_update_command(state)
@@ -25,7 +29,7 @@ pub(crate) async fn resolve(state: &AppState, id: &str) -> Result<ShownCommand, 
                     )
                 })?;
             Ok(ShownCommand {
-                title: "Update Ghostex",
+                title: "Update Ghostex".to_string(),
                 command,
             })
         }

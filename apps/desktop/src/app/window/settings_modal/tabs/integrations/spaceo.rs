@@ -192,7 +192,8 @@ impl IntegrationsTab {
             ));
         }
         if !installed && let Some(command) = text(status, "spaceoInstallCommand") {
-            rows.push(self.spaceo_install_command_row(p, &name, command.to_string(), cx));
+            let failed = job.install_failed;
+            rows.push(self.spaceo_install_command_row(p, &name, command.to_string(), failed, cx));
         }
         rows
     }
@@ -336,6 +337,7 @@ impl IntegrationsTab {
         p: &SettingsPalette,
         name: &str,
         command: String,
+        install_failed: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let copied = self.copied == Some(SPACEO_COPY_BUTTON);
@@ -376,6 +378,17 @@ impl IntegrationsTab {
             },
             cx,
         );
+        let mut controls = vec![code, copy];
+        if install_failed && let Some(command_id) = local_tool_install_id("spaceo") {
+            controls.push(run_in_terminal_button(
+                p,
+                "integrations-spaceo-run-in-terminal",
+                &self.store,
+                command_id,
+                None,
+                cx,
+            ));
+        }
         integration_row(
             p,
             "spaceo-install-command",
@@ -390,7 +403,7 @@ impl IntegrationsTab {
                 badge: None,
                 pill: None,
             },
-            vec![code, copy],
+            controls,
         )
     }
 }

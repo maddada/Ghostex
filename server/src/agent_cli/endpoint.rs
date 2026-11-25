@@ -68,6 +68,20 @@ pub(crate) async fn read_agent(home: &Path, agent_id: &str) -> Result<Value, Dom
     read(definition, home).await
 }
 
+/// The operation and command of `agent_id`'s last install or update when it failed, for Run in
+/// terminal (server/src/shown_commands/installs.rs).
+pub(crate) fn failed_job_command(home: &Path, agent_id: &str) -> Option<(String, String)> {
+    let jobs = JOBS.lock().ok()?;
+    let progress = &jobs
+        .get(&(home.to_path_buf(), agent_id.to_string()))?
+        .progress;
+    crate::shown_commands::failed_agent_cli_job_id(agent_id, progress)?;
+    Some((
+        progress["operation"].as_str()?.to_string(),
+        progress["command"].as_str()?.trim().to_string(),
+    ))
+}
+
 /// Whether an install or update of `agent_id` is queued or running (the Agents page, the CLI, or another
 /// session's Codex "Update now").
 pub(crate) fn job_active(home: &Path, agent_id: &str) -> bool {
@@ -208,6 +222,12 @@ async fn read(definition: &'static Definition, home: &Path) -> Result<Value, Dom
     let mut state = read_state(definition, home).await?;
     if let Some(job) = previous {
         state["job"] = job.progress;
+        // Run in terminal beside a failed install (server/src/shown_commands/installs.rs).
+        if let Some(id) =
+            crate::shown_commands::failed_agent_cli_job_id(&definition.agent_id, &state["job"])
+        {
+            state["job"]["runInTerminal"] = json!(id);
+        }
     }
     // CDXC:RemoteMachines 2026-10-26 WHY: the phone's machine screen lists agents by this answer
     // alone, so it carries the built-in agent's display name.

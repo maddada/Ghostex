@@ -6,8 +6,8 @@
 //! CDXC:ManagedTools 2026-09-29 SEE-ALSO: the React twin above carries the user's decision (one
 //! click installs, the Install tooltip says how); server/src/managed_tools/endpoint.rs answers.
 use super::super::super::fields::{
-    ButtonVariant, ListItemStatus, SizedButtonSize, SizedButtonVariant, settings_button,
-    settings_icon, settings_list_item, settings_section, settings_sized_button,
+    ButtonVariant, ListItemStatus, SizedButtonSize, SizedButtonVariant, run_in_terminal_button,
+    settings_button, settings_icon, settings_list_item, settings_section, settings_sized_button,
     settings_square_button, tooltip_text,
 };
 use super::super::super::palette::SettingsPalette;
@@ -905,6 +905,23 @@ impl IntegrationsTab {
                     cx,
                 ));
             }
+        }
+        // Run in terminal beside a failed install, when that computer's gxserver offers it
+        // (server/src/shown_commands/installs.rs).
+        if !busy
+            && let Some(command_id) = tool["job"]
+                .get("runInTerminal")
+                .and_then(Value::as_str)
+                .filter(|id| !id.is_empty())
+        {
+            controls.push(run_in_terminal_button(
+                p,
+                SharedString::from(format!("tool-{key}-run-in-terminal")),
+                &self.store,
+                command_id.to_string(),
+                self.shown_machine.clone(),
+                cx,
+            ));
         }
         settings_list_item(
             p,

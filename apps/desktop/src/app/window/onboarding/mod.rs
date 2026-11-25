@@ -159,6 +159,9 @@ pub(crate) enum OnboardingCommand {
         agent_id: String,
         operation: &'static str,
     },
+    /// Run in terminal beside a failed agent install: a Main Hub terminal with its command typed in
+    /// (server/src/shown_commands/installs.rs).
+    OpenShownCommandTerminal(String),
     /// `/api/agentCliMaintenance` for one agent.
     AgentCli {
         request_id: u64,

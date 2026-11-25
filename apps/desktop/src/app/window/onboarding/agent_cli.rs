@@ -86,6 +86,9 @@ pub(crate) struct CliJob {
     pub(crate) status: String,
     pub(crate) output: String,
     pub(crate) error: Option<String>,
+    /// Run in terminal's id on a failed install (server/src/shown_commands/installs.rs); `None`
+    /// from an older gxserver.
+    pub(crate) run_in_terminal: Option<String>,
 }
 
 impl CliJob {
@@ -154,6 +157,7 @@ impl CliState {
                         .unwrap_or_default()
                         .to_string(),
                     error: text(job, "error"),
+                    run_in_terminal: text(job, "runInTerminal"),
                 })
             }),
         }
@@ -332,6 +336,13 @@ impl CliRow {
         self.state
             .as_ref()
             .and_then(|state| state.path_directory.as_deref())
+    }
+
+    /// Run in terminal's id while the row shows its job's failed install.
+    pub(crate) fn run_in_terminal(&self) -> Option<String> {
+        self.job()
+            .filter(|job| job.status == "failed")
+            .and_then(|job| job.run_in_terminal.clone())
     }
 
     /// The failure shown under the row: a start that was refused, or the job's own error / last line.

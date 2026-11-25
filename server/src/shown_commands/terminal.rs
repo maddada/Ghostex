@@ -61,8 +61,9 @@ async fn open(state: &AppState, id: &str) -> Result<Value, DomainStateError> {
     let shown = super::registry::resolve(state, id).await?;
     let worker = state.clone();
     let title = shown.title;
+    let new_title = title.clone();
     let (project_id, session_id) =
-        tokio::task::spawn_blocking(move || create_started_terminal(&worker, title))
+        tokio::task::spawn_blocking(move || create_started_terminal(&worker, &new_title))
             .await
             .map_err(|error| internal(format!("The terminal could not be made: {error}")))??;
     wait_for_prompt(state, &project_id, &session_id).await;

@@ -10,8 +10,9 @@ use super::super::super::native_modal_kit::*;
 use super::super::catalog::settings_catalog;
 use super::super::fields::toggle_from_row;
 use super::super::fields::{
-    ButtonVariant, FieldStates, ListItemStatus, SettingsPage, settings_button, settings_icon,
-    settings_section, switch_control, tooltip_text,
+    ButtonVariant, FieldStates, ListItemStatus, SettingsPage, local_tool_install_id,
+    run_in_terminal_button, settings_button, settings_icon, settings_section, switch_control,
+    tooltip_text,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -200,6 +201,8 @@ struct InstallJob {
     running_reason: Option<String>,
     plan: Option<String>,
     blocked_reason: Option<String>,
+    /// The last install did not finish, so the install command row offers Run in terminal.
+    install_failed: bool,
 }
 
 fn trycua_job(status: Option<&Value>) -> InstallJob {
@@ -260,6 +263,7 @@ fn install_job(
     } else {
         None
     };
+    let install_failed = field("status") == Some("failed") && operation == "install";
     InstallJob {
         running,
         operation: running.then_some(operation),
@@ -270,6 +274,7 @@ fn install_job(
         blocked_reason: blocked_key
             .and_then(|key| text(status, key))
             .map(str::to_string),
+        install_failed,
     }
 }
 
@@ -1090,6 +1095,19 @@ impl IntegrationsTab {
                 },
                 cx,
             );
+            let mut controls = vec![code, copy];
+            if job.install_failed
+                && let Some(command_id) = local_tool_install_id("trycua")
+            {
+                controls.push(run_in_terminal_button(
+                    p,
+                    "integrations-trycua-run-in-terminal",
+                    &self.store,
+                    command_id,
+                    None,
+                    cx,
+                ));
+            }
             rows.push(integration_row(
                 p,
                 "trycua-install-command",
@@ -1104,7 +1122,7 @@ impl IntegrationsTab {
                     badge: None,
                     pill: None,
                 },
-                vec![code, copy],
+                controls,
             ));
         }
         rows

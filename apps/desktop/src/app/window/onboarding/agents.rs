@@ -962,7 +962,7 @@ impl GpuiOnboardingWindow {
                 INSTALL_BUTTON_DEFAULT,
             )
             .tooltip(move |window, cx| Tooltip::new(title.clone()).build(window, cx));
-            Some(if disabled {
+            let install = if disabled {
                 button.into_any_element()
             } else {
                 self.control(
@@ -975,6 +975,37 @@ impl GpuiOnboardingWindow {
                     move |this, _, cx| this.cli_install(&key, cx),
                 )
                 .into_any_element()
+            };
+            // Run in terminal beside a failed install (server/src/shown_commands/installs.rs).
+            Some(match row.and_then(|row| row.run_in_terminal()) {
+                Some(command_id) => {
+                    let id = SharedString::from(format!("run-in-terminal-{agent_id}"));
+                    let run = self.control(
+                        s,
+                        ghost(s, id.clone(), "Run in terminal", 13.0, false)
+                            .h(s.px(30.0))
+                            .px(s.px(4.0)),
+                        id,
+                        interact::Ring::new(7.0, 0.0),
+                        interact::Keys::EnterSpace,
+                        cx,
+                        move |this, _, cx| {
+                            this.send(
+                                OnboardingCommand::OpenShownCommandTerminal(command_id.clone()),
+                                cx,
+                            )
+                        },
+                    );
+                    div()
+                        .flex()
+                        .flex_none()
+                        .items_center()
+                        .gap(s.px(6.0))
+                        .child(run)
+                        .child(install)
+                        .into_any_element()
+                }
+                None => install,
             })
         } else {
             let id = SharedString::from(format!("guide-{agent_id}"));

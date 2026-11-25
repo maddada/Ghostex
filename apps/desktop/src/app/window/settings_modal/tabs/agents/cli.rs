@@ -9,7 +9,8 @@
 //! The row action and the expanded controls keep separate job states, as their two React hooks do. Every request goes to the machine the page's machine picker shows (tabs/machine_picker.rs): this computer's gxserver, or a connected remote machine's through its tunnel.
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{
-    ButtonSize, ButtonVariant, settings_button_sized, settings_icon, tooltip_text,
+    ButtonSize, ButtonVariant, run_in_terminal_button, settings_button_sized, settings_icon,
+    tooltip_text,
 };
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::store_machine_gxserver_rpc;
@@ -160,6 +161,9 @@ pub(super) struct CliJobInfo {
     pub(super) error: Option<String>,
     /// A finished update that still leaves a newer release (mise held it back), in plain words.
     pub(super) notice: Option<String>,
+    /// Run in terminal's id on a failed install or update (server/src/shown_commands/installs.rs);
+    /// `None` from an older gxserver.
+    pub(super) run_in_terminal: Option<String>,
 }
 
 impl CliJobInfo {
@@ -235,6 +239,7 @@ impl CliState {
                         .to_string(),
                     error: nonempty(job, "error"),
                     notice: nonempty(job, "notice"),
+                    run_in_terminal: nonempty(job, "runInTerminal"),
                 })
             }),
         })
@@ -1342,6 +1347,16 @@ impl AgentsTab {
                 .w_full()
                 .min_w_0()
                 .child(small(text, if failed { p.destructive } else { muted }));
+            if let Some(command_id) = job.run_in_terminal.clone().filter(|_| failed) {
+                job_block = job_block.child(h_flex().mt(px(8.0)).child(run_in_terminal_button(
+                    p,
+                    SharedString::from(format!("agent-cli-run-in-terminal-{agent_id}")),
+                    &self.store,
+                    command_id,
+                    self.shown_machine.clone(),
+                    cx,
+                )));
+            }
             if !job.output.is_empty() {
                 let toggle_agent = agent_id.to_string();
                 job_block = job_block.child(

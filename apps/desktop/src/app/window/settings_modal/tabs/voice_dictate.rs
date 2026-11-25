@@ -73,6 +73,9 @@ pub(crate) struct DictateState {
     hex_confirm_focus: gpui::FocusHandle,
     /// This computer's install as the app reports it (`hexInstallState`).
     hex_install_run: Option<hex::HexInstallRun>,
+    /// Another computer's failed Install Hex: that machine and the Run in terminal id its gxserver
+    /// gave the failed job (server/src/shown_commands/installs.rs).
+    hex_failed_run_in_terminal: Option<(Option<String>, String)>,
     /// Open Hex was pressed and the row is checking again until Hex runs.
     hex_opening: Option<Task<()>>,
 }
@@ -89,6 +92,7 @@ impl DictateState {
             hex_install_confirm: false,
             hex_confirm_focus: cx.focus_handle(),
             hex_install_run: None,
+            hex_failed_run_in_terminal: None,
             hex_opening: None,
         }
     }

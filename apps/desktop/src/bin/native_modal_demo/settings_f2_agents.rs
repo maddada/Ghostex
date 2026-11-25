@@ -181,6 +181,7 @@ fn cli_state(agent_id: &str) -> Value {
                 "id": "failed", "status": "failed", "operation": "update", "command": "grok update",
                 "output": "Checking for updates…\nDownload failed: connection timed out.",
                 "error": "Command exited with exit status: 1.",
+                "runInTerminal": "agentCli:grok",
             },
         }),
         "zcode" => json!({

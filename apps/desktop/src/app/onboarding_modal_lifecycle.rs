@@ -418,6 +418,9 @@ impl GhostexGpuiApp {
                     );
                 }
             }
+            OnboardingCommand::OpenShownCommandTerminal(command_id) => {
+                self.gx_store_open_shown_command_terminal(None, command_id, cx);
+            }
             OnboardingCommand::IntroVideoSeen => {
                 self.persist_gpui_first_run_onboarding_marker(
                     GpuiFirstRunOnboardingMarker::IntroVideoSeen,

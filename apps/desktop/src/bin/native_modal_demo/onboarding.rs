@@ -476,7 +476,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     if cli == "failed" {
         jobs.insert(
             "claude".to_string(),
-            json!({ "id": "story-failed", "operation": "install", "command": "npm install -g @anthropic-ai/claude-code@latest", "status": "failed", "output": "npm ERR! code EACCES\nnpm ERR! syscall mkdir\nnpm ERR! path /usr/local/lib/node_modules/@anthropic-ai\n", "error": "Command exited with exit status: 243." }),
+            json!({ "id": "story-failed", "operation": "install", "command": "npm install -g @anthropic-ai/claude-code@latest", "status": "failed", "output": "npm ERR! code EACCES\nnpm ERR! syscall mkdir\nnpm ERR! path /usr/local/lib/node_modules/@anthropic-ai\n", "error": "Command exited with exit status: 243.", "runInTerminal": "agentCli:claude" }),
         );
     }
     let cli_status = match computer_use {
@@ -612,6 +612,9 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             }
             OnboardingCommand::OpenExternalUrl(url) => eprintln!("open {url}"),
             OnboardingCommand::IntroVideoSeen => eprintln!("introVideoSeen"),
+            OnboardingCommand::OpenShownCommandTerminal(command_id) => {
+                eprintln!("openShownCommandTerminal {command_id}")
+            }
             OnboardingCommand::Finish(target, after) => {
                 eprintln!("finish -> {target:?}, after setup {after:?}");
                 cx.quit();
@@ -720,6 +723,8 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                                                     job["error"] = json!(
                                                         "npm could not write to /usr/local/lib/node_modules (EACCES)."
                                                     );
+                                                    job["runInTerminal"] =
+                                                        json!(format!("agentCli:{agent_id}"));
                                                 }
                                                 return;
                                             }
