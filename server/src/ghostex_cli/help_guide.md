@@ -158,7 +158,7 @@ they ask for one.
    over to another computer with Handoff / Export > Handoff to an agent >
    Destination > Change… (a new session there with the conversation
    attached, not the running one); and projects and sessions share one
-   sidebar unless Separate by machine (`sidebarSeparateByMachine`) is on.
+   sidebar unless Computers (`sidebarSeparateByMachine`) is set to A tab each.
 
 8. For anything beyond settings (start or steer agents, sessions, automations,
    the project board, prompt history, servers, diagnostics), read

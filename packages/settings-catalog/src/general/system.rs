@@ -195,10 +195,7 @@ pub(crate) fn sleeping_sessions() -> Section {
                 "Dim inactive projects",
                 "Fade a project in the sidebar when all its sessions are asleep or closed, none is working and none waits on you, so projects you are not using stand apart. A project with no sessions counts as inactive.",
             ),
-            row(
-                "wakeSleepingSessionsOnSelect",
-                "Wake sleeping sessions when selected",
-                "Wake a sleeping session as soon as you select it. Turn off to open it with a Resume button instead, so switching sessions does not wake it by accident.",
+            row("wakeSleepingSessionsOnSelect", "Selecting a sleeping session", "Wakes it: a sleeping session wakes as soon as you select it. Shows Resume: it opens with a Resume button instead, so switching sessions does not wake it by accident.",
             ),
         ],
     )

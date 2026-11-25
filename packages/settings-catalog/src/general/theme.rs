@@ -31,7 +31,7 @@ pub(crate) fn theming() -> Section {
             row("windowGlassSource", "Behind the glass", "Fully transparent (everything behind the window, blurred), your wallpaper, a picture you choose, or Animated: a calm animation in your theme colours or your own video.").options(WINDOW_GLASS_SOURCE_OPTIONS),
             // CDXC:Settings 2026-10-29 DECISION (cleanup Q19): one switch keeps the light-mode picture, video, Animated
             // background and tints the same as the dark-mode ones; off shows the light-mode rows again.
-            row("windowGlassSameForLightAndDark", "Same for light and dark", "Use the dark-mode picture, video, Animated background and tints in light mode too. Turn off to pick them for light mode separately."),
+            row("windowGlassSameForLightAndDark", "Light mode", "Same as dark: light mode uses the dark-mode picture, video, Animated background and tints too. Its own: pick them for light mode separately."),
             row("windowGlassImagePlacement", "Picture position", "Where the wallpaper, custom picture or your own video sits behind the glass. Stays with the desktop can trail the window while you drag it.").options(WINDOW_GLASS_IMAGE_PLACEMENT_OPTIONS),
             row("windowGlassImageDark", "Picture for dark mode", "The picture the glass blurs in dark mode when Picture shows behind the glass."),
             row("windowGlassImageLight", "Picture for light mode", "The picture the glass blurs in light mode when Picture shows behind the glass."),
@@ -111,7 +111,7 @@ pub(crate) fn window_layout() -> Section {
             row("windowLayout", "Layout", "Framed work area draws the work area as a card beside the sidebar. Floating sidebar draws the sidebar as the card, floating over the work area, which runs to the window's edges.").options(WINDOW_LAYOUT_OPTIONS),
             row("showWindowButtonsWhenSidebarCollapsed", "Show the window buttons when the sidebar is collapsed", "Keep the red, yellow and green window buttons in the window's top left while the sidebar is collapsed. Off hides them until you open the floating sidebar, which carries them in its top row. Full screen keeps its own title bar either way."),
             // CDXC:AppModal 2026-11-10 DECISION in apps/desktop/src/app/window/round_close_button.rs: on macOS the close X of dialogs and toasts sits at their top left; this macOS-only row on the Window & Layout page puts it back on the right.
-            row("closeButtonsOnRight", "Close buttons on the right", "Put the X that closes dialogs and pop-up messages at their top right. Off keeps it at their top left, where macOS puts a window's close button."),
+            row("closeButtonsOnRight", "Close buttons", "Where the X that closes dialogs and pop-up messages sits: Left or Right. Left (the default) is where macOS puts a window's close button."),
             row("showActivePaneOutline", "Show active pane outline", "Show an outline around the currently focused pane."),
             row("workspaceActivePaneBorderColor", "Active pane outline colour", "Color of the outline around the currently focused pane."),
             row("panelAnimationSpeed", "Animations", "Set how fast the sidebar, the side panel, the Agents Panel and the bottom or right panel slide open and closed: Off, Slow, Normal or Fast. Reduce Motion in your computer settings always turns it off.").options(PANEL_ANIMATION_SPEED_OPTIONS),

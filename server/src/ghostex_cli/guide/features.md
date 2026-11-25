@@ -605,8 +605,8 @@ view from the strip.
   window edge hides the files list; the same button in the corner brings it
   back, and hovering that button peeks the list without pinning it. Hidden or pinned is remembered.
   Every file you open stays open, with its own unsaved changes and notes, and is
-  shown as a row of tabs above the document (Show open files as tabs, on by
-  default; turn it off in Settings > Files & Links > File opening to list them
+  shown as a row of tabs above the document (Open files show as: Tabs, the
+  default; pick A list in Settings > Files & Links > File opening to list them
   under Open Files, above the Project Docs tree instead): click a tab to show its file, close it with
   its × (a dot marks unsaved changes) or a middle click, right-click a tab for
   Close All, and use the + after the tabs to open another file. After clicking a
@@ -923,7 +923,7 @@ one is the same Space in the other. The list then holds only the sessions of
 the active Space's projects, Drafts and the Working, Snoozed and Parked shelves
 included, and a Space with no sessions says so. Spaces are shared by all your
 connected computers, so every computer's sessions follow the active Space; with
-Separate by machine on, sessions on your other computers stay in the list in
+Computers set to A tab each, sessions on your other computers stay in the list in
 every Space under their computer's name. Switch Space by clicking it, swiping sideways over
 the list, dragging sideways on an empty part of the list, or with
 Cmd+Option+Shift+1 to 9, with the same slide as the Project sidebar. The filter
@@ -933,9 +933,9 @@ Spaces. A session you start, or a draft you move, in a project of another Space
 switches to that Space so you see it. Turn Spaces off and the Unified list shows
 every Space again.
 
-**One list for every computer.** Unless Separate by machine is on (Settings >
-Sidebar & Sessions > Separate by machine, `sidebarSeparateByMachine`, off by
-default), the Project sidebar has no machine tabs: every connected computer's
+**One list for every computer.** Unless Computers is set to A tab each (Settings >
+Sidebar & Sessions > Computers: One list / A tab each, `sidebarSeparateByMachine`,
+One list by default), the Project sidebar has no machine tabs: every connected computer's
 projects are in one list. A project on several computers (the same git remote,
 else the same folder name), or cloned twice on one computer, is one entry with
 the sessions of every copy mixed under it; a session on another computer shows
@@ -985,7 +985,7 @@ folder of one repository into a single Space, the update puts them back once,
 from that copy, unless you have rearranged them since. When one sync moves
 three or more projects between Spaces at once (or puts them back like this),
 Settings > Sync lists it under Projects moved by sync, saying which projects
-went where and when. Turn Separate by machine on for a tab per
+went where and when. Set Computers to A tab each for a tab per
 computer, each with its own list; the Spaces stay shared, each tab showing its
 computer's projects of them.
 Cards show the project's own icon when it has one, and right-clicking
@@ -1636,7 +1636,7 @@ where they are while you open, change and close views.
   passes it returns to its usual place, still asleep until you open it.
   Unsnooze brings it back early. Snooze needs no setting; it is always
   available.
-- With Separate by machine on, each computer is an icon tile at the start of
+- With Computers set to A tab each, each computer is an icon tile at the start of
   the row under New session, before the Spaces, showing that computer's icon,
   with a spinner while it connects and its status dots on the tile. The
   picked computer is filled like a picked Space. Hover a
@@ -2614,8 +2614,8 @@ while the panel is open, with Close panel and Terminal View; a message sent from
 the chat closes the panel first. The Ghostex phone app opens Empryo sessions in
 chat too, with the same cards, and offers Fork and Make Coordinator on them.
 Scrolling up collapses the composer; returning to the bottom expands it.
-Settings > Chat > Keep chat box expanded while scrolling leaves the desktop
-chat box at full size instead (`sessionChatKeepComposerExpanded`, off by default).
+Settings > Chat > While scrolling, the chat box: Stays full size leaves the desktop
+chat box at full size instead (`sessionChatKeepComposerExpanded`; Shrinks by default).
 In a short pane, such as one half of a stacked split, the chat box stays
 collapsed even at the bottom of the conversation until you click it, and
 collapses again when you click elsewhere.
@@ -2938,9 +2938,9 @@ Ultracode off even when Claude's own settings turn it on; pick Ultracode as the
 effort to start in it.
 Escape interrupts the agent. While the agent is working, the first Escape shows
 "Press Escape again to interrupt" at the bottom of the chat, and a second Escape
-within 2 seconds interrupts; Settings > Chat > Press Escape twice to interrupt
-turns this off so the first Escape interrupts (`sessionChatConfirmEscapeInterrupt`,
-on by default). After an interrupt, a red "Agent was interrupted" notice shows
+within 2 seconds interrupts; Settings > Chat > Interrupt with: One Escape
+makes the first Escape interrupt (`sessionChatConfirmEscapeInterrupt`; Two Escapes
+by default). After an interrupt, a red "Agent was interrupted" notice shows
 in the same place for 2 seconds. If a Claude message is cancelled before it is
 accepted, its text returns to the chat composer for editing. Rewind to here
 also returns the selected text when the message was never accepted, keeping
@@ -3197,8 +3197,8 @@ browser open that chat the same way. A device takes it when it opens the chat, a
 a chat already open elsewhere follows within a few seconds; one that could not reach the
 computer keeps its own pick and hands it over later, and the newest pick wins. A
 computer on an older Ghostex keeps no view, so each device keeps its own. Turning Summary off, by
-any route, always goes back to Normal. To have new chats start in Detailed, turn
-on Settings > Chat > Advanced > Default to Detailed view (`sessionChatDetailedView`).
+any route, always goes back to Normal. To have new chats start in Detailed, set
+Settings > Chat > Advanced > New chats open in to Detailed view (`sessionChatDetailedView`).
 
 While a chat is in Summary or Detailed view, a "Summary view" or "Detailed view"
 chip sits at the left of the strip along the top of the chat box; hover it and
@@ -5905,9 +5905,9 @@ typing anywhere (the panel shows a Space key when it works), or hold the
 while you hold Space, what you said so far is sent. On Grok push-to-talk
 calls you pay only for the audio you send and the agent's replies. GPT
 Realtime bills only audio in both modes. A change applies to your next call;
-Regular stays the default. Answer when I say "reply" (Settings > Voice Agent,
-right under Call mode, on by default, shown only while the call mode is Regular)
-makes a Regular call wait for you: the agent answers only once what you said ends
+Regular stays the default. The agent answers: When I say "reply" (Settings > Voice Agent,
+right under Call mode, the default, shown only while the call mode is Regular; When I pause
+answers as soon as you stop) makes a Regular call wait for you: the agent answers only once what you said ends
 with "reply", "over" or "go ahead", and that word is taken off the caption. Anything
 it would have started to say by itself is dropped. Each call opens with a short spoken
 introduction that also asks you to say "reply" while the setting is on. Push-to-talk,
@@ -6176,8 +6176,8 @@ agents, a connection from either side is enough.
   says "<phone> is connected"; click Done, or Connect another phone. If the
   window is closed, the same question shows as a notice, and in Settings >
   Remote at the top of the device list; phones already paired can approve too.
-  Approve is one click unless Settings > Security's "Require Touch ID or your
-  password to approve" is on. When it works, the phone opens your sessions
+  Approve is one click unless Settings > Security's Approve with is set to
+  Touch ID or password. When it works, the phone opens your sessions
   with "Connected to" the computer on top. When it doesn't, the phone stays on
   a screen that says why (nobody approved in time, the code was used up, the
   computer said no, the words did not match, the computer can't be reached)
@@ -6221,8 +6221,8 @@ agents, a connection from either side is enough.
   While everything works, the Sessions screen says nothing about connections:
   no "Connected to" line and no "Refreshing" line. Each computer's own icon
   shows its link instead: green is connected, yellow is slow, red can't
-  connect. With Separate by machine off the icons sit in a row at the right;
-  with it on, each computer's tab carries its own icon. Tap an icon (or the
+  connect. With Computers set to One list the icons sit in a row at the right;
+  on A tab each, each computer's tab carries its own icon. Tap an icon (or the
   failure line) to open the Connections sheet: every computer, the ones with
   problems first, with the way the phone reaches it and how long a round trip
   takes. The way is Tailscale with its address, or, for Easy Connect, Private
@@ -6352,7 +6352,7 @@ agents, a connection from either side is enough.
   words: a b c". While A has neither the Ghostex app nor a paired phone, it asks
   "Do they match the words on that computer? Approve it? [y/N]"; if the words
   are the same on both, type y (n turns it down); with Settings > Security >
-  "Require Touch ID or your password to approve" on, y first asks Touch ID,
+  Approve with set to Touch ID or password, y first asks Touch ID,
   Windows Hello or the system password on A (on a Linux server with no screen
   or polkit agent it can't, says so, and leaves the request waiting). Once A has an owner (the
   Ghostex app on another of your computers, or a paired phone), the code prints
@@ -6746,9 +6746,8 @@ agents, a connection from either side is enough.
   Connect or Tailscale. Nothing goes through a server, and each computer works
   on its own while apart. Sidebar organization syncs by default: your Spaces
   (names, icons, colours, their order, which projects are in each and in which
-  order), project groups, Project or Unified sidebar, Separate by machine,
-  Merge copies of the same repository, Worktree sessions show in their
-  project, the Spaces switch, Show Main Hub on all Spaces, Hide projects
+  order), project groups, Project or Unified sidebar, Computers,
+  Merge copies of the same repository, Worktree sessions, the Spaces switch, Show Main Hub on all Spaces, Hide projects
   without sessions, Group working sessions, session parking, Pinned order, the
   Unified sidebar's Moving section, Session order, Group by project and project order, and
   your Session Tags (the tags you made and the tag list's order). A change
@@ -7088,7 +7087,7 @@ Ghostex Apps lets you ask an agent for an app, a dashboard, a tracker or a prese
 
 Ghostex keeps a security log of every sensitive action on your computer: pairing a phone (and failed pairing attempts), showing a pairing code, Easy Connect changes (on or off, its allow-list, ports and relay), sharing a chat in Collab or changing how a share works, letting a connected computer's agents in, Autopilot answering an approval or being allowed to do more, adding a GBot, turning a GBot's Bot API on or off or giving it a new key, and a playbook, skill or agent command arriving by settings sync. Each entry says what happened, who asked (this computer's app or an agent, naming the session it says it runs in, a paired phone, another computer, Autopilot), when, and how it ended. An approval request also gets a line for how it ended: approved (and whether in the Ghostex app, on a paired phone or with the CLI), expired, replaced by a newer request, or withdrawn because the session that asked was closed; these lines stay in the log and don't ring the bell. Each one also shows in the notification bell and as a notification on your paired phones, so you see it when it happens; clicking it opens Settings > Security.
 
-Settings > Security has three parts. Approvals: "Require Touch ID or your password to approve" (see Approvals below). What still asks: the short list of what asks for an Approve on this computer, with the line that everything else works without asking and your own clicks never ask. Log: "Show the security log" (it was under Settings > Extensions > Experimental as Security logs) with Open log beside it; while it is on, the log shows under it, newest first, and the log is kept and its alerts arrive either way. Every entry is chained to the one before it, so if something edits or removes an entry after Ghostex wrote it, the page says "The security log was changed" and where. `ghostex security log` shows the same list in a terminal (`--last <n>`, `--json`) and exits with code 2 when the log was changed.
+Settings > Security has three parts. Approvals: Approve with, One click or Touch ID or password (see Approvals below). What still asks: the short list of what asks for an Approve on this computer, with the line that everything else works without asking and your own clicks never ask. Log: "Show the security log" (it was under Settings > Extensions > Experimental as Security logs) with Open log beside it; while it is on, the log shows under it, newest first, and the log is kept and its alerts arrive either way. Every entry is chained to the one before it, so if something edits or removes an entry after Ghostex wrote it, the page says "The security log was changed" and where. `ghostex security log` shows the same list in a terminal (`--last <n>`, `--json`) and exits with code 2 when the log was changed.
 
 Settings that are account or pairing state, or hold a key or token (the Remote and Accounts pages), aren't written through `ghostex settings` or `ghostex actions`: change them in Settings. Easy Connect serves only SSH and Ghostex itself, never other ports. Private file links never open keys (such as `~/.ssh`), Ghostex's own data, or a project's hidden files like `.env`.
 
@@ -7102,7 +7101,7 @@ Rows named zmx or gxserver in System Settings > Privacy & Security are left over
 
 ## Approvals (only at the door)
 
-Ghostex asks only when something could let someone new in, and then with one Approve / Deny card: a new phone or computer asking to pair (compare the three words it shows), each message a Collab guest sends in Ask me mode, and, when an agent asks, turning on Easy Connect (once), letting a device into it, making a Collab share or showing its link again, and turning on Send for a share. Your own clicks in Ghostex never ask. Everything else just works, for you and your agents: connecting your computers, every setting, GBots, Autopilot, Cloud Boxes, teams, extensions, secret providers and starting an agent with Full permissions. Agents can't approve a card or answer a secret request. The card opens in the middle of the Ghostex window on your computer, saying who asked and on which computer; Enter never approves, and Escape, Close or the corner X put it aside behind an "Approvals waiting" pill in the work area header. A card from a computer you added under Settings > Remote can be approved right where you are. On the phone, open the computer in Machines, then Approvals. Approve is one click; to require Touch ID or your Mac password (Windows Hello or your Windows password, your password on Linux, Face ID or your fingerprint on the phone) first, turn on Settings > Security > "Require Touch ID or your password to approve" (on the phone: "Require Face ID to approve" on the computer's page under Machines); it applies to every device that approves for that computer. A request waits 10 minutes, also across a restart of Ghostex or the computer's gxserver, and an approval is good for that one change only. When the same phone or agent asks again for the same thing, the newer request replaces the waiting one and its card shows instead (check its words, then approve); a card whose request ran out of time says so ("This request expired. Ask again from the phone.").
+Ghostex asks only when something could let someone new in, and then with one Approve / Deny card: a new phone or computer asking to pair (compare the three words it shows), each message a Collab guest sends in Ask me mode, and, when an agent asks, turning on Easy Connect (once), letting a device into it, making a Collab share or showing its link again, and turning on Send for a share. Your own clicks in Ghostex never ask. Everything else just works, for you and your agents: connecting your computers, every setting, GBots, Autopilot, Cloud Boxes, teams, extensions, secret providers and starting an agent with Full permissions. Agents can't approve a card or answer a secret request. The card opens in the middle of the Ghostex window on your computer, saying who asked and on which computer; Enter never approves, and Escape, Close or the corner X put it aside behind an "Approvals waiting" pill in the work area header. A card from a computer you added under Settings > Remote can be approved right where you are. On the phone, open the computer in Machines, then Approvals. Approve is one click; to require Touch ID or your Mac password (Windows Hello or your Windows password, your password on Linux, Face ID or your fingerprint on the phone) first, set Settings > Security > Approve with to Touch ID or password (Windows Hello or password on Windows, Password on Linux; on the phone: "Require Face ID to approve" on the computer's page under Machines); it applies to every device that approves for that computer. A request waits 10 minutes, also across a restart of Ghostex or the computer's gxserver, and an approval is good for that one change only. When the same phone or agent asks again for the same thing, the newer request replaces the waiting one and its card shows instead (check its words, then approve); a card whose request ran out of time says so ("This request expired. Ask again from the phone.").
 
 Older Ghostex apps and phones keep working with a computer on this version: their Touch ID or Face ID approvals count as a plain Approve. A computer still on an older Ghostex keeps asking for Touch ID or Face ID to approve, as before.
 
@@ -7560,8 +7559,8 @@ and the Project sidebar lists them among the project's own sessions, each with
 the worktree's branch on a small line under its title. Right-click such a session for Rename
 Worktree and Delete Worktree, or use the project's ⋯ menu, whose Delete
 Worktree lists the project's worktrees. To give each worktree its own entry
-under its project instead, turn off Settings > Sidebar & Sessions > Advanced >
-Worktree sessions show in their project (`worktreeSessionsInProject`, on by
+under its project instead, set Settings > Sidebar & Sessions > Advanced >
+Worktree sessions to Own project (`worktreeSessionsInProject`; In their repository by
 default); the phone follows it, and nothing is lost either way. The Unified
 sidebar always lists worktree sessions under their repository. Worktrees can be
 renamed, merged back, and deleted from the sidebar. When a worktree's folder is deleted, the sessions that
@@ -8836,7 +8835,7 @@ background image); **Text & Fonts** (`--tab textFonts`): Fonts, Terminal text (t
 font weight, bold text, line height and letter spacing) and Text; **Size & Zoom** (`--tab
 sizeZoom`): Size (Scale and More size options) and Panel sizes (the sidebar's width and the
 Commands pane's height on double-click); **Window & Layout** (`--tab windowLayout`): Window frame
-(Layout, the window buttons, Close buttons on the right), Panes (the active pane
+(Layout, the window buttons, Close buttons), Panes (the active pane
 outline) and Panels (Animations, Close side panel with its last tab, Commands pane side). Each
 setting is on one page, and these pages link nowhere else. A search for a row inside a More
 fold opens it.
@@ -8919,7 +8918,7 @@ card instead, with a thin margin and a hairline border, floating over the work a
 flat to the window's edges; the sidebar rail sits on the work area's background. The sidebar is
 at least 196pt wide either way.
 Show the window buttons when the sidebar is collapsed (macOS, on by default) keeps the red, yellow and green window buttons in the window's top left while the sidebar is collapsed; off hides them until you open the floating sidebar, which then carries them in its top row (`showWindowButtonsWhenSidebarCollapsed`). Full screen keeps its own title bar either way.
-Under them, Close buttons on the right (macOS, off by default) puts the X that closes a dialog or a pop-up message back at its top right. Off, it sits at the top left, where macOS puts a window's close button: the corner X of every dialog and of the dialogs inside Settings, the X in the header of the Markdown table, Mermaid diagram and page windows and of the picture viewer, and the X of the messages that pop up at the bottom of the window (`closeButtonsOnRight`). On Windows and Linux the X stays at the top right.
+Under them, Close buttons: Left / Right (macOS, Left by default) says where the X that closes a dialog or a pop-up message sits. Left is the top left, where macOS puts a window's close button: the corner X of every dialog and of the dialogs inside Settings, the X in the header of the Markdown table, Mermaid diagram and page windows and of the picture viewer, and the X of the messages that pop up at the bottom of the window (`closeButtonsOnRight`). On Windows and Linux the X stays at the top right.
 The chosen theme colors the
 sidebar and window chrome, the sidebar's dropdown menus, and the chat view
 background (chat keeps following its own Chat theme setting, so a light chat in a

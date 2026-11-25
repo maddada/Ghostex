@@ -19,7 +19,7 @@ fn approvals() -> Section {
         "approvals",
         "Approvals",
         vec![
-            row("approvalsRequirePresence", "Require Touch ID or your password to approve", "Off: Approve on a card (a new phone or computer, a guest's message in Collab, an agent turning on Easy Connect) goes through with one click. On: your computer asks for Touch ID, Windows Hello or your password first, and your phone for Face ID or your fingerprint. It applies to every device that approves for this computer."),
+            row("approvalsRequirePresence", "Approve with", "One click: Approve on a card (a new phone or computer, a guest's message in Collab, an agent turning on Easy Connect) goes through at once. Touch ID or password: your computer asks for Touch ID, Windows Hello or your password first, and your phone for Face ID or your fingerprint. It applies to every device that approves for this computer."),
         ],
     )
 }

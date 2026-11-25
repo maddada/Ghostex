@@ -51,7 +51,7 @@ pub(crate) fn provider() -> Section {
             row("voiceAgentCallMode", "Call mode", "Regular calls listen hands-free; on Grok they're billed for the whole time the call is connected, quiet and muted time included (about $0.08 a minute). Push-to-talk calls listen only while you hold the talk button next to Mute (or Space, or the Hold to Talk hotkey); on Grok you pay only for the audio you send and the agent's replies. In a muted Regular call, holding it unmutes you for as long as you hold. GPT Realtime bills only audio in both modes. A change applies to your next call; the gear in the voice panel changes it too.").options(&[
                 opt("Regular", "regular"), opt("Push-to-talk", "pushToTalk"),
             ]),
-            row("voiceAgentWaitForReply", "Answer when I say \"reply\"", "The voice agent keeps listening until you end with \"reply\", \"over\" or \"go ahead\", then answers. Each Regular call starts with it saying \"Hey, I hear you. Please say reply after you finish speaking so I can reply to you.\" Off: it answers when you pause. Shown while the call mode is Regular: a push-to-talk turn ends when you let go of the talk button. A change applies to your next call."),
+            row("voiceAgentWaitForReply", "The agent answers", "When I pause: the voice agent answers when you stop speaking. When I say \"reply\": it keeps listening until you end with \"reply\", \"over\" or \"go ahead\", then answers, and each Regular call starts with it saying \"Hey, I hear you. Please say reply after you finish speaking so I can reply to you.\" Shown while the call mode is Regular: a push-to-talk turn ends when you let go of the talk button. A change applies to your next call."),
         ],
     )
 }

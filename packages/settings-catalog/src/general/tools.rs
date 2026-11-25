@@ -19,7 +19,7 @@ pub(crate) fn file_opening() -> Section {
             row("changesHideTestFiles", "Hide test files in Changes", "Leave test files (such as foo_test.go, button.test.ts, FooTests.swift and anything in a tests folder) out of the Changes view, so you can review an agent's change without its tests. A line at the top says how many are hidden, with a click to show them. The flask button in the Changes toolbar switches this too."),
             row("beadsViewLayout", "Beads view layout", "Choose whether the Beads view opens as a Tree (every bead under its epic) or as the Board. The Tree | Board switch in the view's header changes this too.").options(BEADS_VIEW_LAYOUT_OPTIONS),
             row("audioFileOpenTarget", "Audio", "Choose whether audio files linked in agent chat or the terminal, or opened with `ghostex open`, play in Files or open in the system app. Formats Files cannot play, such as .m4a, always open in the system app.").options(MEDIA_FILE_OPEN_TARGET_OPTIONS),
-            row("docsOpenFilesAsTabs", "Show open files as tabs", "Show the files open in the Files view as a row of tabs above the document, instead of the Open Files list in the files sidebar. Every file you open, from the files list, Quick Access or a chat link, gets a tab, and each keeps its own unsaved changes and notes."),
+            row("docsOpenFilesAsTabs", "Open files show as", "A list: the files open in the Files view are the Open Files list in the files sidebar. Tabs: they are a row of tabs above the document; every file you open, from the files list, Quick Access or a chat link, gets a tab, and each keeps its own unsaved changes and notes."),
         ],
     )
 }

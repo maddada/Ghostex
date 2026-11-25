@@ -14,8 +14,8 @@
 use super::super::super::native_modal_kit::*;
 use super::super::catalog::{SettingOption, settings_catalog};
 use super::super::fields::{
-    ButtonVariant, FieldStates, RowSpec, SettingsPage, reset_key, select_field, setting_row,
-    settings_button, settings_section, settings_text_input, toggle_field,
+    ButtonVariant, FieldStates, RowSpec, SettingsPage, bool_segmented_key, reset_key, select_field,
+    setting_row, settings_button, settings_section, settings_text_input,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -799,11 +799,11 @@ impl VoiceAgentTab {
                     .description(subtitle)
                     .keyed(values, WAIT_FOR_REPLY)
                     .dependent();
-                provider_rows.push(toggle_field(
-                    self,
+                provider_rows.push(bool_segmented_key(
                     p,
                     WAIT_FOR_REPLY,
                     spec,
+                    [("When I pause", false), ("When I say \"reply\"", true)],
                     values.bool(WAIT_FOR_REPLY),
                     cx,
                 ));

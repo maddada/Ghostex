@@ -29,9 +29,9 @@ mod user_themes;
 use super::super::super::native_modal_kit::*;
 use super::super::catalog::{SettingOption, module, settings_catalog};
 use super::super::fields::{
-    DropdownState, FieldStates, RowSpec, SettingsPage, SliderSaver, open_tint_picker, reset_key,
-    searchable_select_field, segmented_field, select_field, setting_row, settings_section,
-    toggle_field, toggle_field_with, trigger_tint_picker,
+    DropdownState, FieldStates, RowSpec, SettingsPage, SliderSaver, bool_segmented_key,
+    open_tint_picker, reset_key, searchable_select_field, segmented_field, select_field,
+    setting_row, settings_section, toggle_field, toggle_field_with, trigger_tint_picker,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -628,15 +628,15 @@ impl ThemeTab {
         // CDXC:AppModal 2026-11-10 DECISION in window/round_close_button.rs: dialogs and toasts
         // close from their top left on macOS; this row puts the X back on the right.
         if cfg!(target_os = "macos") && t.visible("closeButtonsOnRight") {
-            rows.push(toggle_field(
-                self,
+            rows.push(bool_segmented_key(
                 &p,
                 "closeButtonsOnRight",
                 t.spec_plain(
                     "closeButtonsOnRight",
-                    "Close buttons on the right",
-                    "Put the X that closes dialogs and pop-up messages at their top right. Off keeps it at their top left, where macOS puts a window's close button.",
+                    "Close buttons",
+                    "Where the X that closes dialogs and pop-up messages sits. Left (the default) is where macOS puts a window's close button.",
                 ),
+                [("Left", false), ("Right", true)],
                 values.bool("closeButtonsOnRight"),
                 cx,
             ));

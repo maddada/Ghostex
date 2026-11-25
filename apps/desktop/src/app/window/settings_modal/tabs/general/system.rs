@@ -601,12 +601,13 @@ pub(super) fn sleeping_sessions_section(
         false,
         cx,
     ));
-    rows.extend(page.toggle(
+    rows.extend(page.bool_choice(
         g,
         "sleepingSessions",
         "wakeSleepingSessionsOnSelect",
-        "Wake sleeping sessions when selected",
-        "Wake a sleeping session as soon as you select it. Turn off to open it with a Resume button instead, so switching sessions does not wake it by accident.",
+        "Selecting a sleeping session",
+        "Wakes it: a sleeping session wakes as soon as you select it. Shows Resume: it opens with a Resume button instead, so switching sessions does not wake it by accident.",
+        [("Wakes it", true), ("Shows Resume", false)],
         false,
         cx,
     ));

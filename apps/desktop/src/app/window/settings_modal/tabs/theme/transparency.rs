@@ -10,9 +10,9 @@
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::catalog::{SettingOption, module, settings_catalog};
 use super::super::super::fields::{
-    SizedButtonSize, SizedButtonVariant, SliderBinding, SliderSaver, reset_key, segmented_field,
-    select_field, setting_row, settings_sized_button, slider_number_field,
-    slider_number_field_with, stock_segmented, toggle_field_with, tooltip_text,
+    SizedButtonSize, SizedButtonVariant, SliderBinding, SliderSaver, bool_segmented_field,
+    reset_key, segmented_field, select_field, setting_row, settings_sized_button,
+    slider_number_field, slider_number_field_with, stock_segmented, tooltip_text,
 };
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::{SettingsStore, post_store_message};
@@ -373,7 +373,7 @@ impl ThemeTab {
                 &p,
                 "theme-more-transparency",
                 "More transparency options",
-                "Same for light and dark, wallpaper position, sidebar and work area tints, menu blur",
+                "Light mode, wallpaper position, sidebar and work area tints, menu blur",
                 shown,
                 move |page, _window, cx| page.set_more_open(MoreGroup::Transparency, !open, cx),
                 cx,
@@ -622,16 +622,17 @@ impl ThemeTab {
         let source = values.string("windowGlassSource");
         let mut rows: Vec<AnyElement> = Vec::new();
         if let Some(same) = same.filter(|_| t.visible("windowGlassSameForLightAndDark")) {
-            rows.push(toggle_field_with(
+            rows.push(bool_segmented_field(
                 &p,
                 "windowGlassSameForLightAndDark",
                 t.spec(
                     "windowGlassSameForLightAndDark",
-                    "Same for light and dark",
-                    "Use the dark-mode Animated background and tints in light mode too. Turn off to pick them for light mode separately.",
+                    "Light mode",
+                    "Same as dark: light mode uses the dark-mode Animated background and tints too. Its own: pick them for light mode separately.",
                 ),
-                same,
                 Some(reset_key::<Self>("windowGlassSameForLightAndDark")),
+                [("Same as dark", true), ("Its own", false)],
+                same,
                 |page: &mut Self, checked, _window, cx| {
                     let mut patch = Map::new();
                     patch.insert("windowGlassSameForLightAndDark".to_string(), json!(checked));

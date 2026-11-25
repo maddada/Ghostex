@@ -457,7 +457,7 @@ impl Render for SyncTab {
 fn describe(prefix: &str) -> &'static str {
     match prefix {
         "spaces" => {
-            "Spaces in their order with their projects, project groups, Project or Unified sidebar, Separate by machine and the other settings that arrange the sidebar, and your Session Tags. Width, animations and card details stay on each computer."
+            "Spaces in their order with their projects, project groups, Project or Unified sidebar, Computers (One list or A tab each) and the other settings that arrange the sidebar, and your Session Tags. Width, animations and card details stay on each computer."
         }
         "appearance" => {
             "Theme, colours, fonts, the chat's look and the glass. The glass picture or video, the interface scale and zoom stay on each computer."

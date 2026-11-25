@@ -5,11 +5,12 @@
 //! CDXC:Security 2026-11-08 DECISION:
 //! User (Q1724, GitHub #495): an append-only, hash-chained log "in Settings > Security, and a notification for every sensitive action. Who (session, device), what, when; you notice in real time."
 //! SEE-ALSO: server/src/audit/ (the log and its check), packages/settings-catalog/src/pages/security.rs (its search rows), apps/desktop/src/app/gx_store/notifications/commands.rs (a security row in the bell opens this page).
+use super::super::catalog::SettingOption;
 use super::super::fields::notice::{is_service_unreachable, service_unreachable_state};
 use super::super::fields::{
     ButtonVariant, FieldStates, ListItemStatus, SettingsPage, settings_button, settings_list_item,
-    settings_list_item_wrapped, settings_note_row, settings_section, static_note, switch_control,
-    toggle_from_row,
+    settings_list_item_wrapped, settings_note_row, settings_section, settings_segmented,
+    static_note, switch_control, toggle_from_row,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -180,24 +181,26 @@ impl SecurityTab {
         );
     }
 
-    /// "Require Touch ID or your password to approve" (`approvalsRequirePresence`, off by
+    /// "Approve with: One click / Touch ID or password" (`approvalsRequirePresence`, off by
     /// default; CDXC:Security 2026-11-10 in packages/settings-catalog/src/pages/security.rs). The
     /// approving device checks it before it sends the plain approval (`owner_security`).
     fn approvals_section(&mut self, p: &SettingsPalette, cx: &mut Context<Self>) -> Option<Div> {
-        let (label, description) = if cfg!(target_os = "macos") {
+        // CDXC:Settings 2026-11-26 SEE-ALSO: two named choices instead of a switch (Q5019) is on
+        // `bool_segmented_field` in fields/segmented.rs.
+        let (secure, description) = if cfg!(target_os = "macos") {
             (
-                "Require Touch ID or your password to approve",
-                "Off: Approve on a card (a new phone or computer, a guest's message in Collab, an agent turning on Easy Connect) goes through with one click. On: Ghostex asks for Touch ID or your Mac password first, and your phone for Face ID or your fingerprint. It applies to every device that approves for this computer.",
+                "Touch ID or password",
+                "One click: Approve on a card (a new phone or computer, a guest's message in Collab, an agent turning on Easy Connect) goes through at once. Touch ID or password: Ghostex asks for Touch ID or your Mac password first, and your phone for Face ID or your fingerprint. It applies to every device that approves for this computer.",
             )
         } else if cfg!(target_os = "windows") {
             (
-                "Require Windows Hello or your password to approve",
-                "Off: Approve on a card (a new phone or computer, a guest's message in Collab, an agent turning on Easy Connect) goes through with one click. On: Ghostex asks for Windows Hello or your Windows password first, and your phone for Face ID or your fingerprint. It applies to every device that approves for this computer.",
+                "Windows Hello or password",
+                "One click: Approve on a card (a new phone or computer, a guest's message in Collab, an agent turning on Easy Connect) goes through at once. Windows Hello or password: Ghostex asks for Windows Hello or your Windows password first, and your phone for Face ID or your fingerprint. It applies to every device that approves for this computer.",
             )
         } else {
             (
-                "Require your password to approve",
-                "Off: Approve on a card (a new phone or computer, a guest's message in Collab, an agent turning on Easy Connect) goes through with one click. On: Ghostex asks for your password first, and your phone for Face ID or your fingerprint. It applies to every device that approves for this computer.",
+                "Password",
+                "One click: Approve on a card (a new phone or computer, a guest's message in Collab, an agent turning on Easy Connect) goes through at once. Password: Ghostex asks for your password first, and your phone for Face ID or your fingerprint. It applies to every device that approves for this computer.",
             )
         };
         /*
@@ -206,30 +209,34 @@ impl SecurityTab {
         */
         let key = "approvalsRequirePresence";
         let checked = self.store.read(cx).values().bool(key);
-        let switch = switch_control(
+        let options = [
+            SettingOption {
+                label: "One click".to_string(),
+                value: "off".to_string(),
+            },
+            SettingOption {
+                label: secure.to_string(),
+                value: "on".to_string(),
+            },
+        ];
+        let control = settings_segmented(
             p,
-            "approvalsRequirePresence-switch",
-            label,
-            checked,
-            false,
-            None,
+            "approvalsRequirePresence",
+            &options,
+            Some(if checked { "on" } else { "off" }),
             move |page: &mut Self, next, _window, cx| {
                 let store = page.store.clone();
-                store.update(cx, |store, cx| store.update_setting(key, json!(next), cx));
+                store.update(cx, |store, cx| {
+                    store.update_setting(key, json!(next == "on"), cx)
+                });
             },
             cx,
         );
-        let (switch, press) = switch.into_row_parts();
-        let row = toggle_from_row(
+        let row = settings_list_item_wrapped(
             p,
-            "approvalsRequirePresence-row",
-            settings_list_item_wrapped(
-                p,
-                label,
-                div().child(description).into_any_element(),
-                Some(switch.into_any_element()),
-            ),
-            press,
+            "Approve with",
+            div().child(description).into_any_element(),
+            Some(control),
         );
         settings_section(p, "Approvals", None, None, vec![row])
     }

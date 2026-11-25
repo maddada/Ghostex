@@ -43,7 +43,7 @@ hotkeys Every shortcut and its default binding
   floating workspace, and sends the window to the dock.
 - **Sidebar** (left by default): projects, their sessions, tags and filters
   (every connected computer's projects in one list, a project on several
-  computers as one entry, unless Separate by machine is on), and the More Options menu under the three-lines button (☰) at
+  computers as one entry, unless Computers is set to A tab each), and the More Options menu under the three-lines button (☰) at
   the top right (Sort & Filter, Collapse All, Terminal, Coordinator, Browser, Commands, Agents Hub, All Automations,
   Connect a Phone, Connect a Computer, Keep Awake, then Ask Ghostex AI, Join Discord and Send Bug / Feedback, then the Tools and Ghostex submenus and
   Settings; Ghostex holds New Window, Check for Updates, Restart Ghostex, Quit

@@ -21,8 +21,8 @@ pub(super) mod terminal_font;
 use super::super::catalog::{SettingOption, module, settings_catalog};
 use super::super::fields::advanced_fold_header;
 use super::super::fields::{
-    FieldStates, PageAction, RowSpec, SettingsPage, SliderBinding, reset_key, segmented_field,
-    select_field, slider_number_field, toggle_field,
+    BoolChoices, FieldStates, PageAction, RowSpec, SettingsPage, SliderBinding, bool_segmented_key,
+    reset_key, segmented_field, select_field, slider_number_field, toggle_field,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -193,6 +193,37 @@ impl GeneralTab {
             spec = spec.dependent();
         }
         Some(toggle_field(self, &g.p, key, spec, g.values.bool(key), cx))
+    }
+
+    /// An on/off `key` whose two states are named behaviours: a two-choice segmented control
+    /// in place of a switch, saving `false` or `true` as the switch did.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn bool_choice(
+        &mut self,
+        g: &GeneralCx,
+        section: &str,
+        key: &'static str,
+        label: &str,
+        description: &str,
+        choices: BoolChoices,
+        dependent: bool,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        if !g.visible(section, key) {
+            return None;
+        }
+        let mut spec = g.spec(key, label, description);
+        if dependent {
+            spec = spec.dependent();
+        }
+        Some(bool_segmented_key(
+            &g.p,
+            key,
+            spec,
+            choices,
+            g.values.bool(key),
+            cx,
+        ))
     }
 
     /// A `SelectField` bound to a string `key`.

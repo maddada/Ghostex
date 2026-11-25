@@ -102,7 +102,7 @@ fn sidebar_section(
     // The Project / Unified switch lives here only (CDXC:Sidebar 2026-10-30 on SIDEBAR_VIEW_OPTIONS).
     if g.visible(s, "sidebarView") {
         let spec = RowSpec::new("Sidebar")
-            .description("Project sidebar lists each project with its sessions under it. Unified sidebar shows every session in one list, with the ones that need you on top. Both show every connected computer together unless Separate by machine is on.")
+            .description("Project sidebar lists each project with its sessions under it. Unified sidebar shows every session in one list, with the ones that need you on top. Both show every connected computer together unless Computers is set to A tab each.")
             .modified(g.values.is_modified("sidebarView"));
         rows.extend(page.segmented(
             g,
@@ -131,12 +131,13 @@ fn sidebar_section(
     }
     // One list for every computer unless this is on (CDXC:RemoteMachines 2026-11-05 in gx-core
     // sidebar_view/merged.rs).
-    rows.extend(page.toggle(
+    rows.extend(page.bool_choice(
         g,
         s,
         "sidebarSeparateByMachine",
-        "Separate by machine",
-        "Show one computer at a time, each with its own tab, project list and Spaces. Off (the default): one list for every connected computer, where a project on several computers is one entry with the sessions of all of them, and Spaces and project groups are shared by all of them.",
+        "Computers",
+        "One list (the default): every connected computer in one list, where a project on several computers is one entry with the sessions of all of them, and Spaces and project groups are shared by all of them. A tab each: one computer at a time, each with its own tab, project list and Spaces.",
+        [("One list", false), ("A tab each", true)],
         false,
         cx,
     ));
@@ -312,12 +313,13 @@ fn sidebar_section(
         ));
         // CDXC:Worktrees 2026-11-06 DECISION in gx-core sidebar_view/worktree_fold.rs (an
         // advanced row, on by default); the Unified sidebar groups worktrees by repository itself.
-        rows.extend(page.toggle(
+        rows.extend(page.bool_choice(
             g,
             s,
             "worktreeSessionsInProject",
-            "Worktree sessions show in their project",
-            "List a session started in a worktree under its repository's project, with the worktree's branch on its row, instead of giving the worktree a project of its own. The session still works in the worktree's folder. Turn off to show each worktree as its own project under its repository.",
+            "Worktree sessions",
+            "In their repository: a session started in a worktree is listed under its repository's project, with the worktree's branch on its row; the session still works in the worktree's folder. Own project: each worktree shows as its own project under its repository.",
+            [("In their repository", true), ("Own project", false)],
             false,
             cx,
         ));
