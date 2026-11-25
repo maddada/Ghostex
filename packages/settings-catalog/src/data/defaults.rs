@@ -741,6 +741,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("chatSendOnPick", J::Bool(false)),
     ("chatAnswersWaitForIdle", J::Bool(false)),
     ("chatPageOpenTarget", J::Str("popup")),
+    // CDXC:SessionChat 2026-11-26 SEE-ALSO: the Inbox reply arrow's chat box path is opt-in, off; the user decision is on `open_row_reply` in apps/desktop/src/app/native_chat/reply_popover.rs.
+    ("chatInboxReplyInChat", J::Bool(false)),
     // CDXC:SessionChat 2026-11-07 SEE-ALSO: the chat look settings (Message layout, Your messages, Status line in the chat) are opt-in; Agent work and Tool call cards are retired (`migrate_retired_chat_looks` in lib.rs), all Default; the user decisions are in packages/gx-chat-core/src/transcript/chat_look.rs.
     ("chatMessageLayout", J::Str("default")),
     ("chatUserMessageStyle", J::Str("default")),

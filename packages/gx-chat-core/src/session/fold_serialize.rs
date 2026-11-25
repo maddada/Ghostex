@@ -364,6 +364,7 @@ pub(crate) mod tests {
             answers_wait_for_idle: Some(false),
             all_orchestrator_efforts: Some(true),
             varied_working_words: None,
+            inbox_reply_in_chat: None,
             enabled_agent_icons: Some(vec!["claude".into()]),
             marked_heading_strength: Some(40.0),
             chat_text_strength: Some(72.5),

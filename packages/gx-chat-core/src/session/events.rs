@@ -155,6 +155,9 @@ fn route(state: &mut ChatState, event: &Event, context: &ChatContext) -> Vec<Eff
             if let Some(varied) = settings.varied_working_words {
                 state.core.varied_working_words = varied;
             }
+            if let Some(in_chat) = settings.inbox_reply_in_chat {
+                state.core.inbox_reply_in_chat = in_chat;
+            }
             if let Some(strength) = settings.marked_heading_strength {
                 state.core.marked_heading_strength =
                     crate::transcript::marked_sections::heading_strength(strength);
@@ -305,6 +308,9 @@ pub fn boot_read(
         }
         if let Some(varied) = settings.varied_working_words {
             state.core.varied_working_words = varied;
+        }
+        if let Some(in_chat) = settings.inbox_reply_in_chat {
+            state.core.inbox_reply_in_chat = in_chat;
         }
         if let Some(strength) = settings.marked_heading_strength {
             state.core.marked_heading_strength =

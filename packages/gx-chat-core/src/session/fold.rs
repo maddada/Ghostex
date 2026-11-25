@@ -695,6 +695,7 @@ fn empty_result() -> ReadSessionChatResult {
         answers_wait_for_idle: None,
         all_orchestrator_efforts: None,
         varied_working_words: None,
+        inbox_reply_in_chat: None,
         enabled_agent_icons: None,
         marked_heading_strength: None,
         chat_text_strength: None,

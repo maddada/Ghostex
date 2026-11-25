@@ -258,7 +258,7 @@ impl NativeChatView {
                                 "question": reply.clone(),
                                 "at": [f32::from(at.x), f32::from(at.y)],
                             });
-                            this.open_reply_popover(&command, window, cx);
+                            this.open_row_reply(&command, window, cx);
                         } else if command["type"] == "hostAction" {
                             this.run_dock_host_action(&command, window, cx);
                         } else if command["type"] == "openCoordinatorThread" {
@@ -657,7 +657,7 @@ impl NativeChatView {
                     "question": reply.clone(),
                     "at": [f32::from(at.x), f32::from(at.y)],
                 });
-                this.open_reply_popover(&command, window, cx);
+                this.open_row_reply(&command, window, cx);
             }),
         )
         .into_any_element()
@@ -745,7 +745,7 @@ impl NativeChatView {
                         "question": reply.clone(),
                         "at": [f32::from(at.x), f32::from(at.y)],
                     });
-                    this.open_reply_popover(&command, window, cx);
+                    this.open_row_reply(&command, window, cx);
                 }),
             )
             .into_any_element(),
@@ -938,7 +938,7 @@ impl NativeChatView {
                                         "question": reply.clone(),
                                         "at": [f32::from(at.x), f32::from(at.y)],
                                     });
-                                    this.open_reply_popover(&command, window, cx);
+                                    this.open_row_reply(&command, window, cx);
                                 } else {
                                     this.invoke(command.clone(), cx);
                                 }
@@ -1031,7 +1031,7 @@ impl NativeChatView {
                             "question": reply.clone(),
                             "at": [f32::from(at.x), f32::from(at.y)],
                         });
-                        this.open_reply_popover(&command, window, cx);
+                        this.open_row_reply(&command, window, cx);
                     },
                 )),
             );

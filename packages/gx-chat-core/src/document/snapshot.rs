@@ -356,6 +356,11 @@ pub struct Document {
     /// otherwise (`extras::dock_approvals`). Family f.
     #[serde(default)]
     pub approval_in_dock: Value,
+    /// An Inbox row's reply arrow puts the row in the chat box as a pill and focuses it, as the
+    /// reply form's Reply in chat box does, instead of opening that form (`chatInboxReplyInChat`).
+    /// Family f.
+    #[serde(default)]
+    pub inbox_reply_in_chat: bool,
     /// A coordinator's work item cards (`extras::work_cards::project`), an array, empty when none:
     /// drawn under the reply each sits under (`anchorId`), the item's newest card in full and its
     /// earlier ones folded to one line. Family f.

@@ -717,6 +717,10 @@ pub struct ReadSessionChatResult {
     /// `catch_up`; off, the working strip says Thinking.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub varied_working_words: Option<bool>,
+    /// Whether an Inbox row's reply arrow goes straight to the chat box (`chatInboxReplyInChat`),
+    /// the same way as `catch_up`; off, it opens the small reply form.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inbox_reply_in_chat: Option<bool>,
     /// The icons of the agents turned on in Settings › Agents (an agent with no icon gives its
     /// id), the same way as `catch_up`; the model menu shows only their providers' tabs.
     #[serde(default, skip_serializing_if = "Option::is_none")]

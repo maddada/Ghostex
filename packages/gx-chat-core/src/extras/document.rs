@@ -137,6 +137,7 @@ pub fn document_with_board(
     // The approval waiting on the agent is a dock row, so its card steps aside; answered ones
     // settle in the dock too (`dock_approvals`).
     into.approval_in_dock = crate::extras::dock_approvals::in_dock(state);
+    into.inbox_reply_in_chat = state.core.inbox_reply_in_chat;
     into.side_chat_of = Tri::Value(side_chats::bar(
         state.session.side_chat_of.as_ref(),
         &state.identity.project_id,

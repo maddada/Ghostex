@@ -230,7 +230,7 @@ fn open_reply_rows(value: &serde_json::Value, rows: &mut HashSet<String>) {
 /// came from the question's own pill, else its tag alone (its own Q-tag pill), which the core
 /// resolves to the newest copy.
 #[derive(Clone)]
-struct QuestionReply {
+pub(super) struct QuestionReply {
     form: Option<String>,
     tag: String,
     /// A coordinator's work item ask (`W7`) and its card key: the words answer that ask
@@ -344,44 +344,7 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        // A work item with no open question has no tag: its words go to the item ("W7: words").
-        let item = command["question"]["item"].as_str().unwrap_or_default();
-        let questions = command["question"]["questions"]
-            .as_str()
-            .filter(|id| !id.is_empty())
-            .map(|id| {
-                (
-                    id.to_owned(),
-                    command["question"]["to"]
-                        .as_str()
-                        .unwrap_or_default()
-                        .to_owned(),
-                )
-            });
-        let question = command["question"]["tag"]
-            .as_str()
-            .filter(|tag| !tag.is_empty() || !item.is_empty() || questions.is_some())
-            .map(|tag| QuestionReply {
-                name: command["question"]["name"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .to_owned(),
-                questions: questions.clone(),
-                form: command["question"]["form"].as_str().map(str::to_owned),
-                tag: tag.to_owned(),
-                work: command["question"]["item"]
-                    .as_str()
-                    .filter(|item| !item.is_empty())
-                    .map(|item| {
-                        (
-                            item.to_owned(),
-                            command["question"]["key"]
-                                .as_str()
-                                .unwrap_or_default()
-                                .to_owned(),
-                        )
-                    }),
-            });
+        let question = question_reply_of(command);
         let quote = command["quote"].as_str().unwrap_or_default();
         if quote.is_empty() && question.is_none() {
             return;
@@ -888,16 +851,7 @@ impl NativeChatView {
             // goes also with no words yet, to say them in the chat box (by voice, with pictures,
             // or beside other answers). (`questions::answer_pills`, CDXC:Coordinators 2026-11-16.)
             if action == ReplyAction::AddToPrompt {
-                let (tags, settles) = match (&question.questions, &question.work) {
-                    (Some(_), _) => (question.tag.clone(), false),
-                    (None, Some((item, _))) => (format!("{item} {}", question.tag), true),
-                    (None, None) => (question.tag.clone(), true),
-                };
-                if let Some(pill) = ghostex_gx_chat_core::questions::answer_pills::pill(
-                    &question.name,
-                    &tags,
-                    settles,
-                ) {
+                if let Some(pill) = answer_pill(question) {
                     self.append_prompt(&format!("{pill}{reply}"), cx);
                     return;
                 }
@@ -971,6 +925,61 @@ impl NativeChatView {
             self.send(false, window, cx);
         }
     }
+}
+
+/// What a Reply command answers (a question, a work item ask, a whole form or page), `None` for a
+/// quoted selection's Reply.
+pub(super) fn question_reply_of(command: &Value) -> Option<QuestionReply> {
+    // A work item with no open question has no tag: its words go to the item ("W7: words").
+    let item = command["question"]["item"].as_str().unwrap_or_default();
+    let questions = command["question"]["questions"]
+        .as_str()
+        .filter(|id| !id.is_empty())
+        .map(|id| {
+            (
+                id.to_owned(),
+                command["question"]["to"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_owned(),
+            )
+        });
+    command["question"]["tag"]
+        .as_str()
+        .filter(|tag| !tag.is_empty() || !item.is_empty() || questions.is_some())
+        .map(|tag| QuestionReply {
+            name: command["question"]["name"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned(),
+            questions: questions.clone(),
+            form: command["question"]["form"].as_str().map(str::to_owned),
+            tag: tag.to_owned(),
+            work: command["question"]["item"]
+                .as_str()
+                .filter(|item| !item.is_empty())
+                .map(|item| {
+                    (
+                        item.to_owned(),
+                        command["question"]["key"]
+                            .as_str()
+                            .unwrap_or_default()
+                            .to_owned(),
+                    )
+                }),
+        })
+}
+
+/// The pill Reply in chat box puts in the chat box for `question`: what it answers by its title,
+/// its tags riding in the pill's link only (`questions::answer_pills`). `None` when it names no
+/// tag, as a page that only waits to be seen.
+pub(super) fn answer_pill(question: &QuestionReply) -> Option<String> {
+    let (tags, settles) = match (&question.questions, &question.work) {
+        (Some(_), _) => (question.tag.clone(), false),
+        (None, Some((item, _))) => (format!("{item} {}", question.tag), true),
+        (None, None) => (question.tag.clone(), true),
+    };
+    ghostex_gx_chat_core::questions::answer_pills::pill(&question.name, &tags, settles)
 }
 
 /// The card's width before the chat's zoom: `WIDTH`, or what its button row takes when that is

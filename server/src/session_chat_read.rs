@@ -686,6 +686,15 @@ pub(crate) async fn handle_read_session_chat_http(
             "chatVariedWorkingWords"
         )),
     );
+    // The Inbox reply arrow setting rides every read too, so the phone's reply arrow goes where the
+    // computer's does.
+    result.insert(
+        "inboxReplyInChat".to_string(),
+        json!(crate::session_chat_catch_up::chat_setting_enabled(
+            &state.paths,
+            "chatInboxReplyInChat"
+        )),
+    );
     // The phone reads the computer's answer delivery choice from this optional field; older
     // clients ignore it, and an older daemon leaves the core's default (normal send) in place.
     result.insert(

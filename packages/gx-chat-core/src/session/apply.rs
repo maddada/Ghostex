@@ -504,6 +504,9 @@ pub fn apply_draft_agent_carriage(state: &mut ChatState, result: &ReadSessionCha
     if let Some(varied) = result.varied_working_words {
         state.core.varied_working_words = varied;
     }
+    if let Some(in_chat) = result.inbox_reply_in_chat {
+        state.core.inbox_reply_in_chat = in_chat;
+    }
     if let Some(icons) = &result.enabled_agent_icons {
         state.session.enabled_agent_icons = Some(icons.clone());
     }

@@ -583,6 +583,9 @@ fn settings_moved(
             .all_orchestrator_efforts
             .is_some_and(|enabled| enabled != state.core.all_orchestrator_efforts_enabled)
         || settings
+            .inbox_reply_in_chat
+            .is_some_and(|enabled| enabled != state.core.inbox_reply_in_chat)
+        || settings
             .tool_cards
             .is_some_and(|enabled| enabled != state.transcript_view.tool_cards)
         || settings
