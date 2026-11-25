@@ -100,6 +100,14 @@ pub(crate) struct NativeSidebarState {
     /// The card's window on the desktop.
     #[cfg_attr(ghostex_web, allow(dead_code))]
     pub(crate) main_hub_card_window: Option<gpui::AnyWindowHandle>,
+    /// The merged-PR popup a row's merge badge opened (work_chips.rs; window/merged_pr_popup.rs
+    /// on the desktop, web_host/merged_pr_popup.rs on the web), and the last one a press outside
+    /// closed, with when.
+    pub(crate) merged_popup: Option<super::work_chips::MergedPopupOpen>,
+    pub(crate) merged_popup_closed: Option<(String, web_time::Instant)>,
+    /// The popup's window on the desktop.
+    #[cfg_attr(ghostex_web, allow(dead_code))]
+    pub(crate) merged_popup_window: Option<gpui::AnyWindowHandle>,
     /// The project whose missing-folder popover is open under its header (folder_mark.rs), and
     /// the last one a click outside closed, with when.
     pub(crate) folder_popover: Option<super::folder_mark::FolderPopover>,

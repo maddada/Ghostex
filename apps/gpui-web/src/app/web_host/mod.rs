@@ -12,6 +12,7 @@ mod git_menu;
 mod host_messages;
 pub(crate) mod kanban;
 mod main_hub_card;
+mod merged_pr_popup;
 mod modals;
 mod new_thread_picker;
 mod path_links;

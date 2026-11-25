@@ -7434,7 +7434,7 @@ worktree so a second agent works on a branch without touching the main
 checkout. Its sessions run in the worktree's folder (Files, Changes, Commit and
 the diff counts use the worktree, and several sessions can share one worktree),
 and the Project sidebar lists them among the project's own sessions, each with
-the worktree's branch after its title. Right-click such a session for Rename
+the worktree's branch on a small line under its title. Right-click such a session for Rename
 Worktree and Delete Worktree, or use the project's ⋯ menu, whose Delete
 Worktree lists the project's worktrees. To give each worktree its own entry
 under its project instead, turn off Settings > Sidebar & Sessions > Advanced >
@@ -7523,8 +7523,10 @@ to list would suggest. The phone's session menu has the same Link to, with the
 same rows. When a linked PR is merged, its card offers
 Clean up (remove the session's worktree and park the session; a worktree with
 uncommitted changes is kept) or Keep, once per PR; `ghostex issues cleanup
-<session> clean-up|keep` answers it from a terminal. The offer takes the card's
-second line until you answer; on the phone's session list, tap Clean up or Keep.
+<session> clean-up|keep` answers it from a terminal. Until you answer, the card's
+PR badge shows a merge icon and the PR number: click it (tap it on the phone) for
+Clean up and Keep, or right-click the session (long-press on the phone) for Clean
+Up Worktree and Keep Worktree.
 A coordinator's threads share one banner under their coordinator instead: "N merged
 worktrees" with Clean up all and Keep, which answer them all at once (`ghostex issues
 cleanup-threads <coordinator> clean-up|keep`). With **Clean up merged threads by

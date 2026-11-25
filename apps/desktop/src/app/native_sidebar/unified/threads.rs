@@ -257,7 +257,7 @@ impl GhostexGpuiApp {
                     );
                     anchor = TreeAnchor::below_row(session_card_height(
                         session,
-                        self.native_session_has_second_line(session),
+                        self.native_session_extra_lines(session),
                     ));
                 }
                 UnifiedCardLine::Older(older) => {

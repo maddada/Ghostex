@@ -13,7 +13,7 @@ use gpui::{
     AnyElement, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement, Styled,
     div, px, rgb,
 };
-use gpui_component::v_flex;
+use gpui_component::{h_flex, v_flex};
 use serde_json::{Value, json};
 
 use super::{
@@ -300,34 +300,51 @@ pub(crate) fn crew_badge(
         })
 }
 
-/// The worktree a session runs in, after its title, on a worktree session its parent project lists
-/// (gx-core `sidebar_view/worktree_fold.rs`, `worktree` in the row's details): its branch, in the
-/// muted text the computer badge uses, so the row stays recognisable among the project's own.
-pub(crate) fn worktree_badge(
-    session: &NativeSidebarSession,
-    appearance: &SidebarAppearance,
-) -> Option<AnyElement> {
-    let label = session
+/// The branch of the worktree a session runs in, on a worktree session its parent project lists
+/// (gx-core `sidebar_view/worktree_fold.rs`, `worktree` in the row's details).
+pub(crate) fn worktree_branch_label(session: &NativeSidebarSession) -> Option<String> {
+    session
         .details
         .get("worktree")
         .and_then(|worktree| worktree.get("label"))
         .and_then(Value::as_str)
         .map(str::trim)
-        .filter(|label| !label.is_empty())?
-        .to_owned();
+        .filter(|label| !label.is_empty())
+        .map(str::to_owned)
+}
+
+/// The worktree's branch on its own muted line under the title, so the row stays recognisable
+/// among the project's own without taking the title's width.
+///
+/// CDXC:WorkMode 2026-11-25 DECISION:
+/// User picked option D on the sidebar-rows page: "The worktree branch moves under the title (a
+/// second line, muted, as in the mockup). The title is no longer squeezed by the branch on line 1."
+/// The line sits under the title text like the links line (link_chips.rs) and comes before it; the
+/// phone's SessionRow.tsx does the same. This supersedes the branch badge after the title (up to
+/// 110px) of 2026-11-06.
+pub(crate) fn worktree_branch_line(
+    session: &NativeSidebarSession,
+    indent: f32,
+    appearance: &SidebarAppearance,
+) -> Option<AnyElement> {
+    let label = worktree_branch_label(session)?;
     let scale = appearance.scale;
     Some(
-        div()
+        h_flex()
+            .h(px(super::link_chips::LINK_LINE_HEIGHT * scale))
             .flex_shrink_0()
-            .flex()
-            .items_center()
-            .gap(px(3.0 * scale))
-            .max_w(px(110.0 * scale))
-            .child(titlebar_svg_icon(
+            .w_full()
+            .min_w_0()
+            .overflow_hidden()
+            // Under the title: the row's indent, the 15px icon and the 6px gap after it.
+            .pl(px((indent + 15.0 + 6.0) * scale))
+            .pr(px(6.0 * scale))
+            .gap(px(4.0 * scale))
+            .child(div().flex_shrink_0().child(titlebar_svg_icon(
                 "titlebar/git-branch.svg",
-                12.0 * scale,
+                11.0 * scale,
                 appearance.muted,
-            ))
+            )))
             .child(
                 div()
                     .min_w_0()

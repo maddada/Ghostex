@@ -5,7 +5,7 @@
 //! Only the list moves: the worktree stays a gxserver project, so its sessions still run in its folder (Files, Changes, Commit, diff counts and Delete Worktree read the worktree's project), several sessions share one worktree, and nothing is written, so switching the setting off brings every worktree entry back with its sessions, pins, tags and order. The parent's header menu lists the folded worktrees in a Delete Worktree submenu, as the Unified sidebar's repository header does. The Unified sidebar needs none of this: it already lists a worktree's sessions under its repository, and reads the worktree groups this would remove, so the fold runs only for the Project sidebar.
 //!
 //! SEE-ALSO: packages/gx-core/src/sidebar_view/merged.rs (the same fold for another machine's
-//! worktrees), apps/desktop/src/app/native_sidebar/threads.rs (`worktree_badge`),
+//! worktrees), apps/desktop/src/app/native_sidebar/threads.rs (`worktree_branch_line`),
 //! apps/mobile/app/src/contract/grouping.ts (the phone's Project list),
 //! server/src/ghostex_cli/sessions/mobile_summary.rs (the setting the phone reads).
 

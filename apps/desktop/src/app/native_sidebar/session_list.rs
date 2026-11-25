@@ -15,8 +15,9 @@ use crate::GhostexGpuiApp;
 /// Its rows are 31pt apart at the same text size as ours, so a row is 30pt plus the 1pt spacing
 /// (it was 34pt). Section headings and the gaps between groups follow (sections.rs).
 pub(super) const SESSION_HEIGHT: f32 = 30.0;
-/// A work-mode card with links: line 1 exactly as tall as every other card, then the chips.
-pub(super) const WORK_SESSION_HEIGHT: f32 = SESSION_HEIGHT + 18.0;
+/// Each line under a card's title (its worktree's branch, its links): the 16px line and 2px
+/// under it; line 1 stays exactly as tall as every other card's.
+pub(super) const EXTRA_LINE_HEIGHT: f32 = 18.0;
 /// Between two session rows.
 ///
 /// CDXC:Sidebar 2026-11-21 DECISION:
@@ -26,14 +27,10 @@ pub(super) const SESSION_SPACING: f32 = 3.0;
 /// Horizontal gap between the list edge and a session card's rounded body.
 pub(super) const SESSION_INSET_X: f32 = 3.0;
 
-/// A card's height before scaling: taller only when it draws a second line, its links or a Work
-/// mode card's Clean up / Keep offer (`native_session_has_second_line`, link_chips.rs).
-pub(super) fn session_card_height(_session: &NativeSidebarSession, second_line: bool) -> f32 {
-    if second_line {
-        WORK_SESSION_HEIGHT
-    } else {
-        SESSION_HEIGHT
-    }
+/// A card's height before scaling: taller by a line for each line it draws under its title
+/// (`native_session_extra_lines`, link_chips.rs).
+pub(super) fn session_card_height(_session: &NativeSidebarSession, extra_lines: u8) -> f32 {
+    SESSION_HEIGHT + EXTRA_LINE_HEIGHT * f32::from(extra_lines)
 }
 
 impl GhostexGpuiApp {
@@ -60,9 +57,7 @@ impl GhostexGpuiApp {
         let sessions: Rc<[Arc<NativeSidebarSession>]> = sessions.into();
         let card_heights: Rc<[f32]> = sessions
             .iter()
-            .map(|session| {
-                session_card_height(session, self.native_session_has_second_line(session))
-            })
+            .map(|session| session_card_height(session, self.native_session_extra_lines(session)))
             .collect();
         // Each row's top in unscaled pixels, plus the list's total height as the last entry.
         let mut tops: Vec<f32> = Vec::with_capacity(sessions.len() + 1);

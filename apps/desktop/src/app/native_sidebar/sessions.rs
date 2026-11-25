@@ -90,8 +90,7 @@ impl GhostexGpuiApp {
             == Some(true);
         let drop_position = self.native_sidebar_session_drop_line(&session_id);
         let scale = appearance.scale;
-        let card_height =
-            session_card_height(session, self.native_session_has_second_line(session));
+        let card_height = session_card_height(session, self.native_session_extra_lines(session));
         // Main Hub's per-computer fold (gx-core `MachineFold`, CDXC:Chief 2026-11-24): this
         // computer's Ask Ghostex AI / Autopilot supervisor row carries a neutral `+N` chip, and
         // unfolded other-computer rows sit indented underneath showing their computer icon & name.
@@ -310,6 +309,7 @@ impl GhostexGpuiApp {
             .unwrap_or("")
             .to_owned();
         let hide_computer_icon = super::computer_mark::hide_computer_icon_until_hover(hud);
+        let merged_offer = super::work_chips::row_merged_offer(session);
         let computer_badge = (machine_fold_child.is_none()
             && machine_fold_lead.is_none()
             && (!buttons_shown || hide_computer_icon))
@@ -317,7 +317,15 @@ impl GhostexGpuiApp {
                 self.session_computer_badge(session, appearance, !hide_computer_icon || hovered)
             })
             .flatten();
-        let has_computer_badge = !buttons_shown && computer_badge.is_some();
+        // CDXC:RemoteMachines 2026-11-25 DECISION:
+        // User, of a row whose computer icon shows on hover: "please we should swap the machine and the #112 so #112 doesn't shift when i hover" and "same here swap machine icon to be left one pls so workers icon doesnt shift". The computer's icon comes first among the badges after the title (the links or merge badge, the workers count, the agentbox and cloud badges), and the trailing slot keeps its width whenever the row has a computer to show, drawn or not, so nothing at the right of the row moves when the icon appears on hover. Supersedes the icon's place just before the trailing slot (2026-11-12, status.rs).
+        let has_computer_badge = !buttons_shown
+            && machine_fold_child.is_none()
+            && machine_fold_lead.is_none()
+            && (computer_badge.is_some()
+                || self
+                    .session_computer_badge(session, appearance, true)
+                    .is_some());
         // Neutral `+N` chip on Main Hub's per-computer lead rows (Ask Ghostex AI, Autopilot
         // supervisor); stays visible on hover so clicking it never misses when hover actions open.
         let machine_fold_chip = machine_fold_lead.map(|(fold_key, count, expanded, _)| {
@@ -482,24 +490,28 @@ impl GhostexGpuiApp {
                 .child(self.render_native_session_identity(session, icon, hovered, appearance, cx))
                 .child(div().id(format!("native-session-title-{session_id}")).flex_1().min_w_0().h_full().flex().items_center().child(title_with_rename_shake(div().min_w_0().truncate().when_some(title_color, |title, color| title.text_color(color)).when(bold_title, |title| title.font_weight(gpui::FontWeight::SEMIBOLD)).child(display_label), &session_id, session.rename_failed_at.as_deref(), scale)).when(session_tooltips && self.native_sidebar.pointer_inside && self.native_sidebar.menu.is_none() && !cx.has_active_drag(), |row| row.managed_discrete_tooltip_with_placement(tooltip_span.placement(), appearance.tooltip_delay, move |window, cx| super::tooltips::sidebar_tooltip(tooltip.clone(), tooltip_span, scale, window, cx))))
                 // CDXC:Sidebar 2026-10-29 DECISION: User: "please swap the order of these 2 things (the threads one for orchestrator with the link tag)". The links badge comes before a coordinator's workers badge; the phone's SessionRow.tsx follows.
-                .when(!buttons_shown, |row| row.children(self.render_native_session_links_badge(session, appearance)))
+                // The computer's icon leads the badges, so the badges after it never move when it
+                // shows on hover (CDXC:RemoteMachines 2026-11-25 above). When hover buttons replace
+                // the badges while hideComputerIconUntilHover is on, it still renders before the
+                // hover strip so pointing at the row reveals which computer it runs on.
+                .children(computer_badge)
+                // A merged PR the row offers to clean up shows as its merge badge, in the links
+                // badge's place (work_chips.rs).
+                .when(!buttons_shown, |row| match &merged_offer {
+                    Some(offer) => row.child(self.render_merged_pr_badge(offer, tooltip_span, appearance, cx)),
+                    None => row.children(self.render_native_session_links_badge(session, appearance)),
+                })
                 .when(!buttons_shown && !clock_fold, |row| row.children(super::threads::coordinator_badge(session, appearance)))
                 // A Unified coordinator whose hat a clock owns folds from its count, idle or hovered too.
                 .when(clock_fold, |row| row.children(self.render_unified_crew_count(session, appearance, cx)))
                 .when(!buttons_shown, |row| row.children(super::gbots_rows::opened_by_chief_tag(session, appearance)))
-                .when(!buttons_shown, |row| row.children(super::threads::worktree_badge(session, appearance)))
                 .when(!buttons_shown, |row| row.children(self.render_voice_call_badge(&session.session_id, appearance)))
                 .when(!buttons_shown, |row| row.children(super::agentbox::agentbox_badge(session, appearance, tooltip_span, self.native_sidebar.pointer_inside && self.native_sidebar.menu.is_none() && !cx.has_active_drag())))
                 .when(!buttons_shown, |row| row.children(super::cloud_box::cloud_box_badge(session, appearance, tooltip_span, self.native_sidebar.pointer_inside && self.native_sidebar.menu.is_none() && !cx.has_active_drag())))
                 .children(machine_fold_chip)
-                // The computer's icon comes last before the trailing slot, which keeps one width while it
-                // is drawn so the icons line up down the list (CDXC:RemoteMachines 2026-11-12 in status.rs).
-                // When hideComputerIconUntilHover is on, it still renders before the hover strip on hover
-                // so pointing at the row reveals which computer it runs on.
-                .children(computer_badge)
                 .when(buttons_shown, |row| row.child(self.render_native_session_hover_strip(session, strip_expanded, strip_toggle, appearance, cx)))
                 .when(!trailing.is_empty() || has_computer_badge, |row| row.child(h_flex().flex_shrink_0().justify_end().gap(px(6.0 * scale)).when(has_computer_badge, |slot| slot.min_w(px(super::status::TRAILING_SLOT_WIDTH * scale))).children(trailing))))
-                .children(self.render_native_session_work_chips(session, indent, tooltip_span, appearance, cx))
+                .children(super::threads::worktree_branch_line(session, indent, appearance))
                 .children(self.render_native_session_link_line(session, indent, tooltip_span, appearance, cx))
                 .when(can_drag && self.native_sidebar.menu.is_none(), |row| row.sidebar_drag_source(dragged, cx))
                 .when(place == SessionRowPlace::ProjectList, |row| row.sidebar_drop_target("session", drag_id, Some(drag_group_id), cx))

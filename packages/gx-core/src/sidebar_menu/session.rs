@@ -935,6 +935,7 @@ impl Places<'_, '_> {
             "snooze" => self.action(HoverAction::Snooze),
             "park" => self.action(HoverAction::Park),
             "box" => box_rows(id, row, group),
+            "cleanUpWorktree" | "keepWorktree" => worktree_cleanup_rows(id, row, place),
             "claudeAi" => claude_cloud_rows(id, row, group),
             "coordinator" => coordinator_rows(row, group.is_stale, input.has_inactive_threads),
             "markThreadDone" => thread_rows(row, group.is_stale),
@@ -988,6 +989,24 @@ impl Places<'_, '_> {
             _ => Vec::new(),
         }
     }
+}
+
+/// Clean Up Worktree or Keep Worktree while gxserver offers to clean up the row's merged PR
+/// (CDXC:WorkMode 2026-11-25 in layout.rs); the same answer the row's merged badge sends.
+fn worktree_cleanup_rows(id: &str, row: &SessionRow, place: &str) -> Vec<MenuItem> {
+    if !row.work.as_ref().is_some_and(|work| work.offer_cleanup) {
+        return Vec::new();
+    }
+    let answer = if place == "cleanUpWorktree" {
+        "cleanUp"
+    } else {
+        "keep"
+    };
+    vec![layout_row(
+        place,
+        false,
+        MenuCommand::answer_work_cleanup(id, answer),
+    )]
 }
 
 /// The row's whole menu: the one session menu (layout.rs) as the sidebar fills it.

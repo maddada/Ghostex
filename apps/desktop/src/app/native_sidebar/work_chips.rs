@@ -1,53 +1,71 @@
-//! A work-mode session card's Clean up / Keep offer for its merged PR, on the card's second line
-//! with the PR chip. The card's links themselves show as every other card's do (link_chips.rs).
+//! A session row's Clean up / Keep offer for its merged PR: the merge badge on the row's title line
+//! and the small popup it opens beside the sidebar, level with the row.
 //!
-//! SEE-ALSO: packages/gx-core/src/sidebar_view/work.rs (what the chips read),
-//! server/src/work_mode/ (where the links and their states come from),
-//! apps/desktop/src/app/gx_store/work_mode.rs (`openWorkLink`, what a click does).
+//! CDXC:WorkMode 2026-11-25 DECISION:
+//! User picked option D on the sidebar-rows page: "On a row whose PR is merged and that gxserver
+//! offers to clean up, the PR badge turns into a merge icon with #108. That is the only mark on the
+//! row; the separate second line with #108 + Clean up + Keep chips goes away." Hovering the badge
+//! says "PR #108 merged. Click to clean up or keep."; clicking it opens a popup beside the sidebar,
+//! level with the row like the links card, saying what Clean up does, with Open PR, Keep and Clean
+//! up in the app's neutral button style (never the accent). The row's right-click menu carries the
+//! same two answers (gx-core sidebar_menu/layout.rs), and the phone opens the popup as a sheet. The
+//! answers are unchanged (`answerWorkCleanup`, gx_store/work_links.rs), and a coordinator's threads
+//! still answer in its banner (cleanup_banner.rs). This supersedes the 2026-10-09 chips on the
+//! card's second line.
+//!
+//! SEE-ALSO: packages/gx-core/src/sidebar_view/work.rs (what the badge reads),
+//! server/src/work_mode/cleanup.rs (the offer), window/merged_pr_popup.rs (the desktop's popup
+//! window), apps/gpui-web/src/app/web_host/merged_pr_popup.rs (the web build's),
+//! apps/mobile/app/src/components/sessions/SessionRow.tsx (the phone's sheet).
+
+use std::rc::Rc;
 
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    AnyElement, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement,
-    StatefulInteractiveElement, Styled, div, px, rgb,
+    AnyElement, App, FontWeight, InteractiveElement, IntoElement, MouseButton, ParentElement,
+    StatefulInteractiveElement, Styled, Window, div, px,
 };
-use gpui_component::h_flex;
 use gpui_component::tooltip::ManagedTooltipExt as _;
+use gpui_component::{h_flex, v_flex};
 use serde_json::json;
+use web_time::{Duration, Instant};
 
 use super::appearance::SidebarAppearance;
 use super::model::NativeSidebarSession;
 use super::tooltips::SidebarTooltipSpan;
 use crate::GhostexGpuiApp;
 use crate::app::helpers::*;
+use ghostex_gx_core::SessionLinkTone;
 
-const OPEN_GREEN: u32 = 0x3fb950;
-const DRAFT_GREY: u32 = 0x8b949e;
-const MERGED_PURPLE: u32 = 0xa371f7;
-const CLOSED_RED: u32 = 0xf85149;
-const PENDING_AMBER: u32 = 0xd29922;
-const STARTED_YELLOW: u32 = 0xf2c94c;
-const REVIEW_GREEN: u32 = 0x4cb782;
-const DONE_INDIGO: u32 = 0x5e6ad2;
-const LINEAR_INDIGO: u32 = 0x7c84f0;
+/// The popup's width, as the mockup draws it.
+pub(crate) const MERGED_PR_POPUP_WIDTH: f32 = 270.0;
+/// The gap between the sidebar's edge and the popup.
+pub(crate) const MERGED_PR_POPUP_GAP: f32 = 6.0;
+/// A click on the badge right after a click outside closed the popup is that same click.
+const REOPEN_GUARD: Duration = Duration::from_millis(300);
 
-/// The height of the chip line under line 1; `WORK_SESSION_HEIGHT` leaves 2px under it.
-const CHIP_LINE_HEIGHT: f32 = 16.0;
+/// A merged PR the row offers to clean up, as its badge and popup show it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct MergedOffer {
+    pub(crate) session_id: String,
+    pub(crate) number: u64,
+    pub(crate) url: Option<String>,
+    pub(crate) branch: Option<String>,
+}
 
-/// One chip's parts, before it is drawn.
-struct Chip {
-    key: &'static str,
-    icon: &'static str,
-    icon_color: Hsla,
-    label: String,
-    /// The PR's checks mark, drawn after the number.
-    trailing: Option<(&'static str, Hsla)>,
-    url: Option<String>,
-    /// A sidebar command the chip sends instead of opening `url` (the Clean up / Keep offer).
-    action: Option<serde_json::Value>,
-    /// The ticket a click opens in the Work view, as `/api/readWorkItem` names it; the link is
-    /// what opens when the window cannot show the Work view (gx_store/work_mode.rs).
-    work_item: Option<serde_json::Value>,
-    tooltip: String,
+/// The open popup: whose offer, and the top of its row in the window when it opened.
+#[derive(Clone, Debug)]
+pub(crate) struct MergedPopupOpen {
+    pub(crate) offer: MergedOffer,
+    pub(crate) top: f32,
+}
+
+/// What a popup button does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum MergedOfferAnswer {
+    OpenPr,
+    Keep,
+    CleanUp,
 }
 
 /// The row's merged-PR offer is answered in its coordinator's banner (gx-core
@@ -60,370 +78,307 @@ pub(crate) fn offer_in_banner(session: &NativeSidebarSession) -> bool {
         == Some(true)
 }
 
+/// The offer the row answers itself: gxserver offers to clean up its merged PR and no banner of
+/// its coordinator answers for it.
+pub(crate) fn row_merged_offer(session: &NativeSidebarSession) -> Option<MergedOffer> {
+    let work = session
+        .work
+        .as_ref()
+        .filter(|work| work.offer_cleanup && !offer_in_banner(session))?;
+    let pr = work.pull_request.as_ref()?;
+    let branch = work
+        .branch
+        .clone()
+        .or_else(|| super::threads::worktree_branch_label(session))
+        .filter(|branch| !branch.trim().is_empty());
+    Some(MergedOffer {
+        session_id: session.session_id.clone(),
+        number: pr.number,
+        url: pr.url.clone(),
+        branch,
+    })
+}
+
+fn merged_color() -> gpui::Hsla {
+    super::link_chips::session_link_badge_color(SessionLinkTone::Merged)
+}
+
 impl GhostexGpuiApp {
-    /// CDXC:SessionLinks 2026-10-24 DECISION:
-    /// User: "i think i we don't need a separate thing called "work mode" and instead we can just do this". A Work mode card no longer draws its own permanent line of links (CDXC:WorkMode 2026-10-09, superseded): its links follow "Session links in the sidebar" like every card's. Only the merged-PR Clean up / Keep offer still takes a second line, with the PR chip, while it waits for an answer.
-    pub(super) fn render_native_session_work_chips(
+    /// The merge badge in place of the row's links badge: the merge icon and the PR's number.
+    pub(super) fn render_merged_pr_badge(
         &self,
-        session: &NativeSidebarSession,
-        indent: f32,
+        offer: &MergedOffer,
         tooltip_span: SidebarTooltipSpan,
         appearance: &SidebarAppearance,
         cx: &mut gpui::Context<Self>,
-    ) -> Option<AnyElement> {
-        // A thread whose coordinator's banner answers its offer draws none of its own
-        // (cleanup_banner.rs).
-        let work = session
-            .work
-            .as_ref()
-            .filter(|work| work.offer_cleanup && !offer_in_banner(session))?;
+    ) -> AnyElement {
         let scale = appearance.scale;
-        let project_id = ghostex_gx_core::SessionKey::parse_sidebar_session_id(&session.session_id)
-            .filter(|key| key.machine.is_local())
-            .map(|key| key.project_id);
-        let work_item = |mut item: serde_json::Value| {
-            if let Some(project_id) = &project_id {
-                item["projectId"] = json!(project_id);
-            }
-            Some(item)
-        };
-        let mut chips: Vec<Chip> = Vec::new();
-        if let Some(pr) = &work.pull_request {
-            let (icon, color, state_label) = match pr.state.as_str() {
-                "draft" => ("titlebar/git-pull-request.svg", DRAFT_GREY, "Draft"),
-                "merged" => ("titlebar/git-merge.svg", MERGED_PURPLE, "Merged"),
-                "closed" => ("titlebar/git-pull-request.svg", CLOSED_RED, "Closed"),
-                _ => ("titlebar/git-pull-request.svg", OPEN_GREEN, "Open"),
-            };
-            let checks = match pr.checks.as_deref() {
-                Some("passing") => {
-                    Some(("titlebar/circle-check.svg", OPEN_GREEN, "checks passing"))
-                }
-                Some("failing") => Some(("titlebar/circle-x.svg", CLOSED_RED, "checks failing")),
-                Some("pending") => Some(("titlebar/loader2.svg", PENDING_AMBER, "checks running")),
-                _ => None,
-            };
-            chips.push(Chip {
-                key: "pr",
-                icon,
-                icon_color: rgb(color).into(),
-                label: format!("#{}", pr.number),
-                trailing: checks.map(|(icon, color, _)| (icon, rgb(color).into())),
-                url: pr.url.clone(),
-                action: None,
-                work_item: work_item(json!({
-                    "pullRequest": pr.url.clone().unwrap_or_else(|| pr.number.to_string()),
-                })),
-                tooltip: match checks {
-                    Some((_, _, checks)) => format!("PR #{} · {state_label} · {checks}", pr.number),
-                    None => format!("PR #{} · {state_label}", pr.number),
-                },
-            });
-        }
-        // CDXC:WorkMode 2026-10-09 WHY:
-        // The merged-PR offer is two chips on the card itself rather than a toast: toasts in this
-        // app have no buttons and vanish, while the offer has to wait for an answer and leave
-        // every client when it is given (gxserver stores it, server/src/work_mode/cleanup.rs).
-        if work.offer_cleanup {
-            let pr_number = work
-                .pull_request
-                .as_ref()
-                .map(|pr| pr.number)
-                .unwrap_or_default();
-            chips.push(Chip {
-                key: "cleanup",
-                icon: "titlebar/archive.svg",
-                icon_color: rgb(MERGED_PURPLE).into(),
-                label: "Clean up".to_string(),
-                trailing: None,
-                url: None,
-                action: Some(json!({
-                    "type": "answerWorkCleanup",
-                    "sessionId": session.session_id,
-                    "answer": "cleanUp",
-                })),
-                work_item: None,
-                tooltip: format!(
-                    "PR #{pr_number} is merged. Remove this session's worktree and park the session."
-                ),
-            });
-            chips.push(Chip {
-                key: "keep",
-                icon: "titlebar/x.svg",
-                icon_color: appearance.muted,
-                label: "Keep".to_string(),
-                trailing: None,
-                url: None,
-                action: Some(json!({
-                    "type": "answerWorkCleanup",
-                    "sessionId": session.session_id,
-                    "answer": "keep",
-                })),
-                work_item: None,
-                tooltip: "Keep this session and its worktree. Ghostex won't ask again for this PR."
-                    .to_string(),
-            });
-        }
-        if let Some(first) = work.linear_issues.first() {
-            let (icon, color) =
-                linear_glyph(first.state_type.as_deref(), first.state_name.as_deref());
-            let extra = work.linear_issues.len() - 1;
-            chips.push(Chip {
-                key: "linear",
-                icon,
-                icon_color: rgb(color).into(),
-                label: if extra > 0 {
-                    format!("{} +{extra}", first.identifier)
-                } else {
-                    first.identifier.clone()
-                },
-                trailing: None,
-                url: first.url.clone(),
-                action: None,
-                work_item: work_item(json!({ "source": "linear", "ticketId": first.identifier })),
-                tooltip: work
-                    .linear_issues
-                    .iter()
-                    .map(|issue| {
-                        [
-                            Some(issue.identifier.as_str()),
-                            issue.title.as_deref(),
-                            issue.state_name.as_deref(),
-                        ]
-                        .into_iter()
-                        .flatten()
-                        .filter(|part| !part.trim().is_empty())
-                        .collect::<Vec<_>>()
-                        .join(" · ")
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-            });
-        }
-        if let Some(first) = work.github_issues.first() {
-            let open = first.state.as_deref() != Some("closed");
-            let extra = work.github_issues.len() - 1;
-            chips.push(Chip {
-                key: "issue",
-                icon: if open {
-                    "titlebar/circle-dot.svg"
-                } else {
-                    "titlebar/circle-check.svg"
-                },
-                icon_color: rgb(if open { OPEN_GREEN } else { MERGED_PURPLE }).into(),
-                label: if extra > 0 {
-                    format!("#{} +{extra}", first.number)
-                } else {
-                    format!("#{}", first.number)
-                },
-                trailing: None,
-                url: first.url.clone(),
-                action: None,
-                work_item: work_item(json!({ "source": "github", "ticketId": first.number })),
-                tooltip: work
-                    .github_issues
-                    .iter()
-                    .map(|issue| {
-                        let state = if issue.state.as_deref() == Some("closed") {
-                            "Closed"
-                        } else {
-                            "Open"
-                        };
-                        match issue
-                            .title
-                            .as_deref()
-                            .filter(|title| !title.trim().is_empty())
-                        {
-                            Some(title) => format!("Issue #{} · {title} · {state}", issue.number),
-                            None => format!("Issue #{} · {state}", issue.number),
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-            });
-        }
-        if let Some(project) = &work.linear_project {
-            chips.push(Chip {
-                key: "linear-project",
-                icon: "titlebar/box.svg",
-                icon_color: rgb(LINEAR_INDIGO).into(),
-                label: project.name.clone(),
-                trailing: None,
-                url: project.url.clone(),
-                action: None,
-                work_item: None,
-                tooltip: format!("Linear project: {}", project.name),
-            });
-        }
-        if let Some(project) = &work.github_project {
-            let label = project.label();
-            chips.push(Chip {
-                key: "github-project",
-                icon: "titlebar/box.svg",
-                icon_color: rgb(DRAFT_GREY).into(),
-                tooltip: match project.status.as_deref() {
-                    Some(status) => format!("GitHub project: {label} · {status}"),
-                    None => format!("GitHub project: {label}"),
-                },
-                label,
-                trailing: None,
-                url: project.url.clone(),
-                action: None,
-                work_item: None,
-            });
-        }
-        if chips.is_empty() {
-            return None;
-        }
-        // While the merged-PR offer waits, its two answers must fit: on a sidebar-width card the
-        // PR chip, its checks icon, Clean up and Keep already fill the line, and the row clips its
-        // overflow, which cut Keep in half and hid the ticket chips behind it. The other chips
-        // come back once the offer is answered.
-        if work.offer_cleanup {
-            chips.retain(|chip| matches!(chip.key, "pr" | "cleanup" | "keep"));
-            if let Some(pr) = chips.iter_mut().find(|chip| chip.key == "pr") {
-                pr.trailing = None;
-            }
-        }
-        let show_tooltips = self.native_sidebar.pointer_inside
+        let color = merged_color();
+        let tooltip = format!("PR #{} merged. Click to clean up or keep.", offer.number);
+        let open = self.merged_pr_popup_open_for(&offer.session_id);
+        let show_tooltip = !open
+            && self.native_sidebar.pointer_inside
             && self.native_sidebar.menu.is_none()
             && !cx.has_active_drag();
-        let session_id = session.session_id.clone();
-        Some(
-            h_flex()
-                .h(px(CHIP_LINE_HEIGHT * scale))
-                .flex_shrink_0()
-                .w_full()
-                .min_w_0()
-                .overflow_hidden()
-                // Under the title: the row's indent, the 15px icon and the 6px gap after it.
-                .pl(px((indent + 15.0 + 6.0) * scale))
-                .pr(px(6.0 * scale))
-                .gap(px(10.0 * scale))
-                .children(chips.into_iter().map(|chip| {
-                    render_chip(
-                        &session_id,
-                        chip,
-                        tooltip_span,
-                        show_tooltips,
-                        appearance,
-                        cx,
-                    )
-                }))
-                .into_any_element(),
-        )
+        let toggle_offer = offer.clone();
+        div()
+            .id(format!("native-session-merged-pr-{}", offer.session_id))
+            .role(gpui::Role::Button)
+            .aria_label(tooltip.clone())
+            .aria_expanded(open)
+            .flex()
+            .flex_shrink_0()
+            .items_center()
+            .gap(px(2.0 * scale))
+            .text_size(px(super::threads::BADGE_TEXT_SIZE * scale))
+            .text_color(color)
+            .whitespace_nowrap()
+            .cursor_pointer()
+            .child(titlebar_svg_icon(
+                "titlebar/git-merge.svg",
+                12.0 * scale,
+                color,
+            ))
+            .child(format!("#{}", offer.number))
+            // Its own click: the row's selection and drag never start from the badge.
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .on_click(cx.listener(move |app, _, _, cx| {
+                cx.stop_propagation();
+                app.toggle_merged_pr_popup(toggle_offer.clone(), cx);
+            }))
+            .when(show_tooltip, |badge| {
+                badge.managed_discrete_tooltip_with_placement(
+                    tooltip_span.placement(),
+                    appearance.tooltip_delay,
+                    move |window, cx| {
+                        super::tooltips::sidebar_tooltip(
+                            tooltip.clone(),
+                            tooltip_span,
+                            scale,
+                            window,
+                            cx,
+                        )
+                    },
+                )
+            })
+            .into_any_element()
+    }
+
+    pub(crate) fn merged_pr_popup_open_for(&self, session_id: &str) -> bool {
+        self.native_sidebar
+            .merged_popup
+            .as_ref()
+            .is_some_and(|open| open.offer.session_id == session_id)
+    }
+
+    /// Opens the popup for the row's offer, or closes it when it is the one open.
+    fn toggle_merged_pr_popup(&mut self, offer: MergedOffer, cx: &mut gpui::Context<Self>) {
+        let session_id = offer.session_id.clone();
+        if self.merged_pr_popup_open_for(&session_id) {
+            self.close_merged_pr_popup(cx);
+            return;
+        }
+        let just_closed = self
+            .native_sidebar
+            .merged_popup_closed
+            .as_ref()
+            .is_some_and(|(closed, at)| *closed == session_id && at.elapsed() < REOPEN_GUARD);
+        if just_closed {
+            return;
+        }
+        let Some(row) = self.native_sidebar.session_card_bounds.get(&session_id) else {
+            return;
+        };
+        let top = row.top().as_f32();
+        self.close_session_links_card(cx);
+        self.open_merged_pr_popup(MergedPopupOpen { offer, top }, cx);
+    }
+
+    /// Closes the popup and remembers which one, so the press that closed it doesn't reopen it.
+    pub(crate) fn close_merged_pr_popup(&mut self, cx: &mut gpui::Context<Self>) {
+        self.close_merged_pr_popup_window(cx);
+        self.forget_merged_pr_popup(cx);
+    }
+
+    /// Forgets the open popup without touching its window: what the desktop's popup window calls
+    /// before it removes itself (a window can't be closed from inside its own update).
+    pub(crate) fn forget_merged_pr_popup(&mut self, cx: &mut gpui::Context<Self>) {
+        if let Some(open) = self.native_sidebar.merged_popup.take() {
+            self.native_sidebar.merged_popup_closed = Some((open.offer.session_id, Instant::now()));
+        }
+        self.native_sidebar.merged_popup_window = None;
+        cx.notify();
+    }
+
+    /// A popup button: Open PR opens it where Settings says (gx_store/session_links.rs), Keep and
+    /// Clean up answer the offer on the session's computer (gx_store/work_links.rs).
+    pub(crate) fn answer_merged_pr_popup(
+        &mut self,
+        offer: &MergedOffer,
+        answer: MergedOfferAnswer,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.close_merged_pr_popup(cx);
+        let command = match answer {
+            MergedOfferAnswer::OpenPr => match &offer.url {
+                Some(url) => {
+                    json!({ "type": "openSessionLink", "url": url, "sessionId": offer.session_id })
+                }
+                None => return,
+            },
+            MergedOfferAnswer::Keep | MergedOfferAnswer::CleanUp => json!({
+                "type": "answerWorkCleanup",
+                "sessionId": offer.session_id,
+                "answer": if answer == MergedOfferAnswer::Keep { "keep" } else { "cleanUp" },
+            }),
+        };
+        self.dispatch_native_sidebar_ui(command, cx);
     }
 }
 
-fn render_chip(
-    session_id: &str,
-    chip: Chip,
-    tooltip_span: SidebarTooltipSpan,
-    show_tooltip: bool,
-    appearance: &SidebarAppearance,
-    cx: &mut gpui::Context<GhostexGpuiApp>,
-) -> AnyElement {
-    let scale = appearance.scale;
-    let muted = appearance.muted;
-    let foreground = appearance.foreground;
-    let tooltip = chip.tooltip.clone();
-    let click = chip.action.clone().or_else(|| {
-        chip.url.clone().map(|url| {
-            json!({
-                "type": "openWorkLink",
-                "url": url,
-                "workItem": chip.work_item.clone(),
-                "sessionId": session_id,
+/// What a popup button calls: the desktop's popup window and the web build's page both route it to
+/// `answer_merged_pr_popup`.
+pub(crate) type MergedAnswerHandler = Rc<dyn Fn(MergedOfferAnswer, &mut Window, &mut App)>;
+
+/// The popup's card: the merged PR, its branch, what Clean up and Keep do, and the three buttons.
+/// `frosted` draws it on the frosted host's fill (the desktop's blurred window), otherwise on the
+/// in-window bubble (the web build's page), like the Main Hub card (tooltips.rs `main_hub_card`).
+pub(crate) fn merged_pr_popup_card(
+    offer: &MergedOffer,
+    frosted: bool,
+    glass: bool,
+    on_answer: MergedAnswerHandler,
+) -> gpui::Stateful<gpui::Div> {
+    let menu = titlebar_popup_menu_background();
+    let bubble = super::tooltips::in_window_bubble(glass);
+    let fill = if frosted {
+        frosted_tooltip_fill(menu)
+    } else {
+        bubble.fill
+    };
+    let foreground = titlebar_popup_menu_foreground();
+    let muted = bubble.secondary;
+    let light = chrome_uses_light_appearance();
+    let fills = crate::app::window::native_modal_kit::neutral_button_fills(light);
+    let button = |id: &'static str,
+                  label: &'static str,
+                  icon: Option<&'static str>,
+                  answer: MergedOfferAnswer| {
+        let on_answer = on_answer.clone();
+        h_flex()
+            .id(id)
+            .role(gpui::Role::Button)
+            .aria_label(label)
+            .flex_shrink_0()
+            .h(px(26.0))
+            .px(px(9.0))
+            .gap(px(5.0))
+            .items_center()
+            .rounded(px(6.0))
+            .bg(gpui::Hsla::from(fills.rest))
+            .hover(move |style| style.bg(gpui::Hsla::from(fills.hover)))
+            .active(move |style| style.bg(gpui::Hsla::from(fills.pressed)))
+            .text_size(px(12.5))
+            .text_color(foreground)
+            .cursor_pointer()
+            .children(icon.map(|icon| titlebar_svg_icon(icon, 13.0, foreground)))
+            .child(label)
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .on_click(move |_, window, cx| {
+                cx.stop_propagation();
+                on_answer(answer, window, cx);
             })
-        })
+    };
+    let open_pr = offer.url.is_some().then(|| {
+        let on_answer = on_answer.clone();
+        h_flex()
+            .id("merged-pr-popup-open")
+            .role(gpui::Role::Link)
+            .aria_label("Open PR")
+            .flex_shrink_0()
+            .h(px(26.0))
+            .gap(px(5.0))
+            .items_center()
+            .text_size(px(12.5))
+            .text_color(muted)
+            .cursor_pointer()
+            .hover(move |style| style.text_color(foreground))
+            .child(titlebar_svg_icon("titlebar/external-link.svg", 13.0, muted))
+            .child("Open PR")
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .on_click(move |_, window, cx| {
+                cx.stop_propagation();
+                on_answer(MergedOfferAnswer::OpenPr, window, cx);
+            })
     });
-    div()
-        .id(format!("native-session-work-{}-{session_id}", chip.key))
-        .role(if chip.action.is_some() {
-            gpui::Role::Button
-        } else {
-            gpui::Role::Link
-        })
-        .aria_label(chip.tooltip.clone())
-        .flex()
-        // An answer chip (Clean up, Keep) keeps its full width; the others give way first and end
-        // in an ellipsis, so a narrow card never cuts an answer or a label off mid-letter.
-        .when(chip.action.is_some(), |chip| chip.flex_shrink_0())
-        .when(chip.action.is_none(), |chip| {
-            chip.min_w_0().overflow_hidden()
-        })
-        .items_center()
-        .gap(px(3.0 * scale))
-        .text_size(px(11.5 * scale))
-        .text_color(muted)
-        .child(div().flex_shrink_0().child(titlebar_svg_icon(
-            chip.icon,
-            12.0 * scale,
-            chip.icon_color,
-        )))
+    v_flex()
+        .id("merged-pr-popup")
+        .w(px(MERGED_PR_POPUP_WIDTH))
+        .p(px(12.0))
+        .gap(px(8.0))
+        .rounded(px(8.0))
+        .border_1()
+        .border_color(bubble.border)
+        .bg(fill)
+        .text_color(foreground)
+        .cursor_default()
+        .child(
+            v_flex()
+                .gap(px(3.0))
+                .child(
+                    h_flex()
+                        .gap(px(6.0))
+                        .items_center()
+                        .text_size(px(13.0))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .child(titlebar_svg_icon(
+                            "titlebar/git-merge.svg",
+                            14.0,
+                            merged_color(),
+                        ))
+                        .child(format!("PR #{} is merged", offer.number)),
+                )
+                .children(offer.branch.clone().map(|branch| {
+                    h_flex()
+                        .min_w_0()
+                        .gap(px(5.0))
+                        .items_center()
+                        .text_size(px(11.5))
+                        .text_color(muted)
+                        .child(titlebar_svg_icon("titlebar/git-branch.svg", 12.0, muted))
+                        .child(div().min_w_0().truncate().child(branch))
+                })),
+        )
         .child(
             div()
-                .min_w_0()
-                .overflow_hidden()
-                .whitespace_nowrap()
-                .text_ellipsis()
-                .child(chip.label),
+                .text_size(px(12.0))
+                .line_height(px(17.0))
+                .text_color(muted)
+                .child(
+                    "Clean up removes this session's worktree and parks the session. Keep leaves \
+                     both and won't ask again for this PR.",
+                ),
         )
-        .when_some(chip.trailing, |chip, (icon, color)| {
-            chip.child(
-                div()
-                    .flex_shrink_0()
-                    .child(titlebar_svg_icon(icon, 12.0 * scale, color)),
-            )
-        })
-        .when_some(click, |chip, click| {
-            chip.cursor_pointer()
-                .hover(move |style| {
-                    style
-                        .text_color(foreground)
-                        .text_decoration_1()
-                        .text_decoration_color(foreground)
-                })
-                // Its own click: the row's selection and drag never start from a chip.
-                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .on_click(cx.listener(move |app, _, _, cx| {
-                    cx.stop_propagation();
-                    app.dispatch_native_sidebar_ui(click.clone(), cx);
-                }))
-        })
-        .when(show_tooltip, |chip| {
-            chip.managed_discrete_tooltip_with_placement(
-                tooltip_span.placement(),
-                appearance.tooltip_delay,
-                move |window, cx| {
-                    super::tooltips::sidebar_tooltip(
-                        tooltip.clone(),
-                        tooltip_span,
-                        scale,
-                        window,
-                        cx,
-                    )
-                },
-            )
-        })
-        .into_any_element()
-}
-
-/// Linear's status ring for a workflow state: empty or dashed before work starts, half while it
-/// runs, three-quarters in review, a filled check when done, a cross when cancelled.
-fn linear_glyph(state_type: Option<&str>, state_name: Option<&str>) -> (&'static str, u32) {
-    let in_review = state_name.is_some_and(|name| name.to_ascii_lowercase().contains("review"));
-    match state_type {
-        Some("started") if in_review => ("titlebar/work-issue-review.svg", REVIEW_GREEN),
-        Some("started") => ("titlebar/work-issue-started.svg", STARTED_YELLOW),
-        Some("completed") => ("titlebar/circle-check-filled.svg", DONE_INDIGO),
-        Some("canceled") => ("titlebar/circle-x.svg", DRAFT_GREY),
-        Some("backlog") | Some("triage") => ("titlebar/circle-dashed.svg", DRAFT_GREY),
-        Some(_) => ("titlebar/circle.svg", DRAFT_GREY),
-        // Linear has not answered yet (no API key, or not fetched): the plain ring, in Linear's
-        // colour so the chip still reads as a Linear issue.
-        None => ("titlebar/circle.svg", LINEAR_INDIGO),
-    }
+        .child(
+            h_flex()
+                .pt(px(2.0))
+                .gap(px(6.0))
+                .items_center()
+                .children(open_pr)
+                .child(div().flex_1())
+                .child(button(
+                    "merged-pr-popup-keep",
+                    "Keep",
+                    None,
+                    MergedOfferAnswer::Keep,
+                ))
+                .child(button(
+                    "merged-pr-popup-clean-up",
+                    "Clean up",
+                    Some("titlebar/archive.svg"),
+                    MergedOfferAnswer::CleanUp,
+                )),
+        )
 }
 
 impl super::model::NativeSidebarGroup {

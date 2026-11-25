@@ -530,6 +530,9 @@ impl GhostexGpuiApp {
             .children(self.render_session_links_page_card(cx))
             // The Main Hub card, where a build draws it in the page (the desktop's is a window).
             .children(self.render_main_hub_page_card(cx))
+            // A merged PR's Clean up / Keep popup, where a build draws it in the page (the
+            // desktop's is a window, work_chips.rs).
+            .children(self.render_merged_pr_page_popup(cx))
             // Where the Focus Sidebar hotkey's entry holds the keyboard while it waits for its row:
             // no size, so no click ever focuses it. Last, so the children the bounds above count
             // keep their places.

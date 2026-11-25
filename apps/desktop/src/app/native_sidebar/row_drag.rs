@@ -86,11 +86,10 @@ impl RowDragPreview {
             // icon and title centred on line 1 where they were grabbed.
             RowDragIdentity::Session { session } => row
                 .h(px(
-                    super::session_list::session_card_height(session, false) * scale
+                    super::session_list::session_card_height(session, 0) * scale
                 ))
-                .pb(px((super::session_list::session_card_height(
-                    session, false,
-                ) - super::session_list::SESSION_HEIGHT)
+                .pb(px((super::session_list::session_card_height(session, 0)
+                    - super::session_list::SESSION_HEIGHT)
                     * scale))
                 // The card's own insets, so the icon and title stay where they were grabbed.
                 .pl(px((5.0

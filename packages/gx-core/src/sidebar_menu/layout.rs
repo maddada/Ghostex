@@ -197,6 +197,8 @@ pub const ENTRIES: &[SessionMenuEntry] = &[
     toggle("snooze", "Snooze", "alarm", "Unsnooze", "alarm"),
     toggle("park", "Park", "archive", "Unpark", "archive"),
     row("box", "Box", "world"),
+    row("cleanUpWorktree", "Clean Up Worktree", "archive"),
+    row("keepWorktree", "Keep Worktree", "x"),
     row("claudeAi", "claude.ai", "external-link"),
     row(
         "moveToGroup",
@@ -310,11 +312,23 @@ struct SpotRows {
     more: &'static [&'static str],
 }
 
+/// CDXC:WorkMode 2026-11-25 DECISION:
+/// User picked option D for merged-PR rows: the row's PR badge turns into a merge icon that opens
+/// the Clean up / Keep popup, and "the same two entries (Clean up worktree, Keep worktree) are
+/// added to the row's right-click menu while the offer stands". They lead the sidebar's and the
+/// phone row's own rows and are empty while gxserver makes no offer for the row.
 fn spot_rows(spot: SessionMenuSpot) -> SpotRows {
     match spot {
         SessionMenuSpot::Sidebar => SpotRows {
             tiles: &["pin", "popout"],
-            rows: &["snooze", "park", "box", "claudeAi"],
+            rows: &[
+                "cleanUpWorktree",
+                "keepWorktree",
+                "snooze",
+                "park",
+                "box",
+                "claudeAi",
+            ],
             more: &["moveToGroup", "sleepBelow", "closeBelow"],
         },
         SessionMenuSpot::ChatBox => SpotRows {
@@ -324,7 +338,7 @@ fn spot_rows(spot: SessionMenuSpot) -> SpotRows {
         },
         SessionMenuSpot::PhoneRow => SpotRows {
             tiles: &["pin", "voiceCall"],
-            rows: &["snooze", "park"],
+            rows: &["cleanUpWorktree", "keepWorktree", "snooze", "park"],
             more: &[
                 "openTerminal",
                 "links",

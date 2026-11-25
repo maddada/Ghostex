@@ -48,6 +48,12 @@ impl MenuCommand {
         Self(Value::Object(object))
     }
 
+    /// `{ type: 'answerWorkCleanup', sessionId, answer }`: a merged PR's Clean up (`cleanUp`) or
+    /// Keep (`keep`), which the host sends to the session's computer (gx_store/work_links.rs).
+    pub(crate) fn answer_work_cleanup(session_id: &str, answer: &str) -> Self {
+        Self(json!({ "type": "answerWorkCleanup", "sessionId": session_id, "answer": answer }))
+    }
+
     /// `{ type: 'sessionAction', sessionId, action }` and its two extra fields.
     pub(crate) fn session_action(session_id: &str, action: &str) -> Self {
         Self(json!({ "type": "sessionAction", "sessionId": session_id, "action": action }))

@@ -188,6 +188,8 @@ impl GhostexGpuiApp {
                 if app.native_sidebar.hovered_session.as_deref() == Some(&id)
                     && !app.floating_sidebar_shown()
                     && app.native_sidebar.links_card_session.as_deref() != Some(&id)
+                    // The row's merged-PR popup sits where the card would (work_chips.rs).
+                    && app.native_sidebar.merged_popup.is_none()
                 {
                     app.open_session_links_card(id, cx);
                 }

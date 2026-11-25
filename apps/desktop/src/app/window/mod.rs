@@ -34,6 +34,7 @@ pub(crate) mod jobs_popover;
 pub(crate) mod jobs_popover_view;
 pub(crate) mod main_hub_card;
 pub(crate) mod markdown_table_modal;
+pub(crate) mod merged_pr_popup;
 pub(crate) mod mermaid_diagram_modal;
 pub(crate) mod missing_project_folder_modal;
 pub(crate) mod modal_host;

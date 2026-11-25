@@ -70,5 +70,5 @@ mod screenshot_chip;
 pub(crate) mod tooltips;
 pub(crate) mod unified;
 pub(crate) mod usage;
-mod work_chips;
+pub(crate) mod work_chips;
 pub(crate) mod workspace_tile;

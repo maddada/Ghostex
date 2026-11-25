@@ -32,7 +32,8 @@ use ghostex_gx_core::{
     SessionLinksRow,
 };
 
-/// The line's height, the Work mode card's chip line's (work_chips.rs).
+/// The height of a line under a row's title: the links line, and the worktree's branch line
+/// (threads.rs).
 pub(crate) const LINK_LINE_HEIGHT: f32 = 16.0;
 /// A text's width in the sidebar's UI font at `size`, unscaled.
 pub(crate) fn ui_text_width(text_system: &WindowTextSystem, text: &str, size: f32) -> f32 {
@@ -252,6 +253,14 @@ pub(crate) fn session_links_overflow_pill(
         })
 }
 
+/// gxserver offers to clean up the row's merged PR and the row answers it itself (work_chips.rs).
+fn offer_on_row(session: &NativeSidebarSession) -> bool {
+    session
+        .work
+        .as_ref()
+        .is_some_and(|work| work.offer_cleanup && !super::work_chips::offer_in_banner(session))
+}
+
 impl GhostexGpuiApp {
     /// A session's links as gxserver last published them.
     pub(crate) fn session_links_of(
@@ -302,15 +311,14 @@ impl GhostexGpuiApp {
         )
     }
 
-    /// Whether the row draws a second line: its links line, or a Work mode card's Clean up / Keep
-    /// offer for a merged PR (work_chips.rs), which takes the line while it waits.
-    pub(crate) fn native_session_has_second_line(&self, session: &NativeSidebarSession) -> bool {
-        let row = self.native_session_links_row(session);
-        session
-            .work
-            .as_ref()
-            .is_some_and(|work| work.offer_cleanup && !super::work_chips::offer_in_banner(session))
-            || !row.line.is_empty()
+    /// How many lines the row draws under its title line: its worktree's branch
+    /// (threads.rs `worktree_branch_line`) and its links line. A row waiting on a merged PR's
+    /// Clean up / Keep draws no links line (`render_native_session_link_line`).
+    pub(crate) fn native_session_extra_lines(&self, session: &NativeSidebarSession) -> u8 {
+        let branch = super::threads::worktree_branch_label(session).is_some();
+        let links =
+            !offer_on_row(session) && !self.native_session_links_row(session).line.is_empty();
+        u8::from(branch) + u8::from(links)
     }
 
     /// The badge a row's title shows with the Badge option: the pinned (or only, or most pressing)
@@ -366,11 +374,9 @@ impl GhostexGpuiApp {
         appearance: &SidebarAppearance,
         cx: &mut gpui::Context<Self>,
     ) -> Option<AnyElement> {
-        if session
-            .work
-            .as_ref()
-            .is_some_and(|work| work.offer_cleanup && !super::work_chips::offer_in_banner(session))
-        {
+        // The row's merge badge stands for its merged PR (work_chips.rs), so the PR isn't
+        // shown again under it.
+        if offer_on_row(session) {
             return None;
         }
         let row = self.native_session_links_row(session);
