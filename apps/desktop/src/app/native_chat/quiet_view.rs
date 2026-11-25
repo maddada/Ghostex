@@ -308,28 +308,67 @@ impl NativeChatView {
     ///
     /// CDXC:SessionChat 2026-11-20 DECISION:
     /// User, of an opened "Reports" group: the rail down its left was two pieces with a gap between, and the lower piece did not close the group when clicked. Each row of an opened line draws its own piece of the rail, and a row that is not the line's last carries it on through the gap below (`quiet_row_bottom`, `rail`'s `bottom`). Whether a row is the last one is in the snapshot's `quietView`, not in the row's own item, so when a report or a turn joined a line that was drawn open, the core's splice only held the new rows; the row that used to end the line was not in it, and the list kept it as drawn (the desktop's list holds rows whose item did not change, as `remeasure_on_look_change` and `rowDetails` also have to answer for), so its piece of the rail stopped at its last card with the row gap under it. The web build lays every row out each frame, so it never showed this. The rows of a line whose first row, end, tail or work item lines changed are measured and drawn again, the same way a change of the chat look is.
+    ///
+    /// CDXC:SessionChat 2026-11-26 WHY:
+    /// Profiled on the user's Mac: on an 8,307-message chat the UI thread froze 4 to 10 seconds per burst of updates, once 41.5s, inside this function. It deserialized both snapshots' stretches on every frame and compared them with `contains` scans, O(N^2) in the number of lines, even when nothing changed. It now reads the JSON in place, matches lines by key (O(N)), and `pump` calls it once per drained batch against the snapshot drawn before it, not once per frame.
     pub(super) fn remeasure_changed_quiet_rows(&mut self, before: &Value) {
-        let stretches = |snapshot: &Value| -> Vec<QuietStretch> {
-            serde_json::from_value(snapshot["quietView"]["stretches"].clone()).unwrap_or_default()
-        };
-        let (old, new) = (stretches(before), stretches(&self.snapshot));
-        for line in &old {
-            if !new
-                .iter()
-                .any(|next| next.key == line.key && self.quiet_open(next))
-            {
-                self.closing_rail.clear_key(&line.key);
+        fn stretches(snapshot: &Value) -> &[Value] {
+            snapshot["quietView"]["stretches"]
+                .as_array()
+                .map_or(&[], Vec::as_slice)
+        }
+        fn key(line: &Value) -> &str {
+            line["key"].as_str().unwrap_or_default()
+        }
+        fn index(line: &Value, field: &str) -> Option<usize> {
+            line[field].as_u64().map(|at| at as usize)
+        }
+        // Held so the lines can be read while the rail's state changes.
+        let snapshot = std::sync::Arc::clone(&self.snapshot);
+        let (old, new) = (stretches(before), stretches(&snapshot));
+        // The rail of a line that is gone or shut forgets its hover and press.
+        let open: HashSet<&str> = new
+            .iter()
+            .filter(|next| self.is_expanded(key(next), next["open"] == true))
+            .map(key)
+            .collect();
+        for line in old {
+            if !open.contains(key(line)) {
+                self.closing_rail.clear_key(key(line));
             }
         }
+        if old == new {
+            return;
+        }
+        // The lines in only one of the two snapshots, matched by key; a key held twice keeps
+        // every line under it.
+        fn by_key(lines: &[Value]) -> HashMap<&str, Vec<&Value>> {
+            let mut map: HashMap<&str, Vec<&Value>> = HashMap::with_capacity(lines.len());
+            for line in lines {
+                map.entry(key(line)).or_default().push(line);
+            }
+            map
+        }
+        let (old_by_key, new_by_key) = (by_key(old), by_key(new));
+        let missing_from = |lines: &HashMap<&str, Vec<&Value>>, line: &Value| {
+            !lines
+                .get(key(line))
+                .is_some_and(|same| same.iter().any(|other| *other == line))
+        };
         let count = self.list.item_count();
         let mut rows: Option<std::ops::Range<usize>> = None;
         for line in old
             .iter()
-            .filter(|line| !new.contains(line))
-            .chain(new.iter().filter(|line| !old.contains(line)))
+            .filter(|line| missing_from(&new_by_key, line))
+            .chain(new.iter().filter(|line| missing_from(&old_by_key, line)))
         {
-            let start = line.start.min(line.after.unwrap_or(line.start));
-            let end = line.end.max(line.after.map_or(0, |after| after + 1));
+            let (Some(line_start), Some(line_end)) = (index(line, "start"), index(line, "end"))
+            else {
+                continue;
+            };
+            let after = index(line, "after");
+            let start = line_start.min(after.unwrap_or(line_start));
+            let end = line_end.max(after.map_or(0, |after| after + 1));
             let span = start.min(count)..end.min(count);
             rows = match rows {
                 Some(rows) => Some(rows.start.min(span.start)..rows.end.max(span.end)),

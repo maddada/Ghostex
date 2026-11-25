@@ -1318,8 +1318,15 @@ impl NativeChatView {
         let Some(runtime) = &self.runtime else {
             return;
         };
+        let outputs = runtime.take_outputs();
+        // CDXC:SessionChat 2026-11-26 WHY: nothing is drawn between the frames of one batch, so
+        // the quiet lines are compared once, the last snapshot against the one drawn before the
+        // batch (`remeasure_changed_quiet_rows`), instead of once per frame. Marking rows for
+        // remeasure keeps their heights as hints, so the frames after it read the same scroll
+        // position either way.
+        let drawn = Arc::clone(&self.snapshot);
         let mut changed = false;
-        for output in runtime.take_outputs() {
+        for output in outputs {
             match output {
                 ChatRuntimeOutput::Drained(output) => {
                     changed |= self.apply_output(output, cx);
@@ -1331,6 +1338,12 @@ impl NativeChatView {
                     cx.notify();
                 }
             }
+        }
+        if Arc::ptr_eq(&drawn, &self.snapshot) {
+            drop(drawn);
+        } else {
+            self.remeasure_changed_quiet_rows(&drawn);
+            drop_off_main_thread(drawn, cx);
         }
         if changed {
             self.notify_if_shown(cx);
@@ -1447,7 +1460,7 @@ impl NativeChatView {
             let before = std::mem::replace(&mut self.snapshot, Arc::new(snapshot));
             self.note_held_send(&before);
             self.remeasure_on_look_change(&before);
-            self.remeasure_changed_quiet_rows(&before);
+            // The quiet lines are compared once per batch, in `pump`.
             self.adopt_board_focus(&before, cx);
             self.prune_kept_replies(&before, cx);
             self.sync_dock_ask_modal(cx);
