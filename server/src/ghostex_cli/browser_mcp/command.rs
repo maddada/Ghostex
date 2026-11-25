@@ -189,6 +189,11 @@ pub(super) fn parse_browser_open(rest: &[String], flags: &Flags) -> Value {
         flag_json(flags, "reuse").unwrap_or_else(|| Value::String("similar".to_string()))
     };
     payload.insert("reuse".to_string(), reuse);
+    // `--background`: load the page in a tab of the agent's project without showing it, and
+    // without the switch toast an agent's open otherwise waits on (#762).
+    if flags.truthy("background") {
+        payload.insert("background".to_string(), Value::Bool(true));
+    }
     if let Some(value) =
         flag_json(flags, "url").or_else(|| rest.first().map(|value| Value::String(value.clone())))
     {
@@ -227,6 +232,10 @@ fn browser_usage() -> String {
             "Open or reuse an embedded browser pane",
         ),
         format_help_command(
+            "browser open [url] --background",
+            "Open or reuse a page without showing it or asking",
+        ),
+        format_help_command(
             "browser open-pane [url] [project/reuse flags]",
             "Alias for browser open",
         ),
@@ -242,6 +251,10 @@ fn browser_usage() -> String {
             "ghostex_select_page",
             "Choose the target page for later tool calls",
         ),
+        format_help_command(
+            "ghostex_open_page",
+            "Open or reuse a page of this agent's project in the background",
+        ),
         format_help_command("ghostex_navigate", "Navigate the selected CEF page"),
         format_help_command(
             "ghostex_console_logs",
@@ -254,6 +267,10 @@ fn browser_usage() -> String {
         format_help_command(
             "ghostex_click / ghostex_fill",
             "Interact with @e refs or CSS selectors",
+        ),
+        format_help_command(
+            "ghostex_set_input_files",
+            "Put local files (absolute paths) in a file upload field",
         ),
         format_help_command(
             "ghostex_press_key",
@@ -276,7 +293,7 @@ fn browser_usage() -> String {
 Usage:
   gx browser --help
   gx browser mcp [--port n] [--target id|--page id] [--project-path path|--project-id id] [--timeout ms]
-  gx browser open [url] [--project-path path|--project-id id] [--reuse similar|exact|none]
+  gx browser open [url] [--project-path path|--project-id id] [--reuse similar|exact|none] [--background]
   gx browser open-pane [url] [--project-path path|--project-id id] [--reuse similar|exact|none]
 Agent MCP config:
   [mcp_servers.ghostex-browser]
@@ -298,6 +315,11 @@ Tab reuse:
   Use --reuse exact when only the exact same URL should be reused.
   Use --reuse none or --new only when a separate browser pane is required.
   When a pane is reused for a different URL on the same origin, Ghostex focuses that pane and navigates it instead of creating another tab.
+
+Opening in the background:
+  An agent's plain browser open waits for the user to click Switch on a toast, because an agent never changes what the user is looking at.
+  Pass --background (or use the ghostex_open_page tool) to open or reuse the page in a tab of your own project without showing it, focusing it or asking: it opens at once and the tools can drive it.
+  A background open always goes to your own session's project, whatever project flags it names. The user sees the tab in that project's Browser when they look.
   After creating or selecting a page, keep the returned session id and the MCP page id from ghostex_list_pages; pass --target <pageId> to gx browser mcp or call ghostex_select_page before follow-up actions.
 
 Which page the tools drive:
@@ -313,6 +335,8 @@ Recommended agent workflow:
   2. Run ghostex_select_page when more than one page is open.
   3. Run ghostex_console_logs before reproducing a bug, then again after the action.
   4. Run ghostex_snapshot and use @e refs with ghostex_click or ghostex_fill.
+     ghostex_click clicks like a person, with the mouse at the element's centre, and falls back to a script click when something covers the element; its answer says which ("method": "mouse" or "script").
+     For a file upload field use ghostex_set_input_files with absolute paths; clicking it never opens a file chooser.
   5. Use ghostex_screenshot for visual proof and ghostex_evaluate for focused inspection.
 
 Connection details:

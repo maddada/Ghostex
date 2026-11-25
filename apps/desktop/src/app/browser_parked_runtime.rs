@@ -253,12 +253,15 @@ impl GhostexGpuiApp {
     /// `ghostex browser open` names the agent's own project, which is often not the one on screen. Such a page goes into that project's parked tab model the way a parked page's popup does: the project on screen keeps its panel, view and tabs, and focus stays put.
     /// The project's saved view moves to Browser, as the open would have done on screen, a toast says where the page went, and the page is shown when the project is next on screen (`land_pending_parked_browser_open`).
     /// The page itself is made at once, hidden, under the Browser profile of the project's own workspace (`start_parked_browser_page`), so the agent's next step (`ghostex_list_pages`, a snapshot, a click) finds a page to drive. This supersedes the 2026-10-25 rule that made it only when the project came on screen, which left the embedded-browser-use loop with no page. A reused tab whose page is already running parked goes to the address at once, as a live one would.
+    /// `announce` is false for an agent's background open (`open_browser_url_in_background`),
+    /// which shows no toast.
     pub(crate) fn open_browser_url_in_parked_project(
         &mut self,
         project_id: &str,
         url: String,
         reuse: GpuiBrowserRendererOpenReuse,
         remote_machine_id: Option<String>,
+        announce: bool,
         cx: &mut gpui::Context<Self>,
     ) {
         let active_profile_id = self.browser_profiles.active_profile_id();
@@ -303,6 +306,11 @@ impl GhostexGpuiApp {
         if !self.start_parked_browser_page(project_id, tab_id, cx) {
             self.waiting_parked_browser_pages
                 .insert((project_id.to_string(), tab_id));
+        }
+        if !announce {
+            self.persist_shell_layout_state();
+            cx.notify();
+            return;
         }
         let project_title = self
             .parked_project_title(project_id)

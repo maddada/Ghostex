@@ -256,6 +256,7 @@ impl GhostexGpuiApp {
                 reuse,
                 url,
                 agent_session,
+                background,
             } => {
                 let mut payload = json!({
                     "reuse": reuse,
@@ -265,6 +266,48 @@ impl GhostexGpuiApp {
                 });
                 if let Some(project_id) = &project_id {
                     payload["projectId"] = json!(project_id);
+                }
+                if background {
+                    // Shows nothing, so an agent's open gets here with no toast (switch_requests.rs
+                    // in gxserver pins it to the agent's own project).
+                    let Some(project_id) =
+                        project_id.or_else(|| self.agents_workspace_project_id.clone())
+                    else {
+                        return Err(RendererCommandError::NoMatchingProject);
+                    };
+                    let message = gpui_sidebar_open_browser_url_from_json(&payload.to_string())
+                        .map_err(|_| RendererCommandError::Failed)?;
+                    return Ok(
+                        match self.open_browser_url_in_background(
+                            &project_id,
+                            &message.url,
+                            message.reuse,
+                            window,
+                            cx,
+                        ) {
+                            Ok(tab_id) => {
+                                if let Some(agent_session) = agent_session {
+                                    self.browser_agent_pages
+                                        .insert(agent_session, (project_id.clone(), tab_id));
+                                }
+                                json!({
+                                    "accepted": true,
+                                    "action": action,
+                                    "background": true,
+                                    "ok": true,
+                                    "projectId": project_id,
+                                    "shown": false,
+                                })
+                            }
+                            Err(reason) => json!({
+                                "accepted": false,
+                                "action": action,
+                                "background": true,
+                                "error": reason,
+                                "ok": false,
+                            }),
+                        },
+                    );
                 }
                 if let Ok(message) = gpui_sidebar_open_browser_url_from_json(&payload.to_string()) {
                     self.open_browser_url_from_renderer_command(message, window, cx);

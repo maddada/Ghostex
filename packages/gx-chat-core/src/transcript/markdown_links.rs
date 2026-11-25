@@ -190,7 +190,27 @@ fn autolink_literal(candidate: &str) -> &str {
     url
 }
 
-/// `(^|[\s*_~(])(https?:\/\/[^\s<]+)` case-insensitively, every match.
+/// Punctuation that ends a bare address, and may stand right before one: CJK and full-width
+/// punctuation, curly quotes and the ellipsis. The native renderer ends its links at the same
+/// characters (`ends_bare_link` in gpui-component's text/format/markdown.rs), so
+/// `页（http://a/?x=1），见` links `http://a/?x=1` in both (#762).
+pub(crate) fn ends_bare_link(character: char) -> bool {
+    matches!(
+        character,
+        '\u{2018}'..='\u{201F}'
+            | '\u{2026}'
+            | '\u{3000}'..='\u{303F}'
+            | '\u{FE10}'..='\u{FE1F}'
+            | '\u{FE30}'..='\u{FE6B}'
+            | '\u{FF01}'..='\u{FF0F}'
+            | '\u{FF1A}'..='\u{FF20}'
+            | '\u{FF3B}'..='\u{FF40}'
+            | '\u{FF5B}'..='\u{FF65}'
+    )
+}
+
+/// `(^|[\s*_~(])(https?:\/\/[^\s<]+)` case-insensitively, every match, where wide punctuation
+/// (`ends_bare_link`) also opens and ends an address.
 fn autolink_candidates(markdown: &str) -> Vec<&str> {
     let lower = markdown.to_ascii_lowercase();
     let mut found = Vec::new();
@@ -210,7 +230,9 @@ fn autolink_candidates(markdown: &str) -> Vec<&str> {
         let before = markdown[..start].chars().next_back();
         let opens = match before {
             None => true,
-            Some(character) => is_js_space(character) || "*_~(".contains(character),
+            Some(character) => {
+                is_js_space(character) || "*_~(".contains(character) || ends_bare_link(character)
+            }
         };
         if !opens {
             cursor = start + 1;
@@ -218,7 +240,9 @@ fn autolink_candidates(markdown: &str) -> Vec<&str> {
         }
         let run: usize = markdown[start..]
             .chars()
-            .take_while(|character| !is_js_space(*character) && *character != '<')
+            .take_while(|character| {
+                !is_js_space(*character) && *character != '<' && !ends_bare_link(*character)
+            })
             .map(char::len_utf8)
             .sum();
         found.push(&markdown[start..start + run]);

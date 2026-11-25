@@ -187,17 +187,324 @@ pub(super) fn browser_mcp_snapshot(args: &Value, state: &mut McpState) -> CliRes
     Ok(Value::Object(response))
 }
 
+/// CDXC:Browser 2026-11-26 DECISION:
+/// User (Q4999, #762): `ghostex_click` clicks like a person: the mouse is pressed and released
+/// through DevTools at the element's centre, so the page gets a trusted click (`isTrusted`), which
+/// some sites need before they react. When that point does not reach the element (another element
+/// covers it, or it is outside the view) it falls back to the script click it always used. A file
+/// upload field (or its label) is refused: a person's click there opens the file chooser on the
+/// user's screen, and `ghostex_set_input_files` fills it without one. A page that is not on screen
+/// opens the popups such a click starts beside it, never in front (browser_pane.rs).
 pub(super) fn browser_mcp_click(args: &Value, state: &mut McpState) -> CliResult<Value> {
     let page = get_ghostex_cdp_client(args, state)?;
     let page_id = page_id_of(&page);
     let selector = resolve_browser_element_selector(args, state, &page_id)?;
-    let result = evaluate_function(state, &page_id, GHOSTEX_CLICK_SCRIPT, json!([selector]))?;
-    let mut response = serde_json::Map::new();
-    if let Some(result) = result {
-        response.insert("clicked".to_string(), result);
+    let point = evaluate_function(
+        state,
+        &page_id,
+        GHOSTEX_CLICK_POINT_SCRIPT,
+        json!([selector]),
+    )?
+    .unwrap_or(Value::Null);
+    if point.get("fileUpload") == Some(&Value::Bool(true)) {
+        return Err(CliError::Other(format!(
+            "{selector} is a file upload field. Use ghostex_set_input_files with absolute paths: clicking it would open a file chooser on the user's screen."
+        )));
     }
-    response.insert("page".to_string(), cdp_page_summary(&page));
-    Ok(Value::Object(response))
+    let reachable = point.get("reachable") == Some(&Value::Bool(true));
+    let mut clicked = if reachable && press_mouse_at(state, &page_id, &point)? {
+        json!({ "method": "mouse" })
+    } else {
+        let mut clicked =
+            evaluate_function(state, &page_id, GHOSTEX_CLICK_SCRIPT, json!([selector]))?
+                .unwrap_or_else(|| json!({}));
+        clicked["method"] = json!("script");
+        clicked["reason"] = json!(if point.get("inView") == Some(&Value::Bool(false)) {
+            "The element has no size or is outside the view"
+        } else if reachable {
+            "The page did not take the mouse"
+        } else {
+            "Another element covers the element's centre"
+        });
+        clicked
+    };
+    if clicked.get("bounds").is_none() {
+        clicked["bounds"] = point.get("bounds").cloned().unwrap_or(Value::Null);
+    }
+    clicked["selector"] = json!(selector);
+    Ok(json!({ "clicked": clicked, "page": cdp_page_summary(&page) }))
+}
+
+/// Moves the mouse to `point` and presses and releases the left button there. False when the page
+/// would not take the first move, before anything was pressed, so the caller's script click
+/// cannot click twice.
+fn press_mouse_at(state: &mut McpState, page_id: &str, point: &Value) -> CliResult<bool> {
+    let (Some(x), Some(y)) = (
+        point.get("x").and_then(Value::as_f64),
+        point.get("y").and_then(Value::as_f64),
+    ) else {
+        return Ok(false);
+    };
+    let event = |kind: &str, button: &str, buttons: u64, click_count: u64| {
+        json!({
+            "type": kind,
+            "x": x,
+            "y": y,
+            "button": button,
+            "buttons": buttons,
+            "clickCount": click_count,
+            "pointerType": "mouse",
+        })
+    };
+    if client_call(
+        state,
+        page_id,
+        "Input.dispatchMouseEvent",
+        event("mouseMoved", "none", 0, 0),
+    )
+    .is_err()
+    {
+        return Ok(false);
+    }
+    client_call(
+        state,
+        page_id,
+        "Input.dispatchMouseEvent",
+        event("mousePressed", "left", 1, 1),
+    )?;
+    client_call(
+        state,
+        page_id,
+        "Input.dispatchMouseEvent",
+        event("mouseReleased", "left", 0, 1),
+    )?;
+    Ok(true)
+}
+
+/// The most files one `ghostex_set_input_files` call may put in a field.
+const MAX_UPLOAD_FILES: usize = 20;
+
+/// CDXC:Browser 2026-11-26 DECISION:
+/// User (Q4999, #762): `ghostex_set_input_files` puts local files in a page's file upload field
+/// (`DOM.setFileInputFiles`), the one thing the other tools could not do. It is kept narrow: only an
+/// `input type=file` that is enabled (and takes several files when given several), only absolute
+/// paths of existing regular files (symlinks resolved, at most `MAX_UPLOAD_FILES`), and never a
+/// file inside a folder that holds credentials (`upload_refused_folder`). It sends the files to the
+/// page's site exactly as a person choosing them would; an agent that can run commands could send
+/// them the long way already. The browser tools only ever talk to this computer's gxserver, so the
+/// paths checked here are the ones the Browser reads.
+pub(super) fn browser_mcp_set_input_files(args: &Value, state: &mut McpState) -> CliResult<Value> {
+    let files = upload_paths(defined(args.get("files")).or_else(|| defined(args.get("paths"))))?;
+    let page = get_ghostex_cdp_client(args, state)?;
+    let page_id = page_id_of(&page);
+    let selector = resolve_browser_element_selector(args, state, &page_id)?;
+    let call_args = serde_json::to_string(&json!([selector, files.len()]))
+        .map_err(|error| CliError::Other(error.to_string()))?;
+    let found = client_call(
+        state,
+        &page_id,
+        "Runtime.evaluate",
+        json!({
+            "expression": format!("({GHOSTEX_FILE_INPUT_SCRIPT})(...{call_args})"),
+            "returnByValue": false,
+        }),
+    )?;
+    if let Some(details) = defined(found.get("exceptionDetails")) {
+        let message = details
+            .get("exception")
+            .and_then(|exception| exception.get("description"))
+            .and_then(Value::as_str)
+            .and_then(|description| description.lines().next())
+            .or_else(|| details.get("text").and_then(Value::as_str))
+            .unwrap_or("The file upload field could not be found");
+        return Err(CliError::Other(
+            message.trim_start_matches("Error: ").to_string(),
+        ));
+    }
+    let object_id = found
+        .get("result")
+        .and_then(|remote| remote.get("objectId"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| CliError::Other("The file upload field could not be found".to_string()))?
+        .to_string();
+    let set = client_call(
+        state,
+        &page_id,
+        "DOM.setFileInputFiles",
+        json!({ "files": files, "objectId": object_id }),
+    );
+    let _ = client_call(
+        state,
+        &page_id,
+        "Runtime.releaseObject",
+        json!({ "objectId": object_id }),
+    );
+    set?;
+    Ok(json!({
+        "files": files,
+        "page": cdp_page_summary(&page),
+        "selector": selector,
+        "set": true,
+    }))
+}
+
+/// The paths `ghostex_set_input_files` was given, each resolved to the file it names, or why one
+/// may not be used.
+fn upload_paths(value: Option<&Value>) -> CliResult<Vec<String>> {
+    let usage = || {
+        CliError::Other(
+            "ghostex_set_input_files requires files: a list of absolute file paths".to_string(),
+        )
+    };
+    let given: Vec<String> = match value {
+        Some(Value::String(path)) => vec![path.clone()],
+        Some(Value::Array(paths)) => paths
+            .iter()
+            .map(|path| path.as_str().map(str::to_string))
+            .collect::<Option<_>>()
+            .ok_or_else(usage)?,
+        _ => return Err(usage()),
+    };
+    if given.is_empty() {
+        return Err(usage());
+    }
+    if given.len() > MAX_UPLOAD_FILES {
+        return Err(CliError::Other(format!(
+            "ghostex_set_input_files takes at most {MAX_UPLOAD_FILES} files at a time"
+        )));
+    }
+    given
+        .iter()
+        .map(|path| {
+            let path = std::path::Path::new(path.trim());
+            if !path.is_absolute() {
+                return Err(CliError::Other(format!(
+                    "{} is not an absolute path; give the file's full path",
+                    path.display()
+                )));
+            }
+            let resolved = std::fs::canonicalize(path).map_err(|_| {
+                CliError::Other(format!("{} does not exist", path.display()))
+            })?;
+            if !resolved.is_file() {
+                return Err(CliError::Other(format!(
+                    "{} is not a file",
+                    path.display()
+                )));
+            }
+            if let Some(folder) = upload_refused_folder(&resolved) {
+                return Err(CliError::Other(format!(
+                    "{} is inside {}, which holds credentials; the browser tools never upload from there",
+                    path.display(),
+                    folder.display()
+                )));
+            }
+            Ok(resolved.to_string_lossy().to_string())
+        })
+        .collect()
+}
+
+/// The credentials folder or file `resolved` is in, if any: SSH, GPG, cloud and container
+/// logins, the macOS keychains, saved Git and netrc passwords, and Ghostex's own state (its
+/// gxserver token among it).
+fn upload_refused_folder(resolved: &std::path::Path) -> Option<std::path::PathBuf> {
+    let canonical = |path: std::path::PathBuf| std::fs::canonicalize(&path).unwrap_or(path);
+    let mut refused = vec![canonical(crate::ghostex_cli::rpc::ghostex_home())];
+    let home = canonical(crate::ghostex_cli::rpc::home_dir());
+    if !home.as_os_str().is_empty() {
+        for entry in [
+            ".ssh",
+            ".gnupg",
+            ".aws",
+            ".azure",
+            ".kube",
+            ".docker",
+            ".config/gcloud",
+            ".config/gh",
+            ".password-store",
+            ".netrc",
+            ".git-credentials",
+            "Library/Keychains",
+        ] {
+            refused.push(home.join(entry));
+        }
+    }
+    refused
+        .into_iter()
+        .find(|folder| resolved.starts_with(folder))
+}
+
+/// CDXC:Browser 2026-11-26 DECISION:
+/// User (Q4999, #762): the browser tools' way to open a page, always in the background: it opens or
+/// reuses a tab of this agent's own project without showing it, focusing it or asking (gxserver
+/// pins it to the agent's project, switch_requests.rs), and the tools drive that page next.
+pub(super) fn browser_mcp_open_page(args: &Value, state: &mut McpState) -> CliResult<Value> {
+    let url = string_flag(defined(args.get("url")))
+        .ok_or_else(|| CliError::Other("ghostex_open_page requires url".to_string()))?;
+    let reuse = match string_flag(defined(args.get("reuse"))).as_deref() {
+        None => "similar".to_string(),
+        Some(reuse @ ("similar" | "exact" | "none")) => reuse.to_string(),
+        Some(other) => {
+            return Err(CliError::Other(format!(
+                "ghostex_open_page reuse must be similar, exact or none, not {other}"
+            )))
+        }
+    };
+    let scope = state.options.scope.clone();
+    let mut payload = serde_json::Map::new();
+    payload.insert("url".to_string(), json!(url));
+    payload.insert("reuse".to_string(), json!(reuse));
+    payload.insert("background".to_string(), json!(true));
+    if let Some(session) = &scope.agent_session {
+        payload.insert("agentSessionId".to_string(), json!(session));
+    }
+    match (
+        &scope.project_id,
+        &scope.project_path,
+        &scope.session_project_id,
+    ) {
+        (Some(project_id), _, _) | (None, None, Some(project_id)) => {
+            payload.insert("projectId".to_string(), json!(project_id));
+        }
+        (None, Some(project_path), _) => {
+            payload.insert("projectPath".to_string(), json!(project_path));
+        }
+        (None, None, None) => {}
+    }
+    let payload = Value::Object(payload);
+    let flags = crate::ghostex_cli::args::Flags::default();
+    let send = |payload: &Value| {
+        crate::ghostex_cli::actions::send_gxserver_cli_action("openBrowserPane", payload, &flags)
+    };
+    let opened = match send(&payload) {
+        Err(error) if error.to_string().contains("No matching project") => {
+            match browser_open_in_session_project(
+                &payload,
+                false,
+                scope.session_project_id.as_deref(),
+            ) {
+                Some(retry) => send(&retry)?,
+                None => return Err(error),
+            }
+        }
+        other => other?,
+    };
+    if opened.get("ok") == Some(&Value::Bool(false)) {
+        let reason = opened
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("The page could not be opened");
+        return Err(CliError::Other(reason.to_string()));
+    }
+    // The page just opened is the one the tools drive next (agent_pages.rs).
+    state.selected_page_id = None;
+    if let Some(session) = &scope.agent_session {
+        remember_agent_page(session, None);
+    }
+    Ok(json!({
+        "opened": opened,
+        "note": "The page opened in the background, in a tab of this agent's project that the user is not shown. The other tools now drive it; ghostex_list_pages gives its pageId.",
+    }))
 }
 
 pub(super) fn browser_mcp_fill(args: &Value, state: &mut McpState) -> CliResult<Value> {

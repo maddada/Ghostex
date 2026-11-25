@@ -196,9 +196,17 @@ impl BrowserTabModel {
         url: String,
     ) -> Option<(BrowserTabId, BrowserProfileId)> {
         let tab_id = self.active_tab_id_for_pane(pane_id)?;
-        let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == tab_id) else {
-            return None;
-        };
+        let profile_id = self.load_tab_url(tab_id, url)?;
+        Some((tab_id, profile_id))
+    }
+
+    /// Points `tab_id` at `url` as a loaded tab, whether or not it is the one shown.
+    pub(crate) fn load_tab_url(
+        &mut self,
+        tab_id: BrowserTabId,
+        url: String,
+    ) -> Option<BrowserProfileId> {
+        let tab = self.tabs.iter_mut().find(|tab| tab.id == tab_id)?;
         tab.title = browser_tab_title_for_url(&url);
         tab.runtime_page_title = None;
         tab.runtime_favicon_url = None;
@@ -211,7 +219,7 @@ impl BrowserTabModel {
         tab.navigation_history.append_loaded_url(&url);
         tab.url = url;
         tab.state = BrowserTabState::Loaded;
-        Some((tab.id, tab.profile_id))
+        Some(tab.profile_id)
     }
 
     pub(crate) fn set_tab_device_view(

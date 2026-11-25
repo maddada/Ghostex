@@ -659,7 +659,7 @@ pub(crate) async fn handle_renderer_command_http(
             );
         }
     };
-    let payload = with_renderer_session_target(payload);
+    let mut payload = with_renderer_session_target(payload);
     // `ghostex close-after-done` reaches the app through here; an orchestrator is refused before
     // the app is asked, so the CLI (and the phone, which runs it) gets the plain error.
     if action == "toggleCloseAfterDone" && renderer_command_targets_orchestrator(state, &payload) {
@@ -716,7 +716,14 @@ pub(crate) async fn handle_renderer_command_http(
             );
         }
     };
-    if crate::switch_requests::is_agent_switch_request_action(&action) {
+    // An agent's background browser open shows nothing, so it needs no toast (switch_requests.rs).
+    let background_open = crate::switch_requests::pin_agent_background_browser_open(
+        state,
+        caller,
+        &action,
+        &mut payload,
+    );
+    if !background_open && crate::switch_requests::is_agent_switch_request_action(&action) {
         if let Some((caller_project_id, caller_session_id)) =
             crate::switch_requests::caller_agent_session(state, caller)
         {

@@ -166,6 +166,9 @@ pub enum RendererVerb {
         /// The agent session that ran `ghostex browser open`, whose page this becomes
         /// (`listBrowserPages`).
         agent_session: Option<String>,
+        /// `ghostex browser open --background`: load the page in a tab of its project without
+        /// showing it, focusing it or announcing it (#762).
+        background: bool,
     },
     /// `listBrowserPages`: one project's Browser pages, for the browser tools of an agent in it
     /// (`ghostex browser mcp`).
@@ -553,6 +556,7 @@ fn open_browser(core: &Core, payload: &Value) -> Result<RendererVerb, RendererCo
         reuse,
         url: url.to_string(),
         agent_session: trimmed(payload, "agentSessionId"),
+        background: payload.get("background").and_then(Value::as_bool) == Some(true),
     })
 }
 

@@ -93,6 +93,36 @@ pub(super) const GHOSTEX_CLICK_SCRIPT: &str = r##"function ghostexClickScript(se
   return { bounds: { height: rect.height, width: rect.width, x: rect.x, y: rect.y }, selector };
 }"##;
 
+/// Where `ghostex_click` presses the mouse (#762): the element scrolled to the middle of the view
+/// and its centre, and whether that point reaches it (`reachable`: not covered by another element,
+/// inside the view). `fileUpload` names a file field, or a label or element inside a label for
+/// one, which a person's click would answer with the file chooser on the user's screen.
+pub(super) const GHOSTEX_CLICK_POINT_SCRIPT: &str = r##"function ghostexClickPointScript(selector) {
+  const element = document.querySelector(selector);
+  if (!element) throw new Error(`Element not found: ${selector}`);
+  element.scrollIntoView({ block: "center", inline: "center" });
+  const rect = element.getBoundingClientRect();
+  const control = element instanceof HTMLInputElement ? element : element.closest("label")?.control;
+  const fileUpload = control instanceof HTMLInputElement && control.type === "file";
+  const x = rect.x + rect.width / 2;
+  const y = rect.y + rect.height / 2;
+  const inView = rect.width > 0 && rect.height > 0 && x >= 0 && y >= 0 && x < window.innerWidth && y < window.innerHeight;
+  const hit = inView ? document.elementFromPoint(x, y) : null;
+  const reachable = Boolean(hit && (hit === element || element.contains(hit)));
+  return { bounds: { height: rect.height, width: rect.width, x: rect.x, y: rect.y }, fileUpload, inView, reachable, selector, x, y };
+}"##;
+
+/// The file field `ghostex_set_input_files` fills, as a remote object; refused unless it is one
+/// (#762).
+pub(super) const GHOSTEX_FILE_INPUT_SCRIPT: &str = r##"function ghostexFileInputScript(selector, count) {
+  const element = document.querySelector(selector);
+  if (!element) throw new Error(`Element not found: ${selector}`);
+  if (!(element instanceof HTMLInputElement) || element.type !== "file") throw new Error(`Not a file upload field (input type=file): ${selector}`);
+  if (element.disabled) throw new Error(`The file upload field is disabled: ${selector}`);
+  if (count > 1 && !element.multiple) throw new Error(`The file upload field takes one file: ${selector}`);
+  return element;
+}"##;
+
 pub(super) const GHOSTEX_FILL_SCRIPT: &str = r##"function ghostexFillScript(selector, text) {
   const element = document.querySelector(selector);
   if (!element) throw new Error(`Element not found: ${selector}`);
@@ -171,12 +201,14 @@ mod tests {
             vec![
                 "ghostex_list_pages",
                 "ghostex_select_page",
+                "ghostex_open_page",
                 "ghostex_navigate",
                 "ghostex_evaluate",
                 "ghostex_console_logs",
                 "ghostex_snapshot",
                 "ghostex_click",
                 "ghostex_fill",
+                "ghostex_set_input_files",
                 "ghostex_press_key",
                 "ghostex_screenshot",
             ]
@@ -188,32 +220,45 @@ mod tests {
                 Some("object")
             );
         }
-        // list_pages has no page-selector properties; every other tool does.
+        let tool = |name: &str| {
+            tools
+                .iter()
+                .find(|tool| tool.get("name").and_then(Value::as_str) == Some(name))
+                .expect("tool")
+        };
+        // list_pages has no page-selector properties, and open_page opens a page of its own;
+        // every other tool selects a page.
         assert_eq!(
-            tools[0].pointer("/inputSchema/properties"),
+            tool("ghostex_list_pages").pointer("/inputSchema/properties"),
             Some(&json!({}))
         );
-        for tool in &tools[1..] {
+        assert!(tool("ghostex_open_page")
+            .pointer("/inputSchema/properties/pageId")
+            .is_none());
+        for tool in tools.iter().filter(|tool| {
+            !matches!(
+                tool.get("name").and_then(Value::as_str),
+                Some("ghostex_list_pages" | "ghostex_open_page")
+            )
+        }) {
             assert!(tool
                 .pointer("/inputSchema/properties/pageId/description")
                 .is_some());
         }
-        assert_eq!(
-            tools[2].pointer("/inputSchema/required"),
-            Some(&json!(["url"]))
-        );
-        assert_eq!(
-            tools[3].pointer("/inputSchema/required"),
-            Some(&json!(["script"]))
-        );
-        assert_eq!(
-            tools[7].pointer("/inputSchema/required"),
-            Some(&json!(["text"]))
-        );
-        assert_eq!(
-            tools[8].pointer("/inputSchema/required"),
-            Some(&json!(["key"]))
-        );
+        for (name, required) in [
+            ("ghostex_open_page", json!(["url"])),
+            ("ghostex_navigate", json!(["url"])),
+            ("ghostex_evaluate", json!(["script"])),
+            ("ghostex_fill", json!(["text"])),
+            ("ghostex_set_input_files", json!(["files"])),
+            ("ghostex_press_key", json!(["key"])),
+        ] {
+            assert_eq!(
+                tool(name).pointer("/inputSchema/required"),
+                Some(&required),
+                "{name}"
+            );
+        }
     }
 
     #[test]

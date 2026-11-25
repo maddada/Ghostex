@@ -156,6 +156,18 @@ pub(super) fn browser_mcp_tools() -> Value {
             "inputSchema": { "type": "object", "properties": props(json!({ "index": { "type": "number" } })) },
         },
         {
+            "name": "ghostex_open_page",
+            "description": "Open a page in this agent's own project in the background: a tab the user is not shown, with no switch toast to wait for. Reuses a tab of the same origin unless reuse is exact or none; the other tools drive the page next.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["url"],
+                "properties": {
+                    "url": { "type": "string" },
+                    "reuse": { "type": "string", "enum": ["similar", "exact", "none"] },
+                },
+            },
+        },
+        {
             "name": "ghostex_navigate",
             "description": "Navigate a Ghostex embedded browser page.",
             "inputSchema": { "type": "object", "required": ["url"], "properties": props(json!({ "url": { "type": "string" } })) },
@@ -184,7 +196,7 @@ pub(super) fn browser_mcp_tools() -> Value {
         },
         {
             "name": "ghostex_click",
-            "description": "Click an element by @e ref from ghostex_snapshot or a CSS selector.",
+            "description": "Click an element by @e ref from ghostex_snapshot or a CSS selector, with a real mouse click at its centre (a script click when something covers it). File upload fields are refused: use ghostex_set_input_files.",
             "inputSchema": {
                 "type": "object",
                 "properties": props(json!({ "ref": { "type": "string" }, "selector": { "type": "string" } })),
@@ -197,6 +209,19 @@ pub(super) fn browser_mcp_tools() -> Value {
                 "type": "object",
                 "required": ["text"],
                 "properties": props(json!({ "ref": { "type": "string" }, "selector": { "type": "string" }, "text": { "type": "string" } })),
+            },
+        },
+        {
+            "name": "ghostex_set_input_files",
+            "description": "Put local files in a file upload field (input type=file) by @e ref or CSS selector. files are absolute paths of existing files; files in credential folders (~/.ssh, keychains and the like) are refused.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["files"],
+                "properties": props(json!({
+                    "ref": { "type": "string" },
+                    "selector": { "type": "string" },
+                    "files": { "type": "array", "items": { "type": "string" } },
+                })),
             },
         },
         {
@@ -221,12 +246,16 @@ fn call_browser_mcp_tool(
     match name.as_str() {
         "ghostex_list_pages" => Ok(text_tool_result(&browser_mcp_list_pages(state)?)),
         "ghostex_select_page" => Ok(text_tool_result(&browser_mcp_select_page(args, state)?)),
+        "ghostex_open_page" => Ok(text_tool_result(&browser_mcp_open_page(args, state)?)),
         "ghostex_navigate" => Ok(text_tool_result(&browser_mcp_navigate(args, state)?)),
         "ghostex_evaluate" => Ok(text_tool_result(&browser_mcp_evaluate(args, state)?)),
         "ghostex_console_logs" => Ok(text_tool_result(&browser_mcp_console_logs(args, state)?)),
         "ghostex_snapshot" => Ok(text_tool_result(&browser_mcp_snapshot(args, state)?)),
         "ghostex_click" => Ok(text_tool_result(&browser_mcp_click(args, state)?)),
         "ghostex_fill" => Ok(text_tool_result(&browser_mcp_fill(args, state)?)),
+        "ghostex_set_input_files" => {
+            Ok(text_tool_result(&browser_mcp_set_input_files(args, state)?))
+        }
         "ghostex_press_key" => Ok(text_tool_result(&browser_mcp_press_key(args, state)?)),
         "ghostex_screenshot" => {
             let value = browser_mcp_screenshot(args, state)?;

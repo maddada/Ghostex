@@ -786,6 +786,21 @@ impl GhostexGpuiApp {
                         let _ = app.update_in(&mut async_cx, |this, window, cx| {
                             match this.browser_runtime_owner_for_key(runtime_key) {
                                 Some(BrowserRuntimeOwner::Live) => {
+                                    // CDXC:Browser 2026-11-26 WHY: a page that is not on screen
+                                    // (an agent's background page, #762) opens its popups beside
+                                    // it, never in front: an agent's click there must not switch
+                                    // the user's view to the Browser.
+                                    let placement = if source_tab.is_some_and(|tab| {
+                                        !this.browser_surfaces_may_be_visible()
+                                            || !this
+                                                .browser_tabs
+                                                .rendered_active_loaded_tab_ids()
+                                                .contains(&tab)
+                                    }) {
+                                        cef::BrowserPopupPlacement::Background
+                                    } else {
+                                        placement
+                                    };
                                     // A page of `source_tab` opened it, so closing it goes back
                                     // there (`forget_browser_tab_opener_once_hidden`).
                                     if let Some(tab) = this.open_browser_popup_tab(

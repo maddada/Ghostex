@@ -35,6 +35,56 @@ pub(crate) fn is_agent_switch_request_action(action: &str) -> bool {
     )
 }
 
+/// CDXC:SwitchRequests 2026-11-26 DECISION:
+/// User (Q4999, #762): an agent may open a page in the background without the switch toast,
+/// because a background open changes nothing the user is looking at: the page loads in a tab of
+/// the agent's own project that is not shown, focused or announced (`open_browser_url_in_background`
+/// in apps/desktop/src/app/workspace_events.rs). Every other open keeps the toast. To keep that
+/// power narrow the open is pinned to the caller's own project, whatever project, group or folder
+/// its payload named, and it goes into the security log (quietly: no bell, no phone).
+///
+/// Returns true when `payload` is an agent session's background open, pinned in place.
+pub(crate) fn pin_agent_background_browser_open(
+    state: &AppState,
+    caller: &Principal,
+    action: &str,
+    payload: &mut Map<String, Value>,
+) -> bool {
+    if !matches!(action, "openBrowser" | "openBrowserPane")
+        || payload.get("background") != Some(&Value::Bool(true))
+    {
+        return false;
+    }
+    let Some((project_id, _)) = caller_agent_session(state, caller) else {
+        return false;
+    };
+    for key in ["groupId", "projectName", "projectPath"] {
+        payload.remove(key);
+    }
+    payload.insert(
+        "projectId".to_string(),
+        Value::String(project_id.to_string()),
+    );
+    let url = payload
+        .get("url")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .chars()
+        .take(200)
+        .collect::<String>();
+    crate::audit::record(
+        crate::audit::Action::new(
+            "browser.backgroundOpen",
+            "Opened a Browser page in the background",
+        )
+        .target(url),
+        crate::audit::Actor::current(),
+        crate::audit::Outcome::Done,
+        None,
+    );
+    true
+}
+
 /// Returns `Some((project_id, session_id))` when the caller is an agent session whose switch
 /// requests must become clickable toasts instead of stealing focus.
 ///
