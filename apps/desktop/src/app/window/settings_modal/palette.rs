@@ -82,8 +82,8 @@ impl SettingsPalette {
         }
     }
 
-    /// Settings over an art theme's artwork: the window is the dark frosted glass the chat box and
-    /// the sidebar card use (`frosted_glass_backdrop`, drawn by the window in shell.rs), and the
+    /// Settings over an art theme's artwork: the window is the dark frosted glass
+    /// the sidebar card uses (`frosted_glass_backdrop`, drawn by the window in shell.rs), and the
     /// rail, the section cards and the inputs are faint washes of the ink with hairline edges over
     /// it, instead of grey slabs.
     ///

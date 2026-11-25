@@ -707,13 +707,10 @@ impl NativeChatView {
             })
     }
 
-    /// The strip for the tray behind the chat box (`in_tray`, composer.rs) or the top of the box,
-    /// or `None` once it has shrunk away. In the tray it has no hairline under it: the box's edge
-    /// is the line.
+    /// The strip for the top of the chat box, or `None` once it has shrunk away.
     pub(super) fn render_pills_strip(
         &mut self,
         p: &ChatAppearance,
-        in_tray: bool,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let s = p.scale;
@@ -845,15 +842,13 @@ impl NativeChatView {
                     .child(self.pills_strip_fit(row, p, cx)),
             )
             // The hairline under the band, the box's border colour.
-            .when(!in_tray, |strip| {
-                strip.child(div().h(px(1.0)).flex_shrink_0().bg(p.composer_border))
-            })
+            .child(div().h(px(1.0)).flex_shrink_0().bg(p.composer_border))
             .child(
                 canvas(move |bounds, _, _| measured.set(bounds), |_, _, _, _| {})
                     .absolute()
                     .inset_0(),
             );
-        let full = STRIP_HEIGHT * s + if in_tray { 0.0 } else { 1.0 };
+        let full = STRIP_HEIGHT * s + 1.0;
         Some(match animating {
             Some((_, showing, generation)) => {
                 let easing = super::composer_animation::METRICS.easing;

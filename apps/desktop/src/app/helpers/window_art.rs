@@ -735,8 +735,11 @@ pub(crate) fn window_art_frosted() -> Option<FrostedArt> {
 
 /// A dark, blurred glass backdrop for a surface over the artwork, rounded by `radius`: the frosted
 /// artwork lined up with the original, its dimming, black smoke (dark mode) and the work area
-/// colour over it, the way the chat box draws its glass (`composer_frost_layer` in
-/// native_chat/composer.rs). `None` without an artwork. Put it first in the surface (`relative`).
+/// colour over it. `None` without an artwork. Put it first in the surface (`relative`). The floating
+/// sidebar card and Settings use it; the chat box no longer does (CDXC:SessionChat 2026-11-25 below).
+///
+/// CDXC:SessionChat 2026-11-25 DECISION:
+/// User, after PR 757: "pls revert the chat box to look similar to the inbox above it: 1- wider pills bar that doesn't end before end of the chat box itself 2- bg color. also please make the scrolling in the chat transcript not bring the chat transcript behind my inbox and chat box (like we used to have before i merged this from jay)". The chat box's frosted glass, its pills tray and its floating over the transcript are gone (native_chat/composer.rs, render.rs); the box has its own solid fill with the pills along its top again, and the transcript ends above the Inbox and the box. This backdrop stays for the sidebar card and Settings.
 ///
 /// CDXC:Workarea 2026-11-25 DECISION:
 /// User, of the floating sidebar card showing the artwork straight through it: "add a bg to the sidebar man why transparent", "a drak tint blured", then "keep the same amount of transperancy for both". Over an artwork the card is dark frosted glass exactly like the chat box (the sidebar and the rail paint no tint of their own over it); otherwise it takes the sidebar's own solid colour (`render_sidebar_card` in native_sidebar/host.rs).

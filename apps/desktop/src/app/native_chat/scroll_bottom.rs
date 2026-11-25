@@ -356,14 +356,14 @@ impl NativeChatView {
         let shown = toast.is_some();
         if glass {
             let label = toast.map_or_else(String::new, |toast| toast.text);
-            return pill_row(&p, self.composer_overlap)
+            return pill_row(&p)
                 .child(self.scroll_bottom_window_placeholder(shown, label, &p, cx))
                 .into_any_element();
         }
         let Some(toast) = toast else {
             return div().into_any_element();
         };
-        let row = pill_row(&p, self.composer_overlap);
+        let row = pill_row(&p);
         // The pill wears the composer's own chrome: the same opaque card fill, the 1px outline and
         // the inset top highlight session-chat-composer-focus.css gives both of them.
         let outline = if p.light {
@@ -392,11 +392,11 @@ impl NativeChatView {
 }
 
 /// The centred row the toasts sit in, at the transcript's bottom edge, just above the working card
-/// or the composer, lifted by `overlap` above the chat box floating over the transcript.
-fn pill_row(p: &ChatAppearance, overlap: f32) -> gpui::Div {
+/// or the composer.
+fn pill_row(p: &ChatAppearance) -> gpui::Div {
     div()
         .absolute()
-        .bottom(px(SPEC.bottom * p.scale + overlap))
+        .bottom(px(SPEC.bottom * p.scale))
         .w_full()
         .flex()
         .justify_center()

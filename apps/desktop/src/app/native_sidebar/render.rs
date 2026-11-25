@@ -234,7 +234,7 @@ impl GhostexGpuiApp {
             .size_full()
             .min_h_0()
             // In the Floating sidebar layout over an artwork the card's frosted glass is the fill,
-            // the same glass as the chat box (`render_sidebar_card`), so no tint stacks on it.
+            // (`render_sidebar_card`), so no tint stacks on it.
             .bg(
                 if in_card && crate::app::helpers::window_art_frosted().is_some() {
                     gpui::transparent_black().into()

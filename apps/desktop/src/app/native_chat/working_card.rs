@@ -215,10 +215,7 @@ impl NativeChatView {
         Some(
             div()
                 .absolute()
-                // Above the chat box floating over the transcript (`composer_overlap`).
-                .bottom(px(
-                    super::transcript_layout::LAYOUT.end_padding * s + self.composer_overlap
-                ))
+                .bottom(px(super::transcript_layout::LAYOUT.end_padding * s))
                 .left_0()
                 .right_0()
                 .flex()

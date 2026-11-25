@@ -72,43 +72,6 @@ impl NativeChatView {
         )
     }
 
-    /// The chat box floating over the bottom of the transcript, so the rows scroll on behind it,
-    /// with its height measured for the rows' end padding (`composer_overlap`); a change of height
-    /// draws the chat again so the rows' end follows it.
-    ///
-    /// CDXC:SessionChat 2026-11-25 DECISION:
-    /// User, of the chat box over the transcript: "the text can go behind it not like that", choosing that it always floats (not only over an art theme's artwork, where the box is frosted glass, `composer_frost_layer` in composer.rs). The box and what stacks with it are drawn over the transcript's bottom edge; the rows' end padding grows by its height, so the newest row still rests above it, and the toasts and scroll pills sit above it.
-    fn render_floating_composer(&mut self, cx: &mut Context<Self>) -> gpui::AnyElement {
-        let measured = self.composer_overlap_measured.clone();
-        let chat = cx.weak_entity();
-        div()
-            .absolute()
-            .left_0()
-            .right_0()
-            .bottom_0()
-            .child(self.render_composer_host(cx))
-            .child(
-                gpui::canvas(
-                    move |bounds, window, cx| {
-                        let height = bounds.size.height.as_f32();
-                        if (measured.get() - height).abs() > 0.5 {
-                            measured.set(height);
-                            let chat = chat.clone();
-                            window.defer(cx, move |_, cx| {
-                                let _ = chat.update(cx, |_, cx| cx.notify());
-                            });
-                        }
-                    },
-                    |_, _, _, _| {},
-                )
-                .absolute()
-                .top_0()
-                .left_0()
-                .size_full(),
-            )
-            .into_any_element()
-    }
-
     /// Decides this frame's `held_text_width`: while a window panel or the docked Session details
     /// column slides (`terminal_element::grid_resize_held`, `session_details.motion`) and the pane's width would change the transcript's
     /// text width, the rows keep the width they had before the slide, centred; the settling frame
@@ -251,12 +214,9 @@ impl Render for NativeChatView {
         if maximized {
             self.pending_composer_frame = None;
             self.transcript_inset = 0.0;
-            self.composer_overlap = 0.0;
         } else {
             let frame = self.composer_frame(cx);
-            // The chat box floats over the transcript (`composer_overlap`): the rows end above it.
-            self.composer_overlap = self.composer_overlap_measured.get();
-            self.transcript_inset = frame.transcript_inset + self.composer_overlap;
+            self.transcript_inset = frame.transcript_inset;
             self.pending_composer_frame = Some(frame);
         }
         crate::app::helpers::indicator_animation::render_indicator_frames_animation_only(
@@ -327,7 +287,7 @@ impl Render for NativeChatView {
             overlay.set(indicator_overlay::WORKING_TRACK, None);
         }
         let composer = if !covered {
-            self.render_floating_composer(cx)
+            self.render_composer_host(cx)
         } else if maximized {
             div().h(px(148.0 * s)).into_any_element()
         } else {
