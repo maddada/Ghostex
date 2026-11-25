@@ -196,7 +196,18 @@ mod tests {
             }
         }
         // Drain the startup output's coalesced notification before sending silent input.
-        while rx.recv_timeout(Duration::from_millis(100)).is_ok() {}
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            anyhow::ensure!(
+                std::time::Instant::now() < deadline,
+                "startup did not settle"
+            );
+            match rx.recv_timeout(Duration::from_millis(100)) {
+                Ok(_) => {}
+                Err(mpsc::RecvTimeoutError::Timeout) => break,
+                Err(error) => return Err(error.into()),
+            }
+        }
         assert!(model.send_mouse(
             &VtMouseInput {
                 action: VtMouseAction::Motion,
