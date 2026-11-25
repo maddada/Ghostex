@@ -191,14 +191,23 @@ async fn run_clone_job(
                 return;
             }
             if output.exit_code != 0 {
+                let stderr = output.stderr.clone().or_else(&output.stdout);
+                // Optional: clients from before Run in terminal ignore it.
+                if let Some(command_id) = clone_failure_run_in_terminal(&stderr) {
+                    if let Some(job) = jobs
+                        .lock()
+                        .await
+                        .get_mut(&job_id)
+                        .and_then(Value::as_object_mut)
+                    {
+                        job.insert("runInTerminal".to_string(), json!(command_id));
+                    }
+                }
                 mark_job_failed(
                     &jobs,
                     &runtime,
                     &job_id,
-                    summarize_clone_failure(
-                        &output.stderr.clone().or_else(&output.stdout),
-                        output.exit_code,
-                    ),
+                    summarize_clone_failure(&stderr, output.exit_code),
                     Some(output),
                     "dependencyUnavailable",
                 )

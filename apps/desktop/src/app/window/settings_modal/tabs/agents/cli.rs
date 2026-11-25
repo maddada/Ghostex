@@ -13,7 +13,7 @@ use super::super::super::fields::{
     tooltip_text,
 };
 use super::super::super::palette::SettingsPalette;
-use super::super::super::store::store_machine_gxserver_rpc;
+use super::super::super::store::{post_store_message, store_machine_gxserver_rpc};
 use super::AgentsTab;
 use super::icons;
 use super::logos::muted_fill;
@@ -84,6 +84,9 @@ pub(super) struct CliMethod {
     /// "node", "homebrew", "mise" or "systemTools": a tool Ghostex installs before `command`.
     pub(super) prerequisite: Option<String>,
     pub(super) system_tools: Vec<String>,
+    /// Run in terminal's id for the command `unavailable_reason` names (`bunUpgrade`,
+    /// server/src/shown_commands/); absent from older gxservers.
+    pub(super) run_in_terminal: Option<String>,
 }
 
 impl CliMethod {
@@ -95,6 +98,7 @@ impl CliMethod {
             unavailable_reason: nonempty(method, "unavailableReason"),
             plan: nonempty(method, "plan"),
             prerequisite: nonempty(method, "prerequisite"),
+            run_in_terminal: nonempty(method, "runInTerminal"),
             system_tools: method
                 .get("systemTools")
                 .and_then(Value::as_array)
@@ -1305,6 +1309,33 @@ impl AgentsTab {
                 }
                 if let Some(reason) = &method.unavailable_reason {
                     body = body.child(small(reason.clone(), muted));
+                    // The reason names a command to type (`bun upgrade`): a Main Hub terminal on
+                    // the machine the page shows, with it typed in.
+                    if let Some(command_id) = method.run_in_terminal.clone() {
+                        let machine_id = self.shown_machine.clone();
+                        body = body.child(h_flex().child(settings_button_sized(
+                            p,
+                            SharedString::from(format!("agent-cli-run-in-terminal-{agent_id}")),
+                            "Run in terminal",
+                            None,
+                            ButtonVariant::Default,
+                            ButtonSize::Sm,
+                            !connected,
+                            None,
+                            move |page: &mut Self, _window, cx| {
+                                post_store_message(
+                                    &page.store,
+                                    json!({
+                                        "type": "openShownCommandTerminal",
+                                        "commandId": command_id,
+                                        "machineId": machine_id,
+                                    }),
+                                    cx,
+                                );
+                            },
+                            cx,
+                        )));
+                    }
                 } else if let Some(plan) = &method.plan {
                     body = body.child(small(plan.clone(), muted));
                 }

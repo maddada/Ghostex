@@ -7,18 +7,46 @@ use crate::ghostex_cli::args::parse_args;
 use crate::ghostex_cli::output::print_json;
 use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
 
+/// The arguments some ids take (server/src/shown_commands/registry.rs checks each).
+const ARG_FLAGS: [&str; 9] = [
+    "version",
+    "workspaceId",
+    "machineId",
+    "command",
+    "provider",
+    "agent",
+    "host",
+    "alias",
+    "ssh",
+];
+
 fn usage() -> String {
     "Ghostex shown-command - open a Main Hub terminal with a command Ghostex shows typed in
 
 Usage:
-  ghostex shown-command open <id> [--json]
+  ghostex shown-command open <id> [--version <v>] [--workspace-id <id>] [--json]
 
 Ids:
-  linuxUpdate   The Linux update command Settings > Updates shows (only while an update is out)
+  linuxUpdate          The Linux update command Settings > Updates shows (only while an update is out)
   toolInstall:<trycua|spaceo|hex>
-                The tool's install command (offered after its install failed)
+                       The tool's install command (offered after its install failed)
   agentCli:<agent id>
-                The command of that agent CLI's last install or update (only after it failed)
+                       The command of that agent CLI's last install or update (only after it failed)
+  linuxGoBack          Go back to an older version on a deb or rpm install (--version)
+  ghAuthLogin          gh auth login
+  glabAuthLogin        glab auth login
+  ghProjectsScope      gh auth refresh -s read:project (GitHub Projects)
+  gwsAuthSetup         gws auth setup (Google Workspace)
+  teamDeploy           ghostex team deploy (--workspace-id)
+  teamSlackConnect     ghostex team slack-connect (--workspace-id)
+  teamLinearConnect    ghostex team linear-connect (--workspace-id)
+  sshServer            Install or start the OpenSSH server (Linux)
+  sshSignIn            ssh to a remote computer that reuses your SSH connection (--machine-id)
+  claudeSwapInstall    Install Claude Swap
+  codexSwapInstall     Install Codex Swap
+  bunUpgrade           bun upgrade
+  systemToolsInstall   Install Linux system tools with sudo
+  agentboxStep         A Cloud Boxes step (--command, --provider, --agent, --host, --alias, --ssh)
 
 The command is typed at the new terminal's prompt and not run: press Enter there.
 "
@@ -33,9 +61,15 @@ pub fn shown_command_command(args: &[String]) -> CliResult<()> {
             if id.is_empty() {
                 return Err(CliError::Other(format!("Name the command.\n\n{}", usage())));
             }
+            let mut command_args = serde_json::Map::new();
+            for key in ARG_FLAGS {
+                if let Some(value) = parsed.flags.string_value(key) {
+                    command_args.insert(key.to_string(), json!(value));
+                }
+            }
             let result = call_gxserver_rpc(
                 "/api/openShownCommandTerminal",
-                &json!({ "commandId": id }),
+                &json!({ "commandId": id, "args": command_args }),
                 &parsed.flags,
             )?;
             if parsed.flags.truthy("json") {

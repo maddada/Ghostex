@@ -321,6 +321,9 @@ pub(crate) struct AddProjectProviderDiscovery {
     pub(crate) install_hint: Option<String>,
     /// The `/api/managedTools` tool that installs this provider's missing CLI (`gh`, `glab`).
     pub(crate) install_tool: Option<String>,
+    /// `auth.runInTerminal`: the sign-in command's Run in terminal id while signed out; `None` from
+    /// an older gxserver.
+    pub(crate) sign_in_run_in_terminal: Option<String>,
     pub(crate) provider: Option<AddProjectSourceId>,
     pub(crate) available: bool,
 }
@@ -359,6 +362,9 @@ pub(crate) fn read_add_project_discovery(
                 install_hint: text(provider, "installHint"),
                 install_tool: text(provider, "installTool")
                     .filter(|tool| matches!(tool.as_str(), "gh" | "glab")),
+                sign_in_run_in_terminal: provider
+                    .get("auth")
+                    .and_then(|auth| text(auth, "runInTerminal")),
                 provider: provider
                     .get("provider")
                     .and_then(Value::as_str)
@@ -446,6 +452,9 @@ pub(crate) struct AddProjectCloneJob {
     pub(crate) progress: Option<String>,
     pub(crate) project_path: Option<String>,
     pub(crate) state: AddProjectCloneJobState,
+    /// Run in terminal's id beside a failed clone's sentence (`ghAuthLogin` when git needs a
+    /// sign-in; server/src/shown_commands/); `None` from an older gxserver.
+    pub(crate) run_in_terminal: Option<String>,
 }
 
 /// `readAddProjectCloneJob`.
@@ -465,6 +474,7 @@ pub(crate) fn read_add_project_clone_job(value: &Value) -> Result<AddProjectClon
         progress: text(job, "progress"),
         project_path: text(job, "projectPath"),
         state,
+        run_in_terminal: text(job, "runInTerminal"),
     })
 }
 

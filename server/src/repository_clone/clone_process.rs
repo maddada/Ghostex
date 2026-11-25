@@ -354,6 +354,18 @@ async fn non_interactive_ssh_command(clone_url: &str, cwd: &str) -> Option<Strin
     Some(format!("{configured} -o BatchMode=yes"))
 }
 
+/// git asked for a username or password a background clone cannot answer.
+fn needs_git_sign_in(lower_stderr: &str) -> bool {
+    lower_stderr.contains("terminal prompts disabled")
+        || lower_stderr.contains("could not read username")
+}
+
+/// Run in terminal's id for a failed clone whose sentence (`summarize_clone_failure`) names
+/// `gh auth login`, stored on the job as `runInTerminal` (server/src/shown_commands/).
+pub(super) fn clone_failure_run_in_terminal(stderr: &str) -> Option<&'static str> {
+    needs_git_sign_in(&stderr.to_ascii_lowercase()).then_some(crate::shown_commands::GH_AUTH_LOGIN)
+}
+
 /// One sentence for the dialog from a failed clone's stderr: git's first `fatal:`/`error:` line
 /// (else its last line), with a next step for the two prompts a background clone cannot answer.
 pub(super) fn summarize_clone_failure(stderr: &str, exit_code: i32) -> String {
@@ -374,7 +386,7 @@ pub(super) fn summarize_clone_failure(stderr: &str, exit_code: i32) -> String {
         .unwrap_or("")
         .to_string();
     let lower = stderr.to_ascii_lowercase();
-    if lower.contains("terminal prompts disabled") || lower.contains("could not read username") {
+    if needs_git_sign_in(&lower) {
         return "Git needs you to sign in to this repository. Sign in with Git Credential Manager or `gh auth login`, then clone again.".to_string();
     }
     if lower.contains("host key verification failed") {

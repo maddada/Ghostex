@@ -83,6 +83,9 @@ impl GhostexGpuiApp {
                         cx,
                     );
                 }
+                CreateLinearTicketModalCommand::RunInTerminal(command_id) => {
+                    app.gx_store_open_shown_command_terminal(None, command_id, None, cx);
+                }
                 CreateLinearTicketModalCommand::Cancel => {}
             }
             app.release_native_app_modal_window(GpuiAppModalKind::CreateLinearTicket, cx);

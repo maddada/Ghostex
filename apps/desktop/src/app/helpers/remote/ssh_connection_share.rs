@@ -359,10 +359,13 @@ pub(crate) fn gpui_remote_ssh_reuse_control_socket(
     };
     match gpui_remote_ssh_control_socket_problem(socket.as_path(), unsafe { libc::geteuid() }) {
         None => Ok(socket),
-        Some(GpuiRemoteControlSocketProblem::Missing) => Err(format!(
-            "No SSH connection to {target} is open. Sign in to it in a terminal ({}) and finish the prompt there, then reconnect.",
-            gpui_remote_ssh_sign_in_hint(config)
-        )),
+        Some(GpuiRemoteControlSocketProblem::Missing) => {
+            gpui_remote_note_ssh_sign_in_needed(&config.remote_machine_id, true);
+            Err(format!(
+                "No SSH connection to {target} is open. Sign in to it in a terminal ({}) and finish the prompt there, then reconnect.",
+                gpui_remote_ssh_sign_in_hint(config)
+            ))
+        }
         Some(GpuiRemoteControlSocketProblem::Unsafe(reason)) => Err(format!(
             "Ghostex only reuses an SSH connection whose socket sits in a folder only you can change. {reason} Point ControlPath for {target} at a private folder (for example ~/.ssh/sockets, chmod 700), then sign in again in a terminal."
         )),
@@ -485,13 +488,40 @@ pub(crate) fn gpui_remote_ssh_reuse_connection_refusal(
         None,
         GPUI_REMOTE_SSH_CONTROL_TIMEOUT,
     );
-    if result.exit_code == 0 {
-        return None;
+    let needed = result.exit_code != 0;
+    gpui_remote_note_ssh_sign_in_needed(&config.remote_machine_id, needed);
+    needed.then(|| {
+        format!(
+            "No SSH connection to {target} is open. Sign in to it in a terminal ({}) and finish the prompt there, then reconnect.",
+            gpui_remote_ssh_sign_in_hint(config)
+        )
+    })
+}
+
+/// The saved computers whose last connect stopped because no SSH connection was open to reuse, so
+/// Settings > Remote offers Run in terminal for the sign-in (`sshSignIn`, server/src/shown_commands/,
+/// which builds the same `ssh` line from Settings).
+static GPUI_REMOTE_SSH_SIGN_IN_NEEDED: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashSet<String>>,
+> = std::sync::LazyLock::new(Default::default);
+
+#[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))]
+fn gpui_remote_note_ssh_sign_in_needed(remote_machine_id: &str, needed: bool) {
+    let Ok(mut machines) = GPUI_REMOTE_SSH_SIGN_IN_NEEDED.lock() else {
+        return;
+    };
+    if needed {
+        machines.insert(remote_machine_id.to_string());
+    } else {
+        machines.remove(remote_machine_id);
     }
-    Some(format!(
-        "No SSH connection to {target} is open. Sign in to it in a terminal ({}) and finish the prompt there, then reconnect.",
-        gpui_remote_ssh_sign_in_hint(config)
-    ))
+}
+
+/// Whether `remote_machine_id`'s last connect asked the user to sign in over SSH in a terminal.
+pub(crate) fn gpui_remote_ssh_sign_in_needed(remote_machine_id: &str) -> bool {
+    GPUI_REMOTE_SSH_SIGN_IN_NEEDED
+        .lock()
+        .is_ok_and(|machines| machines.contains(remote_machine_id))
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]

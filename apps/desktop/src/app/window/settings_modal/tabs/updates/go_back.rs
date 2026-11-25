@@ -92,26 +92,57 @@ impl UpdatesTab {
                     )
                     .into_any_element();
                 let copied = self.go_back_copied;
+                let copy = settings_button_sized(
+                    p,
+                    "updates-go-back-copy",
+                    if copied { "Copied" } else { "Copy command" },
+                    None,
+                    ButtonVariant::Outline,
+                    ButtonSize::Sm,
+                    false,
+                    None,
+                    move |tab: &mut Self, _, cx| {
+                        cx.write_to_clipboard(ClipboardItem::new_string(command.clone()));
+                        tab.go_back_copied = true;
+                        cx.notify();
+                    },
+                    cx,
+                );
+                // Run in terminal: a Main Hub terminal with the same command typed in, which
+                // gxserver works out again from the version (`linuxGoBack`, server/src/shown_commands/).
+                let version = previous.clone();
+                let run = settings_button_sized(
+                    p,
+                    "updates-go-back-run-in-terminal",
+                    "Run in terminal",
+                    None,
+                    ButtonVariant::Default,
+                    ButtonSize::Sm,
+                    false,
+                    None,
+                    move |tab: &mut Self, _, cx| {
+                        tab.post(
+                            json!({
+                                "type": "openShownCommandTerminal",
+                                "commandId": "linuxGoBack",
+                                "args": { "version": version },
+                            }),
+                            cx,
+                        );
+                    },
+                    cx,
+                );
                 settings_list_item_wrapped(
                     p,
                     title,
                     detail,
-                    Some(settings_button_sized(
-                        p,
-                        "updates-go-back-copy",
-                        if copied { "Copied" } else { "Copy command" },
-                        None,
-                        ButtonVariant::Default,
-                        ButtonSize::Sm,
-                        false,
-                        None,
-                        move |tab: &mut Self, _, cx| {
-                            cx.write_to_clipboard(ClipboardItem::new_string(command.clone()));
-                            tab.go_back_copied = true;
-                            cx.notify();
-                        },
-                        cx,
-                    )),
+                    Some(
+                        h_flex()
+                            .gap(px(6.0))
+                            .child(copy)
+                            .child(run)
+                            .into_any_element(),
+                    ),
                 )
             }
             Some("download") => {

@@ -53,6 +53,8 @@ pub(crate) struct JobRow {
     /// 0 to 100, read from that line.
     pub(crate) percent: Option<f32>,
     pub(crate) status: JobStatus,
+    /// A failed job's reason names a command Run in terminal types in (a clone's `gh auth login`).
+    pub(crate) run_in_terminal: bool,
     /// The verb the button's label starts with ("Cloning").
     pub(crate) verb: String,
 }
@@ -73,6 +75,7 @@ pub(crate) enum JobsAction {
     Cancel(u64),
     Retry(u64),
     Dismiss(u64),
+    RunInTerminal(u64),
 }
 
 pub(crate) type JobsHandler<V> = Rc<dyn Fn(&mut V, JobsAction, &mut Window, &mut Context<V>)>;
@@ -379,6 +382,16 @@ fn job_row<V: 'static>(
             .into_any_element(),
         JobStatus::Failed(_) => h_flex()
             .gap(px(4.0))
+            .when(row.run_in_terminal, |buttons| {
+                buttons.child(small_button(
+                    p,
+                    SharedString::from(format!("jobs-run-in-terminal-{}", row.id)),
+                    "Run in terminal",
+                    on,
+                    JobsAction::RunInTerminal(row.id),
+                    cx,
+                ))
+            })
             .child(small_button(
                 p,
                 SharedString::from(format!("jobs-retry-{}", row.id)),

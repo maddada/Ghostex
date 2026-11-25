@@ -10,8 +10,8 @@ mod record;
 mod status;
 
 pub(crate) use auto::spawn_app_auto_update_task;
-pub(crate) use linux_install::shown_update_command;
 pub(crate) use http::{
     current_app_update_status, handle_app_update_http, request_app_update_install,
     set_app_auto_update,
 };
+pub(crate) use linux_install::{go_back_command, shown_update_command};

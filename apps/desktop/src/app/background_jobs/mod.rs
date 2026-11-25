@@ -22,6 +22,8 @@ pub(crate) struct BackgroundJob {
     pub(crate) verb: &'static str,
     pub(crate) progress: Option<String>,
     pub(crate) status: JobStatus,
+    /// A failed job's Run in terminal id (server/src/shown_commands/), when its machine offers one.
+    pub(crate) run_in_terminal: Option<String>,
     pub(crate) work: JobWork,
 }
 
@@ -69,6 +71,7 @@ impl BackgroundJobs {
                     .and_then(crate::app::window::jobs_popover_view::progress_percent),
                 progress: job.progress.clone(),
                 status: job.status.clone(),
+                run_in_terminal: job.run_in_terminal.is_some(),
                 verb: job.verb.to_string(),
             })
             .collect()
@@ -118,6 +121,7 @@ impl GhostexGpuiApp {
         }
         job.status = JobStatus::Running;
         job.progress = None;
+        job.run_in_terminal = None;
         match &mut job.work {
             JobWork::Clone(work) => {
                 work.server_job_id = None;
@@ -138,6 +142,23 @@ impl GhostexGpuiApp {
             self.background_jobs.remove(id);
             self.background_jobs_changed(cx);
         }
+    }
+
+    /// Run in terminal beside a failed job: a Main Hub terminal on the job's machine with the
+    /// command its reason names typed in (a clone that needs `gh auth login`).
+    pub(crate) fn background_job_run_in_terminal(&mut self, id: u64, cx: &mut gpui::Context<Self>) {
+        let Some(job) = self.background_jobs.get_mut(id) else {
+            return;
+        };
+        let Some(command_id) = job.run_in_terminal.clone() else {
+            return;
+        };
+        let machine_id = match &job.work {
+            JobWork::Clone(work) => work.machine_id.clone(),
+        };
+        let machine_id =
+            (machine_id != GPUI_ADD_PROJECT_DIALOG_LOCAL_MACHINE_ID).then_some(machine_id);
+        self.gx_store_open_shown_command_terminal(machine_id, command_id, None, cx);
     }
 
     /// A job stopped with `reason`: it stays in the popover until Retry or Dismiss.

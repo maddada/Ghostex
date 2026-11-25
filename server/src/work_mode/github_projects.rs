@@ -536,12 +536,19 @@ pub(crate) fn missing_scope_text() -> String {
     format!("To show GitHub Projects, run `{GITHUB_PROJECTS_SCOPE_COMMAND}`.")
 }
 
-/// `{ access, command }` for the Work page and Settings.
+/// `{ access, command, runInTerminal? }` for the Work page and Settings. `runInTerminal` is Run in
+/// terminal's id for the command (server/src/shown_commands/), sent only while the scope is missing;
+/// older gxservers send none, so clients show the button only with it.
 pub(crate) fn github_projects_status_json() -> Value {
-    json!({
-        "access": cached_github_projects_access().as_wire(),
+    let access = cached_github_projects_access().as_wire();
+    let mut status = json!({
+        "access": access,
         "command": GITHUB_PROJECTS_SCOPE_COMMAND,
-    })
+    });
+    if access == "missingScope" {
+        status["runInTerminal"] = json!(crate::shown_commands::GH_PROJECTS_SCOPE);
+    }
+    status
 }
 
 fn text(value: &Value, key: &str) -> Option<String> {

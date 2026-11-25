@@ -459,8 +459,8 @@ pub fn usage() -> String {
             "Run a command in the project's Commands panel terminal (a new terminal in the session's folder without one; ghostex projects lists the project ids); --paste types it without pressing Enter",
         ),
         format_help_command(
-            "shown-command open <id> [--json]",
-            "Open a new Main Hub terminal with a command Ghostex shows typed in but not run, so you only press Enter (linuxUpdate: the Linux update command Settings > Updates shows)",
+            "shown-command open <id> [--version v] [--workspace-id id] [--json]",
+            "Open a new Main Hub terminal with a command Ghostex shows typed in but not run, so you only press Enter (ghostex shown-command help lists the ids: linuxUpdate, ghAuthLogin, sshServer and more)",
         ),
     ]
     .join("\n");

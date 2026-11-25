@@ -35,16 +35,17 @@ pub enum SshEnableOutcome {
 pub struct SshEnableResult {
     pub outcome: SshEnableOutcome,
     pub message: Option<String>,
+    /// Run in terminal's id (server/src/shown_commands/) when `message` names the command to type
+    /// (`manual_ssh_command`); absent from an older gxserver, so clients show the button only with it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_in_terminal: Option<String>,
 }
 
 /// `install`: on Linux, install the OpenSSH server first when it is missing (the window's Install
 /// click, `ssh_install.rs`); without it a missing server fails with the command to install it.
 pub fn enable_ssh_access(port: u16, install: bool) -> SshEnableResult {
     if ssh_port_accepts_connections(port) {
-        return SshEnableResult {
-            outcome: SshEnableOutcome::Enabled,
-            message: None,
-        };
+        return enabled();
     }
     let result = run_privileged_enable(install);
     if result.outcome != SshEnableOutcome::Enabled {
@@ -59,12 +60,9 @@ pub fn enable_ssh_access(port: u16, install: bool) -> SshEnableResult {
         }
         thread::sleep(Duration::from_millis(200));
     }
-    SshEnableResult {
-        outcome: SshEnableOutcome::Failed,
-        message: Some(format!(
-            "SSH access was turned on, but nothing is listening on port {port} yet."
-        )),
-    }
+    failed(format!(
+        "SSH access was turned on, but nothing is listening on port {port} yet."
+    ))
 }
 
 // macOS: Remote Login is the `com.openssh.sshd` launchd job. `systemsetup
@@ -330,10 +328,16 @@ fn run_privileged_enable(install: bool) -> SshEnableResult {
         LinuxSshProbe::NotInstalled => {
             let manager = LinuxPackageManager::detect();
             let Some(manager) = manager.filter(|_| install) else {
-                return failed(format!(
+                let message = format!(
                     "The OpenSSH server isn't installed on this computer. Install it with {}, then try again.",
                     install_command_hint(manager)
-                ));
+                );
+                // The short list of examples (no known package manager) has no one line to type.
+                return if manager.is_some() {
+                    failed_with_command(message)
+                } else {
+                    failed(message)
+                };
             };
             let manual = manager.user_command();
             return run_pkexec(
@@ -344,12 +348,24 @@ fn run_privileged_enable(install: bool) -> SshEnableResult {
                         "Installing the OpenSSH server failed: {detail}. Install it yourself with `{manual}` in a terminal, then try again."
                     )
                 },
-            );
+            )
+            .naming_manual_command();
         }
         LinuxSshProbe::Installed(units) => units,
     };
+    let command = start_command(&units);
+    let manual = format!("sudo {command}");
+    run_pkexec(&command, &manual, |detail| {
+        format!("Turning on SSH access failed: {detail}.")
+    })
+}
+
+/// What starts an installed SSH server: its socket when the distribution enabled it, else the
+/// service, kept across reboots (run as root).
+#[cfg(all(unix, not(target_os = "macos")))]
+fn start_command(units: &super::ssh_status::LinuxSshUnits) -> String {
     let unit = units.unit;
-    let command = if units
+    if units
         .socket
         .as_ref()
         .is_some_and(|socket| socket.is_enabled())
@@ -357,11 +373,22 @@ fn run_privileged_enable(install: bool) -> SshEnableResult {
         format!("systemctl start {unit}.socket")
     } else {
         format!("systemctl enable --now {unit}.service")
-    };
-    let manual = format!("sudo {command}");
-    run_pkexec(&command, &manual, |detail| {
-        format!("Turning on SSH access failed: {detail}.")
-    })
+    }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+impl SshEnableResult {
+    /// Marks a failure whose message names the manual command for Run in terminal.
+    fn naming_manual_command(self) -> Self {
+        if self.outcome == SshEnableOutcome::Failed {
+            Self {
+                run_in_terminal: Some(crate::shown_commands::SSH_SERVER.to_string()),
+                ..self
+            }
+        } else {
+            self
+        }
+    }
 }
 
 /// Runs `script` as root behind the desktop's polkit prompt. `manual` is what the user can type
@@ -377,7 +404,7 @@ fn run_pkexec(script: &str, manual: &str, failure: impl Fn(&str) -> String) -> S
     let output = match output {
         Ok(output) => output,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return failed(format!(
+            return failed_with_command(format!(
                 "pkexec (polkit) is not installed, so Ghostex cannot show an administrator prompt. Run `{manual}` in a terminal instead."
             ))
         }
@@ -395,7 +422,7 @@ fn run_pkexec(script: &str, manual: &str, failure: impl Fn(&str) -> String) -> S
     // authentication agent, or an error).
     match output.status.code() {
         Some(126) => cancelled(),
-        Some(127) => failed(format!(
+        Some(127) => failed_with_command(format!(
             "The administrator prompt did not authorize the change. If no password dialog appeared, this desktop session has no polkit authentication agent; run `{manual}` in a terminal instead."
         )),
         _ => {
@@ -432,6 +459,7 @@ fn enabled() -> SshEnableResult {
     SshEnableResult {
         outcome: SshEnableOutcome::Enabled,
         message: None,
+        run_in_terminal: None,
     }
 }
 
@@ -439,6 +467,7 @@ fn cancelled() -> SshEnableResult {
     SshEnableResult {
         outcome: SshEnableOutcome::Cancelled,
         message: Some("The administrator prompt was dismissed.".to_string()),
+        run_in_terminal: None,
     }
 }
 
@@ -446,7 +475,35 @@ fn failed(message: String) -> SshEnableResult {
     SshEnableResult {
         outcome: SshEnableOutcome::Failed,
         message: Some(message),
+        run_in_terminal: None,
     }
+}
+
+/// A failure whose message names `manual_ssh_command`, which Run in terminal types in.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn failed_with_command(message: String) -> SshEnableResult {
+    failed(message).naming_manual_command()
+}
+
+/// The command Turn on SSH access's failures tell a Linux user to type, as they show it: the
+/// OpenSSH install line while the server is missing, else the `sudo systemctl` line that starts it.
+/// `None` off Linux, without systemctl, or without a package manager Ghostex knows.
+#[cfg(all(unix, not(target_os = "macos")))]
+pub fn manual_ssh_command() -> Option<String> {
+    use super::ssh_install::LinuxPackageManager;
+    use super::ssh_status::{probe_linux_ssh_units, LinuxSshProbe};
+    match probe_linux_ssh_units() {
+        LinuxSshProbe::NoSystemctl => None,
+        LinuxSshProbe::NotInstalled => {
+            LinuxPackageManager::detect().map(|manager| manager.user_command().to_string())
+        }
+        LinuxSshProbe::Installed(units) => Some(format!("sudo {}", start_command(&units))),
+    }
+}
+
+#[cfg(not(all(unix, not(target_os = "macos"))))]
+pub fn manual_ssh_command() -> Option<String> {
+    None
 }
 
 #[cfg(unix)]

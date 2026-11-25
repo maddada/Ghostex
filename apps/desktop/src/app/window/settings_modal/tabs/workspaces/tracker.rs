@@ -192,6 +192,12 @@ impl WorkspacesTab {
                 .and_then(Value::as_str)
                 .unwrap_or("gh auth refresh -s read:project")
                 .to_string();
+            // Run in terminal's id, from a gxserver that offers it (server/src/shown_commands/).
+            let run_in_terminal = answer
+                .pointer("/githubProjects/runInTerminal")
+                .and_then(Value::as_str)
+                .filter(|id| !id.is_empty())
+                .map(str::to_string);
             let description = format!(
                 "To show GitHub Projects, run `{command}` in a terminal, then reopen this page."
             );
@@ -222,6 +228,30 @@ impl WorkspacesTab {
                         },
                         cx,
                     ))
+                    .when_some(run_in_terminal, |row, command_id| {
+                        row.child(settings_button(
+                            p,
+                            SharedString::from(format!(
+                                "workspace-github-projects-run-{workspace_id}"
+                            )),
+                            "Run in terminal",
+                            None,
+                            ButtonVariant::Default,
+                            false,
+                            None,
+                            move |page: &mut Self, _window, cx| {
+                                post_store_message(
+                                    &page.store,
+                                    json!({
+                                        "type": "openShownCommandTerminal",
+                                        "commandId": command_id,
+                                    }),
+                                    cx,
+                                )
+                            },
+                            cx,
+                        ))
+                    })
                     .into_any_element(),
                 cx,
             ));

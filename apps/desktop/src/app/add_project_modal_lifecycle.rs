@@ -190,6 +190,14 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
+            AddProjectModalCommand::RunInTerminal {
+                machine_id,
+                command_id,
+            } => {
+                let machine_id =
+                    (machine_id != GPUI_ADD_PROJECT_DIALOG_LOCAL_MACHINE_ID).then_some(machine_id);
+                self.gx_store_open_shown_command_terminal(machine_id, command_id, None, cx);
+            }
             AddProjectModalCommand::Close => {
                 self.release_native_app_modal_window(kind, cx);
                 // Opened from a handoff's destination: Handoff / Export comes back now.

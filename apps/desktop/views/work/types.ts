@@ -110,6 +110,8 @@ export interface WorkList {
     access: 'granted' | 'missingScope' | 'unknown';
     command: string;
     noticeDismissed: boolean;
+    /** Run in terminal's id for the command (server/src/shown_commands/); missing from an older gxserver. */
+    runInTerminal?: string | null;
   };
   ghAvailable: boolean;
   errors: string[];

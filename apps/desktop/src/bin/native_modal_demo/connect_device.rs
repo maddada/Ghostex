@@ -205,10 +205,15 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                     } else {
                         Ok(true)
                     };
+                    // gxserver offers Run in terminal beside the Linux failures that name a command.
+                    let run_in_terminal = state
+                        .contains("ssh-missing")
+                        .then(|| "sshServer".to_string());
                     with_view(&slot, cx, |modal, cx| {
                         if result.is_ok() {
                             modal.ssh_server_read(SshServer::default(), cx);
                         }
+                        modal.ssh_run_in_terminal_offered(run_in_terminal);
                         modal.ssh_turned_on(result, cx)
                     });
                 })
@@ -298,6 +303,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 eprintln!("open Settings > Remote");
                 cx.quit();
             }
+            ConnectDeviceCommand::RunInTerminal(id) => eprintln!("run in terminal: {id}"),
             ConnectDeviceCommand::OpenTailscale => {
                 eprintln!("open Settings > Remote > Tailscale");
                 cx.quit();

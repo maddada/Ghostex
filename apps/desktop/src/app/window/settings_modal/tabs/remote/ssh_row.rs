@@ -129,6 +129,29 @@ pub(super) fn ssh_access_row(
         |tab: &mut RemoteTab, _window, cx| tab.enable_ssh_access(cx),
         cx,
     );
+    let run_in_terminal = tab
+        .ssh_attempt
+        .as_ref()
+        .and_then(|attempt| attempt.run_in_terminal.clone())
+        .filter(|_| !enabling)
+        .map(|command_id| {
+            compact_button(
+                &t.p,
+                SharedString::from(format!("{row_id}-run-in-terminal")),
+                "Run in terminal",
+                None,
+                Look::Filled,
+                24.0,
+                14.0,
+                None,
+                false,
+                None,
+                move |tab: &mut RemoteTab, _window, cx| {
+                    tab.open_ssh_command_terminal(command_id.clone(), cx)
+                },
+                cx,
+            )
+        });
     let platform = tab.access.as_ref().and_then(|access| access.platform);
     let mut row = frame(true);
     if !compact {
@@ -139,10 +162,16 @@ pub(super) fn ssh_access_row(
             ))
             .child(detail(t, detail_when_off, false));
     }
-    row.child(h_flex().mt(px(4.0)).gap(px(8.0)).child(button))
-        .child(div().mt(px(4.0)).child(detail(t, attempt_text, false)))
-        .child(os_buttons(tab, t, row_id, platform, window, cx))
-        .into_any_element()
+    row.child(
+        h_flex()
+            .mt(px(4.0))
+            .gap(px(8.0))
+            .child(button)
+            .children(run_in_terminal),
+    )
+    .child(div().mt(px(4.0)).child(detail(t, attempt_text, false)))
+    .child(os_buttons(tab, t, row_id, platform, window, cx))
+    .into_any_element()
 }
 
 /// `SshAccessInstructionButtons`: the three OS buttons (the current OS as `secondary`), each

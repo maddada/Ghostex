@@ -155,6 +155,14 @@ impl AccountsTab {
                     &command,
                     cx,
                 ));
+                if let Some(button) = self.install_run_in_terminal_button(
+                    p,
+                    format!("setup-{provider}-install-run"),
+                    &helper,
+                    cx,
+                ) {
+                    body.push(h_flex().child(button).into_any_element());
+                }
             }
         } else if provider == "codex"
             && helper
@@ -479,6 +487,45 @@ impl AccountsTab {
     }
 
     /// `CopyCommand` with its 1.8s check.
+    /// Run in terminal under a helper's install command, when the shown computer's gxserver offers
+    /// it (`helpers[].installRunInTerminal`; an older one sends none): a Main Hub terminal there with
+    /// the command typed in (server/src/shown_commands/).
+    pub(crate) fn install_run_in_terminal_button(
+        &mut self,
+        p: &SettingsPalette,
+        key: String,
+        helper: &serde_json::Value,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let command_id = helper["installRunInTerminal"]
+            .as_str()
+            .filter(|id| !id.is_empty())?
+            .to_string();
+        let machine_id = self.client.read(cx).machine().map(str::to_string);
+        Some(super::super::super::fields::settings_button_sized(
+            p,
+            SharedString::from(key),
+            "Run in terminal",
+            None,
+            super::super::super::fields::ButtonVariant::Default,
+            super::super::super::fields::ButtonSize::Sm,
+            false,
+            None,
+            move |page: &mut Self, _window, cx| {
+                super::super::super::store::post_store_message(
+                    &page.store,
+                    serde_json::json!({
+                        "type": "openShownCommandTerminal",
+                        "commandId": command_id,
+                        "machineId": machine_id,
+                    }),
+                    cx,
+                );
+            },
+            cx,
+        ))
+    }
+
     pub(crate) fn copy_command_block(
         &mut self,
         p: &SettingsPalette,

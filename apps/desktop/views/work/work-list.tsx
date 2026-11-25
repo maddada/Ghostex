@@ -13,6 +13,7 @@ import {
 } from '@tabler/icons-react';
 import { useMemo, type CSSProperties, type ReactNode } from 'react';
 import { Avatar, Button, ChecksIcon, LiveDot, PullRequestChip, Spinner, StatusGlyph, cx } from './components';
+import { workRequest } from './bridge';
 import { WorkFilterBar } from './filter-bar';
 import { groupWorkItems, type WorkGroupBy } from './grouping';
 import { relativeTime, STATUS_FILTERS, statusMatches, type StatusFilter } from './format';
@@ -363,6 +364,9 @@ function GithubProjectsNotice({ data, onDismiss }: { data: WorkListData | null; 
         <IconCopy size={13} />
         Copy
       </button>
+      {status.runInTerminal ? (
+        <RunInTerminalButton className='work-github-projects-run' commandId={status.runInTerminal} />
+      ) : null}
       <button
         type='button'
         className='w-notice-close work-github-projects-close'
@@ -373,6 +377,30 @@ function GithubProjectsNotice({ data, onDismiss }: { data: WorkListData | null; 
         <IconX size={13} />
       </button>
     </div>
+  );
+}
+
+/**
+ * Run in terminal beside a command the page shows: the app opens a Main Hub terminal with it typed in
+ * and not run (server/src/shown_commands/); a failure shows as the app's own toast.
+ */
+export function RunInTerminalButton({
+  commandId,
+  args,
+  className,
+}: {
+  commandId: string;
+  args?: Record<string, string>;
+  className?: string;
+}) {
+  return (
+    <button
+      type='button'
+      className={cx('w-notice-action', className)}
+      onClick={() => void workRequest('work.runInTerminal', { commandId, args }).catch(() => undefined)}
+    >
+      Run in terminal
+    </button>
   );
 }
 

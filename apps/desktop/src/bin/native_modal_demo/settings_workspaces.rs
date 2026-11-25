@@ -327,7 +327,7 @@ pub(super) fn rpc(state: &str, path: &str, params: &Value) -> Option<Result<Valu
                 "source": "team",
                 "team": state != "workspaces-join",
                 "canEdit": !is_member(state),
-                "githubProjects": { "access": "missingScope", "command": "gh auth refresh -s read:project", "noticeDismissed": false }
+                "githubProjects": { "access": "missingScope", "command": "gh auth refresh -s read:project", "runInTerminal": "ghProjectsScope", "noticeDismissed": false }
             })
         }
         "/api/readWorkTracker" => json!({

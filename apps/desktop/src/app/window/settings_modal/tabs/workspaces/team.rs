@@ -59,12 +59,18 @@ impl TeamConnectionState {
     }
 }
 
-/// `ghostex team <verb> --workspace <name>`, quoting a name with spaces.
+/// `ghostex team <verb> --workspace <name>`, the name in single quotes unless it is a plain word.
+/// SEE-ALSO: `team_command` in server/src/shown_commands/registry.rs types the same text for Run in
+/// terminal.
 pub(super) fn team_command(verb: &str, workspace_name: &str) -> String {
-    let name = if workspace_name.chars().any(char::is_whitespace) {
-        format!("\"{workspace_name}\"")
-    } else {
+    let plain = !workspace_name.is_empty()
+        && workspace_name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'));
+    let name = if plain {
         workspace_name.to_string()
+    } else {
+        format!("'{}'", workspace_name.replace('\'', "'\\''"))
     };
     format!("ghostex team {verb} --workspace {name}")
 }
@@ -315,6 +321,41 @@ impl WorkspacesTab {
         )
     }
 
+    /// Run in terminal for a `ghostex team …` command: a Main Hub terminal with it typed in, which
+    /// gxserver works out again from the workspace (`teamDeploy`, `teamSlackConnect`,
+    /// `teamLinearConnect` in server/src/shown_commands/).
+    fn run_in_terminal_button(
+        &mut self,
+        p: &SettingsPalette,
+        id: String,
+        command_id: &'static str,
+        workspace_id: &str,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let workspace_id = workspace_id.to_string();
+        settings_button(
+            p,
+            SharedString::from(id),
+            "Run in terminal",
+            None,
+            ButtonVariant::Default,
+            false,
+            None,
+            move |page: &mut Self, _window, cx| {
+                post_store_message(
+                    &page.store,
+                    json!({
+                        "type": "openShownCommandTerminal",
+                        "commandId": command_id,
+                        "args": { "workspaceId": workspace_id },
+                    }),
+                    cx,
+                )
+            },
+            cx,
+        )
+    }
+
     /// The Team, Slack and team Linear rows of a Work workspace.
     pub(super) fn team_rows(
         &mut self,
@@ -367,6 +408,13 @@ impl WorkspacesTab {
                     command.clone(),
                     cx,
                 ))
+                .child(self.run_in_terminal_button(
+                    p,
+                    format!("team-deploy-run-{workspace_id}"),
+                    "teamDeploy",
+                    workspace_id,
+                    cx,
+                ))
                 .child(settings_button(
                     p,
                     SharedString::from(format!("team-deploy-check-{workspace_id}")),
@@ -407,7 +455,22 @@ impl WorkspacesTab {
                     "After a Ghostex update, deploy its functions to your team's Convex project again from a terminal: {command}"
                 )),
                 None,
-                self.command_button(p, format!("team-deploy-copy-{workspace_id}"), command, cx),
+                h_flex()
+                    .gap(px(8.0))
+                    .child(self.command_button(
+                        p,
+                        format!("team-deploy-copy-{workspace_id}"),
+                        command,
+                        cx,
+                    ))
+                    .child(self.run_in_terminal_button(
+                        p,
+                        format!("team-deploy-run-{workspace_id}"),
+                        "teamDeploy",
+                        workspace_id,
+                        cx,
+                    ))
+                    .into_any_element(),
                 cx,
             ));
         }
@@ -641,6 +704,29 @@ impl WorkspacesTab {
             None => "unknown".to_string(),
         };
         let command = team_command("slack-connect", workspace_name);
+        // It runs where the team was deployed, so only an owner gets Run in terminal here.
+        let owner = state.is_some_and(TeamConnectionState::is_owner);
+        let copy = self.command_button(
+            p,
+            format!("team-slack-connect-copy-{workspace_id}"),
+            command.clone(),
+            cx,
+        );
+        let control = if owner {
+            h_flex()
+                .gap(px(8.0))
+                .child(copy)
+                .child(self.run_in_terminal_button(
+                    p,
+                    format!("team-slack-connect-run-{workspace_id}"),
+                    "teamSlackConnect",
+                    workspace_id,
+                    cx,
+                ))
+                .into_any_element()
+        } else {
+            copy
+        };
         setting_row(
             p,
             format!("team-slack-secrets-{workspace_id}"),
@@ -656,7 +742,7 @@ impl WorkspacesTab {
                 shown(secret, ""),
             )),
             None,
-            self.command_button(p, format!("team-slack-connect-copy-{workspace_id}"), command, cx),
+            control,
             cx,
         )
     }
@@ -830,6 +916,16 @@ impl WorkspacesTab {
             Some(false) => "Not set".to_string(),
             None => "Unknown".to_string(),
         };
+        // The description names `ghostex team linear-connect` only to an owner with a key stored.
+        let run_linear_connect = (owner && stored == Some(true)).then(|| {
+            self.run_in_terminal_button(
+                p,
+                format!("team-linear-connect-run-{workspace_id}"),
+                "teamLinearConnect",
+                workspace_id,
+                cx,
+            )
+        });
         let control = if owner && stored.is_some() {
             let input_id = SharedString::from(format!("team-linear-key-{workspace_id}"));
             let input = self.draft_input(&input_id, "", "lin_api_…", window, cx);
@@ -882,6 +978,7 @@ impl WorkspacesTab {
                         cx,
                     ))
                 })
+                .when_some(run_linear_connect, |row, run| row.child(run))
                 .into_any_element()
         } else {
             div().into_any_element()

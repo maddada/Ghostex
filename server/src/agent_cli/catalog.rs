@@ -193,6 +193,10 @@ pub(crate) struct Method {
     /// Commands `systemTools` must provide first (Linux).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub system_tools: Vec<String>,
+    /// Run in terminal's id (server/src/shown_commands/) for the command `unavailable_reason`
+    /// names (`bun upgrade`); absent from an older gxserver, so clients show the button only with it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_in_terminal: Option<&'static str>,
 }
 
 impl Method {
@@ -205,6 +209,7 @@ impl Method {
             plan,
             prerequisite: None,
             system_tools: Vec::new(),
+            run_in_terminal: None,
         }
     }
 }
@@ -341,6 +346,9 @@ pub(crate) fn methods(
                     .minimum_bun_version
                     .as_deref()
                     .and_then(|minimum| bun_too_old(&definition.binary, minimum, home));
+                if method.unavailable_reason.is_some() {
+                    method.run_in_terminal = Some(crate::shown_commands::BUN_UPGRADE);
+                }
             }
             methods.push(method);
         }

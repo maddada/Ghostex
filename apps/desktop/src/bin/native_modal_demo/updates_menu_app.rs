@@ -89,6 +89,12 @@ pub(crate) mod helpers {
         None
     }
 
+    /// app/helpers/remote/ssh_connection_share.rs: whether a saved computer's last connect asked
+    /// for an SSH sign-in in a terminal. The demo says so when `GHOSTEX_DEMO_SSH_SIGN_IN` is set.
+    pub(crate) fn gpui_remote_ssh_sign_in_needed(_remote_machine_id: &str) -> bool {
+        std::env::var_os("GHOSTEX_DEMO_SSH_SIGN_IN").is_some()
+    }
+
     pub(crate) fn frosted_glass_backdrop(
         _radii: gpui::Corners<gpui::Pixels>,
         _light: bool,

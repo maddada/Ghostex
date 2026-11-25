@@ -46,6 +46,9 @@ pub(crate) struct AddProjectSourceReadiness {
     pub(crate) ready: bool,
     /// The managed tool that installs this provider's missing CLI with one click.
     pub(crate) install_tool: Option<String>,
+    /// Run in terminal's id for a signed-out provider's sign-in (`glabAuthLogin`; GitHub signs in
+    /// from the repository list instead), from `auth.runInTerminal`.
+    pub(crate) run_in_terminal: Option<String>,
 }
 
 /// Readiness per source, indexed by [`AddProjectSourceId::index`].
@@ -67,12 +70,14 @@ pub(crate) fn build_source_readiness(
         hint: Some(PROVIDER_UNAVAILABLE_HINT.to_string()),
         ready: false,
         install_tool: None,
+        run_in_terminal: None,
     };
     let mut readiness: AddProjectReadiness = [
         AddProjectSourceReadiness {
             hint: None,
             ready: true,
             install_tool: None,
+            run_in_terminal: None,
         },
         unavailable.clone(),
         unavailable.clone(),
@@ -98,6 +103,7 @@ pub(crate) fn build_source_readiness(
                 ),
                 ready: false,
                 install_tool: provider.install_tool.clone(),
+                run_in_terminal: None,
             }
         } else if let Some((AddProjectProviderAuthStatus::Unauthenticated, detail)) = &provider.auth
         {
@@ -110,12 +116,14 @@ pub(crate) fn build_source_readiness(
                 })),
                 ready: false,
                 install_tool: None,
+                run_in_terminal: provider.sign_in_run_in_terminal.clone(),
             }
         } else {
             AddProjectSourceReadiness {
                 hint: None,
                 ready: true,
                 install_tool: None,
+                run_in_terminal: None,
             }
         };
     }

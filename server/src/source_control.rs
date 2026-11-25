@@ -309,6 +309,13 @@ fn provider_auth(
     Value::Object(auth)
 }
 
+/// A signed-out provider's sign-in command for Run in terminal (server/src/shown_commands/), as
+/// `runInTerminal` beside `detail`; older gxservers send none, so clients show the button only with it.
+fn with_run_in_terminal(mut auth: Value, command_id: &str) -> Value {
+    auth["runInTerminal"] = json!(command_id);
+    auth
+}
+
 fn unknown_auth(detail: Option<String>) -> Value {
     provider_auth("unknown", None, None, detail)
 }
@@ -336,15 +343,16 @@ fn parse_github_auth(output: &ProbeOutput) -> Value {
         return provider_auth("authenticated", Some(account), Some(host.to_string()), None);
     }
     if output.exit_code != 0 {
-        return provider_auth(
-            "unauthenticated",
-            None,
-            None,
-            Some(
-                first_safe_auth_line(&combined).unwrap_or_else(|| {
+        return with_run_in_terminal(
+            provider_auth(
+                "unauthenticated",
+                None,
+                None,
+                Some(first_safe_auth_line(&combined).unwrap_or_else(|| {
                     "Run `gh auth login` to authenticate GitHub CLI.".to_string()
-                }),
+                })),
             ),
+            crate::shown_commands::GH_AUTH_LOGIN,
         );
     }
     unknown_auth(Some(first_safe_auth_line(&combined).unwrap_or_else(|| {
@@ -360,13 +368,16 @@ fn parse_gitlab_auth(output: &ProbeOutput) -> Value {
         return provider_auth("authenticated", Some(account), host, None);
     }
     if output.exit_code != 0 {
-        return provider_auth(
-            "unauthenticated",
-            None,
-            host,
-            Some(first_safe_auth_line(&combined).unwrap_or_else(|| {
-                "Run `glab auth login` to authenticate GitLab CLI.".to_string()
-            })),
+        return with_run_in_terminal(
+            provider_auth(
+                "unauthenticated",
+                None,
+                host,
+                Some(first_safe_auth_line(&combined).unwrap_or_else(|| {
+                    "Run `glab auth login` to authenticate GitLab CLI.".to_string()
+                })),
+            ),
+            crate::shown_commands::GLAB_AUTH_LOGIN,
         );
     }
     provider_auth(

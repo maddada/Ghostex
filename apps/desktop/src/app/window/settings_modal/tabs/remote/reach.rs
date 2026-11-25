@@ -188,6 +188,29 @@ fn ssh_off_line(
         .ssh_attempt
         .as_ref()
         .and_then(|attempt| attempt.message.clone());
+    let run_in_terminal = tab
+        .ssh_attempt
+        .as_ref()
+        .and_then(|attempt| attempt.run_in_terminal.clone())
+        .filter(|_| !enabling)
+        .map(|command_id| {
+            compact_button(
+                &t.p,
+                "remote-reach-ssh-run-in-terminal",
+                "Run in terminal",
+                None,
+                Look::Filled,
+                28.0,
+                14.0,
+                None,
+                false,
+                None,
+                move |tab: &mut RemoteTab, _window, cx| {
+                    tab.open_ssh_command_terminal(command_id.clone(), cx)
+                },
+                cx,
+            )
+        });
     Some(
         v_flex()
             .w_full()
@@ -222,7 +245,8 @@ fn ssh_off_line(
                         None,
                         |tab: &mut RemoteTab, _window, cx| tab.enable_ssh_access(cx),
                         cx,
-                    )),
+                    ))
+                    .children(run_in_terminal),
             )
             .children(failed.map(|message| error_line(t, message)))
             .into_any_element(),

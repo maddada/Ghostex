@@ -109,6 +109,14 @@ impl AccountsTab {
                         &command,
                         cx,
                     ));
+                    if let Some(button) = self.install_run_in_terminal_button(
+                        p,
+                        format!("guide-{id}-install-run"),
+                        &helper,
+                        cx,
+                    ) {
+                        parts.push(h_flex().child(button).into_any_element());
+                    }
                 }
             }
             providers.push(

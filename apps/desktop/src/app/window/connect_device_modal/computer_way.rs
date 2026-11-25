@@ -1239,7 +1239,12 @@ impl GpuiConnectDeviceWindow {
                 // (CDXC:RemotePairing 2026-11-18 DECISION in connect_device_modal.rs).
                 .when(self.own_code_needs_ssh(), |this| {
                     this.child(match &self.ssh {
-                        SshAccess::Failed(message) => modal_error(&p, message.clone()),
+                        SshAccess::Failed(message) => v_flex()
+                            .w_full()
+                            .gap(px(8.0))
+                            .child(modal_error(&p, message.clone()))
+                            .children(self.ssh_run_in_terminal_button(cx))
+                            .into_any_element(),
                         _ => self
                             .muted(format!(
                                 "To connect both ways, {name} connects to this computer over SSH, which is off here. {}",

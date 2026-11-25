@@ -55,6 +55,9 @@ pub(crate) enum CreateLinearTicketModalCommand {
     Created {
         identifier: String,
     },
+    /// Run in terminal beside "Sign in to GitHub first": the Main Hub terminal with `gh auth
+    /// login` typed in (`ghAuthLogin`, server/src/shown_commands/). The ticket already exists.
+    RunInTerminal(String),
     Cancel,
 }
 
@@ -114,6 +117,8 @@ pub(crate) struct GpuiCreateLinearTicketModalWindow {
     created: Option<String>,
     busy: Option<&'static str>,
     error: Option<String>,
+    /// Run in terminal's id for the command `error` names, when gxserver said what it is.
+    error_run_in_terminal: Option<&'static str>,
     fit: ModalFit,
     focus_handle: FocusHandle,
     _subscriptions: Vec<Subscription>,
@@ -183,6 +188,7 @@ impl GpuiCreateLinearTicketModalWindow {
             created: None,
             busy: None,
             error: None,
+            error_run_in_terminal: None,
             fit: ModalFit::new(),
             focus_handle: cx.focus_handle(),
             _subscriptions: subscriptions,
@@ -326,6 +332,7 @@ impl GpuiCreateLinearTicketModalWindow {
         }
         self.close_selects();
         self.error = None;
+        self.error_run_in_terminal = None;
         let project_id = self.project_id.clone();
         let created = self.created.clone();
         let create_params = json!({
@@ -447,6 +454,10 @@ impl GpuiCreateLinearTicketModalWindow {
                             "{identifier} was created, but work did not start: {}",
                             error.message
                         ));
+                        // server/src/work_mode/start_work.rs `GITHUB_SIGN_IN_REQUIRED`.
+                        this.error_run_in_terminal = (error.code.as_deref()
+                            == Some("githubSignInRequired"))
+                        .then_some("ghAuthLogin");
                         cx.notify();
                     }
                 }
@@ -542,6 +553,7 @@ impl GpuiCreateLinearTicketModalWindow {
                     self.linear_projects.clear();
                     self.linear_project_index = None;
                     self.error = None;
+                    self.error_run_in_terminal = None;
                     self.load_tracker(window, cx);
                 }
             }
@@ -894,7 +906,27 @@ impl GpuiCreateLinearTicketModalWindow {
             |this, window, cx| this.create(window, cx),
             cx,
         );
-        modal_footer(vec![cancel, create])
+        let mut buttons = vec![cancel];
+        if let Some(command_id) = self.error_run_in_terminal {
+            buttons.push(modal_action_button(
+                &p,
+                "create-linear-ticket-run-in-terminal",
+                "Run in terminal",
+                None,
+                ModalButtonTone::Neutral,
+                false,
+                move |this: &mut Self, window, cx| {
+                    window.remove_window();
+                    (this.host)(
+                        CreateLinearTicketModalCommand::RunInTerminal(command_id.to_string()),
+                        cx,
+                    );
+                },
+                cx,
+            ));
+        }
+        buttons.push(create);
+        modal_footer(buttons)
     }
 }
 

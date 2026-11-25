@@ -156,6 +156,9 @@ pub(crate) enum ConnectDeviceCommand {
     OpenRemote,
     /// Settings > Remote with its Tailscale row open.
     OpenTailscale,
+    /// Run in terminal beside a failed Turn on SSH that names the command to type: a Main Hub
+    /// terminal with it typed in (`sshServer`, server/src/shown_commands/). The window stays.
+    RunInTerminal(String),
     /// Save the computer the SSH details tab describes (`machine`, a saved-computer entry) and its
     /// `password` for the keychain, then connect it; the window has removed itself.
     AddSshComputer {
@@ -314,6 +317,9 @@ pub(crate) struct GpuiConnectDeviceWindow {
     stage: Stage,
     /// SSH access on this computer: this computer's own code waits for it, pasting doesn't.
     ssh: SshAccess,
+    /// Run in terminal's id for the command the failed Turn on SSH names; `None` from an older
+    /// gxserver or when the failure names none.
+    ssh_run_in_terminal: Option<String>,
     /// Whether the SSH server is installed here, and its install command (Linux).
     ssh_server: SshServer,
     code: Option<ConnectCode>,
@@ -373,6 +379,7 @@ impl GpuiConnectDeviceWindow {
             require_presence: config.require_presence,
             stage: Stage::Preparing(None),
             ssh: SshAccess::On,
+            ssh_run_in_terminal: None,
             ssh_server: SshServer::default(),
             code: None,
             qr: None,
@@ -446,6 +453,38 @@ impl GpuiConnectDeviceWindow {
             self.ssh = if on { SshAccess::On } else { SshAccess::Off };
             cx.notify();
         }
+    }
+
+    /// Run in terminal's id beside the next `ssh_turned_on` failure (`runInTerminal` of
+    /// `/api/enableSshAccess`).
+    pub(crate) fn ssh_run_in_terminal_offered(&mut self, command_id: Option<String>) {
+        self.ssh_run_in_terminal = command_id;
+    }
+
+    /// Run in terminal under a failed Turn on SSH whose message names the command.
+    pub(super) fn ssh_run_in_terminal_button(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if !matches!(self.ssh, SshAccess::Failed(_)) {
+            return None;
+        }
+        let command_id = self.ssh_run_in_terminal.clone()?;
+        let p = self.palette;
+        Some(
+            div()
+                .w(px(160.0))
+                .child(modal_action_button(
+                    &p,
+                    "connect-device-ssh-run-in-terminal",
+                    "Run in terminal",
+                    None,
+                    ModalButtonTone::Neutral,
+                    false,
+                    move |this: &mut Self, _window, cx| {
+                        (this.host)(ConnectDeviceCommand::RunInTerminal(command_id.clone()), cx)
+                    },
+                    cx,
+                ))
+                .into_any_element(),
+        )
     }
 
     /// The answer to Turn on SSH: on, still off (the admin prompt was cancelled), or why it failed.
@@ -1199,6 +1238,7 @@ impl GpuiConnectDeviceWindow {
                             cx,
                         )))
                     })
+                    .children(self.ssh_run_in_terminal_button(cx))
                     .child(div().w(px(160.0)).child(modal_action_button(
                         &p,
                         "connect-device-turn-on-ssh",

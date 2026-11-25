@@ -345,7 +345,14 @@ pub(crate) fn plan_ticket_work(
                 ),
                 _ => work_source(ticket_ref.source).branch_for(&scope, &ticket_ref.id),
             }
-            .map_err(DomainStateError::bad_request)?
+            .map_err(|message| {
+                // The sources answer words only; this one keeps its code for Run in terminal.
+                if message == GITHUB_SIGN_IN_MESSAGE {
+                    github_sign_in_required()
+                } else {
+                    DomainStateError::bad_request(message)
+                }
+            })?
         }
         None => {
             let plan = pull_request
@@ -429,10 +436,22 @@ pub(crate) fn existing_ticket_worktree(
         }))
 }
 
+/// The error code of a request that needs `gh auth login` first, so a client can offer Run in
+/// terminal (`ghAuthLogin`, server/src/shown_commands/) beside the message; it answers as a bad
+/// request, and clients that don't know the code show the message as before.
+pub(crate) const GITHUB_SIGN_IN_REQUIRED: &str = "githubSignInRequired";
+const GITHUB_SIGN_IN_MESSAGE: &str = "Sign in to GitHub first (gh auth login).";
+
+fn github_sign_in_required() -> DomainStateError {
+    DomainStateError {
+        code: GITHUB_SIGN_IN_REQUIRED,
+        message: GITHUB_SIGN_IN_MESSAGE.to_string(),
+    }
+}
+
 /// `<gh user>/<number>-<slug of the title>`, like `yahia/218-arabic-plan-cards`.
 pub(crate) fn github_issue_branch(cwd: &str, number: u64) -> Result<String, DomainStateError> {
-    let login = github_login()
-        .ok_or_else(|| DomainStateError::bad_request("Sign in to GitHub first (gh auth login)."))?;
+    let login = github_login().ok_or_else(github_sign_in_required)?;
     let number_text = number.to_string();
     let title = run_gh_command(
         Some(cwd),

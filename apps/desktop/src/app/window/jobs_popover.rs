@@ -41,6 +41,7 @@ impl JobsPopoverPanel {
             JobsAction::Cancel(id) => app.background_job_cancel(id, cx),
             JobsAction::Retry(id) => app.background_job_retry(id, cx),
             JobsAction::Dismiss(id) => app.background_job_dismiss(id, cx),
+            JobsAction::RunInTerminal(id) => app.background_job_run_in_terminal(id, cx),
         });
     }
 }

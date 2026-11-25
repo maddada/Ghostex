@@ -945,6 +945,12 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         } => {
             eprintln!("background clone on {machine_id}: {repository} into {destination} {params}");
         }
+        AddProjectModalCommand::RunInTerminal {
+            machine_id,
+            command_id,
+        } => {
+            eprintln!("run in terminal on {machine_id}: {command_id}");
+        }
         AddProjectModalCommand::Close => {
             eprintln!("close");
             cx.quit();

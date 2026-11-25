@@ -1543,6 +1543,10 @@ fn machine_status_panel(
     let copied = tab.copied.contains(&copy_id);
     let reconnect_id = machine_id.to_string();
     let reinstall_id = machine_id.to_string();
+    // The connect stopped because no SSH connection to reuse was open: Run in terminal types the
+    // `ssh` sign-in the reason names into a Main Hub terminal here (`sshSignIn`).
+    let sign_in = crate::app::helpers::gpui_remote_ssh_sign_in_needed(machine_id)
+        .then(|| machine_id.to_string());
     let mut actions = h_flex()
         .w_full()
         .flex_wrap()
@@ -1566,6 +1570,29 @@ fn machine_status_panel(
             },
             cx,
         ));
+    if let Some(sign_in_id) = sign_in {
+        actions = actions.child(settings_button_sized(
+            &p,
+            "remote-machine-status-run-in-terminal",
+            "Run in terminal",
+            None,
+            ButtonVariant::Default,
+            ButtonSize::Sm,
+            false,
+            None,
+            move |tab: &mut RemoteTab, _window, cx| {
+                tab.post(
+                    json!({
+                        "type": "openShownCommandTerminal",
+                        "commandId": "sshSignIn",
+                        "args": { "machineId": sign_in_id },
+                    }),
+                    cx,
+                );
+            },
+            cx,
+        ));
+    }
     if managed {
         actions = actions.child(settings_button_sized(
             &p,

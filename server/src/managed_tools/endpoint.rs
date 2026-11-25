@@ -196,6 +196,10 @@ pub(crate) fn state(tool: ToolId, home: &Path, fresh: bool) -> Value {
     }
     if let Some(command) = &status.terminal_command {
         value["terminalCommand"] = json!(command);
+        // Run in terminal's id (server/src/shown_commands/); older gxservers send none.
+        if tool == ToolId::SystemTools {
+            value["runInTerminal"] = json!(crate::shown_commands::SYSTEM_TOOLS_INSTALL);
+        }
     }
     if let Some(note) = grants.as_ref().and_then(desktop_control::permission_note) {
         value["permissionNote"] = json!(note);

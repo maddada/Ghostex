@@ -104,7 +104,7 @@ impl GhostexGpuiApp {
                 self.open_linux_update_download_page(cx);
             }
             UpdateAvailableModalCommand::RunInTerminal(command_id) => {
-                self.gx_store_open_shown_command_terminal(None, command_id, cx);
+                self.gx_store_open_shown_command_terminal(None, command_id, None, cx);
             }
         }
         #[cfg(not(any(target_os = "windows", target_os = "linux")))]

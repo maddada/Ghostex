@@ -37,6 +37,7 @@ fn clone_row(id: u64, progress: Option<&str>, status: JobStatus) -> JobRow {
         percent: progress.and_then(view::progress_percent),
         progress: progress.map(str::to_string),
         status,
+        run_in_terminal: false,
         verb: "Cloning".into(),
     }
 }
@@ -55,6 +56,20 @@ fn rows(state: &str) -> Vec<JobRow> {
                 None,
                 JobStatus::Failed(
                     "Repository not found. Check the URL and that this computer can reach it."
+                        .into(),
+                ),
+            )
+        }],
+        "failed-sign-in" => vec![JobRow {
+            title: "Cloning acme/private-api".into(),
+            failed_title: "Couldn't clone acme/private-api".into(),
+            detail: "Into ~/dev/private-api".into(),
+            run_in_terminal: true,
+            ..clone_row(
+                2,
+                None,
+                JobStatus::Failed(
+                    "Git needs you to sign in to this repository. Sign in with Git Credential Manager or `gh auth login`, then clone again."
                         .into(),
                 ),
             )
@@ -176,6 +191,7 @@ fn run_live(view: Entity<JobsDemo>, live: Rc<LiveGxserver>, cx: &mut App) {
             percent: None,
             progress: None,
             status: JobStatus::Running,
+            run_in_terminal: false,
             verb: "Cloning".into(),
         }];
         cx.notify();

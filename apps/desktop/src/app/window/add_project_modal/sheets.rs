@@ -341,6 +341,33 @@ impl GpuiAddProjectModalWindow {
                     cx,
                 )
             });
+            let run_in_terminal = readiness
+                .run_in_terminal
+                .clone()
+                .zip(d.machine_id.clone())
+                .map(|(command_id, machine_id)| {
+                    self.filled_button(
+                        skin,
+                        "add-project-run-in-terminal",
+                        "Run in terminal",
+                        None,
+                        true,
+                        false,
+                        std::rc::Rc::new(
+                            move |this: &mut Self, window: &mut Window, cx: &mut Context<Self>| {
+                                (this.host)(
+                                    AddProjectModalCommand::RunInTerminal {
+                                        machine_id: machine_id.clone(),
+                                        command_id: command_id.clone(),
+                                    },
+                                    cx,
+                                );
+                                this.close(window, cx);
+                            },
+                        ),
+                        cx,
+                    )
+                });
             body.push(
                 v_flex()
                     .gap(px(8.0))
@@ -358,6 +385,7 @@ impl GpuiAddProjectModalWindow {
                             .child(hint),
                     )
                     .children(install.map(|button| div().child(button)))
+                    .children(run_in_terminal.map(|button| div().child(button)))
                     .into_any_element(),
             );
         }

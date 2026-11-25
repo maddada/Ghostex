@@ -4,12 +4,13 @@ use super::super::super::fields::{
     ButtonVariant, ListItemStatus, settings_button, settings_list_item, settings_section,
 };
 use super::super::super::palette::SettingsPalette;
+use super::super::super::store::post_store_message;
 use super::ConnectorsTab;
 use super::data::{busy_key, flag, text};
 use super::widgets::{detail, note_row};
 use gpui::{AnyElement, Context, Div, IntoElement as _, ParentElement as _, Styled as _, px};
 use gpui_component::h_flex;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 const TOOLS: [(&str, &str); 2] = [
     ("gh", "GitHub CLI (gh)"),
@@ -118,6 +119,31 @@ impl ConnectorsTab {
                         move |page: &mut Self, _window, cx| page.cli_choose_client(&target, cx),
                         cx,
                     ));
+                    // No OAuth client to sign in with yet: `gws auth setup` makes the usual one, in
+                    // a Main Hub terminal with it typed in (server/src/shown_commands/).
+                    let setup = text(client, "runInTerminal");
+                    if !signed_in && !setup.is_empty() {
+                        buttons = buttons.child(settings_button(
+                            p,
+                            format!("connectors-{id}-cli-client-run-in-terminal"),
+                            "Run in terminal",
+                            None,
+                            ButtonVariant::Default,
+                            offline,
+                            None,
+                            move |page: &mut Self, _window, cx| {
+                                post_store_message(
+                                    &page.store,
+                                    json!({
+                                        "type": "openShownCommandTerminal",
+                                        "commandId": setup.clone(),
+                                    }),
+                                    cx,
+                                )
+                            },
+                            cx,
+                        ));
+                    }
                     if flag(client, "own") {
                         let target = id.clone();
                         buttons = buttons.child(settings_button(

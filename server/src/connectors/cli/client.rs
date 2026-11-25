@@ -44,7 +44,17 @@ pub(crate) fn client_status(paths: &GxserverPaths, workspace: &str) -> Value {
     if own(&dir) {
         return json!({ "own": true, "project": project_of(&dir.join(CLIENT_FILE)) });
     }
-    json!({ "own": false, "project": project_of(&usual_client(paths)) })
+    // No client a sign-in could use (`ensure_client` would fail asking for `gws auth setup`):
+    // Run in terminal's id for that command (server/src/shown_commands/); older gxservers send none.
+    let usual = usual_client(paths);
+    let needs_setup = !dir.join(CLIENT_FILE).is_file()
+        && std::env::var_os("GOOGLE_WORKSPACE_CLI_CLIENT_ID").is_none()
+        && !usual.is_file();
+    let mut status = json!({ "own": false, "project": project_of(&usual) });
+    if needs_setup {
+        status["runInTerminal"] = json!(crate::shown_commands::GWS_AUTH_SETUP);
+    }
+    status
 }
 
 /// Puts the usual client in the workspace's folder when it has none yet.

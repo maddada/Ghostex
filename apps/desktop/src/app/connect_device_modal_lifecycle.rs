@@ -106,7 +106,8 @@ fn install_step(status: &Value) -> InstallStep {
 /// One admin prompt, only after the window's Turn on SSH (or, on Linux, Install) click; a
 /// cancelled prompt is not an error (Remote Setup's Connect did the same). `Ok(on)`: whether SSH
 /// access is on now; beside it, what the answer says about the SSH server, when it says.
-fn enable_ssh(install: bool) -> (Result<bool, String>, Option<SshServer>) {
+/// The third value is Run in terminal's id for a failure that names the command to type.
+fn enable_ssh(install: bool) -> (Result<bool, String>, Option<SshServer>, Option<String>) {
     let enabled = match rpc(
         "/api/enableSshAccess",
         json!({ "install": install }),
@@ -117,7 +118,7 @@ fn enable_ssh(install: bool) -> (Result<bool, String>, Option<SshServer>) {
         },
     ) {
         Ok(enabled) => enabled,
-        Err(error) => return (Err(error), None),
+        Err(error) => return (Err(error), None, None),
     };
     let server = enabled.get("ssh").map(SshServer::of_status);
     if enabled.get("outcome").and_then(Value::as_str) == Some("failed") {
@@ -127,10 +128,15 @@ fn enable_ssh(install: bool) -> (Result<bool, String>, Option<SshServer>) {
             .filter(|message| !message.is_empty())
             .unwrap_or("SSH access could not be turned on.")
             .to_string();
-        return (Err(message), server);
+        let run_in_terminal = enabled
+            .get("runInTerminal")
+            .and_then(Value::as_str)
+            .filter(|id| !id.is_empty())
+            .map(str::to_string);
+        return (Err(message), server, run_in_terminal);
     }
     let on = enabled.pointer("/ssh/enabled").and_then(Value::as_bool) != Some(false);
-    (Ok(on), server)
+    (Ok(on), server, None)
 }
 
 fn turn_on() -> Result<(), String> {
@@ -307,7 +313,7 @@ impl GhostexGpuiApp {
             ConnectDeviceCommand::InstallHelper => self.install_connect_device_helper(true, cx),
             ConnectDeviceCommand::EnableSsh { install } => {
                 cx.spawn(async move |this, cx| {
-                    let (result, server) = cx
+                    let (result, server, run_in_terminal) = cx
                         .background_executor()
                         .spawn(async move { enable_ssh(install) })
                         .await;
@@ -316,11 +322,15 @@ impl GhostexGpuiApp {
                             if let Some(server) = server {
                                 modal.ssh_server_read(server, cx);
                             }
+                            modal.ssh_run_in_terminal_offered(run_in_terminal);
                             modal.ssh_turned_on(result, cx)
                         });
                     });
                 })
                 .detach();
+            }
+            ConnectDeviceCommand::RunInTerminal(command_id) => {
+                self.gx_store_open_shown_command_terminal(None, command_id, None, cx);
             }
             ConnectDeviceCommand::Poll => {
                 cx.spawn(async move |this, cx| {

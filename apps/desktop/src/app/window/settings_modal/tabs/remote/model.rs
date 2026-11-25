@@ -357,6 +357,9 @@ pub(crate) struct SshEnableAttempt {
     /// `enabled`, `cancelled` or `failed`.
     pub(super) outcome: String,
     pub(super) message: Option<String>,
+    /// Run in terminal's id when `message` names the command to type (`sshServer`,
+    /// server/src/shown_commands/); `None` from an older gxserver.
+    pub(super) run_in_terminal: Option<String>,
 }
 
 /// `parseEasyConnectPortsInput`.

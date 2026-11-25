@@ -15,6 +15,7 @@ mod session;
 mod status;
 
 pub(crate) use activity::{start_agentbox_activity_poller, wake_agentbox_activity_poller};
+pub(crate) use command::terminal_command as agentbox_terminal_command;
 pub(crate) use create::{box_agent_family, prepare_box_launch};
 pub(crate) use first_prompt::claim_launch_prompt_echo;
 pub(crate) use input_ready::{is_agentbox_session_by_ids, wait_for_box_agent_input};

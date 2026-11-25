@@ -2257,6 +2257,27 @@ the project's free Commands pane terminal on the computer (or a new terminal
 when there is none) and opens it as a tab. From a shell:
 `ghostex run-in-terminal --project-id <id> --session-id <id> --command
 "<command>"` (add `--paste` to type it without running it).
+Run in terminal beside other commands Ghostex shows: where Ghostex asks you to
+run a command yourself because it needs your password, a sign-in or your
+answers, a **Run in terminal** button sits next to it. It opens a new terminal in
+Main Hub (your home folder) with the command typed in and never presses Enter,
+so you check it, press Enter and type your password there. It is there for the
+Linux update and Go back commands (Settings > Updates), `gh auth login`,
+`glab auth login` and `gh auth refresh -s read:project` (Add Project, a failed
+clone in the jobs list, the Workspaces page, the Work page's GitHub Projects
+notice, Start Work after creating a ticket), `gws auth setup` (Settings >
+Connectors, before Google Workspace has a sign-in client), the `ssh` sign-in a
+computer that reuses your SSH connection asks for (Settings > Remote), the
+OpenSSH install or start line when Turn on SSH can't ask for your password
+(Settings > Remote, Connect a computer), `ghostex team deploy`, `slack-connect`
+and `linear-connect` for a team's owners (Settings > Workspaces), the Claude
+Swap and Codex Swap installs (Settings > Accounts), `bun upgrade` (Settings >
+Agents), the Linux system tools install where there is no password dialog
+(Settings > Integrations > Tools, Settings > Accounts) and each Cloud Boxes setup
+step. On the phone, a computer's Skills and tools rows that need a terminal get
+the same button: the computer opens the terminal and the phone shows it. From a
+shell: `ghostex shown-command open <id>` (`ghostex shown-command help` lists
+the ids).
 A long message you sent (more than 20 lines or 2,000 characters, such as a
 pasted log) shows its first lines with Show more under them; Show less folds it
 again. Copy still copies the whole message.

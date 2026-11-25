@@ -851,12 +851,18 @@ impl RemoteTab {
                                 .get("message")
                                 .and_then(Value::as_str)
                                 .map(str::to_string),
+                            run_in_terminal: result
+                                .get("runInTerminal")
+                                .and_then(Value::as_str)
+                                .filter(|id| !id.is_empty())
+                                .map(str::to_string),
                         });
                     }
                     Err(error) => {
                         this.ssh_attempt = Some(SshEnableAttempt {
                             outcome: "failed".to_string(),
                             message: Some(error),
+                            run_in_terminal: None,
                         });
                     }
                 }
@@ -949,6 +955,15 @@ impl RemoteTab {
     /// Opens the Connect a phone window (`device`: `phone` or `computer`), which closes Settings.
     pub(super) fn open_connect_device(&self, device: &str, cx: &mut App) {
         self.post(json!({ "type": "openConnectDevice", "device": device }), cx);
+    }
+
+    /// Run in terminal beside Turn on SSH access's failure: a Main Hub terminal with the command
+    /// that failure names typed in (server/src/shown_commands/).
+    pub(super) fn open_ssh_command_terminal(&self, command_id: String, cx: &mut App) {
+        self.post(
+            json!({ "type": "openShownCommandTerminal", "commandId": command_id }),
+            cx,
+        );
     }
 
     pub(super) fn post(&self, message: Value, cx: &mut App) {

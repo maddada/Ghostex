@@ -197,6 +197,20 @@ impl GhostexGpuiApp {
             "work.openCloudInTerminal" => {
                 self.open_cloud_session_in_terminal(request_id, &request, cx)
             }
+            // Run in terminal beside a command the page shows (the GitHub Projects scope, the gh
+            // sign-in, the team deploy): only an id gxserver advertised and its arguments leave the
+            // page, and gxserver resolves and checks them (server/src/shown_commands/).
+            "work.runInTerminal" => {
+                let answer = match text(&request, "commandId") {
+                    Some(command_id) => {
+                        let args = request.get("args").filter(|args| args.is_object()).cloned();
+                        self.gx_store_open_shown_command_terminal(None, command_id, args, cx);
+                        Ok(json!({ "opened": true }))
+                    }
+                    None => Err("Name the command.".to_string()),
+                };
+                self.answer_work_view_request(&request_id, answer, cx);
+            }
             // CDXC:WorkMode 2026-10-09 DECISION:
             // User: the GitHub Projects scope notice is "a closable notice on the page that appears once"; closing it is remembered by gxserver, so it stays closed in every window.
             "work.dismissNotice" => {

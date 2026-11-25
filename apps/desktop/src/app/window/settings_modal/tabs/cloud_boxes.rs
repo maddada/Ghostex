@@ -3,9 +3,9 @@
 //! every box, and agent logins for boxes (the `cloud_*` files). Under Advanced sits "More providers
 //! (agentbox)": running agent sessions in an agentbox sandbox on this computer (Docker) or in the
 //! cloud. That part reads `/api/agentbox` (`status`, `list`, `openTarget`, `stop`, `destroy`) from
-//! gxserver, and every setup step runs in a command-pane terminal: the page posts
-//! `runAgentboxTerminalCommand` with the step's name and gxserver answers with the command text,
-//! so a page can never make the app run text of its choosing. "Set it up for me" posts
+//! gxserver, and every setup step opens in a Main Hub terminal with its command typed in: the page
+//! posts `runAgentboxTerminalCommand` with the step's name and gxserver works out the command text,
+//! so a page can never make the app type text of its choosing. "Set it up for me" posts
 //! `setUpAgentboxWithAgent`, which starts an agent session that does the whole setup.
 //!
 //! CDXC:AgentBox 2026-10-01 DECISION:
@@ -227,7 +227,7 @@ impl CloudBoxesTab {
         self.load_boxes(cx);
     }
 
-    /// Runs one setup step in a command-pane terminal. Only the step's name and its validated
+    /// Opens one setup step in a Main Hub terminal, typed in. Only the step's name and its validated
     /// arguments leave the page; the app asks gxserver for the command text itself.
     pub(super) fn run_terminal_command(
         &mut self,

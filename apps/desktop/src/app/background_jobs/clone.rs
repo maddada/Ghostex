@@ -78,6 +78,7 @@ impl GhostexGpuiApp {
             verb: "Cloning",
             progress: None,
             status: JobStatus::Running,
+            run_in_terminal: None,
             work: JobWork::Clone(CloneWork {
                 machine_id: spec.machine_id,
                 params: spec.params,
@@ -221,6 +222,9 @@ impl GhostexGpuiApp {
                     .find(|text| !text.is_empty())
                     .unwrap_or("Repository clone failed.")
                     .to_string();
+                if let Some(entry) = self.background_jobs.get_mut(id) {
+                    entry.run_in_terminal = job.run_in_terminal.clone();
+                }
                 self.background_job_failed(id, reason, cx);
             }
             AddProjectCloneJobState::Completed => {

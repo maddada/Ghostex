@@ -1,4 +1,4 @@
-//! `/api/openShownCommandTerminal { commandId }`: a new plain terminal in Main Hub with one of the
+//! `/api/openShownCommandTerminal { commandId, args? }`: a new plain terminal in Main Hub with one of the
 //! commands Ghostex shows (registry.rs) typed at its prompt and not sent, answering
 //! `{ projectId, sessionId, title, commandId }` so the caller opens that terminal.
 //!
@@ -43,7 +43,14 @@ pub(crate) async fn handle_open_shown_command_terminal_http(
                 .map(str::trim)
                 .unwrap_or_default()
                 .to_string();
-            open(state, &id).await
+            // Optional (`{ version }`, `{ workspaceId }`, an agentbox step's arguments); older
+            // clients send none.
+            let args = params
+                .get("args")
+                .and_then(Value::as_object)
+                .cloned()
+                .unwrap_or_default();
+            open(state, &id, &args).await
         }
         Err(error) => Err(error),
     };
@@ -57,8 +64,12 @@ pub(crate) async fn handle_open_shown_command_terminal_http(
     }
 }
 
-async fn open(state: &AppState, id: &str) -> Result<Value, DomainStateError> {
-    let shown = super::registry::resolve(state, id).await?;
+async fn open(
+    state: &AppState,
+    id: &str,
+    args: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
+    let shown = super::registry::resolve(state, id, args).await?;
     let worker = state.clone();
     let title = shown.title;
     let new_title = title.clone();

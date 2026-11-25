@@ -283,6 +283,44 @@ pub(crate) async fn shown_update_command(state: &crate::server::AppState) -> Opt
         .map(str::to_string)
 }
 
+/// The command Settings > Updates' Go back row and the Go back dialog show for going back to
+/// `version` over a deb or rpm install, for Run in terminal (server/src/shown_commands/): the same
+/// text the desktop builds (`linux_package_command` in apps/desktop/src/go_back/mod.rs, which must
+/// change with this). `None` for any other install, or a version that isn't a plain release.
+pub(crate) fn go_back_command(version: &str) -> Option<String> {
+    let version = safe_version(version.trim_start_matches('v'))?;
+    if !matches!(install_kind(), InstallKind::Deb | InstallKind::Rpm) {
+        return None;
+    }
+    go_back_package_command(version, std::env::consts::ARCH, Path::new("/"))
+}
+
+fn go_back_package_command(version: &str, arch: &str, root: &Path) -> Option<String> {
+    let download = format!("{RELEASE_DOWNLOAD_URL}{version}");
+    if root.join("var/lib/dpkg/info/ghostex.list").is_file() {
+        let arch = match arch {
+            "x86_64" => "amd64",
+            "aarch64" => "arm64",
+            _ => return None,
+        };
+        let file = format!("ghostex_{version}_{arch}.deb");
+        return Some(format!(
+            "curl -fLo /tmp/{file} {download}/{file} && sudo apt install --allow-downgrades -y /tmp/{file}"
+        ));
+    }
+    if !matches!(arch, "x86_64" | "aarch64") {
+        return None;
+    }
+    let rpm = format!("{download}/ghostex-{version}-1.{arch}.rpm");
+    if root.join("usr/bin/dnf").exists() {
+        return Some(format!("sudo dnf downgrade -y {rpm}"));
+    }
+    if root.join("usr/bin/zypper").exists() {
+        return Some(format!("sudo zypper install -y --oldpackage {rpm}"));
+    }
+    None
+}
+
 /// Why the app can't update itself, in words every client shows as they are (phones and desktops
 /// from before `linuxUpdate` read only this): the command, or where to download.
 pub(super) fn unsupported_reason(

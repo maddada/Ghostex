@@ -47,6 +47,13 @@ pub(crate) enum AddProjectModalCommand {
         /// The folder the clone goes into.
         destination: String,
     },
+    /// Run in terminal beside a signed-out provider's sign-in hint: a Main Hub terminal on
+    /// `machine_id` with that command typed in (`command_id`, server/src/shown_commands/). The
+    /// dialog closes right after sending this, so the terminal is in view.
+    RunInTerminal {
+        machine_id: String,
+        command_id: String,
+    },
     /// The dialog removed its own window (Escape, or a project was added).
     Close,
 }

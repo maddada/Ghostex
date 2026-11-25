@@ -13,11 +13,14 @@ use crate::GhostexGpuiApp;
 
 impl GhostexGpuiApp {
     /// `machine_id` is a saved remote machine's id, or `None` for this computer; `command_id` is
-    /// one gxserver advertised next to the command it shows (e.g. `linuxUpdate.runInTerminal`).
+    /// one gxserver advertised next to the command it shows (e.g. `linuxUpdate.runInTerminal`), and
+    /// `args` the few arguments some ids take (`{ version }`, `{ workspaceId }`, an agentbox step's),
+    /// which gxserver checks again.
     pub(crate) fn gx_store_open_shown_command_terminal(
         &mut self,
         machine_id: Option<String>,
         command_id: String,
+        args: Option<Value>,
         cx: &mut gpui::Context<Self>,
     ) {
         let remote = match machine_id.as_deref() {
@@ -39,7 +42,10 @@ impl GhostexGpuiApp {
             let opened = gx_rpc(
                 remote,
                 "/api/openShownCommandTerminal",
-                json!({ "commandId": command_id }),
+                match args {
+                    Some(args) => json!({ "commandId": command_id, "args": args }),
+                    None => json!({ "commandId": command_id }),
+                },
             )
             .await;
             let ids = opened.as_ref().ok().and_then(|opened| {
