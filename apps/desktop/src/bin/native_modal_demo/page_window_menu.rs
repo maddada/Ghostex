@@ -25,10 +25,11 @@ const WIDTH: f32 = 620.0;
 const HEIGHT: f32 = 440.0;
 
 fn control(icon: &'static str, pressed: bool, light: bool) -> impl IntoElement {
-    let (fill, on, border, ink) = if light {
-        (0xffffffb8, 0xfffffff2, 0x43434324, 0x3f3f46ff)
+    // The neutral filled button's rest and hover fills, no border (`page_controls.rs`).
+    let (fill, on, ink) = if light {
+        (0x00000012, 0x0000001c, 0x3f3f46ff)
     } else {
-        (0x26262699, 0x404040b8, 0xe9e9e924, 0xc8cdd5ff)
+        (0xffffff1a, 0xffffff24, 0xc8cdd5ff)
     };
     div()
         .flex_shrink_0()
@@ -38,8 +39,6 @@ fn control(icon: &'static str, pressed: bool, light: bool) -> impl IntoElement {
         .size(px(CONTROL_SIZE))
         .rounded_full()
         .bg(rgba(if pressed { on } else { fill }))
-        .border_1()
-        .border_color(rgba(border))
         .child(svg().path(icon).size(px(14.0)).text_color(rgba(ink)))
 }
 
