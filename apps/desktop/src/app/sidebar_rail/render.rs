@@ -198,7 +198,7 @@ impl GhostexGpuiApp {
     ///
     /// CDXC:Sidebar 2026-11-21 DECISION:
     /// User (main-hub-rail page): hide the rail's Main Hub button in the Unified sidebar only, where the fixed Chief of Staff row already shows above the list. The Project sidebar keeps it, and so does a hidden or floating sidebar: there it is the only one-click way to Chief of Staff and the only place its status dot shows. Only the rail button goes; the ⋯ menu still lists Main Hub with its pin.
-    fn sidebar_rail_main_hub_in_sidebar(&self) -> bool {
+    pub(super) fn sidebar_rail_main_hub_in_sidebar(&self) -> bool {
         !self.sidebar_collapsed
             && self.native_sidebar.unified.is_some()
             && self
@@ -208,6 +208,26 @@ impl GhostexGpuiApp {
                 .is_some_and(|snapshot| {
                     crate::app::native_sidebar::chief_row_view::chief_row_shown(snapshot.bots_mode)
                 })
+    }
+
+    /// A rail right-click menu (a pinned icon's, a separator's, empty rail space's), hung beside
+    /// `button` as ⋯'s is, or beside the pointer without one.
+    ///
+    /// CDXC:Sidebar 2026-11-25 WHY:
+    /// User: "i can't right click on an icon on the rail to unpin it pls fix". These menus opened as a right-click in the sidebar's list does (`show_native_sidebar_menu`), which takes its width from the sidebar's frame and centres the menu across it: with the sidebar hidden that frame is empty, so the menu had no width and nothing showed, and with it shown the menu came up over the sidebar, away from the icon. Hung beside the icon (`show_native_sidebar_menu_beside`, room in the whole window where the panels have hosts of their own), it shows next to it whatever the sidebar is doing, for every pinned icon: items, agents, hubs and links.
+    pub(super) fn show_sidebar_rail_menu(
+        &self,
+        menu: &serde_json::Value,
+        button: Option<gpui::Bounds<gpui::Pixels>>,
+        pointer: gpui::Point<gpui::Pixels>,
+        window: &mut Window,
+        cx: &mut gpui::App,
+    ) {
+        let anchor = button.unwrap_or(gpui::Bounds {
+            origin: pointer,
+            size: gpui::size(px(0.0), px(0.0)),
+        });
+        self.show_native_sidebar_menu_beside(menu, anchor, 1.0, window, cx);
     }
 
     /// Renders one section's pinned entries (separators, links, built-in rail items) in order,
@@ -494,7 +514,7 @@ impl GhostexGpuiApp {
                             RailSection::Top
                         };
                         let menu = app.sidebar_rail_background_menu(section);
-                        Self::show_native_sidebar_menu(&menu, event.position, 1.0, window, cx);
+                        app.show_sidebar_rail_menu(&menu, None, event.position, window, cx);
                     }),
                 )
             })
@@ -693,6 +713,7 @@ impl GhostexGpuiApp {
             .when(!cfg!(ghostex_web), |button| {
                 let key_mouse = key.clone();
                 let key_a11y = key.clone();
+                let bounds_mouse = bounds.clone();
                 let bounds_a11y = bounds.clone();
                 let rail = cx.entity().downgrade();
                 button
@@ -701,7 +722,13 @@ impl GhostexGpuiApp {
                         cx.listener(move |app, event: &MouseDownEvent, window, cx| {
                             cx.stop_propagation();
                             let menu = app.sidebar_rail_item_menu(&key_mouse);
-                            Self::show_native_sidebar_menu(&menu, event.position, 1.0, window, cx);
+                            app.show_sidebar_rail_menu(
+                                &menu,
+                                bounds_mouse.get(),
+                                event.position,
+                                window,
+                                cx,
+                            );
                         }),
                     )
                     .on_a11y_action(
@@ -709,11 +736,13 @@ impl GhostexGpuiApp {
                         move |_, window, cx| {
                             let _ = rail.update(cx, |app, cx| {
                                 let menu = app.sidebar_rail_item_menu(&key_a11y);
-                                let at = bounds_a11y.get().map_or_else(
-                                    || gpui::point(px(RAIL_WIDTH), px(80.0)),
-                                    |b| gpui::point(b.right() + px(4.0), b.top()),
+                                app.show_sidebar_rail_menu(
+                                    &menu,
+                                    bounds_a11y.get(),
+                                    gpui::point(px(RAIL_WIDTH), px(80.0)),
+                                    window,
+                                    cx,
                                 );
-                                Self::show_native_sidebar_menu(&menu, at, 1.0, window, cx);
                             });
                         },
                     )
@@ -791,6 +820,7 @@ impl GhostexGpuiApp {
         let preview_line = appearance.foreground.opacity(0.75);
         let key_mouse = key.clone();
         let key_a11y = key.clone();
+        let bounds_mouse = bounds.clone();
         let rail = cx.entity().downgrade();
         let draggable = separator
             .on_mouse_down(
@@ -798,7 +828,13 @@ impl GhostexGpuiApp {
                 cx.listener(move |app, event: &MouseDownEvent, window, cx| {
                     cx.stop_propagation();
                     let menu = app.sidebar_rail_item_menu(&key_mouse);
-                    Self::show_native_sidebar_menu(&menu, event.position, 1.0, window, cx);
+                    app.show_sidebar_rail_menu(
+                        &menu,
+                        bounds_mouse.get(),
+                        event.position,
+                        window,
+                        cx,
+                    );
                 }),
             )
             .on_a11y_action(
@@ -806,11 +842,13 @@ impl GhostexGpuiApp {
                 move |_, window, cx| {
                     let _ = rail.update(cx, |app, cx| {
                         let menu = app.sidebar_rail_item_menu(&key_a11y);
-                        let at = bounds.get().map_or_else(
-                            || gpui::point(px(RAIL_WIDTH), px(80.0)),
-                            |b| gpui::point(b.right() + px(4.0), b.top()),
+                        app.show_sidebar_rail_menu(
+                            &menu,
+                            bounds.get(),
+                            gpui::point(px(RAIL_WIDTH), px(80.0)),
+                            window,
+                            cx,
                         );
-                        Self::show_native_sidebar_menu(&menu, at, 1.0, window, cx);
                     });
                 },
             )
@@ -840,6 +878,7 @@ impl GhostexGpuiApp {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let bounds = self.sidebar_rail.more_bounds.clone();
+        let bounds_right = bounds.clone();
         let hover = appearance.hover;
         // ⋯ is no anchor of the notifications feed: it wrote the bell's on every frame and won
         // whenever the cached docked sidebar did not repaint (CDXC:Notifications 2026-11-21 on
@@ -880,10 +919,16 @@ impl GhostexGpuiApp {
             .when(!cfg!(ghostex_web), |more| {
                 more.on_mouse_down(
                     MouseButton::Right,
-                    cx.listener(|app, event: &MouseDownEvent, window, cx| {
+                    cx.listener(move |app, event: &MouseDownEvent, window, cx| {
                         cx.stop_propagation();
                         let menu = app.sidebar_rail_background_menu(RailSection::Top);
-                        Self::show_native_sidebar_menu(&menu, event.position, 1.0, window, cx);
+                        app.show_sidebar_rail_menu(
+                            &menu,
+                            bounds_right.get(),
+                            event.position,
+                            window,
+                            cx,
+                        );
                     }),
                 )
             })

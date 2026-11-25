@@ -128,9 +128,9 @@ fn push_position_rows(
 }
 
 impl GhostexGpuiApp {
-    /// The ⋯ menu: every item that applies here, under its group, each with its pin (filled while
-    /// pinned; an unpinned row's shows on hover, "Pin to rail"), plus Links and Layout (separators)
-    /// on desktop, then Appearance.
+    /// The ⋯ menu: every item that applies here and is not on the rail, under its group, each with
+    /// its pin (shown on hover, "Pin to rail"), plus Links and Layout (separators) on desktop, then
+    /// Appearance.
     pub(crate) fn sidebar_rail_more_menu(&self, cx: &gpui::App) -> Value {
         let layout = sidebar_rail_layout_now();
         let mut rows = Vec::new();
@@ -152,7 +152,7 @@ impl GhostexGpuiApp {
             rows.extend(
                 crate::app::custom_links::custom_link_menu_rows_now()
                     .into_iter()
-                    .map(|row| with_link_pin(row, &layout)),
+                    .filter_map(|row| with_link_pin(row, &layout)),
             );
             rows.push(
                 json!({ "label": "Layout", "heading": true, "checked": false, "disabled": false }),
@@ -178,9 +178,15 @@ impl GhostexGpuiApp {
         layout: &RailLayout,
         cx: &gpui::App,
     ) {
+        // CDXC:Sidebar 2026-11-25 DECISION:
+        // User: "if i pin something pls hide it from inside the 3 dots menu for pinned items (hide the header if all are pinned please)". ⋯ lists only what is not on the rail: a pinned item (Settings, Theme and links too) leaves it, and a heading goes when every item under it is pinned. Unpinning, from the icon's right-click menu, puts the row back. An item pinned but not drawn on the rail stays listed, so it can still be reached and unpinned (Main Hub while the Unified sidebar shows its row, `sidebar_rail_main_hub_in_sidebar`). Supersedes the filled pin on pinned rows.
+        let main_hub_in_sidebar = self.sidebar_rail_main_hub_in_sidebar();
         let items: Vec<_> = RAIL_ITEMS
             .iter()
             .filter(|item| item.group == group)
+            .filter(|item| {
+                !layout.contains(item.key) || (item.key == "mainHub" && main_hub_in_sidebar)
+            })
             .filter(|item| self.sidebar_rail_item_state(item.key, cx).available)
             .collect();
         if items.is_empty() {
@@ -560,15 +566,18 @@ pub(crate) fn sidebar_rail_layout_now() -> RailLayout {
 }
 
 /// A link row of the rail's ⋯ menu with its pin, as every rail item has, and Pin to rail / Pin to
-/// bottom or Unpin from rail in its own menu (`rowMenu.pinned`, packages/gx-core/src/custom_links.rs).
+/// bottom in its own menu (`rowMenu.pinned`, packages/gx-core/src/custom_links.rs). None for a
+/// pinned link: it is on the rail, and leaves ⋯ like any pinned item. Add link… stays.
 #[cfg(not(ghostex_web))]
-fn with_link_pin(mut row: Value, layout: &RailLayout) -> Value {
+fn with_link_pin(mut row: Value, layout: &RailLayout) -> Option<Value> {
     let Some(id) = row["rowMenu"]["key"].as_str().map(str::to_string) else {
-        return row;
+        return Some(row);
     };
     let key = ghostex_gx_core::sidebar_rail::rail_link_pin_key(&id);
-    let pinned = layout.contains(&key);
-    row["rowMenu"]["pinned"] = json!(pinned);
-    row["secondary"] = pin_button(&key, pinned);
-    row
+    if layout.contains(&key) {
+        return None;
+    }
+    row["rowMenu"]["pinned"] = json!(false);
+    row["secondary"] = pin_button(&key, false);
+    Some(row)
 }

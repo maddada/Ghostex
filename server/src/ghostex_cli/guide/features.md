@@ -740,12 +740,14 @@ icon when you pin Theme to the rail); drag it anywhere from there. The side pane
 Board, Dev servers, Resources, Extensions) are not on the rail, not even while
 one is open, and Notifications is not either: the bell is in the sidebar's top
 bar. Views or a bell pinned by an earlier version come off the rail once.
-Point at a row and an outline pin shows at its right: click it to put the item
-on the rail; click the filled pin to take it off. Drag any pinned icon, link or
-separator into any order in either the top group or the bottom group of the rail
-(a straight horizontal drop line shows where it will land), or right-click one to
-move it up, down, to the top or to the bottom, add a separator below it, or unpin
-it. Right-clicking empty space on the rail (or ⋯) also lets you add a separator
+⋯ lists only what is not on the rail: once you pin an item (or a link) it leaves
+⋯, and a heading goes when everything under it is pinned. Point at a row and a
+pin shows at its right: click it to put the item on the rail. Drag any pinned
+icon, link or separator into any order in either the top group or the bottom
+group of the rail (a straight horizontal drop line shows where it will land), or
+right-click one (its menu opens right beside it) to move it up, down, to the top
+or to the bottom, add a separator below it, or unpin it; an unpinned item is
+back in ⋯. Right-clicking empty space on the rail (or ⋯) also lets you add a separator
 to the top or bottom group or add a link. Clicking a
 row you have not pinned opens it at once. When that row opens a page (Hermes,
 Claude, Grok Bot, the Hubs or Voice Call), its icon shows on the rail under a
@@ -764,7 +766,7 @@ rail's switch or right-click them for Hide account usage. The very last button
 on the rail, under the usage switch, is the Settings gear, which opens Settings
 like the ☰ menu's Settings row. It is on by default and always stays at the
 bottom; right-click it for Unpin from rail, and pin it again from Settings in
-⋯. With the rail on,
+⋯, where it shows only while unpinned. With the rail on,
 Toggle sidebar is the rail's top button, above Search, whether the sidebar is
 shown, hidden or sliding out (on macOS, Windows and Linux), and the sidebar's
 top bar and the work area header have none. On macOS the window buttons sit at
@@ -1127,7 +1129,7 @@ or one of the Browser's profiles), DevTools, the ⋯ menu, and Close. Each row
 shows its chosen icon or the site's icon once the page has been opened, and its
 ⋯ (or a right-click) has Edit…, Change icon…, Pin to rail (or Unpin from rail)
 and Remove. A link also pins to the rail like any rail item from the pin button
-on its row in the rail's ⋯ menu. A pinned link shows its chosen icon or the
+on its row in the rail's ⋯ menu, and then leaves that menu until you unpin it. A pinned link shows its chosen icon or the
 site's icon (the globe until the page has been opened) with its name as the
 tooltip, opens its page on a click, drags into any order among the other pins,
 and its right-click menu has Edit…, Change icon…, Move up, Move down, Move to
