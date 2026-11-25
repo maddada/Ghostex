@@ -36,6 +36,11 @@ wrap_client! {
             self.download_handler.clone()
         }
 
+        // A page that is not on screen never raises the Open panel (hidden_page_dialogs.rs).
+        fn dialog_handler(&self) -> Option<cef::DialogHandler> {
+            Some(GhostexHiddenPageDialogHandler::new())
+        }
+
         fn life_span_handler(&self) -> Option<LifeSpanHandler> {
             self.life_span_handler.clone()
         }

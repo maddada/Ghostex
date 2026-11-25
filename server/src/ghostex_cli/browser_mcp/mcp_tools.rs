@@ -195,39 +195,69 @@ pub(super) fn browser_mcp_snapshot(args: &Value, state: &mut McpState) -> CliRes
 /// upload field (or its label) is refused: a person's click there opens the file chooser on the
 /// user's screen, and `ghostex_set_input_files` fills it without one. A page that is not on screen
 /// opens the popups such a click starts beside it, never in front (browser_pane.rs).
+/// Coordinator, on the user's behalf (security review of #762, B3): a trusted press must land on the
+/// named element and nothing else, so a frame inside the element counts as not reachable (the press
+/// would go to the framed site: a like, follow, sign-in or pay button), the element is scrolled at
+/// once rather than smoothly, the point is checked again after the mouse moved there and right
+/// before the press, a guard in the page swallows a press that lands outside the element, and the
+/// answer says which element took the click.
 pub(super) fn browser_mcp_click(args: &Value, state: &mut McpState) -> CliResult<Value> {
     let page = get_ghostex_cdp_client(args, state)?;
     let page_id = page_id_of(&page);
     let selector = resolve_browser_element_selector(args, state, &page_id)?;
+    let guard = format!("__ghostexClickGuard_{}", uuid::Uuid::new_v4().simple());
     let point = evaluate_function(
         state,
         &page_id,
         GHOSTEX_CLICK_POINT_SCRIPT,
-        json!([selector]),
+        json!([selector, guard]),
     )?
     .unwrap_or(Value::Null);
     if point.get("fileUpload") == Some(&Value::Bool(true)) {
         return Err(CliError::Other(format!(
-            "{selector} is a file upload field. Use ghostex_set_input_files with absolute paths: clicking it would open a file chooser on the user's screen."
+            "{selector} is a file upload field (or holds one). Use ghostex_set_input_files with absolute paths: clicking it would open a file chooser on the user's screen."
         )));
     }
     let reachable = point.get("reachable") == Some(&Value::Bool(true));
-    let mut clicked = if reachable && press_mouse_at(state, &page_id, &point)? {
+    let pressed = if reachable {
+        press_mouse_at(state, &page_id, &selector, &point)?
+    } else {
+        Pressed::NotTried
+    };
+    let mut clicked = if pressed == Pressed::Pressed {
         json!({ "method": "mouse" })
     } else {
         let mut clicked =
             evaluate_function(state, &page_id, GHOSTEX_CLICK_SCRIPT, json!([selector]))?
                 .unwrap_or_else(|| json!({}));
         clicked["method"] = json!("script");
-        clicked["reason"] = json!(if point.get("inView") == Some(&Value::Bool(false)) {
-            "The element has no size or is outside the view"
-        } else if reachable {
-            "The page did not take the mouse"
-        } else {
-            "Another element covers the element's centre"
+        clicked["reason"] = json!(match pressed {
+            Pressed::Moved => "Something else came under the pointer after it moved there",
+            Pressed::Refused => "The page did not take the mouse",
+            _ if point.get("inView") == Some(&Value::Bool(false)) => {
+                "The element has no size or is outside the view"
+            }
+            _ => "Another element or a frame covers the element's centre",
         });
         clicked
     };
+    if reachable {
+        let seen = evaluate_function(
+            state,
+            &page_id,
+            GHOSTEX_CLICK_GUARD_RESULT_SCRIPT,
+            json!([guard]),
+        )
+        .ok()
+        .flatten()
+        .unwrap_or(Value::Null);
+        note_who_took_the_click(&mut clicked, &seen, pressed == Pressed::Pressed);
+    }
+    if file_chooser_opened(state, &page_id) {
+        clicked["fileChooser"] = json!(
+            "The click opened a file chooser, which Ghostex cancelled. Use ghostex_set_input_files to fill the upload field."
+        );
+    }
     if clicked.get("bounds").is_none() {
         clicked["bounds"] = point.get("bounds").cloned().unwrap_or(Value::Null);
     }
@@ -235,15 +265,80 @@ pub(super) fn browser_mcp_click(args: &Value, state: &mut McpState) -> CliResult
     Ok(json!({ "clicked": clicked, "page": cdp_page_summary(&page) }))
 }
 
-/// Moves the mouse to `point` and presses and releases the left button there. False when the page
-/// would not take the first move, before anything was pressed, so the caller's script click
-/// cannot click twice.
-fn press_mouse_at(state: &mut McpState, page_id: &str, point: &Value) -> CliResult<bool> {
+/// Puts what the page's click guard saw into the answer: the element that took the press, the
+/// presses it swallowed, and a warning when a mouse press reached nothing in the page itself
+/// (another frame or layer took it).
+fn note_who_took_the_click(clicked: &mut Value, seen: &Value, mouse: bool) {
+    let target_of = |list: &str| {
+        seen.get(list)
+            .and_then(Value::as_array)
+            .and_then(|events| {
+                events
+                    .iter()
+                    .find(|event| event.get("type").and_then(Value::as_str) == Some("click"))
+                    .or_else(|| events.first())
+            })
+            .and_then(|event| event.get("target"))
+            .cloned()
+    };
+    if let Some(target) = target_of("presses") {
+        clicked["target"] = target;
+    } else if mouse {
+        clicked["warning"] = json!(
+            "No press reached the element in the page itself: a frame or another layer may have taken it."
+        );
+    }
+    if let Some(swallowed) = seen
+        .get("swallowed")
+        .and_then(Value::as_array)
+        .filter(|swallowed| !swallowed.is_empty())
+    {
+        clicked["swallowed"] = Value::Array(swallowed.clone());
+    }
+}
+
+/// Whether the page reported a file chooser (intercepted while the agent drives it,
+/// devtools_relay.rs) since the last call.
+fn file_chooser_opened(state: &mut McpState, page_id: &str) -> bool {
+    let Some(client) = state.clients.get_mut(page_id) else {
+        return false;
+    };
+    client.pump_events();
+    let opened = client
+        .events
+        .iter()
+        .any(|event| event.get("method").and_then(Value::as_str) == Some("Page.fileChooserOpened"));
+    pump_client_events(state, page_id);
+    opened
+}
+
+/// How the mouse press went.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Pressed {
+    /// The point was not reachable, so no press was tried.
+    NotTried,
+    /// The page would not take the first move; nothing was pressed.
+    Refused,
+    /// After the move the point no longer reached the element; nothing was pressed.
+    Moved,
+    /// Pressed and released on the element.
+    Pressed,
+}
+
+/// Moves the mouse to `point`, checks the point still reaches the element, then presses and
+/// releases the left button there. Nothing is pressed unless the check passed, so the caller's
+/// script click cannot click twice.
+fn press_mouse_at(
+    state: &mut McpState,
+    page_id: &str,
+    selector: &str,
+    point: &Value,
+) -> CliResult<Pressed> {
     let (Some(x), Some(y)) = (
         point.get("x").and_then(Value::as_f64),
         point.get("y").and_then(Value::as_f64),
     ) else {
-        return Ok(false);
+        return Ok(Pressed::Refused);
     };
     let event = |kind: &str, button: &str, buttons: u64, click_count: u64| {
         json!({
@@ -264,7 +359,16 @@ fn press_mouse_at(state: &mut McpState, page_id: &str, point: &Value) -> CliResu
     )
     .is_err()
     {
-        return Ok(false);
+        return Ok(Pressed::Refused);
+    }
+    let still_reachable = evaluate_function(
+        state,
+        page_id,
+        GHOSTEX_CLICK_RECHECK_SCRIPT,
+        json!([selector, x, y]),
+    )?;
+    if still_reachable != Some(Value::Bool(true)) {
+        return Ok(Pressed::Moved);
     }
     client_call(
         state,
@@ -278,7 +382,7 @@ fn press_mouse_at(state: &mut McpState, page_id: &str, point: &Value) -> CliResu
         "Input.dispatchMouseEvent",
         event("mouseReleased", "left", 0, 1),
     )?;
-    Ok(true)
+    Ok(Pressed::Pressed)
 }
 
 /// The most files one `ghostex_set_input_files` call may put in a field.
@@ -288,11 +392,14 @@ const MAX_UPLOAD_FILES: usize = 20;
 /// User (Q4999, #762): `ghostex_set_input_files` puts local files in a page's file upload field
 /// (`DOM.setFileInputFiles`), the one thing the other tools could not do. It is kept narrow: only an
 /// `input type=file` that is enabled (and takes several files when given several), only absolute
-/// paths of existing regular files (symlinks resolved, at most `MAX_UPLOAD_FILES`), and never a
-/// file inside a folder that holds credentials (`upload_refused_folder`). It sends the files to the
-/// page's site exactly as a person choosing them would; an agent that can run commands could send
-/// them the long way already. The browser tools only ever talk to this computer's gxserver, so the
-/// paths checked here are the ones the Browser reads.
+/// paths of existing regular files (at most `MAX_UPLOAD_FILES`). It sends the files to the page's
+/// site exactly as a person choosing them would.
+/// Coordinator, on the user's behalf (security review of #762, B2): which files may go is decided
+/// by gxserver's DevTools relay, not here, since an agent can open the page socket without this
+/// tool and sets this process's `HOME`: a session's own token uploads only from its project's
+/// folders and Ghostex's attachments, every caller is refused credential folders and Ghostex's own
+/// data, and each upload is logged (server/src/server/cef_devtools_scope.rs). The checks here only
+/// give a clear error early.
 pub(super) fn browser_mcp_set_input_files(args: &Value, state: &mut McpState) -> CliResult<Value> {
     let files = upload_paths(defined(args.get("files")).or_else(|| defined(args.get("paths"))))?;
     let page = get_ghostex_cdp_client(args, state)?;
@@ -383,55 +490,14 @@ fn upload_paths(value: Option<&Value>) -> CliResult<Vec<String>> {
                     path.display()
                 )));
             }
-            let resolved = std::fs::canonicalize(path).map_err(|_| {
-                CliError::Other(format!("{} does not exist", path.display()))
-            })?;
+            let resolved = std::fs::canonicalize(path)
+                .map_err(|_| CliError::Other(format!("{} does not exist", path.display())))?;
             if !resolved.is_file() {
-                return Err(CliError::Other(format!(
-                    "{} is not a file",
-                    path.display()
-                )));
-            }
-            if let Some(folder) = upload_refused_folder(&resolved) {
-                return Err(CliError::Other(format!(
-                    "{} is inside {}, which holds credentials; the browser tools never upload from there",
-                    path.display(),
-                    folder.display()
-                )));
+                return Err(CliError::Other(format!("{} is not a file", path.display())));
             }
             Ok(resolved.to_string_lossy().to_string())
         })
         .collect()
-}
-
-/// The credentials folder or file `resolved` is in, if any: SSH, GPG, cloud and container
-/// logins, the macOS keychains, saved Git and netrc passwords, and Ghostex's own state (its
-/// gxserver token among it).
-fn upload_refused_folder(resolved: &std::path::Path) -> Option<std::path::PathBuf> {
-    let canonical = |path: std::path::PathBuf| std::fs::canonicalize(&path).unwrap_or(path);
-    let mut refused = vec![canonical(crate::ghostex_cli::rpc::ghostex_home())];
-    let home = canonical(crate::ghostex_cli::rpc::home_dir());
-    if !home.as_os_str().is_empty() {
-        for entry in [
-            ".ssh",
-            ".gnupg",
-            ".aws",
-            ".azure",
-            ".kube",
-            ".docker",
-            ".config/gcloud",
-            ".config/gh",
-            ".password-store",
-            ".netrc",
-            ".git-credentials",
-            "Library/Keychains",
-        ] {
-            refused.push(home.join(entry));
-        }
-    }
-    refused
-        .into_iter()
-        .find(|folder| resolved.starts_with(folder))
 }
 
 /// CDXC:Browser 2026-11-26 DECISION:

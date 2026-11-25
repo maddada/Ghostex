@@ -193,13 +193,19 @@ fn autolink_literal(candidate: &str) -> &str {
 /// Punctuation that ends a bare address, and may stand right before one: CJK and full-width
 /// punctuation, curly quotes and the ellipsis. The native renderer ends its links at the same
 /// characters (`ends_bare_link` in gpui-component's text/format/markdown.rs), so
-/// `页（http://a/?x=1），见` links `http://a/?x=1` in both (#762).
+/// `页（http://a/?x=1），见` links `http://a/?x=1` in both (#762). The letters among the CJK
+/// symbols (々 〆 〇, the Hangzhou numerals, the kana repeat marks, 〸 〹 〺 〻 〼) carry on, so
+/// `https://ja.wikipedia.org/wiki/佐々木` stays whole.
 pub(crate) fn ends_bare_link(character: char) -> bool {
     matches!(
         character,
         '\u{2018}'..='\u{201F}'
             | '\u{2026}'
-            | '\u{3000}'..='\u{303F}'
+            | '\u{3000}'..='\u{3004}'
+            | '\u{3008}'..='\u{3020}'
+            | '\u{302A}'..='\u{3030}'
+            | '\u{3036}'..='\u{3037}'
+            | '\u{303D}'..='\u{303F}'
             | '\u{FE10}'..='\u{FE1F}'
             | '\u{FE30}'..='\u{FE6B}'
             | '\u{FF01}'..='\u{FF0F}'
@@ -209,8 +215,32 @@ pub(crate) fn ends_bare_link(character: char) -> bool {
     )
 }
 
+/// Whether `address` written up to a dot look-alike (。 ． ｡) is still in its host: past any
+/// `scheme://` and before the first `/`, `?` or `#`. Ending the address there would link another
+/// domain (`https://example.com。au/login` is not `https://example.com`), so such an address is
+/// not linked at all. The native renderer applies the same rule (`ends_in_host` in
+/// gpui-component's text/format/markdown.rs).
+fn ends_in_host(address: &str, end: char) -> bool {
+    if !matches!(end, '\u{3002}' | '\u{FF0E}' | '\u{FF61}') {
+        return false;
+    }
+    let host = match address.split_once("://") {
+        Some((scheme, rest))
+            if !scheme.is_empty()
+                && scheme.chars().all(|character| {
+                    character.is_ascii_alphanumeric() || "+.-".contains(character)
+                }) =>
+        {
+            rest
+        }
+        _ => address,
+    };
+    !host.contains(['/', '?', '#'])
+}
+
 /// `(^|[\s*_~(])(https?:\/\/[^\s<]+)` case-insensitively, every match, where wide punctuation
-/// (`ends_bare_link`) also opens and ends an address.
+/// (`ends_bare_link`) also opens and ends an address, except one it would end inside the host
+/// (`ends_in_host`).
 fn autolink_candidates(markdown: &str) -> Vec<&str> {
     let lower = markdown.to_ascii_lowercase();
     let mut found = Vec::new();
@@ -245,7 +275,11 @@ fn autolink_candidates(markdown: &str) -> Vec<&str> {
             })
             .map(char::len_utf8)
             .sum();
-        found.push(&markdown[start..start + run]);
+        let address = &markdown[start..start + run];
+        let ended_by = markdown[start + run..].chars().next();
+        if !ended_by.is_some_and(|end| ends_in_host(address, end)) {
+            found.push(address);
+        }
         cursor = start + run;
     }
     found
@@ -376,4 +410,79 @@ pub fn markdown_references(markdown: &str) -> Vec<Value> {
     });
     references.extend(autolink_references(markdown));
     references
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn autolinks(markdown: &str) -> Vec<String> {
+        autolink_references(markdown)
+            .iter()
+            .filter_map(|reference| reference["href"].as_str().map(str::to_string))
+            .collect()
+    }
+
+    #[test]
+    fn bare_link_ends_at_wide_punctuation() {
+        assert_eq!(autolinks("页（http://a/?x=1），见"), ["http://a/?x=1"]);
+        assert_eq!(
+            autolinks("https://example.com/a。b"),
+            ["https://example.com/a"]
+        );
+    }
+
+    #[test]
+    fn bare_link_with_a_dot_look_alike_in_its_host_is_not_linked() {
+        for markdown in [
+            "https://example.com。au/login",
+            "see https://example.com．au/login now",
+            "https://example.com｡au",
+        ] {
+            assert!(autolinks(markdown).is_empty(), "{markdown}");
+        }
+    }
+
+    #[test]
+    fn bare_link_keeps_kana_iteration_marks() {
+        assert_eq!(
+            autolinks("https://ja.wikipedia.org/wiki/佐々木"),
+            ["https://ja.wikipedia.org/wiki/佐々木"]
+        );
+        assert_eq!(autolinks("http://a/〇〆ゝ〻"), ["http://a/〇〆ゝ〻"]);
+    }
+
+    #[test]
+    fn bare_link_cut_at_wide_punctuation_is_trimmed_like_gfm() {
+        assert_eq!(autolinks("(见 http://a/x)。"), ["http://a/x"]);
+        assert_eq!(autolinks("见 http://a/x.，好"), ["http://a/x"]);
+        assert_eq!(autolinks("见 http://a/(x)。"), ["http://a/(x)"]);
+    }
+
+    #[test]
+    fn explicit_link_label_is_not_relinked() {
+        let references = markdown_references("[https://trusted.example。x](https://evil.example)");
+        let hrefs: Vec<&str> = references
+            .iter()
+            .filter_map(|reference| reference["href"].as_str())
+            .collect();
+        assert!(hrefs.contains(&"https://evil.example"), "{hrefs:?}");
+        assert!(
+            !hrefs.iter().any(|href| href.contains("trusted")),
+            "{hrefs:?}"
+        );
+    }
+
+    #[test]
+    fn scanning_many_bare_links_is_linear() {
+        let markdown = "http://a.b/x。 ".repeat(20_000);
+        let started = std::time::Instant::now();
+        let candidates = autolink_candidates(&markdown);
+        let elapsed = started.elapsed();
+        assert_eq!(candidates.len(), 20_000);
+        assert!(candidates
+            .iter()
+            .all(|candidate| *candidate == "http://a.b/x"));
+        assert!(elapsed.as_millis() < 1_000, "took {elapsed:?}");
+    }
 }

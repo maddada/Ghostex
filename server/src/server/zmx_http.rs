@@ -716,6 +716,17 @@ pub(crate) async fn handle_renderer_command_http(
             );
         }
     };
+    // An agent session's browser requests name its own session and open web pages only
+    // (browser_agent_limits.rs).
+    if let Some(message) =
+        crate::browser_agent_limits::pin_agent_browser_request(state, caller, &action, &mut payload)
+    {
+        return routed_json(
+            Some(endpoint_path),
+            StatusCode::FORBIDDEN,
+            rpc_error("forbidden", message, Some(request_id)),
+        );
+    }
     // An agent's background browser open shows nothing, so it needs no toast (switch_requests.rs).
     let background_open = crate::switch_requests::pin_agent_background_browser_open(
         state,
@@ -723,6 +734,13 @@ pub(crate) async fn handle_renderer_command_http(
         &action,
         &mut payload,
     );
+    let background_url = background_open.then(|| {
+        payload
+            .get("url")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    });
     if !background_open
         && crate::switch_requests::is_agent_switch_request_action(&action)
         && !crate::switch_requests::agent_page_opens_allowed(state, &action)
@@ -768,6 +786,12 @@ pub(crate) async fn handle_renderer_command_http(
                 message: error.message,
             })
     };
+    if let Some(url) = &background_url {
+        crate::browser_agent_limits::record_background_open(
+            url,
+            answer.as_ref().map_err(|error| error.message.as_str()),
+        );
+    }
     match answer {
         Ok(result) => routed_json(
             Some(endpoint_path),

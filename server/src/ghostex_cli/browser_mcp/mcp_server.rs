@@ -196,7 +196,7 @@ pub(super) fn browser_mcp_tools() -> Value {
         },
         {
             "name": "ghostex_click",
-            "description": "Click an element by @e ref from ghostex_snapshot or a CSS selector, with a real mouse click at its centre (a script click when something covers it). File upload fields are refused: use ghostex_set_input_files.",
+            "description": "Click an element by @e ref from ghostex_snapshot or a CSS selector, with a real mouse click at its centre (a script click when something or a frame covers it). The answer names the element that took the click. File upload fields are refused: use ghostex_set_input_files.",
             "inputSchema": {
                 "type": "object",
                 "properties": props(json!({ "ref": { "type": "string" }, "selector": { "type": "string" } })),
@@ -213,7 +213,7 @@ pub(super) fn browser_mcp_tools() -> Value {
         },
         {
             "name": "ghostex_set_input_files",
-            "description": "Put local files in a file upload field (input type=file) by @e ref or CSS selector. files are absolute paths of existing files; files in credential folders (~/.ssh, keychains and the like) are refused.",
+            "description": "Put local files in a file upload field (input type=file) by @e ref or CSS selector. files are absolute paths of existing files. From an agent's session only files in its project's folders, its worktree and Ghostex's attachments may be uploaded; credential folders (~/.ssh, keychains and the like) and Ghostex's own data never.",
             "inputSchema": {
                 "type": "object",
                 "required": ["files"],

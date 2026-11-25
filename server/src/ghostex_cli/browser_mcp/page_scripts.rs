@@ -86,30 +86,85 @@ pub(super) const GHOSTEX_SNAPSHOT_SCRIPT: &str = r##"function ghostexSnapshotScr
 pub(super) const GHOSTEX_CLICK_SCRIPT: &str = r##"function ghostexClickScript(selector) {
   const element = document.querySelector(selector);
   if (!element) throw new Error(`Element not found: ${selector}`);
-  element.scrollIntoView({ block: "center", inline: "center" });
+  element.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
   element.focus?.();
   element.click();
   const rect = element.getBoundingClientRect();
   return { bounds: { height: rect.height, width: rect.width, x: rect.x, y: rect.y }, selector };
 }"##;
 
-/// Where `ghostex_click` presses the mouse (#762): the element scrolled to the middle of the view
-/// and its centre, and whether that point reaches it (`reachable`: not covered by another element,
-/// inside the view). `fileUpload` names a file field, or a label or element inside a label for
-/// one, which a person's click would answer with the file chooser on the user's screen.
-pub(super) const GHOSTEX_CLICK_POINT_SCRIPT: &str = r##"function ghostexClickPointScript(selector) {
+/// Where `ghostex_click` presses the mouse (#762): the element scrolled at once (never smoothly) to
+/// the middle of the view, and its centre. `reachable` says that point reaches the element: inside
+/// the view, and the topmost element there is the element itself or inside it, but not a frame,
+/// object or embed inside it (a press there would go to the framed page, not the element).
+/// `fileUpload` names a file field (the element, the one at the point, a label for one, or one
+/// inside the element), which a person's click would answer with the file chooser. When the point
+/// is reachable, a guard named `guard` is set up: it notes which element each press reaches and
+/// swallows a press that lands outside the element (`GHOSTEX_CLICK_GUARD_RESULT_SCRIPT` reads it).
+pub(super) const GHOSTEX_CLICK_POINT_SCRIPT: &str = r##"function ghostexClickPointScript(selector, guard) {
   const element = document.querySelector(selector);
   if (!element) throw new Error(`Element not found: ${selector}`);
-  element.scrollIntoView({ block: "center", inline: "center" });
+  element.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
   const rect = element.getBoundingClientRect();
-  const control = element instanceof HTMLInputElement ? element : element.closest("label")?.control;
-  const fileUpload = control instanceof HTMLInputElement && control.type === "file";
+  const isFileField = (node) => node instanceof HTMLInputElement && node.type === "file";
+  const fileControl = (node) => Boolean(node) && (isFileField(node) || isFileField(node.closest?.("label")?.control));
+  const embedded = (node) => node instanceof HTMLIFrameElement || node instanceof HTMLFrameElement || node instanceof HTMLObjectElement || node instanceof HTMLEmbedElement;
   const x = rect.x + rect.width / 2;
   const y = rect.y + rect.height / 2;
   const inView = rect.width > 0 && rect.height > 0 && x >= 0 && y >= 0 && x < window.innerWidth && y < window.innerHeight;
   const hit = inView ? document.elementFromPoint(x, y) : null;
-  const reachable = Boolean(hit && (hit === element || element.contains(hit)));
+  const reachable = Boolean(hit && (hit === element || (element.contains(hit) && !embedded(hit))));
+  const fileUpload = fileControl(element) || fileControl(hit) || Boolean(element.querySelector?.('input[type="file" i]'));
+  if (reachable && !fileUpload) {
+    const describe = (node) => {
+      if (!(node instanceof Element)) return String(node?.nodeName || "unknown");
+      const id = node.id ? `#${node.id}` : "";
+      const text = (node.innerText || node.value || node.getAttribute("aria-label") || "").trim().replace(/\s+/g, " ").slice(0, 80);
+      return `${node.nodeName.toLowerCase()}${id}${text ? ` "${text}"` : ""}`;
+    };
+    const presses = [];
+    const swallowed = [];
+    const types = ["pointerdown", "mousedown", "pointerup", "mouseup", "click"];
+    const onPress = (event) => {
+      const target = event.target;
+      const inside = target === element || (target instanceof Node && element.contains(target));
+      if (!inside) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        swallowed.push({ type: event.type, target: describe(target) });
+        return;
+      }
+      presses.push({ type: event.type, target: describe(target), trusted: event.isTrusted });
+    };
+    for (const type of types) window.addEventListener(type, onPress, true);
+    const remove = () => { for (const type of types) window.removeEventListener(type, onPress, true); };
+    Object.defineProperty(window, guard, {
+      configurable: true,
+      value: () => { remove(); delete window[guard]; return { presses, swallowed }; },
+    });
+    setTimeout(remove, 15000);
+  }
   return { bounds: { height: rect.height, width: rect.width, x: rect.x, y: rect.y }, fileUpload, inView, reachable, selector, x, y };
+}"##;
+
+/// Whether the point `ghostex_click` moved the mouse to still reaches the element, checked after
+/// the move and right before the press, so a page that slides a frame or another element under the
+/// pointer on the move (or scrolls on its own) gets the script click instead of the press.
+pub(super) const GHOSTEX_CLICK_RECHECK_SCRIPT: &str = r##"function ghostexClickRecheckScript(selector, x, y) {
+  const element = document.querySelector(selector);
+  if (!element) return false;
+  const embedded = (node) => node instanceof HTMLIFrameElement || node instanceof HTMLFrameElement || node instanceof HTMLObjectElement || node instanceof HTMLEmbedElement;
+  const rect = element.getBoundingClientRect();
+  const inside = x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom;
+  const hit = document.elementFromPoint(x, y);
+  return inside && Boolean(hit && (hit === element || (element.contains(hit) && !embedded(hit))));
+}"##;
+
+/// What the guard `GHOSTEX_CLICK_POINT_SCRIPT` set up saw (and removes it): which element each
+/// press reached, and the presses it swallowed because they landed outside the element.
+pub(super) const GHOSTEX_CLICK_GUARD_RESULT_SCRIPT: &str = r##"function ghostexClickGuardResultScript(guard) {
+  const read = window[guard];
+  return typeof read === "function" ? read() : null;
 }"##;
 
 /// The file field `ghostex_set_input_files` fills, as a remote object; refused unless it is one

@@ -23,6 +23,8 @@ use tokio_tungstenite::tungstenite::{
 const RELAY_MESSAGE_BYTES: usize = 128 * 1024 * 1024;
 /// The first id a session's commands get, above Ghostex's own counter.
 const RELAY_FIRST_MESSAGE_ID: i64 = 1_500_000_000;
+/// The id of the relay's own file chooser command; its answer stays in the app.
+const RELAY_FILE_CHOOSER_MESSAGE_ID: i64 = RELAY_FIRST_MESSAGE_ID - 1;
 
 /// The sender to the current gxserver connection; `None` while disconnected.
 static RELAY_OUTBOX: Mutex<Option<tokio::sync::mpsc::UnboundedSender<String>>> = Mutex::new(None);
@@ -187,8 +189,9 @@ fn handle_relay_frame(frame: &str) {
         }
         Some("attach") => {
             let page_id = frame.get("pageId").and_then(Value::as_str).unwrap_or("");
+            let scoped = frame.get("scoped").and_then(Value::as_bool) == Some(true);
             if let Some(session) = session {
-                attach_session(session, page_id);
+                attach_session(session, page_id, scoped);
             }
         }
         Some("send") => {
@@ -257,8 +260,18 @@ fn close_session(session: u64, reason: &str) {
     relay_send(json!({ "type": "closed", "session": session, "reason": reason }));
 }
 
-fn attach_session(session: u64, page_id: &str) {
+/// Attaches `session` to the page listed as `page_id`. A `scoped` session (a session's own token,
+/// which gxserver checked against its project's Browser tabs by DevTools target id) attaches only
+/// to the page with that target id, never to a CEF browser id that happens to match.
+fn attach_session(session: u64, page_id: &str, scoped: bool) {
     let browser = relay_browsers().into_iter().find(|browser| {
+        if scoped {
+            return RELAY_TARGET_IDS.with(|ids| {
+                ids.borrow()
+                    .get(&browser.identifier())
+                    .is_some_and(|target_id| target_id == page_id)
+            });
+        }
         relay_page_id(browser) == page_id || browser.identifier().to_string() == page_id
     });
     let Some(browser) = browser else {
@@ -290,6 +303,7 @@ fn attach_session(session: u64, page_id: &str) {
         };
         RELAY_OBSERVERS.with(|observers| observers.borrow_mut().insert(browser_id, registration));
     }
+    intercept_file_chooser(&browser, true);
     RELAY_SESSIONS.with(|sessions| {
         sessions.borrow_mut().insert(
             session,
@@ -299,6 +313,25 @@ fn attach_session(session: u64, page_id: &str) {
             },
         )
     });
+}
+
+/// CDXC:Browser 2026-11-26 DECISION:
+/// Coordinator, on the user's behalf (security review of #762, B4): while an agent's DevTools
+/// session drives a page, the page's file choosers are intercepted and cancelled
+/// (`Page.setInterceptFileChooserDialog`), so no click of the agent's, or script the page runs from
+/// it, opens a native Open panel on the user's screen; the session gets `Page.fileChooserOpened`
+/// and fills the field with `DOM.setFileInputFiles` (`ghostex_set_input_files`). Interception ends
+/// with the page's last session, so the user's own uploads work again afterwards. Pages not on
+/// screen never show the panel at all (hidden_page_dialogs.rs).
+fn intercept_file_chooser(browser: &cef::Browser, enabled: bool) {
+    let command = json!({
+        "id": RELAY_FILE_CHOOSER_MESSAGE_ID,
+        "method": "Page.setInterceptFileChooserDialog",
+        "params": { "enabled": enabled, "cancel": true },
+    });
+    if let Some(host) = browser.host() {
+        host.send_dev_tools_message(Some(command.to_string().as_bytes()));
+    }
 }
 
 fn send_to_page(session: u64, message: &str) {
@@ -350,6 +383,7 @@ fn detach_session(session: u64) {
             .any(|attached| attached.browser_id == detached.browser_id)
     });
     if !still_attached {
+        intercept_file_chooser(&detached.browser, false);
         RELAY_OBSERVERS.with(|observers| observers.borrow_mut().remove(&detached.browser_id));
     }
 }

@@ -625,6 +625,9 @@ impl CefBrowser {
         set_cef_native_view_hidden(native_view, !visible);
         platform::set_native_view_visible(native_view, visible);
         self.last_visible.set(Some(visible));
+        if visible {
+            release_held_download(native_view);
+        }
     }
 
     #[cfg(target_os = "macos")]
@@ -1088,6 +1091,7 @@ pub(crate) fn unregister_native_view_browser(native_view: *mut c_void) {
         views.borrow_mut().remove(&(native_view as usize));
     });
     set_cef_native_view_hidden(native_view, false);
+    forget_held_download(native_view);
     clear_active_native_view_if_matching(native_view);
 }
 

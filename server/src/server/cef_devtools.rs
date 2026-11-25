@@ -7,6 +7,7 @@
 //! gxserver → host: `{type:"list",requestId}`, `{type:"attach",session,pageId}`, `{type:"send",session,message}`, `{type:"detach",session}`.
 //! host → gxserver: `{type:"pages",requestId,pages:[{id,title,url}]}`, `{type:"message",session,message}`, `{type:"closed",session,reason}`.
 //! SEE-ALSO: apps/desktop/src/cef/shell/devtools_relay.rs (the host), server/src/ghostex_cli/browser_mcp/cdp_pages.rs (the client).
+use super::cef_devtools_scope::*;
 use super::*;
 use axum::extract::Path;
 use futures_util::{SinkExt, StreamExt};
@@ -119,13 +120,21 @@ impl CefDevtoolsHub {
         pages
     }
 
-    fn open_session(&self) -> Option<(u64, mpsc::UnboundedReceiver<SessionEvent>)> {
+    /// A new page session: its number, a sender for answers the relay itself gives (a refused
+    /// command), and the receiver of everything the client is sent.
+    fn open_session(
+        &self,
+    ) -> Option<(
+        u64,
+        mpsc::UnboundedSender<SessionEvent>,
+        mpsc::UnboundedReceiver<SessionEvent>,
+    )> {
         let mut state = self.state();
         let connection = state.host.as_ref()?.0;
         let session = Self::next_id(&mut state);
         let (sender, receiver) = mpsc::unbounded_channel();
-        state.sessions.insert(session, (connection, sender));
-        Some((session, receiver))
+        state.sessions.insert(session, (connection, sender.clone()));
+        Some((session, sender, receiver))
     }
 
     fn close_session(&self, session: u64) {
@@ -264,19 +273,31 @@ pub(crate) async fn handle_cef_devtools_pages(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Response<Body> {
-    if !crate::auth::is_authorized_session_client_headers(
-        &headers,
-        &state.auth_token,
-        &state.device_api_tokens,
-        &state.security.session_tokens,
-    ) {
+    let Some(caller) = relay_caller(&state, &headers) else {
         return devtools_failure(
             &headers,
             StatusCode::UNAUTHORIZED,
             "unauthorized",
             "gxserver authorization is required.",
         );
-    }
+    };
+    // A session's own token sees only its project's Browser tabs (cef_devtools_scope.rs).
+    let own_pages = match &caller {
+        RelayCaller::Full => None,
+        RelayCaller::Session { project_id, .. } => {
+            match project_page_ids(&state, project_id).await {
+                Ok(ids) => Some(ids),
+                Err(message) => {
+                    return devtools_failure(
+                        &headers,
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "unavailable",
+                        &message,
+                    )
+                }
+            }
+        }
+    };
     let Some(pages) = state.cef_devtools.list_pages().await else {
         return devtools_failure(
             &headers,
@@ -290,6 +311,9 @@ pub(crate) async fn handle_cef_devtools_pages(
         .into_iter()
         .filter_map(|page| {
             let id = page.get("id").and_then(Value::as_str)?.to_string();
+            if own_pages.as_ref().is_some_and(|own| !own.contains(&id)) {
+                return None;
+            }
             Some(json!({
                 "id": id,
                 "type": "page",
@@ -302,26 +326,45 @@ pub(crate) async fn handle_cef_devtools_pages(
     json_response(StatusCode::OK, Value::Array(targets))
 }
 
-/// `GET /api/cefDevtools/page/<id>`: one DevTools session with that page.
+/// `GET /api/cefDevtools/page/<id>`: one DevTools session with that page. A session's own token
+/// reaches only its project's Browser tabs and the browser tools' commands (cef_devtools_scope.rs).
 pub(crate) async fn handle_cef_devtools_page(
     State(state): State<Arc<AppState>>,
     Path(page_id): Path<String>,
     ws: std::result::Result<WebSocketUpgrade, WebSocketUpgradeRejection>,
     headers: HeaderMap,
 ) -> Response<Body> {
-    if !crate::auth::is_authorized_session_client_headers(
-        &headers,
-        &state.auth_token,
-        &state.device_api_tokens,
-        &state.security.session_tokens,
-    ) {
+    let Some(caller) = relay_caller(&state, &headers) else {
         return devtools_failure(
             &headers,
             StatusCode::UNAUTHORIZED,
             "unauthorized",
             "gxserver authorization is required.",
         );
+    };
+    if let RelayCaller::Session { project_id, .. } = &caller {
+        let own = match project_page_ids(&state, project_id).await {
+            Ok(own) => own,
+            Err(message) => {
+                return devtools_failure(
+                    &headers,
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "unavailable",
+                    &message,
+                )
+            }
+        };
+        if !own.contains(&page_id) {
+            return devtools_failure(
+                &headers,
+                StatusCode::FORBIDDEN,
+                "forbidden",
+                "A session's browser tools reach only its own project's Browser tabs.",
+            );
+        }
     }
+    let limits = RelayLimits::for_caller(&state, &caller);
+    let audit = audit_caller(&state, &headers);
     let Ok(ws) = ws else {
         return devtools_failure(
             &headers,
@@ -331,7 +374,7 @@ pub(crate) async fn handle_cef_devtools_page(
         );
     };
     let hub = state.cef_devtools.clone();
-    let Some((session, mut events)) = hub.open_session() else {
+    let Some((session, replies, mut events)) = hub.open_session() else {
         return devtools_failure(
             &headers,
             StatusCode::SERVICE_UNAVAILABLE,
@@ -343,12 +386,26 @@ pub(crate) async fn handle_cef_devtools_page(
     ws.max_frame_size(DEVTOOLS_MESSAGE_BYTES)
         .max_message_size(DEVTOOLS_MESSAGE_BYTES)
         .on_upgrade(move |socket| async move {
-            hub.send_to_host(json!({ "type": "attach", "session": session, "pageId": page_id }));
+            // A scoped session attaches only to the page listed under that DevTools target id,
+            // never to a CEF browser id that happens to match.
+            hub.send_to_host(json!({
+                "type": "attach",
+                "session": session,
+                "pageId": page_id,
+                "scoped": limits.scoped,
+            }));
+            // Uploads sent on and waiting for the page's answer: the client's command id, the
+            // files and the page's address, for the security log.
+            let pending_uploads: Mutex<HashMap<String, (Vec<String>, Option<String>)>> =
+                Mutex::new(HashMap::new());
             let (mut socket_tx, mut socket_rx) = socket.split();
             let write = async {
                 while let Some(event) = events.recv().await {
                     let message = match event {
-                        SessionEvent::Message(text) => Message::Text(text.into()),
+                        SessionEvent::Message(text) => {
+                            settle_upload(&pending_uploads, &audit, &text);
+                            Message::Text(text.into())
+                        }
                         SessionEvent::Closed(reason) => {
                             Message::Close(Some(axum::extract::ws::CloseFrame {
                                 code: 1001,
@@ -367,10 +424,35 @@ pub(crate) async fn handle_cef_devtools_page(
                 while let Some(Ok(message)) = socket_rx.next().await {
                     match message {
                         Message::Text(text) => {
+                            let command = match check_command(text.as_str(), &limits) {
+                                Checked::Forward(command) => command,
+                                Checked::Upload { command, id, files } => {
+                                    let url = page_url(&hub, &page_id).await;
+                                    pending_uploads
+                                        .lock()
+                                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                                        .insert(id.to_string(), (files, url));
+                                    command
+                                }
+                                Checked::Refuse { id, message, files } => {
+                                    if let Some(files) = files {
+                                        let url = page_url(&hub, &page_id).await;
+                                        log_upload(
+                                            &audit,
+                                            url.as_deref(),
+                                            &files,
+                                            crate::audit::Outcome::Refused(message.clone()),
+                                        );
+                                    }
+                                    let _ = replies
+                                        .send(SessionEvent::Message(refusal_reply(&id, &message)));
+                                    continue;
+                                }
+                            };
                             hub.send_to_host(json!({
                                 "type": "send",
                                 "session": session,
-                                "message": text.as_str(),
+                                "message": command,
                             }));
                         }
                         Message::Close(_) => break,
@@ -385,4 +467,41 @@ pub(crate) async fn handle_cef_devtools_page(
             }
             hub.close_session(session);
         })
+}
+
+/// The address the page `page_id` shows now, from the app's page list.
+async fn page_url(hub: &CefDevtoolsHub, page_id: &str) -> Option<String> {
+    hub.list_pages().await?.into_iter().find_map(|page| {
+        (page.get("id").and_then(Value::as_str) == Some(page_id))
+            .then(|| page.get("url").and_then(Value::as_str).map(str::to_string))
+            .flatten()
+    })
+}
+
+/// Logs a pending upload once the page answered its command.
+fn settle_upload(
+    pending: &Mutex<HashMap<String, (Vec<String>, Option<String>)>>,
+    audit: &crate::audit::Caller,
+    text: &str,
+) {
+    let mut pending = pending
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if pending.is_empty() {
+        return;
+    }
+    let Ok(answer) = serde_json::from_str::<Value>(text) else {
+        return;
+    };
+    let Some(id) = answer.get("id") else {
+        return;
+    };
+    let Some((files, url)) = pending.remove(&id.to_string()) else {
+        return;
+    };
+    let outcome = match answer.pointer("/error/message").and_then(Value::as_str) {
+        Some(error) => crate::audit::Outcome::Failed(error.to_string()),
+        None => crate::audit::Outcome::Done,
+    };
+    log_upload(audit, url.as_deref(), &files, outcome);
 }

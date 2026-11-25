@@ -223,7 +223,7 @@ wrap_download_handler! {
 
         fn on_before_download(
             &self,
-            _browser: Option<&mut cef::Browser>,
+            browser: Option<&mut cef::Browser>,
             _download_item: Option<&mut DownloadItem>,
             suggested_name: Option<&CefString>,
             callback: Option<&mut BeforeDownloadCallback>,
@@ -242,6 +242,15 @@ wrap_download_handler! {
             let download_path = std::env::home_dir()
                 .map(|home| home.join("Downloads").join(&suggested_name))
                 .unwrap_or_else(|| PathBuf::from(&suggested_name));
+            // A page that is not on screen asks where to save once it is shown
+            // (hidden_page_dialogs.rs).
+            if let Some(browser) = browser {
+                match hold_hidden_page_download(browser, callback, &download_path) {
+                    HeldDownload::NotHidden => {}
+                    HeldDownload::Held => return 1,
+                    HeldDownload::Refused => return 0,
+                }
+            }
             callback.cont(
                 Some(&CefString::from(download_path.to_string_lossy().as_ref())),
                 1,
@@ -743,7 +752,13 @@ wrap_life_span_handler! {
             */
             // A sign-in popup (OAuth, Google sign-in) opens as its own native window with its
             // opener intact (sign_in_popup.rs); only a Browser pane hands out popups.
+            // A page that is not on screen gets no window of its own and nothing in front: its
+            // popups, sign-in ones too, open as background tabs (hidden_page_dialogs.rs).
+            let off_screen = browser
+                .as_deref()
+                .is_some_and(browser_is_off_screen);
             if self.popup_open_handler.is_some()
+                && !off_screen
                 && is_sign_in_popup(target_disposition, target_url)
                 && let (Some(window_info), Some(client)) = (window_info, client)
             {
@@ -763,7 +778,12 @@ wrap_life_span_handler! {
                     .or(self.code_window_popup_handler.as_ref()),
                 browser_popup_target_url_for_shell(target_url),
             ) {
-                (popup_open_handler)(requested_url, BrowserPopupPlacement::Selected);
+                let placement = if off_screen {
+                    BrowserPopupPlacement::Background
+                } else {
+                    BrowserPopupPlacement::Selected
+                };
+                (popup_open_handler)(requested_url, placement);
             }
             1
         }

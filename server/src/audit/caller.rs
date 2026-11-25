@@ -129,7 +129,13 @@ pub(super) fn current_actor() -> Actor {
     let Ok(caller) = CALLER.try_with(Clone::clone) else {
         return Actor::Ghostex;
     };
-    match caller {
+    actor_of_caller(&caller)
+}
+
+/// Who `caller` is in the log, for an entry written outside the request that classified it (a
+/// WebSocket's later frames).
+pub(crate) fn actor_of_caller(caller: &Caller) -> Actor {
+    match caller.clone() {
         Caller::SharedToken { claimed_session } => Actor::SharedToken { claimed_session },
         Caller::PairedDevice { token_hash } => paired_device_actor(&token_hash),
         Caller::ConnectedComputer { server_id, name } => {

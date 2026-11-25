@@ -41,7 +41,8 @@ pub(crate) fn is_agent_switch_request_action(action: &str) -> bool {
 /// the agent's own project that is not shown, focused or announced (`open_browser_url_in_background`
 /// in apps/desktop/src/app/workspace_events.rs). Every other open keeps the toast. To keep that
 /// power narrow the open is pinned to the caller's own project, whatever project, group or folder
-/// its payload named, and it goes into the security log (quietly: no bell, no phone).
+/// its payload named, and it goes into the security log (quietly: no bell, no phone) once the app
+/// answered (`record_background_open` in browser_agent_limits.rs).
 ///
 /// Returns true when `payload` is an agent session's background open, pinned in place.
 pub(crate) fn pin_agent_background_browser_open(
@@ -64,23 +65,6 @@ pub(crate) fn pin_agent_background_browser_open(
     payload.insert(
         "projectId".to_string(),
         Value::String(project_id.to_string()),
-    );
-    let url = payload
-        .get("url")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .chars()
-        .take(200)
-        .collect::<String>();
-    crate::audit::record(
-        crate::audit::Action::new(
-            "browser.backgroundOpen",
-            "Opened a Browser page in the background",
-        )
-        .target(url),
-        crate::audit::Actor::current(),
-        crate::audit::Outcome::Done,
-        None,
     );
     true
 }

@@ -133,6 +133,7 @@ mod bot_create;
 mod bot_sync;
 mod browser_tcp;
 mod cef_devtools;
+mod cef_devtools_scope;
 pub(crate) mod chat_frame_dedupe;
 mod close_after_done_runtime;
 pub mod commit_message_generation;

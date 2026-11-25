@@ -27,6 +27,7 @@ pub mod board_start_work;
 pub(crate) mod boosts;
 pub(crate) mod bot_feed;
 pub(crate) mod bot_projects;
+pub(crate) mod browser_agent_limits;
 pub(crate) mod carry_on_compaction;
 pub(crate) mod chat_item_quotes;
 pub(crate) mod chat_message_numbers;
