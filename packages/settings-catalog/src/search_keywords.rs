@@ -68,6 +68,13 @@ pub fn search_keywords(key: &str) -> &'static [&'static str] {
         "chatPageOpenTarget" | "chatAnswersWaitForIdle" => {
             &["ghostex page", "gx page", "inline html"]
         }
+        "chatInboxReplyArrow" => &[
+            "reply in chat box",
+            "needs you",
+            "to-do",
+            "todo",
+            "reply form",
+        ],
         // CDXC:Theming 2026-11-22: Animated was called Live until the user renamed it; a search
         // for the old name still finds its rows.
         "windowGlassSource"

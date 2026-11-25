@@ -520,6 +520,28 @@
       "agentWritable": true
     },
     {
+      "key": "chatInboxReplyArrow",
+      "title": "Inbox reply arrow",
+      "subtitle": "What the reply arrow on an Inbox row does: open the small reply form, or put what it asks in the chat box as a pill, as Reply in chat box does. The phone follows this too.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "enum",
+      "default": "form",
+      "options": [
+        {
+          "label": "Open the reply form",
+          "value": "form"
+        },
+        {
+          "label": "Reply in the chat",
+          "value": "chat"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
       "key": "coordinatorBoardView",
       "title": "Coordinator board opens as",
       "subtitle": "What the Work items button above a coordinator's chat box opens: its lines of work as a list beside the chat, or as columns over the chat, one per group. The switch at the top of either view changes this too.",

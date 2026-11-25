@@ -259,6 +259,24 @@ fn chat_section(
             cx,
         ));
     }
+    // CDXC:SessionChat 2026-11-26 SEE-ALSO: the user's decision on this row and the arrow is on
+    // `open_row_reply` in native_chat/row_reply.rs.
+    if g.visible(s, "chatInboxReplyArrow") {
+        let spec = g.spec(
+            "chatInboxReplyArrow",
+            "Inbox reply arrow",
+            "What the reply arrow on an Inbox row does: open the small reply form, or put what it asks in the chat box as a pill, as Reply in chat box does. The phone follows this too.",
+        );
+        rows.extend(page.segmented(
+            g,
+            s,
+            "chatInboxReplyArrow",
+            spec,
+            Some(reset_key::<GeneralTab>("chatInboxReplyArrow")),
+            g.options("CHAT_INBOX_REPLY_ARROW_OPTIONS"),
+            cx,
+        ));
+    }
     if g.visible(s, "coordinatorBoardView") {
         let spec = g.spec(
             "coordinatorBoardView",

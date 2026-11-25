@@ -4824,7 +4824,10 @@ version of the Projects features in Cursor and Claude Code.
   box as a pill with its title, inside your text, with your words after it, so
   you can use everything the chat box does and answer several questions in one
   message; point at a pill to see which question it answers. Sending it answers
-  those questions, the same as Reply. **Mark answered**, next to Dismiss in a
+  those questions and to-dos, the same as Reply, and they leave the list. To
+  have a row's reply arrow do this at once, with no small form, set Settings >
+  Chat > **Inbox reply arrow** (`chatInboxReplyArrow`) to **Reply in the chat** (Open the reply form is
+  the default; the phone follows the computer's choice). **Mark answered**, next to Dismiss in a
   question row's ⋯ menu, closes a question you already answered in the chat in
   your own words and tells the agent so; a coordinator is also told, under each
   message you send it, which questions are still open, so it can close the ones

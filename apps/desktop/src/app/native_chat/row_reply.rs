@@ -1,5 +1,5 @@
 //! The reply arrow on an Inbox row and a Work panel card: the small reply form at the press, or,
-//! with Settings' Inbox reply arrow set to the chat (`chatInboxReplyInChat`, the core's
+//! with Settings' Inbox reply arrow set to the chat (`chatInboxReplyArrow` set to `chat`, the core's
 //! `inboxReplyInChat`), what the row answers straight into the chat box as Reply in chat box puts
 //! it there (`reply_popover::answer_pill`).
 
@@ -13,10 +13,12 @@ impl NativeChatView {
     /// CDXC:SessionChat 2026-11-26 DECISION:
     /// A tester (issue #771): the reply arrow's small form is "two steps" before Reply in chat box
     /// or Option+Enter, "I personally always want to reply in chat". User: "add toggle in settings
-    /// for my friend". Off by default, so the arrow keeps opening the form for everyone else; on,
-    /// the arrow does what Reply in chat box does with no words typed: the row's pill at the end
-    /// of the chat box, and the chat box focused. A row with no tag to name (a page that only
-    /// waits to be seen) still opens the form. The phone follows the same switch
+    /// for my friend", then (Q5016) a two-choice row in Settings > Chat's main list under Open Live
+    /// pages in: "Inbox reply arrow: Open the reply form / Reply in the chat". Open the reply form
+    /// by default, so nothing changes for anyone else; Reply in the chat makes the arrow do what
+    /// Reply in chat box does with no words typed: the row's pill at the end of the chat box, and
+    /// the chat box focused. A row with no tag to name (a page that only waits to be seen) still
+    /// opens the form. The phone follows the computer's choice
     /// (apps/mobile/app/src/chat/native/cards/workItemParts.tsx `openWorkReply`).
     pub(super) fn open_row_reply(
         &mut self,

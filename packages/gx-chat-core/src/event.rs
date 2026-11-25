@@ -343,7 +343,7 @@ pub struct ChatSettings {
     /// working strip says Thinking.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub varied_working_words: Option<bool>,
-    /// The Inbox reply arrow setting (`chatInboxReplyInChat`), the same way: on, an Inbox row's
+    /// The Inbox reply arrow setting (`chatInboxReplyArrow` set to `chat`), the same way: on, an Inbox row's
     /// reply arrow puts the row in the chat box instead of opening the small reply form.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inbox_reply_in_chat: Option<bool>,

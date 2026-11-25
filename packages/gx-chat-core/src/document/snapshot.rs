@@ -357,7 +357,7 @@ pub struct Document {
     #[serde(default)]
     pub approval_in_dock: Value,
     /// An Inbox row's reply arrow puts the row in the chat box as a pill and focuses it, as the
-    /// reply form's Reply in chat box does, instead of opening that form (`chatInboxReplyInChat`).
+    /// reply form's Reply in chat box does, instead of opening that form (`chatInboxReplyArrow` set to `chat`).
     /// Family f.
     #[serde(default)]
     pub inbox_reply_in_chat: bool,

@@ -736,6 +736,12 @@ pub const MARKED_HANDOVERS_STYLE_OPTIONS: &[Opt] = &[
     opt("Coloured badge", "badge"),
 ];
 
+/// What an Inbox row's reply arrow does (`chatInboxReplyArrow`), in the Settings control's order.
+pub const CHAT_INBOX_REPLY_ARROW_OPTIONS: &[Opt] = &[
+    opt("Open the reply form", "form"),
+    opt("Reply in the chat", "chat"),
+];
+
 /// Where a page an agent published in chat (`ghostex show`) opens when its card is clicked, in the Settings control's order.
 pub const CHAT_PAGE_OPEN_TARGET_OPTIONS: &[Opt] = &[
     opt("Popup", "popup"),

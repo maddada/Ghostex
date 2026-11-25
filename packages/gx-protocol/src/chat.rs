@@ -717,7 +717,7 @@ pub struct ReadSessionChatResult {
     /// `catch_up`; off, the working strip says Thinking.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub varied_working_words: Option<bool>,
-    /// Whether an Inbox row's reply arrow goes straight to the chat box (`chatInboxReplyInChat`),
+    /// Whether an Inbox row's reply arrow goes straight to the chat box (`chatInboxReplyArrow` set to `chat`),
     /// the same way as `catch_up`; off, it opens the small reply form.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inbox_reply_in_chat: Option<bool>,

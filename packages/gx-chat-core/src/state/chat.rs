@@ -73,7 +73,7 @@ pub struct CoreState {
     /// The Varied thinking words setting (`chatVariedWorkingWords`), from the chat settings or the
     /// latest read; off by default, which makes the working strip say Thinking.
     pub varied_working_words: bool,
-    /// The Inbox reply arrow setting (`chatInboxReplyInChat`), from the chat settings or the latest
+    /// The Inbox reply arrow setting (`chatInboxReplyArrow` set to `chat`), from the chat settings or the latest
     /// read; off by default, which keeps the small reply form.
     pub inbox_reply_in_chat: bool,
     /// The Handover heading color strength setting (`markedHandoversHeadingStrength`), from the

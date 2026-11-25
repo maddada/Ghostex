@@ -690,10 +690,12 @@ pub(crate) async fn handle_read_session_chat_http(
     // computer's does.
     result.insert(
         "inboxReplyInChat".to_string(),
-        json!(crate::session_chat_catch_up::chat_setting_enabled(
-            &state.paths,
-            "chatInboxReplyInChat"
-        )),
+        json!(
+            crate::session_chat_catch_up::read_settings(&state.paths)
+                .get("chatInboxReplyArrow")
+                .and_then(Value::as_str)
+                == Some("chat")
+        ),
     );
     // The phone reads the computer's answer delivery choice from this optional field; older
     // clients ignore it, and an older daemon leaves the core's default (normal send) in place.
