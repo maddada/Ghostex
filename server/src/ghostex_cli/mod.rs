@@ -94,6 +94,7 @@ mod team_slack;
 mod theme_cli;
 pub mod usage;
 mod visual;
+mod visual_choice_mix;
 mod visual_export;
 mod visual_guide;
 mod visual_page_check;

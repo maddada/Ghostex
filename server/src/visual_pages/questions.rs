@@ -129,6 +129,14 @@ pub(crate) fn page_answered(gxserver_state_dir: &Path, id: &str) -> bool {
 }
 
 fn parse_questions(html: &str) -> Vec<PageQuestion> {
+    let mut questions = written_questions(html);
+    add_row_choices(&mut questions, &page_rows(html));
+    questions
+}
+
+/// The page's questions with only the `<gx-choice>` lines the author wrote, no rows added: what
+/// `ghostex visual check` judges a question's own list by (ghostex_cli/visual_choice_mix.rs).
+pub(crate) fn written_questions(html: &str) -> Vec<PageQuestion> {
     let mut questions = Vec::new();
     let mut used: Vec<String> = Vec::new();
     let mut rest = html;
@@ -172,7 +180,6 @@ fn parse_questions(html: &str) -> Vec<PageQuestion> {
             },
         });
     }
-    add_row_choices(&mut questions, &page_rows(html));
     questions
 }
 

@@ -286,6 +286,15 @@ Rules for every question, whichever way you ask it:
   `code`, or `--command` is set.
 - **Show the exact words for anything posted in the user's name:** for any reply, comment or message
   to post or send for them, put its full verbatim text inside the question's description.
+- **Choices: one question per dimension.** When the options differ in more than one way (a look, a
+  layout, extras), ask one question for each kind of choice, never one long list that mixes them, so
+  "A's look with D's layout and G's extra" is three picks instead of Other and a note. Make a
+  question pick any (`multiple` in a form or page) unless its choices truly exclude each other, and
+  when it is pick one, say why in its description ("one surface only"). Say there that a mix is
+  welcome in the note. In a pick-any question, mark every choice you recommend. `visual check` warns
+  about a pick-one list that looks like several kinds of choice. When the answers arrive, open your
+  reply with the combined pick in one line ("Building A + D + G, A darker in dark mode"), so a
+  misread shows at once.
 - **If the user says "I don't get it"** (or similar confusion), close that question
   (`item ask W<n> --withdraw Q<n>`, or `"withdraw"` in a form) and ask again more simply. Never
   re-send the same wording.

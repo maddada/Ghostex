@@ -51,7 +51,7 @@ pub(crate) use publish::{
     handle_publish_visual_page_http, PUBLISH_VISUAL_PAGE_BODY_LIMIT_BYTES,
     PUBLISH_VISUAL_PAGE_ENDPOINT,
 };
-pub(crate) use questions::{page_answered, page_questions};
+pub(crate) use questions::{page_answered, page_questions, written_questions};
 pub(crate) use retire::{
     handle_retire_visual_pages_http, page_id_of, read_retired_page_ids, take_back_retired_pages,
     RETIRE_VISUAL_PAGES_ENDPOINT,
