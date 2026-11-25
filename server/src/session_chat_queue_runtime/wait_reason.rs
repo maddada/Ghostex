@@ -106,6 +106,31 @@ impl WaitReason {
         }
     }
 
+    /// CDXC:SessionChat 2026-11-25 DECISION:
+    /// User (Q4865): the line under a queued message read as more of the user's own text, so the
+    /// row shows a short status chip on its right ("chip"), with "the full text on hovering on
+    /// that status pill" (a tooltip on desktop, a press on the phone). These are the chip's words;
+    /// they sit beside the sentences so the desktop and the phone never word a status apart.
+    pub(super) fn label(&self) -> &'static str {
+        match self {
+            Self::Asleep => "Asleep",
+            Self::Closed => "Closed",
+            Self::ModelChange => "Changing model",
+            Self::ModelChangeFailed => crate::session_chat_queue::MODEL_CHANGE_FAILED_WAIT_LABEL,
+            Self::AccountRecovery => "Account not ready",
+            Self::MissingLogin => "Not signed in",
+            Self::StartFailed => "Didn't start",
+            Self::Starting => "Starting",
+            Self::Compacting => "Compacting",
+            Self::Working => "Agent working",
+            Self::Answer => "Needs your answer",
+            Self::Settling => "Finishing reply",
+            Self::InputBox(InputBoxStep::Reading) => "Reading screen",
+            Self::InputBox(InputBoxStep::Repainting) => "Redrawing screen",
+            Self::InputBox(InputBoxStep::SendingAnyway) | Self::Retrying => "Trying to send",
+        }
+    }
+
     /// A stable name for logs; a change of kind restarts the watchdog's clock.
     pub(super) fn kind(&self) -> &'static str {
         match self {
@@ -235,6 +260,9 @@ fn minutes(count: i64) -> String {
         format!("{count} minutes")
     }
 }
+
+/// The status chip's words on a row stuck on the input box ([`stuck_input_box_text`]).
+pub(super) const STUCK_INPUT_BOX_LABEL: &str = "Input box hidden";
 
 /// What a row stuck on the input box says, instead of "trying to send anyway" for good.
 pub(super) fn stuck_input_box_text(waited_minutes: i64, screen_tail: &[String]) -> String {

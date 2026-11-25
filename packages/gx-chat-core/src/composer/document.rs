@@ -16,7 +16,7 @@ use crate::composer::policy::{
     STOP_BUTTON_COOLDOWN_MS, TOUCH_COMPOSER_PLACEHOLDER,
 };
 use crate::composer::queue::{
-    is_queue_row_busy, queue_capabilities, queue_row_preview, QUEUE_LONG_PRESS_MS,
+    is_queue_row_busy, queue_capabilities, queue_row_more, queue_row_preview, QUEUE_LONG_PRESS_MS,
 };
 use crate::composer::suggestions::{composer_native_command, suggestion_popup};
 use crate::composer::view::{current_matches, suggestion_sources};
@@ -172,8 +172,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         &composer.text,
     );
     into.compact_hint = crate::composer::compact_hint::compact_hint(state, context);
-    into.compact_before_send =
-        crate::composer::compact_prompt::compact_before_send(state, context);
+    into.compact_before_send = crate::composer::compact_prompt::compact_before_send(state, context);
     into.interaction = Interaction {
         queue_long_press_ms: QUEUE_LONG_PRESS_MS,
         stop_button_cooldown_ms: STOP_BUTTON_COOLDOWN_MS,
@@ -321,11 +320,30 @@ fn queued_prompt(prompt: &Value) -> QueuedPrompt {
             }
         }
     } else {
+        if let Some(more) = queue_row_more(&row.text) {
+            row.more_lines = more.label;
+            row.full_text = more.full_text;
+        }
         queue_row_preview(&row.text)
     };
     row.busy = is_queue_row_busy(&row.state);
+    // A gxserver from before the status chip sends the sentence alone; its chip says this.
+    if row
+        .wait_label
+        .value()
+        .is_none_or(|label| label.trim().is_empty())
+        && row
+            .wait_reason
+            .value()
+            .is_some_and(|reason| !reason.trim().is_empty())
+    {
+        row.wait_label = Tri::Value(QUEUE_WAIT_FALLBACK_LABEL.to_string());
+    }
     row
 }
+
+/// The status chip's words on a row whose gxserver gave a reason but no label.
+const QUEUE_WAIT_FALLBACK_LABEL: &str = "Waiting";
 
 /// `sendBlockedReason(state)`: why the send button is off, or `None`.
 ///

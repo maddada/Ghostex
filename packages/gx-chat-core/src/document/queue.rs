@@ -54,15 +54,27 @@ pub struct QueuedPrompt {
     #[serde(default, skip_serializing_if = "Tri::is_absent")]
     pub error_message: Tri<String>,
     /// Why gxserver still holds a waiting row, in the user's words, once it has waited about a
-    /// minute (server/src/session_chat_queue_runtime/wait_reason.rs); both renderers show it under
-    /// the row.
+    /// minute (server/src/session_chat_queue_runtime/wait_reason.rs); both renderers show it in
+    /// the tooltip of the row's status chip.
     #[serde(default, skip_serializing_if = "Tri::is_absent")]
     pub wait_reason: Tri<String>,
+    /// The status chip's few words for `wait_reason`, worded by gxserver beside the sentence so
+    /// the desktop and the phone never differ. Absent from a gxserver older than the chip, whose
+    /// rows the renderers label "Waiting".
+    #[serde(default, skip_serializing_if = "Tri::is_absent")]
+    pub wait_label: Tri<String>,
     pub created_at: String,
     pub updated_at: String,
     /// The single line the row shows, projected so both renderers clip identically.
     #[serde(default)]
     pub preview: String,
+    /// "+4 lines" beside the preview of a message with more lines than it shows; empty for one
+    /// line (`composer::queue::queue_row_more`).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub more_lines: String,
+    /// The whole message the row's tooltip shows (a press on the phone), set with `more_lines`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub full_text: String,
     /// The row is mid-flight, so its controls are held.
     #[serde(default)]
     pub busy: bool,

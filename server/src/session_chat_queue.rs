@@ -45,6 +45,8 @@ pub const SESSION_CHAT_QUEUE_STATE_FAILED: &str = "failed";
 
 pub(crate) const MODEL_CHANGE_FAILED_WAIT_REASON: &str =
     "Waiting: the model change before this message failed. Pick a model again to send it.";
+/// The status chip's words for [`MODEL_CHANGE_FAILED_WAIT_REASON`].
+pub(crate) const MODEL_CHANGE_FAILED_WAIT_LABEL: &str = "Model change failed";
 
 /// Reason stamped on a row that was mid-delivery when the daemon went down.
 /// Never silently re-sent: the agent may already have received it.
@@ -70,27 +72,39 @@ pub struct SessionChatQueuedPrompt {
     /// reason for a head row that has waited about a minute.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wait_reason: Option<String>,
+    /// The few words of `wait_reason` the row's status chip shows; the chip's tooltip holds the
+    /// sentence (CDXC:SessionChat 2026-11-25 in session_chat_queue_runtime/wait_reason.rs).
+    /// Optional on the wire: a client from before it shows the sentence alone.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wait_label: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<u64>,
 }
 
+/// What a waiting row shows: the full sentence and the status chip's short label.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct QueueWait {
+    pub text: String,
+    pub label: String,
+}
+
 /// The waiting reasons the scheduler shows, by prompt id. In memory only: a reason is a reading
 /// of the live session, and the scheduler states it again within a minute of a restart.
 static QUEUE_WAIT_REASONS: std::sync::LazyLock<
-    std::sync::Mutex<std::collections::HashMap<String, String>>,
+    std::sync::Mutex<std::collections::HashMap<String, QueueWait>>,
 > = std::sync::LazyLock::new(Default::default);
 
 /// Sets or clears the waiting reason shown on `prompt_id`; answers whether it changed, so the
 /// caller republishes the queue only then.
-pub(crate) fn set_queue_wait_reason(prompt_id: &str, reason: Option<&str>) -> bool {
+pub(crate) fn set_queue_wait_reason(prompt_id: &str, reason: Option<QueueWait>) -> bool {
     let Ok(mut reasons) = QUEUE_WAIT_REASONS.lock() else {
         return false;
     };
     match reason {
-        Some(reason) if reasons.get(prompt_id).map(String::as_str) != Some(reason) => {
-            reasons.insert(prompt_id.to_string(), reason.to_string());
+        Some(reason) if reasons.get(prompt_id) != Some(&reason) => {
+            reasons.insert(prompt_id.to_string(), reason);
             true
         }
         None => reasons.remove(prompt_id).is_some(),
@@ -105,7 +119,7 @@ pub(crate) fn retain_queue_wait_reasons(keep: impl Fn(&str) -> bool) {
     }
 }
 
-fn queue_wait_reason(prompt_id: &str) -> Option<String> {
+fn queue_wait_reason(prompt_id: &str) -> Option<QueueWait> {
     QUEUE_WAIT_REASONS
         .lock()
         .ok()
@@ -502,6 +516,7 @@ pub fn handle_session_chat_queue_endpoint(
                     state: SESSION_CHAT_QUEUE_STATE_QUEUED.to_string(),
                     error_message: None,
                     wait_reason: None,
+                    wait_label: None,
                     created_at: now_iso(),
                     updated_at: now_iso(),
                     version: None,
@@ -1266,14 +1281,18 @@ fn read_snapshot(
                 let version: i64 = row.get(8)?;
                 // A failed pick holds every queued row. In particular, a form answer behind
                 // another message cannot inherit the head row's scheduler annotation.
-                let wait_reason = if model_change_failed && state == SESSION_CHAT_QUEUE_STATE_QUEUED
-                {
-                    Some(MODEL_CHANGE_FAILED_WAIT_REASON.to_string())
+                let wait = if model_change_failed && state == SESSION_CHAT_QUEUE_STATE_QUEUED {
+                    Some(QueueWait {
+                        text: MODEL_CHANGE_FAILED_WAIT_REASON.to_string(),
+                        label: MODEL_CHANGE_FAILED_WAIT_LABEL.to_string(),
+                    })
                 } else {
                     queue_wait_reason(&id)
                 };
+                let (wait_reason, wait_label) = wait.map(|wait| (wait.text, wait.label)).unzip();
                 Ok(SessionChatQueuedPrompt {
                     wait_reason,
+                    wait_label,
                     id,
                     text: row.get(1)?,
                     state,
@@ -1422,6 +1441,7 @@ fn append_prompt(
             state: SESSION_CHAT_QUEUE_STATE_QUEUED.to_string(),
             error_message: None,
             wait_reason: None,
+            wait_label: None,
             created_at: now_iso(),
             updated_at: now_iso(),
             version: Some(next_version),
@@ -2201,8 +2221,12 @@ fn read_prompt(
         |row| {
             let id: String = row.get(0)?;
             let version: i64 = row.get(8)?;
+            let (wait_reason, wait_label) = queue_wait_reason(&id)
+                .map(|wait| (wait.text, wait.label))
+                .unzip();
             Ok(SessionChatQueuedPrompt {
-                wait_reason: queue_wait_reason(&id),
+                wait_reason,
+                wait_label,
                 id,
                 text: row.get(1)?,
                 state: row.get(2)?,

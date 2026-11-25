@@ -51,6 +51,8 @@ export interface SessionChatQueuedPrompt {
   errorMessage?: string;
   /** Why gxserver still holds a waiting row. A failed model change is available immediately. */
   waitReason?: string;
+  /** The status chip's few words for `waitReason` (server wait_reason.rs). */
+  waitLabel?: string;
   /** ISO-8601 millis. */
   createdAt: string;
   /** ISO-8601 millis. */

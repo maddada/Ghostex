@@ -1,6 +1,7 @@
 use super::wait_reason::{
     stuck_input_box_text, stuck_notification_body, HeadWait, InputBoxStep, WaitReason,
-    INPUT_BOX_LAST_RESORT_AFTER_MS, INPUT_BOX_RELOAD_AFTER_MS, WATCHDOG_AFTER_MS,
+    INPUT_BOX_LAST_RESORT_AFTER_MS, INPUT_BOX_RELOAD_AFTER_MS, STUCK_INPUT_BOX_LABEL,
+    WATCHDOG_AFTER_MS,
 };
 use super::*;
 
@@ -1618,12 +1619,22 @@ impl SessionChatQueueRuntime {
         });
         drop(gates);
         let Some((minutes, report)) = stuck else {
-            noted.changed |= crate::session_chat_queue::set_queue_wait_reason(prompt_id, words);
+            let wait = words.map(|text| crate::session_chat_queue::QueueWait {
+                text: text.to_string(),
+                label: reason.label().to_string(),
+            });
+            noted.changed |= crate::session_chat_queue::set_queue_wait_reason(prompt_id, wait);
             return noted;
         };
         let screen = screen();
         let text = stuck_input_box_text(minutes, &screen);
-        noted.changed |= crate::session_chat_queue::set_queue_wait_reason(prompt_id, Some(&text));
+        noted.changed |= crate::session_chat_queue::set_queue_wait_reason(
+            prompt_id,
+            Some(crate::session_chat_queue::QueueWait {
+                text: text.clone(),
+                label: STUCK_INPUT_BOX_LABEL.to_string(),
+            }),
+        );
         if report {
             noted.stuck = Some(StuckReport {
                 body: stuck_notification_body(minutes, &screen),
@@ -1960,6 +1971,7 @@ mod tests {
             state: "queued".to_string(),
             error_message: None,
             wait_reason: None,
+            wait_label: None,
             created_at: created.clone(),
             updated_at: created,
             version: None,
