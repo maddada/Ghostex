@@ -32,6 +32,15 @@ const MAX_PUBLISHED: Duration = Duration::from_secs(120);
 /// The raised flags, each with the raise that owns it.
 static RAISED: LazyLock<Mutex<HashMap<(String, String), u64>>> = LazyLock::new(Mutex::default);
 static NEXT_RAISE: AtomicU64 = AtomicU64::new(1);
+/// Bumped on every raise and lower; see [`changes`].
+static CHANGES: AtomicU64 = AtomicU64::new(0);
+
+/// How many times a flag was raised or lowered. The phone's pushed sessions list
+/// (server/src/server/sessions_list_stream.rs) rebuilds when it moves: the flag lives in memory,
+/// so the database stamp that list watches never changes for it.
+pub(crate) fn changes() -> u64 {
+    CHANGES.load(Ordering::Relaxed)
+}
 
 pub(crate) fn is_raised(project_id: &str, session_id: &str) -> bool {
     RAISED
@@ -56,6 +65,7 @@ impl HostModeSwitchFlag {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .insert(key.clone(), raise);
+        CHANGES.fetch_add(1, Ordering::Relaxed);
         // Made before the first await, so a cancelled caller still lowers it.
         let flag = Self {
             state: state.clone(),
@@ -99,6 +109,7 @@ fn lower(key: &(String, String), raise: u64) -> bool {
         return false;
     }
     raised.remove(key);
+    CHANGES.fetch_add(1, Ordering::Relaxed);
     true
 }
 

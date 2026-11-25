@@ -141,7 +141,12 @@ async fn run(
             },
         };
         let now = now_ms();
-        let stamp = database_stamp();
+        // A Native <-> Terminal-based switch's flag (`switchingHostMode`) lives in memory, not in the database.
+        let stamp = format!(
+            "{} {}",
+            database_stamp(),
+            crate::acp::host_mode_switching::changes()
+        );
         let due =
             sent.is_none() || stamp != built_stamp || now.saturating_sub(built_at) >= REBUILD_MS;
         let may_push = request_id.is_some() || now.saturating_sub(pushed_at) >= MIN_PUSH_GAP_MS;

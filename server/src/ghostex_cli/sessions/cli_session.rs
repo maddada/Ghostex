@@ -220,6 +220,8 @@ pub(super) fn to_cli_session(
     // CDXC:Chief 2026-11-08 WHY: the phone draws Chief's row from this flag and leaves the session out of its project (apps/mobile/app ChiefRow).
     insert_js(&mut map, "isChief", &[p("isChief")]);
     insert_js(&mut map, "chiefEarlier", &[p("chiefEarlier")]);
+    // CDXC:SessionChat 2026-11-25 SEE-ALSO: server/src/acp/host_mode_switching.rs raises it while the session switches between Native and Terminal-based; mobile_summary.rs forwards it to the phone, whose chat keeps its view and shows "Switching to Terminal-based" (apps/mobile/app NativeChatScreen.tsx). Absent when not switching.
+    insert_js(&mut map, "switchingHostMode", &[p("switchingHostMode")]);
     // A GBot chat's bot and who opened it; the phone folds it under its bot (apps/mobile/app GbotsRows).
     insert_js(&mut map, "gbotsChat", &[p("gbotsChat")]);
     insert_js(
