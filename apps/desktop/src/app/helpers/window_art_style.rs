@@ -226,13 +226,23 @@ const ASCII_BACKDROP_ALPHA_COLOUR: f32 = 0.22;
 const ASCII_GLOW_BLUR: f32 = 2.0;
 const ASCII_GLOW_ALPHA: f32 = 0.5;
 
-/// Light mode draws dark ink on a pale window, which reads stronger: every layer is weaker.
-const LIGHT_STRENGTH: f32 = 0.7;
+/// How strongly ASCII characters and Dither dots are laid down in light mode (dark mode draws them
+/// at full strength), and how far the theme's text colour is pushed toward black for their Black and
+/// white ink there.
+///
+/// CDXC:Theming 2026-11-25 DECISION:
+/// User, after ASCII and Dither in light mode read as almost blank (pale ink under the dimming wash
+/// and the work area tint): chose "darker ink in light mode". Light mode draws the characters and
+/// dots at full strength in a darker ink (`COLOUR_LUMA_LIGHT` for colour, `LIGHT_MONO_INK_DARKEN`
+/// for Black and white); dark mode, the wash and the tints are unchanged, and Black and white still
+/// changes only the artwork.
+const LIGHT_STRENGTH: f32 = 1.0;
+const LIGHT_MONO_INK_DARKEN: f32 = 0.6;
 
 /// How bright a coloured character or dot is drawn (its luma, 0 to 255) when Black and white is
 /// off: each keeps its cell's hue and saturation at one brightness, so dark artwork shows colour.
 const COLOUR_LUMA_DARK: f32 = 200.0;
-const COLOUR_LUMA_LIGHT: f32 = 90.0;
+const COLOUR_LUMA_LIGHT: f32 = 35.0;
 
 /// How much of the artwork row `y` draws: all of it along the bottom (the lowest 8% of the
 /// height), fading out to nothing by 70% up, so the window's top (its header and title) sits on
@@ -357,7 +367,14 @@ pub(crate) fn stylise_artwork(rgba: &mut image::RgbaImage, tone: ArtTone, light:
         (tone.ink >> 8) as u8,
         tone.ink as u8,
     ]
-    .map(f32::from);
+    .map(f32::from)
+    .map(|channel| {
+        if light {
+            channel * (1.0 - LIGHT_MONO_INK_DARKEN)
+        } else {
+            channel
+        }
+    });
     let target = if light {
         COLOUR_LUMA_LIGHT
     } else {
