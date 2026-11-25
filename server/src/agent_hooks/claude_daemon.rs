@@ -2,7 +2,7 @@
 //! attached to their conversation.
 
 use std::{
-    env, fs,
+    fs,
     path::{Path, PathBuf},
 };
 

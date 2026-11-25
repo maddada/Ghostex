@@ -17,7 +17,7 @@ drive list; entries carry the host's full drive paths so the client never invent
 pub(crate) const ADD_PROJECT_ROOT_BROWSE_PATH: &str = "/";
 
 const PROVIDER_UNAVAILABLE_HINT: &str =
-    "Provider status unavailable. Open Settings -> Source Control and rescan.";
+    "Provider status unavailable. Open Settings > Integrations > Tools and check again.";
 
 pub(crate) fn source_label(source: AddProjectSourceId) -> &'static str {
     match source {
@@ -110,7 +110,7 @@ pub(crate) fn build_source_readiness(
             AddProjectSourceReadiness {
                 hint: Some(trimmed_non_empty(detail.as_ref()).unwrap_or_else(|| {
                     format!(
-                        "{} is not authenticated. Open Settings -> Source Control for setup guidance.",
+                        "{} is not signed in. Sign in with its command line tool in a terminal, then try again.",
                         source_label(source)
                     )
                 })),

@@ -19,7 +19,7 @@ pub(crate) use provider_model_picker::run_provider_model_picker_job;
 #[path = "session_chat_claude_effort_slider.rs"]
 mod claude_effort_slider;
 pub(crate) use claude_effort_slider::{
-    claude_effort_rail, is_claude_effort_slider_footer, ultracode_switch as claude_ultracode_switch,
+    claude_effort_rail, ultracode_switch as claude_ultracode_switch,
 };
 #[path = "session_chat_claude_model_list.rs"]
 mod claude_model_list;

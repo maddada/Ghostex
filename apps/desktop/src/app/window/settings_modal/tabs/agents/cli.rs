@@ -13,7 +13,7 @@ use super::super::super::fields::{
     tooltip_text,
 };
 use super::super::super::palette::SettingsPalette;
-use super::super::super::store::{post_store_message, store_machine_gxserver_rpc};
+use super::super::super::store::store_machine_gxserver_rpc;
 use super::AgentsTab;
 use super::icons;
 use super::logos::muted_fill;
@@ -1311,28 +1311,13 @@ impl AgentsTab {
                     body = body.child(small(reason.clone(), muted));
                     // The reason names a command to type (`bun upgrade`): a Main Hub terminal on
                     // the machine the page shows, with it typed in.
-                    if let Some(command_id) = method.run_in_terminal.clone() {
-                        let machine_id = self.shown_machine.clone();
-                        body = body.child(h_flex().child(settings_button_sized(
+                    if let Some(command_id) = method.run_in_terminal.clone().filter(|_| connected) {
+                        body = body.child(h_flex().child(run_in_terminal_button(
                             p,
                             SharedString::from(format!("agent-cli-run-in-terminal-{agent_id}")),
-                            "Run in terminal",
-                            None,
-                            ButtonVariant::Default,
-                            ButtonSize::Sm,
-                            !connected,
-                            None,
-                            move |page: &mut Self, _window, cx| {
-                                post_store_message(
-                                    &page.store,
-                                    json!({
-                                        "type": "openShownCommandTerminal",
-                                        "commandId": command_id,
-                                        "machineId": machine_id,
-                                    }),
-                                    cx,
-                                );
-                            },
+                            &self.store,
+                            command_id,
+                            self.shown_machine.clone(),
                             cx,
                         )));
                     }

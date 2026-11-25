@@ -7,7 +7,7 @@ use super::super::palette::SettingsPalette;
 use super::super::store::{SettingsStore, post_store_message};
 use super::controls::{ButtonSize, ButtonVariant, settings_button_sized};
 use gpui::{AnyElement, Context, ElementId, Entity};
-use serde_json::json;
+use serde_json::{Value, json};
 
 /// The id of an install this computer's desktop runs itself (`trycua`, `spaceo`, `hex`), which
 /// this computer's gxserver resolves to the same official command; `None` on Windows, where the
@@ -26,12 +26,29 @@ pub(crate) fn run_in_terminal_button<V: 'static>(
     machine_id: Option<String>,
     cx: &mut Context<V>,
 ) -> AnyElement {
+    run_in_terminal_button_with_args(p, id, store, command_id, machine_id, None, cx)
+}
+
+/// [`run_in_terminal_button`] for an id that takes arguments (`teamDeploy`'s `workspaceId`), which
+/// gxserver checks again before it types anything.
+pub(crate) fn run_in_terminal_button_with_args<V: 'static>(
+    p: &SettingsPalette,
+    id: impl Into<ElementId>,
+    store: &Entity<SettingsStore>,
+    command_id: String,
+    machine_id: Option<String>,
+    args: Option<Value>,
+    cx: &mut Context<V>,
+) -> AnyElement {
     let store = store.clone();
-    let message = json!({
+    let mut message = json!({
         "type": "openShownCommandTerminal",
         "commandId": command_id,
         "machineId": machine_id,
     });
+    if let Some(args) = args {
+        message["args"] = args;
+    }
     settings_button_sized(
         p,
         id,

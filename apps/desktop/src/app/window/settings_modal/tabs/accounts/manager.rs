@@ -486,7 +486,6 @@ impl AccountsTab {
             .into_any_element()
     }
 
-    /// `CopyCommand` with its 1.8s check.
     /// Run in terminal under a helper's install command, when the shown computer's gxserver offers
     /// it (`helpers[].installRunInTerminal`; an older one sends none): a Main Hub terminal there with
     /// the command typed in (server/src/shown_commands/).
@@ -502,30 +501,17 @@ impl AccountsTab {
             .filter(|id| !id.is_empty())?
             .to_string();
         let machine_id = self.client.read(cx).machine().map(str::to_string);
-        Some(super::super::super::fields::settings_button_sized(
+        Some(super::super::super::fields::run_in_terminal_button(
             p,
             SharedString::from(key),
-            "Run in terminal",
-            None,
-            super::super::super::fields::ButtonVariant::Default,
-            super::super::super::fields::ButtonSize::Sm,
-            false,
-            None,
-            move |page: &mut Self, _window, cx| {
-                super::super::super::store::post_store_message(
-                    &page.store,
-                    serde_json::json!({
-                        "type": "openShownCommandTerminal",
-                        "commandId": command_id,
-                        "machineId": machine_id,
-                    }),
-                    cx,
-                );
-            },
+            &self.store,
+            command_id,
+            machine_id,
             cx,
         ))
     }
 
+    /// `CopyCommand` with its 1.8s check.
     pub(crate) fn copy_command_block(
         &mut self,
         p: &SettingsPalette,

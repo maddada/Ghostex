@@ -14,7 +14,8 @@
 //! SEE-ALSO: server/src/team_sync/operations.rs, server/src/ghostex_cli/team_slack.rs,
 //! packages/team-sync/convex/teams.ts (`info.secrets`).
 use super::super::super::fields::{
-    ButtonVariant, RowSpec, setting_row, settings_button, switch_control,
+    ButtonVariant, RowSpec, run_in_terminal_button_with_args, setting_row, settings_button,
+    switch_control,
 };
 use super::super::super::store::{store_copy_to_clipboard, store_gxserver_rpc};
 use super::*;
@@ -332,26 +333,13 @@ impl WorkspacesTab {
         workspace_id: &str,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let workspace_id = workspace_id.to_string();
-        settings_button(
+        run_in_terminal_button_with_args(
             p,
             SharedString::from(id),
-            "Run in terminal",
+            &self.store,
+            command_id.to_string(),
             None,
-            ButtonVariant::Default,
-            false,
-            None,
-            move |page: &mut Self, _window, cx| {
-                post_store_message(
-                    &page.store,
-                    json!({
-                        "type": "openShownCommandTerminal",
-                        "commandId": command_id,
-                        "args": { "workspaceId": workspace_id },
-                    }),
-                    cx,
-                )
-            },
+            Some(json!({ "workspaceId": workspace_id })),
             cx,
         )
     }

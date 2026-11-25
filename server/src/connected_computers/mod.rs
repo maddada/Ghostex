@@ -15,16 +15,18 @@ pub(crate) use held_sends::{
 pub(crate) use http::{
     handle_connected_computers_http, this_computer_name, CONNECTED_COMPUTER_ENDPOINTS,
 };
-pub(crate) use peer_listener::{peer_listener_port, set_peer_listener_port};
+pub(crate) use peer_listener::set_peer_listener_port;
 pub(crate) use registry::{
     authorize_peer_token, find, has_grant, is_server_id, issue_grant, list, owner_issued, register,
     revoke_grant, unregister, ConnectedComputer, Direction, PeerAuthorization, Registration,
     DEFAULT_REGISTRATION_TTL,
 };
+#[cfg(test)]
+use relay::parse_relay_path;
 pub(crate) use relay::{
-    access_off_message, parse_relay_path, peer_refusal, relay, relay_base_url, RELAY_ROUTE_PREFIX,
+    access_off_message, peer_refusal, relay, relay_base_url, RELAY_ROUTE_PREFIX,
 };
-pub(crate) use scope::{is_peer_allowed, PEER_ALLOWED_ENDPOINTS};
+pub(crate) use scope::is_peer_allowed;
 
 #[cfg(test)]
 pub(crate) mod tests;
