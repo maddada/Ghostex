@@ -779,15 +779,24 @@ fn popover(p: &DocsPalette) -> gpui::Div {
 // ---- source edits -------------------------------------------------------------------------
 
 /// Byte range of the whole lines the selection touches (without the final newline).
+/// Searched on the bytes (a newline is one byte, and the edges it gives are char boundaries), so
+/// a selection edge inside a character can't panic here.
 fn line_span(text: &str, selection: &Range<usize>) -> Range<usize> {
-    let start = text[..selection.start].rfind('\n').map_or(0, |i| i + 1);
-    let end_probe = if selection.end > selection.start && text[..selection.end].ends_with('\n') {
-        selection.end - 1
+    let bytes = text.as_bytes();
+    let sel_start = selection.start.min(bytes.len());
+    let sel_end = selection.end.clamp(sel_start, bytes.len());
+    let start = bytes[..sel_start]
+        .iter()
+        .rposition(|byte| *byte == b'\n')
+        .map_or(0, |i| i + 1);
+    let end_probe = if sel_end > sel_start && bytes[sel_end - 1] == b'\n' {
+        sel_end - 1
     } else {
-        selection.end
+        sel_end
     };
-    let end = text[end_probe..]
-        .find('\n')
+    let end = bytes[end_probe..]
+        .iter()
+        .position(|byte| *byte == b'\n')
         .map_or(text.len(), |i| end_probe + i);
     start..end.max(start)
 }
@@ -930,7 +939,9 @@ enum LinkKind {
 
 fn wrap_link(editor: &mut EditorState, kind: LinkKind, cx: &mut Context<EditorState>) {
     let selection = editor.selected_range();
-    let label = editor.text()[selection.clone()].to_string();
+    let Some(label) = editor.text().get(selection.clone()).map(str::to_string) else {
+        return;
+    };
     let (insert, select) = match kind {
         LinkKind::Link => {
             let insert = format!("[{label}](url)");
@@ -1007,7 +1018,9 @@ pub(crate) fn wrap_inline(
 ) {
     editor.update(cx, |editor, cx| {
         let selection = editor.selected_range();
-        let selected = editor.text()[selection.clone()].to_string();
+        let Some(selected) = editor.text().get(selection.clone()).map(str::to_string) else {
+            return;
+        };
         let replacement = if selected.len() >= before.len() + after.len()
             && selected.starts_with(before)
             && selected.ends_with(after)

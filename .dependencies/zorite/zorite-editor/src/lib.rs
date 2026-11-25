@@ -5785,10 +5785,20 @@ impl EntityInputHandler for EditorState {
             self.content[0..range.start].to_owned() + new_text + &self.content[range.end..];
         self.marked_range =
             (!new_text.is_empty()).then(|| range.start..range.start + new_text.len());
+        // Local change: the IME's selection is in UTF-16 units relative to `new_text`, not the
+        // document, so it is added to the insertion's own UTF-16 start before converting.
+        // Converting it on its own and adding the UTF-8 `range.start` put the caret of a dead-key
+        // `´` (2 bytes, 1 UTF-16 unit) one byte into the character, and the next slice at the
+        // caret panicked (Ghostex #749).
+        let insertion_start_utf16 = self.offset_to_utf16(range.start);
+        let inserted_len_utf16 = new_text.encode_utf16().count();
         self.selected_range = new_selected_range_utf16
-            .as_ref()
-            .map(|r| self.range_from_utf16(r))
-            .map(|r| r.start + range.start..r.end + range.start)
+            .map(|r| {
+                self.range_from_utf16(
+                    &(insertion_start_utf16 + r.start.min(inserted_len_utf16)
+                        ..insertion_start_utf16 + r.end.min(inserted_len_utf16)),
+                )
+            })
             .unwrap_or_else(|| {
                 let caret = range.start + new_text.len();
                 caret..caret

@@ -75,7 +75,11 @@ pub(crate) fn render_markdown_body(
     let rows = state.row_layout();
     let text = state.text();
     let caret = state.cursor().min(text.len());
-    let caret_line = text[..caret].bytes().filter(|byte| *byte == b'\n').count();
+    // Counted on the bytes: the line number must never panic on a caret inside a character.
+    let caret_line = text.as_bytes()[..caret]
+        .iter()
+        .filter(|byte| **byte == b'\n')
+        .count();
     // Source mode shows the fold lane empty, like the Docs page.
     let folds: Vec<(usize, bool)> = if body.source {
         Vec::new()

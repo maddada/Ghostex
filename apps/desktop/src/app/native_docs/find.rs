@@ -239,7 +239,7 @@ impl GhostexGpuiApp {
         let query = find.query.clone();
         let selected = if let Some(editor) = editor {
             let selection = editor.read(cx).selected_range();
-            Some(editor.read(cx).text()[selection].to_string())
+            editor.read(cx).text().get(selection).map(str::to_string)
         } else {
             code.map(|code| code.read(cx).selected_text().to_string())
         };

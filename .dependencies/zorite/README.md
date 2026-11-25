@@ -23,4 +23,8 @@ language and copy chips; a host view per Mermaid block (`set_mermaid_view_provid
 for the block-drag grip and the hover chevrons; and table controls (`caret_table`,
 `table_header_cells`, `sort_table`, TSV copy and cell clearing of a cell-range selection).
 
+Also marked `Local change`: `replace_and_mark_text_in_range` converts the input method's selection
+relative to the marked text, so a dead-key accent (`´`, `¨`) no longer leaves the caret inside the
+character (Ghostex #749).
+
 The Zorite application is GPL and none of its code is here.
