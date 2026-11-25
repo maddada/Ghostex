@@ -1,0 +1,1 @@
+../../../../../desktop/src/app/render/workarea_header/git_summary.rs

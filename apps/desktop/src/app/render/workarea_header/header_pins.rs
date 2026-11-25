@@ -207,12 +207,13 @@ impl GhostexGpuiApp {
                         "gitActions",
                     );
                 if let Some(git) = self.titlebar_git_menu_state.as_ref() {
-                    let summary = super::action_buttons::WorkareaHeaderGitSummary::from_state(git);
+                    use crate::app::native_sidebar::project_status::compact_count;
+                    let summary = super::git_summary::WorkareaHeaderGitSummary::from_state(git);
                     if summary.has_diff() {
                         state.status = Some(format!(
                             "+{} \u{2212}{}",
-                            summary.additions.min(9999),
-                            summary.deletions.min(9999)
+                            compact_count(summary.additions),
+                            compact_count(summary.deletions)
                         ));
                     }
                 }

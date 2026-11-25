@@ -378,9 +378,12 @@ impl GhostexGpuiApp {
     }
 
     /// Commit opens the Git menu, as the desktop's Commit split button's main half does (`CDXC:Git 2026-09-20`).
+    /// It shows the desktop pill's summary of the active project's Git state (render/workarea_header/git_summary.rs):
+    /// the same numbers, arrows and tooltip, the icon left out while an arrow shows, and "Commit" with nothing to show.
     fn render_web_git_button(&self, cx: &mut Context<Self>) -> AnyElement {
         let text = titlebar_active_text_color();
         let recorded = self.web_host.git_button_bounds.clone();
+        let summary = self.workarea_header_git_summary();
         h_flex()
             .id("web-header-commit")
             .h(px(TITLEBAR_CONTROL_HEIGHT))
@@ -392,8 +395,17 @@ impl GhostexGpuiApp {
             .text_color(text)
             .cursor_pointer()
             .hover(|button| button.bg(titlebar_popup_menu_hover_color()))
-            .child(titlebar_svg_icon(TITLEBAR_ICON_GIT_COMMIT, 16.0, text))
-            .child("Commit")
+            .when(!summary.shows_arrows(), |button| {
+                button.child(titlebar_svg_icon(TITLEBAR_ICON_GIT_COMMIT, 16.0, text))
+            })
+            .map(|button| match summary.render() {
+                Some(rich) => button.child(rich),
+                None => button.child("Commit"),
+            })
+            .when_some(summary.tooltip(), |button, tooltip| {
+                let tooltip = SharedString::from(tooltip);
+                button.tooltip(move |window, cx| titlebar_tooltip(tooltip.clone(), window, cx))
+            })
             .child(
                 gpui::canvas(
                     move |element_bounds, _, _| recorded.set(Some(element_bounds)),

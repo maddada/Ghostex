@@ -15,6 +15,14 @@ pub(crate) fn project_diff_deletions_color() -> gpui::Rgba {
     chrome_color(0xdca8a4, 0xc43a42)
 }
 
+/// CDXC:Titlebar 2026-11-25 DECISION:
+/// User: big numbers read the same everywhere: 1000 and up read 7.3k, 10000 and up 13k, in the
+/// project header's "+N -N", the header's Commit pill and the header ⋯ menu's Commit row, with no
+/// 9999 cap. The chat core's one compact-number formatter (the context-usage numbers use it too).
+pub(crate) fn compact_count(value: u64) -> String {
+    ghostex_gx_chat_core::menus::context::usage::format_context_tokens(Some(value as f64))
+}
+
 /// The opacity the project header draws its diff numbers at (the 2026-09-22 decision below).
 pub(crate) const PROJECT_DIFF_OPACITY: f32 = 0.7;
 
@@ -47,8 +55,8 @@ fn header_diff_stats<'a>(
         .as_ref()?
         .get("editor")?
         .get("diffStats")?;
-    let additions = stats["additions"].as_u64().unwrap_or_default().min(9999);
-    let deletions = stats["deletions"].as_u64().unwrap_or_default().min(9999);
+    let additions = stats["additions"].as_u64().unwrap_or_default();
+    let deletions = stats["deletions"].as_u64().unwrap_or_default();
     if additions == 0 && deletions == 0 {
         return None;
     }
@@ -157,12 +165,12 @@ pub(crate) fn project_status(
             .child(
                 div()
                     .text_color(additions_color)
-                    .child(format!("+{additions}")),
+                    .child(format!("+{}", compact_count(additions))),
             )
             .child(
                 div()
                     .text_color(deletions_color)
-                    .child(format!("-{deletions}")),
+                    .child(format!("-{}", compact_count(deletions))),
             )
             .into_any_element(),
     )
