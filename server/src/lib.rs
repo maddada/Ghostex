@@ -312,6 +312,7 @@ pub(crate) mod settings_sync;
 pub mod setup;
 pub(crate) mod shared_settings_file;
 pub(crate) mod sharing;
+pub(crate) mod shown_commands;
 pub(crate) mod side_chats;
 pub mod sidebar_hud;
 pub mod sidebar_project_collections;

@@ -62,7 +62,7 @@ pub(crate) fn is_home_project(project: &Value) -> bool {
 
 /// The home project: the one already registered at the home folder (adopted as it is), or a new
 /// one added there.
-pub(super) fn home_project(
+pub(crate) fn home_project(
     state: &AppState,
     db: &Connection,
     repository: &DomainRepository<'_>,

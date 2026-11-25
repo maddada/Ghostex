@@ -86,6 +86,7 @@ pub mod settings;
 mod settings_hotkeys;
 mod settings_transfer;
 mod show;
+mod shown_command;
 mod side_chats;
 pub mod skills;
 mod spaceo_heal;
@@ -229,6 +230,7 @@ const HELP_GATE_EXCLUDED: &[&str] = &[
     "agents",
     "app-update",
     "box",
+    "shown-command",
     "claude-cloud",
     "gbots",
     "grokbot",
@@ -544,6 +546,7 @@ fn is_known_command(name: &str) -> bool {
         "server",
         "tailcat",
         "app-update",
+        "shown-command",
         "web",
         "ports",
         "resources",
@@ -1179,6 +1182,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "server" => server_command(args),
         "tailcat" => tailcat::tailcat_command(args),
         "app-update" => app_update::app_update_command(args),
+        "shown-command" => shown_command::shown_command_command(args),
         "web" => web::web_command(args),
         "ports" => ports::ports_command(args),
         "resources" => resources::resources_command(args),

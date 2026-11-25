@@ -1221,6 +1221,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/appUpdateCheck"
         | "/api/appUpdateInstall"
         | "/api/appUpdateSetAuto"
+        // Run in terminal types a command into a new terminal here, so it stays with the app update endpoints.
+        | "/api/openShownCommandTerminal"
         // CDXC:Updates 2026-11-05 WHY: Settings > Updates can install the app's update (Update all ends with it), so it stays with the app update endpoints above.
         | "/api/updates"
         /*

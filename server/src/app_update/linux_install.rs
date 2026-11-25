@@ -1,10 +1,10 @@
 //! How this Linux computer's Ghostex was installed, and the command that updates it.
 //!
 //! CDXC:Updates 2026-11-18 DECISION:
-//! User (Q83, "Show the command and a link", after "i really dont know how to update"; it replaced Autopilot's earlier Q81 pick "Update runs the right command"): on Linux the Ghostex card works out how Ghostex was installed and shows the command that updates it, in words ("To update, run this in a terminal:") with Copy command, and the release page link is always shown; Ghostex does not run the command or open a terminal. The titlebar's Linux update dialog shows the same line and command with Later, Release page and Copy command. gxserver answers it because it runs from the same package as the app (`/opt/ghostex/gxserver/bin`), so the package that owns the app next to it is the one to update, and every client (this desktop, another computer's Settings > Updates, the phone) reads the same answer in `/api/appUpdateStatus` (`linuxUpdate`). The AppImage keeps its own download and swap (linux_updater.rs); a tarball, or an install no package manager owns, gets the release page link only.
+//! User (Q83, "Show the command and a link", after "i really dont know how to update"; it replaced Autopilot's earlier Q81 pick "Update runs the right command"): on Linux the Ghostex card works out how Ghostex was installed and shows the command that updates it, in words ("To update, run this in a terminal:") with Copy command, and the release page link is always shown; Ghostex does not run the command itself (that it opens no terminal is superseded by Run in terminal, 2026-11-25 below). The titlebar's Linux update dialog shows the same line and command with Later, Release page and Copy command. gxserver answers it because it runs from the same package as the app (`/opt/ghostex/gxserver/bin`), so the package that owns the app next to it is the one to update, and every client (this desktop, another computer's Settings > Updates, the phone) reads the same answer in `/api/appUpdateStatus` (`linuxUpdate`). The AppImage keeps its own download and swap (linux_updater.rs); a tarball, or an install no package manager owns, gets the release page link only.
 //!
 //! CDXC:Updates 2026-11-25 DECISION:
-//! User, after `yay -S --overwrite '/opt/ghostex/*' ghostex-bin` stopped at the clean-build menu, the diff menu and "Proceed with installation?" and then left the old app running: "make it not need these answers by adding something to the command" and "make the command quit ghostex and start it again after finishing install". The command now answers every prompt itself (yay `--noconfirm --answerclean All --answerdiff None --answeredit None`, paru `--noconfirm --skipreview`, pacman and makepkg `--noconfirm`, apt `-y`, dnf `-y`, zypper `--non-interactive`; only the sudo password is left) and ends with `&& <app>/gxserver/bin/ghostex app-update restart`, which quits a Ghostex that was running and opens it on the installed version (server/src/ghostex_cli/app_restart.rs). It is still only shown, never run: "mention it requires sudo password so we can't run it for them but they can check the command with any agent", so the card and the dialog say so above it. This supersedes the 2026-11-18 command text (the plain install commands) and its line "To update, run this in a terminal:", not the rest of that decision.
+//! User, after `yay -S --overwrite '/opt/ghostex/*' ghostex-bin` stopped at the clean-build menu, the diff menu and "Proceed with installation?" and then left the old app running: "make it not need these answers by adding something to the command" and "make the command quit ghostex and start it again after finishing install". The command now answers every prompt itself (yay `--noconfirm --answerclean All --answerdiff None --answeredit None`, paru `--noconfirm --skipreview`, pacman and makepkg `--noconfirm`, apt `-y`, dnf `-y`, zypper `--non-interactive`; only the sudo password is left) and ends with `&& <app>/gxserver/bin/ghostex app-update restart`, which quits a Ghostex that was running and opens it on the installed version (server/src/ghostex_cli/app_restart.rs). Ghostex still never runs it, because it needs the user's password. Run in terminal (user: "can we please create a terminal for them and have them just hit enter there? add button to do this please", in Main Hub) opens a Main Hub terminal with the command typed in (server/src/shown_commands/), and the line above the command says that instead of the earlier "Ghostex can't run it for you", which the user called wrong once the button existed ("the text saying ghostex can't run it for you is wrong"): it needs your password, Run in terminal types it in, you only press Enter, any agent can check it first. Where the button is missing (another computer on an older gxserver) the line only says it needs the password. This supersedes the 2026-11-18 command text (the plain install commands) and its line "To update, run this in a terminal:", not the rest of that decision.
 //! SEE-ALSO: apps/desktop/src/app/os_integration/linux_update_command.rs (the dialog), apps/desktop/src/app/window/settings_modal/tabs/updates/card.rs, apps/desktop/src/linux_updater.rs, tooling/release-gpui/customer-downloads.mjs (the asset names).
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -262,11 +262,25 @@ pub(super) fn linux_update(app_platform: Option<&str>, available_version: Option
     let restart = restart_command();
     let command =
         available_version.and_then(|version| update_command(kind, Some(version), &restart));
+    // An older gxserver sends no `runInTerminal`, so clients show Run in terminal only with it.
+    let run_in_terminal = command
+        .is_some()
+        .then_some(crate::shown_commands::LINUX_UPDATE);
     json!({
         "kind": kind.name(),
         "command": command,
+        "runInTerminal": run_in_terminal,
         "releaseUrl": release_url(available_version),
     })
+}
+
+/// The update command this computer shows now (`linuxUpdate.command`), for Run in terminal
+/// (server/src/shown_commands/registry.rs): `None` without one to show.
+pub(crate) async fn shown_update_command(state: &crate::server::AppState) -> Option<String> {
+    let answer = super::status::ask_app(state, "status").await;
+    super::status::compose_status(state, &answer)["linuxUpdate"]["command"]
+        .as_str()
+        .map(str::to_string)
 }
 
 /// Why the app can't update itself, in words every client shows as they are (phones and desktops
@@ -278,7 +292,7 @@ pub(super) fn unsupported_reason(
     available_version?;
     if let Some(command) = linux_update["command"].as_str() {
         return Some(format!(
-            "Update it in a terminal (it asks for your password, so Ghostex can't run it for you): {command}"
+            "It needs your password. Run in terminal on Ghostex's update card types it into a terminal for you, or run it yourself: {command}"
         ));
     }
     match linux_update["kind"].as_str()? {

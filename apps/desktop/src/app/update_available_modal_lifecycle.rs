@@ -44,6 +44,11 @@ impl GhostexGpuiApp {
                 .and_then(serde_json::Value::as_str)
                 .filter(|command| !command.trim().is_empty())
                 .map(str::to_string),
+            linux_run_in_terminal: message
+                .get("linuxRunInTerminal")
+                .and_then(serde_json::Value::as_str)
+                .filter(|id| !id.is_empty())
+                .map(str::to_string),
             palette: self.gpui_native_dialog_palette(),
         };
         let host = self.native_app_modal_host(cx, |app, command, cx| {
@@ -71,7 +76,8 @@ impl GhostexGpuiApp {
     /// The dialog has already removed its window. `Download` and `Restart`
     /// are the `downloadGhostexUpdate` / `restartAndUpdateGhostex` bridge
     /// commands the React page posted, on Windows and the Linux AppImage;
-    /// `OpenDownloadPage` is the Linux packages' Release page (their Copy command stays in the dialog).
+    /// `OpenDownloadPage` is the Linux packages' Release page (their Copy command stays in the dialog),
+    /// and `RunInTerminal` their Main Hub terminal with the command typed in.
     fn handle_gpui_update_available_modal_command(
         &mut self,
         command: UpdateAvailableModalCommand,
@@ -96,6 +102,9 @@ impl GhostexGpuiApp {
             UpdateAvailableModalCommand::OpenDownloadPage => {
                 #[cfg(target_os = "linux")]
                 self.open_linux_update_download_page(cx);
+            }
+            UpdateAvailableModalCommand::RunInTerminal(command_id) => {
+                self.gx_store_open_shown_command_terminal(None, command_id, cx);
             }
         }
         #[cfg(not(any(target_os = "windows", target_os = "linux")))]

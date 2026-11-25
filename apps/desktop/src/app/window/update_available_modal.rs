@@ -34,7 +34,11 @@ const OPEN_DOWNLOAD_PAGE: &str = "Open download page";
 const COPY_COMMAND: &str = "Copy command";
 const COPIED: &str = "Copied";
 const RELEASE_PAGE: &str = "Release page";
-const COMMAND_HINT: &str = "This command needs your password, so Ghostex can't run it for you. Run it in a terminal; any agent can check it first.";
+const RUN_IN_TERMINAL: &str = "Run in terminal";
+/// The line above the command with Run in terminal, and without it (a gxserver too old to offer it).
+const COMMAND_HINT: &str = "It needs your password. Run in terminal types it in for you, so you only press Enter. Any agent can check it first.";
+const COMMAND_HINT_NO_RUN: &str =
+    "It needs your password, so run it in a terminal. Any agent can check it first.";
 /// The command box under the notes and the gaps around it, without the hint's lines of 13/19.5 and
 /// the command's lines of 12/16 mono.
 const COMMAND_BLOCK_HEIGHT: f32 = 12.0 + 8.0 + 14.0 + 2.0;
@@ -92,7 +96,7 @@ pub(crate) enum UpdateAvailableState {
     Available,
     Ready,
     /// CDXC:Release 2026-11-18 DECISION:
-    /// User (Q83, "Show the command and a link", which replaced Autopilot's earlier Q81 pick "Update runs the right command"): a Linux package install's dialog shows the command that updates it (`linux_command`, from gxserver) under a line saying it needs the password, so Ghostex can't run it, and any agent can check it first (2026-11-25, replacing "To update, run this in a terminal:"; user: "mention it requires sudo password so we can't run it for them but they can check the command with any agent"), with Later, Release page and Copy command; Ghostex runs nothing itself. With no command (a tarball, an install no package manager owns) its one button opens the download page, as since 2026-09-22. Native only: the React twin is never opened on Linux.
+    /// User (Q83, "Show the command and a link", which replaced Autopilot's earlier Q81 pick "Update runs the right command"): a Linux package install's dialog shows the command that updates it (`linux_command`, from gxserver) under a line saying it needs the password, that Run in terminal types it in so you only press Enter, and that any agent can check it first (2026-11-25, replacing "To update, run this in a terminal:" and then "Ghostex can't run it for you", which the user called wrong once the button existed: "the text saying ghostex can't run it for you is wrong"), with Later, Release page, Copy command and Run in terminal (user: "can we please create a terminal for them and have them just hit enter there? add button to do this please"; a Main Hub terminal with the command typed in, server/src/shown_commands/); Ghostex never presses Enter itself. With no command (a tarball, an install no package manager owns) its one button opens the download page, as since 2026-09-22. Native only: the React twin is never opened on Linux.
     Notify,
 }
 
@@ -102,6 +106,8 @@ pub(crate) enum UpdateAvailableModalCommand {
     Download,
     Restart,
     OpenDownloadPage,
+    /// Run in terminal: the id gxserver resolves to the command (`linuxUpdate.runInTerminal`).
+    RunInTerminal(String),
 }
 
 pub(crate) type UpdateAvailableModalHost = Rc<dyn Fn(UpdateAvailableModalCommand, &mut App)>;
@@ -113,6 +119,8 @@ pub(crate) struct UpdateAvailableModalConfig {
     pub(crate) portable: bool,
     /// Linux packages: the command that updates this install, shown with Copy command (gxserver's `linuxUpdate.command`).
     pub(crate) linux_command: Option<String>,
+    /// Run in terminal's id for that command, when this computer's gxserver offers it.
+    pub(crate) linux_run_in_terminal: Option<String>,
     pub(crate) palette: ModalPalette,
 }
 
@@ -344,6 +352,7 @@ pub(crate) struct GpuiUpdateAvailableModalWindow {
     state: UpdateAvailableState,
     portable: bool,
     linux_command: Option<String>,
+    linux_run_in_terminal: Option<String>,
     /// Copy command was pressed: its label says Copied.
     copied: bool,
     blocks: Vec<Block>,
@@ -376,6 +385,9 @@ impl GpuiUpdateAvailableModalWindow {
             portable: config.portable,
             linux_command: config
                 .linux_command
+                .filter(|_| config.state == UpdateAvailableState::Notify),
+            linux_run_in_terminal: config
+                .linux_run_in_terminal
                 .filter(|_| config.state == UpdateAvailableState::Notify),
             copied: false,
             blocks,
@@ -417,6 +429,20 @@ impl GpuiUpdateAvailableModalWindow {
             cx.write_to_clipboard(gpui::ClipboardItem::new_string(command));
             self.copied = true;
             cx.notify();
+        }
+    }
+
+    fn run_in_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(id) = self.linux_run_in_terminal.clone() {
+            self.close_window_and_send(UpdateAvailableModalCommand::RunInTerminal(id), window, cx);
+        }
+    }
+
+    fn command_hint(&self) -> &'static str {
+        if self.linux_run_in_terminal.is_some() {
+            COMMAND_HINT
+        } else {
+            COMMAND_HINT_NO_RUN
         }
     }
 
@@ -784,7 +810,7 @@ impl GpuiUpdateAvailableModalWindow {
                 .ceil()
                 .clamp(1.0, 4.0);
             let hint_per_line = (text_width / COMMAND_HINT_CHAR_WIDTH).floor().max(1.0);
-            let hint_lines = (COMMAND_HINT.chars().count() as f32 / hint_per_line)
+            let hint_lines = (self.command_hint().chars().count() as f32 / hint_per_line)
                 .ceil()
                 .clamp(1.0, 3.0);
             COMMAND_BLOCK_HEIGHT + 19.5 * hint_lines + 16.0 * lines
@@ -832,7 +858,7 @@ impl GpuiUpdateAvailableModalWindow {
                     .text_size(px(13.0))
                     .line_height(px(19.5))
                     .text_color(hsla(p.muted))
-                    .child(COMMAND_HINT),
+                    .child(self.command_hint()),
             )
             .child(
                 div()
@@ -915,6 +941,18 @@ impl GpuiUpdateAvailableModalWindow {
                 |this, _window, cx| this.copy_command(cx),
                 cx,
             ));
+            if self.linux_run_in_terminal.is_some() {
+                buttons.push(modal_action_button(
+                    &p,
+                    "update-available-run-in-terminal",
+                    RUN_IN_TERMINAL,
+                    None,
+                    ModalButtonTone::Primary,
+                    false,
+                    |this, window, cx| this.run_in_terminal(window, cx),
+                    cx,
+                ));
+            }
             return modal_footer(buttons);
         }
         buttons.push(modal_action_button(

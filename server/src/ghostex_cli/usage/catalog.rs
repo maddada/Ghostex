@@ -458,6 +458,10 @@ pub fn usage() -> String {
             "run-in-terminal --project-id id [--session-id id|--cwd path] [--paste] [--json] (--command text | -- command...)",
             "Run a command in the project's Commands panel terminal (a new terminal in the session's folder without one; ghostex projects lists the project ids); --paste types it without pressing Enter",
         ),
+        format_help_command(
+            "shown-command open <id> [--json]",
+            "Open a new Main Hub terminal with a command Ghostex shows typed in but not run, so you only press Enter (linuxUpdate: the Linux update command Settings > Updates shows)",
+        ),
     ]
     .join("\n");
 

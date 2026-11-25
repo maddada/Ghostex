@@ -210,7 +210,7 @@ fn items(state: &str) -> Vec<Value> {
     }
     if matches!(state, "updates-linux" | "updates-linux-tarball") {
         let plan = if state == "updates-linux" {
-            json!({ "kind": "pacman", "command": "yay -S --noconfirm --answerclean All --answerdiff None --answeredit None ghostex-bin && /opt/ghostex/gxserver/bin/ghostex app-update restart", "releaseUrl": "https://github.com/maddada/Ghostex/releases/tag/v11.9.0" })
+            json!({ "kind": "pacman", "command": "yay -S --noconfirm --answerclean All --answerdiff None --answeredit None ghostex-bin && /opt/ghostex/gxserver/bin/ghostex app-update restart", "runInTerminal": "linuxUpdate", "releaseUrl": "https://github.com/maddada/Ghostex/releases/tag/v11.9.0" })
         } else {
             json!({ "kind": "manual", "command": null, "releaseUrl": "https://github.com/maddada/Ghostex/releases/tag/v11.9.0" })
         };
@@ -572,7 +572,7 @@ pub(super) fn answers(state: &str, message: &Value) -> Vec<Value> {
                 item["latest"] = json!("10.48.0");
                 item["canAuto"] = json!(false);
                 item["canUpdate"] = json!(false);
-                item["linuxUpdate"] = json!({ "kind": "deb", "command": "cd \"$(mktemp -d)\" && curl -fLO https://github.com/maddada/Ghostex/releases/download/v10.48.0/ghostex_10.48.0_amd64.deb && sudo apt install -y ./ghostex_10.48.0_amd64.deb && /opt/ghostex/gxserver/bin/ghostex app-update restart", "releaseUrl": "https://github.com/maddada/Ghostex/releases/tag/v10.48.0" });
+                item["linuxUpdate"] = json!({ "kind": "deb", "command": "cd \"$(mktemp -d)\" && curl -fLO https://github.com/maddada/Ghostex/releases/download/v10.48.0/ghostex_10.48.0_amd64.deb && sudo apt install -y ./ghostex_10.48.0_amd64.deb && /opt/ghostex/gxserver/bin/ghostex app-update restart", "runInTerminal": "linuxUpdate", "releaseUrl": "https://github.com/maddada/Ghostex/releases/tag/v10.48.0" });
             }
         }
     }

@@ -1,6 +1,6 @@
 //! Linux package installs: the update dialog shows the command gxserver worked out for this
 //! computer (`linuxUpdate` in `/api/appUpdateStatus`, server/src/app_update/linux_install.rs), with
-//! Copy command and the release page.
+//! Copy command, Run in terminal and the release page.
 //! SEE-ALSO: server/src/app_update/linux_install.rs, apps/desktop/src/app/window/update_available_modal.rs.
 #![cfg(target_os = "linux")]
 
@@ -9,7 +9,8 @@ use std::time::Duration;
 use crate::app::helpers::*;
 use crate::*;
 
-/// gxserver's `linuxUpdate` for this computer: `{ kind, command, releaseUrl }`. Blocking.
+/// gxserver's `linuxUpdate` for this computer: `{ kind, command, runInTerminal, releaseUrl }`.
+/// Blocking.
 fn read_linux_update_plan() -> Result<serde_json::Value, String> {
     let result = gpui_gxserver_rpc_result(
         "/api/appUpdateStatus",
@@ -36,7 +37,13 @@ impl GhostexGpuiApp {
             let plan = background
                 .spawn(async move { read_linux_update_plan() })
                 .await;
-            let command = plan.ok().as_ref().and_then(plan_command);
+            let plan = plan.ok();
+            let command = plan.as_ref().and_then(plan_command);
+            let run_in_terminal = plan
+                .as_ref()
+                .and_then(|plan| plan["runInTerminal"].as_str())
+                .filter(|id| !id.is_empty() && command.is_some())
+                .map(str::to_string);
             let _ = this.update(cx, |this, cx| {
                 let Some(update) = this.linux_update.as_ref() else {
                     return;
@@ -49,6 +56,7 @@ impl GhostexGpuiApp {
                     "type": "open",
                     "version": update.version(),
                     "linuxCommand": command,
+                    "linuxRunInTerminal": run_in_terminal,
                 });
                 this.open_gpui_app_modal_window(
                     GpuiAppModalKind::UpdateAvailable,

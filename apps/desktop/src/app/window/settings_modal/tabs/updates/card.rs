@@ -247,13 +247,17 @@ pub(super) fn up_to_date_row(
 }
 
 /// A Linux Ghostex card's update (server/src/app_update/linux_install.rs): the command that updates
-/// it (shown with Copy command; Ghostex runs nothing itself), the release page, and whether it is
-/// this computer or another one.
+/// it (shown with Copy command, and Run in terminal when that computer's gxserver offers it; Ghostex
+/// never runs it itself), the release page, and whether it is this computer or another one.
 struct LinuxUpdate {
     command: Option<String>,
+    /// The id Run in terminal sends (server/src/shown_commands/); `None` from an older gxserver.
+    run_in_terminal: Option<String>,
     release_url: String,
     appimage: bool,
     here: bool,
+    /// The saved remote machine's id for another computer's card.
+    machine_id: Option<String>,
     computer: String,
 }
 
@@ -269,6 +273,11 @@ impl LinuxUpdate {
                 .and_then(Value::as_str)
                 .filter(|command| !command.trim().is_empty())
                 .map(str::to_string),
+            run_in_terminal: plan
+                .get("runInTerminal")
+                .and_then(Value::as_str)
+                .filter(|id| !id.is_empty())
+                .map(str::to_string),
             release_url: plan
                 .get("releaseUrl")
                 .and_then(Value::as_str)
@@ -278,6 +287,9 @@ impl LinuxUpdate {
             here: item["computer"]
                 .as_str()
                 .is_none_or(|computer| computer == "local"),
+            machine_id: text(item, "computer")
+                .filter(|computer| *computer != "local")
+                .map(str::to_string),
             computer: text(item, "computerName")
                 .or(text(item, "name"))
                 .unwrap_or("that computer")
@@ -287,10 +299,16 @@ impl LinuxUpdate {
 
     /// The card's line: what Update does, or what to do instead.
     fn line(&self) -> String {
+        let run_in_terminal = self.run_in_terminal.is_some();
         match (&self.command, self.appimage, self.here) {
-            (Some(_), _, true) => "This command needs your password, so Ghostex can't run it for you. Run it in a terminal; any agent can check it first.".to_string(),
+            (Some(_), _, true) if run_in_terminal => "It needs your password. Run in terminal types it in for you, so you only press Enter. Any agent can check it first.".to_string(),
+            (Some(_), _, false) if run_in_terminal => format!(
+                "It needs the password on {}. Run in terminal types it in, so you only press Enter.",
+                self.computer
+            ),
+            (Some(_), _, true) => "It needs your password, so run it in a terminal. Any agent can check it first.".to_string(),
             (Some(_), _, false) => format!(
-                "It needs a password on {}, so Ghostex can't run it. Any agent can check it first.",
+                "It needs a password on {}, so run it in a terminal there.",
                 self.computer
             ),
             (None, true, true) => {
@@ -666,8 +684,9 @@ fn release_link(
 }
 
 impl UpdatesTab {
-    /// A Linux Ghostex card's buttons: Copy command when there is one; Update only for this
-    /// computer's AppImage, which opens its own download-and-swap dialog.
+    /// A Linux Ghostex card's buttons: Copy command when there is one, and Run in terminal when its
+    /// gxserver offers it (a Main Hub terminal on that computer with the command typed in); Update
+    /// only for this computer's AppImage, which opens its own download-and-swap dialog.
     fn linux_actions(
         &self,
         p: &SettingsPalette,
@@ -684,7 +703,11 @@ impl UpdatesTab {
                 SharedString::from(format!("updates-linux-copy-{id}")),
                 if copied { "Copied" } else { "Copy command" },
                 None,
-                ButtonVariant::Default,
+                if linux.run_in_terminal.is_some() {
+                    ButtonVariant::Outline
+                } else {
+                    ButtonVariant::Default
+                },
                 ButtonSize::Xs,
                 false,
                 None,
@@ -692,6 +715,34 @@ impl UpdatesTab {
                     cx.write_to_clipboard(ClipboardItem::new_string(command.clone()));
                     tab.linux_command_copied = Some(copied_id.clone());
                     cx.notify();
+                },
+                cx,
+            ));
+        }
+        if let Some(command_id) = linux
+            .run_in_terminal
+            .clone()
+            .filter(|_| linux.command.is_some())
+        {
+            let machine_id = (!linux.here).then(|| linux.machine_id.clone()).flatten();
+            buttons.push(settings_button_sized(
+                p,
+                SharedString::from(format!("updates-linux-run-{id}")),
+                "Run in terminal",
+                None,
+                ButtonVariant::Default,
+                ButtonSize::Xs,
+                false,
+                None,
+                move |tab: &mut Self, _window, cx| {
+                    tab.post(
+                        json!({
+                            "type": "openShownCommandTerminal",
+                            "commandId": command_id,
+                            "machineId": machine_id,
+                        }),
+                        cx,
+                    );
                 },
                 cx,
             ));

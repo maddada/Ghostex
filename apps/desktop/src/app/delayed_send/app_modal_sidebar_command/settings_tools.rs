@@ -196,6 +196,24 @@ impl GhostexGpuiApp {
                 #[cfg(target_os = "linux")]
                 self.open_linux_update_modal(Some(window), cx);
             }
+            // Run in terminal beside a command Ghostex shows (Settings > Updates' Linux command, here
+            // or on a remote machine): Settings closes so the Main Hub terminal it opens is in view.
+            "openShownCommandTerminal" => {
+                if let Some(command_id) =
+                    command.get("commandId").and_then(serde_json::Value::as_str)
+                {
+                    let machine_id = command
+                        .get("machineId")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_string);
+                    self.close_native_app_modal_from_bridge(cx);
+                    self.gx_store_open_shown_command_terminal(
+                        machine_id,
+                        command_id.to_string(),
+                        cx,
+                    );
+                }
+            }
             "runManagedToolTerminalCommand" => {
                 if let Some(tool_id) = command.get("toolId").and_then(serde_json::Value::as_str) {
                     self.run_managed_tool_terminal_command(tool_id.to_string(), window, cx);

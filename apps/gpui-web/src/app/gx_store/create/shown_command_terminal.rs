@@ -1,0 +1,1 @@
+../../../../../desktop/src/app/gx_store/create/shown_command_terminal.rs

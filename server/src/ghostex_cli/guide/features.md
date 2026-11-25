@@ -75,14 +75,19 @@ appears just before the project name. On Linux the button opens the release
 notes with the command that updates Ghostex the way it was installed (for
 example `yay -S --noconfirm … ghostex-bin` for the AUR package, or a download
 plus `sudo apt install -y` for the .deb or `sudo dnf install -y` for the .rpm),
-with **Release page** and **Copy command**. Ghostex can't run it for you because
-it needs your password; run it in a terminal (any agent can check it first) and
-type your password when it asks. It answers every other question itself, and
-when the install finishes it ends with `ghostex app-update restart`, which
-quits Ghostex and opens the new version (only if Ghostex was open; terminals
-and agents keep running). Settings > Updates shows the same command on
-Ghostex's card, with Copy command and a Release page link; another Linux
-computer's card shows its command the same way, to run on that computer.
+with **Release page**, **Copy command** and **Run in terminal**. The command
+needs your password, so Ghostex never runs it itself: **Run in terminal** opens
+a new terminal in Main Hub with the command typed in, and you type your
+password and press Enter there (any agent can check the command first). It
+answers every other question itself, and when the install finishes it ends with
+`ghostex app-update restart`, which quits Ghostex and opens the new version
+(only if Ghostex was open; terminals and agents keep running). Settings >
+Updates shows the same command on Ghostex's card, with Copy command, Run in
+terminal and a Release page link; another Linux computer's card shows its
+command the same way, and its Run in terminal opens that computer's Main Hub
+terminal here. On the phone, the computer's Ghostex row in Machines has the same
+buttons. From a shell, `ghostex shown-command open linuxUpdate` opens that
+terminal too.
 The tarball, or a copy no package manager installed, gets only the release page
 (**Open download page**). Linux downloads come
 for x64 and for ARM64 (aarch64) computers, each as a .deb, an .rpm, a portable
@@ -6659,7 +6664,8 @@ agents, a connection from either side is enough.
   machine's tile and turn on **Keep this machine up to date** to have it
   install updates on its own while none of its agents is working. Ghostex must
   be open on that computer (macOS or Windows, also with WSL); a Linux machine
-  shows the new version, which you install with its package manager. From a
+  shows the command that installs the new version with its package manager,
+  and **Run in terminal** types it into a terminal there for you to press Enter. From a
   terminal: `ghostex app-update status`, `check`, `install --wait` and
   `auto on|off`, with `--server <profile>` for another computer; on Linux,
   `ghostex app-update restart` quits Ghostex on this computer and opens the

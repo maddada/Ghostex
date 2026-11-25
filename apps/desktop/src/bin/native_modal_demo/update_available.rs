@@ -31,6 +31,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             UpdateAvailableModalCommand::Download => eprintln!("download update"),
             UpdateAvailableModalCommand::Restart => eprintln!("restart and update"),
             UpdateAvailableModalCommand::OpenDownloadPage => eprintln!("open download page"),
+            UpdateAvailableModalCommand::RunInTerminal(id) => eprintln!("run in terminal: {id}"),
         }
         cx.quit();
     });
@@ -46,6 +47,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         linux_command: (demo.state == "notify-command").then(|| {
             "yay -S --noconfirm --answerclean All --answerdiff None --answeredit None ghostex-bin && /opt/ghostex/gxserver/bin/ghostex app-update restart".to_string()
         }),
+        linux_run_in_terminal: (demo.state == "notify-command").then(|| "linuxUpdate".to_string()),
         palette: demo.palette,
     };
     super::open_modal_window(

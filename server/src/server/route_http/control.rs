@@ -196,6 +196,15 @@ pub(super) async fn route_control_http(
         "/api/updates" => {
             crate::updates::handle_updates_http(&state, endpoint.path, request_id, &body_json).await
         }
+        crate::shown_commands::OPEN_SHOWN_COMMAND_TERMINAL_ENDPOINT => {
+            crate::shown_commands::handle_open_shown_command_terminal_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
+        }
         "/api/listExtensions"
         | "/api/extensionsCatalog"
         | "/api/extensionStoreContent"

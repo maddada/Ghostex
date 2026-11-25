@@ -15,6 +15,7 @@ mod browser;
 mod claim;
 mod cloud_box_setup;
 mod command_terminal;
+mod shown_command_terminal;
 mod coordinator;
 mod focus_created;
 mod folder_pick;
