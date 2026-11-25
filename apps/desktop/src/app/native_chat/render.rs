@@ -26,6 +26,51 @@ impl NativeChatView {
         }
     }
 
+    /// A soft panel of the work area colour behind the transcript's reading column while an art
+    /// theme's artwork shows behind the window: solid across the column (plus a margin), fading out
+    /// to clear over `FADE` on each side, so the artwork stays sharp beside the chat and the text
+    /// sits on a calm ground. `None` without an artwork.
+    ///
+    /// CDXC:Theming 2026-11-25 DECISION:
+    /// User, of the ASCII artwork showing through behind the chat's text and tables: "it is looking quite good actually ... do something to improve the visibility of this chat window". The chat keeps the artwork around it and draws its reading column on a panel of the theme's work area colour that fades out at its sides; 60% since the user's "the fede in the middle make it a little reansparent" (82% first).
+    fn art_reading_panel(&self, p: &ChatAppearance) -> Option<gpui::AnyElement> {
+        const MARGIN: f32 = 40.0;
+        const FADE: f32 = 120.0;
+        const STRENGTH: f32 = 0.6;
+        if !crate::app::helpers::window_art_active() {
+            return None;
+        }
+        let s = p.scale;
+        let pane = self.bounds.get().size.width.as_f32();
+        let column = self.transcript_column_cap(p).min(pane) + 2.0 * MARGIN * s;
+        let solid = crate::app::helpers::workspace_background_color().opacity(STRENGTH);
+        let clear = solid.opacity(0.0);
+        let fade = |angle: f32| {
+            div()
+                .flex_shrink_0()
+                .w(px(FADE * s))
+                .h_full()
+                .bg(gpui::linear_gradient(
+                    angle,
+                    gpui::linear_color_stop(clear, 0.0),
+                    gpui::linear_color_stop(solid, 1.0),
+                ))
+        };
+        Some(
+            div()
+                .absolute()
+                .top_0()
+                .left_0()
+                .size_full()
+                .flex()
+                .justify_center()
+                .child(fade(90.0))
+                .child(div().flex_shrink_0().w(px(column)).h_full().bg(solid))
+                .child(fade(270.0))
+                .into_any_element(),
+        )
+    }
+
     /// Decides this frame's `held_text_width`: while a window panel or the docked Session details
     /// column slides (`terminal_element::grid_resize_held`, `session_details.motion`) and the pane's width would change the transcript's
     /// text width, the rows keep the width they had before the slide, centred; the settling frame
@@ -292,6 +337,7 @@ impl Render for NativeChatView {
         };
         let selection_bar_listeners = self.selection_bar_listeners(cx);
         let pane_bounds = self.session_details_pane_bounds();
+        let art_reading_panel = self.art_reading_panel(&p);
         let chat = div()
             .id("native-session-chat")
             .role(gpui::Role::Group)
@@ -350,6 +396,8 @@ impl Render for NativeChatView {
                 chat.attach_to_composer(Vec::new(), paths, cx);
                 cx.stop_propagation();
             }))
+            // First, so the transcript and everything else draw over it.
+            .children(art_reading_panel)
             .when_some(error_card, |this, card| {
                 this.child(div().p(px(16.0 * s)).child(card))
             })

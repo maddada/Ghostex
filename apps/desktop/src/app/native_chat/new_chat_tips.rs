@@ -381,7 +381,14 @@ impl NativeChatView {
                 .pt(px(14.0 * s))
                 .pb(px(10.0 * s))
                 .rounded(px(16.0 * s))
-                .bg(wash(p, 0.045, 0.035))
+                // CDXC:Theming 2026-11-25 WHY: a see-through 4.5% wash let an art theme's dots run
+                // behind the tip's text (user: "fix this"); the card takes the theme's Cards fill,
+                // or the chat's opaque lifted fill where that is still see-through (glass, art).
+                .bg(if p.card_panel.a >= 0.99 {
+                    p.card_panel
+                } else {
+                    p.over_content_fill(p.card_panel)
+                })
                 .border_1()
                 .border_color(wash(p, 0.085, 0.075))
                 .flex()
