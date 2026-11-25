@@ -28,6 +28,12 @@ pub(crate) async fn handle_zmx_lifecycle_http(
     let blocking_endpoint_path = endpoint_path.clone();
     let blocking_request_id = request_id.clone();
     match tokio::task::spawn_blocking(move || {
+        if blocking_endpoint_path == "/api/sleepSession" {
+            crate::accounts::wake_account::end_pending_restart_for_requested_sleep(
+                &blocking_state,
+                &params,
+            );
+        }
         dispatch_zmx_lifecycle_http_blocking(
             &blocking_state,
             blocking_endpoint_path,

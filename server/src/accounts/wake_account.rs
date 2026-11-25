@@ -256,3 +256,36 @@ pub(crate) fn command_model(command: &str, agent: &str) -> Option<String> {
     }
     None
 }
+
+/// CDXC:AgentProviders 2026-11-25 WHY: GitHub #750, "sessions that had been asleep for 6 to 12
+/// days came back as running". The recovery pass wakes a sleeping session whose recovery still
+/// waits on a restart (`accountRecovery.restartRequired`, recovery.rs `plan_session`), which is
+/// right while that sleep is recovery's own (its sleep and wake, or a switch, failed), but the
+/// flag outlived a sleep the user then asked for, so the session woke later with nobody asking
+/// (reproduced on a test server). A sleep asked for through `/api/sleepSession` (the app, the
+/// phone, `ghostex sleep`) ends that pending restart; the recovery itself stays, so opening the
+/// session carries on from it. Recovery's own cycle and Auto Sleep do not come through here.
+pub(crate) fn end_pending_restart_for_requested_sleep(
+    state: &crate::server::AppState,
+    params: &serde_json::Map<String, Value>,
+) {
+    let text = |key: &str| params.get(key).and_then(Value::as_str).map(str::trim);
+    let (Some(pid), Some(sid)) = (text("projectId"), text("sessionId")) else {
+        return;
+    };
+    let _gate = state.accounts.mutation_gate();
+    let Ok(db) = crate::storage::open_gxserver_database(&state.paths) else {
+        return;
+    };
+    let repo = DomainRepository::new(&db, &state.metadata.server_id);
+    let Ok(Some(session)) = repo.get_session(pid, sid) else {
+        return;
+    };
+    let restart = "/runtimeSettings/accountRecovery/restartRequired";
+    if session.pointer(restart).and_then(Value::as_bool) != Some(true) {
+        return;
+    }
+    let mut recovery = session["runtimeSettings"]["accountRecovery"].clone();
+    recovery["restartRequired"] = json!(false);
+    let _ = recovery::save(state, &repo, &session, recovery);
+}
