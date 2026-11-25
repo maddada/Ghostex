@@ -316,6 +316,21 @@ pub(crate) fn sidebar_toggle_leading_x(_lights_reserved: bool) -> f32 {
 /// The desktop frame's gutter (helpers/work_area_frame.rs). The browser draws no frame, so the
 /// sidebar never reads it there (`native_sidebar_right_gutter`).
 pub(crate) const WORK_AREA_FRAME_MARGIN: f32 = 6.0;
+/// The desktop card's border and radii (helpers/work_area_frame.rs), for the Floating sidebar card
+/// the browser never draws (`floating_sidebar_layout`).
+pub(crate) const WORK_AREA_FRAME_BORDER: f32 = 1.0;
+pub(crate) const WORK_AREA_FRAME_RADIUS: f32 = 16.5 - WORK_AREA_FRAME_MARGIN;
+pub(crate) const WORK_AREA_FRAME_INNER_RADIUS: f32 =
+    WORK_AREA_FRAME_RADIUS - WORK_AREA_FRAME_BORDER;
+/// The browser draws no work area frame, so the sidebar is never the desktop's floating card
+/// (`windowLayout`, helpers/work_area_frame.rs) and sits flush beside the work area.
+pub(crate) fn floating_sidebar_layout() -> bool {
+    false
+}
+/// The desktop card's hairline (helpers/work_area_frame.rs), unused while the browser draws no card.
+pub(crate) fn work_area_frame_border_color() -> gpui::Hsla {
+    crate::app::helpers::sidebar_divider_line_color()
+}
 
 /// The work area's colour (the desktop's `workspace_background_color` in helpers/project/colors.rs).
 pub(crate) fn workspace_background_color() -> gpui::Hsla {
