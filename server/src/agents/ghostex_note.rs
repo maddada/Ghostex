@@ -192,6 +192,7 @@ pub(crate) fn note_text_with_workspace(
             Vec::new()
         };
         notes.extend(crate::grokbot::agent_note(paths));
+        notes.extend(crate::ghostex_apps::agent_note(paths));
         notes
     };
     if let Some(workspace_note) = workspace_instructions

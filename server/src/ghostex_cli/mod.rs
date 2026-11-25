@@ -46,6 +46,7 @@ mod gbots_problem_cli;
 mod gbots_routine_cli;
 mod gbots_team_cli;
 mod gbots_voice_cli;
+mod ghostex_app;
 mod grokbot_cli;
 pub mod guide;
 mod help_ask;
@@ -214,6 +215,7 @@ fn adopt_caller_session_from_process_tree() {
 /// global help gate.
 const HELP_GATE_EXCLUDED: &[&str] = &[
     "account-login",
+    "app",
     "clear-command",
     "theme",
     "chief",
@@ -376,6 +378,7 @@ fn exit_code() -> i32 {
 fn is_known_command(name: &str) -> bool {
     const NAMES: &[&str] = &[
         "account-login",
+        "app",
         "theme",
         "accounts",
         "agent-cli",
@@ -645,6 +648,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "box" => box_cli::run(args),
         "claude-cloud" => claude_cloud_cli::run(args),
         "gbots" => gbots_cli::run(args),
+        "app" => ghostex_app::app_command(args),
         "grokbot" => grokbot_cli::run(args),
         "cloud" => cloud_cli::run(args),
         // CDXC:Coordinators 2026-10-28 DECISION: user renamed Orchestrator back to Coordinator and made `coordinator` the real command group; `orchestrator` stays as an alias (see ghostex_cli/coordinator/command.rs).

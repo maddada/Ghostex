@@ -1293,6 +1293,13 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         `ghostex show` publishes a page an agent on this computer wrote, so only the loopback listener accepts it; the remote listener must not let another machine store pages that this gxserver then serves.
         */
         "/api/publishVisualPage" => full_local(path),
+        // CDXC:GhostexApps 2026-11-25 WHY: like `ghostex show`, apps are published, opened and allowed powers only on this computer's own loopback listener, never by another machine through the remote one.
+        crate::ghostex_apps::PUBLISH_GHOSTEX_APP_ENDPOINT
+        | crate::ghostex_apps::LIST_GHOSTEX_APPS_ENDPOINT
+        | crate::ghostex_apps::READ_GHOSTEX_APP_ENDPOINT
+        | crate::ghostex_apps::OPEN_GHOSTEX_APP_ENDPOINT
+        | crate::ghostex_apps::SET_GHOSTEX_APP_GRANT_ENDPOINT
+        | crate::ghostex_apps::DELETE_GHOSTEX_APP_ENDPOINT => full_local(path),
         // CDXC:Security 2026-11-08 WHY: the security log is read by this computer's own Settings and CLI (and a phone through its tunnel, which lands on this listener); it names devices and computers, so it never answers on the remote listener.
         crate::audit::SECURITY_LOG_ENDPOINT
         | crate::security_upgrade::SECURITY_UPGRADE_NOTICE_ENDPOINT => full_local(path),

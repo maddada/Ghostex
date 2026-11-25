@@ -30,7 +30,10 @@ mod theme;
 mod thumbnail;
 mod version;
 
-pub(crate) use answers::{is_answers_route, submit as submit_answers, submit_outside_answers};
+pub(crate) use answers::{
+    deliver as deliver_to_chat, is_answers_route, submit as submit_answers, submit_outside_answers,
+};
+pub(crate) use builtin::with_app_block;
 pub(crate) use drafts::{is_draft_route, read as read_draft, save as save_draft};
 pub(crate) use exported::{
     download as download_exported_page, handle_export_http as handle_export_visual_page_http,
@@ -46,6 +49,7 @@ pub(crate) use import::{
 pub(crate) use linked::{follow as follow_page_link, is_link_route};
 pub(crate) use mentions::{is_mentions_route, read as read_page_mentions};
 pub(crate) use notice::{dismiss as dismiss_page_notice, is_notice_route};
+pub(crate) use prepare::PAGE_CONTENT_SECURITY_POLICY;
 pub(crate) use prepare::{page_too_large, prepare_page};
 pub(crate) use publish::{
     handle_publish_visual_page_http, PUBLISH_VISUAL_PAGE_BODY_LIMIT_BYTES,

@@ -290,7 +290,7 @@ fn visual_page_block(
 /// file replaces its older cards in the chat; they stop counting and read Replaced, and the newest
 /// card is the page (gx-chat-core transcript/open_questions.rs `settle_askers`). Blocks printed
 /// before carry no source and replace nothing.
-fn source_key(path: &Path) -> String {
+pub(super) fn source_key(path: &Path) -> String {
     let hash = path
         .to_string_lossy()
         .bytes()
@@ -300,11 +300,11 @@ fn source_key(path: &Path) -> String {
     format!("{hash:016x}")
 }
 
-fn json_string(text: &str) -> String {
+pub(super) fn json_string(text: &str) -> String {
     serde_json::to_string(text).unwrap_or_else(|_| "\"\"".to_string())
 }
 
-fn absolute_path(file: &str) -> PathBuf {
+pub(super) fn absolute_path(file: &str) -> PathBuf {
     let path = PathBuf::from(file);
     if path.is_absolute() {
         return path;
@@ -314,7 +314,7 @@ fn absolute_path(file: &str) -> PathBuf {
         .unwrap_or(path)
 }
 
-fn read_source(path: &Path) -> CliResult<String> {
+pub(super) fn read_source(path: &Path) -> CliResult<String> {
     let metadata = fs::metadata(path)
         .map_err(|_| CliError::Other(format!("Could not find {}.", path.display())))?;
     if !metadata.is_file() {
@@ -349,7 +349,7 @@ fn file_stem(path: &Path) -> String {
 /// The session this runs in, from the environment every Ghostex pane exports; kept with the page
 /// so it can be traced back to the conversation that made it, and so the reader's answers
 /// (`ghostex.submit`) reach that session.
-fn calling_session_ref() -> Option<String> {
+pub(super) fn calling_session_ref() -> Option<String> {
     ["GHOSTEX_GLOBAL_SESSION_REF", "GHOSTEX_NATIVE_SESSION_ID"]
         .iter()
         .find_map(|key| {

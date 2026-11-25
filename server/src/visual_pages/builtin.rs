@@ -71,6 +71,32 @@ pub(super) fn with_current_block(html: String, policy: &str) -> String {
     out
 }
 
+/// A Ghostex App's version with an app's built-in block in place of the page block `prepare` wrote:
+/// the policy tag with `policy`, the theme, `app_api` (which must come before the bootstrap, since
+/// the bootstrap drops the `#gx-…` fragment the app API reads its launch token from), the bootstrap,
+/// the kit's look and the narrow-screen fit. No page API and no question kit: an app has no
+/// questions or answers, it has `window.ghostex.app` (server/src/ghostex_apps/serve.rs).
+pub(crate) fn with_app_block(html: String, policy: &str, app_api: &str) -> String {
+    let Some(range) = published_block(&html) else {
+        return html;
+    };
+    let mut out = String::with_capacity(html.len() + 64 * 1024);
+    out.push_str(&html[..range.start]);
+    out.push_str(BUILTIN_START);
+    out.push_str(POLICY_META_START);
+    out.push_str(policy);
+    out.push_str("\">");
+    out.push_str(THEME_STYLE);
+    out.push_str(app_api);
+    out.push_str(PAGE_BOOTSTRAP);
+    out.push_str(KIT_STYLE);
+    out.push_str(FIT_STYLE);
+    out.push_str(FIT_SCRIPT);
+    out.push_str(BUILTIN_END);
+    out.push_str(&html[range.end..]);
+    out
+}
+
 /// Where the block the page was published with lies, when it can be told apart exactly.
 fn published_block(html: &str) -> Option<std::ops::Range<usize>> {
     let mut at = read_prologue(html).insert_at;

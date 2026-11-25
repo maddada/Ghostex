@@ -179,6 +179,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("sessionNotesHidden", J::Bool(true)),
     // CDXC:SessionChat 2026-11-22 DECISION: the Chat Status Line is off by default, for existing users too (official_extensions.rs).
     ("chatStatusLineEnabled", J::Bool(false)),
+    // CDXC:GhostexApps 2026-11-25 DECISION: Ghostex Apps is off by default, a Beta built-in extension (official_extensions.rs).
+    ("ghostexAppsEnabled", J::Bool(false)),
     // CDXC:Extensions 2026-10-25 DECISION: Claude is off by default (official_extensions.rs).
     ("claudeWebHidden", J::Bool(true)),
     // CDXC:Extensions 2026-11-09 DECISION: Grok is off by default, like Claude (official_extensions.rs).

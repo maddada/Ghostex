@@ -492,6 +492,17 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         user_only: false,
     },
     Supplemental {
+        key: "ghostexAppsEnabled",
+        tab: EXTENSIONS,
+        group: None,
+        section: "official",
+        section_title: "Built-in",
+        title: "Ghostex Apps",
+        subtitle: "Turn Ghostex Apps on or off (Beta): agents build HTML apps, dashboards and presentations that open like Live pages and can be installed as their own app. Off by default; only you can turn it on, and installed apps are kept while it is off.",
+        options: &[],
+        user_only: true,
+    },
+    Supplemental {
         key: "claudeWebHidden",
         tab: EXTENSIONS,
         group: None,

@@ -63,6 +63,11 @@ pub const SESSION_DETAILS: &str = "sessionDetailsPanel";
 pub const SESSION_NOTES: &str = "sessionNotes";
 /// The Chat Status Line (the line of pinned details under the chat box). Off by default.
 pub const CHAT_STATUS_LINE: &str = "chatStatusLine";
+/// Ghostex Apps (HTML apps an agent builds with `ghostex app show`, opened like a Live page and
+/// installable as their own small app; Settings > Installed apps). Beta, off by default; gxserver
+/// refuses `/api/*GhostexApp*`, `/app/<id>` and `ghostex app` while it is off
+/// (server/src/ghostex_apps/feature.rs).
+pub const GHOSTEX_APPS: &str = "ghostexApps";
 /// OS Integration (Settings > OS Integration). Experimental, off by default.
 pub const OS_INTEGRATION: &str = "osIntegration";
 /// The Beads view (the view panel's Beads tab, Tree and Board). A view, not a whole feature, so

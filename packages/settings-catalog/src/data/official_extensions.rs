@@ -347,6 +347,20 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("appWide", J::Bool(true)),
         ("title", J::Str("Chat Status Line")),
     ]),
+    // CDXC:GhostexApps 2026-11-25 DECISION:
+    // User: "this whole thing needs to be an extension called Ghostex Apps, disabled by default. put beta tag on its card in settings under extensions." Agents build HTML apps (dashboards, trackers, presentations) with `ghostex app show`, which open like Live pages and can be installed as their own small app. A whole-feature entry with a key that enables (`ghostexAppsEnabled`, default false), so a settings file from before it reads off. Off, nothing of it shows anywhere: no menu rows, no Settings page, no agent instructions, no CLI help beyond a one-line hint, and gxserver refuses its routes. Installed apps and their data are kept while it is off.
+    // SEE-ALSO: server/src/ghostex_apps/ (store, routes, bridge, the gate), server/src/ghostex_cli/ghostex_app.rs (the verb and its hint).
+    J::Obj(&[
+        ("description", J::Str("Ask an agent for an app, a dashboard or a presentation: it builds one in HTML that opens like a Live page, and you can install it as its own app with its own icon. Apps keep their own data and ask before they use anything more.")),
+        ("category", J::Str("features")),
+        ("id", J::Str("ghostexApps")),
+        ("placement", J::Str("feature")),
+        ("settingsKey", J::Str("ghostexAppsEnabled")),
+        ("settingsKeyEnables", J::Bool(true)),
+        ("appWide", J::Bool(true)),
+        ("title", J::Str("Ghostex Apps")),
+        ("badge", J::Str("Beta")),
+    ]),
     // CDXC:Extensions 2026-10-25 DECISION:
     // User: claude.ai inside Ghostex "has to be built in extension", not an external Ghostex extension from the Store. Enabled, it adds a sidebar button that opens a global page, with "different claude profiles for each account" to switch between. The 2026-10-28 decision in apps/desktop/src/app/claude_web/takeover.rs supersedes "switches to a global page that just keeps just my sidebar shown": turning Claude on now hides the sidebar too. A whole-feature entry with a new key (`claudeWebHidden`, default on = hidden, so it starts off like Actions) because the settings file stores every default. Off removes the sidebar button and the Claude view; each account's claude.ai sign-in is kept.
     // SEE-ALSO: apps/desktop/src/app/claude_web/ (the view, the button and the account bar).

@@ -110,6 +110,20 @@ pub(in crate::server) async fn route_http(
         return crate::visual_pages::serve(state.paths.root_dir.clone(), path, query, host).await;
     }
 
+    // A Ghostex App and its icon (`/app/<id>`, `/app/<id>/icon`) and its own calls
+    // (`/app/<id>/bridge`, which take only the app's launch token): server/src/ghostex_apps/.
+    if method == Method::GET && crate::ghostex_apps::is_app_route(&path) {
+        let host = parts
+            .headers
+            .get(axum::http::header::HOST)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string);
+        return crate::ghostex_apps::serve(state.clone(), path, host).await;
+    }
+    if method == Method::POST && crate::ghostex_apps::is_bridge_route(&path) {
+        return crate::ghostex_apps::bridge_call(state.clone(), path, body).await;
+    }
+
     if method == Method::POST && crate::visual_pages::is_answers_route(&path) {
         return crate::visual_pages::submit_answers(state.clone(), path, body).await;
     }
@@ -732,6 +746,10 @@ pub(in crate::server) async fn route_http(
         Err(request) => request,
     };
     let request = match route_grokbot_http(request).await {
+        Ok(response) => return response,
+        Err(request) => request,
+    };
+    let request = match route_ghostex_apps_http(request).await {
         Ok(response) => return response,
         Err(request) => request,
     };

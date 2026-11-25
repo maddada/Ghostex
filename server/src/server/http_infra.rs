@@ -121,6 +121,8 @@ pub(crate) fn json_body_limit_bytes(endpoint_path: &str) -> usize {
         32 * 1024 * 1024
     } else if endpoint_path == crate::visual_pages::PUBLISH_VISUAL_PAGE_ENDPOINT {
         crate::visual_pages::PUBLISH_VISUAL_PAGE_BODY_LIMIT_BYTES
+    } else if endpoint_path == crate::ghostex_apps::PUBLISH_GHOSTEX_APP_ENDPOINT {
+        crate::ghostex_apps::PUBLISH_GHOSTEX_APP_BODY_LIMIT_BYTES
     } else {
         GXSERVER_JSON_BODY_LIMIT_BYTES
     }

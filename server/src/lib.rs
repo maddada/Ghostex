@@ -61,6 +61,7 @@ pub(crate) mod file_links;
 pub(crate) mod file_memo;
 pub(crate) mod freebuff_activity;
 pub(crate) mod gbots;
+pub(crate) mod ghostex_apps;
 pub mod ghostex_cli;
 pub mod git_ship_workflow;
 pub mod global_project_defaults;

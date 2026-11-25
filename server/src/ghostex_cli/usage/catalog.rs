@@ -580,7 +580,14 @@ pub fn usage() -> String {
     .join("\n");
 
     let show_connectors = super::connectors::connectors_enabled();
+    let show_apps = crate::ghostex_cli::built_in_extensions::built_in_extension_enabled(
+        ghostex_settings_catalog::built_in_extensions::GHOSTEX_APPS,
+    );
     let ui_commands = [
+        format_help_command(
+            "app show <app.html> | list | guide",
+            "Ghostex Apps (Beta): publish an HTML app the user keeps and can install, list the apps, read how to build one",
+        ),
         format_help_command(
             "floating-editor | fe -- <editor> [args...]",
             "Open a draggable terminal overlay",
@@ -806,6 +813,7 @@ pub fn usage() -> String {
     ]
     .into_iter()
     .filter(|line| show_connectors || !line.starts_with("  connectors "))
+    .filter(|line| show_apps || !line.starts_with("  app "))
     .collect::<Vec<_>>()
     .join("\n");
 
