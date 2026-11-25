@@ -30,8 +30,8 @@ use super::super::super::native_modal_kit::*;
 use super::super::catalog::{SettingOption, module, settings_catalog};
 use super::super::fields::{
     DropdownState, FieldStates, RowSpec, SettingsPage, SliderSaver, open_tint_picker, reset_key,
-    searchable_select_field, select_field, setting_row, settings_section, toggle_field,
-    toggle_field_with, trigger_tint_picker,
+    searchable_select_field, segmented_field, select_field, setting_row, settings_section,
+    toggle_field, toggle_field_with, trigger_tint_picker,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -586,13 +586,33 @@ impl ThemeTab {
     /// CDXC:Settings 2026-11-08 DECISION:
     /// User: "please also move this whole setting under a new advanced area in the interface page in settings". Both rows moved out of Colours into the page's collapsed Advanced fold (`ADVANCED_MAIN_SETTING_KEYS`), as About does with Experimental: a search shows the matching rows in this section in place and the fold stays out. Superseded 2026-11-18 (CDXC:Settings in model.rs, Q4153): the rows are the Window & Layout page's Window frame group, shown without a fold.
     fn window_frame_section(&mut self, t: &ThemeCx, cx: &mut Context<Self>) -> Option<AnyElement> {
-        if !cfg!(target_os = "macos") {
-            return None;
-        }
         let p = t.p;
         let values = &t.values;
         let mut rows: Vec<AnyElement> = Vec::new();
-        if t.visible("showWindowButtonsWhenSidebarCollapsed") {
+        // CDXC:Workarea 2026-11-25 DECISION in helpers/work_area_frame.rs: every platform.
+        if t.visible("windowLayout") {
+            let options = settings_catalog().options(module::SETTINGS, "WINDOW_LAYOUT_OPTIONS");
+            let allowed: Vec<String> = options.iter().map(|option| option.value.clone()).collect();
+            rows.push(segmented_field(
+                &p,
+                "windowLayout",
+                t.spec_plain(
+                    "windowLayout",
+                    "Layout",
+                    "Floating sidebar draws the sidebar as a card floating over the work area, which runs to the window's edges. Framed work area draws the work area as the card beside the sidebar.",
+                ),
+                Some(reset_key::<Self>("windowLayout")),
+                &options,
+                Some(values.choice("windowLayout", &allowed).as_str()),
+                None,
+                |page: &mut Self, next, _window, cx| {
+                    let store = page.store.clone();
+                    store.update(cx, |store, cx| store.update_setting("windowLayout", json!(next), cx));
+                },
+                cx,
+            ));
+        }
+        if cfg!(target_os = "macos") && t.visible("showWindowButtonsWhenSidebarCollapsed") {
             rows.push(toggle_field(
                 self,
                 &p,
@@ -608,7 +628,7 @@ impl ThemeTab {
         }
         // CDXC:AppModal 2026-11-10 DECISION in window/round_close_button.rs: dialogs and toasts
         // close from their top left on macOS; this row puts the X back on the right.
-        if t.visible("closeButtonsOnRight") {
+        if cfg!(target_os = "macos") && t.visible("closeButtonsOnRight") {
             rows.push(toggle_field(
                 self,
                 &p,

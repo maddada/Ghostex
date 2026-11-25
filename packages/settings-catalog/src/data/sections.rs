@@ -466,6 +466,7 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
             "windowGlassWorkAreaTintLight",
             "showActivePaneOutline",
             "workspaceActivePaneBorderColor",
+            "windowLayout",
             "showWindowButtonsWhenSidebarCollapsed",
             "closeButtonsOnRight",
             "appIconSourceId",
@@ -756,6 +757,7 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
     (
         "windowLayout",
         &[
+            "windowLayout",
             "showWindowButtonsWhenSidebarCollapsed",
             "closeButtonsOnRight",
             "showActivePaneOutline",
@@ -986,6 +988,7 @@ pub const MAIN_SETTINGS_SECTION_SETTING_KEYS: &[(&str, &[&str])] = &[
             "windowGlassWorkAreaTintLight",
             "showActivePaneOutline",
             "workspaceActivePaneBorderColor",
+            "windowLayout",
             "showWindowButtonsWhenSidebarCollapsed",
             "closeButtonsOnRight",
             "panelAnimationSpeed",

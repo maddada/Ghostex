@@ -8700,7 +8700,7 @@ background image); **Text & Fonts** (`--tab textFonts`): Fonts, Terminal text (t
 font weight, bold text, line height and letter spacing) and Text; **Size & Zoom** (`--tab
 sizeZoom`): Size (Scale and More size options) and Panel sizes (the sidebar's width and the
 Commands pane's height on double-click); **Window & Layout** (`--tab windowLayout`): Window frame
-(the window buttons, Close buttons on the right), Panes (the active pane
+(Layout, the window buttons, Close buttons on the right), Panes (the active pane
 outline) and Panels (Animations, Close side panel with its last tab, Commands pane side). Each
 setting is on one page, and these pages link nowhere else. A search for a row inside a More
 fold opens it.
@@ -8775,10 +8775,13 @@ work area colourfulness separately, and show the active pane outline and its
 colour.
 Picking a colour square never overwrites the custom values, so picking the + square again
 restores them (a theme preset does set them).
-The work area is always drawn as a card inside the window: a thin margin all around it, a
-hairline border and, without window glass, a light shadow. It stays framed with the sidebar
-hidden and in full screen, web pages in the work area follow the card's rounded corners, and
-the sidebar is at least 196pt wide. There is no setting to turn the frame off.
+Layout (Settings > Window & Layout > Window frame, `windowLayout`) picks how the window is drawn.
+**Floating sidebar**, the default, draws the sidebar as a card with a thin margin and a hairline
+border, floating over the work area, which runs flat to the window's edges; the sidebar rail sits
+on the work area's background. **Framed work area** draws the work area as the card instead: a
+thin margin all around it and a hairline border, framed with the sidebar hidden and in full
+screen, with web pages in it following the card's rounded corners. The sidebar is at least 196pt
+wide either way.
 Show the window buttons when the sidebar is collapsed (macOS, on by default) keeps the red, yellow and green window buttons in the window's top left while the sidebar is collapsed; off hides them until you open the floating sidebar, which then carries them in its top row (`showWindowButtonsWhenSidebarCollapsed`). Full screen keeps its own title bar either way.
 Under them, Close buttons on the right (macOS, off by default) puts the X that closes a dialog or a pop-up message back at its top right. Off, it sits at the top left, where macOS puts a window's close button: the corner X of every dialog and of the dialogs inside Settings, the X in the header of the Markdown table, Mermaid diagram and page windows and of the picture viewer, and the X of the messages that pop up at the bottom of the window (`closeButtonsOnRight`). On Windows and Linux the X stays at the top right.
 The chosen theme colors the

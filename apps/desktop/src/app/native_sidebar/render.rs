@@ -9,12 +9,36 @@ use gpui_component::v_flex;
 use super::appearance::SidebarAppearance;
 use crate::GhostexGpuiApp;
 
+thread_local! {
+    /// Set while the floating reveal draws the sidebar (`render_native_sidebar_in_reveal`).
+    static IN_FLOATING_REVEAL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 impl GhostexGpuiApp {
+    /// The sidebar in the floating reveal (the sidebar that slides over the work area while the
+    /// docked one is hidden), which draws its own fill: the Floating sidebar layout's card is the
+    /// docked sidebar's.
+    pub(crate) fn render_native_sidebar_in_reveal(
+        &mut self,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        IN_FLOATING_REVEAL.with(|flag| flag.set(true));
+        let sidebar = self.render_native_sidebar(window, cx);
+        IN_FLOATING_REVEAL.with(|flag| flag.set(false));
+        sidebar
+    }
+
     pub(crate) fn render_native_sidebar(
         &mut self,
         window: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
+        // The Floating sidebar layout's card (with the rail its left half while it shows) holds
+        // the docked sidebar only, never the floating reveal's.
+        let in_card = crate::app::helpers::floating_sidebar_layout()
+            && !IN_FLOATING_REVEAL.with(std::cell::Cell::get);
+        let rail_joined = self.sidebar_rail_shown();
         if !cx.has_active_drag() {
             self.native_sidebar.drop_command = None;
             self.native_sidebar.drop_memo = None;
@@ -209,10 +233,23 @@ impl GhostexGpuiApp {
             }))
             .size_full()
             .min_h_0()
-            .bg(crate::app::helpers::sidebar_chrome_fill(
-                appearance.glass,
-                180.0,
-            ))
+            // In the Floating sidebar layout over an artwork the card's frosted glass is the fill,
+            // the same glass as the chat box (`render_sidebar_card`), so no tint stacks on it.
+            .bg(if in_card && crate::app::helpers::window_art_active() {
+                gpui::transparent_black().into()
+            } else {
+                crate::app::helpers::sidebar_chrome_fill(appearance.glass, 180.0)
+            })
+            // The Floating sidebar layout's card rounds the fill on its outer corners: all four, or
+            // the right two while the rail is the card's left half (`render_sidebar_card`).
+            .when(in_card, |this| {
+                let radius = px(crate::app::helpers::WORK_AREA_FRAME_INNER_RADIUS);
+                if rail_joined {
+                    this.rounded_tr(radius).rounded_br(radius)
+                } else {
+                    this.rounded(radius)
+                }
+            })
             .text_color(appearance.foreground)
             .text_size(px(super::appearance::SIDEBAR_TEXT_SIZE * appearance.scale))
             .font_family(crate::ui_fonts::UI_FONT)

@@ -1072,6 +1072,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("workspaceActivePaneBorderColor", J::Str("#5581a9")),
     // CDXC:Settings 2026-11-08 DECISION: User: "to show traffic lights on macos when sidebar is collapsed (default to yes)". On: the window's buttons stay with the sidebar collapsed, as they did before the 2026-11-06 floating-sidebar change (GitHub #432), which off restores.
     ("showWindowButtonsWhenSidebarCollapsed", J::Bool(false)),
+    // CDXC:Workarea 2026-11-25 DECISION in apps/desktop/src/app/helpers/work_area_frame.rs: the sidebar floats as the card by default.
+    ("windowLayout", J::Str("floatingSidebar")),
     ("closeButtonsOnRight", J::Bool(false)),
     // CDXC:Theming 2026-11-21 DECISION:
     // User (through the coordinator): six dark art themes (Moonwater, Glasshouse, Red Earth, Deep Current, Night Garden, Nocturne Canyon) are Ghostex's main themes. Each paints its own artwork behind the sidebar and the work area of an opaque window: no desktop shows through. `windowArt` names the artwork (Polar Night by default since 2026-11-22, `gm-light` in light mode; None keeps the glass as it is), `windowArtDim` darkens it (percent black over it) and `windowArtBlur` softens it (points). The surfaces over it take the glass tints (`windowGlassSidebarOpacityDark`, `windowGlassWorkAreaTintDark`).
