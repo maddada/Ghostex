@@ -20,7 +20,9 @@
 //! User: "If we have Art selected, the background of these Live pages should be that art, but more blurred (like we do to the wallpaper)." Art themes (built-in artworks and Your image, `window_art.rs`) paint in an opaque GPUI window without a platform wallpaper snapshot, and Animated (`window_glass_live.rs`) previously returned `None`, leaving every Live page on Art or Animated with the flat dusk/dawn fill. `page_glass` now checks Art first (softening `window_art_snapshot` by `PICTURE_BLUR_POINTS` on top of `windowArtBlur` and combining `windowArtDim` with the work area tint in `art_tint`), then Animated (softening a frame of the active style in the current theme's colours from `live_backdrop.rs`), before falling through to Window transparency's Wallpaper / Custom image / Desktop snapshot.
 //! SEE-ALSO: .dependencies/zed/crates/gpui_macos/src/window_wallpaper.rs (`jpeg`), app/helpers/window_art.rs (`window_art_snapshot`), server/src/visual_pages/theme.rs (`data-gx-glass`, `--gx-glass-tint-dark` / `-light`, `--gx-backdrop-top`).
 
-use super::{CONTROL_INSET, GpuiVisualPageModalWindow, TOP_BAND_HEIGHT, controls_side_attr};
+use super::{
+    CONTROL_INSET, GpuiVisualPageModalWindow, RESIZE_EDGE, TOP_BAND_HEIGHT, controls_side_attr,
+};
 use base64::Engine as _;
 use gpui::{App, Bounds, Context, Pixels, Point, Rgba, Size, Window, point, px, size};
 use std::{sync::Arc, time::Duration};
@@ -777,7 +779,7 @@ fn look_script(
 s.setProperty(\"--gx-glass-tint-{theme}\",\"{}\");s.removeProperty(\"--gx-glass-tint-{other}\");",
             css_px(rect.size.width),
             css_px(rect.size.height),
-            css_px(rect.origin.x),
+            css_px(rect.origin.x - px(RESIZE_EDGE)),
             css_px(rect.origin.y - px(TOP_BAND_HEIGHT)),
             css_rgba(tint),
         ),
@@ -858,10 +860,12 @@ mod tests {
                 },
             )),
         );
-        // The page starts under the header, so its picture starts that much higher.
+        // The page starts under the header (and inside the resize edge), so its picture starts
+        // that much higher (and further left).
+        let left = -400.0 - RESIZE_EDGE;
         let top = -150.0 - TOP_BAND_HEIGHT;
         assert!(
-            look.contains(&format!("\"--gx-glass-position\",\"-400px {top}px\"")),
+            look.contains(&format!("\"--gx-glass-position\",\"{left}px {top}px\"")),
             "{look}"
         );
         assert!(

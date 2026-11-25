@@ -47,6 +47,17 @@ use std::{
 };
 
 pub(crate) use super::page_band_geometry::TOP_BAND_HEIGHT;
+
+/// How far the page stops short of the window's left, right and bottom edges, which resize the
+/// window there (Windows only).
+///
+/// CDXC:SessionChat 2026-11-26 WHY:
+/// Windows asks the window under the pointer where its resize edges are, and over the page that is the page's own browser window, which answers "inside": the page window could be resized only from its top band. The page now stops this far short of the window's left, right and bottom edges, so those strips belong to the window itself and resize it (gpui_windows' hit test for pop-ups), as a real frame rather than a hit-test override on the browser. macOS and Linux resize a window from its border over any child view, so there the page runs to the edges.
+const RESIZE_EDGE: f32 = if cfg!(all(target_os = "windows", not(ghostex_web))) {
+    6.0
+} else {
+    0.0
+};
 use super::page_band_geometry::{CONTROL_INSET, CONTROL_SIZE};
 use super::page_controls::{ControlGlass, control_button};
 const ICON_CLOSE: &str = "titlebar/x.svg";
@@ -510,10 +521,10 @@ impl GpuiVisualPageModalWindow {
         let viewport = window.viewport_size();
         let initial_frame = (
             gpui::Bounds::new(
-                point(px(0.0), px(TOP_BAND_HEIGHT)),
+                point(px(RESIZE_EDGE), px(TOP_BAND_HEIGHT)),
                 size(
-                    viewport.width,
-                    (viewport.height - px(TOP_BAND_HEIGHT)).max(px(1.0)),
+                    (viewport.width - px(2.0 * RESIZE_EDGE)).max(px(1.0)),
+                    (viewport.height - px(TOP_BAND_HEIGHT + RESIZE_EDGE)).max(px(1.0)),
                 ),
             ),
             window.scale_factor(),
@@ -859,6 +870,8 @@ impl Render for GpuiVisualPageModalWindow {
             .flex_1()
             .min_h_0()
             .w_full()
+            .px(px(RESIZE_EDGE))
+            .pb(px(RESIZE_EDGE))
             .children(self.surface.clone())
             .when(self.surface.is_none() && self.error.is_none(), |this| {
                 this.flex()
