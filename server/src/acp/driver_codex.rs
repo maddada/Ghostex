@@ -36,6 +36,9 @@ const CODEX_RPC_TIMEOUT: Duration = Duration::from_secs(30);
 #[path = "driver_codex_rewind.rs"]
 mod rewind;
 
+#[path = "driver_codex_clear.rs"]
+mod clear;
+
 struct CodexTransport {
     stdin: Mutex<Option<ChildStdin>>,
     next_id: AtomicU64,
@@ -3296,6 +3299,21 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         .get("interrupt")
                         .and_then(Value::as_bool)
                         .unwrap_or(false);
+                    if clear::is_clear_command(&text, &images) {
+                        match clear::start_new_thread(
+                            &mut proc_opt,
+                            &spawn_cfg,
+                            &state,
+                            &activity,
+                            &child_pid,
+                            &active_transport,
+                            &process_gen,
+                        ) {
+                            Ok(result) => ep.ack(id, true, result, None),
+                            Err(err) => ep.ack(id, false, Value::Null, Some(&err)),
+                        }
+                        continue;
+                    }
                     let mut input = Vec::new();
                     let mut img_err = None;
                     for raw in &images {

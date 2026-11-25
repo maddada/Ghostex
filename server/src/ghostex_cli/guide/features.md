@@ -1729,7 +1729,8 @@ first prompt), and ZCode's automatic naming will not replace it. Before that,
 the rename is saved only in Ghostex and ZCode's later automatic naming may
 replace it.
 `ghostex clear-command <session>` starts a Claude Code or Codex session's
-conversation over in the same session (it types the agent's own `/clear`), so
+conversation over in the same session (it types the agent's own `/clear`, in
+Native and Terminal-based chats alike), so
 the session keeps its name, place in the sidebar and ref, and it prints the new
 conversation id; the old conversation stays on disk. Codex, and a session it had
 to wake first, show their new conversation only once they get their next

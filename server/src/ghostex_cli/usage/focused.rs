@@ -920,8 +920,8 @@ pub fn clear_command_usage() -> String {
     r#"Usage:
   ghostex clear-command <session> [--timeout <seconds>] [--no-wait] [--json]
 
-Starts a session's conversation over with its agent's own /clear (Claude Code and Codex), in the
-same session: its name, place in the sidebar and ref stay, and its old conversation stays on disk.
+Starts a session's conversation over with its agent's own /clear (Claude Code and Codex, Native
+or Terminal-based), in the same session: its name, place in the sidebar and ref stay, and its old conversation stays on disk.
 A sleeping session is woken first and cleared once its agent is up (up to 120 seconds). Then it
 waits until the session is on its new conversation and prints its id (up to 30 seconds, 10 for
 Codex or a session it woke; --timeout sets both, --no-wait skips the second).
