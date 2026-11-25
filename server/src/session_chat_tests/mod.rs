@@ -15,6 +15,7 @@ use crate::resume_lookup::home_dir;
 use crate::session_chat::*;
 
 mod antigravity_sign_in;
+mod claude_command_menu;
 mod claude_compact_offer;
 mod claude_plan_dialog;
 mod codex_hooks_review;

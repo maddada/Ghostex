@@ -40,7 +40,26 @@ fn is_bottom_slot_dialog(text: &str, after: &[String]) -> bool {
         && !composer
         && !title_is_row
         && !question_tool
+        && !is_slash_command_menu(after)
         && crate::session_chat_claude_popups::claude_escape_safe_popup(text).is_none()
+}
+
+/*
+CDXC:AgentScreenDetection 2026-11-26 WHY:
+GitHub #768: when Ghostex compacted a Terminal-based Claude thread on its own it typed `/compact`, and Claude Code drew its command menu under the input box's foot rule (`❯ /compact   Free up context…`, `/autocompact   Set how full…`). That menu has the bottom-slot panel's shape (an indented `❯` row and no composer below the rule), so it was read as a question: the Return was held back, the thread read "waiting for an answer" and then "Message not sent", and chats grew far past the compaction limit. A panel always has a title above its options; the menu starts with its rows, each a `/name` with its description, so a slot whose first row and highlighted row are both `/name` rows is the menu and Enter runs the command.
+*/
+fn is_slash_command_menu(after: &[String]) -> bool {
+    let command_row = |line: &str| {
+        let line = line.trim_start().trim_start_matches('❯').trim_start();
+        line.strip_prefix('/')
+            .and_then(|name| name.chars().next())
+            .is_some_and(|first| first.is_alphanumeric())
+    };
+    let first = after.iter().find(|line| !line.trim().is_empty());
+    let highlighted = after
+        .iter()
+        .find(|line| line.starts_with(' ') && line.trim_start().starts_with("❯ "));
+    first.is_some_and(|line| command_row(line)) && highlighted.is_some_and(|line| command_row(line))
 }
 
 /// CDXC:AgentScreenDetection 2026-09-28 WHY:
