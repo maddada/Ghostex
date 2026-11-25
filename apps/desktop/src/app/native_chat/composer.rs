@@ -52,6 +52,9 @@ impl NativeChatView {
 
     /// `mode` is `send`, `queue`, `compact`, or `interrupt` for interrupt and send (a send the core
     /// marks to stop the agent's running turn first).
+    ///
+    /// CDXC:Drafts 2026-11-25 WHY:
+    /// GitHub #754: Enter on a new coordinator's first message sent the guide line plus the typed words under the revision the typed words were already saved at, and gxserver refuses one revision saved with two texts ("Two editors changed the same draft revision"), so the message was not sent. That text goes as the draft's next revision, as the core does for text it rewrites (`composer/send.rs`).
     pub(crate) fn submit(&mut self, mode: &str, window: &mut Window, cx: &mut Context<Self>) {
         let (mode, interrupt) = match mode {
             "interrupt" => ("send", true),
@@ -163,9 +166,11 @@ impl NativeChatView {
         } else {
             self.draft.clone()
         };
+        // The coordinator's guide line makes this a new text: the draft's next revision (above).
+        let revision = self.draft_revision.max(1) + u64::from(starting_coordinator);
         let mut submission = json!({"type":mode,"text":outgoing_text,"interrupt":interrupt,
             "sendRequestId":send_request_id,
-            "draftVersion":{"draftId":self.draft_id,"revision":self.draft_revision.max(1)}});
+            "draftVersion":{"draftId":self.draft_id,"revision":revision}});
         // The pictures still on their way go where the caret is, as a paste that lands writes
         // them (packages/gx-chat-core/src/composer/attaching.rs).
         if pictures {

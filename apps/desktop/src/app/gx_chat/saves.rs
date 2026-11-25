@@ -180,11 +180,13 @@ pub(super) fn settle_draft_save(world: &mut World, key: &str, arguments: &[Value
     let Some(draft) = world.draft_saves.remove(&request_id) else {
         return;
     };
-    if arguments.get(2).is_some_and(|error| !error.is_null()) {
-        // The row it queued is still in the outbox, and that row is the queue, so the in-flight
-        // entry is dropped rather than kept: keeping it would grow a map nothing ever reads again.
-        arm_retry(world, key, true);
-        return;
+    if let Some(error) = arguments.get(2).filter(|error| !error.is_null()) {
+        if !outbox::refused_for_good(error) {
+            // The row it queued is still in the outbox, and that row is the queue, so the in-flight
+            // entry is dropped rather than kept: keeping it would grow a map nothing ever reads again.
+            arm_retry(world, key, true);
+            return;
+        }
     }
     if outbox::acknowledge(&draft.session_key, &draft.version, now_millis()).is_err() {
         world.counters.storage_refused += 1;
@@ -208,7 +210,9 @@ pub(super) fn settle_retry_write(world: &mut World, key: &str, arguments: &[Valu
     if request_id < outbox::HOST_REQUEST_ID_BASE {
         return false;
     }
-    let failed = arguments.get(2).is_some_and(|error| !error.is_null());
+    let failed = arguments
+        .get(2)
+        .is_some_and(|error| !error.is_null() && !outbox::refused_for_good(error));
     let now_ms = now_millis();
     let Some(worker) = world.draft_workers.get_mut(key) else {
         return true;

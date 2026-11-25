@@ -119,6 +119,15 @@ pub(super) fn settle(
     Some(true)
 }
 
+/// Whether gxserver refused a save for what it holds rather than for being unreachable or busy, so
+/// sending the same row again can only be refused again.
+///
+/// CDXC:Drafts 2026-11-25 WHY:
+/// GitHub #754: a save gxserver answered "Two editors changed the same draft revision" was sent again every 2 to 30 seconds (109 times in 18 minutes in one session) until the user typed, because every refusal kept its row. gxserver answers `badRequest` only for a write it can never take (two texts for one revision, whose newer text it already put in Recovered, or a draft too long to send): such a row is cleared like an accepted one, and the next edit saves under its own revision. A refusal without that code still retries.
+pub(super) fn refused_for_good(error: &Value) -> bool {
+    error.get("code").and_then(Value::as_str) == Some("badRequest")
+}
+
 /// Clears every pending save of one draft at or below the acknowledged revision.
 ///
 /// `acknowledgeDraftSave` removes the whole run rather than the one key, which is what makes an
