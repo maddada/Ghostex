@@ -595,8 +595,23 @@ pub(crate) fn project_presentation_session(
         string_field(session, "projectId"),
         string_field(session, "sessionId"),
     ) {
+        let attention_kind = output
+            .get("attention")
+            .and_then(|attention| attention.get("kind"))
+            .and_then(Value::as_str)
+            .map(str::to_string);
         if let Some(program_status) =
-            crate::program_status::presentation_program_status(&project_id, &session_id)
+            crate::program_status::presentation_program_status(&project_id, &session_id).or_else(
+                || {
+                    crate::program_status::native_program_status(
+                        session,
+                        &activity,
+                        attention_kind.as_deref(),
+                        awaiting_approval,
+                        unanswered_question_count,
+                    )
+                },
+            )
         {
             output.insert("programStatus".to_string(), program_status);
         }

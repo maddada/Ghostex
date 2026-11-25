@@ -75,3 +75,43 @@ pub(crate) fn presentation_program_status(project_id: &str, session_id: &str) ->
     output.insert("records".to_string(), Value::Array(records));
     Some(Value::Object(output))
 }
+
+/// CDXC:SessionStatus 2026-11-25 WHY:
+/// GitHub #755: a Native session's terminal runs Ghostex's own host, not the agent's program, so
+/// nothing reports OSC 7501 and `programStatus` was absent, while Terminal-based sessions have one
+/// field a lead reads to tell working from finished or waiting. A Native session without records
+/// gets the same shape from what its host already reports into the session's activity:
+/// `working`, `done` (a finished turn), `blocked` with `kind` permission or question, or `idle`.
+/// `governs` stays false and `records` empty, so no client draws or decides anything from it
+/// (the hover line and the red failed dot read only a governing status); it is the session's own
+/// activity said the program's way, for `ghostex sessions --json --full`.
+pub(crate) fn native_program_status(
+    session: &Value,
+    activity: &str,
+    attention_kind: Option<&str>,
+    awaiting_approval: bool,
+    unanswered_questions: usize,
+) -> Option<Value> {
+    if !crate::acp::session_is_acp(session) {
+        return None;
+    }
+    let (state, kind) = match activity {
+        _ if awaiting_approval => ("blocked", Some("permission")),
+        "working" => ("working", None),
+        "attention" if attention_kind == Some("finished") => ("done", None),
+        "attention" if unanswered_questions > 0 => ("blocked", Some("question")),
+        "attention" => ("blocked", None),
+        _ => ("idle", None),
+    };
+    let mut output = Map::new();
+    output.insert("governs".to_string(), json!(false));
+    output.insert("state".to_string(), json!(state));
+    if let Some(kind) = kind {
+        output.insert("kind".to_string(), json!(kind));
+    }
+    if let Some(app) = crate::acp::resolve_native_family_for_session(session) {
+        output.insert("app".to_string(), json!(app));
+    }
+    output.insert("records".to_string(), json!([]));
+    Some(Value::Object(output))
+}
