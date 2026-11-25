@@ -3,7 +3,7 @@ name: ghostex-release
 description: >-
   Release Ghostex: bump the version, write the CHANGELOG section, dispatch the
   "Release Ghostex" GitHub Actions workflow, watch it, recover failed
-  platforms and verify the live release. Use when the user says "release new
+  platforms, verify the live release and announce it in Discord. Use when the user says "release new
   minor", "release new patch", "release new major", "cut a release", "ship
   10.x", "publish a new version", or asks to rebuild/re-publish one platform
   of an existing release. Also use it for a phone-only change that should
@@ -116,6 +116,8 @@ only to get a phone JavaScript fix out).
    (add `--coordinator <ref>` from a thread). It lists the items that waited on
    the next phone update; check each one's phone commit is in what you
    published and finish it (`item done`).
+6. If the update changes something people see on their phone, announce it
+   in Discord #announcements (step 9); a fix nobody notices needs no post.
 
 It **refuses** when a platform's runtime version has no installed app, which
 means the phone's native side changed since the last app build (Kotlin,
@@ -176,7 +178,7 @@ tree:
      run `ghostex project status` again, and go on only when that row is clean
      (stashes may stay if their coordinator says they are not release work).
    - An **offline** computer doesn't hold the release (user decision Q3297,
-     2026-11-15): release without it, and say so in the report (step 9) with
+     2026-11-15): release without it, and say so in the report (step 10) with
      the last-seen time the table printed. Its work goes in the next release.
    - A row that says `needs a newer Ghostex on <computer>` can't be read until
      that computer (or, for "this computer", the Mac) runs a Ghostex released
@@ -321,7 +323,7 @@ about 10 minutes after the build.
 
 The runbook, with every command, pass check, stop or warn call, the report format
 and the three-release rule, is [smoke-test.md](smoke-test.md). Put its verdict
-line in step 9's report. Update its list in a separate commit after the release,
+line in step 10's report. Update its list in a separate commit after the release,
 never in the prepare commit. The `--dry-run` below needs no smoke test; the real
 dispatch does.
 
@@ -682,7 +684,38 @@ must print `Serial : 0436C352E3CB5E9769206A31B40CE463`,
 result for both architectures in the report. An unsigned or invalid file is a
 release defect: report it at once.
 
-### 9. Report to the user
+### 9. Announce in Discord #announcements
+
+**The release is not done until it is announced.** Once it is live (step 8
+passed), post it in the Ghostex Discord #announcements channel:
+https://discord.com/channels/1503822256953102336/1510637303964635137 (guild
+1503822256953102336, channel 1510637303964635137). Releases 11.14.0 through
+12.1.1 went out without a post (2026-11-25), so never skip this step.
+
+- **Post:** a short first line (`**Ghostex X.Y.Z is out**`), then the 5 to 10
+  biggest highlights from the CHANGELOG section as short bullets in plain
+  words, then the release link
+  (`https://github.com/maddada/Ghostex/releases/tag/vX.Y.Z`). Discord markdown,
+  under 2000 characters, no screenshots unless asked. When a patch replaced
+  the release (11.8.0 then 11.8.1), say which version to get and link it.
+- **Words:** friendly; no em dashes; no internal project names and no
+  security-report wording. Thank outside contributors in one line if it fits.
+- **How:** through the Composio Discord connector, as 11.5.0 to 11.13.0 were
+  (11.5.0 used a temporary webhook named "Ghostex", deleted after posting).
+  Put the message id in the report.
+- **If you can't post it** (no connector, no permission, a thread told to
+  post nothing outside): the release still isn't done. The report (step 10)
+  lists it under **❓ Needs you** with the channel link and the exact post
+  text in a ``` block, ready to paste.
+- **OTA-only release:** when it changes something people see on their phone,
+  announce it the same way (first line `**Ghostex phone update**`, the
+  changes as bullets, no release link since there is none). A fix nobody
+  notices needs no post.
+
+Save the text you posted (or drafted) in the release's work folder, so the
+next release can match its tone.
+
+### 10. Report to the user
 
 First tell the coordinator's work items once the release is live:
 `ghostex coordinator item delivered release vX.Y.Z` and, since a full release
@@ -703,6 +736,9 @@ on it; check each one's commit is in the tag (`git merge-base --is-ancestor
   ("M7-DESKTOP not checked: offline, last seen Nov 14 05:07");
 - a reminder that `main` received the bot's `chore: release X.Y.Z` commit, so
   every machine should pull.
+- the Discord post (step 9): its message id, or, if it isn't posted, a
+  **❓ Needs you** item with the channel link and the exact post text in a
+  ``` block. Don't call the release done without one of the two.
 
 ## Don'ts
 
@@ -713,4 +749,6 @@ on it; check each one's commit is in the tag (`git merge-base --is-ancestor
 - Don't make the tree clean by stashing, cleaning, resetting or ignoring
   other people's work: commit and push it (step 2). Only `*.orig`/`*.rej`
   patch leftovers inside `.dependencies/` get deleted.
+- Don't report a release as done before its Discord #announcements post is
+  out, or handed to the user under Needs you with its text (step 9).
 - Don't push to `main` during the first minutes of a run, before `prepare` passes.

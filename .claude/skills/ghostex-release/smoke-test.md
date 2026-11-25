@@ -867,7 +867,7 @@ the report (AGENTS.md: "Clean up what you create to test").
 ## The report
 
 Post it to the coordinator as the thread's final message, and paste it in the
-release report (step 9 of SKILL.md). One line per step, and a verdict first.
+release report (step 10 of SKILL.md). One line per step, and a verdict first.
 
 ```text
 Smoke test for X.Y.Z: PASS | PASS WITH WARNINGS | STOP
