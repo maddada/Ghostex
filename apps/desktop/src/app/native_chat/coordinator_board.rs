@@ -406,15 +406,34 @@ fn dock_card_height(dock: &Value) -> f32 {
         + command
 }
 
+/// Whether the board draws its own title row: only an older gxserver's "Board", which no header
+/// button names (`board_header`).
+fn board_has_title_row(board: &Value) -> bool {
+    board["title"] != "Work"
+}
+
+/// No group to show: the panel's only line says "Nothing open".
+fn board_groups_empty(board: &Value) -> bool {
+    board["groups"].as_array().is_none_or(Vec::is_empty)
+}
+
 /// The board's content height (unscaled): its header, each group's line, an open group's rows
 /// and its "N more" line.
 fn board_height_with<F>(board: &Value, mut enrich_dock: F) -> f32
 where
     F: FnMut(&Value) -> Value,
 {
-    // The header, and room under the last group's line: the panel's own bottom padding cut the
-    // last line ("Finished today") when everything fit.
-    let mut height = HEADER_HEIGHT + 8.0 + LIST_BOTTOM + super::work_topic::topic_height(board);
+    // The header (the Work panel has none, only "Nothing open" when no group shows), and room
+    // under the last group's line: the panel's own bottom padding cut the last line ("Finished
+    // today") when everything fit.
+    let header = if board_has_title_row(board) {
+        HEADER_HEIGHT
+    } else if board_groups_empty(board) {
+        GROUP_HEIGHT
+    } else {
+        0.0
+    };
+    let mut height = header + 8.0 + LIST_BOTTOM + super::work_topic::topic_height(board);
     for group in board["groups"].as_array().into_iter().flatten() {
         height += GROUP_HEIGHT;
         for row in group["rows"].as_array().into_iter().flatten() {
@@ -1077,12 +1096,27 @@ impl NativeChatView {
             // A wheel turns the row only with Shift (the columns scroll up and down under it).
             .restrict_scroll_to_axis()
             .track_scroll(&scroll);
+        // The view switch on the first open column's head, when the board has no title row.
+        let mut switch = (!board_has_title_row(&board))
+            .then(|| self.board_view_switch(BoardPlace::Columns, p, cx));
         for group in &groups {
             row = row.child(if is_collapsed(group) {
                 self.board_column_strip(group, p, cx)
             } else {
-                self.board_column(group, column, p, cx)
+                self.board_column(group, column, switch.take(), p, cx)
             });
+        }
+        // Every column collapsed to its strip: the switch after them. With no group at all it is
+        // on the "Nothing open" line (`board_header`).
+        if let Some(switch) = switch.filter(|_| !groups.is_empty()) {
+            row = row.child(
+                div()
+                    .flex_shrink_0()
+                    .h(px(GROUP_HEIGHT * s))
+                    .flex()
+                    .items_center()
+                    .child(switch),
+            );
         }
         let wheel_scroll = scroll.clone();
         let down_scroll = scroll.clone();
@@ -1148,7 +1182,7 @@ impl NativeChatView {
                 .min_h_0()
                 .flex()
                 .flex_col()
-                .child(self.board_header(&board, BoardPlace::Columns, p, cx))
+                .children(self.board_header(&board, BoardPlace::Columns, p, cx))
                 .child(row)
                 .into_any_element(),
         )
@@ -1223,11 +1257,13 @@ impl NativeChatView {
             .into_any_element()
     }
 
-    /// One group's column: its title and count, then its rows as cards.
+    /// One group's column: its title and count (and `switch`, on the first), then its rows as
+    /// cards.
     fn board_column(
         &self,
         group: &Value,
         width: f32,
+        switch: Option<AnyElement>,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -1342,6 +1378,7 @@ impl NativeChatView {
                             count => count.to_string(),
                         },
                     ))
+                    .children(switch)
                     .child(
                         svg()
                             .path("titlebar/chevron-left.svg")
@@ -3010,7 +3047,7 @@ impl NativeChatView {
                     .flex_shrink_0()
                     .px(px(10.0 * s))
                     .pt(px(8.0 * s))
-                    .child(self.board_header(&board, BoardPlace::Docked, p, cx)),
+                    .children(self.board_header(&board, BoardPlace::Docked, p, cx)),
             )
             .child(
                 div()
@@ -3022,7 +3059,13 @@ impl NativeChatView {
                     .px(px(10.0 * s))
                     .pb(px(10.0 * s))
                     .opacity(frame.opening_content_opacity() * frame.closing_content_opacity())
-                    .child(self.board_groups(&board, &self.board.scroll, p, cx)),
+                    .child(self.board_groups(
+                        &board,
+                        BoardPlace::Docked,
+                        &self.board.scroll,
+                        p,
+                        cx,
+                    )),
             )
             .into_any_element();
         Some(if frame.animating {
@@ -3058,7 +3101,7 @@ impl NativeChatView {
                 .min_h_0()
                 .flex()
                 .flex_col()
-                .child(self.board_header(&board, BoardPlace::Floating, p, cx))
+                .children(self.board_header(&board, BoardPlace::Floating, p, cx))
                 .child(
                     div()
                         .id("chat-coordinator-board-menu-list")
@@ -3069,70 +3112,72 @@ impl NativeChatView {
                         // Room for the × badge over a card's top-right corner.
                         .px(px(10.0 * p.scale))
                         .pt(px(4.0 * p.scale))
-                        .child(self.board_groups(&board, &self.board.menu_scroll, p, cx)),
+                        .child(self.board_groups(
+                            &board,
+                            BoardPlace::Floating,
+                            &self.board.menu_scroll,
+                            p,
+                            cx,
+                        )),
                 )
                 .into_any_element(),
         )
     }
 
-    /// "Board", its counts line, the switch to the other view, and (docked or as columns) the close
-    /// button.
+    /// The board's top: the Work panel's Topic, and "Nothing open" (holding the view switch) when no
+    /// group shows. Only an older gxserver's "Board", which no header button names, keeps its title
+    /// row with the switch and the close button.
+    ///
+    /// CDXC:Coordinators 2026-11-25 DECISION:
+    /// User (Q4867 B), of the header's Work button over the panel's own icon and "Work": "doesn't
+    /// look good". The panel starts with its first group, as Session details starts with its
+    /// cards; the switch moves to the end of the first group line (`board_groups`, the first open
+    /// column's head) and the × goes, since the Work button closes the docked list, the floating
+    /// card and the columns.
     fn board_header(
         &self,
         board: &Value,
         place: BoardPlace,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
-    ) -> AnyElement {
+    ) -> Option<AnyElement> {
         let s = p.scale;
+        if !board_has_title_row(board) {
+            let topic = self.work_topic_row(board, p, cx);
+            let nothing_open = board_groups_empty(board).then(|| {
+                div()
+                    .flex_shrink_0()
+                    .h(px(GROUP_HEIGHT * s))
+                    .flex()
+                    .items_center()
+                    .gap(px(8.0 * s))
+                    .px(px(4.0 * s))
+                    .text_size(px(TITLE_SIZE * s))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .text_color(p.card_muted)
+                            .child("Nothing open"),
+                    )
+                    .child(self.board_view_switch(place, p, cx))
+            });
+            if topic.is_none() && nothing_open.is_none() {
+                return None;
+            }
+            return Some(
+                div()
+                    .flex_shrink_0()
+                    .flex()
+                    .flex_col()
+                    .children(topic)
+                    .children(nothing_open)
+                    .into_any_element(),
+            );
+        }
         let columns = place == BoardPlace::Columns;
-        let (switch_label, switch_icon, switch_to) = if columns {
-            (
-                "Show as a list beside the chat",
-                "titlebar/layout-sidebar-right-expand.svg",
-                LIST_VIEW,
-            )
-        } else {
-            (
-                "Show as columns",
-                "titlebar/layout-columns.svg",
-                COLUMNS_VIEW,
-            )
-        };
-        let switch = div()
-            .id("chat-coordinator-board-switch")
-            .role(gpui::Role::Button)
-            .aria_label(switch_label)
-            .flex_shrink_0()
-            .h(px(20.0 * s))
-            .flex()
-            .items_center()
-            .gap(px(4.0 * s))
-            .px(px(5.0 * s))
-            .rounded(px(5.0 * s))
-            .text_size(px(CHIP_SIZE * s))
-            .text_color(p.card_muted)
-            .chat_cursor_pointer()
-            .hover(|style| {
-                style
-                    .bg(p.foreground.opacity(0.06))
-                    .text_color(p.foreground)
-            })
-            .tooltip(move |window, cx| {
-                gpui_component::tooltip::Tooltip::new(switch_label).build(window, cx)
-            })
-            .child(
-                svg()
-                    .path(switch_icon)
-                    .size(px(13.0 * s))
-                    .text_color(p.muted),
-            )
-            .child(if columns { "List" } else { "Columns" })
-            .on_click(cx.listener(move |this, _, window, cx| {
-                cx.stop_propagation();
-                this.switch_board_view(switch_to, window, cx);
-            }))
-            .into_any_element();
+        let switch = self.board_view_switch(place, p, cx);
         let docked = place != BoardPlace::Floating;
         let close = docked.then(|| {
             div()
@@ -3163,7 +3208,7 @@ impl NativeChatView {
                 }))
                 .into_any_element()
         });
-        // Only "Work": its groups count themselves below, so the header repeats no count. An
+        // Only the title: its groups count themselves below, so the header repeats no count. An
         // empty panel still says so.
         //
         // CDXC:Coordinators 2026-11-11 DECISION:
@@ -3206,28 +3251,88 @@ impl NativeChatView {
             )
             .child(switch)
             .children(close);
-        // The Work panel's Topic under its title (work_topic.rs).
-        match self.work_topic_row(board, p, cx) {
-            Some(topic) => div()
+        Some(
+            div()
                 .flex_shrink_0()
                 .flex()
                 .flex_col()
                 .child(row)
-                .child(topic)
+                .children(self.work_topic_row(board, p, cx))
                 .into_any_element(),
-            None => row.into_any_element(),
-        }
+        )
     }
 
-    /// Every group: its line (a click folds it), its rows and its "N more".
+    /// The switch to the other view: "Columns" in the list, "List" in the columns.
+    fn board_view_switch(
+        &self,
+        place: BoardPlace,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let columns = place == BoardPlace::Columns;
+        let (switch_label, switch_icon, switch_to) = if columns {
+            (
+                "Show as a list beside the chat",
+                "titlebar/layout-sidebar-right-expand.svg",
+                LIST_VIEW,
+            )
+        } else {
+            (
+                "Show as columns",
+                "titlebar/layout-columns.svg",
+                COLUMNS_VIEW,
+            )
+        };
+        div()
+            .id("chat-coordinator-board-switch")
+            .role(gpui::Role::Button)
+            .aria_label(switch_label)
+            .flex_shrink_0()
+            .h(px(20.0 * s))
+            .flex()
+            .items_center()
+            .gap(px(4.0 * s))
+            .px(px(5.0 * s))
+            .rounded(px(5.0 * s))
+            .text_size(px(CHIP_SIZE * s))
+            .text_color(p.card_muted)
+            .chat_cursor_pointer()
+            .hover(|style| {
+                style
+                    .bg(p.foreground.opacity(0.06))
+                    .text_color(p.foreground)
+            })
+            .tooltip(move |window, cx| {
+                gpui_component::tooltip::Tooltip::new(switch_label).build(window, cx)
+            })
+            .child(
+                svg()
+                    .path(switch_icon)
+                    .size(px(13.0 * s))
+                    .text_color(p.muted),
+            )
+            .child(if columns { "List" } else { "Columns" })
+            .on_click(cx.listener(move |this, _, window, cx| {
+                cx.stop_propagation();
+                this.switch_board_view(switch_to, window, cx);
+            }))
+            .into_any_element()
+    }
+
+    /// Every group: its line (a click folds it), its rows and its "N more". `place`'s view switch
+    /// ends the first line when the board has no title row (`board_header`).
     fn board_groups(
         &self,
         board: &Value,
+        place: BoardPlace,
         scroll: &ScrollHandle,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
+        let mut switch =
+            (!board_has_title_row(board)).then(|| self.board_view_switch(place, p, cx));
         let mut list = div().flex().flex_col().w_full().min_w_0();
         // While a card is dragged, the groups it can land in show even when empty (an empty group
         // is otherwise left out: the 2026-11-05 decision in the core).
@@ -3324,6 +3429,10 @@ impl NativeChatView {
                     } else {
                         count.to_string()
                     }))
+                    // The view switch at the first line's end, when the board has no title row.
+                    .when_some(switch.take(), |line, switch| {
+                        line.child(div().flex_1()).child(switch)
+                    })
                     .on_click(cx.listener(move |this, _, _, cx| this.invoke(toggle.clone(), cx))),
             );
             let mut cards = div()
