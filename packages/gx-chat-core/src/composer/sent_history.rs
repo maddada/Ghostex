@@ -3,7 +3,7 @@
 //! referencing it.
 //!
 //! gxserver reads the list from the session's whole transcript (`/api/readSessionChatSent`,
-//! server/src/session_chat_sent.rs), fifty cards a page from the newest back, with the search and
+//! server/src/session_chat_sent.rs), a page at a time from the newest back, with the search and
 //! the filter applied there, so a chat of hundreds of messages is never read whole into the chat
 //! and a message older than the loaded rows is listed too. Which rows count and what a card holds
 //! are decided here ([`card`], [`matches`]) for gxserver and every client alike.
@@ -19,9 +19,20 @@
 //! (Q4983); oldest first, opening at the newest (Q4984); a search field plus filters (Q4985); the
 //! same pill on the phone (Q4986). Defaults that stood: the pill shows once the chat has a sent
 //! message; messages from before message numbers (Nov 20) are listed without a number; the list
-//! pages fifty at a time from gxserver.
+//! pages fifty at a time from gxserver (now 20 first, then 40 a page: the WHY below).
 //! SEE-ALSO: server/src/session_chat_sent.rs (the read), apps/desktop/src/app/native_chat/sent_history.rs
 //! and apps/mobile/app/src/chat/native/cards/SentHistorySheet.tsx (drawing).
+//!
+//! CDXC:SessionChat 2026-11-26 WHY:
+//! User: "when i click on chat history to open it it loads slow man pls make it load faster (load
+//! only first 20 messages for ex. load more above when i scroll to them. do other optimisations like
+//! that pls make it load fast. Cache it also so clicking again isn't slow". Measured on a copy of the
+//! 2 GB coordinator transcript (web build, test gxserver): every open waited 600 to 850 ms for the
+//! read, because a chat that is being written to changes its file, so gxserver's kept pages never
+//! answered it, and a close threw the list away. Now the first view reads 20 cards, older pages 40
+//! as the list nears its top, and the list of the last few chats is kept ([`CACHED_CHATS`]): a
+//! History opened again shows it at once and reads only the newest page in the background,
+//! fitting it on the kept cards ([`fit_newest`]), which also drops what a rewind took away.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -35,8 +46,17 @@ use crate::transcript::message_numbers::{
 };
 use crate::wire::{ChatRpcMethod, RpcOutcome};
 
-/// Cards one read brings: the first view, and each older page as the list scrolls to its top.
-pub const PAGE_CARDS: usize = 50;
+/// Cards the first view reads, and the background read of a kept list.
+pub const FIRST_PAGE_CARDS: usize = 20;
+/// Cards each older page brings as the list nears its top; gxserver's default for a read that
+/// names no limit.
+pub const PAGE_CARDS: usize = 40;
+/// Chats whose list is kept after History closes, the most recently opened first to stay.
+const CACHED_CHATS: usize = 4;
+/// A kept list longer than this (cards, or bytes of their words) is not kept, so memory stays
+/// small however far a list was scrolled.
+const CACHED_CARDS: usize = 300;
+const CACHED_BYTES: usize = 2 * 1024 * 1024;
 /// The most characters of a message a card carries for its preview (the card cuts it to three
 /// lines); Copy and Put back take the whole text.
 const PREVIEW_CHARS: usize = 600;
@@ -195,6 +215,12 @@ pub struct SentHistoryState {
     pub request: Option<u64>,
     /// The read in flight adds an older page above the cards rather than replacing them.
     pub appending: bool,
+    /// The read in flight is the newest page of a kept list, fitted on its cards when it answers
+    /// ([`fit_newest`]); the kept cards show meanwhile, with no loading line.
+    pub refreshing: bool,
+    /// Bumped whenever `cards` change, so the drawn cards are built once per change ([`ItemMemo`]).
+    pub revision: u64,
+    pub memo: ItemMemo,
     /// Oldest first.
     pub cards: Vec<SentCard>,
     /// Where the next older page ends; `None` once the list reached the chat's first message.
@@ -207,6 +233,98 @@ pub struct SentHistoryState {
     pub filter: SentFilter,
     pub jump: Option<SentJump>,
     pub pending_jump: Option<PendingSentJump>,
+}
+
+/// The cards as drawn, kept for the `cards` revision and the day they were built on, so a publish
+/// while the list is open (a reply streaming in) does not build every card again.
+#[derive(Debug, Default)]
+pub struct ItemMemo(std::sync::Mutex<Option<(u64, i64, Vec<SentItem>)>>);
+
+impl Clone for ItemMemo {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl PartialEq for ItemMemo {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+/// A chat's list as History last showed it, unsearched and unfiltered.
+struct CachedList {
+    key: String,
+    cards: Vec<SentCard>,
+    before: Option<u64>,
+    has_more: bool,
+}
+
+/// The kept lists, the most recently used last.
+static CACHE: std::sync::Mutex<Vec<CachedList>> = std::sync::Mutex::new(Vec::new());
+
+/// The chat and the transcript it reads: a new conversation in the same session is another list.
+fn cache_key(state: &ChatState) -> Option<String> {
+    let agent_session = state.session.agent_session_id.as_deref()?;
+    Some(format!("{}|{agent_session}", state.identity.session_key))
+}
+
+/// Keeps the list History shows when it is the whole one (no search, no filter, read without an
+/// error), or forgets the chat's kept list when it grew too long to keep.
+fn remember(state: &ChatState) {
+    let history = &state.composer.sent_history;
+    if !history.loaded
+        || history.error.is_some()
+        || !history.query.trim().is_empty()
+        || history.filter != SentFilter::All
+    {
+        return;
+    }
+    let Some(key) = cache_key(state) else {
+        return;
+    };
+    let bytes: usize = history.cards.iter().map(|card| card.text.len()).sum();
+    let Ok(mut cache) = CACHE.lock() else {
+        return;
+    };
+    cache.retain(|list| list.key != key);
+    if history.cards.len() > CACHED_CARDS || bytes > CACHED_BYTES {
+        return;
+    }
+    cache.push(CachedList {
+        key,
+        cards: history.cards.clone(),
+        before: history.before,
+        has_more: history.has_more,
+    });
+    let over = cache.len().saturating_sub(CACHED_CHATS);
+    cache.drain(..over);
+}
+
+/// The chat's kept list, which becomes the most recently used.
+fn recall(state: &ChatState) -> Option<(Vec<SentCard>, Option<u64>, bool)> {
+    let key = cache_key(state)?;
+    let mut cache = CACHE.lock().ok()?;
+    let at = cache.iter().position(|list| list.key == key)?;
+    let list = cache.remove(at);
+    let kept = (list.cards.clone(), list.before, list.has_more);
+    cache.push(list);
+    Some(kept)
+}
+
+/// Fits the newest page on a kept list: the kept cards up to the page's first one, then the page,
+/// which brings the messages sent since and leaves out any a rewind took. `None` when the page
+/// does not meet the kept cards (more was sent since than a page holds, a rewind went further
+/// back, another transcript) or holds the whole chat: the page is the list then.
+fn fit_newest(kept: &[SentCard], page: &[SentCard], page_has_more: bool) -> Option<Vec<SentCard>> {
+    let first = page.first()?;
+    if !page_has_more {
+        return None;
+    }
+    let at = kept.iter().position(|card| card.id == first.id)?;
+    let mut cards = kept[..at].to_vec();
+    cards.extend_from_slice(page);
+    Some(cards)
 }
 
 /// Where the transcript should scroll, once per click.
@@ -303,16 +421,34 @@ pub fn toggle(state: &mut ChatState) -> Vec<Effect> {
     history.open = true;
     history.query.clear();
     history.filter = SentFilter::All;
-    read(state, false)
+    show_all(state)
 }
 
-/// The list went away; an answer still on its way is dropped, a jump it started goes on.
+/// The whole list: the kept one at once, with the newest page read behind it, or a first read.
+fn show_all(state: &mut ChatState) -> Vec<Effect> {
+    let Some((cards, before, has_more)) = recall(state) else {
+        return read(state, Read::First);
+    };
+    let history = &mut state.composer.sent_history;
+    history.cards = cards;
+    history.before = before;
+    history.has_more = has_more;
+    history.loaded = true;
+    history.revision += 1;
+    read(state, Read::Refresh)
+}
+
+/// The list went away, kept for the next open; an answer still on its way is dropped, a jump it
+/// started goes on.
 pub fn close(state: &mut ChatState) -> Vec<Effect> {
+    remember(state);
     let history = &mut state.composer.sent_history;
     history.open = false;
     history.request = None;
     history.appending = false;
+    history.refreshing = false;
     history.cards.clear();
+    history.revision += 1;
     history.before = None;
     history.has_more = false;
     history.loaded = false;
@@ -328,8 +464,19 @@ pub fn set_query(state: &mut ChatState, query: &str) -> Vec<Effect> {
     if !state.composer.sent_history.open || state.composer.sent_history.query == query {
         return Vec::new();
     }
+    remember(state);
     state.composer.sent_history.query = query.to_string();
-    read(state, false)
+    reread(state)
+}
+
+/// The search or the filter changed: the whole list comes back from the kept one, anything else
+/// reads again from the newest.
+fn reread(state: &mut ChatState) -> Vec<Effect> {
+    let history = &state.composer.sent_history;
+    if history.query.trim().is_empty() && history.filter == SentFilter::All {
+        return show_all(state);
+    }
+    read(state, Read::First)
 }
 
 /// A filter was picked: the list reads again from the newest.
@@ -338,8 +485,9 @@ pub fn set_filter(state: &mut ChatState, filter: &str) -> Vec<Effect> {
     if !state.composer.sent_history.open || state.composer.sent_history.filter == filter {
         return Vec::new();
     }
+    remember(state);
     state.composer.sent_history.filter = filter;
-    read(state, false)
+    reread(state)
 }
 
 /// The list reached its top: the next older page.
@@ -349,22 +497,35 @@ pub fn more(state: &mut ChatState) -> Vec<Effect> {
     {
         return Vec::new();
     }
-    read(state, true)
+    read(state, Read::Older)
 }
 
-fn read(state: &mut ChatState, appending: bool) -> Vec<Effect> {
+/// What a read is for.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Read {
+    /// The newest cards, replacing the list.
+    First,
+    /// The page before the oldest card.
+    Older,
+    /// The newest cards, fitted on the kept list shown meanwhile.
+    Refresh,
+}
+
+fn read(state: &mut ChatState, kind: Read) -> Vec<Effect> {
     let request_id = state.core.allocate_request_id();
     let history = &mut state.composer.sent_history;
+    let appending = kind == Read::Older;
     history.request = Some(request_id);
     history.appending = appending;
+    history.refreshing = kind == Read::Refresh;
     history.error = None;
-    if !appending {
+    if kind == Read::First {
         history.loaded = false;
     }
     let mut params = json!({
         "query": history.query.trim(),
         "filter": history.filter.wire(),
-        "limit": PAGE_CARDS,
+        "limit": if appending { PAGE_CARDS } else { FIRST_PAGE_CARDS },
     });
     if appending {
         if let Some(before) = history.before {
@@ -389,6 +550,8 @@ pub fn settle(state: &mut ChatState, request_id: u64, outcome: &RpcOutcome) -> O
     let history = &mut state.composer.sent_history;
     history.request = None;
     let appending = std::mem::take(&mut history.appending);
+    let refreshing = std::mem::take(&mut history.refreshing);
+    history.revision += 1;
     match outcome {
         RpcOutcome::Ok { result } => {
             let cards: Vec<SentCard> = result
@@ -396,6 +559,24 @@ pub fn settle(state: &mut ChatState, request_id: u64, outcome: &RpcOutcome) -> O
                 .cloned()
                 .and_then(|messages| serde_json::from_value(messages).ok())
                 .unwrap_or_default();
+            let has_more = result.get("hasMore").and_then(Value::as_bool) == Some(true);
+            let before = result.get("before").and_then(Value::as_u64);
+            if refreshing {
+                // A kept list keeps where its older pages go on from; a page that replaces it
+                // brings its own.
+                match fit_newest(&history.cards, &cards, has_more) {
+                    Some(fitted) => history.cards = fitted,
+                    None => {
+                        history.cards = cards;
+                        history.has_more = has_more;
+                        history.before = before;
+                    }
+                }
+                history.loaded = true;
+                state.core.request_publish();
+                remember(state);
+                return Some(Vec::new());
+            }
             if appending {
                 let known: std::collections::HashSet<String> =
                     history.cards.iter().map(|card| card.id.clone()).collect();
@@ -408,10 +589,15 @@ pub fn settle(state: &mut ChatState, request_id: u64, outcome: &RpcOutcome) -> O
             } else {
                 history.cards = cards;
             }
-            history.has_more = result.get("hasMore").and_then(Value::as_bool) == Some(true);
-            history.before = result.get("before").and_then(Value::as_u64);
+            history.has_more = has_more;
+            history.before = before;
             history.loaded = true;
+            state.core.request_publish();
+            remember(state);
+            return Some(Vec::new());
         }
+        // A kept list stays as it is when its background read fails.
+        RpcOutcome::Err { .. } if refreshing => {}
         // An older gxserver has no `readSessionChatSent` and refuses it without a sentence.
         RpcOutcome::Err { message, .. } if !message.chars().any(char::is_alphabetic) => {
             history.error = Some(
@@ -591,6 +777,25 @@ fn item(card: &SentCard, context: &ChatContext) -> SentItem {
     }
 }
 
+/// The cards as drawn, built again only when the cards or the day changed (`message_time` reads
+/// the day).
+fn items(history: &SentHistoryState, context: &ChatContext) -> Vec<SentItem> {
+    let day = (context.now_millis() + i64::from(context.utc_offset_minutes) * 60_000)
+        .div_euclid(86_400_000);
+    if let Ok(memo) = history.memo.0.lock() {
+        if let Some((revision, built_on, items)) = memo.as_ref() {
+            if *revision == history.revision && *built_on == day {
+                return items.clone();
+            }
+        }
+    }
+    let built: Vec<SentItem> = history.cards.iter().map(|card| item(card, context)).collect();
+    if let Ok(mut memo) = history.memo.0.lock() {
+        *memo = Some((history.revision, day, built.clone()));
+    }
+    built
+}
+
 /// The document's `sentHistory`.
 pub fn document(state: &ChatState, context: &ChatContext) -> SentHistory {
     let history = &state.composer.sent_history;
@@ -628,16 +833,12 @@ pub fn document(state: &ChatState, context: &ChatContext) -> SentHistory {
     SentHistory {
         enabled,
         open,
-        loading: open && history.request.is_some() && !history.appending,
+        loading: open && history.request.is_some() && !history.appending && !history.refreshing,
         loading_more: open && history.request.is_some() && history.appending,
         error: history.error.clone().filter(|_| open),
         query: history.query.clone(),
         filters,
-        items: if open {
-            history.cards.iter().map(|card| item(card, context)).collect()
-        } else {
-            Vec::new()
-        },
+        items: if open { items(history, context) } else { Vec::new() },
         has_more: open && history.has_more,
         caption,
         empty_label,

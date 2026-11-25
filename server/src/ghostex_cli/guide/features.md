@@ -2316,8 +2316,10 @@ shows a History pill (a clock with a backward arrow), right of the ↓ Scroll to
 bottom pill when that shows (on the phone, after the view chips). Click it for
 every message you sent in this chat as a card: its words (up to 3 lines), its
 pictures and files, and its time (hover the time for the full date). The oldest is
-at the top and the list opens scrolled to your latest; scroll up and older messages
-load, 50 at a time, including messages sent before message IDs existed. Search
+at the top and the list opens scrolled to your latest 20; scroll up and older
+messages load before you reach the top, 40 at a time, including messages sent
+before message IDs existed. Opened again, it shows at once (the last few chats'
+lists are kept) and adds what you sent since. Search
 your words or file names, or type M3 for that message; All, With attachments and
 Text only narrow the list. Click a card to jump to its message in the chat. Point
 at a card for Copy and ⋯ at its top right; ⋯ lists the rest by name, in the

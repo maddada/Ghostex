@@ -52,6 +52,8 @@ const ATTACH_HEIGHT: f32 = 44.0;
 const CARD_GAP: f32 = 8.0;
 /// A picture's thumbnail on a card, unscaled.
 const THUMB: f32 = 36.0;
+/// Cards from the list's top at which the next older page is asked for.
+const MORE_AHEAD: usize = 5;
 /// Characters a card's line holds, for the height estimate.
 const LINE_CHARS: usize = 58;
 /// A card's ⋯ menu, unscaled: the message menu's metrics (option_menu/geometry.rs `REGULAR`).
@@ -90,11 +92,18 @@ pub(super) fn sent_menu_height(history: &Value) -> Option<f32> {
     if history["open"] != true {
         return None;
     }
-    let items = history["items"].as_array().cloned().unwrap_or_default();
-    let list = if items.is_empty() {
+    // Summed only until the list is full: a long list is capped anyway.
+    let mut list = 0.0;
+    for item in history["items"].as_array().into_iter().flatten().rev() {
+        list += card_height(item);
+        if list >= LIST_MAX {
+            break;
+        }
+    }
+    let list = if list == 0.0 {
         LINE_HEIGHT * 2.0
     } else {
-        items.iter().map(card_height).sum::<f32>().min(LIST_MAX)
+        list.min(LIST_MAX)
     };
     Some(
         super::chat_pills::MENU_HEADER_HEIGHT
@@ -133,7 +142,9 @@ impl NativeChatView {
             .border_color(p.foreground.opacity(0.1))
             .when(open, |pill| pill.bg(p.foreground.opacity(0.08)))
             .hover(|style| style.bg(p.foreground.opacity(0.06)))
-            .tooltip(|window, cx| gpui_component::tooltip::Tooltip::new("History").build(window, cx))
+            .tooltip(|window, cx| {
+                gpui_component::tooltip::Tooltip::new("History").build(window, cx)
+            })
             .on_click(cx.listener(|chat, _, window, cx| {
                 cx.stop_propagation();
                 chat.toggle_sent_history(window, cx);
@@ -193,7 +204,7 @@ impl NativeChatView {
         self.snapshot["sentHistory"]["items"]
             .as_array()?
             .iter()
-            .find(|item| item["id"] == open)
+            .rfind(|item| item["id"] == open)
             .cloned()
     }
 
@@ -308,8 +319,10 @@ impl NativeChatView {
                     if chat.sent_history_card_menu.take().is_some() {
                         cx.notify();
                     }
+                    // Asked for a few cards before the top, so the older page is usually there
+                    // before the reader reaches it.
                     let history = &chat.snapshot["sentHistory"];
-                    if event.visible_range.start == 0
+                    if event.visible_range.start <= MORE_AHEAD
                         && history["hasMore"] == true
                         && history["loadingMore"] != true
                     {
@@ -327,7 +340,9 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        let history = self.snapshot["sentHistory"].clone();
+        // The snapshot's own Arc, not a copy of every card's words each frame.
+        let snapshot = std::sync::Arc::clone(&self.snapshot);
+        let history = &snapshot["sentHistory"];
         if history["open"] != true && !self.sent_history_opening {
             return None;
         }
@@ -344,7 +359,7 @@ impl NativeChatView {
             if history["loadingMore"] == true {
                 "Loading older\u{2026}".to_string()
             } else {
-                text(&history, "caption")
+                text(history, "caption")
             },
             None,
             p,
@@ -396,7 +411,7 @@ impl NativeChatView {
                     ),
             );
         }
-        column = column.child(self.sent_history_filters(&history, p, cx));
+        column = column.child(self.sent_history_filters(history, p, cx));
         let line = |child: AnyElement| {
             div()
                 .flex_shrink_0()
@@ -408,7 +423,7 @@ impl NativeChatView {
                 .child(child)
                 .into_any_element()
         };
-        let items = history["items"].as_array().cloned().unwrap_or_default();
+        let items: &[Value] = history["items"].as_array().map_or(&[], Vec::as_slice);
         if let Some(error) = history["error"].as_str() {
             column = column.child(line(
                 div()
@@ -429,7 +444,7 @@ impl NativeChatView {
                 div()
                     .truncate()
                     .text_color(p.muted)
-                    .child(text(&history, "emptyLabel"))
+                    .child(text(history, "emptyLabel"))
                     .into_any_element(),
             ));
         } else {
@@ -437,8 +452,10 @@ impl NativeChatView {
             let appearance = p.clone();
             column = column.child(
                 list(self.sent_history_list.clone(), move |index, _, cx| {
-                    chat.update(cx, |chat, cx| chat.sent_history_card(index, &appearance, cx))
-                        .unwrap_or_else(|_| div().into_any_element())
+                    chat.update(cx, |chat, cx| {
+                        chat.sent_history_card(index, &appearance, cx)
+                    })
+                    .unwrap_or_else(|_| div().into_any_element())
                 })
                 .flex_1()
                 .min_h_0()
@@ -509,24 +526,22 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let Some(item) = self.snapshot["sentHistory"]["items"]
-            .get(index)
-            .cloned()
-        else {
+        let Some(item) = self.snapshot["sentHistory"]["items"].get(index).cloned() else {
             return div().into_any_element();
         };
         let s = p.scale;
         let id = text(&item, "id");
         let group = SharedString::from(format!("sent-card:{id}"));
         let timestamp = item["timestamp"].as_i64();
-        let time = item["time"]["label"].as_str().unwrap_or_default().to_string();
+        let time = item["time"]["label"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string();
         let time_title = text(&item["time"], "title");
         let images: Vec<Value> = item["images"].as_array().cloned().unwrap_or_default();
         let files: Vec<Value> = item["files"].as_array().cloned().unwrap_or_default();
         let mut attachments: Vec<AnyElement> = (0..images.len())
-            .map(|position| {
-                self.image_tile_at(&id, &images, position, true, THUMB, p, cx)
-            })
+            .map(|position| self.image_tile_at(&id, &images, position, true, THUMB, p, cx))
             .collect();
         attachments.extend(files.iter().map(|file| {
             div()
@@ -715,9 +730,9 @@ impl NativeChatView {
                     {
                         return;
                     }
-                    chat.sent_history_card_menu =
-                        (chat.sent_history_card_menu.as_deref() != Some(menu_id.as_str()))
-                            .then(|| menu_id.clone());
+                    chat.sent_history_card_menu = (chat.sent_history_card_menu.as_deref()
+                        != Some(menu_id.as_str()))
+                    .then(|| menu_id.clone());
                     cx.notify();
                 }))
                 .into_any_element(),
@@ -872,14 +887,14 @@ impl NativeChatView {
             .text_size(px(13.0 * s))
             .line_height(px(18.2 * s))
             .occlude()
-            .on_mouse_down_out(cx.listener(
-                move |chat, event: &gpui::MouseDownEvent, _, cx| {
+            .on_mouse_down_out(
+                cx.listener(move |chat, event: &gpui::MouseDownEvent, _, cx| {
                     if let Some(closed) = chat.sent_history_card_menu.take() {
                         chat.sent_history_card_menu_dismissed = Some((closed, event.position));
                         cx.notify();
                     }
-                },
-            ))
+                }),
+            )
             .children(rows)
             .into_any_element()
     }

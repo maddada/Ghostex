@@ -6,8 +6,8 @@
 //! chat read does (`chat_message_numbers::annotate_messages`), keeps the user's own messages that
 //! pass the search and the filter (`sent_history::card`, `sent_history::matches`) and stops once it
 //! holds a page of them. `before` resumes from where the last answer stopped, so the list pages
-//! fifty at a time however long the chat is, and a message sent before message numbers existed is
-//! listed too, without a number.
+//! (20 cards first, then 40, `FIRST_PAGE_CARDS` and `PAGE_CARDS`) however long the chat is, and a
+//! message sent before message numbers existed is listed too, without a number.
 //!
 //! CDXC:SessionChat 2026-11-26 WHY:
 //! Remote-allowed like readSessionChat (protocol.rs): the transcript lives on the machine that runs
@@ -15,7 +15,9 @@
 //! transcript and answers its user rows' words, pictures' paths and mentioned files, which a chat
 //! read already sends the same callers.
 
-use ghostex_gx_chat_core::composer::sent_history::{card, matches, SentCard, SentFilter, PAGE_CARDS};
+use ghostex_gx_chat_core::composer::sent_history::{
+    card, matches, SentCard, SentFilter, PAGE_CARDS,
+};
 use ghostex_gx_protocol::ChatMessage;
 use serde_json::{json, Value};
 
