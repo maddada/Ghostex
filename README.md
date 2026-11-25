@@ -18,29 +18,41 @@
 
 <p align="center">macOS · Windows · Linux · iOS · Android<br />Free and open source · MIT</p>
 
-[![Ghostex with a coordinator, its threads and side panels open](media/readme/gx-hero-1.webp)](media/readme/gx-hero-1.webp)
+[![A coordinator chat with the Work panel open: pings to answer, a blocked question, and work in progress](media/readme/gx-readme-coordinator.png)](media/readme/gx-readme-coordinator.png)
 
-**As minimal as you want it.**
+**One coordinator runs the whole project.**
 
-![A minimal Ghostex workspace](media/readme/gx-hero-2.webp)
+Give it the goal once. It keeps every piece of work in the Work panel, sorted by what needs you, what is blocked and what is moving.
 
-**Coordinators and pages, together.**
+![A coordinator starting a thread for each piece of work and reporting back](media/readme/gx-readme-delegate.png)
 
-![A coordinator with a visual page](media/readme/gx-hero-9.webp)
+**It hands the work to threads and reports back.**
 
-**Pick a design and send your choices in Live HTML Pages.**
+Each piece gets its own thread in its own worktree, on any agent and any of your computers. Their reports land in the coordinator's chat, so you read one chat, not five.
 
-Ask the agent to create one for you at any time! This and Coordinators are the 2 best features of Ghostex.
+![The Inbox under the chat with pages, questions and to-dos](media/readme/gx-readme-inbox.png)
 
-<img width="3456" height="2074" alt="2026-11-19_Ghostex_09-53-09@2x" src="media/readme/gx-live-pages-design-picker.webp" />
+**Everything that needs you, in one Inbox.**
 
-<img width="3456" height="2074" alt="2026-11-19_Ghostex_09-53-09@2x" src="media/readme/gx-live-pages-design-picker.webp" />
+Pages to answer, questions with a recommended answer, blocked work and to-dos. Answer most of them in one click, right from the list.
 
-**A full editor, with annotations.**
+![A Live page with three invite designs in tabs, each drawn as the app's real Members page](media/readme/gx-readme-page-invite.png)
 
-![The built-in editor](media/readme/gx-hero-6.webp)
+**Choices come as Live pages.**
 
-<sub>Want an animated wallpaper behind Ghostex like these? Try [Wallspace](https://wallspace.app/) on macOS (free, recommended), [Lively Wallpaper](https://github.com/rocksdanister/lively) on Windows (free, open source) or [Hidamari](https://github.com/jeffshee/hidamari) on Linux (free, open source; it has no gallery, so add your own videos, for example looping clips from [Pexels Videos](https://www.pexels.com/search/videos/abstract%20loop/), or paste a YouTube link: search for "4K live wallpaper loop"). Move Ghostex to its own desktop or workspace so only the wallpaper sits behind it.</sub>
+Three options, the recommended one marked. Pick one and the agent gets your answer. Design choices are drawn as the real screen, here the web app's Members page in each version.
+
+![A Live page with three designs for a phone screen, each drawn as the real screen](media/readme/gx-readme-page-bank.png)
+
+**Ask for options, get real screens.**
+
+"Show me options" gets you three designs drawn at the phone's real size, with how many taps each takes and how long it takes to build.
+
+![A Live page with three plans for splitting work across agents and computers](media/readme/gx-readme-page-offline.png)
+
+**Plans you can see before they run.**
+
+Who does what, on which computer, and how long it takes. Ask an agent for a page about anything, at any time.
 
 ## Click to Connect GrokBot:
 
@@ -54,7 +66,35 @@ Manage your agents from Grok Bot and send tasks from any thread to any coordinat
 
 Pair the iOS or Android app with one scan. Read transcripts, send follow-ups, preview localhost pages, and get a push when an agent finishes.
 
-![Pairing the phone app, then sessions and a chat on the phone](media/readme/gx-phone.webp)
+![A coordinator chat with its Inbox on one phone, and the Work panel grouped into pings, blocked and in progress on another](media/readme/gx-readme-phones-1.png)
+
+**The coordinator and its Inbox, on your phone.**
+
+The same Inbox and Work panel as on your computer: answer pings, see what is blocked and what is moving.
+
+![A Live page with three ways to link a bank on one phone, and a Live page with three plans on another](media/readme/gx-readme-phones-2.png)
+
+**Live pages open full screen.**
+
+Pick a design or a plan with your thumb, and the agent gets your answer.
+
+![A blocked question with its choices open in the Work panel, and a question sheet with Yes, No and Reply](media/readme/gx-readme-phones-3.png)
+
+**Answer questions in a tap.**
+
+The recommended choice is marked, and every question opens with the details behind it.
+
+![The sessions list with projects, a coordinator and its threads, and the Boosts sheet in a thread](media/readme/gx-readme-phones-4.png)
+
+**Every session and thread, plus Boosts.**
+
+Projects, coordinators and their threads in one list. Boosts ask the agent to answer with a page, a chart, a form or a browser run.
+
+![Theme settings with a live preview and artwork, and Experience settings with Chill, Regular and Advanced](media/readme/gx-readme-phones-5.png)
+
+**Make it yours.**
+
+Themes, artwork, and how much each screen shows: Chill, Regular or Advanced.
 
 ### 💬 Chat or CLI, your call
 
@@ -253,6 +293,28 @@ Turning off the analytics switch in Onboarding Step 2 or **Settings > About** (`
 
 ## More screenshots:
 
+**As minimal as you want it.**
+
+![A minimal Ghostex workspace](media/readme/gx-hero-2.webp)
+
+**Coordinators and pages, together.**
+
+![A coordinator with a visual page](media/readme/gx-hero-9.webp)
+
+[![Ghostex with a coordinator, its threads and side panels open](media/readme/gx-hero-1.webp)](media/readme/gx-hero-1.webp)
+
+**Pick a design and send your choices in Live HTML Pages.**
+
+Ask the agent to create one for you at any time! This and Coordinators are the 2 best features of Ghostex.
+
+<img width="3456" height="2074" alt="2026-11-19_Ghostex_09-53-09@2x" src="media/readme/gx-live-pages-design-picker.webp" />
+
+**A full editor, with annotations.**
+
+![The built-in editor](media/readme/gx-hero-6.webp)
+
+<sub>Want an animated wallpaper behind Ghostex like these? Try [Wallspace](https://wallspace.app/) on macOS (free, recommended), [Lively Wallpaper](https://github.com/rocksdanister/lively) on Windows (free, open source) or [Hidamari](https://github.com/jeffshee/hidamari) on Linux (free, open source; it has no gallery, so add your own videos, for example looping clips from [Pexels Videos](https://www.pexels.com/search/videos/abstract%20loop/), or paste a YouTube link: search for "4K live wallpaper loop"). Move Ghostex to its own desktop or workspace so only the wallpaper sits behind it.</sub>
+
 ![Design options with feedback controls](media/readme/gx-hero-10.webp)
 
 <img width="3456" height="2158" alt="image" src="media/readme/gx-more-1.webp" />
@@ -262,5 +324,9 @@ Turning off the analytics switch in Onboarding Step 2 or **Settings > About** (`
 <img width="3456" height="2079" alt="2026-11-19_Ghostex_08-01-09@2x" src="media/readme/gx-more-3.webp" />
 
 <img width="3456" height="2077" alt="2026-11-19_Ghostex_08-01-50@2x" src="media/readme/gx-more-4.webp" />
+
+**Pairing the phone app.**
+
+![Pairing the phone app, then sessions and a chat on the phone](media/readme/gx-phone.webp)
 
 Free and open source under the [MIT License](LICENSE).
