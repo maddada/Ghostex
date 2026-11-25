@@ -120,6 +120,8 @@ pub struct TerminalSpawnConfig {
 pub enum TerminalEvent {
     /// New output was folded into the terminal; take a snapshot when ready.
     Wakeup,
+    /// Queued PTY writes finished; lifecycle consumers may retry detachment.
+    InputDrained,
     /// BEL received.
     Bell,
     /// Terminal title changed (OSC 0/2); query lives with P1e.
@@ -457,7 +459,7 @@ impl TerminalModel {
                         let _ = pty_writer.flush();
                     }
                     if writer_pending_input.fetch_sub(1, Ordering::AcqRel) == 1 {
-                        writer_events(TerminalEvent::Wakeup);
+                        writer_events(TerminalEvent::InputDrained);
                     }
                 }
             })?;

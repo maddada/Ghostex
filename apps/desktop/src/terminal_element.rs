@@ -1104,12 +1104,17 @@ impl TerminalView {
             if let TerminalEvent::Exited(exit) = event {
                 self.exit = Some(exit);
             }
-            if matches!(event, TerminalEvent::Wakeup | TerminalEvent::Exited(_)) {
+            if matches!(
+                event,
+                TerminalEvent::Wakeup | TerminalEvent::InputDrained | TerminalEvent::Exited(_)
+            ) {
                 cx.notify();
             }
             return;
         }
         match event {
+            // Writing input does not change the screen; only output needs a snapshot.
+            TerminalEvent::InputDrained => {}
             TerminalEvent::Wakeup => {
                 // Titles still sync while a refresh waits, so the sidebar stays current.
                 self.sync_title_and_pwd(cx);
