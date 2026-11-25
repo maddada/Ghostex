@@ -6,7 +6,7 @@ use crate::app::model::*;
 use crate::*;
 
 impl GhostexGpuiApp {
-    /// Marks the shell layout dirty; one task serializes it at most every 250 ms while it is (gx_store/layout_persist.rs).
+    /// Marks the shell layout dirty; one task saves it at most once a second while it is (gx_store/layout_persist.rs).
     pub(crate) fn persist_shell_layout_state(&self) {
         self.gx_store.layout_persist.mark_dirty();
     }

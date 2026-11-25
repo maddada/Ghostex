@@ -16,7 +16,8 @@ pub(crate) struct GpuiShellLayoutState {
     pub(crate) sidebar_usage_visible: bool,
     pub(crate) agents_workspace: WorkspaceModel,
     pub(crate) agents_workspace_project_id: Option<String>,
-    pub(crate) parked_agents_workspaces_by_project: HashMap<String, serde_json::Value>,
+    pub(crate) parked_agents_workspaces_by_project:
+        HashMap<String, std::sync::Arc<serde_json::Value>>,
     pub(crate) local_workspace_session_mappings:
         HashMap<GpuiLocalWorkspaceSessionKey, TerminalSessionId>,
     pub(crate) remote_attach_sessions: HashMap<GpuiRemoteAttachSessionKey, TerminalSessionId>,
@@ -25,7 +26,7 @@ pub(crate) struct GpuiShellLayoutState {
         HashMap<TerminalSessionId, GpuiPreferredAgentInterface>,
     pub(crate) command_pane: CommandPaneModel,
     pub(crate) command_pane_project_id: Option<String>,
-    pub(crate) parked_command_panes_by_project: HashMap<String, serde_json::Value>,
+    pub(crate) parked_command_panes_by_project: HashMap<String, std::sync::Arc<serde_json::Value>>,
     pub(crate) command_startup_activity_restore_intents:
         Vec<GpuiCommandStartupActivityRestoreIntent>,
     pub(crate) command_delayed_send_restore_timers: Vec<GpuiCommandDelayedSendRestoreTimer>,
@@ -272,7 +273,10 @@ impl GpuiShellLayoutState {
                             && workspace_value.is_object()
                     })
                     .map(|(project_id, workspace_value)| {
-                        (project_id.trim().to_string(), workspace_value.clone())
+                        (
+                            project_id.trim().to_string(),
+                            std::sync::Arc::new(workspace_value.clone()),
+                        )
                     })
                     .collect::<HashMap<_, _>>()
             })
@@ -317,7 +321,10 @@ impl GpuiShellLayoutState {
                             && pane_value.is_object()
                     })
                     .map(|(project_id, pane_value)| {
-                        (project_id.trim().to_string(), pane_value.clone())
+                        (
+                            project_id.trim().to_string(),
+                            std::sync::Arc::new(pane_value.clone()),
+                        )
                     })
                     .collect::<HashMap<_, _>>()
             })

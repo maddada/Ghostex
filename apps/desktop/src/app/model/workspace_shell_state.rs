@@ -79,7 +79,70 @@ pub(crate) fn gpui_workspace_shell_state_is_legacy_unversioned_object(
             .is_some_and(|value| value.is_object())
 }
 
-pub(crate) fn gpui_workspace_shell_state_json(app: &GhostexGpuiApp) -> serde_json::Value {
+const AGENTS_WORKSPACES_BY_PROJECT_KEY: &str = "agentsWorkspacesByProject";
+const COMMAND_PANES_BY_PROJECT_KEY: &str = "commandPanesByProject";
+
+type ParkedShellStateBlobs = Vec<(String, std::sync::Arc<serde_json::Value>)>;
+
+/// CDXC:Workarea 2026-11-26 WHY:
+/// The layout file is about 470 KB and was cloned and pretty-printed on the UI thread at every
+/// save (a fifth of the main thread in a profile). The parked per-project blobs, the largest part,
+/// are shared here instead of copied, and the writer thread turns the snapshot into bytes. The
+/// file is only ever read back by `GpuiShellLayoutState::load_or_default`, so it is written
+/// compact.
+pub(crate) struct GpuiWorkspaceShellStateSnapshot {
+    /// The state, with `null` standing in for the two parked maps below.
+    state: serde_json::Value,
+    agents_workspaces_by_project: ParkedShellStateBlobs,
+    command_panes_by_project: ParkedShellStateBlobs,
+}
+
+impl GpuiWorkspaceShellStateSnapshot {
+    fn to_bytes(&self) -> Option<Vec<u8>> {
+        serde_json::to_vec(self).ok()
+    }
+}
+
+impl serde::Serialize for GpuiWorkspaceShellStateSnapshot {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap as _;
+        struct Blobs<'a>(&'a ParkedShellStateBlobs);
+        impl serde::Serialize for Blobs<'_> {
+            fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                serializer.collect_map(self.0.iter().map(|(key, value)| (key, &**value)))
+            }
+        }
+        let serde_json::Value::Object(object) = &self.state else {
+            return self.state.serialize(serializer);
+        };
+        let mut map = serializer.serialize_map(Some(object.len()))?;
+        for (key, value) in object {
+            match key.as_str() {
+                AGENTS_WORKSPACES_BY_PROJECT_KEY => {
+                    map.serialize_entry(key, &Blobs(&self.agents_workspaces_by_project))?
+                }
+                COMMAND_PANES_BY_PROJECT_KEY => {
+                    map.serialize_entry(key, &Blobs(&self.command_panes_by_project))?
+                }
+                _ => map.serialize_entry(key, value)?,
+            }
+        }
+        map.end()
+    }
+}
+
+fn parked_shell_state_blobs(
+    parked: &HashMap<String, std::sync::Arc<serde_json::Value>>,
+) -> ParkedShellStateBlobs {
+    parked
+        .iter()
+        .map(|(project_id, blob)| (project_id.clone(), blob.clone()))
+        .collect()
+}
+
+pub(crate) fn gpui_workspace_shell_state_json(
+    app: &GhostexGpuiApp,
+) -> GpuiWorkspaceShellStateSnapshot {
     let active_mode = app.available_titlebar_mode_or_agents(app.active_mode);
     // CDXC:SessionChat 2026-07-31: bare shell session ids
     // only (layout metadata) — which sessions last showed Session Chat.
@@ -90,7 +153,7 @@ pub(crate) fn gpui_workspace_shell_state_json(app: &GhostexGpuiApp) -> serde_jso
         .map(|session_id| session_id.0)
         .collect::<Vec<_>>();
     agents_chat_mode_session_ids.sort_unstable();
-    serde_json::json!({
+    let state = serde_json::json!({
         "version": GPUI_WORKSPACE_SHELL_STATE_VERSION,
         "activeMode": active_mode.element_slug(),
         "shellFocus": shell_focus_to_shell_state_json(app.shell_focus),
@@ -100,13 +163,7 @@ pub(crate) fn gpui_workspace_shell_state_json(app: &GhostexGpuiApp) -> serde_jso
         "sidebarUsagePinned": app.sidebar_usage_visible,
         "agentsWorkspace": workspace_model_to_shell_state_json(&app.agents_workspace),
         "agentsWorkspaceProjectId": app.agents_workspace_project_id,
-        "agentsWorkspacesByProject": app
-            .parked_agents_workspaces_by_project
-            .iter()
-            .map(|(project_id, workspace_json)| {
-                (project_id.clone(), workspace_json.clone())
-            })
-            .collect::<serde_json::Map<_, _>>(),
+        AGENTS_WORKSPACES_BY_PROJECT_KEY: serde_json::Value::Null,
         "agentsWorkspaceSessionMappings": local_workspace_session_mappings_to_shell_state_json(
             &app.local_workspace_session_mappings,
             &app.agents_workspace,
@@ -134,11 +191,7 @@ pub(crate) fn gpui_workspace_shell_state_json(app: &GhostexGpuiApp) -> serde_jso
             SystemTime::now(),
         ),
         "commandPaneProjectId": app.command_pane_project_id,
-        "commandPanesByProject": app
-            .parked_command_panes_by_project
-            .iter()
-            .map(|(project_id, pane_json)| (project_id.clone(), pane_json.clone()))
-            .collect::<serde_json::Map<_, _>>(),
+        COMMAND_PANES_BY_PROJECT_KEY: serde_json::Value::Null,
         "pendingCommandSessionCleanup": pending_command_gxserver_cleanup_to_shell_state(
             &app.pending_command_gxserver_cleanup,
         ),
@@ -174,7 +227,14 @@ pub(crate) fn gpui_workspace_shell_state_json(app: &GhostexGpuiApp) -> serde_jso
             .map(crate::app::claude_web::ClaudeTakeover::to_shell_state_json),
         "lastOpenViewMode": app.last_open_view_mode.map(TitlebarMode::element_slug),
         "viewPaneLayouts": app.view_pane_layouts_with_live_values().to_shell_state_json(),
-    })
+    });
+    GpuiWorkspaceShellStateSnapshot {
+        state,
+        agents_workspaces_by_project: parked_shell_state_blobs(
+            &app.parked_agents_workspaces_by_project,
+        ),
+        command_panes_by_project: parked_shell_state_blobs(&app.parked_command_panes_by_project),
+    }
 }
 
 pub(crate) fn persist_gpui_workspace_shell_state(app: &GhostexGpuiApp) {
@@ -187,10 +247,7 @@ pub(crate) fn persist_gpui_workspace_shell_state(app: &GhostexGpuiApp) {
     CDXC:Telemetry 2026-06-23-13:18:
     Phase 10 persistence re-audit keeps this as the only GPUI-owned workspace shell-state writer. It may write writer-owned layout/focus/tab/profile/lifecycle metadata, bounded canonical gxserver P/G identities, the validated bounded command Action selector used for restart reuse, safe Agents Delayed Send trigger/remaining-time checkpoints, complete sanitized Browser HTTP(S) URLs, plus the `sidebarUsagePinned` and `viewPanelPickerOpen` UI booleans only; raw settings JSON, terminal content, command text, stdout/stderr, project paths, file paths, page titles, profile paths, cookies, URL credentials, raw payloads, unrelated private user content, and runtime surface data must stay out at the serializer boundary.
     */
-    let Ok(data) = serde_json::to_vec_pretty(&gpui_workspace_shell_state_json(app)) else {
-        return;
-    };
-    shell_state_writer(app.workspace_window_slot).enqueue(data);
+    shell_state_writer(app.workspace_window_slot).enqueue(gpui_workspace_shell_state_json(app));
 }
 
 /// Write the shell state synchronously. Only the quit path uses this, so the last layout is on disk before the process exits.
@@ -198,7 +255,7 @@ pub(crate) fn flush_gpui_workspace_shell_state(app: &GhostexGpuiApp) {
     if app.workspace_window_closing {
         return;
     }
-    let Ok(data) = serde_json::to_vec_pretty(&gpui_workspace_shell_state_json(app)) else {
+    let Some(data) = gpui_workspace_shell_state_json(app).to_bytes() else {
         return;
     };
     shell_state_writer(app.workspace_window_slot).write_now(data);
@@ -212,11 +269,11 @@ pub(crate) fn discard_gpui_workspace_shell_state(slot: u32) {
 
 /// CDXC:SessionChat 2026-09-16 WHY:
 /// The shell state is persisted on every session switch, tab change and layout edit (well over a hundred call sites) and used to be written to disk synchronously on the UI thread, inside the click path.
-/// Serialization stays on the UI thread; the bytes go to one writer thread that always writes the newest pending state, and a sequence number keeps a slower background write from landing after the synchronous quit-time flush.
+/// The snapshot goes to one writer thread that serializes and writes the newest pending state (serializing moved there on 2026-11-26), and a sequence number keeps a slower background write from landing after the synchronous quit-time flush.
 struct ShellStateWriter {
     /// The window slot's layout file (app/workspace_windows/slots.rs).
     path: std::path::PathBuf,
-    pending: std::sync::Mutex<Option<(u64, Vec<u8>)>>,
+    pending: std::sync::Mutex<Option<(u64, GpuiWorkspaceShellStateSnapshot)>>,
     wake: std::sync::Condvar,
     written: std::sync::Mutex<u64>,
     sequence: std::sync::atomic::AtomicU64,
@@ -229,10 +286,10 @@ impl ShellStateWriter {
             + 1
     }
 
-    fn enqueue(&self, data: Vec<u8>) {
+    fn enqueue(&self, snapshot: GpuiWorkspaceShellStateSnapshot) {
         let sequence = self.next_sequence();
         if let Ok(mut pending) = self.pending.lock() {
-            *pending = Some((sequence, data));
+            *pending = Some((sequence, snapshot));
         }
         self.wake.notify_one();
     }
@@ -270,7 +327,7 @@ impl ShellStateWriter {
 
     fn run(&self) {
         loop {
-            let (sequence, data) = {
+            let (sequence, snapshot) = {
                 let Ok(mut pending) = self.pending.lock() else {
                     return;
                 };
@@ -284,7 +341,9 @@ impl ShellStateWriter {
                     };
                 }
             };
-            self.write_if_newer(sequence, &data);
+            if let Some(data) = snapshot.to_bytes() {
+                self.write_if_newer(sequence, &data);
+            }
         }
     }
 }

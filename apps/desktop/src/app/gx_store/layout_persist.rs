@@ -10,7 +10,10 @@ use futures::channel::mpsc;
 use crate::GhostexGpuiApp;
 use crate::app::model::persist_gpui_workspace_shell_state;
 
-const LAYOUT_PERSIST_INTERVAL: Duration = Duration::from_millis(250);
+/// CDXC:Workarea 2026-11-26 WHY: was 250 ms; each save still builds the layout snapshot on the UI
+/// thread, and the quit path writes the final layout itself (`flush_shell_layout_state`), so a
+/// second between saves loses nothing on a normal quit.
+const LAYOUT_PERSIST_INTERVAL: Duration = Duration::from_millis(1000);
 
 /// CDXC:Workarea 2026-09-19 WHY:
 /// `persist_shell_layout_state` has about 165 call sites and used to serialize the whole shell layout to JSON on the UI thread at each of them, several times per tab step (the disk write already ran on a writer thread, 2026-09-16). A held "next tab" key paid that per repeat.

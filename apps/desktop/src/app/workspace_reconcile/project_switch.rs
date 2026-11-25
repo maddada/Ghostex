@@ -383,7 +383,7 @@ impl GhostexGpuiApp {
         match self.agents_workspace_project_id.take() {
             Some(old_project_id) => {
                 self.parked_agents_workspaces_by_project
-                    .insert(old_project_id.clone(), outgoing_state);
+                    .insert(old_project_id.clone(), std::sync::Arc::new(outgoing_state));
                 self.parked_agents_terminal_runtimes_by_project.insert(
                     old_project_id.clone(),
                     ParkedAgentsTerminalRuntime {
@@ -589,7 +589,7 @@ impl GhostexGpuiApp {
         match self.command_pane_project_id.take() {
             Some(old_project_id) => {
                 self.parked_command_panes_by_project
-                    .insert(old_project_id, live_pane_json);
+                    .insert(old_project_id, std::sync::Arc::new(live_pane_json));
             }
             None => {
                 for (project_id, pane_json) in
@@ -599,7 +599,7 @@ impl GhostexGpuiApp {
                     )
                 {
                     self.parked_command_panes_by_project
-                        .insert(project_id, pane_json);
+                        .insert(project_id, std::sync::Arc::new(pane_json));
                 }
             }
         }

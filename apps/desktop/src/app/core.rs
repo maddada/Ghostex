@@ -65,7 +65,8 @@ pub struct GhostexGpuiApp {
     project's session projection.
     */
     pub(crate) agents_workspace_project_id: Option<String>,
-    pub(crate) parked_agents_workspaces_by_project: HashMap<String, serde_json::Value>,
+    pub(crate) parked_agents_workspaces_by_project:
+        HashMap<String, std::sync::Arc<serde_json::Value>>,
     pub(crate) parked_agents_terminal_runtimes_by_project:
         HashMap<String, ParkedAgentsTerminalRuntime>,
     /*
@@ -101,7 +102,7 @@ pub struct GhostexGpuiApp {
     sessions.
     */
     pub(crate) command_pane_project_id: Option<String>,
-    pub(crate) parked_command_panes_by_project: HashMap<String, serde_json::Value>,
+    pub(crate) parked_command_panes_by_project: HashMap<String, std::sync::Arc<serde_json::Value>>,
     pub(crate) command_pane_project_epoch: u64,
     /// The main workspace window, recorded by its render so model hooks without a `Window` can
     /// defer window work onto it (`defer_in_main_window`).

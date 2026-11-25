@@ -27,8 +27,10 @@
 //! replaced copy counts as), apps/desktop/src/app/gx_store/sidebar_ui.rs (the sidebar's own state,
 //! which the warm start also reads before the first frame).
 
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use ghostex_gx_core::protocol::PresentationSnapshot;
 use ghostex_gx_core::{MachineId, snapshot_storage_json};
 use serde_json::{Value, json};
 
@@ -44,7 +46,8 @@ const LOCAL_KEY: &str = "ghostex-gpui-remote-last-seen-presentations:local";
 
 /// How long a change waits before the copy is rebuilt. Building it clones every row of this
 /// computer on the UI thread (about a megabyte of JSON on a busy computer), so it is rare; the quit
-/// flush stores the final state regardless.
+/// flush stores the final state regardless. Turning the rows into that JSON runs on the background
+/// executor (2026-11-26: it was a quarter of the main thread in a profile), except on the quit path.
 const WRITE_DELAY: Duration = Duration::from_secs(60);
 
 /// The write side's state.
@@ -52,8 +55,8 @@ const WRITE_DELAY: Duration = Duration::from_secs(60);
 pub(crate) struct LocalLastSeenWriter {
     /// The revision the copy was last built from.
     written_revision: Option<i64>,
-    /// A payload built and not stored yet.
-    owed: Option<String>,
+    /// Rows built and not stored yet; serialized when they are written.
+    owed: Option<Arc<PresentationSnapshot>>,
     booked: bool,
     /// The first live load of this run has been timed into the startup log.
     live_noted: bool,
@@ -202,8 +205,8 @@ impl GhostexGpuiApp {
             .filter(|snapshot| {
                 self.gx_store.local_last_seen.written_revision != Some(snapshot.revision)
             })
-            .map(|snapshot| (snapshot.revision, snapshot_storage_json(&snapshot)));
-        let Some((revision, raw)) = built else {
+            .map(|snapshot| (snapshot.revision, Arc::new(snapshot)));
+        let Some((revision, snapshot)) = built else {
             return;
         };
         let writer = &mut self.gx_store.local_last_seen;
@@ -211,24 +214,26 @@ impl GhostexGpuiApp {
             .counters
             .build_max_us
             .max(started.elapsed().as_micros() as u64);
-        writer.counters.largest_bytes = writer.counters.largest_bytes.max(raw.len() as u64);
         writer.written_revision = Some(revision);
-        writer.owed = Some(raw);
+        writer.owed = Some(snapshot);
     }
 
     fn gx_store_run_local_last_seen_write(&mut self, cx: &mut gpui::Context<Self>) {
-        let Some(raw) = self.gx_store.local_last_seen.owed.clone() else {
+        let Some(snapshot) = self.gx_store.local_last_seen.owed.clone() else {
             return;
         };
         let now_ms = super::host::now_ms() as i64;
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
-            let attempted = raw.clone();
-            let result = background
-                .spawn(async move { write_record(STORE, LOCAL_KEY, &raw, now_ms) })
+            let attempted = snapshot.clone();
+            let (bytes, result) = background
+                .spawn(async move {
+                    let raw = snapshot_storage_json(&snapshot);
+                    (raw.len(), write_record(STORE, LOCAL_KEY, &raw, now_ms))
+                })
                 .await;
             let _ = this.update(cx, |this, _| {
-                this.gx_store_note_local_last_seen_write(&attempted, result);
+                this.gx_store_note_local_last_seen_write(&attempted, bytes, result);
             });
         })
         .detach();
@@ -237,11 +242,16 @@ impl GhostexGpuiApp {
     /// A failed write stays owed; the next booking or the quit flush stores it.
     fn gx_store_note_local_last_seen_write(
         &mut self,
-        attempted: &str,
+        attempted: &Arc<PresentationSnapshot>,
+        bytes: usize,
         result: Result<RecordWrite, &'static str>,
     ) {
         let writer = &mut self.gx_store.local_last_seen;
-        let current = writer.owed.as_deref() == Some(attempted);
+        writer.counters.largest_bytes = writer.counters.largest_bytes.max(bytes as u64);
+        let current = writer
+            .owed
+            .as_ref()
+            .is_some_and(|owed| Arc::ptr_eq(owed, attempted));
         match result {
             Ok(outcome) => {
                 if current {
@@ -267,11 +277,12 @@ impl GhostexGpuiApp {
     /// draws its first frame from.
     pub(crate) fn gx_store_flush_local_last_seen(&mut self) {
         self.gx_store_build_local_last_seen();
-        let Some(raw) = self.gx_store.local_last_seen.owed.take() else {
+        let Some(snapshot) = self.gx_store.local_last_seen.owed.take() else {
             return;
         };
+        let raw = snapshot_storage_json(&snapshot);
         let now_ms = super::host::now_ms() as i64;
         let result = write_record(STORE, LOCAL_KEY, &raw, now_ms);
-        self.gx_store_note_local_last_seen_write(&raw, result);
+        self.gx_store_note_local_last_seen_write(&snapshot, raw.len(), result);
     }
 }
