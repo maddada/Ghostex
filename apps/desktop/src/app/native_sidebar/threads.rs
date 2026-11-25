@@ -183,6 +183,55 @@ pub(crate) fn is_coordinator_thread(session: &NativeSidebarSession) -> bool {
     session.is_coordinator_thread
 }
 
+/// The mark of a coordinator's thread drawn apart from its coordinator's tree.
+const THREAD_APART_ICON: &str = "titlebar/corner-down-right.svg";
+
+/// The coordinator a thread drawn apart from its coordinator's tree belongs to (gx-core
+/// `thread_drawn_apart`): its title, empty when that coordinator is not listed. `None` on a
+/// nested thread (its tree line says it) and on every other row.
+pub(crate) fn thread_apart_coordinator(session: &NativeSidebarSession) -> Option<&str> {
+    if !is_coordinator_thread(session) || thread_depth(session) > 0.0 {
+        return None;
+    }
+    session.details.get("threadOf").and_then(Value::as_str)
+}
+
+/// The line a thread drawn apart adds to its row's title tooltip, which says which coordinator the
+/// mark ties it to.
+pub(crate) fn thread_apart_tooltip_line(session: &NativeSidebarSession) -> Option<String> {
+    let coordinator = thread_apart_coordinator(session)?.trim();
+    Some(if coordinator.is_empty() {
+        "Thread of a coordinator that is closed".to_string()
+    } else {
+        format!("Thread of coordinator {coordinator}")
+    })
+}
+
+/// The small "↳" before the title of a coordinator's thread drawn apart from its tree, in the
+/// muted ink of the row's other quiet badges; the row's title tooltip names the coordinator.
+///
+/// CDXC:Coordinators 2026-11-25 WHY:
+/// A coordinator's workers in another group (a worktree), parked, snoozed or left by a closed coordinator were drawn exactly like plain sessions, so nothing tied them to their coordinator (gx-core `thread_drawn_apart`). The mark sits where a nested thread's tree line ends, so both read as "under a coordinator"; its name goes in the title tooltip like a row's computer and worktree (`render_native_sidebar_session`), so it is not said twice.
+pub(crate) fn thread_apart_mark(
+    session: &NativeSidebarSession,
+    appearance: &SidebarAppearance,
+) -> Option<AnyElement> {
+    thread_apart_coordinator(session)?;
+    let scale = appearance.scale;
+    Some(
+        div()
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .child(titlebar_svg_icon(
+                THREAD_APART_ICON,
+                12.0 * scale,
+                appearance.muted,
+            ))
+            .into_any_element(),
+    )
+}
+
 /// The icon a coordinator row draws in place of its agent's logo.
 ///
 /// CDXC:Coordinators 2026-10-01 DECISION:
@@ -241,9 +290,13 @@ pub(super) const BADGE_TEXT_SIZE: f32 = 13.55;
 ///
 /// CDXC:Coordinators 2026-11-11 WHY:
 /// A Unified card's threads are folded by default and the hat folds them (the user's 2026-11-11 decision in gx-core `unified_sidebar/tree.rs`), so its crew count always shows there, grey while idle, as the one sign of what a folded card holds; it is information, not a toggle, except while a pending delayed send or close-after-done owns the hat (CDXC:Coordinators 2026-10-06 in decorations.rs), when the count is the fold toggle so the card stays unfoldable (`render_unified_crew_count`; the phone draws its chevron beside the clock and needs no such case). This supersedes the 2026-11-09 WHY that made the count the toggle. The decision above holds for the Project sidebar and for a Unified thread row without a clock.
-pub(crate) fn coordinator_badge(
+///
+/// CDXC:Coordinators 2026-11-25 WHY:
+/// A bare crew icon and number read like a counter of something unnamed, so a user could not tell the coordinator from its workers; the badge's tooltip says what the number counts (`crew_badge_label`).
+pub(super) fn coordinator_badge(
     session: &NativeSidebarSession,
     appearance: &SidebarAppearance,
+    tooltip: Option<super::tooltips::SidebarTooltipSpan>,
 ) -> Option<AnyElement> {
     // A coordinator, or a lead with its linked sessions nested under it (gx-core
     // `SessionRow::folds_threads`, CDXC:LeadLinks 2026-11-22).
@@ -255,7 +308,65 @@ pub(crate) fn coordinator_badge(
         Some("working") => ghostex_gx_core::CoordinatorBadgeTone::Working,
         _ => return None,
     };
-    Some(crew_badge(count, crew_tint(tone, appearance), appearance).into_any_element())
+    let badge = crew_badge(count, crew_tint(tone, appearance), appearance);
+    Some(with_crew_tooltip(badge, session, appearance, tooltip))
+}
+
+/// What a crew count stands for, in words, for its tooltip: how many threads (a lead's linked
+/// agents) work, wait on the user or wait for approval, and how to show them while they are
+/// folded.
+pub(crate) fn crew_badge_label(session: &NativeSidebarSession) -> Option<String> {
+    let threads = session.details.get("coordinatorThreads")?;
+    let count = threads.get("count").and_then(Value::as_u64).unwrap_or(0);
+    let noun = if is_coordinator(session) {
+        "thread"
+    } else {
+        "linked agent"
+    };
+    let counted = if count == 1 {
+        format!("1 {noun}")
+    } else {
+        format!("{count} {noun}s")
+    };
+    let state = match threads.get("tone").and_then(Value::as_str) {
+        Some("approval") => " waiting for your approval",
+        Some("waiting") => " waiting on you",
+        Some("working") => " working",
+        _ => "",
+    };
+    let mut label = format!("{counted}{state}");
+    if coordinator_fold_state(session) == Some(true) {
+        label.push_str("\nFolded: click the arrow at the start of the row to show them");
+    }
+    Some(label)
+}
+
+/// The crew count with its words in the sidebar's tooltip (`crew_badge_label`); `span` is `None`
+/// while the sidebar shows no tooltips (pointer outside, a menu open, a drag).
+pub(super) fn with_crew_tooltip(
+    badge: gpui::Div,
+    session: &NativeSidebarSession,
+    appearance: &SidebarAppearance,
+    span: Option<super::tooltips::SidebarTooltipSpan>,
+) -> AnyElement {
+    use gpui_component::tooltip::ManagedTooltipExt as _;
+    let (Some(span), Some(label)) = (span, crew_badge_label(session)) else {
+        return badge.into_any_element();
+    };
+    let scale = appearance.scale;
+    badge
+        .id(gpui::SharedString::from(format!(
+            "native-session-crew-{}",
+            session.session_id
+        )))
+        .managed_discrete_tooltip_with_placement(
+            span.placement(),
+            appearance.tooltip_delay,
+            move |window, cx| {
+                super::tooltips::sidebar_tooltip(label.clone(), span, scale, window, cx)
+            },
+        )
+        .into_any_element()
 }
 
 /// The crew count's colour for a gx-core badge tone; grey while idle (drawn only on a Unified card).

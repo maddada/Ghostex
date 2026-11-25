@@ -147,6 +147,34 @@ pub(crate) fn tally_threads<'a>(
     tallies
 }
 
+/// Every coordinator's title, by its key, over all rows (a thread can sit in another group than
+/// its coordinator: a worktree thread is in its worktree's group).
+pub(crate) fn coordinator_titles<'a>(
+    rows: impl Iterator<Item = &'a Arc<SessionRow>>,
+) -> HashMap<SessionKey, String> {
+    rows.filter(|row| row.is_coordinator)
+        .filter_map(|row| Some((row.key.clone()?, row.display_title.clone())))
+        .collect()
+}
+
+/// The coordinator a row is a thread of, when the row is not drawn inside its coordinator's tree:
+/// its coordinator's title, or an empty title when that coordinator is not listed anywhere (it was
+/// closed). `None` for a nested thread, a lead's linked session and every other row.
+///
+/// CDXC:Coordinators 2026-11-25 WHY:
+/// A user could not tell which sessions were a coordinator's workers: a thread nests under its coordinator only when both are in the same group, so a worktree thread (its worktree's group), a parked or snoozed thread, or one whose coordinator is gone is drawn flat and looks like any other session. Such a row carries a thread mark that names its coordinator (apps/desktop/src/app/native_sidebar/threads.rs `thread_apart_mark`); a nested thread's tree line already says it.
+pub(crate) fn thread_drawn_apart(
+    row: &SessionRow,
+    nesting: &RowNesting,
+    coordinator_titles: &HashMap<SessionKey, String>,
+) -> Option<String> {
+    if nesting.depth > 0 || row.lead_linked || row.is_browser {
+        return None;
+    }
+    let parent = row.coordinator_parent.as_ref()?;
+    Some(coordinator_titles.get(parent).cloned().unwrap_or_default())
+}
+
 /// Deeper trees are drawn flat past this, so a coordinator of coordinators still reads as a tree
 /// without running out of row width.
 pub(crate) const MAX_DEPTH: u8 = 3;
@@ -533,6 +561,7 @@ mod tests {
             is_multi_selected: false,
             nesting: RowNesting::default(),
             machine_fold: None,
+            thread_of: None,
         }
     }
 
