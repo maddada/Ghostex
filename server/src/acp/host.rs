@@ -770,6 +770,7 @@ pub(super) fn append_bounded(buf: &mut String, chunk: &str, max_bytes: usize) {
 struct HostPendingPermission {
     perm: PendingPermission,
     elicitation: Option<super::elicitation::PendingElicitation>,
+    omp_elicitation: Option<super::omp_elicitation::ElicitationMeta>,
 }
 
 impl HostPendingPermission {
@@ -777,6 +778,7 @@ impl HostPendingPermission {
         Self {
             perm,
             elicitation: None,
+            omp_elicitation: None,
         }
     }
 
@@ -799,11 +801,23 @@ impl HostPendingPermission {
                 custom_prompt_override: Some(prompt),
             },
             elicitation: Some(elicitation),
+            omp_elicitation: None,
+        }
+    }
+
+    fn from_omp_elicitation(
+        perm: PendingPermission,
+        meta: super::omp_elicitation::ElicitationMeta,
+    ) -> Self {
+        Self {
+            perm,
+            elicitation: None,
+            omp_elicitation: Some(meta),
         }
     }
 
     fn cancel_response(&self) -> Value {
-        if self.elicitation.is_some() {
+        if self.elicitation.is_some() || self.omp_elicitation.is_some() {
             json!({ "action": "cancel" })
         } else {
             json!({ "outcome": { "outcome": "cancelled" } })
@@ -818,6 +832,7 @@ struct HostState {
     last_turn_interrupted: bool,
     turn_generation: u64,
     approval_level: AcpApprovalLevel,
+    read_only: bool,
     in_flight_target_level: Option<AcpApprovalLevel>,
     default_native_mode: Option<String>,
     native_auto_active: bool,
@@ -848,6 +863,7 @@ impl HostState {
     fn new(
         family: &str,
         approval_level: AcpApprovalLevel,
+        read_only: bool,
         cwd: PathBuf,
         writable_roots: Vec<PathBuf>,
     ) -> Self {
@@ -858,6 +874,7 @@ impl HostState {
             last_turn_interrupted: false,
             turn_generation: 0,
             approval_level,
+            read_only,
             in_flight_target_level: None,
             default_native_mode: None,
             native_auto_active: false,
@@ -1180,6 +1197,27 @@ fn apply_session_metadata(state: &mut HostState, result: &Value) {
 
 fn apply_config_options(state: &mut HostState, configs: &Value, overwrite_model: bool) {
     state.config_options = configs.clone();
+    if state.family == "omp" {
+        let parsed = super::omp_elicitation::parse_config_options(configs);
+        if let Some(model) = parsed.current_model {
+            state.current_model = Some(model);
+        }
+        if !parsed.available_models.is_empty() {
+            state.available_models = Value::Array(parsed.available_models);
+        }
+        if let Some(effort) = parsed.current_effort {
+            state.current_effort = Some(effort);
+        }
+        if let Some(mode) = parsed.current_mode {
+            state.current_mode = Some(mode);
+        }
+        if !parsed.available_modes.is_empty()
+            && state.available_modes.as_array().is_none_or(Vec::is_empty)
+        {
+            state.available_modes = Value::Array(parsed.available_modes);
+        }
+        return;
+    }
     let (effort, model) = super::hermes::extract_config_option_state(configs);
     if let Some(eff) = effort {
         state.current_effort = Some(eff);
@@ -1811,6 +1849,9 @@ pub fn run(args: &[String]) -> i32 {
     if spec.family == "cursor" {
         return super::driver_cursor::run(spec, parsed);
     }
+    if spec.family == "pi" {
+        return super::driver_pi::run(spec, parsed);
+    }
     let cwd_path = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let cwd = cwd_path.to_string_lossy().to_string();
     let writable_roots = canonicalize_writable_roots(&cwd_path, &parsed.writable_roots);
@@ -1835,16 +1876,22 @@ pub fn run(args: &[String]) -> i32 {
     let record_target = endpoint
         .as_ref()
         .map(super::child_lifetime::ChildRecordTarget::from_endpoint);
-    let mut child = match super::child_lifetime::end_with_host(&mut Command::new(&prog))
+    let mut cmd = Command::new(&prog);
+    super::child_lifetime::end_with_host(&mut cmd)
         .env_remove(super::channel::ACP_CHANNEL_SECRET_ENV)
         .envs(acp_envs)
         .args(&argv)
         .current_dir(&cwd)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-    {
+        .stderr(Stdio::piped());
+    if spec.family == "omp" {
+        // Disable Terminal-based Ghostex OMP hooks and chat channel inside the Native ACP child
+        // so only `ghostex acp-host` owns `/api/agentChatChannel` and hook reporting.
+        cmd.env("GHOSTEX_OMP_HOOKS_DISABLED", "1")
+            .env("GHOSTEX_CHAT_CHANNEL_DISABLED", "1");
+    }
+    let mut child = match cmd.spawn() {
         Ok(child) => child,
         Err(err) => {
             eprintln!("Failed to start `{prog} {}`: {err}", argv.join(" "));
@@ -1875,6 +1922,7 @@ pub fn run(args: &[String]) -> i32 {
     let state = Arc::new(Mutex::new(HostState::new(
         spec.family,
         initial_explicit_level.unwrap_or(AcpApprovalLevel::Ask),
+        parsed.read_only,
         cwd_path.clone(),
         writable_roots,
     )));
@@ -1971,12 +2019,22 @@ pub fn run(args: &[String]) -> i32 {
                         if method == "session/request_permission" {
                             let mut perm = parse_permission_request(rpc_id, &params);
                             if !perm.is_question {
-                                let (level, roots, session_cwd) = {
+                                let (level, read_only, roots, session_cwd) = {
                                     let s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                                    (s.approval_level, s.writable_roots.clone(), s.cwd.clone())
+                                    (
+                                        s.approval_level,
+                                        s.read_only,
+                                        s.writable_roots.clone(),
+                                        s.cwd.clone(),
+                                    )
+                                };
+                                let eval_level = if read_only {
+                                    AcpApprovalLevel::Ask
+                                } else {
+                                    level
                                 };
                                 match evaluate_permission(
-                                    level,
+                                    eval_level,
                                     &params,
                                     &perm.options,
                                     &roots,
@@ -1985,7 +2043,7 @@ pub fn run(args: &[String]) -> i32 {
                                     PermissionDecision::AutoApprove { option_id } => {
                                         println!(
                                             "\r\n[Native] Auto-approved ({}): {} ({})",
-                                            level.label(),
+                                            eval_level.label(),
                                             perm.tool_name,
                                             perm.summary
                                         );
@@ -1998,6 +2056,25 @@ pub fn run(args: &[String]) -> i32 {
                                                     "optionId": option_id,
                                                 }
                                             }),
+                                        );
+                                        return;
+                                    }
+                                    PermissionDecision::AskUser { .. } if read_only => {
+                                        println!(
+                                            "\r\n[Native] Denied in read-only mode: {} ({})",
+                                            perm.tool_name, perm.summary
+                                        );
+                                        let _ = std::io::stdout().flush();
+                                        let outcome = if let Some(opt_id) =
+                                            perm.resolve_option_id(None, "reject_once")
+                                        {
+                                            json!({ "outcome": "selected", "optionId": opt_id })
+                                        } else {
+                                            json!({ "outcome": "cancelled" })
+                                        };
+                                        let _ = t_out.respond_to_agent(
+                                            perm.rpc_id,
+                                            json!({ "outcome": outcome }),
                                         );
                                         return;
                                     }
@@ -2028,7 +2105,38 @@ pub fn run(args: &[String]) -> i32 {
                                 act_out.sync();
                             }
                         } else if method == "elicitation/create" {
-                            if let Some(form) =
+                            let is_omp =
+                                st_out.lock().unwrap_or_else(|p| p.into_inner()).family == "omp";
+                            let omp_parsed = if is_omp {
+                                super::omp_elicitation::parse_elicitation_request(
+                                    rpc_id.clone(),
+                                    &params,
+                                )
+                            } else {
+                                None
+                            };
+                            if let Some((perm, meta)) = omp_parsed {
+                                println!(
+                                    "\r\n[Native] Waiting for {}: {}",
+                                    if perm.is_question {
+                                        "question answer"
+                                    } else {
+                                        "approval"
+                                    },
+                                    perm.summary
+                                );
+                                let _ = std::io::stdout().flush();
+                                let entry = HostPendingPermission::from_omp_elicitation(perm, meta);
+                                let was_empty = {
+                                    let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                    let empty = s.pending_permissions.is_empty();
+                                    s.pending_permissions.push_back(entry);
+                                    empty
+                                };
+                                if was_empty {
+                                    act_out.sync();
+                                }
+                            } else if let Some(form) =
                                 super::elicitation::parse_elicitation_request(&params)
                             {
                                 let tool_use_id = format!("elicitation-{}", now_ms());
@@ -2065,6 +2173,27 @@ pub fn run(args: &[String]) -> i32 {
                         return;
                     }
                     // JSON-RPC notification from agent.
+                    if msg.get("method").and_then(Value::as_str) == Some("$/cancel_request") {
+                        if let Some(cancel_id) = msg.pointer("/params/requestId") {
+                            let removed = {
+                                let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                if let Some(idx) = s
+                                    .pending_permissions
+                                    .iter()
+                                    .position(|p| p.perm.rpc_id == *cancel_id)
+                                {
+                                    s.pending_permissions.remove(idx);
+                                    true
+                                } else {
+                                    false
+                                }
+                            };
+                            if removed {
+                                act_out.sync();
+                            }
+                        }
+                        return;
+                    }
                     if let Some(update) = msg.pointer("/params/update") {
                         let kind = update
                             .get("sessionUpdate")
@@ -2242,11 +2371,21 @@ pub fn run(args: &[String]) -> i32 {
             "version": env!("CARGO_PKG_VERSION"),
         },
     });
-    if let Err(err) = transport.call("initialize", init_params, ACP_RPC_TIMEOUT) {
-        eprintln!("Native host initialize failed: {err}");
-        stop_child_gracefully(&transport, &mut child, &mut child_lifetime, &child_pid);
-        return 1;
-    }
+    let init_result = match transport.call("initialize", init_params, ACP_RPC_TIMEOUT) {
+        Ok(res) => res,
+        Err(err) => {
+            eprintln!("Native host initialize failed: {err}");
+            stop_child_gracefully(&transport, &mut child, &mut child_lifetime, &child_pid);
+            return 1;
+        }
+    };
+    let supports_steering = init_result
+        .pointer("/_meta/steering/supported")
+        .and_then(Value::as_bool)
+        == Some(true);
+    let supports_session_resume = init_result
+        .pointer("/agentCapabilities/sessionCapabilities/resume")
+        .is_some_and(|v| !v.is_null() && v.as_bool() != Some(false));
 
     // 2. Open or resume conversation.
     let session_result = if let Some(resume_id) = parsed.resume_session_id.as_deref() {
@@ -2255,25 +2394,28 @@ pub fn run(args: &[String]) -> i32 {
             "cwd": cwd,
             "mcpServers": [],
         });
-        match transport.call("session/load", load_params.clone(), ACP_LOAD_TIMEOUT) {
-            Ok(mut res) => {
-                if res.get("sessionId").is_none() {
-                    if let Some(obj) = res.as_object_mut() {
-                        obj.insert("sessionId".to_string(), json!(resume_id));
-                    }
+        let attach_id = |mut res: Value| {
+            if res.get("sessionId").is_none() {
+                if let Some(obj) = res.as_object_mut() {
+                    obj.insert("sessionId".to_string(), json!(resume_id));
                 }
-                Ok(res)
             }
-            Err(_) => transport
-                .call("session/resume", load_params, ACP_RPC_TIMEOUT)
-                .map(|mut res| {
-                    if res.get("sessionId").is_none() {
-                        if let Some(obj) = res.as_object_mut() {
-                            obj.insert("sessionId".to_string(), json!(resume_id));
-                        }
-                    }
-                    res
-                }),
+            res
+        };
+        if supports_session_resume {
+            match transport.call("session/resume", load_params.clone(), ACP_RPC_TIMEOUT) {
+                Ok(res) => Ok(attach_id(res)),
+                Err(_) => transport
+                    .call("session/load", load_params, ACP_LOAD_TIMEOUT)
+                    .map(attach_id),
+            }
+        } else {
+            match transport.call("session/load", load_params.clone(), ACP_LOAD_TIMEOUT) {
+                Ok(res) => Ok(attach_id(res)),
+                Err(_) => transport
+                    .call("session/resume", load_params, ACP_RPC_TIMEOUT)
+                    .map(attach_id),
+            }
         }
     } else {
         transport.call(
@@ -2292,15 +2434,41 @@ pub fn run(args: &[String]) -> i32 {
         }
     };
 
-    let native_session_id = {
+    let (native_session_id, has_plan_mode) = {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
         apply_session_metadata(&mut s, &session_result);
+        // Clear any history chunks replayed during `session/load` so liveActivity stays clean.
+        s.clear_live_turn_output();
         s.default_native_mode =
             find_advertised_default_mode_id(&s.available_modes, s.current_mode.as_deref());
-        s.native_session_id.clone()
+        let has_plan = s.available_modes.as_array().is_some_and(|modes| {
+            modes.iter().any(|m| {
+                m.get("id")
+                    .or_else(|| m.get("modeId"))
+                    .and_then(Value::as_str)
+                    .is_some_and(|id| id.eq_ignore_ascii_case("plan"))
+            })
+        });
+        (s.native_session_id.clone(), has_plan)
     };
 
-    if let Some(target_level) = initial_explicit_level {
+    if parsed.read_only && has_plan_mode {
+        if let Some(sid) = native_session_id.as_deref() {
+            if transport
+                .call(
+                    "session/set_mode",
+                    json!({ "sessionId": sid, "modeId": "plan" }),
+                    ACP_RPC_TIMEOUT,
+                )
+                .is_ok()
+            {
+                let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                s.current_mode = Some("plan".to_string());
+                s.approval_level = AcpApprovalLevel::Ask;
+                s.native_auto_active = false;
+            }
+        }
+    } else if let Some(target_level) = initial_explicit_level {
         if let Err(err) = apply_approval_level_and_sync_native_mode(
             &transport,
             &state,
@@ -2321,7 +2489,7 @@ pub fn run(args: &[String]) -> i32 {
     }
 
     {
-        let (avail, existing_model, current_is_concrete) = {
+        let (avail, existing_model, configs, current_is_concrete) = {
             let s = state.lock().unwrap_or_else(|p| p.into_inner());
             let concrete = s.current_model.as_deref().is_some_and(|m| {
                 !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(m)
@@ -2329,6 +2497,7 @@ pub fn run(args: &[String]) -> i32 {
             (
                 s.available_models.clone(),
                 s.current_model.clone(),
+                s.config_options.clone(),
                 concrete,
             )
         };
@@ -2352,16 +2521,27 @@ pub fn run(args: &[String]) -> i32 {
                 let already_same = existing_model
                     .as_deref()
                     .is_some_and(|cur| cur == target_id);
-                if already_same
-                    || transport
-                        .call(
-                            "session/set_model",
-                            json!({ "sessionId": sid, "modelId": target_id }),
-                            ACP_RPC_TIMEOUT,
-                        )
-                        .is_ok()
-                {
+                let model_cfg_id = super::omp_elicitation::find_model_config_id(&configs);
+                let set_res = if already_same {
+                    Ok(Value::Null)
+                } else if let Some(cfg_id) = model_cfg_id {
+                    transport.call(
+                        "session/set_config_option",
+                        json!({ "sessionId": sid, "configId": cfg_id, "value": target_id }),
+                        ACP_RPC_TIMEOUT,
+                    )
+                } else {
+                    transport.call(
+                        "session/set_model",
+                        json!({ "sessionId": sid, "modelId": target_id }),
+                        ACP_RPC_TIMEOUT,
+                    )
+                };
+                if let Ok(res) = set_res {
                     let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                    if let Some(updated_configs) = res.get("configOptions") {
+                        apply_config_options(&mut s, updated_configs, true);
+                    }
                     s.current_model = Some(target_id);
                     if let Some(eff) = resolved_effort {
                         s.current_effort = Some(eff);
@@ -2373,7 +2553,8 @@ pub fn run(args: &[String]) -> i32 {
     if let Some(effort) = parsed.effort.as_deref().filter(|e| !e.is_empty()) {
         let effort_cfg_id = {
             let s = state.lock().unwrap_or_else(|p| p.into_inner());
-            find_effort_config_option_id(&s.config_options)
+            super::omp_elicitation::find_effort_config_id(&s.config_options)
+                .or_else(|| find_effort_config_option_id(&s.config_options))
         };
         if let (Some(sid), Some(cfg_id)) = (native_session_id.as_deref(), effort_cfg_id) {
             if let Ok(resp) = transport.call(
@@ -2440,6 +2621,9 @@ pub fn run(args: &[String]) -> i32 {
     ];
     if spec.supports_mid_turn_prompt {
         caps.push("mid_turn_send");
+    }
+    if supports_steering {
+        caps.push("steer");
     }
     let capabilities = json!(caps);
     let channel_agent = format!("acp:{}", spec.family);
@@ -2578,7 +2762,7 @@ pub fn run(args: &[String]) -> i32 {
                         .and_then(Value::as_str)
                         .map(str::trim)
                         .filter(|s| !s.is_empty());
-                    let perm = {
+                    let entry = {
                         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                         if let Some(wanted_id) = target_tool_use_id {
                             s.pending_permissions
@@ -2588,16 +2772,14 @@ pub fn run(args: &[String]) -> i32 {
                                         && p.perm.tool_use_id.as_deref() == Some(wanted_id)
                                 })
                                 .and_then(|idx| s.pending_permissions.remove(idx))
-                                .map(|entry| entry.perm)
                         } else {
                             s.pending_permissions
                                 .iter()
                                 .position(|p| !p.perm.is_question)
                                 .and_then(|idx| s.pending_permissions.remove(idx))
-                                .map(|entry| entry.perm)
                         }
                     };
-                    let Some(perm) = perm else {
+                    let Some(entry) = entry else {
                         let msg = if target_tool_use_id.is_some() {
                             "That Native approval request is no longer pending."
                         } else {
@@ -2606,16 +2788,25 @@ pub fn run(args: &[String]) -> i32 {
                         ep.ack(id, false, Value::Null, Some(msg));
                         continue;
                     };
-                    let outcome = if decision.eq_ignore_ascii_case("escape")
-                        || decision.eq_ignore_ascii_case("cancel")
-                    {
-                        json!({ "outcome": "cancelled" })
-                    } else if let Some(opt_id) = perm.resolve_option_id(explicit, decision) {
-                        json!({ "outcome": "selected", "optionId": opt_id })
+                    let response_payload = if entry.omp_elicitation.is_some() {
+                        super::omp_elicitation::build_confirm_elicitation_response(
+                            explicit.unwrap_or(decision),
+                        )
                     } else {
-                        json!({ "outcome": "cancelled" })
+                        let outcome = if decision.eq_ignore_ascii_case("escape")
+                            || decision.eq_ignore_ascii_case("cancel")
+                        {
+                            json!({ "outcome": "cancelled" })
+                        } else if let Some(opt_id) =
+                            entry.perm.resolve_option_id(explicit, decision)
+                        {
+                            json!({ "outcome": "selected", "optionId": opt_id })
+                        } else {
+                            json!({ "outcome": "cancelled" })
+                        };
+                        json!({ "outcome": outcome })
                     };
-                    match transport.respond_to_agent(perm.rpc_id, json!({ "outcome": outcome })) {
+                    match transport.respond_to_agent(entry.perm.rpc_id, response_payload) {
                         Ok(()) => {
                             activity.sync();
                             ep.ack(id, true, json!({ "answered": true }), None);
@@ -2655,7 +2846,12 @@ pub fn run(args: &[String]) -> i32 {
                         ep.ack(id, false, Value::Null, Some("NO_PENDING_QUESTION"));
                         continue;
                     };
-                    let response_body = if let Some(form) = entry.elicitation {
+                    let response_body = if let Some(meta) = entry.omp_elicitation {
+                        super::omp_elicitation::build_question_elicitation_response(
+                            &meta,
+                            &selections,
+                        )
+                    } else if let Some(form) = entry.elicitation {
                         form.build_response(&selections)
                     } else {
                         let outcome = if let Some(opt_id) =
@@ -2686,11 +2882,12 @@ pub fn run(args: &[String]) -> i32 {
                         .and_then(Value::as_str)
                         .unwrap_or_default()
                         .to_string();
-                    let (sid, avail, existing_model) = {
+                    let (sid, avail, configs, existing_model) = {
                         let s = state.lock().unwrap_or_else(|p| p.into_inner());
                         (
                             s.native_session_id.clone(),
                             s.available_models.clone(),
+                            s.config_options.clone(),
                             s.current_model.clone(),
                         )
                     };
@@ -2739,13 +2936,37 @@ pub fn run(args: &[String]) -> i32 {
                                 .as_deref()
                                 .is_some_and(|cur| cur == target_id);
                             if !same_model {
-                                if let Err(err) = t_model.call(
-                                    "session/set_model",
-                                    json!({ "sessionId": sid, "modelId": target_id }),
-                                    ACP_RPC_TIMEOUT,
-                                ) {
-                                    ep_model.ack(&cmd_id, false, Value::Null, Some(&err));
-                                    return;
+                                let model_cfg_id =
+                                    super::omp_elicitation::find_model_config_id(&configs);
+                                let call_res = if let Some(cfg_id) = model_cfg_id {
+                                    t_model.call(
+                                        "session/set_config_option",
+                                        json!({
+                                            "sessionId": sid,
+                                            "configId": cfg_id,
+                                            "value": target_id,
+                                        }),
+                                        ACP_RPC_TIMEOUT,
+                                    )
+                                } else {
+                                    t_model.call(
+                                        "session/set_model",
+                                        json!({ "sessionId": sid, "modelId": target_id }),
+                                        ACP_RPC_TIMEOUT,
+                                    )
+                                };
+                                match call_res {
+                                    Ok(resp) => {
+                                        if let Some(opts) = resp.get("configOptions") {
+                                            let mut s =
+                                                st_model.lock().unwrap_or_else(|p| p.into_inner());
+                                            apply_config_options(&mut s, opts, true);
+                                        }
+                                    }
+                                    Err(err) => {
+                                        ep_model.ack(&cmd_id, false, Value::Null, Some(&err));
+                                        return;
+                                    }
                                 }
                             }
                             let mut s = st_model.lock().unwrap_or_else(|p| p.into_inner());
@@ -2757,7 +2978,8 @@ pub fn run(args: &[String]) -> i32 {
                         if !effort.is_empty() {
                             let effort_cfg_id = {
                                 let s = st_model.lock().unwrap_or_else(|p| p.into_inner());
-                                find_effort_config_option_id(&s.config_options)
+                                super::omp_elicitation::find_effort_config_id(&s.config_options)
+                                    .or_else(|| find_effort_config_option_id(&s.config_options))
                             };
                             if let Some(cfg_id) = effort_cfg_id {
                                 match t_model.call(
@@ -2825,6 +3047,50 @@ pub fn run(args: &[String]) -> i32 {
                         .snapshot_json();
                     ep.ack(id, true, snap, None);
                 }
+                "steer" => {
+                    let text = params
+                        .get("text")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string();
+                    let sid = state
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .native_session_id
+                        .clone();
+                    let Some(sid) = sid else {
+                        ep.ack(
+                            id,
+                            false,
+                            Value::Null,
+                            Some("Native session not initialized yet."),
+                        );
+                        continue;
+                    };
+                    if !supports_steering {
+                        ep.ack(
+                            id,
+                            false,
+                            Value::Null,
+                            Some("Steering is not supported by this ACP agent."),
+                        );
+                        continue;
+                    }
+                    let blocks = vec![json!({ "type": "text", "text": text })];
+                    match transport.call(
+                        "_session/steering",
+                        json!({ "sessionId": sid, "prompt": blocks }),
+                        ACP_RPC_TIMEOUT,
+                    ) {
+                        Ok(_) => ep.ack(
+                            id,
+                            true,
+                            json!({ "accepted": true, "midTurn": true, "sessionId": sid }),
+                            None,
+                        ),
+                        Err(err) => ep.ack(id, false, Value::Null, Some(&err)),
+                    }
+                }
                 "send" => {
                     let text = params
                         .get("text")
@@ -2878,6 +3144,33 @@ pub fn run(args: &[String]) -> i32 {
                         }
                     };
                     let is_mid_turn = is_working && !interrupt;
+                    if is_mid_turn && supports_steering {
+                        // Agents advertising `_meta.steering.supported` (such as OMP) cancel the
+                        // active turn if a second `session/prompt` arrives mid-turn; route mid-turn
+                        // sends through `_session/steering` instead.
+                        match transport.call(
+                            "_session/steering",
+                            json!({ "sessionId": sid, "prompt": blocks }),
+                            ACP_RPC_TIMEOUT,
+                        ) {
+                            Ok(_) => {
+                                println!("\r\n[Native] Delivered mid-turn steering message...");
+                                let _ = std::io::stdout().flush();
+                                ep.ack(
+                                    id,
+                                    true,
+                                    json!({
+                                        "accepted": true,
+                                        "midTurn": true,
+                                        "sessionId": sid,
+                                    }),
+                                    None,
+                                );
+                            }
+                            Err(err) => ep.ack(id, false, Value::Null, Some(&err)),
+                        }
+                        continue;
+                    }
                     if is_working && interrupt {
                         state
                             .lock()

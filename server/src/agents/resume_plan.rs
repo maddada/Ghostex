@@ -936,14 +936,36 @@ pub(crate) fn build_agent_resume_command(
         }),
         // CDXC:AgentProviders 2026-10-06 DECISION: "Resume. `empryo --session <id>`. The process-identity scan reads `--session` from argv." SEE-ALSO: extract_agent_process_session_id in server/src/zmx/process_identity.rs.
         // A session with no written folder: see `get_empryo_session_reference`.
-        "omp" | "empryo" => match omp_wake_reference(input, exact_reference) {
-            OmpWakeReference::Resume(reference) => Some(format!(
-                "{agent_command} --session {}",
-                quote_shell_double_arg(&reference)
-            )),
-            OmpWakeReference::Fresh => Some(agent_command.to_string()),
-            OmpWakeReference::None => (agent_id == "empryo").then(|| agent_command.to_string()),
-        },
+        "omp" | "empryo" => {
+            if agent_id == "omp" && input.acp_mode {
+                let resume_ref = match omp_wake_reference(input, exact_reference) {
+                    OmpWakeReference::Resume(reference) => Some(reference),
+                    OmpWakeReference::Fresh | OmpWakeReference::None => None,
+                };
+                return Some(
+                    crate::acp::spec::build_acp_host_launch_command_with_profile(
+                        "omp",
+                        Some(agent_command),
+                        resume_ref.as_deref(),
+                        input.acp_approval_level,
+                        &[],
+                        input.acp_model.as_deref(),
+                        input.acp_effort.as_deref(),
+                        false,
+                        input.acp_read_only,
+                        &input.acp_profile,
+                    ),
+                );
+            }
+            match omp_wake_reference(input, exact_reference) {
+                OmpWakeReference::Resume(reference) => Some(format!(
+                    "{agent_command} --session {}",
+                    quote_shell_double_arg(&reference)
+                )),
+                OmpWakeReference::Fresh => Some(agent_command.to_string()),
+                OmpWakeReference::None => (agent_id == "empryo").then(|| agent_command.to_string()),
+            }
+        }
         "codex" => {
             if input.acp_mode {
                 let resume_ref = codex_exact_reference
@@ -1129,7 +1151,39 @@ pub(crate) fn build_agent_resume_command(
                 ))
             }
         }
-        "pi" => pi_reference.and_then(|_| build_pi_resume_command(agent_command, input)),
+        "pi" => {
+            if input.acp_mode {
+                let written_path = input
+                    .agent_session_path
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|p| !p.is_empty() && crate::resume_lookup::expand_home(p).is_file())
+                    .map(str::to_string);
+                let resume_ref = written_path.or_else(|| {
+                    input
+                        .agent_session_id
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)
+                });
+                return Some(
+                    crate::acp::spec::build_acp_host_launch_command_with_profile(
+                        "pi",
+                        Some(agent_command),
+                        resume_ref.as_deref(),
+                        input.acp_approval_level,
+                        &[],
+                        input.acp_model.as_deref(),
+                        input.acp_effort.as_deref(),
+                        false,
+                        input.acp_read_only,
+                        &input.acp_profile,
+                    ),
+                );
+            }
+            pi_reference.and_then(|_| build_pi_resume_command(agent_command, input))
+        }
         "rovodev" => {
             exact_reference.map(|reference| build_rovodev_resume_command(agent_command, &reference))
         }

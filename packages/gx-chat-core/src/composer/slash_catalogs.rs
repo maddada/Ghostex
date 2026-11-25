@@ -2478,6 +2478,77 @@ pub(crate) const OMP: &[SlashCommand] = &[
     },
 ];
 
+pub(crate) const PI_NATIVE: &[SlashCommand] = &[
+    SlashCommand {
+        name: "btw",
+        description: "Ask a side question without interrupting the main conversation",
+        insert_text: Some(crate::composer::side_chat::SIDE_CHAT_PREFIX),
+    },
+    SlashCommand {
+        name: "compact",
+        description: "Summarize conversation to save context",
+        insert_text: None,
+    },
+];
+
+pub(crate) const OMP_NATIVE: &[SlashCommand] = &[
+    SlashCommand {
+        name: "btw",
+        description: "Ask a side question without interrupting the main conversation",
+        insert_text: Some(crate::composer::side_chat::SIDE_CHAT_PREFIX),
+    },
+    SlashCommand {
+        name: "clear",
+        description: "Clear the conversation context in place, keeping the session",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "compact",
+        description: "Manually compact the session context",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "context",
+        description: "Show estimated context usage breakdown",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "handoff",
+        description: "Summarize the session into a handoff document and compact in place",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "plan",
+        description: "Toggle plan mode (agent plans before executing)",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "rename",
+        description: "Rename the current session",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "retry",
+        description: "Retry the last failed agent turn",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "shake",
+        description: "Drop heavy content from context (tool results, large blocks)",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "todo",
+        description: "View or modify the agent's todo list",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "usage",
+        description: "Show provider usage and limits",
+        insert_text: None,
+    },
+];
+
 pub(crate) const FALLBACK: &[SlashCommand] = &[
     SlashCommand {
         name: "clear",

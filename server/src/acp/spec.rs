@@ -89,7 +89,7 @@ const OPENCODE_SPEC: AcpAgentSpec = AcpAgentSpec {
 const GROK_SPEC: AcpAgentSpec = AcpAgentSpec {
     family: "grok",
     display_name: "Grok Build",
-    // Native Grok CLI ACP server over stdio with xAI extensions (`driver_grok.rs`).
+    // Native Grok CLI ACP server over stdio with xAI extensions (`driver_grok`).
     acp_argv: &["grok", "--permission-mode", "default", "agent", "stdio"],
     default_cli_bin: "grok",
     cli_resume_flag: "-r",
@@ -123,6 +123,28 @@ const CURSOR_SPEC: AcpAgentSpec = AcpAgentSpec {
     supports_mid_turn_prompt: false,
 };
 
+const PI_SPEC: AcpAgentSpec = AcpAgentSpec {
+    family: "pi",
+    display_name: "Pi Agent",
+    // Native Pi RPC JSONL protocol over stdio (`driver_pi`).
+    acp_argv: &["pi", "--mode", "rpc"],
+    default_cli_bin: "pi",
+    cli_resume_flag: "--session",
+    cli_accept_all_flag: None,
+    supports_mid_turn_prompt: true,
+};
+
+const OMP_SPEC: AcpAgentSpec = AcpAgentSpec {
+    family: "omp",
+    display_name: "OMP",
+    // Native OMP ACP server over stdio (`omp acp`).
+    acp_argv: &["omp", "acp"],
+    default_cli_bin: "omp",
+    cli_resume_flag: "--session",
+    cli_accept_all_flag: None,
+    supports_mid_turn_prompt: true,
+};
+
 pub fn spec_for_family(family: &str) -> Option<&'static AcpAgentSpec> {
     match family.trim().to_ascii_lowercase().as_str() {
         "antigravity" | "antigravity-cli" | "agy" => Some(&ANTIGRAVITY_SPEC),
@@ -132,6 +154,8 @@ pub fn spec_for_family(family: &str) -> Option<&'static AcpAgentSpec> {
         "grok" | "grok-build" => Some(&GROK_SPEC),
         "hermes" | "hermes-agent" => Some(&HERMES_SPEC),
         "cursor" | "cursor-cli" | "cursor-agent" => Some(&CURSOR_SPEC),
+        "pi" | "pi-agent" => Some(&PI_SPEC),
+        "omp" | "oh-my-pi" => Some(&OMP_SPEC),
         _ => None,
     }
 }
@@ -193,6 +217,11 @@ pub fn transcript_path_for_session(family: &str, native_session_id: &str) -> Opt
                 )
             })
             .or_else(|| super::driver_cursor::cursor_native_transcript_path(native_session_id)),
+        "pi" | "omp" => crate::session_chat_paths::resolve_session_chat_transcript_path(
+            crate::session_chat::SessionChatTranscriptAgent::Pi,
+            Some(native_session_id),
+            None,
+        ),
         _ => None,
     }
 }
@@ -740,7 +769,8 @@ pub(crate) fn extract_safe_model_and_effort_from_command(
 ) -> (Option<String>, Option<String>) {
     if !matches!(
         family,
-        "claude" | "codex" | "antigravity" | "opencode" | "grok" | "hermes" | "cursor"
+        "claude" | "codex" | "antigravity" | "opencode" | "grok" | "hermes" | "cursor" | "pi"
+            | "omp"
     ) {
         return (None, None);
     }
@@ -777,6 +807,11 @@ pub(crate) fn extract_safe_model_and_effort_from_command(
                     .then(|| tok.strip_prefix("--reasoning="))
                     .flatten()
             })
+            .or_else(|| {
+                matches!(family, "pi" | "omp")
+                    .then(|| tok.strip_prefix("--thinking="))
+                    .flatten()
+            })
         {
             if effort.is_none() && is_safe_model_or_effort_token(v) {
                 effort = Some(v.trim().to_string());
@@ -784,6 +819,7 @@ pub(crate) fn extract_safe_model_and_effort_from_command(
         } else if tok == "--effort"
             || (family == "grok" && tok == "--reasoning-effort")
             || (family == "hermes" && tok == "--reasoning")
+            || (matches!(family, "pi" | "omp") && tok == "--thinking")
         {
             if let Some(next) = base_tokens.get(i + 1) {
                 if effort.is_none() && is_safe_model_or_effort_token(next) {
@@ -813,6 +849,8 @@ pub(crate) fn ignored_owner_command_tokens(
         "grok" => "grok",
         "hermes" => "hermes",
         "cursor" => "cursor-agent",
+        "pi" => "pi",
+        "omp" => "omp",
         _ => return Vec::new(),
     };
     let Some(raw) = owner_command.map(str::trim).filter(|s| !s.is_empty()) else {
@@ -855,6 +893,11 @@ pub(crate) fn ignored_owner_command_tokens(
                     .then(|| tok.strip_prefix("--reasoning="))
                     .flatten()
             })
+            .or_else(|| {
+                matches!(family, "pi" | "omp")
+                    .then(|| tok.strip_prefix("--thinking="))
+                    .flatten()
+            })
         {
             if !is_safe_model_or_effort_token(v) {
                 ignored.push(tok.to_string());
@@ -862,6 +905,7 @@ pub(crate) fn ignored_owner_command_tokens(
         } else if matches!(tok, "--model" | "-m" | "--effort")
             || (family == "grok" && tok == "--reasoning-effort")
             || (family == "hermes" && tok == "--reasoning")
+            || (matches!(family, "pi" | "omp") && tok == "--thinking")
         {
             if let Some(next) = base_tokens.get(i + 1) {
                 if !is_safe_model_or_effort_token(next) {
@@ -1227,8 +1271,28 @@ pub fn build_cli_switch_argv_with_options(
         }
     }
     if let Some(id) = native_session_id.map(str::trim).filter(|s| !s.is_empty()) {
-        inner_args.push(spec.cli_resume_flag.to_string());
-        inner_args.push(id.to_string());
+        if spec.family == "pi" {
+            let existing_path = if std::path::Path::new(id).is_file() {
+                Some(id.to_string())
+            } else {
+                transcript_path_for_session("pi", id)
+                    .filter(|p| p.is_file())
+                    .map(|p| p.to_string_lossy().to_string())
+            };
+            if let Some(path) = existing_path {
+                inner_args.push("--session".to_string());
+                inner_args.push(path);
+            } else if crate::agents::pi_session_id::is_pi_session_id(id) {
+                inner_args.push("--session-id".to_string());
+                inner_args.push(id.to_string());
+            } else {
+                inner_args.push(spec.cli_resume_flag.to_string());
+                inner_args.push(id.to_string());
+            }
+        } else {
+            inner_args.push(spec.cli_resume_flag.to_string());
+            inner_args.push(id.to_string());
+        }
     }
 
     if spec.family == "claude" {
@@ -1317,6 +1381,15 @@ pub fn build_cli_switch_argv_with_options(
         }
         if let Some(e) = effort {
             inner_args.push("--reasoning-effort".to_string());
+            inner_args.push(e.to_string());
+        }
+    } else if matches!(spec.family, "pi" | "omp") {
+        if let Some(m) = model {
+            inner_args.push("--model".to_string());
+            inner_args.push(m.to_string());
+        }
+        if let Some(e) = effort {
+            inner_args.push("--thinking".to_string());
             inner_args.push(e.to_string());
         }
     } else if spec.family == "hermes" {

@@ -23,14 +23,16 @@ use crate::app::window::{
 use crate::GhostexGpuiApp;
 
 const SETTINGS_INTRO_KEY: &str = "nativeModeIntro";
-const NATIVE_FAMILIES: [&str; 7] = [
+const NATIVE_FAMILIES: [&str; 9] = [
     "antigravity",
     "claude",
     "codex",
     "cursor",
     "grok",
     "hermes",
+    "omp",
     "opencode",
+    "pi",
 ];
 
 /// Opened in this run already (by any window), so a second window never opens it twice before the

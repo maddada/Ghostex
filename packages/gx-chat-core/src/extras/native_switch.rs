@@ -15,7 +15,7 @@
 use crate::document::NativeSwitchOffer;
 use crate::state::ChatState;
 
-/// Canonical family and user-facing display name for the three Native-capable agents.
+/// Canonical family and user-facing display name for Native-capable agents.
 pub fn canonical_native_agent(raw: &str) -> Option<(&'static str, &'static str)> {
     match raw.trim().to_ascii_lowercase().as_str() {
         "antigravity" | "antigravity-cli" | "agy" => Some(("antigravity", "Antigravity")),
@@ -23,6 +23,8 @@ pub fn canonical_native_agent(raw: &str) -> Option<(&'static str, &'static str)>
         "codex" | "codex-cli" => Some(("codex", "Codex")),
         "opencode" | "opencode-cli" => Some(("opencode", "OpenCode")),
         "cursor" | "cursor-cli" | "cursor-agent" => Some(("cursor", "Cursor CLI")),
+        "omp" | "omp-cli" | "oh-my-pi" => Some(("omp", "OMP")),
+        "pi" | "pi-cli" => Some(("pi", "Pi")),
         _ => None,
     }
 }
@@ -37,13 +39,13 @@ pub fn project(state: &ChatState) -> Option<NativeSwitchOffer> {
     }
     let (family, agent_name) = state
         .session
-        .agent
+        .session_agent_id
         .as_deref()
         .and_then(canonical_native_agent)
         .or_else(|| {
             state
                 .session
-                .session_agent_id
+                .agent
                 .as_deref()
                 .and_then(canonical_native_agent)
         })?;

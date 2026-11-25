@@ -22,6 +22,7 @@ pub(super) async fn rewind(
     let label = match agent {
         "codex" => "Codex",
         "opencode" => "OpenCode",
+        "pi" => "Pi Agent",
         _ => "Claude Code",
     };
     if crate::acp::channel::live(&target.project_id, &target.session_id, "rewind").is_none() {
@@ -42,6 +43,7 @@ pub(super) async fn rewind(
     let result = match agent {
         "codex" => rewind_codex(state, &target, message_id).await?,
         "opencode" => ask_host(&target, json!({ "messageId": message_id }), "OpenCode").await?,
+        "pi" => rewind_pi(state, &target, message_id).await?,
         _ => rewind_claude(state, &target, message_id).await?,
     };
     crate::session_chat_follower::request_session_chat_resnapshot(
@@ -276,6 +278,48 @@ async fn rewind_codex(
     };
     let warning = (!adopted).then(|| {
         "Codex went back, but this chat couldn't catch up. Reopen the chat to see where it is now."
+            .to_string()
+    });
+    Ok(json!({
+        "ok": true,
+        "warning": warning,
+        "targetMessageId": message_id,
+        "leafId": null,
+    }))
+}
+
+/// Pi Agent: `fork { entryId }` writes a branched session file containing entries before the
+/// chosen user message and switches the live RPC host onto it; adopt that new session identity.
+async fn rewind_pi(
+    state: &AppState,
+    target: &SessionChatSendTarget,
+    message_id: &str,
+) -> Result<Value, DomainStateError> {
+    let previous_id = read_runtime_text(&target.session, "agentSessionId").unwrap_or_default();
+    let answer = ask_host(target, json!({ "messageId": message_id }), "Pi Agent").await?;
+    let next_id = answer
+        .get("sessionId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let next_path = answer
+        .get("transcriptPath")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default();
+    let adopted = match next_id {
+        Some(next_id) => adopt_identity(
+            state,
+            target,
+            &previous_id,
+            next_id,
+            next_path,
+            answer.get("childPid").and_then(Value::as_i64),
+        )?,
+        None => false,
+    };
+    let warning = (!adopted).then(|| {
+        "Pi Agent went back, but this chat couldn't catch up. Reopen the chat to see where it is now."
             .to_string()
     });
     Ok(json!({

@@ -808,11 +808,16 @@ pub(crate) async fn handle_read_session_chat_http(
         "isCoordinatorThread".to_string(),
         json!(is_coordinator_thread),
     );
-    if let Some(family) = agent
+    if let Some(family) = terminal_agent
         .as_deref()
         .and_then(crate::acp::canonical_native_family)
         .or_else(|| {
             session_agent_id
+                .as_deref()
+                .and_then(crate::acp::canonical_native_family)
+        })
+        .or_else(|| {
+            agent
                 .as_deref()
                 .and_then(crate::acp::canonical_native_family)
         })

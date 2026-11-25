@@ -403,7 +403,9 @@ pub const NATIVE_AGENT_FAMILIES: &[&str] = &[
     "cursor",
     "grok",
     "hermes",
+    "omp",
     "opencode",
+    "pi",
 ];
 pub const SESSION_MODES: &[&str] = &["native", "terminal"];
 pub const SESSION_MODE_STATE_TRIGGERS: &[&str] = &["app_start", "changed"];

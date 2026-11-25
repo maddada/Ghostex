@@ -309,6 +309,8 @@ fn acp_terminal_notice(
             "opencode" => "OpenCode",
             "grok" => "Grok Build",
             "cursor" => "Cursor CLI",
+            "pi" => "Pi Agent",
+            "omp" => "OMP",
             _ => "Claude Code",
         };
         return Some(
@@ -355,6 +357,8 @@ fn acp_terminal_notice(
                 "opencode" => "OpenCode",
                 "grok" => "Grok Build",
                 "cursor" => "Cursor CLI",
+                "pi" => "Pi Agent",
+                "omp" => "OMP",
                 _ => "Agent",
             };
             let lower_code = code.unwrap_or_default().to_ascii_lowercase();
@@ -532,14 +536,18 @@ pub(crate) fn session_chat_questions_only_on_screen(agent: Option<&str>) -> bool
 /// Resolves the canonical ACP agent family (`"claude"`, `"codex"`, `"antigravity"`, ...) for a
 /// session row even when its `agentId` is a custom account wrapper such as `custom-claude-70-...`.
 pub(super) fn acp_family_for_session(agent_id: Option<&str>, session: Option<&Value>) -> String {
-    let raw = agent_id
+    if let Some(explicit) = session
+        .and_then(|s| s.pointer("/runtimeSettings/acpFamily"))
+        .and_then(Value::as_str)
+        .and_then(crate::acp::canonical_native_family)
+    {
+        return explicit.to_string();
+    }
+    let raw = session
+        .and_then(|s| s.get("agentId"))
+        .and_then(Value::as_str)
         .filter(|s| !s.trim().is_empty())
-        .or_else(|| {
-            session
-                .and_then(|s| s.get("agentId"))
-                .and_then(Value::as_str)
-                .filter(|s| !s.trim().is_empty())
-        })
+        .or_else(|| agent_id.filter(|s| !s.trim().is_empty()))
         .unwrap_or("antigravity");
     let lower = raw.trim().to_ascii_lowercase();
     if lower.contains("claude") {
@@ -562,6 +570,12 @@ pub(super) fn acp_family_for_session(agent_id: Option<&str>, session: Option<&Va
     }
     if lower.contains("cursor") {
         return "cursor".to_string();
+    }
+    if lower == "omp" || lower == "oh-my-pi" || lower.contains("omp") {
+        return "omp".to_string();
+    }
+    if lower == "pi" || lower == "pi-agent" {
+        return "pi".to_string();
     }
     ghostex_gx_chat_core::menus::catalog::canonical_model_family(raw).to_string()
 }
@@ -830,20 +844,53 @@ pub fn detect_session_chat_terminal_state(
                 )
             })
             .flatten();
-        let model_catalog = if family == "hermes" {
-            crate::acp::hermes::build_native_model_catalog(Some(&acp_state), hermes_sel.as_ref())
+        let (model_catalog, pi_status, transcript_context_usage) = if family == "hermes" {
+            (
+                crate::acp::hermes::build_native_model_catalog(
+                    Some(&acp_state),
+                    hermes_sel.as_ref(),
+                ),
+                None,
+                None,
+            )
+        } else if matches!(family, "pi" | "omp") {
+            let pi_agent = if family == "omp" {
+                crate::session_chat_pi_models::PiFamilyAgent::Omp
+            } else {
+                crate::session_chat_pi_models::PiFamilyAgent::Pi
+            };
+            let opt_agent = if family == "omp" {
+                SessionChatOptionAgent::Omp
+            } else {
+                SessionChatOptionAgent::Pi
+            };
+            let pi_sel = crate::session_chat_pi_models::read_pi_family_selection(
+                repository, project_id, session_id, opt_agent,
+            );
+            let catalog = pi_sel
+                .as_ref()
+                .and_then(|s| s.model_catalog.clone())
+                .or_else(|| crate::session_chat_pi_models::pi_family_model_catalog(pi_agent));
+            let status = pi_sel.as_ref().and_then(|s| s.pi_status.clone());
+            let ctx = pi_sel.and_then(|s| s.context_usage);
+            (catalog, status, ctx)
         } else {
-            acp_state
-                .get("modelCatalog")
-                .filter(|v| v.is_object())
-                .cloned()
+            (
+                acp_state
+                    .get("modelCatalog")
+                    .filter(|v| v.is_object())
+                    .cloned(),
+                None,
+                None,
+            )
         };
         let selection = SessionChatDetectedSelection {
             model,
             effort,
             mode,
-            context_usage,
+            context_usage: context_usage.or(transcript_context_usage),
             hermes_status: hermes_sel.and_then(|sel| sel.hermes_status),
+            pi_status,
             model_catalog,
             ..SessionChatDetectedSelection::default()
         };
@@ -855,6 +902,16 @@ pub fn detect_session_chat_terminal_state(
                 repository, project_id, session_id, notice,
             );
         }
+        let (fleet, fleet_observed) = if family == "omp" {
+            match session_row.as_ref().and_then(|session| {
+                crate::session_chat_fleet_status::read_fleet(session, None).ok()
+            }) {
+                Some(fleet) => (fleet, true),
+                None => (None, false),
+            }
+        } else {
+            (None, true)
+        };
         let child_exited = acp_state.get("childExited").and_then(Value::as_bool) == Some(true);
         let has_fatal_error = acp_state
             .get("fatalError")
@@ -992,6 +1049,9 @@ pub fn detect_session_chat_terminal_state(
                 detection.fleet = Some(fleet);
                 detection.fleet_observed = true;
             }
+        } else if family == "omp" {
+            detection.fleet = fleet;
+            detection.fleet_observed = fleet_observed;
         }
         detection.composer.state =
             if child_exited || has_fatal_error || is_working || has_pending_permission {
@@ -1049,9 +1109,18 @@ pub fn detect_session_chat_terminal_state(
                     )
                 })
                 .flatten();
-            let model_catalog = (family == "hermes")
-                .then(|| crate::acp::hermes::build_native_model_catalog(None, hermes_sel.as_ref()))
-                .flatten();
+            let model_catalog = match family.as_str() {
+                "hermes" => {
+                    crate::acp::hermes::build_native_model_catalog(None, hermes_sel.as_ref())
+                }
+                "pi" => crate::session_chat_pi_models::pi_family_model_catalog(
+                    crate::session_chat_pi_models::PiFamilyAgent::Pi,
+                ),
+                "omp" => crate::session_chat_pi_models::pi_family_model_catalog(
+                    crate::session_chat_pi_models::PiFamilyAgent::Omp,
+                ),
+                _ => None,
+            };
             let selection = SessionChatDetectedSelection {
                 model,
                 effort,

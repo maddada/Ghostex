@@ -693,7 +693,7 @@ async fn reconcile_live_host_mode_inner(
             return None;
         }
         let family = super::acp_family_from_channel_agent(&channel_agent)
-            .or_else(|| crate::session_chat_follower::session_chat_agent_for_session(&session))
+            .or_else(|| super::resolve_native_family_for_session(&session))
             .filter(|fam| super::supports_acp(fam))?;
         let mut runtime_settings = session
             .get("runtimeSettings")
@@ -845,7 +845,7 @@ pub(crate) fn reconcile_live_host_activity(
                 return None;
             }
             let agent_name = family
-                .or_else(|| crate::session_chat_follower::session_chat_agent_for_session(&session))
+                .or_else(|| super::resolve_native_family_for_session(&session))
                 .unwrap_or_else(|| "antigravity".to_string());
             let lifecycle = crate::agents::LifecycleParams {
                 project_id: pid.clone(),
@@ -1372,7 +1372,7 @@ pub(crate) async fn switch_to_cli(
         .and_then(Value::as_str)
         .and_then(super::canonical_native_family)
         .or_else(|| {
-            crate::session_chat_follower::session_chat_agent_for_session(&updated_session)
+            super::resolve_native_family_for_session(&updated_session)
                 .as_deref()
                 .and_then(super::canonical_native_family)
         })
@@ -1467,14 +1467,8 @@ pub(crate) fn session_native_switch_family(session: &Value) -> Result<String, Do
     if let Some(reason) = session_ineligible_reason(session) {
         return Err(DomainStateError::bad_request(reason));
     }
-    let family = session
-        .pointer("/runtimeSettings/acpFamily")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-        .or_else(|| crate::session_chat_follower::session_chat_agent_for_session(session))
-        .ok_or_else(|| DomainStateError {
+    let family =
+        super::resolve_native_family_for_session(session).ok_or_else(|| DomainStateError {
             code: "invalidParams",
             message: "This agent does not support Native mode.".to_string(),
         })?;

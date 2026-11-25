@@ -753,11 +753,31 @@ pub fn resolve_acp_model(
     });
     let catalog_label = catalog_model(canonical, raw)
         .and_then(|row| row.get("label").and_then(Value::as_str).map(str::to_string))
-        .filter(|label| !is_placeholder_model_label(label));
+        .filter(|label| !is_placeholder_model_label(label))
+        .or_else(|| {
+            let pi_agent = match canonical {
+                "pi" => Some(crate::session_chat_pi_models::PiFamilyAgent::Pi),
+                "omp" => Some(crate::session_chat_pi_models::PiFamilyAgent::Omp),
+                _ => None,
+            }?;
+            let cat = crate::session_chat_pi_models::pi_family_model_catalog(pi_agent)?;
+            cat.pointer(&format!("/agents/{canonical}/models"))?
+                .as_array()?
+                .iter()
+                .find(|row| row.get("value").and_then(Value::as_str) == Some(raw))
+                .and_then(|row| row.get("label").and_then(Value::as_str))
+                .filter(|label| !is_placeholder_model_label(label))
+                .map(str::to_string)
+        });
+    let fallback_slug = if matches!(canonical, "pi" | "omp") {
+        raw.split_once('/').map(|(_, id)| id).unwrap_or(raw)
+    } else {
+        raw
+    };
     let raw_label = catalog_label
         .or(available_name)
-        .or_else(|| humanize_raw_model_slug(raw))
-        .unwrap_or_else(|| raw.to_string());
+        .or_else(|| humanize_raw_model_slug(fallback_slug))
+        .unwrap_or_else(|| fallback_slug.to_string());
     let (clean_label, extracted_effort) = split_parenthesized_effort(&raw_label);
     let label = humanize_raw_model_slug(clean_label).unwrap_or_else(|| clean_label.to_string());
     if effort.is_none() {

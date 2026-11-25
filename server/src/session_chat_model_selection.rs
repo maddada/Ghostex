@@ -389,8 +389,9 @@ fn enqueue_selection(
             code: "notFound",
             message: "The session no longer exists.".into(),
         })?;
-    let provider =
-        crate::session_chat_follower::session_chat_agent_for_session(&session).unwrap_or_default();
+    let provider = crate::acp::session_acp_family(&session)
+        .or_else(|| crate::session_chat_follower::session_chat_agent_for_session(&session))
+        .unwrap_or_default();
     let model = params
         .get("model")
         .and_then(Value::as_str)

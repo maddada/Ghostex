@@ -1621,7 +1621,8 @@ fn persist_session_chat_model_resume(
     effort: &str,
     session_only: bool,
 ) -> Result<(), DomainStateError> {
-    let agent = crate::session_chat_follower::session_chat_agent_for_session(&target.session)
+    let agent = crate::acp::session_acp_family(&target.session)
+        .or_else(|| crate::session_chat_follower::session_chat_agent_for_session(&target.session))
         .unwrap_or_default();
     if crate::agent_model_pins::pin_family(&agent).is_none() || model.is_empty() {
         return Ok(());
@@ -1720,13 +1721,14 @@ pub(crate) async fn select_session_chat_model(
     // no restart and persisting the approval level per session. Checked before agent-name gates so
     // any future ACP adapter works without silent rejection.
     if crate::acp::session_is_acp(&target.session) {
+        let acp_agent = crate::acp::session_acp_family(&target.session).or_else(|| agent.clone());
         let options = crate::session_chat_model_selection::read_options(
-            agent.as_deref().unwrap_or_default(),
+            acp_agent.as_deref().unwrap_or_default(),
             true,
             params,
         )?;
         let scope = crate::session_chat_model_selection::read_scope(
-            agent.as_deref().unwrap_or_default(),
+            acp_agent.as_deref().unwrap_or_default(),
             params,
         )?;
         let session_only = scope == crate::session_chat_model_selection::SCOPE_SESSION;
@@ -1737,13 +1739,13 @@ pub(crate) async fn select_session_chat_model(
         }
         if !model.is_empty() || options.is_empty() {
             crate::session_chat_model_selection::validate_selection(
-                agent.as_deref().unwrap_or_default(),
+                acp_agent.as_deref().unwrap_or_default(),
                 &model,
                 &effort,
             )?;
         }
         if let Some(refusal) = crate::session_chat_model_selection::foreign_model_refusal(
-            agent.as_deref().unwrap_or_default(),
+            acp_agent.as_deref().unwrap_or_default(),
             &model,
         ) {
             return Err(unsupported_selection(refusal));
@@ -1790,7 +1792,7 @@ pub(crate) async fn select_session_chat_model(
             }
             crate::agent_model_pins::record_coordinator_pick(
                 &target.session,
-                agent.as_deref().unwrap_or_default(),
+                acp_agent.as_deref().unwrap_or_default(),
                 &model,
                 &effort,
             );
@@ -1798,7 +1800,7 @@ pub(crate) async fn select_session_chat_model(
                 &state.paths,
                 &target.project_id,
                 &target.session_id,
-                agent.as_deref().unwrap_or_default(),
+                acp_agent.as_deref().unwrap_or_default(),
                 &model,
                 &effort,
             );

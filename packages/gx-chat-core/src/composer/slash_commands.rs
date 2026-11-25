@@ -7,7 +7,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::composer::slash_catalogs::{
     ANTIGRAVITY_NATIVE, CLAUDE_CODE, CLAUDE_NATIVE, CODEX, CODEX_NATIVE, COPILOT, CURSOR,
-    CURSOR_NATIVE, FALLBACK, GROK, GROK_NATIVE, HERMES, HERMES_NATIVE, OMP, OPENCODE_NATIVE, PI,
+    CURSOR_NATIVE, FALLBACK, GROK, GROK_NATIVE, HERMES, HERMES_NATIVE, OMP, OMP_NATIVE,
+    OPENCODE_NATIVE, PI, PI_NATIVE,
 };
 
 /// One offered `/` command.
@@ -52,6 +53,8 @@ pub fn slash_commands_for_session(agent: Option<&str>, non_cli: bool) -> &'stati
         Some("grok") if non_cli => GROK_NATIVE,
         Some("hermes") if non_cli => HERMES_NATIVE,
         Some("cursor") if non_cli => CURSOR_NATIVE,
+        Some("pi") if non_cli => PI_NATIVE,
+        Some("omp") if non_cli => OMP_NATIVE,
         _ => slash_commands_for_agent(agent),
     }
 }

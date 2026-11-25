@@ -30,10 +30,12 @@ mod driver_codex;
 pub(crate) mod driver_cursor;
 mod driver_grok;
 pub(crate) mod driver_opencode;
+mod driver_pi;
 mod elicitation;
 pub(crate) mod hermes;
 pub mod host;
 pub(crate) mod host_mode_switching;
+mod omp_elicitation;
 pub(crate) mod pending_switch;
 pub(crate) mod spec;
 
@@ -301,17 +303,32 @@ pub fn session_is_acp(session: &Value) -> bool {
     session_is_non_cli(session)
 }
 
+/// Resolve the canonical Native family for a session row, distinguishing OMP from Pi even though
+/// both share the `"pi"` transcript decoder.
+pub(crate) fn resolve_native_family_for_session(session: &Value) -> Option<String> {
+    session
+        .pointer("/runtimeSettings/acpFamily")
+        .and_then(Value::as_str)
+        .and_then(canonical_native_family)
+        .or_else(|| {
+            crate::session_chat_composer::session_chat_composer_agent_id(session)
+                .as_deref()
+                .and_then(canonical_native_family)
+        })
+        .or_else(|| {
+            crate::session_chat_follower::session_chat_agent_for_session(session)
+                .as_deref()
+                .and_then(canonical_native_family)
+        })
+        .map(str::to_string)
+}
+
 /// The ACP family for a session currently running in ACP mode.
 pub fn session_acp_family(session: &Value) -> Option<String> {
     if !session_is_acp(session) {
         return None;
     }
-    session
-        .pointer("/runtimeSettings/acpFamily")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
+    resolve_native_family_for_session(session)
         .or_else(|| crate::session_chat_follower::session_chat_agent_for_session(session))
 }
 

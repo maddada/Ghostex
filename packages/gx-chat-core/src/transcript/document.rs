@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 
 use crate::document::Document;
 use crate::state::{ChatContext, ChatState, RewindRequest};
-use crate::transcript::presentation::agent_supports_rewind;
+use crate::transcript::presentation::session_supports_rewind;
 use crate::transcript::{presentation, rows};
 
 const PREVIEW_LINE_LIMIT: usize = 3;
@@ -115,7 +115,11 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     live `canRewind` gate, the same condition that lets the composer send, because the daemon types
     the rewind into that same pane.
     */
-    into.rewind_available = agent_supports_rewind(state.session.agent.as_deref());
+    into.rewind_available = session_supports_rewind(
+        state.session.agent.as_deref(),
+        state.session.session_agent_id.as_deref(),
+        state.session.non_cli_mode,
+    );
     into.fork_from_message_available =
         crate::transcript::presentation::agent_supports_fork_from_message(
             state.session.agent.as_deref(),
