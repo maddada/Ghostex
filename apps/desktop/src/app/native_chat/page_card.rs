@@ -449,7 +449,8 @@ impl NativeChatView {
             .as_deref()
             .filter(|_| !answered)
             .and_then(|page_id| self.question_section_of(page_id))
-            .is_some_and(|section| section == "canceled");
+            // A seen-only page cleared from the Inbox lists as `seen` (gx-chat-core `SEEN_STATUS`).
+            .is_some_and(|section| section == "canceled" || section == "seen");
         // A page that waited only to be looked at and was cleared from the dock (Mark all read,
         // Dismiss) reads Seen, as one marked seen on the page does (gx-chat-core
         // questions/later.rs `mark_seen`).

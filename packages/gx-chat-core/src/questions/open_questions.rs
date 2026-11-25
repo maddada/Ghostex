@@ -115,7 +115,8 @@ pub struct QuestionListRow {
     pub kind: String,
     pub title: String,
     /// Where it stands: `waiting` (unanswered), `later` (put off For later, still unanswered),
-    /// `answered`, `withdrawn`, `canceled` (removed by the reader), or `other` for a page or chart that asks nothing. The renderers
+    /// `answered`, `seen` (a page that only waited to be seen, done with: `SEEN_STATUS`),
+    /// `withdrawn`, `canceled` (removed by the reader), or `other` for a page or chart that asks nothing. The renderers
     /// tell rows apart by it (the icon's colour, the For later marker and button).
     #[serde(default)]
     pub status: String,
@@ -385,10 +386,24 @@ fn status_of(
         });
     }
     if asker.answered || on_the_way.contains(&asker.id) {
-        return Some("answered");
+        return Some(if asker.seen_only {
+            SEEN_STATUS
+        } else {
+            "answered"
+        });
     }
     if asker.inherited {
         return None;
+    }
+    // A page that only waited to be seen and was cleared (Seen, Clear Inbox, or Archive before
+    // 2026-11-25) reads Seen; one its agent replaced or retired reads withdrawn, as its card says
+    // Replaced. It never reads Canceled (`SEEN_STATUS`).
+    if asker.seen_only && removed.contains(&asker.id) {
+        return Some(if asker.replaced || asker.obsolete {
+            "withdrawn"
+        } else {
+            SEEN_STATUS
+        });
     }
     // Neither waiting nor answered: canceled (removed by the reader), withdrawn by the agent, asked again
     // later, or a form whose answers are on their way (answered, as the pill counts it).
@@ -451,7 +466,12 @@ fn indexed_status(
     removed: &std::collections::BTreeSet<String>,
     cards: &std::collections::BTreeSet<String>,
 ) -> String {
+    // A page that only waited to be seen (`asker_from_entry`): cleared or seen, it reads Seen.
+    let seen_only = entry.kind == "page" && (entry.awaits_seen || entry.tags.is_empty());
     match entry.status.as_str() {
+        "waiting" | "answered" if seen_only && removed.contains(&entry.id) => SEEN_STATUS,
+        "answered" if seen_only => SEEN_STATUS,
+        "withdrawn" if seen_only => "withdrawn",
         "waiting" if removed.contains(&entry.id) => "canceled",
         "waiting" if crate::extras::work_cards::covered_by_cards(&entry.tags, cards) => "answered",
         "waiting" if entry.offset.is_none() && entry.thread.is_none() => "withdrawn",
@@ -606,6 +626,16 @@ const GROUPS: [(&str, &str); 3] = [
     ("threads", "Worker pages"),
 ];
 
+/// The list status of a page that only waited to be seen and is done with: marked Seen in the
+/// Inbox (or Archived before 2026-11-25), or seen on the page. The renderers draw it in the
+/// answered rows' green with the word "Seen" (desktop `questions_list.rs`, phone `ChatPills.tsx`).
+///
+/// CDXC:Coordinators 2026-11-25 DECISION:
+/// User, of pages cleared from the Inbox: "pages go in resources pill in chat box already marked
+/// green thats all i need". A cleared seen-only page read Canceled in grey and was listed twice
+/// (its asker row and a plain page row from the content scan); it now reads Seen in green, once.
+pub const SEEN_STATUS: &str = "seen";
+
 /// The pill's list: every form, page and chart in its group, all kinds. Earlier is newest first;
 /// Unanswered is oldest first, so the waiting questions read in the order they were asked.
 ///
@@ -643,7 +673,20 @@ fn list_rows(state: &ChatState, context: &ChatContext, labels: bool) -> Vec<Ques
         })
         .collect();
     let askers = state.transcript_view.askers.len();
+    // A page that waits to be seen (`awaitsSeen`, no questions) is an asker, listed above with where
+    // it stands, and also a page that asks nothing to the content scan (`questions::content`), which
+    // listed it a second time as a plain page. Each page is listed once: the asker's row wins.
+    let listed: std::collections::HashSet<String> = placed
+        .iter()
+        .filter(|(_, _, row)| row.kind == "page")
+        .map(|(_, _, row)| row.id.clone())
+        .collect();
     for (index, item) in state.questions.content.items.iter().enumerate() {
+        if item.kind == crate::transcript::question_forms::ContentKind::Page
+            && listed.contains(item.id.as_str())
+        {
+            continue;
+        }
         let mut row = content_row(item, context, labels);
         row.status = "other".to_string();
         placed.push((item.at, askers + index, row));

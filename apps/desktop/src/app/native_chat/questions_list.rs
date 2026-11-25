@@ -88,10 +88,12 @@ fn later_action(status: &str, kind: &str, id: &str) -> Option<(&'static str, Val
 }
 
 /// The word a row carries before its age: "For later" on a put-off form or page, "Canceled" on
-/// one the reader removed without answering.
+/// one the reader removed without answering, "Seen" on a page that only waited to be seen and is
+/// done with (gx-chat-core `SEEN_STATUS`).
 fn status_label(status: &str) -> Option<&'static str> {
     match status {
         "later" => Some("For later"),
+        "seen" => Some("Seen"),
         "canceled" => Some("Canceled"),
         _ => None,
     }
@@ -252,6 +254,7 @@ impl NativeChatView {
                 "waiting" => "unanswered".to_string(),
                 "later" => "later".to_string(),
                 "canceled" => "canceled".to_string(),
+                "seen" => "seen".to_string(),
                 _ => text(section, "id"),
             })
     }
@@ -727,9 +730,10 @@ impl NativeChatView {
         }
         let icon = kind_icon(&kind);
         let group = SharedString::from(format!("chat-questions-row-group:{id}"));
-        // Answered forms and pages are green, withdrawn ones dimmed; the rest are the usual grey.
+        // Answered forms and pages are green, and so are pages marked Seen (gx-chat-core
+        // `SEEN_STATUS`); withdrawn ones dimmed; the rest are the usual grey.
         let (icon_color, title_color) = match status.as_str() {
-            "answered" => (p.success(), p.foreground),
+            "answered" | "seen" => (p.success(), p.foreground),
             "withdrawn" | "canceled" => (p.muted.opacity(0.6), p.card_muted),
             _ => (p.card_muted, p.foreground),
         };
