@@ -1,9 +1,17 @@
 //! History: the icon pill in the chat box's pill strip, right of the scroll to bottom arrow
 //! (pills_strip.rs), and the popover it opens above the chat box: every message the user sent in
 //! this chat as cards, oldest at the top and opening at the newest, under a search field and the
-//! All / With attachments / Text only filters. A card's click jumps the transcript to its message;
-//! its buttons copy it, put it back in the chat box, copy its reference, reference it in the chat
-//! box, fork from it or rewind to it, as the message's own menu does (message_actions.rs).
+//! All / With attachments / Text only filters. A card's click jumps the transcript to its message.
+//! Pointing at a card shows Copy and ⋯ at its top right; the ⋯ menu names the rest: Copy reference
+//! and Reference in chat, Jump to message and Put back in the chat box, Rewind to here and Fork
+//! from here, the rows and look of the ⋯ under a message (message_actions.rs).
+//!
+//! CDXC:SessionChat 2026-11-26 DECISION:
+//! User, of the seven bare icons on a card: "i want 3 dots here next to the copy button on the top
+//! right corner so i know what each one does. only show copy and 3 dots on the top right of each
+//! card pls". They then picked the order that matches the ⋯ under a message (references first),
+//! and kept the pencil for Put back, since the back arrow is Rewind's. The menu is drawn inside
+//! the History menu's window, because a second chat menu would close History.
 //!
 //! The list, its search and its pages are the core's (`sentHistory`,
 //! packages/gx-chat-core/src/composer/sent_history.rs, where the user's decision lives); this draws
@@ -19,7 +27,8 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, AppContext as _, Bounds, Context, InteractiveElement as _, IntoElement,
     ListAlignment, ListState, ParentElement as _, Pixels, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Window, canvas, div, list, px, svg,
+    StatefulInteractiveElement as _, Styled as _, Window, anchored, canvas, deferred, div, list,
+    px, svg,
 };
 use gpui_component::input::{Input, InputEvent, InputState};
 use serde_json::{Value, json};
@@ -45,6 +54,17 @@ const CARD_GAP: f32 = 8.0;
 const THUMB: f32 = 36.0;
 /// Characters a card's line holds, for the height estimate.
 const LINE_CHARS: usize = 58;
+/// A card's ⋯ menu, unscaled: the message menu's metrics (option_menu/geometry.rs `REGULAR`).
+const CARD_MENU_PADDING: f32 = 6.0;
+const CARD_MENU_ROW: f32 = 18.2 + 8.0 * 2.0;
+const CARD_MENU_SEPARATOR: f32 = 13.0;
+const CARD_MENU_MIN_WIDTH: f32 = 200.0;
+
+/// One row of a card's ⋯ menu, or the line between two groups.
+enum CardMenuRow {
+    Action(&'static str, &'static str, Value),
+    Separator,
+}
 
 /// A card's estimated height (unscaled): its time line, up to three lines of words and the row of
 /// pictures and files.
@@ -152,7 +172,29 @@ impl NativeChatView {
         })?;
         let scale = ChatAppearance::current(&self.snapshot).scale;
         let pane = f32::from(self.bounds.get().size.height) / scale;
-        Some(height.min((pane * 0.6).max(220.0)))
+        let height = height.min((pane * 0.6).max(220.0));
+        // An open card menu needs room under the card's top line, so a short list grows for it.
+        let menu = self.sent_card_menu_item().map(|item| {
+            super::chat_pills::MENU_HEADER_HEIGHT
+                + GAP * 3.0
+                + FIELD_HEIGHT
+                + CHIPS_HEIGHT
+                + CARD_PAD_Y
+                + META_HEIGHT
+                + self.sent_card_menu_height(&item)
+                + 12.0
+        });
+        Some(menu.map_or(height, |menu| height.max(menu)))
+    }
+
+    /// The card whose ⋯ menu is open, while it is still listed.
+    fn sent_card_menu_item(&self) -> Option<Value> {
+        let open = self.sent_history_card_menu.as_deref()?;
+        self.snapshot["sentHistory"]["items"]
+            .as_array()?
+            .iter()
+            .find(|item| item["id"] == open)
+            .cloned()
     }
 
     fn open_sent_history_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -177,6 +219,7 @@ impl NativeChatView {
     /// The menu went away (a click outside, Escape, another menu, a jump): the core drops the list,
     /// and the search field goes with the window it was made in.
     pub(super) fn sent_history_menu_closed(&mut self, cx: &mut Context<Self>) {
+        self.sent_history_card_menu = None;
         self.sent_history_input = None;
         self.sent_history_subscription = None;
         self.sent_history_input_window = None;
@@ -260,14 +303,19 @@ impl NativeChatView {
         let chat = cx.entity().downgrade();
         self.sent_history_list
             .set_scroll_handler(move |event, _, cx| {
-                if event.visible_range.start == 0 {
-                    let _ = chat.update(cx, |chat, cx| {
-                        let history = &chat.snapshot["sentHistory"];
-                        if history["hasMore"] == true && history["loadingMore"] != true {
-                            chat.invoke(json!({"type": "sentHistoryMore"}), cx);
-                        }
-                    });
-                }
+                let _ = chat.update(cx, |chat, cx| {
+                    // A card's menu belongs to where the card was; scrolling closes it.
+                    if chat.sent_history_card_menu.take().is_some() {
+                        cx.notify();
+                    }
+                    let history = &chat.snapshot["sentHistory"];
+                    if event.visible_range.start == 0
+                        && history["hasMore"] == true
+                        && history["loadingMore"] != true
+                    {
+                        chat.invoke(json!({"type": "sentHistoryMore"}), cx);
+                    }
+                });
             });
     }
 
@@ -505,6 +553,8 @@ impl NativeChatView {
                 .into_any_element()
         }));
         let jump_id = id.clone();
+        let menu_open = self.sent_history_card_menu.as_deref() == Some(id.as_str());
+        let menu = menu_open.then(|| self.sent_card_menu(&item, p, cx));
         div()
             .pb(px(CARD_GAP * s))
             .child(
@@ -528,6 +578,7 @@ impl NativeChatView {
                             .border_color(p.foreground.opacity(0.1))
                     })
                     .chat_cursor_pointer()
+                    .relative()
                     .on_click(cx.listener(move |chat, _, _, cx| {
                         chat.close_pill_menu(cx);
                         chat.invoke(
@@ -559,9 +610,12 @@ impl NativeChatView {
                                     .flex()
                                     .items_center()
                                     .gap(px(2.0 * s))
-                                    .invisible()
-                                    .group_hover(group, |style| style.visible())
-                                    .children(self.sent_card_buttons(&item, p, cx)),
+                                    .when(!menu_open, |buttons| {
+                                        buttons
+                                            .invisible()
+                                            .group_hover(group, |style| style.visible())
+                                    })
+                                    .children(self.sent_card_buttons(&item, menu_open, p, cx)),
                             ),
                     )
                     .child(
@@ -584,41 +638,102 @@ impl NativeChatView {
                                 .overflow_hidden()
                                 .children(attachments),
                         )
+                    })
+                    // The ⋯ menu hangs from the ⋯'s bottom right, over the list and unclipped by
+                    // it, moved to fit the window (or above the ⋯ when it fits better there).
+                    .when_some(menu, |card, menu| {
+                        card.child(
+                            div()
+                                .absolute()
+                                .top(px((CARD_PAD_Y + META_HEIGHT + 2.0) * s))
+                                .right(px(11.0 * s))
+                                .size_0()
+                                .child(
+                                    deferred(
+                                        anchored()
+                                            .anchor(gpui::Anchor::TopRight)
+                                            .snap_to_window_with_margin(px(8.0 * s))
+                                            .child(menu),
+                                    )
+                                    .with_priority(1),
+                                ),
+                        )
                     }),
             )
             .into_any_element()
     }
 
-    /// A card's buttons, in the order the user picked them: Jump, Copy, Put back in the chat box,
-    /// Copy reference and Reference in chat (a numbered message), Fork from here and Rewind to
-    /// here (where the chat offers them, as the message's menu does).
+    /// A card's two buttons at its top right: Copy, and ⋯ for the rest (`sent_card_menu`).
     fn sent_card_buttons(
         &self,
         item: &Value,
+        menu_open: bool,
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> Vec<AnyElement> {
         let id = text(item, "id");
+        let s = p.scale;
+        let button = |key: &str, label: &'static str, icon: &'static str, on: bool| {
+            div()
+                .id(SharedString::from(format!("sent-card-{key}:{id}")))
+                .role(gpui::Role::Button)
+                .aria_label(label)
+                .size(px(24.0 * s))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(px(6.0 * s))
+                .when(on, |button| button.bg(p.foreground.opacity(0.08)))
+                .hover(|style| style.bg(p.foreground.opacity(0.08)))
+                .chat_cursor_pointer()
+                .tooltip(move |window, cx| {
+                    gpui_component::tooltip::Tooltip::new(label).build(window, cx)
+                })
+                .child(svg().path(icon).size(px(14.0 * s)).text_color(p.foreground))
+        };
+        let copy = json!({"type": "copyText", "text": text(item, "copyText")});
+        let menu_id = id.clone();
+        vec![
+            button("copy", "Copy", "titlebar/copy.svg", false)
+                .on_click(cx.listener(move |chat, _, _, cx| {
+                    cx.stop_propagation();
+                    chat.run_sent_card_command(&copy, cx);
+                }))
+                .into_any_element(),
+            button("more", "More actions", "titlebar/dots.svg", menu_open)
+                .aria_expanded(menu_open)
+                .on_click(cx.listener(move |chat, event: &gpui::ClickEvent, _, cx| {
+                    cx.stop_propagation();
+                    let press = match event {
+                        gpui::ClickEvent::Mouse(click) => Some(click.down.position),
+                        _ => None,
+                    };
+                    // The press on this ⋯ already closed its open menu (`sent_card_menu`).
+                    if let Some((closed, at)) = chat.sent_history_card_menu_dismissed.take()
+                        && closed == menu_id
+                        && Some(at) == press
+                    {
+                        return;
+                    }
+                    chat.sent_history_card_menu =
+                        (chat.sent_history_card_menu.as_deref() != Some(menu_id.as_str()))
+                            .then(|| menu_id.clone());
+                    cx.notify();
+                }))
+                .into_any_element(),
+        ]
+    }
+
+    /// A card's ⋯ rows in the order the user picked (the ⋯ under a message's): Copy reference and
+    /// Reference in chat (a numbered message), Jump to message and Put back in the chat box, then
+    /// Rewind to here and Fork from here where the message's own menu offers them, a line between
+    /// each group.
+    fn sent_card_menu_rows(&self, item: &Value) -> Vec<CardMenuRow> {
+        let id = text(item, "id");
         let timestamp = item["timestamp"].as_i64();
-        let mut buttons: Vec<(&'static str, &'static str, Value)> = vec![
-            (
-                "Jump to it",
-                "titlebar/arrow-up-right.svg",
-                json!({"type": "sentHistoryJump", "messageId": id, "timestamp": timestamp}),
-            ),
-            (
-                "Copy",
-                "titlebar/copy.svg",
-                json!({"type": "copyText", "text": text(item, "copyText")}),
-            ),
-            (
-                "Put back in the chat box",
-                "titlebar/arrow-back-up.svg",
-                json!({"type": "appendToDraft", "text": text(item, "draft")}),
-            ),
-        ];
+        let mut references = Vec::new();
         if let Some(link) = item["referenceLink"].as_str() {
-            buttons.push((
+            references.push(CardMenuRow::Action(
                 "Copy reference",
                 "titlebar/hash.svg",
                 json!({"type": "copyText", "text": link}),
@@ -627,56 +742,146 @@ impl NativeChatView {
         if let Some(pill) = item["referencePill"].as_str()
             && !self.in_subagent
         {
-            buttons.push((
+            references.push(CardMenuRow::Action(
                 "Reference in chat",
                 "titlebar/quote.svg",
                 json!({"type": "appendToDraft", "text": pill, "inline": true}),
             ));
         }
-        if !self.in_subagent && self.snapshot["forkFromMessageAvailable"] == true {
-            buttons.push((
-                "Fork from here",
-                "titlebar/git-branch.svg",
-                json!({"type": "forkFromMessage", "messageId": id}),
-            ));
-        }
+        let reuse = vec![
+            CardMenuRow::Action(
+                "Jump to message",
+                "titlebar/arrow-up-right.svg",
+                json!({"type": "sentHistoryJump", "messageId": id, "timestamp": timestamp}),
+            ),
+            CardMenuRow::Action(
+                "Put back in the chat box",
+                "titlebar/pencil.svg",
+                json!({"type": "appendToDraft", "text": text(item, "draft")}),
+            ),
+        ];
+        let mut branch = Vec::new();
         if !self.in_subagent
             && self.snapshot["rewindAvailable"] == true
             && self.snapshot["rewindEnabled"] == true
         {
-            buttons.push((
+            branch.push(CardMenuRow::Action(
                 "Rewind to here",
                 "chat-actions/rewind",
                 json!({"type": "rewindOpen", "messageId": id, "prompt": text(item, "copyText")}),
             ));
         }
+        if !self.in_subagent && self.snapshot["forkFromMessageAvailable"] == true {
+            branch.push(CardMenuRow::Action(
+                "Fork from here",
+                "titlebar/git-branch.svg",
+                json!({"type": "forkFromMessage", "messageId": id}),
+            ));
+        }
+        let mut rows = Vec::new();
+        for group in [references, reuse, branch] {
+            if group.is_empty() {
+                continue;
+            }
+            if !rows.is_empty() {
+                rows.push(CardMenuRow::Separator);
+            }
+            rows.extend(group);
+        }
+        rows
+    }
+
+    /// The ⋯ menu's height (unscaled).
+    fn sent_card_menu_height(&self, item: &Value) -> f32 {
+        CARD_MENU_PADDING * 2.0
+            + self
+                .sent_card_menu_rows(item)
+                .iter()
+                .map(|row| match row {
+                    CardMenuRow::Action(..) => CARD_MENU_ROW,
+                    CardMenuRow::Separator => CARD_MENU_SEPARATOR,
+                })
+                .sum::<f32>()
+    }
+
+    /// A card's ⋯ menu, drawn as the chat's menus are (option_menu/render.rs): the menu's colour
+    /// (kept opaque), hairline, ink and row hover, 13px labels after 14px icons, a line between groups. A click
+    /// outside it closes it; a row runs and closes it.
+    fn sent_card_menu(&self, item: &Value, p: &ChatAppearance, cx: &Context<Self>) -> AnyElement {
         let s = p.scale;
-        buttons
+        let glass = super::option_menu::ChatMenuGlass::in_window(p);
+        let id = text(item, "id");
+        let rows: Vec<AnyElement> = self
+            .sent_card_menu_rows(item)
             .into_iter()
-            .map(|(label, icon, command)| {
-                div()
-                    .id(SharedString::from(format!("sent-card-action:{id}:{label}")))
-                    .role(gpui::Role::Button)
+            .map(|row| match row {
+                CardMenuRow::Separator => div()
+                    .flex_shrink_0()
+                    .h(px(CARD_MENU_SEPARATOR * s))
+                    .px(px(4.0 * s))
+                    .py(px((CARD_MENU_SEPARATOR - 1.0) / 2.0 * s))
+                    .child(div().h(px(1.0)).bg(glass.edge.opacity(0.7)))
+                    .into_any_element(),
+                CardMenuRow::Action(label, icon, command) => div()
+                    .id(SharedString::from(format!("sent-card-menu:{id}:{label}")))
+                    .role(gpui::Role::MenuItem)
                     .aria_label(label)
-                    .size(px(24.0 * s))
+                    .flex_shrink_0()
+                    .w_full()
+                    .h(px(CARD_MENU_ROW * s))
+                    .px(px(10.0 * s))
                     .flex()
                     .items_center()
-                    .justify_center()
+                    .gap(px(8.0 * s))
                     .rounded(px(6.0 * s))
-                    .text_color(p.foreground)
-                    .hover(|style| style.bg(p.foreground.opacity(0.08)))
+                    .whitespace_nowrap()
+                    .hover(|style| style.bg(glass.hover))
                     .chat_cursor_pointer()
-                    .tooltip(move |window, cx| {
-                        gpui_component::tooltip::Tooltip::new(label).build(window, cx)
-                    })
                     .on_click(cx.listener(move |chat, _, _, cx| {
                         cx.stop_propagation();
+                        chat.sent_history_card_menu = None;
                         chat.run_sent_card_command(&command, cx);
+                        cx.notify();
                     }))
-                    .child(svg().path(icon).size(px(14.0 * s)).text_color(p.foreground))
-                    .into_any_element()
+                    .child(
+                        svg()
+                            .path(icon)
+                            .flex_shrink_0()
+                            .size(px(14.0 * s))
+                            .text_color(glass.ink),
+                    )
+                    .child(label)
+                    .into_any_element(),
             })
-            .collect()
+            .collect();
+        div()
+            .id(SharedString::from(format!("sent-card-menu:{id}")))
+            .role(gpui::Role::Menu)
+            .aria_label("More actions")
+            .min_w(px(CARD_MENU_MIN_WIDTH * s))
+            .flex()
+            .flex_col()
+            .p(px(CARD_MENU_PADDING * s))
+            .rounded(glass.radius)
+            .border_1()
+            .border_color(glass.edge)
+            // Opaque, as every card drawn over the chat's own content is (`over_content_fill`):
+            // the cards' words sit right under it.
+            .bg(p.over_content_fill(p.menu_opaque().alpha(1.0)))
+            .text_color(glass.ink)
+            .text_size(px(13.0 * s))
+            .line_height(px(18.2 * s))
+            .occlude()
+            .on_mouse_down_out(cx.listener(
+                move |chat, event: &gpui::MouseDownEvent, _, cx| {
+                    if let Some(closed) = chat.sent_history_card_menu.take() {
+                        chat.sent_history_card_menu_dismissed = Some((closed, event.position));
+                        cx.notify();
+                    }
+                },
+            ))
+            .children(rows)
+            .into_any_element()
     }
 
     /// A card button's command, run as the message menu runs its rows (actions.rs). Copy keeps the

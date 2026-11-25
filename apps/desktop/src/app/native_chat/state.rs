@@ -459,6 +459,11 @@ pub(crate) struct NativeChatView {
     pub(super) sent_history_pill_bounds:
         std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
     pub(super) sent_history_opening: bool,
+    /// The History card whose ⋯ menu is open (sent_history.rs), drawn inside the History menu.
+    pub(super) sent_history_card_menu: Option<String>,
+    /// The card menu a press outside it just closed, and where: the ⋯ that press lands on does not
+    /// open it again on release.
+    pub(super) sent_history_card_menu_dismissed: Option<(String, gpui::Point<gpui::Pixels>)>,
     /// The question jump this pane last scrolled to (`None` before its first document), and the
     /// highlight on the question it landed on (open_questions.rs).
     pub(super) open_question_jump_revision: Option<u64>,
@@ -880,6 +885,8 @@ impl NativeChatView {
             sent_history_jump_revision: 0,
             sent_history_pill_bounds: Default::default(),
             sent_history_opening: false,
+            sent_history_card_menu: None,
+            sent_history_card_menu_dismissed: None,
             open_question_jump_revision: None,
             question_flash: None,
             question_list: Default::default(),
