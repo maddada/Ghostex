@@ -262,7 +262,9 @@ pub(crate) fn extract_config_option_state(
                 || cid.contains("effort"))
         {
             if let Some(val) = current {
-                effort = Some(val.to_ascii_lowercase());
+                if !ghostex_gx_chat_core::menus::catalog::is_placeholder_effort_value(val) {
+                    effort = Some(val.to_ascii_lowercase());
+                }
             }
         }
         if model.is_none()
@@ -371,7 +373,7 @@ pub(crate) fn build_native_model_catalog(
                 .get("currentValue")
                 .and_then(Value::as_str)
                 .map(str::trim)
-                .filter(|s| !s.is_empty())
+                .filter(|s| !ghostex_gx_chat_core::menus::catalog::is_placeholder_effort_value(s))
             {
                 default_effort = Some(cur.to_ascii_lowercase());
             }
@@ -381,7 +383,9 @@ pub(crate) fn build_native_model_catalog(
                         .get("value")
                         .and_then(Value::as_str)
                         .map(str::trim)
-                        .filter(|s| !s.is_empty())
+                        .filter(|s| {
+                            !ghostex_gx_chat_core::menus::catalog::is_placeholder_effort_value(s)
+                        })
                     else {
                         continue;
                     };

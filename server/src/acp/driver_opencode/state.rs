@@ -276,7 +276,8 @@ impl OpenCodeState {
             cwd,
             writable_roots,
             current_model: initial_model,
-            current_effort: initial_effort,
+            current_effort: initial_effort
+                .filter(|e| !ghostex_gx_chat_core::menus::catalog::is_placeholder_effort_value(e)),
             available_models: Value::Array(Vec::new()),
             model_catalog: None,
             model_variants: HashMap::new(),

@@ -645,8 +645,12 @@ pub fn detect_session_chat_terminal_state(
             .get("effort")
             .and_then(Value::as_str)
             .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .or(launch_effort.as_deref());
+            .filter(|s| !ghostex_gx_chat_core::menus::catalog::is_placeholder_effort_value(s))
+            .or_else(|| {
+                launch_effort.as_deref().filter(|s| {
+                    !ghostex_gx_chat_core::menus::catalog::is_placeholder_effort_value(s)
+                })
+            });
         let resolved_acp = crate::agent_model_catalog::resolve_acp_model(
             family,
             raw_model,
@@ -1078,6 +1082,7 @@ pub fn detect_session_chat_terminal_state(
                 .as_ref()
                 .and_then(|(_, _, effort)| effort.as_deref())
                 .or(launch_effort.as_deref())
+                .filter(|s| !ghostex_gx_chat_core::menus::catalog::is_placeholder_effort_value(s))
                 .map(|value| SessionChatDetectedChoice {
                     value: value.to_string(),
                     label: crate::agent_model_catalog::effort_display_label(value),

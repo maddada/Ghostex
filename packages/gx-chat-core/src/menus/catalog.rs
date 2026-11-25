@@ -568,6 +568,20 @@ pub fn is_placeholder_model_label(label: &str) -> bool {
         || normalized.ends_with("\u{2019}s default")
 }
 
+/// True when `value` is a generic effort placeholder ("default", "auto", "inherit", "unspecified",
+/// or blank) rather than a concrete reasoning level. Never display these as an effort label on the
+/// model pill.
+pub fn is_placeholder_effort_value(value: &str) -> bool {
+    let normalized = value.trim().to_ascii_lowercase();
+    normalized.is_empty()
+        || matches!(
+            normalized.as_str(),
+            "default" | "auto" | "inherit" | "unspecified" | "model default" | "agent default"
+        )
+        || normalized.starts_with("default (")
+        || normalized.starts_with("default ")
+}
+
 /// Preferred family words for agents with an explicit default-model rule:
 /// Claude Code -> newest Opus; Codex -> newest Sol; Antigravity -> newest Neon;
 /// Cursor CLI -> newest Composer.

@@ -40,6 +40,7 @@ pub(super) fn non_empty_str(val: Option<&Value>) -> Option<&str> {
 pub(super) fn is_valid_grok_reasoning_effort_token(value: &str) -> bool {
     let trimmed = value.trim();
     !trimmed.is_empty()
+        && !ghostex_gx_chat_core::menus::catalog::is_placeholder_effort_value(trimmed)
         && trimmed.len() <= 32
         && trimmed
             .bytes()

@@ -147,7 +147,9 @@ pub(super) fn parse_config_options(configs: &Value) -> ParsedConfigOptions {
             || id == "thinking"
             || id.contains("effort")
         {
-            if let Some(val) = current {
+            if let Some(val) = current
+                .filter(|s| !ghostex_gx_chat_core::menus::catalog::is_placeholder_effort_value(s))
+            {
                 parsed.current_effort = Some(val.to_ascii_lowercase());
             }
         } else if category == "mode" || id == "mode" {

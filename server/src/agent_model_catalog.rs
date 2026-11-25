@@ -527,7 +527,7 @@ pub fn default_effort_for_model(family: &str, model_value: &str) -> Option<Strin
             if let Some(default_effort) = agent
                 .default_effort
                 .as_deref()
-                .filter(|e| !e.trim().is_empty())
+                .filter(|e| !ghostex_gx_chat_core::menus::catalog::is_placeholder_effort_value(e))
             {
                 return Some(default_effort.to_ascii_lowercase());
             }
@@ -595,13 +595,13 @@ fn resolve_acp_model_inner(
     allow_cursor_fallback: bool,
 ) -> Option<(String, String, Option<String>)> {
     use ghostex_gx_chat_core::menus::catalog::{
-        canonical_model_family, humanize_raw_model_slug, is_placeholder_model_label,
-        is_placeholder_model_value, split_parenthesized_effort,
+        canonical_model_family, humanize_raw_model_slug, is_placeholder_effort_value,
+        is_placeholder_model_label, is_placeholder_model_value, split_parenthesized_effort,
     };
     let canonical = canonical_model_family(family);
     let mut effort = raw_effort
         .map(str::trim)
-        .filter(|s| !s.is_empty())
+        .filter(|s| !is_placeholder_effort_value(s))
         .map(|s| s.to_ascii_lowercase());
     let raw = raw_model.map(str::trim).filter(|s| {
         !is_placeholder_model_value(s)

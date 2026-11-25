@@ -1251,6 +1251,8 @@ fn apply_config_options(state: &mut HostState, configs: &Value, overwrite_model:
         }
         if let Some(effort) = parsed.current_effort {
             state.current_effort = Some(effort);
+        } else if super::omp_elicitation::find_effort_config_id(configs).is_some() {
+            state.current_effort = None;
         }
         if let Some(mode) = parsed.current_mode {
             state.current_mode = Some(mode);
@@ -1265,6 +1267,8 @@ fn apply_config_options(state: &mut HostState, configs: &Value, overwrite_model:
     let (effort, model) = super::hermes::extract_config_option_state(configs);
     if let Some(eff) = effort {
         state.current_effort = Some(eff);
+    } else if find_effort_config_option_id(configs).is_some() {
+        state.current_effort = None;
     }
     if let Some(m) = model {
         if overwrite_model || state.current_model.is_none() {
@@ -2614,7 +2618,11 @@ pub fn run(args: &[String]) -> i32 {
             }
         }
     }
-    if let Some(effort) = parsed.effort.as_deref().filter(|e| !e.is_empty()) {
+    if let Some(effort) = parsed
+        .effort
+        .as_deref()
+        .filter(|e| !ghostex_gx_chat_core::menus::catalog::is_placeholder_effort_value(e))
+    {
         let effort_cfg_id = {
             let s = state.lock().unwrap_or_else(|p| p.into_inner());
             super::omp_elicitation::find_effort_config_id(&s.config_options)
@@ -3367,15 +3375,26 @@ pub fn run(args: &[String]) -> i32 {
                         }
                         if is_current_turn
                             && !was_cancelled
-                            && turn_family == "hermes"
                             && turn_prompt_text.trim_start().starts_with('/')
                             && !streamed_reply.trim().is_empty()
                         {
-                            crate::session_chat_hermes::append_native_slash_exchange(
-                                &turn_sid,
-                                &turn_prompt_text,
-                                &streamed_reply,
-                            );
+                            match turn_family {
+                                "hermes" => {
+                                    crate::session_chat_hermes::append_native_slash_exchange(
+                                        &turn_sid,
+                                        &turn_prompt_text,
+                                        &streamed_reply,
+                                    );
+                                }
+                                "omp" => {
+                                    crate::session_chat_omp_local::append_native_slash_exchange(
+                                        &turn_sid,
+                                        &turn_prompt_text,
+                                        &streamed_reply,
+                                    );
+                                }
+                                _ => {}
+                            }
                         }
                         if is_current_turn {
                             println!("[Native] Turn finished ({stop_reason}).");

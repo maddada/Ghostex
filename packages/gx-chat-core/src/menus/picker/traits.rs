@@ -393,7 +393,16 @@ pub fn model_menu_pill_labels(
                     .iter()
                     .any(|choice| choice.selected && is_long_context_value(&choice.value))
         })
-        .filter_map(|trait_row| trait_row.value_label.clone())
+        .filter_map(|trait_row| {
+            let label = trait_row.value_label.clone()?;
+            if trait_row.id == "effort"
+                && crate::menus::catalog::is_placeholder_effort_value(&label)
+            {
+                None
+            } else {
+                Some(label)
+            }
+        })
         .filter(|value| !value.is_empty())
         .collect();
     let raw_label = entry
