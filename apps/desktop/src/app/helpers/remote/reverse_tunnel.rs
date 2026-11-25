@@ -88,7 +88,7 @@ pub(crate) fn gpui_open_remote_reverse_tunnel(
         });
     }
     let target_arguments = gpui_remote_ssh_target_arguments(config).ok()?;
-    let askpass = gpui_remote_ssh_askpass_script(config).ok()?;
+    let askpass = gpui_remote_ssh_askpass_script(config, GpuiAskpassServe::Handshake).ok()?;
     let mut arguments = vec!["-N".to_string()];
     arguments.extend(gpui_remote_ssh_tunnel_options(config));
     arguments.extend([

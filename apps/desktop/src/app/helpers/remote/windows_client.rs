@@ -124,6 +124,7 @@ pub(crate) fn gpui_read_remote_ssh_password_from_keychain(
 
 pub(crate) fn gpui_remote_ssh_askpass_script(
     config: &GpuiRemoteMachineConfig,
+    _serve: GpuiAskpassServe,
 ) -> Result<Option<GpuiRemoteAskpassScript>, String> {
     if !config.has_saved_password {
         return Ok(None);

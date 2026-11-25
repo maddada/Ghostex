@@ -1,25 +1,19 @@
 // C1 wave-1 deferred split: apps/desktop/src/app/helpers/remote.rs (~8.2k
 // lines) further divided into responsibility-scoped submodules (pure move,
-// no logic changes). This file holds the SSH askpass script, keychain
+// no logic changes). This file holds the SSH askpass script (its broker is in
+// askpass_broker.rs since 2026-11-26), keychain
 // password read, and macOS remote-process spawn/terminate helpers. See
 // docs/2026-08-22/repo-restructure/SPLITS.md C1.
 
 use std::{
     collections::HashMap,
     env, fs,
-    io::{Read, Write},
+    io::Read,
     path::Path,
     process::{Child, Command, Stdio},
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
     thread,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
-
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt as _;
 
 use crate::app::helpers::*;
 use crate::*;
@@ -108,142 +102,46 @@ pub(crate) fn gpui_read_remote_ssh_password_from_keychain(
 }
 
 /// The saved password reaches ssh's askpass helper through a named pipe in a private (0700)
-/// folder: the helper reads it with `/bin/cat` and this app's broker thread answers each read
-/// with the password from the system keyring.
+/// folder: the helper reads one line from it with the shell's own `read`, and this app's broker
+/// thread answers each read with the password from the system keyring (askpass_broker.rs).
+/// `serve` says how long: terminals until they close, tunnels and one-shot commands only while
+/// their ssh signs in.
 ///
 /// CDXC:RemoteMachines 2026-11-14 WHY: The helper used to read a Unix socket with `nc -U`, which
 /// Linux distributions don't install by default (Arch/Omarchy has no `nc` at all), so a computer
 /// added through Easy Connect, which signs in with its saved SSH password, failed with "requires
-/// netcat-openbsd" until the user installed it by hand. A pipe needs only `cat`, on macOS and on
-/// every Linux, with the same access rule (only this user can open the folder) and nothing
-/// written to disk. Don't bring back a helper that needs a program the system may lack.
+/// netcat-openbsd" until the user installed it by hand. A pipe needs no program at all, on macOS
+/// and on every Linux, with the same access rule (only this user can open the folder) and
+/// nothing written to disk. Don't bring back a helper that needs a program the system may lack.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) fn gpui_remote_ssh_askpass_script(
     config: &GpuiRemoteMachineConfig,
+    serve: GpuiAskpassServe,
 ) -> Result<Option<GpuiRemoteAskpassScript>, String> {
     if !config.has_saved_password {
         return Ok(None);
     }
-    let unique_id = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    let directory = env::temp_dir().join(format!("gxap-{}-{unique_id:x}", std::process::id()));
-    let script = directory.join("a");
-    let pipe = directory.join("p");
-    let prepare_failed = |directory: &Path| {
-        let _ = fs::remove_dir_all(directory);
-        "Could not prepare SSH password helper.".to_string()
-    };
-    fs::create_dir_all(&directory)
-        .map_err(|_| "Could not prepare SSH password helper.".to_string())?;
-    fs::set_permissions(&directory, fs::Permissions::from_mode(0o700))
-        .map_err(|_| prepare_failed(&directory))?;
-    let contents = format!(
-        concat!(
-            "#!/bin/sh\n",
-            "password=$(/bin/cat {} </dev/null) || exit 1\n",
-            "if [ -z \"$password\" ]; then\n",
-            "  printf '%s\\n' 'Ghostex saved SSH password unavailable.' >&2\n",
-            "  exit 1\n",
-            "fi\n",
-            "printf '%s\\n' \"$password\"\n",
-            "unset password\n",
-        ),
-        gpui_shell_single_quote(gpui_path_string(pipe.as_path()).as_str())
-    );
-    if fs::write(&script, contents).is_err()
-        || fs::set_permissions(&script, fs::Permissions::from_mode(0o700)).is_err()
-    {
-        return Err(prepare_failed(&directory));
-    }
-    let Ok(pipe_path) = std::ffi::CString::new(gpui_path_string(pipe.as_path())) else {
-        return Err(prepare_failed(&directory));
-    };
-    // SAFETY: `pipe_path` is a valid NUL-terminated path inside the private folder made above.
-    if unsafe { libc::mkfifo(pipe_path.as_ptr(), 0o600) } != 0 {
-        return Err(prepare_failed(&directory));
-    }
-
-    let cancel = Arc::new(AtomicBool::new(false));
-    let server_cancel = cancel.clone();
+    let failed = || "Could not prepare SSH password helper.".to_string();
+    let folder = GpuiAskpassFolder::create(&gpui_askpass_base_directory()).map_err(|_| failed())?;
     let remote_machine_id = config.remote_machine_id.clone();
-    let server_pipe = pipe.clone();
-    let password_server = thread::spawn(move || {
-        while !server_cancel.load(Ordering::Acquire) {
-            // CDXC:RemoteMachines 2026-11-26 WHY: this used to retry a non-blocking open every
-            // 10 ms for the life of the tunnel (100 wakeups a second per tunnel, a third of the
-            // app's samples with four tunnels). The open now blocks, with no wakeups, until the
-            // helper opens the pipe for reading; dropping the script wakes it by opening the pipe
-            // for reading itself after setting `cancel` (types.rs), so nothing is written then.
-            match gpui_wait_for_askpass_pipe_reader(server_pipe.as_path()) {
-                Ok(mut stream) => {
-                    if server_cancel.load(Ordering::Acquire) {
-                        break;
-                    }
-                    if let Ok(mut password) =
-                        gpui_read_remote_ssh_password_from_keychain(remote_machine_id.as_str())
-                    {
-                        let _ = stream.write_all(password.as_slice());
-                        let _ = stream.write_all(b"\n");
-                        password.fill(0);
-                    }
-                    // Closing the pipe ends the helper's read; with nothing written it reports the
-                    // password as unavailable.
-                    drop(stream);
-                    // CDXC:RemoteMachines 2026-09-23 WHY:
-                    // The retained terminal wrapper retries SSH after a disconnect. Keep this broker available until its owner drops it so every handshake can read the current saved password.
-                }
-                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
-                Err(_) => break,
-            }
-        }
-    });
-    Ok(Some(GpuiRemoteAskpassScript {
-        cancel,
-        directory,
-        password_server: Some(password_server),
-        script,
-    }))
-}
-
-/// Opens the askpass pipe for writing without waiting for a reader (see
-/// `gpui_remote_ssh_askpass_script`).
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-pub(crate) fn gpui_open_askpass_pipe_for_writing(pipe: &Path) -> std::io::Result<fs::File> {
-    use std::os::unix::fs::OpenOptionsExt as _;
-    fs::OpenOptions::new()
-        .write(true)
-        .custom_flags(libc::O_NONBLOCK)
-        .open(pipe)
-}
-
-/// Opens the askpass pipe for writing, sleeping in the kernel until a reader has it open: the
-/// helper, or the drop that wakes the broker (`gpui_open_askpass_pipe_for_reading`). The pipe is
-/// then switched to non-blocking writes, as it was opened before, so a helper that stops reading
-/// can never hold the broker, or the drop that joins it.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-pub(crate) fn gpui_wait_for_askpass_pipe_reader(pipe: &Path) -> std::io::Result<fs::File> {
-    use std::os::fd::AsRawFd as _;
-    let stream = fs::OpenOptions::new().write(true).open(pipe)?;
-    let fd = stream.as_raw_fd();
-    // SAFETY: `fd` is the open descriptor `stream` owns for the duration of both calls.
-    let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
-    if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-    Ok(stream)
-}
-
-/// Opens the askpass pipe for reading without waiting for a writer, which wakes a broker asleep in
-/// `gpui_wait_for_askpass_pipe_reader`. Nothing ever reads from it.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-pub(crate) fn gpui_open_askpass_pipe_for_reading(pipe: &Path) -> std::io::Result<fs::File> {
-    use std::os::unix::fs::OpenOptionsExt as _;
-    fs::OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_NONBLOCK)
-        .open(pipe)
+    let mut askpass = GpuiRemoteAskpassScript {
+        broker: None,
+        directory: folder.directory,
+        script: folder.script,
+    };
+    // From here a failure drops `askpass`, which removes the folder.
+    askpass.broker = Some(
+        GpuiAskpassBroker::start(
+            folder.pipe,
+            serve,
+            GPUI_ASKPASS_HANDSHAKE_WINDOW,
+            Box::new(move || {
+                gpui_read_remote_ssh_password_from_keychain(remote_machine_id.as_str()).ok()
+            }),
+        )
+        .map_err(|_| failed())?,
+    );
+    Ok(Some(askpass))
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]

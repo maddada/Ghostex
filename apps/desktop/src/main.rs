@@ -280,6 +280,10 @@ fn main() {
     thread::spawn(gpui_auto_install_ghostex_cli_wrappers);
     // Tunnels a crashed or force-quit Ghostex left running (app/helpers/remote/tunnel_registry.rs).
     thread::spawn(gpui_reap_orphaned_remote_tunnels);
+    // Saved-password helper folders a crashed or force-quit Ghostex left behind
+    // (app/helpers/remote/askpass_broker.rs).
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    thread::spawn(gpui_sweep_stale_askpass_directories);
     // Login Items names Ghostex, not the signing developer, for a gxserver job installed before
     // 11.1.2 (GitHub #510); never restarts gxserver.
     #[cfg(target_os = "macos")]

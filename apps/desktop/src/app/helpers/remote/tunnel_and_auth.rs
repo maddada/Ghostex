@@ -140,7 +140,7 @@ pub(crate) fn gpui_spawn_remote_gxserver_tunnel(
         });
     }
     let target_arguments = gpui_remote_ssh_target_arguments(config)?;
-    let askpass = gpui_remote_ssh_askpass_script(config)?;
+    let askpass = gpui_remote_ssh_askpass_script(config, GpuiAskpassServe::Handshake)?;
     if !matches!(
         execution_target,
         GpuiRemoteExecutionTarget::WindowsWsl { .. }

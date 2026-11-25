@@ -6,6 +6,8 @@
 // qualification. If two submodules ever define the same name, drop the glob
 // for one of them here and qualify its call sites instead. See
 // docs/2026-08-22/repo-restructure/SPLITS.md C1.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) mod askpass_broker;
 pub(crate) mod attach;
 pub(crate) mod attach_terminal_process;
 pub(crate) mod browser_route;
@@ -46,6 +48,8 @@ pub(crate) mod windows_code;
 #[cfg(windows)]
 pub(crate) mod windows_terminal;
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) use askpass_broker::*;
 pub(crate) use attach::*;
 pub(crate) use attach_terminal_process::*;
 pub(crate) use browser_route::*;

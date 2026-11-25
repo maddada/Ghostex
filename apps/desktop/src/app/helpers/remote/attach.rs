@@ -159,8 +159,10 @@ pub(crate) fn gpui_remote_attach_terminal_plan_from_result(
         config.ssh_port,
     );
     #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
+    // A terminal keeps answering until it closes: its wrapper runs ssh again after a disconnect,
+    // and each sign-in asks (CDXC:RemoteMachines 2026-09-23).
     let askpass = if interactive_attach {
-        gpui_remote_ssh_askpass_script(config)?
+        gpui_remote_ssh_askpass_script(config, GpuiAskpassServe::UntilDropped)?
     } else {
         None
     };

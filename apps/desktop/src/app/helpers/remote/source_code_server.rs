@@ -89,7 +89,7 @@ pub(crate) fn source_code_server_spawn_remote_runtime(
         if Instant::now() >= startup_deadline {
             break;
         }
-        let askpass = gpui_remote_ssh_askpass_script(machine_config)?;
+        let askpass = gpui_remote_ssh_askpass_script(machine_config, GpuiAskpassServe::Handshake)?;
         let local_forward =
             format!("127.0.0.1:{local_port}:127.0.0.1:{SOURCE_CODE_SERVER_REMOTE_PORT}");
         let forward_cleanup =

@@ -4,16 +4,7 @@
 // the core remote type/config definitions. See
 // docs/2026-08-22/repo-restructure/SPLITS.md C1.
 
-use std::{
-    fs,
-    path::PathBuf,
-    process::Child,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
-    thread,
-};
+use std::{fs, path::PathBuf, process::Child};
 
 use gpui::{AnyElement, FontWeight, div, px, rgb};
 use gpui_component::v_flex;
@@ -476,13 +467,23 @@ pub(crate) struct GpuiOnDemandArchiveFailure {
     pub(crate) state: GpuiRemoteGxserverConnectState,
 }
 
+/// Whether a saved password helper is answered until it is dropped, or only while its ssh signs
+/// in (app/helpers/remote/askpass_broker.rs). Windows answers each ask from a fresh helper process
+/// and ignores it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum GpuiAskpassServe {
+    /// Terminals: their wrapper runs ssh again after a disconnect, and each sign-in asks.
+    UntilDropped,
+    /// Tunnels and one-shot commands: one ssh process that signs in once.
+    Handshake,
+}
+
 pub(crate) struct GpuiRemoteAskpassScript {
-    #[cfg(unix)]
-    pub(crate) cancel: Arc<AtomicBool>,
-    #[cfg(unix)]
+    /// Dropped before the folder is removed, which stops it.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(crate) broker: Option<GpuiAskpassBroker>,
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(crate) directory: PathBuf,
-    #[cfg(unix)]
-    pub(crate) password_server: Option<thread::JoinHandle<()>>,
     pub(crate) script: PathBuf,
     #[cfg(windows)]
     pub(crate) remote_machine_id: String,
@@ -499,25 +500,10 @@ pub(crate) struct GpuiRemoteSpawnedTunnel {
     pub(crate) _askpass: Option<GpuiRemoteAskpassScript>,
 }
 
-#[cfg(unix)]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 impl Drop for GpuiRemoteAskpassScript {
     fn drop(&mut self) {
-        self.cancel.store(true, Ordering::Release);
-        if let Some(password_server) = self.password_server.take() {
-            // The broker sleeps in a blocking open until the pipe has a reader. This reader wakes
-            // it, and it sees `cancel` and stops without writing. The reader is held until the
-            // broker has exited: on macOS a reader that comes and goes before the broker runs
-            // leaves it asleep. If the pipe is gone nothing can wake the broker, so it is left
-            // asleep rather than holding up this drop.
-            let wake = gpui_open_askpass_pipe_for_reading(self.directory.join("p").as_path());
-            if wake.is_ok() || password_server.is_finished() {
-                let _ = password_server.join();
-            }
-            drop(wake);
-        }
-        // A helper that opened the pipe just as the broker stopped would wait forever for a
-        // writer: opening and closing it once ends that read empty, and the helper exits.
-        let _ = gpui_open_askpass_pipe_for_writing(self.directory.join("p").as_path());
+        drop(self.broker.take());
         let _ = fs::remove_dir_all(&self.directory);
     }
 }

@@ -57,7 +57,7 @@ pub(crate) fn gpui_run_remote_ssh_script_in_execution_target(
         Ok(arguments) => arguments,
         Err(message) => return gpui_remote_ssh_refused_process_result(message),
     };
-    let askpass = match gpui_remote_ssh_askpass_script(config) {
+    let askpass = match gpui_remote_ssh_askpass_script(config, GpuiAskpassServe::Handshake) {
         Ok(askpass) => askpass,
         Err(message) => return gpui_remote_ssh_refused_process_result(message),
     };
@@ -102,7 +102,7 @@ pub(crate) fn gpui_run_remote_ssh_raw(
         Ok(target_arguments) => target_arguments,
         Err(message) => return gpui_remote_ssh_refused_process_result(message),
     };
-    let askpass = match gpui_remote_ssh_askpass_script(config) {
+    let askpass = match gpui_remote_ssh_askpass_script(config, GpuiAskpassServe::Handshake) {
         Ok(askpass) => askpass,
         Err(message) => {
             return GpuiRemoteProcessResult {
@@ -141,7 +141,7 @@ pub(crate) fn gpui_run_remote_ssh_raw_with_stdin_bytes(
         Ok(target_arguments) => target_arguments,
         Err(message) => return gpui_remote_ssh_refused_process_result(message),
     };
-    let askpass = match gpui_remote_ssh_askpass_script(config) {
+    let askpass = match gpui_remote_ssh_askpass_script(config, GpuiAskpassServe::Handshake) {
         Ok(askpass) => askpass,
         Err(message) => return gpui_remote_ssh_refused_process_result(message),
     };
@@ -174,7 +174,7 @@ pub(crate) fn gpui_run_remote_ssh_with_stdin_file_in_execution_target(
         Ok(target_arguments) => target_arguments,
         Err(message) => return gpui_remote_ssh_refused_process_result(message),
     };
-    let askpass = match gpui_remote_ssh_askpass_script(config) {
+    let askpass = match gpui_remote_ssh_askpass_script(config, GpuiAskpassServe::Handshake) {
         Ok(askpass) => askpass,
         Err(message) => {
             return GpuiRemoteProcessResult {

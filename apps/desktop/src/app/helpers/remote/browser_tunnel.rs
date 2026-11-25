@@ -131,7 +131,7 @@ pub(crate) fn start_remote_browser_tunnel(
         .and_then(|listener| listener.local_addr())
         .map_err(|_| "Could not reserve a browser tunnel port.")?
         .port();
-    let askpass = gpui_remote_ssh_askpass_script(config)?;
+    let askpass = gpui_remote_ssh_askpass_script(config, GpuiAskpassServe::Handshake)?;
     let dynamic_forward = format!("127.0.0.1:{forward_port}");
     if config.reuse_ssh_connection {
         let _ =

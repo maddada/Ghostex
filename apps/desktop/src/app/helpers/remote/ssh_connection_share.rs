@@ -75,7 +75,7 @@ impl GpuiRemoteSshConnectionShare {
         }
         let (Ok(target_arguments), Ok(askpass)) = (
             gpui_remote_ssh_target_arguments(config),
-            gpui_remote_ssh_askpass_script(config),
+            gpui_remote_ssh_askpass_script(config, GpuiAskpassServe::Handshake),
         ) else {
             // The first command reports the same refusal through the ordinary path.
             return Ok(Self::unshared());
