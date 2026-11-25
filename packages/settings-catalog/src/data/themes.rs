@@ -385,13 +385,23 @@ impl Changes {
             .map(|(_, value)| value.as_str())
     }
 
-    /// Every theme colour of `appearance` that is not set yet goes back to the theme's own, so a
+    /// Every theme colour of `appearance` that is not set yet takes the shipped clean value (the
+    /// catalog's default `themeRoles`), or goes back to the theme's own where none ships, so a
     /// colour an earlier theme set never lingers.
+    ///
+    /// CDXC:Theming 2026-11-25 DECISION:
+    /// User: "fix the color scheme for all the themes and make them look good ... clean and minimal", choosing "Clean pass, keep identity": every theme (Default, the art themes, the agent-made looks and the presets) takes the clean Default's borders, dividers, card, control, menu and chat box fills, hover and selected row for the colours it does not set itself, and keeps its own window colour, text, grey text, accent, links, status colours and terminal palette. Before, a colour a preset or look left unset was taken off (`default`), which fell back to the older built-in fills.
     fn fill_roles(&mut self, appearance: &str) {
+        let shipped = crate::default_value(crate::theme_roles::THEME_ROLES_SETTING)
+            .and_then(|roles| roles.get(appearance));
         for role in THEME_ROLES {
             let key = format!("{appearance}.{}", role.id);
             if self.get(&key).is_none() {
-                self.set(&key, "default");
+                let value = shipped
+                    .and_then(|mode| mode.get(role.id))
+                    .and_then(J::as_str)
+                    .unwrap_or("default");
+                self.set(&key, value);
             }
         }
     }
