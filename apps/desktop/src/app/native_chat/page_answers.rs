@@ -713,7 +713,7 @@ impl NativeChatView {
     }
 
     /// A note behind a thin rule, two lines until More opens it: muted under its answer, or, for the
-    /// reader's own note on the whole form (`lead`), in the foreground's normal type.
+    /// reader's own note on the whole form (`lead`), in the foreground's normal type and with no rule.
     fn answers_note(
         &self,
         note: String,
@@ -732,7 +732,7 @@ impl NativeChatView {
             .flex()
             .flex_col()
             .items_start()
-            .gap(px(1.0 * s))
+            .gap(px(5.0 * s))
             .w_full()
             .min_w_0()
             .mt(px(if lead { 1.0 } else { 3.0 } * s))
@@ -740,13 +740,18 @@ impl NativeChatView {
                 div()
                     .w_full()
                     .min_w_0()
-                    .pl(px(8.0 * s))
-                    .border_l_2()
-                    .border_color(p.foreground.opacity(0.1))
+                    // The reader's own note has no rule beside it; a note under an answer keeps one.
+                    .when(!lead, |text| {
+                        text.pl(px(8.0 * s))
+                            .border_l_2()
+                            .border_color(p.foreground.opacity(0.1))
+                    })
                     .text_size(px(size * s))
                     .line_height(px(line * s))
                     .text_color(if lead { p.foreground } else { p.muted })
-                    .when(long && !open, |text| text.line_clamp(2))
+                    // GPUI clamps only when the text also asks for an ellipsis (system_cards.rs):
+                    // `line_clamp` alone left the whole note showing, so More and Less looked dead.
+                    .when(long && !open, |text| text.line_clamp(2).text_ellipsis())
                     .child(note),
             )
             .when(long, |column| {
@@ -768,7 +773,12 @@ impl NativeChatView {
                         .child(if open { "Less" } else { "More" })
                         .on_click(cx.listener(move |this, _, _, cx| {
                             cx.stop_propagation();
-                            if this.expanded.remove(&toggle_key) {
+                            // Anchored like every other disclosure, so the list measures the
+                            // card again at its new height.
+                            let open = this.is_expanded(&toggle_key, false);
+                            this.anchor_disclosure_toggle(&toggle_key, !open);
+                            if open {
+                                this.expanded.remove(&toggle_key);
                                 this.collapsed.insert(toggle_key.clone());
                             } else {
                                 this.collapsed.remove(&toggle_key);
