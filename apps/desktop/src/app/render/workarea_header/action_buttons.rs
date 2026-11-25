@@ -53,6 +53,8 @@ pub(crate) struct WorkareaHeaderSplitButton {
     pub(crate) rich_label: Option<AnyElement>,
     /// Hover text for the button's main half.
     pub(crate) tooltip: Option<SharedString>,
+    /// Leaves the icon out while the label is shown (Commit's push / pull arrows stand in for it).
+    pub(crate) hide_icon: bool,
 }
 
 /// CDXC:Titlebar 2026-11-16 DECISION:
@@ -121,8 +123,19 @@ impl WorkareaHeaderGitSummary {
         Some(parts.join(" \u{00b7} "))
     }
 
-    /// Up and down counts first, then "+N -N" in the sidebar project header's own colours and
-    /// opacity (`project_status.rs`), capped as it caps them.
+    /// The pill shows an up, down or both arrow: there are commits to push or pull.
+    pub(crate) fn shows_arrows(self) -> bool {
+        self.ahead > 0 || self.behind > 0
+    }
+
+    /// CDXC:Titlebar 2026-11-25 DECISION:
+    /// User (Q4869, "do all 3 please. also I don't want the icon on the left to be shown (the
+    /// commit icon) when there's arrows + numbers"): the pill gets narrower. Every number reads
+    /// short (7.3k from 1000, 13k from 10000), which ends the old 9999 cap. With lines changed,
+    /// commits to push or pull show as one arrow without a count (↑ push, ↓ pull, ↕ both) before
+    /// "+N -N"; with no lines changed the arrows keep their counts ("↑3 ↓12"). The commit icon is
+    /// left out whenever an arrow shows (`shows_arrows`). The tooltip keeps every number in full.
+    /// Line numbers use the sidebar project header's own colours and opacity (`project_status.rs`).
     pub(crate) fn render(self) -> Option<AnyElement> {
         use crate::app::native_sidebar::project_status::{
             PROJECT_DIFF_OPACITY, project_diff_additions_color, project_diff_deletions_color,
@@ -130,16 +143,26 @@ impl WorkareaHeaderGitSummary {
         if self.is_empty() {
             return None;
         }
+        let arrows: Vec<String> = if self.has_diff() {
+            let arrow = match (self.ahead > 0, self.behind > 0) {
+                (true, true) => Some("\u{2195}"),
+                (true, false) => Some("\u{2191}"),
+                (false, true) => Some("\u{2193}"),
+                (false, false) => None,
+            };
+            arrow.into_iter().map(str::to_string).collect()
+        } else {
+            [("\u{2191}", self.ahead), ("\u{2193}", self.behind)]
+                .into_iter()
+                .filter(|(_, count)| *count > 0)
+                .map(|(arrow, count)| format!("{arrow}{}", compact_count(count)))
+                .collect()
+        };
         Some(
             h_flex()
                 .items_center()
                 .gap(px(8.0))
-                .when(self.ahead > 0, |this| {
-                    this.child(div().child(format!("\u{2191}{}", self.ahead)))
-                })
-                .when(self.behind > 0, |this| {
-                    this.child(div().child(format!("\u{2193}{}", self.behind)))
-                })
+                .children(arrows.into_iter().map(|arrow| div().child(arrow)))
                 .when(self.has_diff(), |this| {
                     this.child(
                         h_flex()
@@ -149,18 +172,24 @@ impl WorkareaHeaderGitSummary {
                             .child(
                                 div()
                                     .text_color(project_diff_additions_color())
-                                    .child(format!("+{}", self.additions.min(9999))),
+                                    .child(format!("+{}", compact_count(self.additions))),
                             )
                             .child(
                                 div()
                                     .text_color(project_diff_deletions_color())
-                                    .child(format!("-{}", self.deletions.min(9999))),
+                                    .child(format!("-{}", compact_count(self.deletions))),
                             ),
                     )
                 })
                 .into_any_element(),
         )
     }
+}
+
+/// 1000 and up read 7.3k, 10000 and up 13k: the chat core's one compact-number formatter
+/// (the same one the context-usage numbers use).
+fn compact_count(value: u64) -> String {
+    ghostex_gx_chat_core::menus::context::usage::format_context_tokens(Some(value as f64))
 }
 
 impl GhostexGpuiApp {
@@ -369,6 +398,8 @@ impl GhostexGpuiApp {
                         )
                         .size(px(15.0)),
                     )
+                } else if spec.hide_icon && !compact {
+                    this
                 } else {
                     this.child(
                         div()
@@ -540,6 +571,7 @@ impl GhostexGpuiApp {
                     busy: false,
                     rich_label: None,
                     tooltip: None,
+                    hide_icon: false,
                 },
                 compact,
                 run_quick_action,
@@ -560,6 +592,7 @@ impl GhostexGpuiApp {
                     busy: false,
                     rich_label: None,
                     tooltip: None,
+                    hide_icon: false,
                 },
                 compact,
                 open_active_open_target,
@@ -584,6 +617,7 @@ impl GhostexGpuiApp {
                             .is_some_and(|state| state.is_busy),
                         rich_label: git_summary.render(),
                         tooltip: git_summary.tooltip().map(SharedString::from),
+                        hide_icon: git_summary.shows_arrows(),
                     },
                     compact,
                     toggle_git_menu,
