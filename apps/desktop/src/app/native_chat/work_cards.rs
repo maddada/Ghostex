@@ -17,6 +17,7 @@
 //! glass (the user's standing rule: no black fills on glass).
 
 use super::chat_text_look::{PROSE_LINE_HEIGHT, PROSE_SIZE};
+use super::pills_strip::STRIP_PAD_X;
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;
@@ -1575,7 +1576,19 @@ impl NativeChatView {
             .items_center()
             .gap(px(6.0 * s))
             .pl(px(12.0 * s))
-            .pr(px(5.0 * s))
+            // CDXC:Coordinators 2026-11-25 DECISION:
+            // User, of the Inbox label sitting almost on the bar's right edge, above the chat box
+            // whose last pill (Boost) sits further in: "please make it shifted like the pill below
+            // (have same space from the right edge)". The bar's last content ends as far from its
+            // border as the pills strip's last pill does (`STRIP_PAD_X`). With the chevron button
+            // (24px box, 14px glyph) its own 5px inset makes up the rest of that gap.
+            .pr(px((STRIP_PAD_X
+                - if collapsible {
+                    (24.0 - 14.0) / 2.0
+                } else {
+                    0.0
+                })
+                * s))
             .text_size(px(bar_font * s))
             .line_height(px(19.0 * s))
             .whitespace_nowrap()

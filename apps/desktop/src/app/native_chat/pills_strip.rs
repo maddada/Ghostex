@@ -53,6 +53,11 @@ fn view_chip_icon(id: &str) -> &'static str {
 
 /// The strip's height (unscaled): a pill's 25px with 5px above and below, and its 1px hairline.
 const STRIP_HEIGHT: f32 = 25.0 + 2.0 * 5.0;
+/// The strip's side padding (unscaled), inside the chat box's border: the gap between the box's
+/// edge and its first and last pill. The Inbox bar above the box (work_cards.rs
+/// `work_dock_header`) keeps its content this far in from its own border too, so its Inbox label
+/// and the pills under it share one edge.
+pub(super) const STRIP_PAD_X: f32 = 10.0;
 
 /// The width of the fade at an edge that hides pills (unscaled).
 pub(super) const PILLS_FADE: f32 = 24.0;
@@ -807,7 +812,7 @@ impl NativeChatView {
                 div()
                     .h(px(STRIP_HEIGHT * s))
                     .flex_shrink_0()
-                    .px(px(10.0 * s))
+                    .px(px(STRIP_PAD_X * s))
                     .flex()
                     .items_center()
                     .gap(px(BAND_GAP * s))
