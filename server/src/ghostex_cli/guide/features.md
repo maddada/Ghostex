@@ -8629,7 +8629,7 @@ step through the last 20 changes, kept across restarts, and `ghostex theme histo
 with when they were made, by which agent or by you, and what changed; Undo is refused once a
 setting it would put back was changed again.
 Settings > Themes shows this in the Themes group, under Appearance. The themes row starts with
-**Default**, Ghostex's own look (it puts the shipped colours, glass and Animated background back),
+**Default**, Ghostex's own clean look (neutral colours on a solid window, with no artwork or glass),
 then the seven **Art** themes, Ghostex's main themes: Moonwater (a quiet mountain night in ink and
 silver), Polar (Polar Night, deep ink navy with a polar mountain artwork and crisp ice-blue accents),
 Glasshouse (a secret garden after dark), Red Earth (sculpted dunes in warm embers), Deep
@@ -8642,7 +8642,7 @@ Dusk) and the twenty presets (Catppuccin, Dracula, Solarized, Tokyo Night,
 Nord, Kanagawa, Everforest, Gruvbox Material), each of which also sets its theme's own text, grey
 text, accent, link, status, message, code and selection colours. Every tile is a screenshot of
 Ghostex in that theme.
-A theme starts with its own backdrop: its still artwork for Default, every Art theme and every Agent-made look
+A theme starts with its own backdrop: a solid window for Default, its still artwork for every Art theme and every Agent-made look
 (you can still switch any of them to Animated in Artwork below), and a preset keeps whatever you had. **Your themes**, under the row, keeps
 looks you save: **Save current theme** names the look on screen (its colours, artwork and
 transparency) and adds it as a tile showing a small Ghostex window in its colours, with its
@@ -8660,7 +8660,10 @@ kept, so it shows at once after that. A theme applies its colours at once and it
 in when it arrives; offline the window stays solid in the theme's colour until it can download.
 Light themes paint their artwork in light mode too. While an artwork or Your image shows, the
 window is solid and **Strength** (how much of it shows through the sidebar and the work area),
-**Dimming** and **Blur** sit right under the strip; the Window transparency card below then says
+**Style** (how the artwork is drawn, rising from the bottom of the window and fading out toward
+the top, with a chat's text on a soft panel of the theme's colour: **ASCII**, the default, as characters over a soft blurred copy of it, or **Dither**, as
+halftone dots; `windowArtStyle`), **Black and white** (on, the default, draws the characters or dots
+in the theme's own text colour, off in the artwork's own colours; `windowArtMonochrome`), **Dimming** and **Blur** sit right under the strip; the Window transparency card below then says
 transparency is paused, with **Use transparency** to take the artwork off. Clicking a tile sets the whole look as one theme change, the same as
 `ghostex theme apply <theme> [--background art|live|transparent|solid]` (`ghostex theme list` lists them in the row's order, with their backgrounds; `ghostex theme background list` and `ghostex theme background set <image|art|live|transparent|solid>` pick a background); the line under the row then names it, with **Undo** (`ghostex theme undo`
 works too) and Change them. Hovering a look shows **Make it your own**, which opens a Help chat
@@ -8674,9 +8677,9 @@ that, has **Ask an agent**, which opens a Help chat with a starter prompt as its
 looks are dark mode looks: applying one while the app shows light mode switches Appearance to
 Dark. A look never changes your fonts (nor does a preset). The looks share Inkstone's calm way:
 a deep, muted colour, paper-white text, a muted accent, faint borders and an Animated
-background, each in its own hue. Inkstone is also how dark mode looks out of the box: the
-custom colour #46506a, Inkstone's theme colours (a cinnabar accent) and the Ink Animated background
-behind the glass; a computer that already had Ghostex set up keeps the look it had.
+background, each in its own hue. Out of the box Ghostex follows your system's light or dark
+mode with a clean, solid window: Graphite colours, faint borders, no artwork and transparency
+Off; a computer that already had Ghostex set up keeps the look it had.
 Theme colours go further than the colour squares: borders, dividers, text, grey text, the
 accent, links, cards, controls, menus, the selected and hovered rows, the focus ring, your
 messages, the chat box, code blocks and the success, warning and danger colours, each set apart
@@ -8706,7 +8709,7 @@ background image); **Text & Fonts** (`--tab textFonts`): Fonts, Terminal text (t
 font weight, bold text, line height and letter spacing) and Text; **Size & Zoom** (`--tab
 sizeZoom`): Size (Scale and More size options) and Panel sizes (the sidebar's width and the
 Commands pane's height on double-click); **Window & Layout** (`--tab windowLayout`): Window frame
-(the window buttons, Close buttons on the right), Panes (the active pane
+(Layout, the window buttons, Close buttons on the right), Panes (the active pane
 outline) and Panels (Animations, Close side panel with its last tab, Commands pane side). Each
 setting is on one page, and these pages link nowhere else. A search for a row inside a More
 fold opens it.
@@ -8781,10 +8784,13 @@ work area colourfulness separately, and show the active pane outline and its
 colour.
 Picking a colour square never overwrites the custom values, so picking the + square again
 restores them (a theme preset does set them).
-The work area is always drawn as a card inside the window: a thin margin all around it, a
-hairline border and, without window glass, a light shadow. It stays framed with the sidebar
-hidden and in full screen, web pages in the work area follow the card's rounded corners, and
-the sidebar is at least 196pt wide. There is no setting to turn the frame off.
+Layout (Settings > Window & Layout > Window frame, `windowLayout`) picks how the window is drawn.
+**Floating sidebar**, the default, draws the sidebar as a card with a thin margin and a hairline
+border, floating over the work area, which runs flat to the window's edges; the sidebar rail sits
+on the work area's background. **Framed work area** draws the work area as the card instead: a
+thin margin all around it and a hairline border, framed with the sidebar hidden and in full
+screen, with web pages in it following the card's rounded corners. The sidebar is at least 196pt
+wide either way.
 Show the window buttons when the sidebar is collapsed (macOS, on by default) keeps the red, yellow and green window buttons in the window's top left while the sidebar is collapsed; off hides them until you open the floating sidebar, which then carries them in its top row (`showWindowButtonsWhenSidebarCollapsed`). Full screen keeps its own title bar either way.
 Under them, Close buttons on the right (macOS, off by default) puts the X that closes a dialog or a pop-up message back at its top right. Off, it sits at the top left, where macOS puts a window's close button: the corner X of every dialog and of the dialogs inside Settings, the X in the header of the Markdown table, Mermaid diagram and page windows and of the picture viewer, and the X of the messages that pop up at the bottom of the window (`closeButtonsOnRight`). On Windows and Linux the X stays at the top right.
 The chosen theme colors the
@@ -8822,9 +8828,8 @@ were.
 Window glass lets the blurred desktop show through the sidebar, the work area,
 terminals, and chat on macOS, Windows and Linux. On macOS and Windows, menus and most dialogs (Rename
 Session, Quick Access and the like) turn frosted to match. The Transparency group's Transparency
-control picks Off, Dark only or Always (Dark only, the default on macOS and Linux,
-keeps light mode solid; Off, so the window is fast and solid, is the default on
-Windows), and
+control picks Off, Dark only or Always (Off, so the window is fast and solid, is the
+default; Dark only keeps light mode solid), and
 Strength sets how see-through it is, from 0 (fully solid) to 100 (fully clear); the default
 is 20, and out of the box the sidebar and the work area get the same tint. The four tint settings
 under More transparency options set them apart by hand, in dark and light mode separately; moving

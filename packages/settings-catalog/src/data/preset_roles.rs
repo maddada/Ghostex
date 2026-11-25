@@ -2,11 +2,14 @@
 /// published palette: text, grey text, accent (and the focus ring), links, success, warning and
 /// danger, and relative surface steps (`base+N%` / `base-N%`) for your messages, code blocks and
 /// selected rows so they follow whatever window colour the user picks next. The roles a preset
-/// leaves out keep the theme's own (borders, dividers, cards, controls, menus, hover, the chat
-/// box).
+/// leaves out (borders, dividers, cards, controls, menus, hover, the chat box) take the clean
+/// Default's (`fill_roles` in themes.rs).
 ///
 /// CDXC:Theming 2026-11-21 DECISION:
 /// User: "also the ones at #3 are sparse on text color changes i believe." Every named preset sets the colours its theme is known for, from the theme's own palette (Catppuccin's text, subtext0, mauve, blue, green, yellow, red; Dracula's foreground, comment, purple, cyan and the rest; Solarized's base1/base0 and accents; Tokyo Night's fg, fg_dark, blue, cyan; Nord's snow storm and frost; Kanagawa's, Everforest's and Gruvbox Material's named colours), so a preset changes the text and accents with its background.
+///
+/// CDXC:Theming 2026-11-25 DECISION:
+/// User: "fix the color scheme for all the themes and make them look good ... clean and minimal" ("Clean pass, keep identity"). The steps are the same quiet ones for every preset of a mode (dark: your messages `base+6%`, code blocks `base-10%`, selected row `base+8%`; light: `base+4%`, `base+3%`, `base+6%`) instead of 4% to 16% per theme, and the colours a preset leaves out take the clean Default's (`fill_roles` in themes.rs). The text, accent and status colours stay the theme's own.
 ///
 /// CDXC:Theming 2026-11-21 DECISION (Q4390 Option B):
 /// User chose relative fills (`base+N%` / `base-N%`): `userMessage`, `codeBlock` and `selection`
@@ -23,9 +26,9 @@ pub const PRESET_ROLES: &[(&str, &[(&str, &str)])] = &[
             ("success", "#a6e3a1"),
             ("warning", "#f9e2af"),
             ("danger", "#f38ba8"),
-            ("userMessage", "base+9%"),
-            ("codeBlock", "base-15%"),
-            ("selection", "base+14%"),
+            ("userMessage", "base+6%"),
+            ("codeBlock", "base-10%"),
+            ("selection", "base+8%"),
         ],
     ),
     (
@@ -38,9 +41,9 @@ pub const PRESET_ROLES: &[(&str, &[(&str, &str)])] = &[
             ("success", "#a6da95"),
             ("warning", "#eed49f"),
             ("danger", "#ed8796"),
-            ("userMessage", "base+9%"),
-            ("codeBlock", "base-15%"),
-            ("selection", "base+14%"),
+            ("userMessage", "base+6%"),
+            ("codeBlock", "base-10%"),
+            ("selection", "base+8%"),
         ],
     ),
     (
@@ -53,9 +56,9 @@ pub const PRESET_ROLES: &[(&str, &[(&str, &str)])] = &[
             ("success", "#a6d189"),
             ("warning", "#e5c890"),
             ("danger", "#e78284"),
-            ("userMessage", "base+9%"),
-            ("codeBlock", "base-15%"),
-            ("selection", "base+14%"),
+            ("userMessage", "base+6%"),
+            ("codeBlock", "base-10%"),
+            ("selection", "base+8%"),
         ],
     ),
     (
@@ -68,9 +71,9 @@ pub const PRESET_ROLES: &[(&str, &[(&str, &str)])] = &[
             ("success", "#40a02b"),
             ("warning", "#df8e1d"),
             ("danger", "#d20f39"),
-            ("userMessage", "base+12%"),
-            ("codeBlock", "base+4%"),
-            ("selection", "base+16%"),
+            ("userMessage", "base+4%"),
+            ("codeBlock", "base+3%"),
+            ("selection", "base+6%"),
         ],
     ),
     (
@@ -83,9 +86,9 @@ pub const PRESET_ROLES: &[(&str, &[(&str, &str)])] = &[
             ("success", "#50fa7b"),
             ("warning", "#f1fa8c"),
             ("danger", "#ff5555"),
-            ("userMessage", "base+11%"),
-            ("codeBlock", "base-15%"),
-            ("selection", "base+11%"),
+            ("userMessage", "base+6%"),
+            ("codeBlock", "base-10%"),
+            ("selection", "base+8%"),
         ],
     ),
     (
@@ -98,9 +101,9 @@ pub const PRESET_ROLES: &[(&str, &[(&str, &str)])] = &[
             ("success", "#14710a"),
             ("warning", "#846e15"),
             ("danger", "#cb3a2a"),
-            ("userMessage", "base+12%"),
-            ("codeBlock", "base+5%"),
-            ("selection", "base+12%"),
+            ("userMessage", "base+4%"),
+            ("codeBlock", "base+3%"),
+            ("selection", "base+6%"),
         ],
     ),
     (
@@ -114,8 +117,8 @@ pub const PRESET_ROLES: &[(&str, &[(&str, &str)])] = &[
             ("warning", "#b58900"),
             ("danger", "#dc322f"),
             ("userMessage", "base+6%"),
-            ("codeBlock", "base+5%"),
-            ("selection", "base+6%"),
+            ("codeBlock", "base-10%"),
+            ("selection", "base+8%"),
         ],
     ),
     (
@@ -129,8 +132,8 @@ pub const PRESET_ROLES: &[(&str, &[(&str, &str)])] = &[
             ("warning", "#b58900"),
             ("danger", "#dc322f"),
             ("userMessage", "base+4%"),
-            ("codeBlock", "base+4%"),
-            ("selection", "base+4%"),
+            ("codeBlock", "base+3%"),
+            ("selection", "base+6%"),
         ],
     ),
     (
@@ -143,9 +146,9 @@ pub const PRESET_ROLES: &[(&str, &[(&str, &str)])] = &[
             ("success", "#9ece6a"),
             ("warning", "#e0af68"),
             ("danger", "#f7768e"),
-            ("userMessage", "base+8%"),
-            ("codeBlock", "base-15%"),
-            ("selection", "base+12%"),
+            ("userMessage", "base+6%"),
+            ("codeBlock", "base-10%"),
+            ("selection", "base+8%"),
         ],
     ),
     (
@@ -158,9 +161,9 @@ pub const PRESET_ROLES: &[(&str, &[(&str, &str)])] = &[
             ("success", "#9ece6a"),
             ("warning", "#e0af68"),
             ("danger", "#f7768e"),
-            ("userMessage", "base+8%"),
-            ("codeBlock", "base-15%"),
-            ("selection", "base+12%"),
+            ("userMessage", "base+6%"),
+            ("codeBlock", "base-10%"),
+            ("selection", "base+8%"),
         ],
     ),
     (
@@ -173,9 +176,9 @@ pub const PRESET_ROLES: &[(&str, &[(&str, &str)])] = &[
             ("success", "#c3e88d"),
             ("warning", "#ffc777"),
             ("danger", "#ff757f"),
-            ("userMessage", "base+8%"),
-            ("codeBlock", "base-15%"),
-            ("selection", "base+12%"),
+            ("userMessage", "base+6%"),
+            ("codeBlock", "base-10%"),
+            ("selection", "base+8%"),
         ],
     ),
     (
@@ -188,9 +191,9 @@ pub const PRESET_ROLES: &[(&str, &[(&str, &str)])] = &[
             ("success", "#587539"),
             ("warning", "#8c6c3e"),
             ("danger", "#f52a65"),
-            ("userMessage", "base+6%"),
-            ("codeBlock", "base+4%"),
-            ("selection", "base+8%"),
+            ("userMessage", "base+4%"),
+            ("codeBlock", "base+3%"),
+            ("selection", "base+6%"),
         ],
     ),
     (
@@ -203,9 +206,9 @@ pub const PRESET_ROLES: &[(&str, &[(&str, &str)])] = &[
             ("success", "#a3be8c"),
             ("warning", "#ebcb8b"),
             ("danger", "#bf616a"),
-            ("userMessage", "base+7%"),
-            ("codeBlock", "base+6%"),
-            ("selection", "base+11%"),
+            ("userMessage", "base+6%"),
+            ("codeBlock", "base-10%"),
+            ("selection", "base+8%"),
         ],
     ),
     (
@@ -218,9 +221,9 @@ pub const PRESET_ROLES: &[(&str, &[(&str, &str)])] = &[
             ("success", "#98bb6c"),
             ("warning", "#e6c384"),
             ("danger", "#e46876"),
-            ("userMessage", "base+7%"),
-            ("codeBlock", "base-15%"),
-            ("selection", "base+12%"),
+            ("userMessage", "base+6%"),
+            ("codeBlock", "base-10%"),
+            ("selection", "base+8%"),
         ],
     ),
     (
@@ -233,9 +236,9 @@ pub const PRESET_ROLES: &[(&str, &[(&str, &str)])] = &[
             ("success", "#8a9a7b"),
             ("warning", "#c4b28a"),
             ("danger", "#c4746e"),
-            ("userMessage", "base+7%"),
-            ("codeBlock", "base-15%"),
-            ("selection", "base+12%"),
+            ("userMessage", "base+6%"),
+            ("codeBlock", "base-10%"),
+            ("selection", "base+8%"),
         ],
     ),
     (
@@ -248,9 +251,9 @@ pub const PRESET_ROLES: &[(&str, &[(&str, &str)])] = &[
             ("success", "#6f894e"),
             ("warning", "#77713f"),
             ("danger", "#c84053"),
-            ("userMessage", "base+7%"),
-            ("codeBlock", "base+4%"),
-            ("selection", "base+10%"),
+            ("userMessage", "base+4%"),
+            ("codeBlock", "base+3%"),
+            ("selection", "base+6%"),
         ],
     ),
     (
@@ -263,9 +266,9 @@ pub const PRESET_ROLES: &[(&str, &[(&str, &str)])] = &[
             ("success", "#a7c080"),
             ("warning", "#dbbc7f"),
             ("danger", "#e67e80"),
-            ("userMessage", "base+7%"),
-            ("codeBlock", "base-15%"),
-            ("selection", "base+11%"),
+            ("userMessage", "base+6%"),
+            ("codeBlock", "base-10%"),
+            ("selection", "base+8%"),
         ],
     ),
     (
@@ -278,8 +281,8 @@ pub const PRESET_ROLES: &[(&str, &[(&str, &str)])] = &[
             ("success", "#8da101"),
             ("warning", "#dfa000"),
             ("danger", "#f85552"),
-            ("userMessage", "base+5%"),
-            ("codeBlock", "base+4%"),
+            ("userMessage", "base+4%"),
+            ("codeBlock", "base+3%"),
             ("selection", "base+6%"),
         ],
     ),
@@ -293,9 +296,9 @@ pub const PRESET_ROLES: &[(&str, &[(&str, &str)])] = &[
             ("success", "#a9b665"),
             ("warning", "#d8a657"),
             ("danger", "#ea6962"),
-            ("userMessage", "base+8%"),
-            ("codeBlock", "base-15%"),
-            ("selection", "base+12%"),
+            ("userMessage", "base+6%"),
+            ("codeBlock", "base-10%"),
+            ("selection", "base+8%"),
         ],
     ),
     (
@@ -308,9 +311,9 @@ pub const PRESET_ROLES: &[(&str, &[(&str, &str)])] = &[
             ("success", "#6c782e"),
             ("warning", "#b47109"),
             ("danger", "#c14a4a"),
-            ("userMessage", "base+5%"),
-            ("codeBlock", "base+4%"),
-            ("selection", "base+7%"),
+            ("userMessage", "base+4%"),
+            ("codeBlock", "base+3%"),
+            ("selection", "base+6%"),
         ],
     ),
 ];

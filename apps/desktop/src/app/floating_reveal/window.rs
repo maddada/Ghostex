@@ -90,7 +90,7 @@ impl Render for FloatingRevealWindow {
                                     .w(px(sidebar_width))
                                     .flex_shrink_0()
                                     .h_full()
-                                    .child(app.render_native_sidebar(window, cx)),
+                                    .child(app.render_native_sidebar_in_reveal(window, cx)),
                             )
                         })
                         .when(content.sidebar && content.agents_column, |this| {

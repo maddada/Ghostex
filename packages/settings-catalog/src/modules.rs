@@ -563,6 +563,11 @@ pub fn exports(module: &str, platform: Platform) -> Vec<(&'static str, Json)> {
                 "SIDEBAR_SESSION_LINKS_OPTIONS",
                 SIDEBAR_SESSION_LINKS_OPTIONS.to_json(),
             ),
+            ("WINDOW_LAYOUT_OPTIONS", WINDOW_LAYOUT_OPTIONS.to_json()),
+            (
+                "WINDOW_ART_STYLE_OPTIONS",
+                WINDOW_ART_STYLE_OPTIONS.to_json(),
+            ),
             (
                 "WINDOW_GLASS_IMAGE_PLACEMENT_OPTIONS",
                 WINDOW_GLASS_IMAGE_PLACEMENT_OPTIONS.to_json(),

@@ -413,7 +413,19 @@ impl GhostexGpuiApp {
             .flex_shrink_0()
             .items_center()
             .pb(px(if has_foot { 5.0 } else { 2.0 }))
-            .bg(sidebar_rail_fill(appearance.glass))
+            // In the Floating sidebar layout the rail is the card's left half and paints what the
+            // sidebar paints, so the two read as one card (`render_rail_card`).
+            .bg(if crate::app::helpers::floating_sidebar_layout() {
+                if crate::app::helpers::window_art_active() {
+                    // The card's frosted glass shows, as behind the sidebar (CDXC:Workarea
+                    // 2026-11-25 in native_sidebar/host.rs).
+                    gpui::transparent_black().into()
+                } else {
+                    crate::app::helpers::sidebar_chrome_fill(appearance.glass, 180.0)
+                }
+            } else {
+                sidebar_rail_fill(appearance.glass)
+            })
             // Which half has the pointer, for the hidden sidebar's reveal
             // (`sidebar_rail_reveal_hover`); a press starts its wait again.
             .on_mouse_move(
@@ -478,29 +490,37 @@ impl GhostexGpuiApp {
             // Above the rail the body row's top gutter shows the sidebar's tint (the work area
             // frame's glass ring); the sidebar's colour at the rail's extra cover laid over it
             // makes the same tint as the rail's, so the rail's column runs to the window's top.
-            .when(appearance.glass && RAIL_DIVIDER_TOP < 0.0, |rail| {
-                rail.child(
-                    div()
-                        .absolute()
-                        .top(px(RAIL_DIVIDER_TOP))
-                        .left_0()
-                        .right_0()
-                        .h(px(-RAIL_DIVIDER_TOP))
-                        .bg(rail_glass_gutter_tint(sidebar_glass_tint())),
-                )
-            })
-            .when(!self.sidebar_collapsed, |rail| {
-                rail.child(
-                    div()
-                        .id("ghostex-gpui-sidebar-rail-divider")
-                        .absolute()
-                        .top(px(RAIL_DIVIDER_TOP))
-                        .bottom_0()
-                        .right_0()
-                        .w(px(1.0))
-                        .bg(sidebar_divider_line_color()),
-                )
-            })
+            .when(
+                appearance.glass
+                    && RAIL_DIVIDER_TOP < 0.0
+                    && !crate::app::helpers::floating_sidebar_layout(),
+                |rail| {
+                    rail.child(
+                        div()
+                            .absolute()
+                            .top(px(RAIL_DIVIDER_TOP))
+                            .left_0()
+                            .right_0()
+                            .h(px(-RAIL_DIVIDER_TOP))
+                            .bg(rail_glass_gutter_tint(sidebar_glass_tint())),
+                    )
+                },
+            )
+            .when(
+                !self.sidebar_collapsed && !crate::app::helpers::floating_sidebar_layout(),
+                |rail| {
+                    rail.child(
+                        div()
+                            .id("ghostex-gpui-sidebar-rail-divider")
+                            .absolute()
+                            .top(px(RAIL_DIVIDER_TOP))
+                            .bottom_0()
+                            .right_0()
+                            .w(px(1.0))
+                            .bg(sidebar_divider_line_color()),
+                    )
+                },
+            )
             // The top slot, the sidebar's top row's height: Toggle sidebar on that row's line, in
             // a drag band (`render_sidebar_rail_sidebar_toggle`). The divider runs past it to the
             // window's top.

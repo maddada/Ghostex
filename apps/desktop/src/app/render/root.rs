@@ -276,9 +276,14 @@ impl Render for GhostexGpuiApp {
         // Collapsing or expanding, the sidebar and its divider slide at their full width inside a
         // clip that tweens (panel_motion.rs).
         let sidebar_frame = self.panel_motion.sidebar.frame();
-        let rail = self
-            .sidebar_rail_shown()
-            .then(|| self.render_sidebar_rail(window, cx));
+        let rail = self.sidebar_rail_shown().then(|| {
+            let rail = self.render_sidebar_rail(window, cx);
+            if floating_sidebar_layout() {
+                self.render_rail_card(rail, sidebar_frame.animating || sidebar_chrome_visible)
+            } else {
+                rail
+            }
+        });
         let card_left_gutter =
             self.work_area_frame_left_gutter(sidebar_frame.animating || sidebar_chrome_visible);
         // Read before the header and the floating sidebar lay out from `window_controls_shown`.
@@ -1430,6 +1435,9 @@ impl Render for GhostexGpuiApp {
                     .map(|row| {
                         if window_glass_active() {
                             row.bg(window_body_row_background())
+                        } else if floating_sidebar_layout() {
+                            // The work area's colour behind the floating sidebar card.
+                            row.bg(workspace_column_background())
                         } else {
                             row.bg(work_area_frame_gutter_fill())
                         }
@@ -1465,7 +1473,7 @@ impl Render for GhostexGpuiApp {
                                             .id("ghostex-gpui-docked-sidebar")
                                             .w(px(self.sidebar_width))
                                             .h_full()
-                                            .child(self.render_docked_native_sidebar(cx)),
+                                            .child(self.render_sidebar_card(cx)),
                                     )
                                     .child(self.render_sidebar_resize_divider(cx))
                                     .into_any_element(),
@@ -1498,7 +1506,7 @@ impl Render for GhostexGpuiApp {
                                         this.disarm_floating_reveal_edge();
                                     }
                                 }))
-                                .child(self.render_docked_native_sidebar(cx)),
+                                .child(self.render_sidebar_card(cx)),
                         )
                     })
                     .when(sidebar_chrome_visible && !sidebar_frame.animating, |this| {
@@ -1542,13 +1550,21 @@ impl Render for GhostexGpuiApp {
                         // The gutter between the card and the window: the body row holds the top one,
                         // this wrapper the others, the divider's 1pt counting toward it beside the
                         // sidebar, and none beside the rail (`work_area_frame_left_gutter`).
-                        let margin = px(WORK_AREA_FRAME_MARGIN);
+                        // The Floating sidebar layout draws the work area flat, to the window's
+                        // right and bottom edges (CDXC:Workarea 2026-11-25 in
+                        // helpers/work_area_frame.rs).
+                        let floating = floating_sidebar_layout();
+                        let margin = px(if floating { 0.0 } else { WORK_AREA_FRAME_MARGIN });
                         let left = px(card_left_gutter);
-                        let card = column
-                            .border(px(WORK_AREA_FRAME_BORDER))
-                            .border_color(work_area_frame_border_color())
-                            .rounded(px(WORK_AREA_FRAME_RADIUS))
-                            .shadow(work_area_frame_shadow());
+                        let card = if floating {
+                            column
+                        } else {
+                            column
+                                .border(px(WORK_AREA_FRAME_BORDER))
+                                .border_color(work_area_frame_border_color())
+                                .rounded(px(WORK_AREA_FRAME_RADIUS))
+                                .shadow(work_area_frame_shadow())
+                        };
                         row.child(
                             h_flex()
                                 .id("ghostex-gpui-work-area-frame-gutter")

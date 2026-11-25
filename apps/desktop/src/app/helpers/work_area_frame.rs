@@ -1,5 +1,5 @@
 //! The work area frame: the work area drawn as one card inside the window, with a gutter all
-//! around it, a hairline border and a light shadow, on every desktop platform. The elements that
+//! around it and a hairline border, on every desktop platform. The elements that
 //! draw it are in `app/element/work_area_frame.rs`.
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -34,6 +34,29 @@ pub(crate) const WORK_AREA_FRAME_RADIUS: f32 = 16.5 - WORK_AREA_FRAME_MARGIN;
 /// The radius of what sits inside the card's border (panes, web pages).
 pub(crate) const WORK_AREA_FRAME_INNER_RADIUS: f32 =
     WORK_AREA_FRAME_RADIUS - WORK_AREA_FRAME_BORDER;
+
+/// Whether the window uses the Floating sidebar layout (`windowLayout`).
+static FLOATING_SIDEBAR: AtomicBool = AtomicBool::new(true);
+
+/// Reads `windowLayout`: Floating sidebar (the default) or Framed work area.
+///
+/// CDXC:Workarea 2026-11-25 DECISION:
+/// User: "re design the layout the sidebar is floting and the chat is back inverted of current layout", then, told it goes against the 2026-11-20 decision below ("make it framed for everyone"), chose "Floating sidebar as default" with the framed work area kept as an option. Settings > Window & Layout > Layout (`windowLayout`): Floating sidebar (the default) draws the sidebar as the card, inset by the gutter with the card's radius and border, and the work area flat behind it, running to the window's right and bottom edges with no border, its panes and web pages square; the gutter around the sidebar and the rail take the work area's colour (under glass and art its tint, `work_area_frame_glass_gutter`). Framed work area is the 2026-11-20 look. Supersedes, as the default, the 2026-11-20 always-framed rule.
+pub(crate) fn refresh_window_layout(object: &serde_json::Map<String, serde_json::Value>) {
+    let layout = object
+        .get("windowLayout")
+        .and_then(serde_json::Value::as_str)
+        .or_else(|| {
+            ghostex_settings_catalog::default_value("windowLayout")
+                .and_then(ghostex_settings_catalog::J::as_str)
+        });
+    FLOATING_SIDEBAR.store(layout != Some("framedWorkArea"), Ordering::Relaxed);
+}
+
+/// Whether the sidebar is the floating card and the work area flat behind it (`windowLayout`).
+pub(crate) fn floating_sidebar_layout() -> bool {
+    FLOATING_SIDEBAR.load(Ordering::Relaxed)
+}
 
 /// Reads `showWindowButtonsWhenSidebarCollapsed` (off when unset: the catalog default).
 pub(crate) fn refresh_show_window_buttons_when_sidebar_collapsed(
@@ -71,25 +94,11 @@ pub(crate) fn work_area_frame_border_color() -> Hsla {
     }
 }
 
-/// The card's light shadow.
+/// The card's shadow: none, so its 1pt border alone draws its edge.
+///
+/// CDXC:Theming 2026-11-22 DECISION: User: "polishing the ui to be more like clean ... something like t3". The solid window's card drops its shadow (45% black in dark mode, two soft layers in light mode) and keeps only its hairline border, as it already did under glass, where a shadow would darken the wallpaper inside the see-through card.
 pub(crate) fn work_area_frame_shadow() -> Vec<BoxShadow> {
-    let shadow = |alpha: f32, blur: f32| BoxShadow {
-        color: gpui::black().opacity(alpha),
-        offset: point(px(0.0), px(1.0)),
-        blur_radius: px(blur),
-        spread_radius: px(0.0),
-        inset: false,
-    };
-    if window_glass_active() {
-        // GPUI paints a shadow under its element's whole shape. Under glass the card is
-        // see-through, so a shadow would darken the wallpaper inside it; the border alone draws
-        // the card's edge there.
-        Vec::new()
-    } else if chrome_uses_light_appearance() {
-        vec![shadow(0.06, 2.0), shadow(0.05, 4.0)]
-    } else {
-        vec![shadow(0.45, 3.0)]
-    }
+    Vec::new()
 }
 
 /// The opaque gutter: the sidebar's own chrome gradient, painted by the body row from the window's

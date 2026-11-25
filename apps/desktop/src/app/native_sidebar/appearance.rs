@@ -78,8 +78,9 @@ impl SidebarAppearance {
                     .into(),
             ),
             tooltip_delay: tooltip_delay_from_hud(hud),
-            foreground: chrome_color(0xb4b8c0, 0x262626).into(),
-            muted: theme_role_or("mutedText", light, chrome_color(0x7c828c, 0x6b7280).into()),
+            // CDXC:Theming 2026-11-22 DECISION: User: "polishing the ui to be more like clean ... something like t3". The sidebar's text and grey text are neutral greys (they were #b4b8c0 / #7c828c and #6b7280, which read blue on the neutral Graphite sidebar); the Grey text theme role still replaces the grey.
+            foreground: chrome_color(0xb8b8b8, 0x262626).into(),
+            muted: theme_role_or("mutedText", light, chrome_color(0x808080, 0x737373).into()),
             chrome_icon: titlebar_icon_color(),
             chrome_label: titlebar_text_color(),
             selected: if light_glass {
@@ -100,7 +101,13 @@ impl SidebarAppearance {
                     })
                     .into(),
             ),
-            selected_highlight: rgb(0xffffff).opacity(if light { 0.6 } else { 0.04 }).into(),
+            // The selected row's 1pt top bevel belongs to the glass look; a solid sidebar draws the
+            // row flat (CDXC:Theming 2026-11-22 DECISION on `foreground`).
+            selected_highlight: if glass {
+                rgb(0xffffff).opacity(if light { 0.6 } else { 0.04 }).into()
+            } else {
+                gpui::transparent_black()
+            },
             hover: rgb(0x808080).opacity(0.12).into(),
             // Under window glass these are washes of the same ink rather than opaque blends of the
             // chrome colour, which would sit on the frosted sidebar as solid slabs.

@@ -12,7 +12,8 @@ use gpui::{
 
 use crate::app::helpers::{
     WORK_AREA_FRAME_BORDER, WORK_AREA_FRAME_INNER_RADIUS, WORK_AREA_FRAME_MARGIN,
-    WORK_AREA_FRAME_RADIUS, sidebar_glass_tint, window_glass_active,
+    WORK_AREA_FRAME_RADIUS, floating_sidebar_layout, sidebar_glass_tint, window_glass_active,
+    workspace_column_background,
 };
 
 thread_local! {
@@ -23,6 +24,10 @@ thread_local! {
     /// Each window's docked sidebar divider this frame, by window id: where the sidebar's own tint
     /// ends, as layout snapped it. Taken by the glass gutter when it paints.
     static SIDEBAR_DIVIDER_BOUNDS: RefCell<HashMap<u64, Bounds<Pixels>>> =
+        RefCell::new(HashMap::new());
+    /// Each window's floating sidebar card parts this frame (the rail's and the sidebar's), by
+    /// window id and part, with their corner radii (`work_area_frame_sidebar_card_marker`).
+    static SIDEBAR_CARD_BOUNDS: RefCell<HashMap<(u64, u8), (Bounds<Pixels>, gpui::Corners<Pixels>)>> =
         RefCell::new(HashMap::new());
 }
 
@@ -35,8 +40,12 @@ pub(crate) fn work_area_frame_card_bounds(window: &Window) -> Option<Bounds<Pixe
     CARD_BOUNDS.with(|cards| cards.borrow().get(&window_key(window)).copied())
 }
 
-/// The inside of the card's border, where its panes and web pages sit.
+/// The inside of the card's border, where its panes and web pages sit. `None` in the Floating
+/// sidebar layout, where the work area is flat and nothing in it rounds to a card.
 pub(crate) fn work_area_frame_inner_bounds(window: &Window) -> Option<Bounds<Pixels>> {
+    if floating_sidebar_layout() {
+        return None;
+    }
     work_area_frame_card_bounds(window).map(|card| {
         let border = px(WORK_AREA_FRAME_BORDER);
         Bounds::from_corners(
@@ -155,6 +164,50 @@ impl<E: Element + Styled> Element for WorkAreaFrameCard<E> {
     }
 }
 
+/// Adds `bounds` as one closed square subpath.
+fn add_rect(path: &mut PathBuilder, bounds: Bounds<Pixels>) {
+    path.move_to(bounds.origin);
+    path.line_to(point(bounds.right(), bounds.top()));
+    path.line_to(point(bounds.right(), bounds.bottom()));
+    path.line_to(point(bounds.left(), bounds.bottom()));
+    path.close();
+}
+
+/// Adds `bounds` with each corner rounded by its own radius (square where it is 0) as one closed
+/// subpath.
+fn add_rounded_rect_corners(
+    path: &mut PathBuilder,
+    bounds: Bounds<Pixels>,
+    radii: gpui::Corners<Pixels>,
+) {
+    let (left, top, right, bottom) = (bounds.left(), bounds.top(), bounds.right(), bounds.bottom());
+    let arc = |path: &mut PathBuilder, radius: Pixels, to: gpui::Point<Pixels>| {
+        if radius > px(0.0) {
+            path.arc_to(point(radius, radius), px(0.0), false, true, to);
+        } else {
+            path.line_to(to);
+        }
+    };
+    path.move_to(point(left + radii.top_left, top));
+    path.line_to(point(right - radii.top_right, top));
+    arc(path, radii.top_right, point(right, top + radii.top_right));
+    path.line_to(point(right, bottom - radii.bottom_right));
+    arc(
+        path,
+        radii.bottom_right,
+        point(right - radii.bottom_right, bottom),
+    );
+    path.line_to(point(left + radii.bottom_left, bottom));
+    arc(
+        path,
+        radii.bottom_left,
+        point(left, bottom - radii.bottom_left),
+    );
+    path.line_to(point(left, top + radii.top_left));
+    arc(path, radii.top_left, point(left + radii.top_left, top));
+    path.close();
+}
+
 /// Adds `bounds` with all four corners rounded by `radius` as one closed subpath.
 fn add_rounded_rect(path: &mut PathBuilder, bounds: Bounds<Pixels>, radius: Pixels) {
     let (left, top, right, bottom) = (bounds.left(), bounds.top(), bounds.right(), bounds.bottom());
@@ -188,6 +241,32 @@ pub(crate) fn work_area_frame_glass_gutter(card_beside_rail: bool) -> impl IntoE
             let Some(card) = work_area_frame_card_bounds(window) else {
                 return;
             };
+            if floating_sidebar_layout() {
+                // The Floating sidebar layout's gutter is the work area's: its tint everywhere the
+                // flat work area and the sidebar card do not cover (the rail included, which draws
+                // no fill of its own there).
+                let key = window_key(window);
+                let parts: Vec<_> = SIDEBAR_CARD_BOUNDS.with(|cards| {
+                    let mut cards = cards.borrow_mut();
+                    [0u8, 1]
+                        .iter()
+                        .filter_map(|part| cards.remove(&(key, *part)))
+                        .collect()
+                });
+                let mut ring = PathBuilder::fill()
+                    .with_style(gpui::PathStyle::Fill(gpui::FillOptions::even_odd()));
+                add_rect(&mut ring, bounds);
+                for (part, radii) in parts {
+                    if part.right() <= card.left() {
+                        add_rounded_rect_corners(&mut ring, part, radii);
+                    }
+                }
+                add_rect(&mut ring, card);
+                if let Ok(path) = ring.build() {
+                    window.paint_path(path, workspace_column_background());
+                }
+                return;
+            }
             // The gutter: the strip above the sidebar and the card, then everything right of the
             // sidebar down to the window's bottom edge.
             let margin = px(WORK_AREA_FRAME_MARGIN);
@@ -231,6 +310,32 @@ pub(crate) fn work_area_frame_sidebar_edge_marker() -> impl IntoElement {
         |bounds, window, _cx| {
             SIDEBAR_DIVIDER_BOUNDS.with(|dividers| {
                 dividers.borrow_mut().insert(window_key(window), bounds);
+            });
+        },
+        |_, _, _, _| {},
+    )
+    .absolute()
+    .top_0()
+    .left_0()
+    .size_full()
+}
+
+/// A zero-paint child of one part of the floating sidebar card (the Floating sidebar layout: `part`
+/// 0 the rail's, 1 the sidebar's) that records its laid-out bounds (inside the card's border) and its
+/// corners for the glass gutter this frame, which leaves every part's shape out.
+pub(crate) fn work_area_frame_sidebar_card_marker(
+    part: u8,
+    radii: gpui::Corners<Pixels>,
+) -> impl IntoElement {
+    canvas(
+        move |bounds, window, _cx| {
+            // The marker spans the card's inside (its border excluded), so the gutter's tint runs
+            // under the card's see-through 1px border; leaving the border out of the tint showed
+            // the raw artwork's dots through it as a glowing, dotted edge.
+            SIDEBAR_CARD_BOUNDS.with(|cards| {
+                cards
+                    .borrow_mut()
+                    .insert((window_key(window), part), (bounds, radii));
             });
         },
         |_, _, _, _| {},
@@ -299,4 +404,5 @@ pub(crate) fn forget_work_area_frame_window(window_id: gpui::WindowId) {
     let key = window_id.as_u64();
     CARD_BOUNDS.with(|cards| cards.borrow_mut().remove(&key));
     SIDEBAR_DIVIDER_BOUNDS.with(|dividers| dividers.borrow_mut().remove(&key));
+    SIDEBAR_CARD_BOUNDS.with(|cards| cards.borrow_mut().retain(|(window, _), _| *window != key));
 }

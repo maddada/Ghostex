@@ -268,14 +268,15 @@ impl Start {
                 ("GHOSTEX_MACOS_ARCH".into(), macos_arch()?),
             ]);
         }
-        if !self.targets_windows {
-            // CDXC:Build 2026-11-14 DECISION: Linux local starts get the macOS dev build too (user, Q51 "Both platforms"): ghostex-gpui and gxserver at opt-level 0 with incremental codegen, `--optimized` for opt-level 3; releases keep the plain release profile. Linux reads it in build-linux-rust.sh and through package-remote-linux.mjs --local-start.
+        // CDXC:Build 2026-11-14 DECISION: Linux local starts get the macOS dev build too (user, Q51 "Both platforms"): ghostex-gpui and gxserver at opt-level 0 with incremental codegen, `--optimized` for opt-level 3; releases keep the plain release profile. Linux reads it in build-linux-rust.sh and through package-remote-linux.mjs --local-start.
+        // CDXC:Build 2026-11-25 DECISION: native Windows local starts get it too (user asked to speed up the Windows start, which compiled both leaf crates at opt-level 3 on every run). build-windows-app.ps1 reads it; the release workflow runs that script without GHOSTEX_LOCAL_START and keeps the plain release profile. The WSL script does not read it yet.
+        self.build_env
+            .push(("GHOSTEX_LOCAL_START".into(), "1".into()));
+        if self.opts.optimized || truthy(env_var("GHOSTEX_START_OPTIMIZED")) {
             self.build_env
-                .push(("GHOSTEX_LOCAL_START".into(), "1".into()));
-            if self.opts.optimized || truthy(env_var("GHOSTEX_START_OPTIMIZED")) {
-                self.build_env
-                    .push(("GHOSTEX_START_OPTIMIZED".into(), "1".into()));
-            }
+                .push(("GHOSTEX_START_OPTIMIZED".into(), "1".into()));
+        }
+        if !self.targets_windows {
             if self.log.verbose {
                 self.build_env
                     .push(("GHOSTEX_GPUI_START_VERBOSE".into(), "1".into()));
@@ -401,9 +402,9 @@ impl Start {
             build.env("GHOSTEX_GPUI_USE_PREBUILT_RUST", "1");
         }
         if self.targets_windows {
-            // CDXC:Build 2026-10-02 WHY: the Windows script compiles every Rust binary in release with its output hidden, which reads as a hang for several minutes; say so, and where to watch it.
+            // CDXC:Build 2026-10-02 WHY: the Windows script compiles every Rust binary with its output hidden, which reads as a hang for several minutes on a cold build; say so, and where to watch it.
             self.log.detail(
-                "Compiling the Windows release binaries; this can take several minutes. Live output: build/local-start-logs/ (or rerun with --verbose).",
+                "Compiling the Windows binaries; a cold build can take several minutes. Live output: build/local-start-logs/ (or rerun with --verbose).",
             );
         }
         let build_started = std::time::SystemTime::now();

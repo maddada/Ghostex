@@ -674,8 +674,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("sidebarVisibilityMemory", J::Str("shared")),
     ("expandCollapsedProjectsOnJump", J::Bool(true)),
     // CDXC:Theming 2026-09-14 DECISION: User: default App theme to System, with Chat and Terminal on Follow app. Existing saved theme selections remain unchanged.
-    // CDXC:Theming 2026-11-22 DECISION: User: default Ghostex's built-in theme to their current look (Dark mode, Polar Night artwork and colours, Gruvbox Material Light artwork and Everforest Light colours in light mode; see `darkThemePreset`).
-    ("sidebarTheme", J::Str("dark-2")),
+    // Follows the system again since the clean default look of 2026-11-22 (see `darkThemePreset`); Dark (`dark-2`) with the Polar Night look before.
+    ("sidebarTheme", J::Str("system")),
     ("sessionChatTheme", J::Str("app")),
     ("sessionChatFontFamily", J::Str("")),
     // CDXC:SessionChat 2026-10-31 DECISION: User: "add a slider to pick the color of the text how strong it is (color of text in the chat now is not full white, i have user wanting it to be full white". 0% is today's colour, so nobody's look changes until they move it; 100% is full white in dark mode and full black in light mode.
@@ -815,10 +815,10 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     //
     // Background Contrast and Background Tint are always-active Theming controls.
     ("customSidebarTitlebarForegroundColor", J::Str("#d8d8d8")),
-    // Since 2026-11-22 the default dark look's colour (see `darkThemePreset`); Graphite keeps #808080.
+    // Neutral since the clean default look of 2026-11-22 (see `darkThemePreset`), so Custom starts where Graphite is; #404e78 with the Polar Night look before.
     (
         "customSidebarTitlebarBackgroundTintColor",
-        J::Str("#404e78"),
+        J::Str("#808080"),
     ),
     (
         "customSidebarTitlebarBackgroundDarknessPercent",
@@ -830,11 +830,11 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:Theming 2026-11-21 DECISION:
     // User: "can u please make the current theme i have on windows now the default dark theme for people when they first install ghostex? i dont like the fully black one we have." Out of the box dark mode is their Windows look (the agent-made Inkstone look without its fonts): the Custom colour #46506a at depth 96, the Inkstone theme colours (paper-white text #ece4d6, grey text #9b968d, a cinnabar accent and focus ring #d8664f, borders 8% and dividers 6%, cards, controls, menus and the chat box in near-neutral blue-blacks, selection 9%, hover 5%, muted success, warning and danger), the cinnabar pane outline colour, and Live glass behind the window: Ink at speed 0.3 and brightness 25. Live draws the same on macOS, Windows and Linux (no system blur), so the look matches across platforms; Blur stays 4 because Live is not blurred by it on macOS, and Blur on Windows stays Acrylic for Desktop and windows. Kept as they were: transparency off by default on Windows (the 2026-10-04 decision in availability.rs) and one tint for the sidebar and the work area (88, the 2026-10-23 Strength decision; their Windows sidebar is 82). Fonts are not part of a look (their Windows fonts are the defaults anyway). Supersedes the 2026-11-20 Black look below. Long-time users keep their current look (`DARK_LOOK_2026_11_21_OLD_DEFAULTS` in lib.rs). Superseded on 2026-11-22 by their Polar Night art look below.
     // CDXC:Theming 2026-11-22 DECISION:
-    // User: "I want my current theme to be the default one for Ghostex (same art, same everything)." Out of the box Ghostex uses Dark appearance (`dark-2`), Custom dark tint `#404e78` at depth 96, Custom light tint `#fcf3da` at depth 97, Polar Night artwork in dark mode (`polar-night`) and Gruvbox Material Light artwork in light mode (`gm-light`) with dimming 45 and blur 0, Transparency Always (`frosted`; Windows keeps `opaque` in availability.rs while Art still paints in an opaque window), Same for light and dark off, Picture position desktop, Animated styles Aurora (dark) and Ink (light) (keeping the raised 1.0 speed and 80 brightness defaults), glass tints 61/67 (dark) and 64/64 (light) (Strength 45), Polar Night dark theme colours with `#5581a9` accent/focus ring and Everforest Light light theme colours, terminal palettes Ghostex Nord (dark) and Ghostex Everforest Light (light) with Follow theme terminal background, and `#7cbf9f` active pane outline. Fonts stay unchanged (not part of a theme). Changes only the catalog defaults so saved user settings are untouched.
-    // CDXC:Theming 2026-11-24 DECISION:
-    // User: in Ghostex's default theme, the notification bell's unread badge blue (`#5581a9`, from `themeRoles.dark.accent`) is too dark; change it for everyone using the default theme to `#95d7f6` (dark mode) and a matching high-contrast sky blue `#0c74a6` in light mode (~5.0:1 on `#fdfbf4`, ~5.2:1 against white badge ink). Existing saved default-theme files migrate once via `migrate_default_theme_accent` (lib.rs).
-    ("darkThemePreset", J::Str("custom")),
-    ("lightThemePreset", J::Str("custom")),
+    // User: "I want my current theme to be the default one for Ghostex (same art, same everything)." Out of the box Ghostex uses Dark appearance (`dark-2`), Custom dark tint `#404e78` at depth 96, Custom light tint `#fcf3da` at depth 97, Polar Night artwork in dark mode (`polar-night`) and Gruvbox Material Light artwork in light mode (`gm-light`) with dimming 45 and blur 0, Transparency Always (`frosted`; Windows keeps `opaque` in availability.rs while Art still paints in an opaque window), Same for light and dark off, Picture position desktop, Animated styles Aurora (dark) and Ink (light) (keeping the raised 1.0 speed and 80 brightness defaults), glass tints 61/67 (dark) and 64/64 (light) (Strength 45), Polar Night dark theme colours with `#5581a9` accent/focus ring and Everforest Light light theme colours, terminal palettes Ghostex Nord (dark) and Ghostex Everforest Light (light) with Follow theme terminal background, and `#7cbf9f` active pane outline. Fonts stay unchanged (not part of a theme). Changes only the catalog defaults so saved user settings are untouched. Superseded on 2026-11-22 by the clean look below.
+    // CDXC:Theming 2026-11-22 DECISION:
+    // User: "polishing the ui to be more like clean and not like default to glass we can have something like t3", then picked "Clean T3 look" as the default over the Polar Night art look. Out of the box Ghostex follows the system's light or dark mode and draws a clean, solid window: Graphite in both modes (neutral, no hue), no artwork and transparency Off (`opaque`), so nothing shows behind the window; faint hairline borders and dividers, quiet hover and selection washes, and opaque card, control, menu, chat box and message fills a small step off the window colour; the accent, text and status colours stay Ghostex's own. Terminals use GitHub Dark and GitHub Light Default and follow the theme's background. The art themes, Animated and Glass stay in Settings > Themes to pick. Long-time users keep the look they had (`DARK_LOOK_2026_11_22_OLD_DEFAULTS` in lib.rs).
+    ("darkThemePreset", J::Str("gray")),
+    ("lightThemePreset", J::Str("gray")),
     ("themeSidebarContrast", J::Num(0.0)),
     ("themeWorkAreaContrast", J::Num(0.0)),
     (
@@ -843,49 +843,41 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
             (
                 "dark",
                 J::Obj(&[
-                    ("accent", J::Str("#95d7f6")),
-                    ("focusRing", J::Str("#5581a9")),
                     ("border", J::Str("8%")),
                     ("divider", J::Str("6%")),
-                    ("text", J::Str("#e6e4de")),
-                    ("mutedText", J::Str("#8c95a3")),
-                    ("userMessage", J::Str("base+12%")),
-                    ("chatBox", J::Str("base+6%/80%")),
-                    ("surface", J::Str("base+8%/80%")),
-                    ("control", J::Str("base+10%/80%")),
-                    ("menu", J::Str("base+6%/95%")),
-                    ("selection", J::Str("9%")),
-                    ("hover", J::Str("5%")),
-                    ("success", J::Str("#a3c48e")),
-                    ("warning", J::Str("#dcbd7a")),
-                    ("danger", J::Str("#d9827c")),
+                    ("userMessage", J::Str("base+6%")),
+                    ("chatBox", J::Str("base+3%")),
+                    ("surface", J::Str("base+3%")),
+                    ("control", J::Str("base+5%")),
+                    ("menu", J::Str("base+4%")),
+                    ("selection", J::Str("7%")),
+                    ("hover", J::Str("4%")),
                 ]),
             ),
             (
                 "light",
                 J::Obj(&[
-                    ("text", J::Str("#5c6a72")),
-                    ("mutedText", J::Str("#939f91")),
-                    ("accent", J::Str("#0c74a6")),
-                    ("focusRing", J::Str("#8da101")),
-                    ("link", J::Str("#3a94c5")),
-                    ("success", J::Str("#8da101")),
-                    ("warning", J::Str("#dfa000")),
-                    ("danger", J::Str("#f85552")),
-                    ("userMessage", J::Str("#efebd4")),
-                    ("codeBlock", J::Str("#f4f0d9")),
-                    ("selection", J::Str("#eaedc8")),
+                    ("border", J::Str("9%")),
+                    ("divider", J::Str("7%")),
+                    ("userMessage", J::Str("base+4%")),
+                    ("chatBox", J::Str("base-60%")),
+                    ("surface", J::Str("base-60%")),
+                    ("control", J::Str("base+3%")),
+                    ("menu", J::Str("base-60%")),
+                    ("selection", J::Str("6%")),
+                    ("hover", J::Str("4%")),
                 ]),
             ),
         ]),
     ),
+    // Neutral since the clean default look of 2026-11-22 (see `darkThemePreset`); #fcf3da at 97 with the Polar Night look before.
     (
         "customSidebarTitlebarLightBackgroundTintColor",
-        J::Str("#fcf3da"),
+        J::Str("#808080"),
     ),
     (
         "customSidebarTitlebarLightBackgroundLightnessPercent",
-        J::Num(97.0),
+        J::Num(96.0),
     ),
     (
         "customSidebarTitlebarLightBackgroundColor",
@@ -908,11 +900,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("terminalFontWeight", J::Num(300.0)),
     ("terminalBoldUsesHeavierFont", J::Bool(true)),
     ("terminalColorScheme", J::Str("app")),
-    (
-        "terminalGhosttyLightTheme",
-        J::Str("Ghostex Everforest Light"),
-    ),
-    ("terminalGhosttyTheme", J::Str("Ghostex Nord")),
+    ("terminalGhosttyLightTheme", J::Str("GitHub Light Default")),
+    ("terminalGhosttyTheme", J::Str("GitHub Dark")),
     ("terminalBackgroundOpacity", J::Num(100.0)),
     ("terminalBackgroundImage", J::Str("")),
     ("terminalBackgroundImageOpacity", J::Num(1.0)),
@@ -1098,21 +1087,28 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("workspaceActivePaneBorderColor", J::Str("#5581a9")),
     // CDXC:Settings 2026-11-08 DECISION: User: "to show traffic lights on macos when sidebar is collapsed (default to yes)". On: the window's buttons stay with the sidebar collapsed, as they did before the 2026-11-06 floating-sidebar change (GitHub #432), which off restores.
     ("showWindowButtonsWhenSidebarCollapsed", J::Bool(false)),
+    // CDXC:Workarea 2026-11-25 DECISION in apps/desktop/src/app/helpers/work_area_frame.rs: the sidebar floats as the card by default.
+    ("windowLayout", J::Str("floatingSidebar")),
     ("closeButtonsOnRight", J::Bool(false)),
     // CDXC:Theming 2026-11-21 DECISION:
     // User (through the coordinator): six dark art themes (Moonwater, Glasshouse, Red Earth, Deep Current, Night Garden, Nocturne Canyon) are Ghostex's main themes. Each paints its own artwork behind the sidebar and the work area of an opaque window: no desktop shows through. `windowArt` names the artwork (Polar Night by default since 2026-11-22, `gm-light` in light mode; None keeps the glass as it is), `windowArtDim` darkens it (percent black over it) and `windowArtBlur` softens it (points). The surfaces over it take the glass tints (`windowGlassSidebarOpacityDark`, `windowGlassWorkAreaTintDark`).
     // SEE-ALSO: apps/desktop/src/app/helpers/window_art.rs, data/theme_gallery.rs.
-    ("windowArt", J::Str("polar-night")),
-    ("windowArtLight", J::Str("gm-light")),
+    // None since the clean default look of 2026-11-22 (see `darkThemePreset`).
+    ("windowArt", J::Str("none")),
+    ("windowArtLight", J::Str("none")),
     ("windowArtDim", J::Num(45.0)),
     ("windowArtBlur", J::Num(0.0)),
+    // CDXC:Theming 2026-11-25 (`stylise_artwork` in apps/desktop/src/app/helpers/window_art.rs): the artwork's style (ASCII or Dither) and whether it is drawn in the theme's text colour (Black and white) or its own colours.
+    ("windowArtMonochrome", J::Bool(true)),
+    ("windowArtStyle", J::Str("ascii")),
     // CDXC:Theming 2026-11-22 (`YOUR_IMAGE_ART_ID` in data/themes.rs): the user's own picture
     // behind the window, per computer; `savedThemes` are the looks saved under Your themes
     // (apps/desktop/src/app/window/settings_modal/tabs/theme/user_themes.rs).
     ("windowArtImage", J::Str("")),
     ("windowArtImageLight", J::Str("")),
     ("savedThemes", J::Arr(&[])),
-    ("windowGlass", J::Str("frosted")),
+    // Off (`opaque`) on every platform since the clean default look of 2026-11-22 (see `darkThemePreset`); Always (`frosted`) on macOS and Linux before.
+    ("windowGlass", J::Str("opaque")),
     // Animated (stored as "live") since 2026-11-21, the default dark look's glass (see `darkThemePreset`); Desktop and windows before.
     ("windowGlassSource", J::Str("live")),
     ("windowGlassImagePlacement", J::Str("desktop")),

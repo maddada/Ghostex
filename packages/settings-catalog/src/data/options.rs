@@ -806,6 +806,15 @@ pub const WINDOW_GLASS_WINDOWS_BLUR_OPTIONS: &[Opt] = &[
     opt("Off", "off"),
 ];
 
+/// The window's layout (CDXC:Workarea 2026-11-25 in apps/desktop/src/app/helpers/work_area_frame.rs).
+pub const WINDOW_LAYOUT_OPTIONS: &[Opt] = &[
+    opt("Floating sidebar", "floatingSidebar"),
+    opt("Framed work area", "framedWorkArea"),
+];
+
+/// How an artwork is drawn behind the window (CDXC:Theming 2026-11-25 in apps/desktop/src/app/helpers/window_art.rs).
+pub const WINDOW_ART_STYLE_OPTIONS: &[Opt] = &[opt("ASCII", "ascii"), opt("Dither", "dither")];
+
 pub const WINDOW_GLASS_IMAGE_PLACEMENT_OPTIONS: &[Opt] = &[
     opt("Moves with the window", "static"),
     opt("Stays with the desktop", "desktop"),

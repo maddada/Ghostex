@@ -10,8 +10,9 @@
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::catalog::{module, settings_catalog};
 use super::super::super::fields::{
-    ButtonVariant, SizedButtonSize, SizedButtonVariant, SliderBinding, reset_key, select_field,
-    settings_icon, settings_icon_button, settings_sized_button, slider_number_field, toggle_field,
+    ButtonVariant, SizedButtonSize, SizedButtonVariant, SliderBinding, reset_key, segmented_field,
+    select_field, settings_icon, settings_icon_button, settings_sized_button, slider_number_field,
+    toggle_field,
 };
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::SettingsValues;
@@ -182,6 +183,44 @@ impl ThemeTab {
                     rows.push(indented_row(self.no_picture_line(&p, dark, cx)));
                 }
                 rows.push(self.strength_row(t, StrengthLocation::UnderArt, window, cx));
+                // CDXC:Theming 2026-11-25 (`dither_in_theme_colours` in helpers/window_art.rs).
+                let style_options =
+                    settings_catalog().options(module::SETTINGS, "WINDOW_ART_STYLE_OPTIONS");
+                let style_allowed: Vec<String> = style_options
+                    .iter()
+                    .map(|option| option.value.clone())
+                    .collect();
+                rows.push(segmented_field(
+                    &p,
+                    "windowArtStyle",
+                    t.spec(
+                        "windowArtStyle",
+                        "Style",
+                        "ASCII draws the artwork as characters over a soft blurred copy of it; Dither as halftone dots. Both rise from the bottom and fade out toward the top.",
+                    )
+                    .dependent(),
+                    Some(reset_key::<Self>("windowArtStyle")),
+                    &style_options,
+                    Some(values.choice("windowArtStyle", &style_allowed).as_str()),
+                    None,
+                    |page: &mut Self, next, _window, cx| {
+                        page.save("windowArtStyle", json!(next), cx)
+                    },
+                    cx,
+                ));
+                rows.push(toggle_field(
+                    self,
+                    &p,
+                    "windowArtMonochrome",
+                    t.spec(
+                        "windowArtMonochrome",
+                        "Black and white",
+                        "Draw the artwork's characters or dots in the theme's own text colour. Turn off to draw them in the artwork's own colours.",
+                    )
+                    .dependent(),
+                    values.bool("windowArtMonochrome"),
+                    cx,
+                ));
                 for (key, title, subtitle) in [
                     (
                         "windowArtDim",

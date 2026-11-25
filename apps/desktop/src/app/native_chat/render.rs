@@ -26,6 +26,88 @@ impl NativeChatView {
         }
     }
 
+    /// A soft panel of the work area colour behind the transcript's reading column while an art
+    /// theme's artwork shows behind the window: solid across the column (plus a margin), fading out
+    /// to clear over `FADE` on each side, so the artwork stays sharp beside the chat and the text
+    /// sits on a calm ground. `None` without an artwork.
+    ///
+    /// CDXC:Theming 2026-11-25 DECISION:
+    /// User, of the ASCII artwork showing through behind the chat's text and tables: "it is looking quite good actually ... do something to improve the visibility of this chat window". The chat keeps the artwork around it and draws its reading column on a panel of the theme's work area colour that fades out at its sides: 70% over a 160-point fade, after "the fede in the middle make it a little reansparent" (82%, then 60%) and "a litttle more fade for the chat".
+    fn art_reading_panel(&self, p: &ChatAppearance) -> Option<gpui::AnyElement> {
+        const MARGIN: f32 = 40.0;
+        const FADE: f32 = 160.0;
+        const STRENGTH: f32 = 0.7;
+        if !crate::app::helpers::window_art_active() {
+            return None;
+        }
+        let s = p.scale;
+        let pane = self.bounds.get().size.width.as_f32();
+        let column = self.transcript_column_cap(p).min(pane) + 2.0 * MARGIN * s;
+        let solid = crate::app::helpers::workspace_background_color().opacity(STRENGTH);
+        let clear = solid.opacity(0.0);
+        let fade = |angle: f32| {
+            div()
+                .flex_shrink_0()
+                .w(px(FADE * s))
+                .h_full()
+                .bg(gpui::linear_gradient(
+                    angle,
+                    gpui::linear_color_stop(clear, 0.0),
+                    gpui::linear_color_stop(solid, 1.0),
+                ))
+        };
+        Some(
+            div()
+                .absolute()
+                .top_0()
+                .left_0()
+                .size_full()
+                .flex()
+                .justify_center()
+                .child(fade(90.0))
+                .child(div().flex_shrink_0().w(px(column)).h_full().bg(solid))
+                .child(fade(270.0))
+                .into_any_element(),
+        )
+    }
+
+    /// The chat box floating over the bottom of the transcript, so the rows scroll on behind it,
+    /// with its height measured for the rows' end padding (`composer_overlap`); a change of height
+    /// draws the chat again so the rows' end follows it.
+    ///
+    /// CDXC:SessionChat 2026-11-25 DECISION:
+    /// User, of the chat box over the transcript: "the text can go behind it not like that", choosing that it always floats (not only over an art theme's artwork, where the box is frosted glass, `composer_frost_layer` in composer.rs). The box and what stacks with it are drawn over the transcript's bottom edge; the rows' end padding grows by its height, so the newest row still rests above it, and the toasts and scroll pills sit above it.
+    fn render_floating_composer(&mut self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let measured = self.composer_overlap_measured.clone();
+        let chat = cx.weak_entity();
+        div()
+            .absolute()
+            .left_0()
+            .right_0()
+            .bottom_0()
+            .child(self.render_composer_host(cx))
+            .child(
+                gpui::canvas(
+                    move |bounds, window, cx| {
+                        let height = bounds.size.height.as_f32();
+                        if (measured.get() - height).abs() > 0.5 {
+                            measured.set(height);
+                            let chat = chat.clone();
+                            window.defer(cx, move |_, cx| {
+                                let _ = chat.update(cx, |_, cx| cx.notify());
+                            });
+                        }
+                    },
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .top_0()
+                .left_0()
+                .size_full(),
+            )
+            .into_any_element()
+    }
+
     /// Decides this frame's `held_text_width`: while a window panel or the docked Session details
     /// column slides (`terminal_element::grid_resize_held`, `session_details.motion`) and the pane's width would change the transcript's
     /// text width, the rows keep the width they had before the slide, centred; the settling frame
@@ -168,9 +250,12 @@ impl Render for NativeChatView {
         if maximized {
             self.pending_composer_frame = None;
             self.transcript_inset = 0.0;
+            self.composer_overlap = 0.0;
         } else {
             let frame = self.composer_frame(cx);
-            self.transcript_inset = frame.transcript_inset;
+            // The chat box floats over the transcript (`composer_overlap`): the rows end above it.
+            self.composer_overlap = self.composer_overlap_measured.get();
+            self.transcript_inset = frame.transcript_inset + self.composer_overlap;
             self.pending_composer_frame = Some(frame);
         }
         crate::app::helpers::indicator_animation::render_indicator_frames_animation_only(
@@ -241,7 +326,7 @@ impl Render for NativeChatView {
             overlay.set(indicator_overlay::WORKING_TRACK, None);
         }
         let composer = if !covered {
-            self.render_composer_host(cx)
+            self.render_floating_composer(cx)
         } else if maximized {
             div().h(px(148.0 * s)).into_any_element()
         } else {
@@ -292,6 +377,7 @@ impl Render for NativeChatView {
         };
         let selection_bar_listeners = self.selection_bar_listeners(cx);
         let pane_bounds = self.session_details_pane_bounds();
+        let art_reading_panel = self.art_reading_panel(&p);
         let chat = div()
             .id("native-session-chat")
             .role(gpui::Role::Group)
@@ -350,6 +436,8 @@ impl Render for NativeChatView {
                 chat.attach_to_composer(Vec::new(), paths, cx);
                 cx.stop_propagation();
             }))
+            // First, so the transcript and everything else draw over it.
+            .children(art_reading_panel)
             .when_some(error_card, |this, card| {
                 this.child(div().p(px(16.0 * s)).child(card))
             })

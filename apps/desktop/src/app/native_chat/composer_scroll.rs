@@ -92,7 +92,9 @@ impl NativeChatView {
             return div().into_any_element();
         }
         let list = self.list.clone();
-        let inset = self.transcript_inset;
+        // The band is the collapsed box's held inset alone; the floating box's own height
+        // (`composer_overlap`) is end padding the viewport never shows rows in.
+        let inset = self.transcript_inset - self.composer_overlap;
         let chat = cx.weak_entity();
         gpui::canvas(
             move |_, window, cx| {
