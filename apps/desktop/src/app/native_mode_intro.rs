@@ -12,15 +12,15 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use gpui::{AppContext as _, Context};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
+use crate::GhostexGpuiApp;
 use crate::app::model::GpuiAppModalKind;
 use crate::app::window::{
-    GpuiNativeModeIntroModalWindow, NativeModeIntroCommand, NativeModeIntroHost,
-    NativeModeIntroModalConfig, NATIVE_MODE_INTRO_MODAL_INITIAL_HEIGHT,
-    NATIVE_MODE_INTRO_MODAL_WIDTH,
+    GpuiNativeModeIntroModalWindow, NATIVE_MODE_INTRO_MODAL_INITIAL_HEIGHT,
+    NATIVE_MODE_INTRO_MODAL_WIDTH, NativeModeIntroCommand, NativeModeIntroHost,
+    NativeModeIntroModalConfig,
 };
-use crate::GhostexGpuiApp;
 
 const SETTINGS_INTRO_KEY: &str = "nativeModeIntro";
 const NATIVE_FAMILIES: [&str; 9] = [
@@ -93,7 +93,7 @@ pub(crate) fn format_bulk_switch_summary(summary: &BulkSwitchSummary) -> String 
             chat_word(s)
         ),
         (0, false) => format!("Native mode is on for new chats. {}.", notes.join("; ")),
-        _ => "Native mode is on for new chats with Antigravity, Claude Code and Codex.".to_string(),
+        _ => "Native mode is on for new chats with Claude Code, Codex, Antigravity, OpenCode, Pi, OMP, Hermes Agent, Cursor CLI and Grok Build.".to_string(),
     }
 }
 

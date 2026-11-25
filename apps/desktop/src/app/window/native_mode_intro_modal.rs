@@ -31,7 +31,7 @@ pub(crate) const NATIVE_MODE_INTRO_MODAL_WIDTH: f32 = 500.0;
 pub(crate) const NATIVE_MODE_INTRO_MODAL_INITIAL_HEIGHT: f32 = 340.0;
 
 const TITLE: &str = "Chat, straight from your agents.";
-const SUBTITLE: &str = "Native mode connects Antigravity, Claude Code and Codex directly instead of reading a terminal screen. More agents coming soon.";
+const SUBTITLE: &str = "Native mode connects Claude Code, Codex, Antigravity, OpenCode, Pi, OMP, Hermes Agent, Cursor CLI and Grok Build directly instead of reading a terminal screen. More agents coming soon.";
 const FOOTER_NOTE: &str = "Terminal-based stays available; switch back any time.";
 
 const CHIPS: [(&str, &str); 3] = [
