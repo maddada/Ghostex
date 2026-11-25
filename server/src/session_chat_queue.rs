@@ -176,6 +176,9 @@ pub struct SessionChatQueueSnapshot {
     pub non_cli_mode: bool,
     /// True while a Terminal -> Native switch is queued until the active reply ends (`Q4771`).
     pub switch_to_native_queued: bool,
+    /// What that queued switch waits on (`"reply"`, `"background"` or `"answer"`,
+    /// acp/channel.rs `SwitchWait`); `None` while none is queued.
+    pub switch_to_native_wait: Option<&'static str>,
     /// The question forms and pages the user removed without answering (`session_chat_open_questions::read_removed_ids`).
     pub removed_question_ids: Vec<String>,
     /// The pages their agent retired (`visual_pages::read_retired_page_ids`).
@@ -231,6 +234,10 @@ impl SessionChatQueueSnapshot {
         target.insert(
             "switchToNativeQueued".to_string(),
             json!(self.switch_to_native_queued),
+        );
+        target.insert(
+            "switchToNativeWait".to_string(),
+            json!(self.switch_to_native_wait),
         );
         target.insert(
             "removedQuestionIds".to_string(),
@@ -302,6 +309,7 @@ impl SessionChatQueueSnapshot {
         } else {
             "|swNative:0"
         });
+        revision.push_str(self.switch_to_native_wait.unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.removed_question_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.retired_page_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.starred_page_ids).unwrap_or_default());
@@ -1333,6 +1341,8 @@ fn read_snapshot(
             ),
             non_cli_mode: read_non_cli_mode(db, project_id, session_id),
             switch_to_native_queued: crate::acp::pending_switch::is_pending(project_id, session_id),
+            switch_to_native_wait: crate::acp::pending_switch::wait(project_id, session_id)
+                .map(crate::acp::channel::SwitchWait::as_str),
             removed_question_ids: crate::session_chat_open_questions::read_removed_ids(
                 db, project_id, session_id,
             ),

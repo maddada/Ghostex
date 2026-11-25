@@ -2,8 +2,9 @@
 //!
 //! Shown beside the Where pill on Terminal chats (including coordinators) of Antigravity, Claude
 //! Code, and Codex for chat-first users until the chat is actually Native or dismissed per agent.
-//! Clicking mid-reply queues the switch and shifts the chip to a cancelable "Switches to Native
-//! when this reply ends" state.
+//! Clicking mid-reply queues the switch and shifts the chip to a cancelable "Switching to Native"
+//! state with an info icon; its tooltip says what the switch waits on (gx-chat-core's
+//! `queuedTooltip`, CDXC:AgentProviders 2026-11-25 in native_switch.rs).
 //!
 //! CDXC:AgentProviders 2026-11-24 SEE-ALSO:
 //! packages/gx-chat-core/src/extras/native_switch.rs (visibility rules),
@@ -12,7 +13,7 @@
 use super::{appearance::ChatAppearance, cursor::ChatCursor as _, state::NativeChatView};
 use gpui::{
     AnyElement, Context, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _, div, px, svg,
+    StatefulInteractiveElement as _, Styled as _, div, prelude::FluentBuilder as _, px, svg,
 };
 use serde_json::{Value, json};
 
@@ -27,7 +28,7 @@ impl NativeChatView {
             .is_some_and(|offer| offer["showChip"] == true)
     }
 
-    /// Renders the "Switch to Native" (or queued "Switching when done…") pill chip for the strip.
+    /// Renders the "Switch to Native" (or queued "Switching to Native (i)") pill chip for the strip.
     pub(super) fn native_switch_chip(
         &self,
         p: &ChatAppearance,
@@ -48,11 +49,18 @@ impl NativeChatView {
         let working = self.snapshot["working"] == true;
 
         let (icon_path, label, tooltip_text, aria_label) = if queued {
+            let tooltip = offer["queuedTooltip"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string();
             (
                 "titlebar/clock.svg",
-                "Switches to Native when this reply ends".to_string(),
-                "Switches to Native when this reply ends. Click × to cancel.".to_string(),
-                format!("Switches {agent_name} to Native when this reply ends"),
+                "Switching to Native".to_string(),
+                tooltip.clone(),
+                format!(
+                    "Switching {agent_name} to Native. {}",
+                    tooltip.replace('\n', " ")
+                ),
             )
         } else {
             (
@@ -107,6 +115,15 @@ impl NativeChatView {
                         .text_color(p.foreground.opacity(0.9)),
                 )
                 .child(label)
+                .when(queued, |chip| {
+                    chip.child(
+                        svg()
+                            .path("titlebar/info-circle.svg")
+                            .size(px(13.0 * s))
+                            .flex_shrink_0()
+                            .text_color(p.foreground.opacity(0.9)),
+                    )
+                })
                 .child(
                     div()
                         .id("chat-native-switch-chip-dismiss")

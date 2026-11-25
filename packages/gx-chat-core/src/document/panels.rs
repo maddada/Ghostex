@@ -272,6 +272,10 @@ pub struct NativeSwitchOffer {
     pub show_chip: bool,
     /// Whether a mid-reply switch is currently queued on gxserver.
     pub queued: bool,
+    /// While queued: the chip's tooltip, what the switch waits on and how to cancel it (two
+    /// lines). The phone shows it when its (i) is tapped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queued_tooltip: Option<String>,
     /// Whether Native mode is already enabled as the default for this agent.
     pub native_default: bool,
     /// Whether the manual "Switch to Native" / "Cancel Switch to Native" row shows in `•••`.

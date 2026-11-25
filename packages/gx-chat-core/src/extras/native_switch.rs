@@ -11,6 +11,14 @@
 //!   shows a cancelable "Switches to Native when this reply ends" chip.
 //! - Q4772 (`hide-threads-gate-remote`): hide the chip on coordinator threads (keep in `•••`); on
 //!   remote computers only show when that computer's gxserver advertises `nativeModeSwitchCapable`.
+//!
+//! CDXC:AgentProviders 2026-11-25 DECISION:
+//! User: "please show the reason in a tooltip so this pill isn't wide. pill should always say
+//! Switching to Native (i)". A queued chip reads `Switching to Native` and an info icon; its
+//! tooltip (desktop and web hover, the phone's tapped (i)) names what gxserver says the switch
+//! waits on (`switchToNativeWait`, server/src/acp/channel.rs `SwitchWait`): the reply, background
+//! work or queued messages, or an answer. Supersedes the always "when this reply ends" chip, which
+//! was wrong once the reply was over and something else held the switch.
 
 use crate::document::NativeSwitchOffer;
 use crate::state::ChatState;
@@ -108,6 +116,15 @@ pub fn project(state: &ChatState) -> Option<NativeSwitchOffer> {
     };
 
     let queued = state.session.switch_to_native_queued;
+    let queued_tooltip = queued.then(|| {
+        let reason = match state.session.switch_to_native_wait.as_deref() {
+            Some("background") => "Switches to Native when background work ends.",
+            Some("answer") => "Switches to Native after you answer.",
+            // `"reply"`, or an older gxserver that does not say.
+            _ => "Switches to Native when this reply ends.",
+        };
+        format!("{reason}\nClick × to cancel.")
+    });
     // Keep the strip chip visible on Terminal chats (including coordinators) even when Native is
     // already the default for new chats, until this chat is actually Native (`non_cli_mode == true`)
     // or the user explicitly dismisses the chip per agent.
@@ -118,6 +135,7 @@ pub fn project(state: &ChatState) -> Option<NativeSwitchOffer> {
         agent_name: agent_name.to_string(),
         show_chip,
         queued,
+        queued_tooltip,
         native_default,
         show_menu_item: true,
     })

@@ -243,6 +243,10 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
     folded.result.state.switch_to_native_queued = side
         .switch_to_native_queued
         .or_else(|| previous_side.and_then(|state| state.switch_to_native_queued));
+    folded.result.state.switch_to_native_wait = side
+        .switch_to_native_wait
+        .clone()
+        .or_else(|| previous_side.and_then(|state| state.switch_to_native_wait.clone()));
 
     folded.result.state.resource_index = carried(
         side.resource_index.as_ref(),

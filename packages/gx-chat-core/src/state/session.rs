@@ -42,6 +42,9 @@ pub struct SessionState {
     pub non_cli_mode: bool,
     /// True while a Terminal -> Native switch is queued until the active reply finishes (`Q4771`).
     pub switch_to_native_queued: bool,
+    /// What that queued switch waits on, as gxserver words it (`"reply"`, `"background"`,
+    /// `"answer"`); `None` when unknown. Set together with `switch_to_native_queued`.
+    pub switch_to_native_wait: Option<String>,
     /// True when this session's gxserver supports Terminal -> Native switching (`Q4772`).
     pub native_mode_switch_capable: bool,
     /// Whether this computer's `agentSessionMode` already enables Native for this session's agent.
@@ -221,6 +224,7 @@ impl Default for SessionState {
             unavailable_modes: Vec::new(),
             non_cli_mode: false,
             switch_to_native_queued: false,
+            switch_to_native_wait: None,
             native_mode_switch_capable: false,
             native_default_for_agent: None,
             native_switch_dismissed: None,

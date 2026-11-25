@@ -1421,8 +1421,31 @@ pub(crate) enum SwitchOrigin {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SwitchSafety {
     Safe,
-    Busy(&'static str),
+    Busy(SwitchWait, &'static str),
     CannotResume(&'static str),
+}
+
+/// What a queued Terminal -> Native switch waits on, published to clients as
+/// `switchToNativeWait` (`session_chat_queue.rs`) so the pill strip chip's tooltip names it
+/// (packages/gx-chat-core/src/extras/native_switch.rs words it).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SwitchWait {
+    /// The agent is replying (working, hooks, compacting, a transcript gate).
+    Reply,
+    /// Queued chat messages or live background shells, monitors or jobs.
+    Background,
+    /// An approval, question or connector card waits on the user mid-turn.
+    Answer,
+}
+
+impl SwitchWait {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Reply => "reply",
+            Self::Background => "background",
+            Self::Answer => "answer",
+        }
+    }
 }
 
 /// Whether `session` is an AgentBox, detected external, Claude Cloud, or Teleport session that
@@ -1560,7 +1583,7 @@ pub(crate) async fn check_session_safe_to_switch_now(
     let now = crate::presentation::now_iso();
     let activity = crate::presentation::presentation_activity(session, &now);
     if activity == "working" {
-        return SwitchSafety::Busy("the agent is currently replying");
+        return SwitchSafety::Busy(SwitchWait::Reply, "the agent is currently replying");
     }
     if activity == "attention" {
         let waiting_connector = crate::connectors::waiting_connector_card(session).is_some();
@@ -1568,11 +1591,14 @@ pub(crate) async fn check_session_safe_to_switch_now(
             session.pointer("/runtimeSettings/agentActivity"),
         );
         if waiting_connector || !turn_complete {
-            return SwitchSafety::Busy("the agent is waiting for your approval or answer");
+            return SwitchSafety::Busy(
+                SwitchWait::Answer,
+                "the agent is waiting for your approval or answer",
+            );
         }
     }
     if crate::session_chat_queue_runtime::agent_is_busy(session).await {
-        return SwitchSafety::Busy("the agent is currently replying");
+        return SwitchSafety::Busy(SwitchWait::Reply, "the agent is currently replying");
     }
     let state_for_db = state.clone();
     let pid = project_id.to_string();
@@ -1599,14 +1625,17 @@ pub(crate) async fn check_session_safe_to_switch_now(
     .await
     .unwrap_or((true, None));
     if has_pending_queue {
-        return SwitchSafety::Busy("queued messages are waiting to send");
+        return SwitchSafety::Busy(
+            SwitchWait::Background,
+            "queued messages are waiting to send",
+        );
     }
     if let Some(target) = send_target {
         if let Some(reason) =
             crate::session_chat_queue_runtime::background_work_a_restart_would_end(state, &target)
                 .await
         {
-            return SwitchSafety::Busy(reason);
+            return SwitchSafety::Busy(SwitchWait::Background, reason);
         }
     }
     if !crate::session_chat_queue_runtime::can_start_on_its_conversation(state, session).await {
@@ -1679,10 +1708,11 @@ pub(crate) async fn switch_to_acp(
     }
 
     match check_session_safe_to_switch_now(state, project_id, session_id, &session).await {
-        SwitchSafety::Busy(reason) => {
+        SwitchSafety::Busy(wait, reason) => {
             super::pending_switch::queue(
                 project_id,
                 session_id,
+                wait,
                 caller_is_user_device,
                 telemetry_source,
                 telemetry_client,
@@ -1730,6 +1760,7 @@ pub(crate) async fn switch_to_acp(
             super::pending_switch::queue(
                 project_id,
                 session_id,
+                SwitchWait::Reply,
                 caller_is_user_device,
                 telemetry_source,
                 telemetry_client,
@@ -2111,7 +2142,7 @@ pub(crate) async fn execute_switch_to_acp(
     if was_running {
         match check_session_safe_to_switch_now(state, project_id, session_id, &session).await {
             SwitchSafety::Safe => {}
-            SwitchSafety::Busy(reason) => {
+            SwitchSafety::Busy(_, reason) => {
                 return Err(DomainStateError {
                     code: "sessionBusy",
                     message: format!("Cannot switch right now: {reason}."),

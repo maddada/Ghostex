@@ -9,12 +9,13 @@
 //! SEE-ALSO: server/src/acp/channel.rs (`switch_to_acp`, `cancel_switch_to_acp`),
 //! server/src/session_chat_queue.rs (`switch_to_native_queued`).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
 use serde_json::json;
 
+use super::channel::SwitchWait;
 use crate::domain::DomainRepository;
 use crate::logging::LogLevel;
 use crate::server::AppState;
@@ -24,6 +25,8 @@ const TICK: Duration = Duration::from_millis(500);
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct PendingSwitchEntry {
+    /// What the switch waits on now, refreshed each tick (`switchToNativeWait`).
+    pub(crate) wait: SwitchWait,
     pub(crate) caller_is_user_device: bool,
     pub(crate) queued_at_ms: i64,
     pub(crate) telemetry_source: &'static str,
@@ -32,14 +35,33 @@ pub(crate) struct PendingSwitchEntry {
 
 static PENDING_SWITCHES: LazyLock<Mutex<HashMap<(String, String), PendingSwitchEntry>>> =
     LazyLock::new(Mutex::default);
-static IN_FLIGHT: LazyLock<Mutex<HashSet<(String, String)>>> = LazyLock::new(Mutex::default);
+/// Switches running now, with the last thing they waited on so the chip keeps its tooltip.
+static IN_FLIGHT: LazyLock<Mutex<HashMap<(String, String), SwitchWait>>> =
+    LazyLock::new(Mutex::default);
 
 pub(crate) fn is_in_flight(project_id: &str, session_id: &str) -> bool {
     let key = (project_id.to_string(), session_id.to_string());
     IN_FLIGHT
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .contains(&key)
+        .contains_key(&key)
+}
+
+/// What a queued or running switch of this session waits on, or `None` when none is queued.
+pub(crate) fn wait(project_id: &str, session_id: &str) -> Option<SwitchWait> {
+    let key = (project_id.to_string(), session_id.to_string());
+    let pending = PENDING_SWITCHES
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .get(&key)
+        .map(|entry| entry.wait);
+    pending.or_else(|| {
+        IN_FLIGHT
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(&key)
+            .copied()
+    })
 }
 
 pub(crate) fn is_pending(project_id: &str, session_id: &str) -> bool {
@@ -57,12 +79,14 @@ pub(crate) fn is_pending(project_id: &str, session_id: &str) -> bool {
 pub(crate) fn queue(
     project_id: &str,
     session_id: &str,
+    wait: SwitchWait,
     caller_is_user_device: bool,
     telemetry_source: &'static str,
     telemetry_client: &'static str,
 ) {
     let key = (project_id.to_string(), session_id.to_string());
     let entry = PendingSwitchEntry {
+        wait,
         caller_is_user_device,
         queued_at_ms: chrono::Utc::now().timestamp_millis(),
         telemetry_source,
@@ -98,7 +122,8 @@ pub(crate) fn start_pending_switch_runtime(state: Arc<AppState>) {
 }
 
 enum PollOutcome {
-    StillWorking,
+    /// Still busy; `Some` names what it waits on now (`None` when the check could not run).
+    StillWorking(Option<SwitchWait>),
     Drop,
     Ready,
 }
@@ -119,7 +144,7 @@ async fn tick(state: &Arc<AppState>) {
         let already_running = IN_FLIGHT
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .contains(&key);
+            .contains_key(&key);
         if already_running {
             continue;
         }
@@ -140,7 +165,7 @@ async fn tick(state: &Arc<AppState>) {
         .and_then(Result::ok);
 
         let outcome = match session_opt {
-            None => PollOutcome::StillWorking,
+            None => PollOutcome::StillWorking(None),
             Some(None) => PollOutcome::Drop,
             Some(Some(session)) => {
                 if super::session_is_acp(&session)
@@ -159,7 +184,9 @@ async fn tick(state: &Arc<AppState>) {
                     .await
                     {
                         super::channel::SwitchSafety::Safe => PollOutcome::Ready,
-                        super::channel::SwitchSafety::Busy(_) => PollOutcome::StillWorking,
+                        super::channel::SwitchSafety::Busy(wait, _) => {
+                            PollOutcome::StillWorking(Some(wait))
+                        }
                         super::channel::SwitchSafety::CannotResume(_) => PollOutcome::Drop,
                     }
                 }
@@ -167,7 +194,23 @@ async fn tick(state: &Arc<AppState>) {
         };
 
         match outcome {
-            PollOutcome::StillWorking => {}
+            PollOutcome::StillWorking(None) => {}
+            PollOutcome::StillWorking(Some(wait)) => {
+                // The reply ended but background work, queued messages or a question still holds
+                // the switch: tell clients so the chip's tooltip names the real reason.
+                let changed = PENDING_SWITCHES
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .get_mut(&key)
+                    .is_some_and(|pending| {
+                        let changed = pending.wait != wait;
+                        pending.wait = wait;
+                        changed
+                    });
+                if changed {
+                    broadcast_state(state, &project_id, &session_id).await;
+                }
+            }
             PollOutcome::Drop => {
                 if cancel(&project_id, &session_id) {
                     broadcast_state(state, &project_id, &session_id).await;
@@ -179,11 +222,11 @@ async fn tick(state: &Arc<AppState>) {
                     let mut pending = PENDING_SWITCHES
                         .lock()
                         .unwrap_or_else(|poisoned| poisoned.into_inner());
-                    if pending.remove(&key).is_some() {
+                    if let Some(claimed) = pending.remove(&key) {
                         IN_FLIGHT
                             .lock()
                             .unwrap_or_else(|poisoned| poisoned.into_inner())
-                            .insert(key.clone());
+                            .insert(key.clone(), claimed.wait);
                         true
                     } else {
                         false
@@ -217,6 +260,7 @@ async fn tick(state: &Arc<AppState>) {
                             queue(
                                 &pid,
                                 &sid,
+                                SwitchWait::Reply,
                                 entry.caller_is_user_device,
                                 entry.telemetry_source,
                                 entry.telemetry_client,

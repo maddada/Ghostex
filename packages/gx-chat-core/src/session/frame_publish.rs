@@ -134,6 +134,10 @@ pub fn side_state_moves(
         || side
             .switch_to_native_queued
             .is_some_and(|queued| session.switch_to_native_queued != queued)
+        || side
+            .switch_to_native_wait
+            .as_ref()
+            .is_some_and(|wait| session.switch_to_native_wait.as_ref() != Some(wait))
         || side.removed_question_ids.is_some()
         || side.retired_page_ids.is_some()
         || side.starred_page_ids.is_some()

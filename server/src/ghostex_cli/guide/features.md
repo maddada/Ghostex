@@ -4110,7 +4110,9 @@ before reopening the conversation in Terminal-based mode. On a Terminal-based ch
 agents, chat-first users also see a dismissible **Switch to Native** chip in the
 chat pill strip (and a **Switch to Native** item in the chat box's `•••` menu);
 confirming optionally sets Native as the default for new chats with that agent,
-and clicking mid-reply queues the switch until the reply finishes.
+and clicking while the agent is busy queues the switch: the chip reads **Switching to
+Native**, its tooltip (tap its info icon on the phone) says what it waits for (the reply,
+background work or queued messages, or your answer), and its `×` cancels it.
 A running Terminal-based chat that switches to Native keeps the mode it was in: Claude
 Code's Auto, Accept edits or Bypass permissions, or Codex's Approve for me or Full
 permissions, become the Native chat's Auto, Auto-edits or Full permissions. A chat in

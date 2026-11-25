@@ -86,6 +86,7 @@ pub fn apply_state_frame(
     }
     if let Some(queued) = frame.state.switch_to_native_queued {
         state.session.switch_to_native_queued = queued;
+        state.session.switch_to_native_wait = frame.state.switch_to_native_wait.clone();
     }
     if let Some(ids) = frame.state.removed_question_ids.clone() {
         *state.session.removed_question_ids = ids;
@@ -220,6 +221,7 @@ pub fn apply_agent_identity(state: &mut ChatState, patch: &AgentIdentity) {
         session.unavailable_modes = Vec::new();
         session.non_cli_mode = false;
         session.switch_to_native_queued = false;
+        session.switch_to_native_wait = None;
         *session.removed_question_ids = Vec::new();
         session.retired_page_ids = Vec::new();
         session.starred_page_ids = Vec::new();
@@ -700,6 +702,7 @@ pub fn apply_authoritative(
     }
     if let Some(queued) = result.state.switch_to_native_queued {
         state.session.switch_to_native_queued = queued;
+        state.session.switch_to_native_wait = result.state.switch_to_native_wait.clone();
     }
     if let Some(ids) = result.state.removed_question_ids.clone() {
         *state.session.removed_question_ids = ids;

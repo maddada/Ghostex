@@ -335,6 +335,7 @@ pub(crate) mod tests {
             }]),
             non_cli_mode: Some(flag),
             switch_to_native_queued: Some(!flag),
+            switch_to_native_wait: Some(format!("wait {tag}")),
             removed_question_ids: Some(vec![format!("removed {tag}")]),
             retired_page_ids: Some(vec![format!("retired page {tag}")]),
             starred_page_ids: Some(vec![format!("starred page {tag}")]),

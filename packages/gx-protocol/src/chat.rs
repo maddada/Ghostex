@@ -466,6 +466,11 @@ pub struct ChatSideState {
     /// Absent means unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub switch_to_native_queued: Option<bool>,
+    /// What that queued switch waits on: `"reply"`, `"background"` (queued messages or background
+    /// work) or `"answer"` (an approval or question). Absent or null means unknown (older
+    /// gxserver, or none queued).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub switch_to_native_wait: Option<String>,
     /// The question forms and pages the user removed without answering (form or page ids,
     /// server/src/session_chat_open_questions.rs): no longer counted as waiting. Absent means
     /// unchanged.
