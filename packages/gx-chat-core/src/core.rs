@@ -482,16 +482,25 @@ impl ChatCore {
         // CDXC:SessionChat 2026-11-10 WHY: the probe (the whole document assembled again at the published clock) only answers whether the state moved, and that answer is read twice below: by the gate, which a requested publish or moved parts pass anyway, and by the panel clock, which a render, a quiet action or a first publish decide on their own. When both are decided it is not built, which left one assembly instead of two on most events of a working chat (a frame asks for a render).
         let decided = (requested || parts_moved)
             && (rendered || self.state.core.quiet_action || !self.published_once);
+        let mut probe = None;
         let state_moved = decided || {
-            let mut probe = assemble_with(
+            let mut assembled = assemble_with(
                 &self.state,
                 &self.published_context,
                 &mut self.assemble_cache,
             );
             // `probe.reactive() != self.document.reactive()` without copying both documents: the
-            // one key `reactive` blanks is made equal on the probe, which is dropped right after.
-            probe.async_questions = self.document.async_questions.clone();
-            probe != self.document
+            // one key `reactive` blanks is made equal on the probe, and given back if it is kept.
+            let async_questions = std::mem::replace(
+                &mut assembled.async_questions,
+                self.document.async_questions.clone(),
+            );
+            let moved = assembled != self.document;
+            if moved {
+                assembled.async_questions = async_questions;
+                probe = Some(assembled);
+            }
+            moved
         };
         if !requested && !parts_moved && !state_moved {
             return;
@@ -500,12 +509,26 @@ impl ChatCore {
         // where `nativeAccountPanel` reads the clock; one that did not (a fleet tick, a backfill
         // batch, an action's close) ships the last render's panel.
         let quiet = std::mem::take(&mut self.state.core.quiet_action);
+        let panel_clock = self.state.menus.panel_clock_ms;
         if rendered || (state_moved && !quiet) || !self.published_once {
             // The LAST render of the call is the one that published, and a call that renders
             // twice (a page answer, then the loading flag) reads its panel clock twice.
             self.state.menus.panel_clock_ms = Some(self.context.clock_read(usize::MAX));
         }
-        let document = assemble_with(&self.state, &self.context, &mut self.assemble_cache);
+        // CDXC:SessionChat 2026-11-26 WHY: a chat that settles several answers in one drive runs
+        // them within the same millisecond, and each one assembled the document twice: the probe
+        // at the published clock, then the document at this turn's. When the two clocks read the
+        // same and the panel clock stayed put, the probe IS that document (`assemble_with` reads
+        // only the state and these context fields), so it is kept instead of built again.
+        let same_clock = self.state.menus.panel_clock_ms == panel_clock
+            && self.context.now_ms == self.published_context.now_ms
+            && self.context.utc_offset_minutes == self.published_context.utc_offset_minutes
+            && self.context.clock_reads == self.published_context.clock_reads
+            && self.context.formatted_times == self.published_context.formatted_times;
+        let document = match probe {
+            Some(probe) if same_clock => probe,
+            _ => assemble_with(&self.state, &self.context, &mut self.assemble_cache),
+        };
         // The rows only change when the projection rebuilt (`transcript::rows` hands back its
         // list), so without a rebuild the list already held is kept: copying it and comparing it
         // row by row on every publish was most of a keystroke's cost on a long chat.

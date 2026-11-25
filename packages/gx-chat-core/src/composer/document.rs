@@ -19,7 +19,7 @@ use crate::composer::queue::{
     is_queue_row_busy, queue_capabilities, queue_row_more, queue_row_preview, QUEUE_LONG_PRESS_MS,
 };
 use crate::composer::suggestions::{composer_native_command, suggestion_popup};
-use crate::composer::view::{current_matches, suggestion_sources};
+use crate::composer::view::{composer_sources, current_matches};
 use crate::document::{
     ComposerActions, Document, Draft, Interaction, InterruptToast, Queue, QueuedPrompt,
 };
@@ -56,7 +56,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         None => Tri::Null,
     };
 
-    let sources = suggestion_sources(state);
+    let sources = composer_sources(state);
     let matches = current_matches(state, &sources);
     let popup = suggestion_popup(
         &matches,

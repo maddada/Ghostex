@@ -343,6 +343,9 @@ action_kinds! {
     ComputerRetry => "computerRetry",
     Refresh => "refresh",
     LoadEarlier => "loadEarlier",
+    // The reader is back at the newest rows: older history paged in may be let go
+    // (`session::actions::release_history`).
+    ReleaseHistory => "releaseHistory",
     LoadWork => "loadWork",
 }
 

@@ -6,7 +6,9 @@
 
 use crate::action::{ActionKind, UserAction};
 use crate::effect::Effect;
+use crate::session::constants::RELEASE_HISTORY_ABOVE;
 use crate::session::events::resubscribe;
+use crate::session::pagination::{page_has_more, PageBoundary};
 use crate::session::reads::{issue_read, request_resync};
 use crate::state::{ChatContext, ChatState, LoadEarlierRequest, ReadKind};
 
@@ -34,6 +36,12 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         // in a read result, because no frame carries those fields.
         ActionKind::Refresh => request_resync(state, context),
         ActionKind::LoadEarlier => load_earlier(state, context),
+        ActionKind::ReleaseHistory => {
+            if release_history(state) {
+                state.core.request_publish();
+            }
+            Vec::new()
+        }
         ActionKind::ComputerRetry => crate::session::computer::retry(state),
         _ => Vec::new(),
     }
@@ -65,6 +73,71 @@ pub fn load_earlier(state: &mut ChatState, context: &ChatContext) -> Vec<Effect>
         ReadKind::Page,
         Some(before_offset),
     )]
+}
+
+/// Drops the older history "Load earlier" (or a jump read) paged in above the live window, for a
+/// reader back at the newest rows; the "Load earlier" cursor goes back to where the live window
+/// starts, so scrolling up pages the same history in again. Says whether anything was dropped.
+///
+/// CDXC:SessionChat 2026-11-26 WHY: paged-in history was kept for as long as the chat was, and
+/// nothing gave it back: a coordinator chat scrolled to its top once held 8,307 messages and
+/// 852 MB and rebuilt all of them on the chat engine's one thread whenever its rows moved, which
+/// is what made Enter take 170 ms to register in every chat. The renderer asks for this when its
+/// list starts following the tail again (desktop `native_chat/pagination.rs`). Only a prefix of
+/// more than [`RELEASE_HISTORY_ABOVE`] rows goes, and never while a page read, Find in chat or a
+/// "Go to chat" is using it. The rows kept are the live window as the fold holds it, which is
+/// exactly what a chat opened afresh holds, and its cursor is the fold's, as a re-read that does
+/// not overlap the prefix leaves it (`apply_authoritative`).
+pub fn release_history(state: &mut ChatState) -> bool {
+    let messages = &state.messages;
+    if messages.loading_earlier
+        || messages.load_earlier_request.is_some()
+        || state.extras.search.open
+        || state.questions.resource_go.is_some()
+    {
+        return false;
+    }
+    let Some(folded) = messages.snapshot.as_ref() else {
+        return false;
+    };
+    let Some(at) = folded
+        .rows
+        .first()
+        .and_then(|first| messages.index_by_id.get(&first.id).copied())
+    else {
+        return false;
+    };
+    if at <= RELEASE_HISTORY_ABOVE {
+        return false;
+    }
+    let window = PageBoundary {
+        message_count: folded.rows.len(),
+        has_more: folded.result.has_more,
+        has_more_exact: folded.result.has_more_exact,
+        before_offset: folded.result.before_offset,
+    };
+    let kept = messages.list[at..].to_vec();
+    let released: Vec<String> = messages.list[..at]
+        .iter()
+        .map(|row| row.id.clone())
+        .collect();
+    let messages = &mut state.messages;
+    messages.replace_list(&kept);
+    messages.new_composition_identity();
+    messages.has_more = page_has_more(window, None);
+    messages.before_offset = window.before_offset;
+    messages.history_epoch = None;
+    messages.history_prefix_count = 0;
+    messages.island_loaded = false;
+    // The window may start inside a turn; its boundary fill already ran for this cursor when the
+    // chat opened, and running it again would page in what was just let go.
+    messages.boundary_attempt = Some(window.before_offset);
+    // The projection's per-message models are the bulk of what those rows held.
+    let projected = &mut state.transcript_view.projected;
+    for id in &released {
+        projected.remove(id);
+    }
+    true
 }
 
 /// A jump read: the window of history that ends just before `before_offset`, merged into the rows

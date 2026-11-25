@@ -366,6 +366,9 @@ pub(crate) struct NativeChatView {
     /// When the reader last scrolled the transcript, the only thing that shows its scrollbar.
     /// `instant::Instant` because gpui-component's scrollbar takes that type; it is std's on native and a browser clock on wasm32.
     pub(super) transcript_scrolled_at: Option<instant::Instant>,
+    /// Whether the list was following its tail when last asked, so older history is let go once
+    /// per return to the newest rows (pagination.rs).
+    pub(super) history_release_following: bool,
     /// Whether the last render drew the "Scroll to bottom" pill (scroll_bottom.rs).
     pub(super) scroll_bottom_drawn: std::rc::Rc<std::cell::Cell<bool>>,
     input_needs_sync: bool,
@@ -820,6 +823,7 @@ impl NativeChatView {
             window_width: 0.0,
             scrollbar_track: Default::default(),
             transcript_scrolled_at: None,
+            history_release_following: false,
             scroll_bottom_drawn: Default::default(),
             input_needs_sync: false,
             input_placeholder: String::new(),

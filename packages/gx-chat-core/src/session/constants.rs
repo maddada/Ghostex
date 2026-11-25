@@ -7,6 +7,9 @@
 pub const INITIAL_LIMIT: u32 = 300;
 /// How much one "Load earlier" adds.
 pub const PAGE: u32 = 200;
+/// How many paged-in rows above the live window a reader back at the newest rows keeps before
+/// they are let go (`session::actions::release_history`): five pages.
+pub const RELEASE_HISTORY_ABOVE: usize = 5 * PAGE as usize;
 /// Mirrors gxserver's own clamp in `server/src/session_chat.rs`.
 pub const MAX_LIMIT: u32 = 10_000;
 

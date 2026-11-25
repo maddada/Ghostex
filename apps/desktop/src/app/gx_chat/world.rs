@@ -402,6 +402,7 @@ fn step(world: &mut World, command: Option<HostCommand>) {
                 .into_iter()
                 .collect();
             events.extend(read_aloud::attach(world, &key));
+            events.extend(directory_owed(world, &key));
             events.extend(visibility_moved(world, &key));
             drive(world, &key, events);
         }
@@ -497,9 +498,20 @@ fn step(world: &mut World, command: Option<HostCommand>) {
             } else {
                 activate_view(world, &key, sink);
             }
+            // A chat shown again catches up on the session names it was not handed while off
+            // screen (`directory_pass`) in the drive that shows it.
+            let mut events: Vec<Event> = if paused {
+                Vec::new()
+            } else {
+                directory_owed(world, &key).into_iter().collect()
+            };
             match visibility_moved(world, &key) {
                 // The chat's held clocks catch up in the same turn, and the drive drains it.
-                Some(event) => drive(world, &key, vec![event]),
+                Some(event) => {
+                    events.push(event);
+                    drive(world, &key, events);
+                }
+                None if !events.is_empty() => drive(world, &key, events),
                 // Shown again: everything the view missed, as one drain from the revision it last
                 // had.
                 None if resumed => publish(world, &key, Vec::new()),
@@ -632,10 +644,7 @@ fn settings_moved(
 /// keeps their clocks running.
 fn visibility_moved(world: &World, key: &str) -> Option<Event> {
     let hidden = world.store.get(key)?.core.state().core.hidden;
-    let shown = world
-        .views
-        .get(key)
-        .is_some_and(|views| views.iter().any(|view| !view.sink.paused));
+    let shown = shown(world, key);
     (shown == hidden).then_some(Event::Visibility { shown })
 }
 
@@ -682,47 +691,96 @@ fn directory_pass(world: &mut World) {
     // turn of every retained chat, each of which builds a document. Only the `+` picker reads
     // those live fields, so a chat is handed them at most every `LIVE_DIRECTORY_EVERY`, and only
     // while one of its views is on screen; a name, which the transcript reads, still goes at once
-    // to every chat.
+    // to every chat on screen.
+    // CDXC:SessionChat 2026-11-26 WHY: a name also went at once to every chat OFF screen, and the
+    // warm pool keeps up to 24 of them attached (`session_chat_prewarm.rs`): each creation or
+    // rename anywhere rebuilt the transcript rows of all of them, thousands of rows each on a
+    // coordinator's chat, on the one chat engine thread that also takes the user's Enter. A chat
+    // with no view on screen draws nothing and takes no clicks, so it is handed the list when one
+    // of its views is shown (`directory_owed`, in the same drive that shows it); a chat on screen
+    // still gets a name at once and the live fields every `LIVE_DIRECTORY_EVERY`.
     let now = Instant::now();
     let stale: Vec<String> = world
         .store
         .keys()
         .into_iter()
-        .filter(|key| match world.directory_sent.get(key) {
-            None => true,
-            Some(sent) if sent.names_revision != names_revision => true,
-            Some(sent) => {
-                sent.revision != revision
-                    && now.saturating_duration_since(sent.at) >= LIVE_DIRECTORY_EVERY
-                    && world
-                        .views
-                        .get(key)
-                        .is_some_and(|views| views.iter().any(|view| !view.sink.paused))
-            }
-        })
         .filter(|key| {
-            world
-                .store
-                .get(key)
-                .is_some_and(|retained| retained.core.state().core.controller_started)
+            shown(world, key) && directory_stale(world, key, revision, names_revision, now)
         })
         .collect();
     for key in stale {
-        world.directory_sent.insert(
-            key.clone(),
-            DirectorySent {
-                revision,
-                names_revision,
-                at: now,
-            },
-        );
-        world.driving = Some(key.clone());
-        let event = Event::SessionDirectoryChanged {
-            sessions: (*sessions).clone(),
+        let Some(event) = directory_event(world, &key, revision, names_revision, &sessions) else {
+            continue;
         };
+        world.driving = Some(key.clone());
         drive(world, &key, vec![event]);
     }
     world.driving = None;
+}
+
+/// The session list a chat about to be shown has not been handed yet, so the drive that shows it
+/// draws the current names (`directory_pass` skips the chats off screen).
+fn directory_owed(world: &mut World, key: &str) -> Option<Event> {
+    let (revision, names_revision, sessions) = super::session_directory::current_named();
+    if revision == 0 || !directory_stale(world, key, revision, names_revision, Instant::now()) {
+        return None;
+    }
+    directory_event(world, key, revision, names_revision, &sessions)
+}
+
+/// Whether a chat's copy of the list is behind: a name moved, or only the live fields did and the
+/// last copy is `LIVE_DIRECTORY_EVERY` old.
+fn directory_stale(
+    world: &World,
+    key: &str,
+    revision: u64,
+    names_revision: u64,
+    now: Instant,
+) -> bool {
+    match world.directory_sent.get(key) {
+        None => true,
+        Some(sent) if sent.names_revision != names_revision => true,
+        Some(sent) => {
+            sent.revision != revision
+                && now.saturating_duration_since(sent.at) >= LIVE_DIRECTORY_EVERY
+        }
+    }
+}
+
+/// Records the list as handed to one started chat and builds the event that hands it.
+fn directory_event(
+    world: &mut World,
+    key: &str,
+    revision: u64,
+    names_revision: u64,
+    sessions: &[ghostex_gx_chat_core::KnownSession],
+) -> Option<Event> {
+    let started = world
+        .store
+        .get(key)
+        .is_some_and(|retained| retained.core.state().core.controller_started);
+    if !started {
+        return None;
+    }
+    world.directory_sent.insert(
+        key.to_string(),
+        DirectorySent {
+            revision,
+            names_revision,
+            at: Instant::now(),
+        },
+    );
+    Some(Event::SessionDirectoryChanged {
+        sessions: sessions.to_vec(),
+    })
+}
+
+/// Whether any of a chat's views is on screen (attached and not paused).
+fn shown(world: &World, key: &str) -> bool {
+    world
+        .views
+        .get(key)
+        .is_some_and(|views| views.iter().any(|view| !view.sink.paused))
 }
 
 /// Hands every chat whose copy is older the computer its session runs on (`computers.rs`). A chat

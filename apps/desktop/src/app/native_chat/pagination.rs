@@ -21,6 +21,7 @@ impl NativeChatView {
     /// that is still short or still near the top continues without another
     /// wheel event.
     pub(super) fn load_earlier_if_near_top(&mut self, cx: &mut Context<Self>) {
+        self.release_history_at_tail(cx);
         if self.snapshot["hasMore"] != true || self.snapshot["loadingEarlier"] == true {
             return;
         }
@@ -35,6 +36,18 @@ impl NativeChatView {
         if offset < px(LOAD_EARLIER_SCROLL_TOP_PX * scale) {
             self.invoke(json!({"type":"loadEarlier"}), cx);
         }
+    }
+
+    /// Once each time the list starts following its tail again, the core may let go of the older
+    /// history paged in above its live window (`release_history` in gx-chat-core): the reader is
+    /// at the newest rows, so the head of the list leaves while nothing on screen moves, and
+    /// scrolling back up pages it in again as before.
+    fn release_history_at_tail(&mut self, cx: &mut Context<Self>) {
+        let following = self.list.is_following_tail() && self.list.item_count() > 0;
+        if std::mem::replace(&mut self.history_release_following, following) || !following {
+            return;
+        }
+        self.invoke(json!({"type":"releaseHistory"}), cx);
     }
 
     /// The identities of the row the reader's scroll position is anchored in (its own, then every

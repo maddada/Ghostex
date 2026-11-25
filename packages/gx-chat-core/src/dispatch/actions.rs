@@ -41,6 +41,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         ActionKind::Retry
         | ActionKind::Refresh
         | ActionKind::LoadEarlier
+        | ActionKind::ReleaseHistory
         | ActionKind::ComputerRetry => Family::Session,
 
         ActionKind::RowDetails
