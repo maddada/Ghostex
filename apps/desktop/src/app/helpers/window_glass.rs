@@ -941,6 +941,20 @@ pub(crate) fn apply_frosted_menu_blur(window: &gpui::Window) {
     );
 }
 
+/// `apply_frosted_menu_blur` for the page window's ⋯ menu and its Snooze lengths, whose raised
+/// glass blurs a quarter more again (`RAISED_MENU_BLUR_SCALE`, CDXC:SessionChat 2026-11-25 in
+/// `window/visual_page_modal/more_menu_panel.rs`), so the Menu blur slider still scales it.
+pub(crate) fn apply_raised_menu_blur(window: &gpui::Window) {
+    window.set_background_blur_style(
+        gpui::px(frosted_menu_blur_value() * FROSTED_SURFACE_BLUR_SCALE * RAISED_MENU_BLUR_SCALE),
+        FROSTED_MENU_KEEP_SATURATION,
+    );
+}
+
+/// How much more than the other frosted surfaces the page window's ⋯ menu blurs: the mockup the
+/// user picked drew today's menu at a 24px blur and option A at 30px.
+const RAISED_MENU_BLUR_SCALE: f32 = 1.25;
+
 /// `apply_frosted_menu_blur` for a tooltip bubble's window: the Menu blur value itself.
 pub(crate) fn apply_frosted_tooltip_blur(window: &gpui::Window) {
     window.set_background_blur_style(

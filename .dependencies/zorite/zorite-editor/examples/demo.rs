@@ -2,10 +2,9 @@
 //!
 //! Run with: `cargo run -p zorite-editor --example demo`.
 //!
-//! Wires the editor to the real OS spell checker (M6): misspelled words get red
-//! squiggles, and right-clicking one offers the system's suggestions. Type to
-//! watch the squiggles update live — the editor emits [`EditorEvent::Changed`]
-//! on each edit, and we re-run the checker in response.
+//! Local change: upstream wires the editor to the OS spell checker through its
+//! `os-spellcheck` crate, which isn't vendored here, so this copy runs without
+//! spell-check squiggles or suggestions.
 
 use gpui::{
     App, AppContext, Bounds, Context, Entity, Focusable, InteractiveElement, IntoElement,
@@ -13,15 +12,14 @@ use gpui::{
     Styled, Subscription, Window, WindowBounds, WindowOptions, actions, div, font, hsla, px, rgb,
     size,
 };
-use os_spellcheck::SpellChecker;
-use zorite_editor::{Diagnostic, EditorEvent, EditorState, SyntaxStyle};
+use zorite_editor::{EditorEvent, EditorState, SyntaxStyle};
 
 actions!(demo, [Quit]);
 
 struct Demo {
     editor: Entity<EditorState>,
     /// Held so the change subscription keeps firing for the window's lifetime.
-    _spell_sub: Subscription,
+    _link_sub: Subscription,
     /// Lets the seeded content (taller than the window) scroll.
     scroll: ScrollHandle,
 }
@@ -53,8 +51,6 @@ impl Render for Demo {
     }
 }
 
-/// Run the OS spell checker over `text` and turn the misspellings into editor
-/// diagnostics (the byte ranges + suggestions map across one-to-one).
 /// A dark-theme palette for the live-preview markdown styling.
 fn demo_markdown_style() -> SyntaxStyle {
     SyntaxStyle {
@@ -90,14 +86,6 @@ fn demo_markdown_style() -> SyntaxStyle {
     }
 }
 
-fn diagnostics_for(text: &str) -> Vec<Diagnostic> {
-    SpellChecker::new()
-        .check(text)
-        .into_iter()
-        .map(|range| Diagnostic { range })
-        .collect()
-}
-
 fn main() {
     gpui_platform::application().run(|cx: &mut App| {
         zorite_editor::bind_keys(cx);
@@ -127,8 +115,7 @@ fn main() {
                             task\n\n![](docs/report.pdf)\n\n---\n\nA footnote reference[^1], a \
                             [reference link][ref], and <mark>highlighted</mark> text.\n\n\
                             [^1]: The footnote definition, shown muted.\n\
-                            [ref]: https://example.com\n\nSpell-check still flags mispelled \
-                            wrds; right-click one for suggestions.\n\nStriped:\n\
+                            [ref]: https://example.com\n\nStriped:\n\
                             <!-- table:striped -->\n| Name | Role | Score |\n| :-- | :--: | --: |\n\
                             | Ada | Engineer | 99 |\n| Linus | Kernel | 88 |\n\
                             | Grace | Compiler | 95 |\n\nHeader:\n<!-- table:header -->\n\
@@ -142,10 +129,7 @@ fn main() {
                 });
                 window.focus(&editor.read(cx).focus_handle(cx), cx);
 
-                // Lazy suggestion provider (consulted on right-click) + an
-                // initial detection pass over the seeded text.
                 editor.update(cx, |editor, cx| {
-                    editor.on_suggest(|word| SpellChecker::new().suggestions(word));
                     editor.set_markdown_style(demo_markdown_style(), cx);
                     // A toy syntax highlighter, to demo the hook: real hosts
                     // plug in an engine (Zorite passes gpui-component's
@@ -175,27 +159,22 @@ fn main() {
                         src.ends_with(".pdf")
                             .then(|| SharedString::from(src.rsplit('/').next().unwrap_or(src)))
                     });
-                    editor.set_diagnostics(diagnostics_for(text), cx);
                 });
 
-                // Re-check on every edit; log chip opens.
+                // Log chip opens.
                 let editor_handle = editor.clone();
                 cx.new(|cx| {
-                    let _spell_sub = cx.subscribe(
+                    let _link_sub = cx.subscribe(
                         &editor_handle,
-                        |_demo: &mut Demo, editor, event: &EditorEvent, cx| {
+                        |_demo: &mut Demo, _editor, event: &EditorEvent, _cx| {
                             if let EditorEvent::OpenLink(src) = event {
                                 eprintln!("open link: {src}");
-                                return;
                             }
-                            let text = editor.read(cx).text().to_string();
-                            let diagnostics = diagnostics_for(&text);
-                            editor.update(cx, |editor, cx| editor.set_diagnostics(diagnostics, cx));
                         },
                     );
                     Demo {
                         editor,
-                        _spell_sub,
+                        _link_sub,
                         scroll: ScrollHandle::new(),
                     }
                 })

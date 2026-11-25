@@ -1,5 +1,9 @@
 pub(crate) mod terminal_content_layout;
 pub(crate) mod window_drag_region;
+/// The header Commit pill's summary (the desktop's render/workarea_header/git_summary.rs); the rest of the desktop's header is native-only.
+pub(crate) mod workarea_header {
+    pub(crate) mod git_summary;
+}
 /// The measurements and the icon of the desktop's terminal action bar; the bar itself is drawn here until the desktop's file can be compiled here.
 #[allow(dead_code)]
 pub(crate) mod terminal_agent_action_bar {

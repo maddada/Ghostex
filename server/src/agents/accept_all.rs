@@ -127,8 +127,10 @@ pub(crate) fn apply_accept_all_spec(
 }
 
 /// Apply the per-agent Auto permission mode to a Terminal-based launch command (`acceptAllMode: "auto"`):
-/// Claude gets `--permission-mode auto`, Codex gets `--approve-for-me`, unless the command already
-/// specifies an explicit permission/approval flag. Other agents are returned unchanged.
+/// Claude gets `--permission-mode auto`, Codex gets `--approve-for-me`, Antigravity gets `--mode auto`
+/// (its own Auto, not the skip-all `--dangerously-skip-permissions`; CDXC:AgentProviders 2026-11-25
+/// in the desktop's settings_modal/tabs/agents/model.rs `auto_permission_family`), unless the command
+/// already specifies an explicit permission/approval flag. Other agents are returned unchanged.
 pub(crate) fn apply_auto_permission_mode(
     command: &str,
     agent_id: &str,
@@ -139,7 +141,7 @@ pub(crate) fn apply_auto_permission_mode(
         return String::new();
     }
     let resolved = match agent_id {
-        "claude" | "openclaude" | "codex" => Some(agent_id),
+        "claude" | "openclaude" | "codex" | "antigravity" => Some(agent_id),
         _ => icon.and_then(default_agent_icon_to_id),
     };
     let tokens: Vec<&str> = trimmed.split_whitespace().collect();
@@ -175,6 +177,18 @@ pub(crate) fn apply_auto_permission_mode(
                 trimmed.to_string()
             } else {
                 format!("{trimmed} --approve-for-me")
+            }
+        }
+        Some("antigravity") => {
+            let names_mode = tokens.iter().any(|token| {
+                *token == "--mode"
+                    || token.starts_with("--mode=")
+                    || *token == "--dangerously-skip-permissions"
+            });
+            if names_mode {
+                trimmed.to_string()
+            } else {
+                format!("{trimmed} --mode auto")
             }
         }
         _ => trimmed.to_string(),

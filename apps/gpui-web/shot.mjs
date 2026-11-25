@@ -178,8 +178,19 @@ try {
       const key = parts.pop();
       const bits = { Alt: 1, Control: 2, Meta: 4, Shift: 8 };
       const modifiers = parts.reduce((sum, name) => sum | (bits[name] ?? 0), 0);
-      await send('Input.dispatchKeyEvent', { type: 'keyDown', key, code: key, modifiers });
-      await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code: key, modifiers });
+      // A letter or digit carries its real code (`KeyC`, `Digit1`) and key code, or a chord such as `Meta+c` matches no binding.
+      const character = /^[a-z0-9]$/i.test(key) ? key.toUpperCase() : null;
+      const event = character
+        ? {
+            type: 'rawKeyDown',
+            key,
+            code: /\d/.test(character) ? `Digit${character}` : `Key${character}`,
+            windowsVirtualKeyCode: character.charCodeAt(0),
+            nativeVirtualKeyCode: character.charCodeAt(0),
+          }
+        : { type: 'keyDown', key, code: key };
+      await send('Input.dispatchKeyEvent', { ...event, modifiers });
+      await send('Input.dispatchKeyEvent', { ...event, type: 'keyUp', modifiers });
     } else if (kind === 'eval') {
       await send('Runtime.evaluate', { expression: value, awaitPromise: true });
     } else if (kind === 'print') {

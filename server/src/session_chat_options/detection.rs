@@ -435,9 +435,10 @@ fn acp_terminal_notice(
         "Native mode skipped extra flags or environment settings from this agent's command. Switch to Terminal if you need them.",
     )
     .with_details(Some(ignored))
-    .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
-        "Switch to Terminal",
-    )])
+    .with_actions(vec![
+        SessionChatTerminalNoticeAction::switch_to_terminal("Switch to Terminal"),
+        crate::acp::ignored_flags::never_show_action(),
+    ])
     .with_input_blocking(false);
     if let Some(created_at) = session
         .and_then(|s| s.get("createdAt"))

@@ -54,7 +54,10 @@ pub(crate) async fn restart(
             return crate::accounts::quota_wait::answer_dismiss(state, params).await
         }
         Some(crate::acp::ignored_flags::ACTION_DISMISS) => {
-            return crate::acp::ignored_flags::answer_dismiss(state, params).await
+            return crate::acp::ignored_flags::answer_dismiss(state, params, false).await
+        }
+        Some(crate::acp::ignored_flags::ACTION_NEVER_SHOW) => {
+            return crate::acp::ignored_flags::answer_dismiss(state, params, true).await
         }
         Some(crate::coordinators::CARRY_ON_STOPPED_THREADS) => {
             return crate::coordinators::answer_stopped_threads(state, params, true).await

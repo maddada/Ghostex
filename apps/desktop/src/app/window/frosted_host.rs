@@ -62,6 +62,11 @@ pub(crate) const SIDEBAR_MENU_HOST_LEVELS: u8 = 4;
 /// The corner radius of a sidebar menu panel's window (the panel's own 8px at 100% zoom).
 pub(crate) const SIDEBAR_MENU_HOST_RADIUS: f32 = 8.0;
 
+/// The corner radius of the page window's ⋯ menu and its Snooze lengths, which their windows'
+/// blur takes too: `MENU_RADIUS` in `visual_page_modal/more_menu_panel.rs`, which the GPUI web
+/// build does not compile.
+const PAGE_WINDOW_MENU_HOST_RADIUS: f32 = 12.0;
+
 /// Whether a sidebar menu panel drawn alone in its host window takes that window's whole height
 /// rather than its own, so nothing of the window shows below it.
 ///
@@ -388,10 +393,11 @@ fn open_host(
                 // window is simply rounded to the panel's corners.
                 FrostedHostKind::SidebarMenu(_)
                 | FrostedHostKind::BoardCardMenu
-                | FrostedHostKind::PageWindowMenu
-                | FrostedHostKind::PageWindowSubmenu
                 | FrostedHostKind::NotificationsMenu => {
                     window.set_background_corner_radius(gpui::px(SIDEBAR_MENU_HOST_RADIUS))
+                }
+                FrostedHostKind::PageWindowMenu | FrostedHostKind::PageWindowSubmenu => {
+                    window.set_background_corner_radius(gpui::px(PAGE_WINDOW_MENU_HOST_RADIUS))
                 }
                 FrostedHostKind::DocsSelectionToolbar => {
                     window.set_background_corner_radius(gpui::px(DOCS_SELECTION_TOOLBAR_RADIUS))
@@ -431,14 +437,31 @@ fn open_host(
     .ok()
 }
 
-/// A tooltip bubble keeps the Menu blur value; every other host takes the frosted surfaces' 25%
-/// more (CDXC:AppModal 2026-10-29 on `frosted_dialog_fill`).
+/// A tooltip bubble keeps the Menu blur value; the page window's ⋯ menu and its Snooze lengths
+/// take its raised glass's stronger blur (CDXC:SessionChat 2026-11-25 in
+/// `visual_page_modal/more_menu_panel.rs`); every other host takes the frosted surfaces' 25% more
+/// (CDXC:AppModal 2026-10-29 on `frosted_dialog_fill`).
 fn apply_host_blur(window: &Window, kind: FrostedHostKind) {
-    if kind == FrostedHostKind::Tooltip {
-        crate::app::helpers::apply_frosted_tooltip_blur(window);
-    } else {
-        crate::app::helpers::apply_frosted_menu_blur(window);
+    match kind {
+        FrostedHostKind::Tooltip => crate::app::helpers::apply_frosted_tooltip_blur(window),
+        FrostedHostKind::PageWindowMenu | FrostedHostKind::PageWindowSubmenu => {
+            crate::app::helpers::apply_raised_menu_blur(window)
+        }
+        _ => crate::app::helpers::apply_frosted_menu_blur(window),
     }
+}
+
+/// Whether `kind`'s window casts a shadow: the page window's ⋯ menu and its Snooze lengths, whose
+/// raised glass floats above the page. Every other host stays flat.
+///
+/// CDXC:SessionChat 2026-11-25 WHY:
+/// The user's pick for that menu (option A) has a soft 40px shadow, but its panel fills a window of its own, and a shadow drawn in that window would need a transparent margin around the panel that takes the page's clicks. macOS draws a window's own shadow outside its frame instead, following the panel's rounded corners, and takes no clicks there.
+#[cfg_attr(not(all(target_os = "macos", not(ghostex_web))), allow(dead_code))]
+fn host_casts_shadow(kind: FrostedHostKind) -> bool {
+    matches!(
+        kind,
+        FrostedHostKind::PageWindowMenu | FrostedHostKind::PageWindowSubmenu
+    )
 }
 
 pub(crate) struct FrostedHostView {
@@ -462,6 +485,12 @@ impl Render for FrostedHostView {
         // (CDXC:Theming 2026-10-15 on `apply_frosted_menu_blur`).
         #[cfg(all(target_os = "macos", not(ghostex_web)))]
         apply_host_blur(window, self.kind);
+        // A window's shadow is worked out from what it drew, so it is cast again after each frame
+        // (the menu's rows change, the window is reused at another size).
+        #[cfg(all(target_os = "macos", not(ghostex_web)))]
+        if host_casts_shadow(self.kind) {
+            window.on_next_frame(|window, _| recast_host_shadow(window));
+        }
         // A sidebar menu's host hands its tooltips (the New Orchestrator… (i)) to the frosted
         // tooltip window, attached above this one, so the bubble is neither clipped to the menu's
         // window nor drawn under it.
@@ -610,6 +639,7 @@ fn attach_host_window(window: &mut Window, parent: *mut std::ffi::c_void, kind: 
             parent: *mut std::ffi::c_void,
         );
         fn GhostexGpuiSetWindowIgnoresMouse(view: *mut std::ffi::c_void, ignores: bool);
+        fn GhostexGpuiSetWindowCastsShadow(view: *mut std::ffi::c_void, casts: bool);
         fn GhostexGpuiSetWindowIdentifier(
             view: *mut std::ffi::c_void,
             identifier: *const std::ffi::c_char,
@@ -622,11 +652,25 @@ fn attach_host_window(window: &mut Window, parent: *mut std::ffi::c_void, kind: 
             // non-opaque window it sees as transparent, which is how clicks on the frosted menu's
             // rows fell through to the sidebar underneath.
             GhostexGpuiSetWindowIgnoresMouse(view, ignores_mouse);
+            if host_casts_shadow(kind) {
+                GhostexGpuiSetWindowCastsShadow(view, true);
+            }
             if matches!(kind, FrostedHostKind::SidebarMenu(_)) {
                 // The sidebar's outside-click monitor must not read a press here as leaving the menu.
                 GhostexGpuiSetWindowIdentifier(view, c"ghostex.frostedSidebarMenu".as_ptr());
             }
         }
+    }
+}
+
+/// Works the host's shadow out again from what it drew last (`host_casts_shadow`).
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
+fn recast_host_shadow(window: &Window) {
+    unsafe extern "C" {
+        fn GhostexGpuiSetWindowCastsShadow(view: *mut std::ffi::c_void, casts: bool);
+    }
+    if let Some(view) = native_view(window) {
+        unsafe { GhostexGpuiSetWindowCastsShadow(view, true) };
     }
 }
 

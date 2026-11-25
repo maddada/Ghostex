@@ -43,6 +43,26 @@ pub(super) struct SecretRequestInputs {
     last_composer_press: Option<web_time::Instant>,
 }
 
+/// Cmd+C while a card's masked field has the keyboard copies the text selected in the window (the
+/// card's reason, a message) instead.
+///
+/// CDXC:Secrets 2026-11-25 WHY:
+/// #752: selecting the reason hands the keyboard back to the masked field (CDXC:Secrets 2026-11-19 above), and the masked field swallows Copy without copying, so the selection could never be copied. The field never copies its own value, so this can only copy text already on screen.
+fn copy_selection_over_secret_field(
+    _: &gpui_component::input::Copy,
+    window: &mut Window,
+    cx: &mut gpui::App,
+) {
+    let selection = gpui_component::TextSelection::selected_text(window, cx)
+        .trim()
+        .to_owned();
+    if selection.is_empty() {
+        return;
+    }
+    cx.stop_propagation();
+    crate::app::helpers::gpui_copy_to_clipboard(gpui::ClipboardItem::new_string(selection), cx);
+}
+
 /// How long the chat's window must have been inactive for its return to count as coming back to
 /// the app: the chat's own popup windows (the suggestions list) take the key window for a moment.
 const AWAY_AT_LEAST: std::time::Duration = std::time::Duration::from_millis(300);
@@ -308,19 +328,33 @@ impl NativeChatView {
         let has_text = !input.read(cx).value().trim().is_empty();
         let error = text(card, "error");
         let mut body = vec![
-            // A reason can carry a long link; it breaks anywhere rather than widening the card.
+            // CDXC:Secrets 2026-11-25 WHY:
+            // #752: the reason was plain text, so it could not be selected or copied and a web address in it could not be clicked. It is drawn by the chat's own message text view (`text_view_look`), which selects, copies and opens links the way a message does; the masked field below is unchanged.
             div()
                 .w_full()
                 .min_w_0()
-                .text_color(p.foreground)
-                .whitespace_normal()
-                .child(text(card, "reason"))
+                .child(self.text_view_look(
+                    format!("secret-request-reason:{id}"),
+                    text(card, "reason"),
+                    &Value::Null,
+                    p,
+                    super::rich_markdown::TextLook {
+                        color: p.foreground,
+                        semibold: false,
+                        size: 14.0,
+                        line_height: 21.0,
+                        arrow: false,
+                        quiet_links: false,
+                    },
+                    cx,
+                ))
                 .into_any_element(),
             div()
                 .id(gpui::SharedString::from(format!(
                     "secret-request-field:{id}"
                 )))
                 .w_full()
+                .capture_action(copy_selection_over_secret_field)
                 .child(
                     Input::new(&input)
                         .disabled(busy)

@@ -364,9 +364,14 @@ impl SessionChatOptionDetector {
                     detected.activity = Some(stream.clone());
                 }
             }
+            // Only grid-scraped `agent-stream` probes (`stream: Some(...)`) need multi-grid
+            // stitching via `merge_agent_stream`. Structured Native (`acp-host`) stream activities
+            // already carry the accumulated turn text in `text` with `stream: None`; passing them
+            // to `merge_agent_stream` would drop them on `current.stream.take() == None`.
             if detected.activity.as_ref().is_some_and(|activity| {
                 activity.kind
                     == crate::session_chat_terminal_activity::SESSION_CHAT_ACTIVITY_AGENT_STREAM
+                    && activity.stream.is_some()
             }) {
                 let mut activity = detected.activity.take().unwrap();
                 if crate::session_chat_terminal_activity::merge_agent_stream(

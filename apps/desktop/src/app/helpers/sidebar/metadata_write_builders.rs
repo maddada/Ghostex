@@ -38,8 +38,8 @@ pub(crate) fn gpui_sidebar_agent_metadata_write_from_command(
                 None => GpuiAgentAcceptAllModeUpdate::Preserve,
                 Some(value) => match value.as_str() {
                     Some("inherit") => GpuiAgentAcceptAllModeUpdate::Set(None),
-                    // `auto` is Settings > Agents > Permission mode "Auto" (Claude Code and Codex,
-                    // 7201b1a22); gxserver's `sidebar_agent_accept_all_mode_update` takes the same
+                    // `auto` is Settings > Agents > Permission mode "Auto" (Claude Code, Codex and
+                    // Antigravity, 7201b1a22); gxserver's `sidebar_agent_accept_all_mode_update` takes the same
                     // four values, so the desktop must not refuse one the server stores.
                     Some("enabled") | Some("disabled") | Some("auto") => {
                         GpuiAgentAcceptAllModeUpdate::Set(value.as_str().map(str::to_string))

@@ -41,7 +41,11 @@ pub(crate) struct LineMove {
 
 /// Where the line holding `offset` starts.
 fn line_start(text: &str, offset: usize) -> usize {
-    text[..offset].rfind('\n').map_or(0, |newline| newline + 1)
+    // On the bytes, so a caret inside a character can't panic here.
+    text.as_bytes()[..offset.min(text.len())]
+        .iter()
+        .rposition(|byte| *byte == b'\n')
+        .map_or(0, |newline| newline + 1)
 }
 
 /// Where the content of the line that starts at `start` ends, and how long its line break is

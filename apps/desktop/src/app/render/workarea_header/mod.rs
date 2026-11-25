@@ -11,6 +11,7 @@ pub(crate) mod band;
 pub(crate) mod box_chip;
 pub(crate) mod breadcrumb;
 pub(crate) mod claude_cloud_button;
+pub(crate) mod git_summary;
 pub(crate) mod header_pins;
 pub(crate) mod jobs_button;
 pub(crate) mod overlap;

@@ -3290,10 +3290,12 @@ mod tests {
     fn heading_nested_in_list_item() {
         // A heading right after a list marker scales like a top-level heading
         // (`- ### Hi` nests like the reading view's AST does), not like plain text.
-        assert_eq!(line_scale("### Hi"), 1.3);
-        assert_eq!(line_scale("- ### Hi"), 1.3);
-        assert_eq!(line_scale("  - ## Hi"), 1.5);
-        assert_eq!(line_scale("1. # Hi"), 1.8);
+        // Local change: compared with the bare heading instead of upstream's numbers, since
+        // `line_scale` carries the Docs heading scale.
+        assert!(line_scale("### Hi") > 1.0);
+        assert_eq!(line_scale("- ### Hi"), line_scale("### Hi"));
+        assert_eq!(line_scale("  - ## Hi"), line_scale("## Hi"));
+        assert_eq!(line_scale("1. # Hi"), line_scale("# Hi"));
         // Plain list text (no heading) is unaffected.
         assert_eq!(line_scale("- not a heading"), 1.0);
 

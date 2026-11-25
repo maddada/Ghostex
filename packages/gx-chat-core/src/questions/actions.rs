@@ -598,7 +598,10 @@ fn answer_prompt(state: &mut ChatState, answer: &Value) -> Vec<Effect> {
                 || answer.get("pickerRow").is_some()
                 || closes_dialog(answer)))
         || (kind == "restartAgent"
-            && answer.get("actionId").and_then(Value::as_str) == Some("dismissUsageLimit"))
+            && matches!(
+                answer.get("actionId").and_then(Value::as_str),
+                Some("dismissUsageLimit" | "neverShowIgnoredFlags")
+            ))
     {
         state.questions.answered_notice_key = state.questions.active_notice_key.clone();
     }

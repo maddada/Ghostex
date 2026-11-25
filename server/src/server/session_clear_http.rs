@@ -204,14 +204,15 @@ fn screen_refusal(
     None
 }
 
-/// What the route does once its checks pass: answer that the session is waking, or type the
-/// command and answer with `result`.
+/// What the route does once its checks pass: answer that the session is waking, type the
+/// command and answer with `result`, or hand the command to a Native session's host.
 enum Prepared {
     Waking(Value),
     Type {
         job: crate::zmx::ZmxQueuedSessionMessage,
         result: Value,
     },
+    Native(Value),
 }
 
 fn prepare_clear(
@@ -262,7 +263,10 @@ fn prepare_clear(
             format!("The conversation was not cleared. {reason}"),
         ));
     }
-    if let Some(refusal) = (!daemon_missing)
+    // A Native session's terminal shows Ghostex's host, never the agent's input box: its host is
+    // asked instead, once the command goes (`clear_native`).
+    let native = crate::acp::session_is_acp(&session);
+    if let Some(refusal) = (!daemon_missing && !native)
         .then(|| screen_refusal(state, repository, &agent, project_id, session_id))
         .flatten()
     {
@@ -297,6 +301,17 @@ fn prepare_clear(
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
+    if native {
+        return Ok(Prepared::Native(json!({
+            "ok": true,
+            "projectId": project_id,
+            "sessionId": session_id,
+            "agent": agent,
+            "command": command,
+            "delivery": "sent",
+            "previousAgentSessionId": (!previous.is_empty()).then_some(previous),
+        })));
+    }
     let mut send = Map::new();
     send.insert("projectId".to_string(), json!(project_id));
     send.insert("sessionId".to_string(), json!(session_id));
@@ -390,6 +405,96 @@ fn record_clear(
     );
 }
 
+/// CDXC:SessionChat 2026-11-25 WHY:
+/// GitHub #755: every Native session was refused ("The claude input box is not on screen yet"):
+/// the screen check reads the agent's input box off the terminal, and a Native session's terminal
+/// runs Ghostex's host instead. Its host is asked instead: it must be up and say it is neither
+/// working nor waiting on an approval or question (read just before, as the screen is for a
+/// Terminal-based session), and then the same `/clear` goes over the Native channel, which
+/// Claude Code's stream-json answers with a new conversation and Codex's host turns into a new
+/// thread (acp/driver_codex_clear.rs). The other checks are the ones above, for both modes.
+async fn clear_native(
+    state: &AppState,
+    caller: &Principal,
+    result: Value,
+) -> Result<Value, DomainStateError> {
+    let (project_id, session_id, command) = (
+        result["projectId"].as_str().unwrap_or_default(),
+        result["sessionId"].as_str().unwrap_or_default(),
+        result["command"].as_str().unwrap_or_default(),
+    );
+    let not_ready = |message: &str| {
+        refused(
+            INPUT_BOX_NOT_READY,
+            format!("The conversation was not cleared. {message}"),
+        )
+    };
+    if crate::acp::channel::live(project_id, session_id, "send").is_none() {
+        return Err(not_ready("It is still starting. Try again in a moment."));
+    }
+    let snapshot = crate::acp::channel::request(
+        project_id,
+        session_id,
+        "state",
+        json!({}),
+        std::time::Duration::from_secs(5),
+    )
+    .await
+    .map_err(|_| not_ready("Its state could not be read. Try again in a moment."))?;
+    if snapshot["working"] != json!(false) {
+        return Err(refused(
+            "agentBusy",
+            "The conversation was not cleared. It is working. Try again once its turn ends.",
+        ));
+    }
+    if snapshot["pendingPermissionCount"].as_u64().unwrap_or(0) > 0
+        || !snapshot["pendingPermission"].is_null()
+    {
+        return Err(refused(
+            "agentBusy",
+            "The conversation was not cleared. It is waiting on the user. Answer it first.",
+        ));
+    }
+    let sent = crate::acp::channel::request(
+        project_id,
+        session_id,
+        "send",
+        json!({ "text": command, "images": [], "interrupt": false }),
+        std::time::Duration::from_secs(60),
+    )
+    .await;
+    use crate::pi_chat_channel::ChannelError;
+    match sent {
+        Ok(_) => {}
+        Err(ChannelError::Failed(message)) if message == "ACP_AGENT_BUSY" => {
+            return Err(refused(
+                "agentBusy",
+                "The conversation was not cleared. It is working. Try again once its turn ends.",
+            ))
+        }
+        Err(ChannelError::Unavailable(_)) => {
+            return Err(not_ready("It is reconnecting. Try again in a moment."))
+        }
+        Err(ChannelError::NoAnswer) => {
+            return Err(refused(
+                "dependencyUnavailable",
+                "The clear was sent but not confirmed. Check the session before trying again.",
+            ))
+        }
+        Err(ChannelError::Failed(message) | ChannelError::Unsupported(message)) => {
+            return Err(refused(
+                "dependencyUnavailable",
+                format!("The conversation was not cleared: {message}"),
+            ))
+        }
+    }
+    crate::session_chat_app_command::record_session_chat_app_command(
+        project_id, session_id, command,
+    );
+    record_clear(state, caller, project_id, session_id, command);
+    Ok(result)
+}
+
 /// `/api/clearSessionConversation`. The checks run off the async workers; the command is then
 /// typed by an awaited job that is never run again (Fable review of 6d5889f7f, finding 3: the
 /// queued job with its retry step answered "sent" before typing, and a job a prompt refused typed
@@ -429,6 +534,7 @@ pub(crate) async fn handle_clear_session_http(
             }
             Err(error) => Err(send_error(error)),
         },
+        Ok(Prepared::Native(result)) => clear_native(state, caller, result).await,
         Err(error) => Err(error),
     };
     match outcome {

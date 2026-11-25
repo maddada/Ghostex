@@ -11,6 +11,29 @@ const MENU_WIDTH: f32 = 240.0;
 const ROW_HEIGHT: f32 = 30.0;
 
 impl GhostexGpuiApp {
+    /// The Git state follows the active project, as the desktop's workspace reconcile does: after
+    /// each store update and each opened session. The header's Commit button draws from it.
+    ///
+    /// CDXC:Git 2026-11-25 WHY:
+    /// A page opened on a session (`?session=`) focuses it before the store has loaded its project,
+    /// so the project's Git scope is unknown at that moment. Recording the project then meant its
+    /// Git state was never read and the Commit button stayed "Commit" until another session was
+    /// opened; the project is recorded only once its read can start.
+    pub(crate) fn web_sync_git_active_project(&mut self, cx: &mut Context<Self>) {
+        let active = self.gpui_app_modal_active_project_id();
+        if active == self.web_host.git_active_project {
+            return;
+        }
+        if active
+            .as_deref()
+            .is_some_and(|project| self.git_scope_for_project(project).is_err())
+        {
+            return;
+        }
+        self.web_host.git_active_project = active;
+        self.gx_store_git_active_project_changed(cx);
+    }
+
     /// The header's Commit button.
     pub(crate) fn web_toggle_git_menu(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         self.web_host.git_menu_open = !self.web_host.git_menu_open;

@@ -395,6 +395,7 @@ impl GhostexGpuiApp {
         if cloud_boxes_changed {
             self.gx_store_sync_cloud_boxes(cx);
         }
+        self.web_sync_git_active_project(cx);
         // A draft whose first message started its agentbox box leaves Chat View (gx-core's
         // `session_chat_view_unavailable`), so its terminal is attached as the rule flips.
         if let Some(session) = self.open_session.clone()

@@ -281,9 +281,15 @@ impl NativeChatView {
         // A focused text field takes Copy itself, so a transcript selection left over from
         // before counts only while no field has focus. The selection check walks every
         // transcript text block, so it runs only while the menu can reach this view at all.
+        // A card's masked field copies the window's selection instead (secret_request.rs
+        // `copy_selection_over_secret_field`).
+        let over_secret_field = field == Some(false)
+            && self.secret_field_focused(window, cx)
+            && gpui_component::TextSelection::has_selection(window, cx);
         ChatEditMenu {
             copy: draft
                 || field_selection
+                || over_secret_field
                 || (!self.composer_focused
                     && field.is_none()
                     && self.surface_focus.contains_focused(window, cx)

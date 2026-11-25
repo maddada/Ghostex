@@ -77,13 +77,20 @@ impl GpuiVisualPageModalWindow {
                 let counts = question_counts(&status);
                 let session = page_session(&status);
                 let starred = status["starred"].as_bool();
+                let created = status["createdAtMs"].as_i64();
                 if status["refreshable"] != true && questions_left.is_none() {
                     return;
                 }
                 let changed = status["refreshable"] == true && status["changed"] == true;
                 let updated = this.update(cx, |this, cx| {
-                    if session.is_some() {
+                    if session.is_some() && this.page_session != session {
                         this.page_session = session;
+                        // The menu's Snooze and Star page rows need the page's session.
+                        this.refresh_more_menu(cx);
+                    }
+                    if created.is_some() && this.page_created_ms != created {
+                        this.page_created_ms = created;
+                        this.refresh_more_menu(cx);
                     }
                     if starred.is_some() && this.page_starred != starred {
                         this.page_starred = starred;
@@ -111,8 +118,13 @@ impl GpuiVisualPageModalWindow {
         cx: &mut Context<Self>,
     ) {
         if self.questions_left != left || self.question_counts != counts {
+            let snooze_changed = self.questions_left != left;
             self.questions_left = left;
             self.question_counts = counts;
+            if snooze_changed {
+                // The menu offers Snooze only while a question waits.
+                self.refresh_more_menu(cx);
+            }
             (self.host)(VisualPageModalCommand::TabChanged, cx);
         }
     }

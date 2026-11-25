@@ -16,8 +16,15 @@ const MAX_DETAIL_CHARS: usize = 2_000;
 const MAX_COMMAND_CHARS: usize = 2_000;
 const MAX_ANSWER_CHARS: usize = 2_000;
 const MAX_ANSWERS: usize = 6;
-/// Open to-dos one session may hold; an agent that needs more is better off asking in one.
-const MAX_OPEN: usize = 12;
+/// Open to-dos one session may hold.
+///
+/// CDXC:Notifications 2026-11-25 DECISION:
+/// GitHub #755 (a lead's 13th to-do was refused). User: "please allow more. no need for 12 limit."
+/// A ceiling stays only as a guard against an agent stuck in a loop: the open to-dos live in the
+/// session's `runtimeSettings` (up to about 16 KB each with detail, command and answers), which
+/// every session save and every chat frame carries, so it is set where no one doing real work
+/// reaches it. Supersedes the 12 of 2026-11-16.
+const MAX_OPEN: usize = 100;
 /// Settled to-dos kept for `needs-you list --all`, newest last.
 const SETTLED_KEEP: usize = 20;
 
