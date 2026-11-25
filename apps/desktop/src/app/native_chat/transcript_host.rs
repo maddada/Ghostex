@@ -58,7 +58,16 @@ impl NativeChatView {
             if self.transcript_loading_stage(&state).is_some() {
                 return self.render_loading_hold(&state, &p, cx);
             }
-            self.render_empty_transcript_region(&state, &p, cx)
+            // The welcome centres in the room above the floating chat box (`composer_overlap`).
+            div()
+                .flex_1()
+                .min_h_0()
+                .w_full()
+                .flex()
+                .flex_col()
+                .pb(px(self.composer_overlap))
+                .child(self.render_empty_transcript_region(&state, &p, cx))
+                .into_any_element()
         } else {
             let transcript = list(
                 self.list.clone(),

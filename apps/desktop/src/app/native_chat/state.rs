@@ -570,8 +570,14 @@ pub(crate) struct NativeChatView {
     pub(super) composer_host: Option<Entity<super::composer_host::ComposerHost>>,
     /// The loading hold and the fade that ends it (transcript_reveal.rs).
     pub(super) transcript_reveal: super::transcript_reveal::TranscriptReveal,
-    /// The composer tween's bottom inset for the row list, computed once per chat render.
+    /// The composer tween's bottom inset for the row list, computed once per chat render, plus
+    /// `composer_overlap`.
     pub(super) transcript_inset: f32,
+    /// How far the chat box floats over the bottom of the transcript (the box and everything
+    /// stacked with it, as last drawn), so the rows can end above it (render.rs).
+    pub(super) composer_overlap: f32,
+    /// The floating chat box's height as its last paint measured it.
+    pub(super) composer_overlap_measured: std::rc::Rc<std::cell::Cell<f32>>,
     /// The transcript minimap's dashes, hover and measured column (minimap.rs).
     pub(super) minimap: super::minimap::MinimapState,
     /// The subagent viewer's list, kept apart so opening it never disturbs the main transcript's scroll.
@@ -903,6 +909,8 @@ impl NativeChatView {
             composer_host: None,
             transcript_reveal: Default::default(),
             transcript_inset: 0.0,
+            composer_overlap: 0.0,
+            composer_overlap_measured: Default::default(),
             minimap: Default::default(),
             subagent_list,
             subagent_focus: cx.focus_handle(),

@@ -85,6 +85,9 @@ static ART_WORK_AREA_PERCENT: AtomicU8 = AtomicU8::new(88);
 struct ReadyArt {
     key: ArtKey,
     image: Arc<RenderImage>,
+    /// The same artwork blurred, grained and at half size, for glass surfaces over it
+    /// (`window_art_frosted`).
+    frosted: Arc<RenderImage>,
     #[cfg(not(ghostex_web))]
     preview: ArtPreview,
 }
@@ -560,10 +563,10 @@ fn encode_art_preview(rgba: &image::RgbaImage) -> ArtPreview {
 /// in its style (`stylise_artwork`). An artwork is WebP; Your image is any picture format
 /// gxserver accepted (server/src/theme/art.rs), scaled to [`YOUR_IMAGE_MAX_SIDE`].
 #[cfg(not(ghostex_web))]
-type DecodedArtwork = (Arc<RenderImage>, ArtPreview);
+type DecodedArtwork = (Arc<RenderImage>, Arc<RenderImage>, ArtPreview);
 
 #[cfg(ghostex_web)]
-type DecodedArtwork = Arc<RenderImage>;
+type DecodedArtwork = (Arc<RenderImage>, Arc<RenderImage>);
 
 fn decode_artwork(
     bytes: &[u8],
@@ -593,26 +596,26 @@ fn decode_artwork(
         rgba = image::imageops::fast_blur(&rgba, f32::from(blur) * 1.5);
     }
     stylise_artwork(&mut rgba, tone, light);
-    // The preview is a JPEG, which has no transparency: the dots go on the work area colour first.
-    #[cfg(not(ghostex_web))]
-    let preview = {
-        let mut flat = rgba.clone();
-        let base = [
-            (tone.base >> 16) as u8,
-            (tone.base >> 8) as u8,
-            tone.base as u8,
-        ];
-        for pixel in flat.pixels_mut() {
-            let a = f32::from(pixel.0[3]) / 255.0;
-            for channel in 0..3 {
-                let under = f32::from(base[channel]);
-                pixel.0[channel] =
-                    (under + (f32::from(pixel.0[channel]) - under) * a).round() as u8;
-            }
-            pixel.0[3] = 255;
+    // The preview (a JPEG, which has no transparency) and the frosted copy start from the artwork
+    // laid on the work area colour.
+    let mut flat = rgba.clone();
+    let base = [
+        (tone.base >> 16) as u8,
+        (tone.base >> 8) as u8,
+        tone.base as u8,
+    ];
+    for pixel in flat.pixels_mut() {
+        let a = f32::from(pixel.0[3]) / 255.0;
+        for channel in 0..3 {
+            let under = f32::from(base[channel]);
+            pixel.0[channel] = (under + (f32::from(pixel.0[channel]) - under) * a).round() as u8;
         }
-        encode_art_preview(&flat)
-    };
+        pixel.0[3] = 255;
+    }
+    #[cfg(not(ghostex_web))]
+    let preview = encode_art_preview(&flat);
+    let frosted = frost_artwork(&flat);
+    drop(flat);
     // GPUI RenderImage expects BGRA.
     for pixel in rgba.pixels_mut() {
         pixel.0.swap(0, 2);
@@ -620,12 +623,98 @@ fn decode_artwork(
     let image = Arc::new(RenderImage::new(vec![image::Frame::new(rgba)]));
     #[cfg(not(ghostex_web))]
     {
-        Some((image, preview))
+        Some((image, frosted, preview))
     }
     #[cfg(ghostex_web)]
     {
-        Some(image)
+        Some((image, frosted))
     }
+}
+
+/// The frosted copy's blur (in pixels of the half-size copy, so about 15 points on screen for a
+/// 2560-pixel artwork on a 1920-point window) and its grain (luma steps either way).
+const FROST_BLUR: f32 = 10.0;
+const FROST_GRAIN: f32 = 6.0;
+
+/// `flat` (the artwork on the work area colour) at half size, blurred and lightly grained, as the
+/// BGRA bitmap a glass surface draws behind itself so it reads as frosted glass over the artwork.
+fn frost_artwork(flat: &image::RgbaImage) -> Arc<RenderImage> {
+    let (width, height) = ((flat.width() / 2).max(1), (flat.height() / 2).max(1));
+    let small = image::imageops::resize(flat, width, height, image::imageops::FilterType::Triangle);
+    let mut soft = image::imageops::fast_blur(&small, FROST_BLUR);
+    for (x, y, pixel) in soft.enumerate_pixels_mut() {
+        let hash =
+            (x.wrapping_mul(374_761_393) ^ y.wrapping_mul(668_265_263)).wrapping_mul(1_274_126_177);
+        let grain = (((hash >> 16) & 0xff) as f32 / 255.0 * 2.0 - 1.0) * FROST_GRAIN;
+        for channel in 0..3 {
+            pixel.0[channel] = (f32::from(pixel.0[channel]) + grain)
+                .round()
+                .clamp(0.0, 255.0) as u8;
+        }
+        pixel.0[3] = 255;
+        pixel.0.swap(0, 2);
+    }
+    Arc::new(RenderImage::new(vec![image::Frame::new(soft)]))
+}
+
+/// The frosted copy of the artwork on screen and its dimming, for a glass surface over it (the chat
+/// box, native_chat/composer.rs), or `None` without an artwork or while it loads. Draw it where the
+/// artwork itself is drawn (the window, cropped to fill) clipped to the surface, then the dimming
+/// in the work area colour, then the surface's own tint.
+pub(crate) struct FrostedArt {
+    pub(crate) image: Arc<RenderImage>,
+    pub(crate) dim: f32,
+}
+
+pub(crate) fn window_art_frosted() -> Option<FrostedArt> {
+    if !window_art_active() {
+        return None;
+    }
+    let choice = (*WINDOW_ART.lock().ok()?)?;
+    let decoded = DECODED.lock().ok()?;
+    let ready = decoded.ready.as_ref()?;
+    (ready.key == choice.key()).then(|| FrostedArt {
+        image: ready.frosted.clone(),
+        dim: f32::from(choice.dim) / 100.0,
+    })
+}
+
+/// A dark, blurred glass backdrop for a surface over the artwork, rounded by `radius`: the frosted
+/// artwork lined up with the original, its dimming, black smoke (dark mode) and the work area
+/// colour over it, the way the chat box draws its glass (`composer_frost_layer` in
+/// native_chat/composer.rs). `None` without an artwork. Put it first in the surface (`relative`).
+///
+/// CDXC:Workarea 2026-11-25 DECISION:
+/// User, of the floating sidebar card showing the artwork straight through it: "add a bg to the sidebar man why transparent", "a drak tint blured", then "keep the same amount of transperancy for both". Over an artwork the card is dark frosted glass exactly like the chat box (the sidebar and the rail paint no tint of their own over it); otherwise it takes the sidebar's own solid colour (`render_sidebar_card` in native_sidebar/host.rs).
+pub(crate) fn frosted_glass_backdrop(
+    radii: gpui::Corners<gpui::Pixels>,
+    light: bool,
+) -> Option<AnyElement> {
+    let frost = window_art_frosted()?;
+    let base = crate::app::helpers::workspace_background_color().opacity(1.0);
+    let smoke = gpui::black().opacity(if light { 0.0 } else { 0.6 });
+    let tint = base.opacity(0.6);
+    Some(
+        gpui::canvas(
+            |_, _, _| {},
+            move |bounds, _, window, _| {
+                let whole = gpui::Bounds {
+                    origin: gpui::point(gpui::px(0.0), gpui::px(0.0)),
+                    size: window.viewport_size(),
+                };
+                let placed = ObjectFit::Cover.get_bounds(whole, frost.image.size(0));
+                let _ = window.paint_image(bounds, placed, radii, frost.image.clone(), 0, false);
+                for fill in [base.opacity(frost.dim), smoke, tint] {
+                    window.paint_quad(gpui::fill(bounds, fill).corner_radii(radii));
+                }
+            },
+        )
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full()
+        .into_any_element(),
+    )
 }
 
 /// The artwork's bytes from gxserver, which downloads it the first time (server/src/theme/art.rs):
@@ -703,14 +792,20 @@ fn artwork_image(choice: ArtChoice, cx: &mut App) -> Option<Arc<RenderImage>> {
                 let entry = ReadyArt {
                     key,
                     image: result.0,
-                    preview: result.1,
+                    frosted: result.1,
+                    preview: result.2,
                 };
                 #[cfg(ghostex_web)]
-                let entry = ReadyArt { key, image: result };
+                let entry = ReadyArt {
+                    key,
+                    image: result.0,
+                    frosted: result.1,
+                };
                 decoded.ready.replace(entry)
             };
             if let Some(previous) = previous {
                 cx.drop_image(previous.image, None);
+                cx.drop_image(previous.frosted, None);
             }
             cx.refresh_windows();
         });

@@ -1008,11 +1008,22 @@ impl NativeChatView {
             self.set_where_pill_shows_project(false, cx);
             None
         } else {
-            let strip = self.render_pills_strip(p, cx);
+            let strip = self.render_pills_strip(p, true, cx);
             let shows = self.where_pill_project_in_strip();
             self.set_where_pill_shows_project(shows, cx);
             strip
         };
+        let frost_layer = self.composer_frost_layer(p, s);
+        let frosted = frost_layer.is_some();
+        // The pills ride in a tray tucked behind the box's top edge (`composer_pills_tray`).
+        let tray = pills_strip.map(|strip| self.composer_pills_tray(strip, frosted, p, s));
+        let has_tray = tray.is_some();
+        footer = footer.children(tray.map(|tray| {
+            div()
+                .when(!maximized, |this| this.mt(px(lead_in * s)))
+                .child(tray)
+                .into_any_element()
+        }));
         footer = footer.child(
             div()
                 .relative()
@@ -1020,22 +1031,37 @@ impl NativeChatView {
                 .flex_col()
                 .w_full()
                 .min_w_0()
-                .when(!maximized, |this| this.mt(px(lead_in * s)))
+                .when(!maximized && !has_tray, |this| this.mt(px(lead_in * s)))
+                // First, so everything in the box draws over its glass.
+                .children(frost_layer)
                 .child(suggestion_anchor)
                 .rounded(px(22.0 * s))
                 .border_1()
                 .border_color(p.composer_border)
+                // The glass draws its own edge over its picture (`composer_frost_layer`).
+                .when(frosted, |this| {
+                    this.border_color(gpui::transparent_black()).shadow(vec![
+                        gpui::BoxShadow::new(px(0.0), px(10.0 * s), gpui::black().opacity(0.35))
+                            .blur_radius(px(28.0 * s)),
+                    ])
+                })
                 // A sidebar session row held over the box shows where its link goes: the box
                 // takes the focus ring (composer_drop.rs), with no split zones over the pane.
-                .when(self.composer_drop_hover, |this| {
+                .when(self.composer_drop_hover && !frosted, |this| {
                     this.border_color(p.ring).shadow(vec![
                         gpui::BoxShadow::new(px(0.0), px(0.0), p.ring.opacity(0.2))
                             .spread_radius(px(3.0 * s)),
                     ])
                 })
-                .bg(p.composer_background)
+                // The rows scroll on behind the box (`render_floating_composer` in render.rs), so
+                // under window glass, where its own fill is a faint wash, it takes the chat's opaque
+                // fill for cards over content.
+                .bg(if frosted {
+                    gpui::transparent_black()
+                } else {
+                    p.over_content_fill(p.composer_background)
+                })
                 .when(maximized, |this| this.flex_1().min_h_0())
-                .children(pills_strip)
                 .child(
                     div()
                         .relative()
@@ -1088,6 +1114,145 @@ impl NativeChatView {
         self.composer_row()
             .when(maximized, |this| this.h_full().min_h_0())
             .child(footer)
+            .into_any_element()
+    }
+
+    /// The chat box's frosted glass while an art theme's artwork shows: the artwork's blurred,
+    /// grained copy drawn exactly where the artwork itself is (the window, cropped to fill) and
+    /// clipped to the box's rounded shape, the artwork's dimming, a see-through tint of the work
+    /// area colour, a soft light sheen from the top and a hairline edge (the focus ring's colour
+    /// while a session row is held over the box). `None` without an artwork, and the box keeps its
+    /// solid fill.
+    ///
+    /// CDXC:Theming 2026-11-25 DECISION:
+    /// User, of the chat box over an ASCII or Dither artwork: "revamp tis to be glasmorphic and a litle svg filter blut kind of thing". No platform blurs one part of a window over another (CDXC:Theming 2026-11-20 on `over_content_fill` in appearance.rs), but the artwork is Ghostex's own bitmap, so the box draws a pre-blurred, grained copy of it (`window_art_frosted` in helpers/window_art.rs) lined up with the original, which reads as frosted glass over it.
+    fn composer_frost_layer(&self, p: &ChatAppearance, s: f32) -> Option<gpui::AnyElement> {
+        let frost = crate::app::helpers::window_art_frosted()?;
+        let radius = px(22.0 * s);
+        let base = crate::app::helpers::workspace_background_color().opacity(1.0);
+        let tint = base.opacity(0.6);
+        // Dark mode's glass is smoked nearly solid, black first and the theme's colour over it, so
+        // only a hint of the blurred artwork shows (user: "keep it black tinted? and theme tinted",
+        // then, of a near-solid dark chat box: "like this man black or theme").
+        let smoke = gpui::black().opacity(if p.light { 0.0 } else { 0.6 });
+        let edge = if self.composer_drop_hover {
+            p.ring
+        } else if p.light {
+            gpui::black().opacity(0.08)
+        } else {
+            gpui::white().opacity(0.08)
+        };
+        let sheen = gpui::white().opacity(if p.light { 0.35 } else { 0.04 });
+        Some(
+            gpui::canvas(
+                |_, _, _| {},
+                move |bounds, _, window, _| {
+                    let whole = gpui::Bounds {
+                        origin: gpui::point(px(0.0), px(0.0)),
+                        size: window.viewport_size(),
+                    };
+                    let placed = gpui::ObjectFit::Cover.get_bounds(whole, frost.image.size(0));
+                    let radii = gpui::Corners::all(radius);
+                    let _ =
+                        window.paint_image(bounds, placed, radii, frost.image.clone(), 0, false);
+                    window.paint_quad(
+                        gpui::fill(bounds, base.opacity(frost.dim)).corner_radii(radii),
+                    );
+                    window.paint_quad(gpui::fill(bounds, smoke).corner_radii(radii));
+                    window.paint_quad(gpui::fill(bounds, tint).corner_radii(radii));
+                    window.paint_quad(
+                        gpui::fill(
+                            bounds,
+                            gpui::linear_gradient(
+                                180.0,
+                                gpui::linear_color_stop(sheen, 0.0),
+                                gpui::linear_color_stop(sheen.opacity(0.0), 0.55),
+                            ),
+                        )
+                        .corner_radii(radii),
+                    );
+                    window.paint_quad(gpui::quad(
+                        bounds,
+                        radii,
+                        gpui::transparent_black(),
+                        px(1.0),
+                        edge,
+                        gpui::BorderStyle::default(),
+                    ));
+                },
+            )
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
+            .into_any_element(),
+        )
+    }
+
+    /// The pills' tray: a narrower card behind the chat box, its top showing above the box and
+    /// its bottom tucked under the box's top edge, so the two read as stacked cards. Over an art
+    /// theme's artwork it is the same dark frosted glass as the box.
+    ///
+    /// CDXC:SessionChat 2026-11-25 DECISION:
+    /// User, sketching a narrower card peeking out from behind a wider one: "also this layout for this" (the chat box with its pills strip along its top edge). The pills (Main Hub, Switch to Native, Boost and the rest) leave the box's top band for this tray behind it; the box keeps the field and the toolbar.
+    fn composer_pills_tray(
+        &self,
+        strip: gpui::AnyElement,
+        frosted: bool,
+        p: &ChatAppearance,
+        s: f32,
+    ) -> gpui::AnyElement {
+        const INSET: f32 = 18.0;
+        const TUCK: f32 = 14.0;
+        const RADIUS: f32 = 18.0;
+        let radius = px(RADIUS * s);
+        let glass = frosted
+            .then(|| {
+                crate::app::helpers::frosted_glass_backdrop(
+                    gpui::Corners {
+                        top_left: radius,
+                        top_right: radius,
+                        ..Default::default()
+                    },
+                    p.light,
+                )
+            })
+            .flatten();
+        let edge = if !frosted {
+            p.composer_border
+        } else if p.light {
+            gpui::black().opacity(0.08)
+        } else {
+            gpui::white().opacity(0.08)
+        };
+        div()
+            .relative()
+            .mx(px(INSET * s))
+            // Under the box: the footer's 8px gap and the tuck.
+            .mb(px(-(8.0 + TUCK) * s))
+            .pb(px(TUCK * s))
+            .rounded_t(radius)
+            .border_1()
+            .border_color(edge)
+            .overflow_hidden()
+            .when(glass.is_none(), |tray| {
+                tray.bg(p.over_content_fill(p.composer_background))
+            })
+            .children(glass)
+            // A faint lift, so the tray reads as the card behind the box.
+            .child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .bg(if p.light {
+                        gpui::black().opacity(0.03)
+                    } else {
+                        gpui::white().opacity(0.03)
+                    }),
+            )
+            .child(strip)
             .into_any_element()
     }
 
