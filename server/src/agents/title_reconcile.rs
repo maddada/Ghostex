@@ -193,10 +193,14 @@ pub(crate) fn reconcile_agent_metadata_title(
     }
     // A Native agent's own title must not overwrite a name the user set by hand in Ghostex
     // (same rule Terminal-based OpenCode follows in `state_update.rs`).
+    let is_native = metadata_title.provider == "acp-state" || crate::acp::session_is_acp(&session);
+    let user_titled = read_text_from_map(&runtime_settings, "titleSource").as_deref()
+        == Some("user")
+        && session.get("title").and_then(Value::as_str) != Some(metadata_title.title.as_str());
     if !user_requested_title
-        && (metadata_title.provider == "acp-state" || crate::acp::session_is_acp(&session))
+        && is_native
         && session.get("title").and_then(Value::as_str) != Some(metadata_title.title.as_str())
-        && (read_text_from_map(&runtime_settings, "titleSource").as_deref() == Some("user")
+        && (user_titled
             || (read_text_from_map(&runtime_settings, "pendingAgentTitleRequestTitleSource")
                 .as_deref()
                 == Some("user")
@@ -204,12 +208,60 @@ pub(crate) fn reconcile_agent_metadata_title(
                     .as_deref()
                     == Some("pending")))
     {
+        // Keep the agent's current name as the one the user's name stands over, so after a switch
+        // to Terminal-based only a different name from the agent replaces it.
+        let known = user_title_baseline_for(&session, &runtime_settings, metadata_title.provider);
+        if user_titled && known.as_deref() != Some(metadata_title.title.as_str()) {
+            let next = with_user_title_baseline(&session, &runtime_settings, &metadata_title);
+            let mut update = lifecycle_update(lifecycle);
+            update.insert("runtimeSettings".to_string(), Value::Object(next));
+            let updated = repository.update_session(&update)?;
+            if let Some(transaction) = transaction {
+                transaction.commit().map_err(sql_error)?;
+            }
+            return Ok(AgentTitleReconcileResult {
+                changed: false,
+                metadata_title_found: true,
+                reason: "user-title-preserved".to_string(),
+                session: Some(updated),
+            });
+        }
         return Ok(AgentTitleReconcileResult {
             changed: false,
             metadata_title_found: true,
             reason: "user-title-preserved".to_string(),
             session: Some(session),
         });
+    }
+    // CDXC:SessionTitles 2026-11-26 WHY: GitHub #763, a Claude chat renamed in Ghostex took
+    // Claude's own conversation name back once it was switched to Terminal-based, because only
+    // Native sessions kept a name the user typed. A Terminal-based session now keeps it too
+    // while the agent still reports the name it had when the user renamed; a different name
+    // from the agent (a `/rename` typed in the terminal) is newer and still wins.
+    if !user_requested_title && !is_native && user_titled {
+        let known = user_title_baseline_for(&session, &runtime_settings, metadata_title.provider);
+        match known {
+            Some(known) if !titles_match(&known, &metadata_title.title) => {}
+            _ => {
+                let mut session = session;
+                if known.is_none() {
+                    let next =
+                        with_user_title_baseline(&session, &runtime_settings, &metadata_title);
+                    let mut update = lifecycle_update(lifecycle);
+                    update.insert("runtimeSettings".to_string(), Value::Object(next));
+                    session = repository.update_session(&update)?;
+                    if let Some(transaction) = transaction {
+                        transaction.commit().map_err(sql_error)?;
+                    }
+                }
+                return Ok(AgentTitleReconcileResult {
+                    changed: false,
+                    metadata_title_found: true,
+                    reason: "user-title-preserved".to_string(),
+                    session: Some(session),
+                });
+            }
+        }
     }
     // A rename already given up on stays failed until the agent confirms it or the user renames
     // again, so its name is still offered by the next Rename.
@@ -338,6 +390,58 @@ pub(crate) fn reconcile_agent_metadata_title(
         reason: "metadata-title-applied".to_string(),
         session: Some(updated),
     })
+}
+
+/// The agent names a user's title stands over, by metadata provider:
+/// `{"title": <the user's title>, "agentTitles": {<provider>: <agent title>}}`. It counts only
+/// while `title` is still the session's title, so any later rename starts it over.
+const USER_TITLE_AGENT_BASELINE_KEY: &str = "userTitleAgentTitles";
+
+/// The agent's name `provider` reported when the session's current (user) title was last kept.
+fn user_title_baseline_for(
+    session: &Value,
+    runtime_settings: &serde_json::Map<String, Value>,
+    provider: &str,
+) -> Option<String> {
+    let baseline = runtime_settings
+        .get(USER_TITLE_AGENT_BASELINE_KEY)
+        .and_then(Value::as_object)?;
+    let current_title = session.get("title").and_then(Value::as_str)?;
+    if baseline.get("title").and_then(Value::as_str) != Some(current_title) {
+        return None;
+    }
+    baseline
+        .get("agentTitles")
+        .and_then(|titles| titles.get(provider))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+/// `runtime_settings` with `metadata_title` recorded as the agent name the current title stands over.
+fn with_user_title_baseline(
+    session: &Value,
+    runtime_settings: &serde_json::Map<String, Value>,
+    metadata_title: &AgentMetadataTitle,
+) -> serde_json::Map<String, Value> {
+    let current_title = session.get("title").and_then(Value::as_str);
+    let mut agent_titles = runtime_settings
+        .get(USER_TITLE_AGENT_BASELINE_KEY)
+        .and_then(Value::as_object)
+        .filter(|baseline| baseline.get("title").and_then(Value::as_str) == current_title)
+        .and_then(|baseline| baseline.get("agentTitles"))
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    agent_titles.insert(
+        metadata_title.provider.to_string(),
+        json!(metadata_title.title),
+    );
+    let mut next = runtime_settings.clone();
+    next.insert(
+        USER_TITLE_AGENT_BASELINE_KEY.to_string(),
+        json!({ "title": current_title, "agentTitles": agent_titles }),
+    );
+    next
 }
 
 /// Gives up on the user rename requested at `requested_at` when the agent still has not confirmed
