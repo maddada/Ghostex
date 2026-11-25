@@ -2415,7 +2415,9 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     let Some((acp_envs, prog, mut argv)) =
         build_acp_server_argv(spec, parsed.cli_command.as_deref(), &parsed.profile)
     else {
-        eprintln!("Invalid Codex Native command.");
+        let msg = "Invalid Codex Native command.";
+        eprintln!("{msg}");
+        super::host::report_driver_startup_error(endpoint.as_ref(), spec.family, msg, false);
         return 1;
     };
     // Synthesize Ghostex's own server-side Codex flags strictly from `parsed.profile` and Ghostex
@@ -2586,6 +2588,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         Ok(proc) => Some(proc),
         Err(err) => {
             eprintln!("{err}");
+            super::host::report_driver_startup_error(
+                endpoint.as_ref(),
+                spec.family,
+                &err,
+                super::startup_error::looks_like_auth_error(&err),
+            );
             return 1;
         }
     };

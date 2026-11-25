@@ -109,18 +109,20 @@ pub(crate) async fn restart(
         let exited =
             classify_session_chat_terminal_notice(agent.as_deref(), &screen.text).is_some_and(
                 |notice| notice.kind == SESSION_CHAT_NOTICE_AGENT_EXITED || notice.missing_login(),
-            ) || crate::session_chat_start_failure::agent_start_failure(
-                &repository,
-                &target.project_id,
-                &target.session_id,
-                &screen.text,
-            )
-            .is_some();
+            ) || crate::acp::startup_error::get(&target.project_id, &target.session_id).is_some()
+                || crate::session_chat_start_failure::agent_start_failure(
+                    &repository,
+                    &target.project_id,
+                    &target.session_id,
+                    &screen.text,
+                )
+                .is_some();
         if !exited {
             return Err(invalid(
                 "The agent is running in this terminal again, so it was not restarted.",
             ));
         }
+        crate::acp::startup_error::clear(&target.project_id, &target.session_id);
         // Start fresh on "Couldn't find this chat's conversation": the wake starts a new
         // conversation instead of looking the old one up again (`forget_conversation`).
         if start_fresh {

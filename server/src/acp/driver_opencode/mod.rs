@@ -138,6 +138,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         Ok(proc) => Some(proc),
         Err(err) => {
             eprintln!("[OpenCode Native] Startup failed: {err}");
+            super::host::report_driver_startup_error(
+                endpoint.as_ref(),
+                spec.family,
+                &err,
+                super::startup_error::looks_like_auth_error(&err),
+            );
             return 1;
         }
     };

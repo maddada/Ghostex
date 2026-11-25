@@ -94,11 +94,10 @@ impl GrokTransport {
         match rx.recv_timeout(timeout) {
             Ok(resp) => {
                 if let Some(error) = resp.get("error") {
-                    let message = error
-                        .get("message")
-                        .and_then(Value::as_str)
-                        .unwrap_or("Grok Native request failed");
-                    Err(message.to_string())
+                    Err(crate::acp::host::extract_jsonrpc_error_message(
+                        error,
+                        "Grok Native request failed",
+                    ))
                 } else {
                     Ok(resp.get("result").cloned().unwrap_or(Value::Null))
                 }

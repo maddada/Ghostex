@@ -136,6 +136,7 @@ pub(crate) fn mark_approval_sync_needed(project_id: &str, session_id: &str) {
 /// sleeps or closes, so an immediate send does not hit the stale `LIVE_GRACE` window and wait on a
 /// dead host instead of waking the session.
 pub(crate) fn close_for_session(project_id: &str, session_id: &str) {
+    crate::acp::startup_error::clear(project_id, session_id);
     let target = key(project_id, session_id);
     let removed = {
         let mut channels = lock(&CHANNELS);
@@ -309,6 +310,9 @@ async fn poll(
         })
         .unwrap_or_default();
     let is_acp = agent.starts_with("acp:");
+    if is_acp {
+        crate::acp::startup_error::clear(&channel_key.0, &channel_key.1);
+    }
     let agent_for_reconcile = agent.clone();
     let mut newly_registered = false;
     let mut needs_approval_sync = false;
@@ -534,7 +538,50 @@ fn close(params: &Map<String, Value>) -> Result<Value, DomainStateError> {
     Ok(json!({ "closed": true }))
 }
 
-/// `/api/agentChatChannel`: `poll`, `ack` and `close` from the extension.
+fn startup_error(
+    state: &crate::server::AppState,
+    params: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
+    let (project_id, session_id) = channel_key(params)?;
+    let message = read_string(params, "message").ok_or_else(|| {
+        DomainStateError::bad_request("A startup error report needs a non-empty message.")
+    })?;
+    let family = read_string(params, "family")
+        .or_else(|| {
+            read_string(params, "agent").map(|a| a.strip_prefix("acp:").unwrap_or(&a).to_string())
+        })
+        .unwrap_or_default();
+    let is_auth = params
+        .get("isAuth")
+        .and_then(Value::as_bool)
+        .unwrap_or_else(|| crate::acp::startup_error::looks_like_auth_error(&message));
+    crate::acp::startup_error::record(&project_id, &session_id, &family, &message, is_auth);
+    if let Ok(mut cache) = state.session_chat_option_cache.lock() {
+        cache.remove(&crate::server::session_observer_key(
+            &project_id,
+            &session_id,
+        ));
+    }
+    crate::session_chat_options::schedule_session_chat_option_redetect(
+        state,
+        &project_id,
+        &session_id,
+        (!family.is_empty()).then_some(family.as_str()),
+    );
+    log(
+        LogLevel::Warn,
+        "piChatChannel.startupError",
+        json!({
+            "projectId": project_id,
+            "sessionId": session_id,
+            "family": family,
+            "isAuth": is_auth,
+        }),
+    );
+    Ok(json!({ "recorded": true }))
+}
+
+/// `/api/agentChatChannel`: `poll`, `ack`, `close`, `trust` and `startupError`.
 pub(crate) async fn dispatch(
     state: &crate::server::AppState,
     params: &Map<String, Value>,
@@ -544,8 +591,9 @@ pub(crate) async fn dispatch(
         Some("ack") => ack(params),
         Some("close") => close(params),
         Some("trust") => trust(state, params),
+        Some("startupError") => startup_error(state, params),
         _ => Err(DomainStateError::bad_request(
-            "The chat channel action is poll, ack, close or trust.",
+            "The chat channel action is poll, ack, close, trust or startupError.",
         )),
     }
 }

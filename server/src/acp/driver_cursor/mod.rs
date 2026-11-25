@@ -52,6 +52,7 @@ use super::host::{
 use super::spec::{build_acp_server_argv, AcpAgentSpec};
 
 pub(super) const CURSOR_RPC_TIMEOUT: Duration = Duration::from_secs(30);
+const CURSOR_AUTH_TIMEOUT: Duration = Duration::from_secs(5);
 const CURSOR_LOAD_TIMEOUT: Duration = Duration::from_secs(90);
 
 /* ----------------------------------------------------------- entry point */
@@ -73,7 +74,9 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     let isolated_config = match CursorIsolatedConfig::create(&gx_paths) {
         Ok(cfg) => cfg,
         Err(err) => {
-            eprintln!("Failed preparing Cursor Native config: {err}");
+            let msg = format!("Failed preparing Cursor Native config: {err}");
+            eprintln!("{msg}");
+            super::host::report_driver_startup_error(endpoint.as_ref(), spec.family, &msg, false);
             return 1;
         }
     };
@@ -86,7 +89,9 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     let Some((mut acp_envs, prog, argv)) =
         build_acp_server_argv(spec, parsed.cli_command.as_deref(), &parsed.profile)
     else {
-        eprintln!("Invalid Native host command for {}", spec.family);
+        let msg = format!("Invalid Native host command for {}", spec.family);
+        eprintln!("{msg}");
+        super::host::report_driver_startup_error(endpoint.as_ref(), spec.family, &msg, false);
         return 1;
     };
     acp_envs.push((
@@ -109,7 +114,9 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     {
         Ok(child) => child,
         Err(err) => {
-            eprintln!("Failed to start `{prog} {}`: {err}", argv.join(" "));
+            let msg = format!("Failed to start `{prog} {}`: {err}", argv.join(" "));
+            eprintln!("{msg}");
+            super::host::report_driver_startup_error(endpoint.as_ref(), spec.family, &msg, false);
             return 1;
         }
     };
@@ -118,13 +125,17 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     let child_pid_num = child.id();
     let child_pid = Arc::new(AtomicU32::new(child_pid_num));
     let Some(stdin) = child.stdin.take() else {
-        eprintln!("Failed to open stdin pipe to Cursor Native host.");
+        let msg = "Failed to open stdin pipe to Cursor Native host.";
+        eprintln!("{msg}");
+        super::host::report_driver_startup_error(endpoint.as_ref(), spec.family, msg, false);
         super::child_lifetime::force_kill_child(&mut child);
         child_lifetime.cleanup();
         return 1;
     };
     let Some(stdout) = child.stdout.take() else {
-        eprintln!("Failed to open stdout pipe from Cursor Native host.");
+        let msg = "Failed to open stdout pipe from Cursor Native host.";
+        eprintln!("{msg}");
+        super::host::report_driver_startup_error(endpoint.as_ref(), spec.family, msg, false);
         super::child_lifetime::force_kill_child(&mut child);
         child_lifetime.cleanup();
         return 1;
@@ -206,6 +217,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     });
     if let Err(err) = transport.call("initialize", init_params, CURSOR_RPC_TIMEOUT) {
         eprintln!("Cursor Native initialize failed: {err}");
+        super::host::report_driver_startup_error(
+            endpoint.as_ref(),
+            spec.family,
+            &err,
+            is_cursor_auth_error(&err),
+        );
         stop_child_gracefully(&transport, &mut child, &mut child_lifetime, &child_pid);
         return 1;
     }
@@ -263,12 +280,14 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     let open_res = match open_session(parsed.resume_session_id.as_deref()) {
         Ok(pair) => Ok(pair),
         Err(err) if is_cursor_auth_error(&err) => {
-            let _ = transport.call(
+            match transport.call(
                 "authenticate",
                 json!({ "methodId": "cursor_login" }),
-                CURSOR_RPC_TIMEOUT,
-            );
-            open_session(parsed.resume_session_id.as_deref())
+                CURSOR_AUTH_TIMEOUT,
+            ) {
+                Ok(_) => open_session(parsed.resume_session_id.as_deref()),
+                Err(_) => Err(err),
+            }
         }
         Err(err) => {
             // If resuming an un-saved/deleted session id failed, fall back to a fresh session so
@@ -286,7 +305,9 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         Ok(pair) => pair,
         Err(err) => {
             eprintln!("Cursor Native session open failed: {err}");
-            if is_cursor_auth_error(&err) {
+            let is_auth = is_cursor_auth_error(&err);
+            super::host::report_driver_startup_error(endpoint.as_ref(), spec.family, &err, is_auth);
+            if is_auth {
                 let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                 s.last_auth_error = Some(err.clone());
                 s.last_error = Some((Some("unauthorized".to_string()), err));

@@ -303,16 +303,7 @@ fn acp_terminal_notice(
             .and_then(|s| s.get("family"))
             .and_then(Value::as_str)
             .unwrap_or("claude");
-        let agent_label = match family {
-            "codex" => "Codex",
-            "antigravity" => "Antigravity",
-            "opencode" => "OpenCode",
-            "grok" => "Grok Build",
-            "cursor" => "Cursor CLI",
-            "pi" => "Pi Agent",
-            "omp" => "OMP",
-            _ => "Claude Code",
-        };
+        let agent_label = crate::acp::startup_error::agent_label(family);
         return Some(
             SessionChatTerminalNotice::new(
                 crate::session_chat_notice::SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
@@ -350,17 +341,7 @@ fn acp_terminal_notice(
                 .and_then(|s| s.get("family"))
                 .and_then(Value::as_str)
                 .unwrap_or("agent");
-            let agent_label = match family {
-                "codex" => "Codex",
-                "antigravity" => "Antigravity",
-                "claude" => "Claude Code",
-                "opencode" => "OpenCode",
-                "grok" => "Grok Build",
-                "cursor" => "Cursor CLI",
-                "pi" => "Pi Agent",
-                "omp" => "OMP",
-                _ => "Agent",
-            };
+            let agent_label = crate::acp::startup_error::agent_label(family);
             let lower_code = code.unwrap_or_default().to_ascii_lowercase();
             let lower_msg = message.to_ascii_lowercase();
             let (kind, title, detail) = if lower_code.contains("usagelimit")
@@ -1138,7 +1119,46 @@ pub fn detect_session_chat_terminal_state(
                 with_checkout_status(repository, project_id, session_id, agent_id, options);
             let mut detection = SessionChatTerminalDetection::default();
             detection.options = options;
-            detection.notice = acp_terminal_notice(None, Some(&session));
+            let mut startup_failed = false;
+            let mut notice =
+                if let Some(err) = crate::acp::startup_error::get(project_id, session_id) {
+                    startup_failed = true;
+                    Some(crate::acp::startup_error::startup_error_notice(&err))
+                } else {
+                    acp_terminal_notice(None, Some(&session)).or_else(|| {
+                        let zmx_name = session
+                            .get("zmxSessionName")
+                            .and_then(Value::as_str)
+                            .map(str::trim)
+                            .filter(|s| !s.is_empty())?;
+                        if crate::acp::host_process_running(zmx_name) {
+                            return None;
+                        }
+                        let capture = crate::zmx::read_zmx_session_history_capture(
+                            repository, project_id, session_id,
+                        )
+                        .ok()?;
+                        let found = crate::session_chat_start_failure::detect_agent_start_failure(
+                            repository,
+                            project_id,
+                            session_id,
+                            &capture.text,
+                        )?;
+                        startup_failed = true;
+                        Some(found)
+                    })
+                };
+            if let Some(notice) = notice.as_mut() {
+                crate::session_chat_account_sign_in::enrich_notice(
+                    repository, project_id, session_id, notice,
+                );
+            }
+            detection.notice = notice;
+            if startup_failed {
+                detection.captured = true;
+                detection.composer.state =
+                    crate::session_chat_composer::SessionChatComposerState::NotReady;
+            }
             detection.attempted = true;
             return detection;
         }

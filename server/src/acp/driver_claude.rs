@@ -1948,6 +1948,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         Ok(p) => p,
         Err(err) => {
             eprintln!("{err}");
+            super::host::report_driver_startup_error(
+                endpoint.as_ref(),
+                spec.family,
+                &err,
+                super::startup_error::looks_like_auth_error(&err),
+            );
             return 1;
         }
     };

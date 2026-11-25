@@ -93,6 +93,12 @@ pub(in crate::acp) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         Ok(proc) => proc,
         Err(err) => {
             eprintln!("{err}");
+            crate::acp::host::report_driver_startup_error(
+                endpoint.as_ref(),
+                spec.family,
+                &err,
+                crate::acp::startup_error::looks_like_auth_error(&err),
+            );
             return 1;
         }
     };

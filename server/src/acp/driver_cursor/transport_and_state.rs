@@ -102,11 +102,10 @@ impl CursorTransport {
         match rx.recv_timeout(timeout) {
             Ok(resp) => {
                 if let Some(error) = resp.get("error") {
-                    let message = error
-                        .get("message")
-                        .and_then(Value::as_str)
-                        .unwrap_or("Cursor Native request failed");
-                    Err(message.to_string())
+                    Err(super::super::host::extract_jsonrpc_error_message(
+                        error,
+                        "Cursor Native request failed",
+                    ))
                 } else {
                     Ok(resp.get("result").cloned().unwrap_or(Value::Null))
                 }

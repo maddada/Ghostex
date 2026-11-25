@@ -185,17 +185,40 @@ pub(super) fn spawn_and_initialize_grok(
         .unwrap_or_default();
     if !auth_methods.is_empty() {
         let preferred = resolve_grok_auth_method_id();
+        let default_method = init_res
+            .pointer("/_meta/defaultAuthMethodId")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|id| !id.is_empty());
         let method_id = if auth_methods
             .iter()
             .any(|m| m.get("id").and_then(Value::as_str) == Some(preferred))
         {
-            preferred
-        } else {
+            Some(preferred)
+        } else if let Some(default_id) = default_method.filter(|id| {
             auth_methods
+                .iter()
+                .any(|m| m.get("id").and_then(Value::as_str) == Some(*id))
+        }) {
+            Some(default_id)
+        } else {
+            None
+        };
+        let Some(method_id) = method_id else {
+            let detail = auth_methods
                 .first()
-                .and_then(|m| m.get("id"))
-                .and_then(Value::as_str)
-                .unwrap_or(preferred)
+                .and_then(|m| {
+                    m.get("description")
+                        .or_else(|| m.get("name"))
+                        .and_then(Value::as_str)
+                })
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or("Authentication required.");
+            let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+            s.fatal_error = Some(detail.to_string());
+            cleanup_on_err(&transport, &mut child, &mut child_lifetime, child_pid);
+            return Err(detail.to_string());
         };
         if let Err(err) = transport.call(
             "authenticate",
@@ -205,7 +228,7 @@ pub(super) fn spawn_and_initialize_grok(
             let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
             s.fatal_error = Some(err.clone());
             cleanup_on_err(&transport, &mut child, &mut child_lifetime, child_pid);
-            return Err(format!("Grok Native authenticate failed: {err}"));
+            return Err(err);
         }
     }
 

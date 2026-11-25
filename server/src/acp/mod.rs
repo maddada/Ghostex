@@ -38,6 +38,7 @@ pub(crate) mod host_mode_switching;
 mod omp_elicitation;
 pub(crate) mod pending_switch;
 pub(crate) mod spec;
+pub(crate) mod startup_error;
 
 pub use approval::{AcpApprovalLevel, SESSION_ACP_APPROVAL_LEVEL_KEY};
 pub(crate) use child_lifetime::ensure_dead_host_child_stopped;

@@ -70,6 +70,7 @@ pub(super) fn run(spec: &'static AcpAgentSpec, parsed: HostArgs) -> i32 {
         Ok(path) => path,
         Err(err) => {
             eprintln!("{err}");
+            super::host::report_driver_startup_error(endpoint.as_ref(), spec.family, &err, false);
             return 1;
         }
     };
@@ -78,7 +79,9 @@ pub(super) fn run(spec: &'static AcpAgentSpec, parsed: HostArgs) -> i32 {
     let Some((acp_envs, prog, base_argv)) =
         build_acp_server_argv(spec, parsed.cli_command.as_deref(), &parsed.profile)
     else {
-        eprintln!("Invalid Native host command for pi");
+        let msg = "Invalid Native host command for pi";
+        eprintln!("{msg}");
+        super::host::report_driver_startup_error(endpoint.as_ref(), spec.family, msg, false);
         return 1;
     };
     let record_target = endpoint
@@ -111,6 +114,12 @@ pub(super) fn run(spec: &'static AcpAgentSpec, parsed: HostArgs) -> i32 {
                 Ok(pair) => pair,
                 Err(err) => {
                     eprintln!("{err}");
+                    super::host::report_driver_startup_error(
+                        endpoint.as_ref(),
+                        spec.family,
+                        &err,
+                        false,
+                    );
                     return 1;
                 }
             };
@@ -118,13 +127,27 @@ pub(super) fn run(spec: &'static AcpAgentSpec, parsed: HostArgs) -> i32 {
             let Some(stdin) = child.stdin.take() else {
                 super::child_lifetime::force_kill_child(&mut child);
                 lifetime.cleanup();
-                eprintln!("Failed to open stdin pipe to Pi RPC.");
+                let msg = "Failed to open stdin pipe to Pi RPC.";
+                eprintln!("{msg}");
+                super::host::report_driver_startup_error(
+                    endpoint.as_ref(),
+                    spec.family,
+                    msg,
+                    false,
+                );
                 return 1;
             };
             let Some(stdout) = child.stdout.take() else {
                 super::child_lifetime::force_kill_child(&mut child);
                 lifetime.cleanup();
-                eprintln!("Failed to open stdout pipe from Pi RPC.");
+                let msg = "Failed to open stdout pipe from Pi RPC.";
+                eprintln!("{msg}");
+                super::host::report_driver_startup_error(
+                    endpoint.as_ref(),
+                    spec.family,
+                    msg,
+                    false,
+                );
                 return 1;
             };
             let stderr = child.stderr.take();
@@ -178,6 +201,12 @@ pub(super) fn run(spec: &'static AcpAgentSpec, parsed: HostArgs) -> i32 {
                 }
                 Err(err) => {
                     eprintln!("Pi RPC startup failed: {err}");
+                    super::host::report_driver_startup_error(
+                        endpoint.as_ref(),
+                        spec.family,
+                        &err,
+                        super::startup_error::looks_like_auth_error(&err),
+                    );
                     let pid_atomic = AtomicU32::new(pid);
                     stop_pi_child_gracefully(&transport, &mut child, &mut lifetime, &pid_atomic);
                     return 1;

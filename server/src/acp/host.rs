@@ -505,6 +505,51 @@ impl GxserverEndpoint {
         });
         let _ = self.post_json("/api/agentChatChannel", body, Duration::from_secs(3));
     }
+
+    pub(super) fn report_startup_error(&self, family: &str, message: &str, is_auth: bool) {
+        let trimmed = message.trim();
+        if trimmed.is_empty() {
+            return;
+        }
+        let mut params = json!({
+            "action": "startupError",
+            "sessionRef": self.session_ref,
+            "family": family,
+            "message": trimmed,
+            "isAuth": is_auth,
+        });
+        if let Some(secret) = self.channel_secret.as_deref() {
+            params["channelSecret"] = json!(secret);
+        }
+        let body = json!({
+            "requestId": format!("acp-startup-err-{}", now_ms()),
+            "params": params,
+        });
+        let _ = self.post_json("/api/agentChatChannel", body, Duration::from_secs(3));
+    }
+}
+
+pub(super) fn extract_jsonrpc_error_message(error: &Value, fallback: &str) -> String {
+    error
+        .pointer("/data/message")
+        .and_then(Value::as_str)
+        .or_else(|| error.get("data").and_then(Value::as_str))
+        .or_else(|| error.get("message").and_then(Value::as_str))
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(fallback)
+        .to_string()
+}
+
+pub(super) fn report_driver_startup_error(
+    endpoint: Option<&GxserverEndpoint>,
+    family: &str,
+    message: &str,
+    is_auth: bool,
+) {
+    if let Some(ep) = endpoint {
+        ep.report_startup_error(family, message, is_auth);
+    }
 }
 
 pub(super) struct SpoolWriter {
@@ -1081,11 +1126,10 @@ impl AcpTransport {
         match rx.recv_timeout(timeout) {
             Ok(resp) => {
                 if let Some(error) = resp.get("error") {
-                    let message = error
-                        .get("message")
-                        .and_then(Value::as_str)
-                        .unwrap_or("Native host request failed");
-                    Err(message.to_string())
+                    Err(extract_jsonrpc_error_message(
+                        error,
+                        "Native host request failed",
+                    ))
                 } else {
                     Ok(resp.get("result").cloned().unwrap_or(Value::Null))
                 }
@@ -1870,7 +1914,9 @@ pub fn run(args: &[String]) -> i32 {
     let Some((acp_envs, prog, argv)) =
         build_acp_server_argv(spec, parsed.cli_command.as_deref(), &parsed.profile)
     else {
-        eprintln!("Invalid Native host command for {}", spec.family);
+        let msg = format!("Invalid Native host command for {}", spec.family);
+        eprintln!("{msg}");
+        report_driver_startup_error(endpoint.as_ref(), spec.family, &msg, false);
         return 1;
     };
     let record_target = endpoint
@@ -1894,7 +1940,9 @@ pub fn run(args: &[String]) -> i32 {
     let mut child = match cmd.spawn() {
         Ok(child) => child,
         Err(err) => {
-            eprintln!("Failed to start `{prog} {}`: {err}", argv.join(" "));
+            let msg = format!("Failed to start `{prog} {}`: {err}", argv.join(" "));
+            eprintln!("{msg}");
+            report_driver_startup_error(endpoint.as_ref(), spec.family, &msg, false);
             return 1;
         }
     };
@@ -1902,13 +1950,17 @@ pub fn run(args: &[String]) -> i32 {
         super::child_lifetime::ChildLifetime::attach(&child, record_target.as_ref());
     let child_pid = Arc::new(AtomicU32::new(child.id()));
     let Some(stdin) = child.stdin.take() else {
-        eprintln!("Failed to open stdin pipe to Native host.");
+        let msg = "Failed to open stdin pipe to Native host.";
+        eprintln!("{msg}");
+        report_driver_startup_error(endpoint.as_ref(), spec.family, msg, false);
         super::child_lifetime::force_kill_child(&mut child);
         child_lifetime.cleanup();
         return 1;
     };
     let Some(stdout) = child.stdout.take() else {
-        eprintln!("Failed to open stdout pipe from Native host.");
+        let msg = "Failed to open stdout pipe from Native host.";
+        eprintln!("{msg}");
+        report_driver_startup_error(endpoint.as_ref(), spec.family, msg, false);
         super::child_lifetime::force_kill_child(&mut child);
         child_lifetime.cleanup();
         return 1;
@@ -2375,6 +2427,12 @@ pub fn run(args: &[String]) -> i32 {
         Ok(res) => res,
         Err(err) => {
             eprintln!("Native host initialize failed: {err}");
+            report_driver_startup_error(
+                endpoint.as_ref(),
+                spec.family,
+                &err,
+                super::startup_error::looks_like_auth_error(&err),
+            );
             stop_child_gracefully(&transport, &mut child, &mut child_lifetime, &child_pid);
             return 1;
         }
@@ -2429,6 +2487,12 @@ pub fn run(args: &[String]) -> i32 {
         Ok(res) => res,
         Err(err) => {
             eprintln!("Native session open failed: {err}");
+            report_driver_startup_error(
+                endpoint.as_ref(),
+                spec.family,
+                &err,
+                super::startup_error::looks_like_auth_error(&err),
+            );
             stop_child_gracefully(&transport, &mut child, &mut child_lifetime, &child_pid);
             return 1;
         }
