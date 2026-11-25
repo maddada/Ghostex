@@ -252,6 +252,11 @@ pub fn file_rows(
         .map(|(index, change)| {
             let counts = file_change_counts(&change.lines);
             let failed = change.result_is_error();
+            let call_status = match (change.result.is_some(), failed) {
+                (_, true) => "failed",
+                (true, false) => "done",
+                (false, false) => "running",
+            };
             // The same opt-out React's card took: the renderer shortens the folder half against
             // the row's real width, so a character budget on top of that only cuts folders that
             // would have fitted.
@@ -271,6 +276,7 @@ pub fn file_rows(
                 "failed": failed,
                 "error": if failed { change.result_output() } else { "" },
                 "status": change.status,
+                "callStatus": call_status,
                 "bars": file_change_bars(counts.added, counts.removed),
                 // The preview already shows everything a short change has; otherwise the row
                 // offers this under it.

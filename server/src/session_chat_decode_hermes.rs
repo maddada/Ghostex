@@ -144,6 +144,10 @@ fn hermes_tool_result(content: &str) -> (String, Option<bool>) {
         .get("error")
         .is_some_and(|error| !error.is_null() && error.as_str() != Some(""))
         || record.get("success") == Some(&Value::Bool(false))
+        || matches!(
+            record.get("status").and_then(Value::as_str),
+            Some("error" | "failed" | "denied" | "rejected" | "cancelled" | "canceled")
+        )
         || record
             .get("exit_code")
             .and_then(Value::as_i64)

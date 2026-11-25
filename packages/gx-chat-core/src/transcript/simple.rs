@@ -10,6 +10,26 @@ pub fn simple_edit_label(count: usize) -> String {
     )
 }
 
+/// Whether a file-edit tool call has answered (`Done`), failed/been denied (`Failed`), or is still
+/// waiting on approval or execution (`Running`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FileCallStatus {
+    Done,
+    Running,
+    Failed,
+}
+
+/// Reads a projected file row's `callStatus`, falling back to `failed` for rows without one.
+pub fn file_call_status_of(file: &serde_json::Value) -> FileCallStatus {
+    match file.get("callStatus").and_then(serde_json::Value::as_str) {
+        Some("running") => FileCallStatus::Running,
+        Some("failed") => FileCallStatus::Failed,
+        Some("done") => FileCallStatus::Done,
+        _ if file.get("failed") == Some(&serde_json::Value::Bool(true)) => FileCallStatus::Failed,
+        _ => FileCallStatus::Done,
+    }
+}
+
 /// CDXC:SessionChat 2026-10-17 WHY:
 /// A Codex edit the user denied ("aborted by user", "patch rejected by user") still carries its patch, so the card counted it and read "Edited 1 file" while the file never changed. Only files with at least one applied change count as edited; files whose every change failed or was denied are counted apart, so the label says so ("Failed to edit 1 file", "Edited 2 files, 1 failed") and the row keeps its "Failed" tag and the agent's reason.
 pub fn edit_label(edited: usize, failed: usize) -> String {
@@ -21,23 +41,74 @@ pub fn edit_label(edited: usize, failed: usize) -> String {
     }
 }
 
+/// Like [`edit_label`], using progressive tense ("Editing 1 file") while any edit in the group is
+/// still waiting on approval or running (`any_running`).
+pub fn file_edit_label(edited: usize, failed: usize, pending: usize, any_running: bool) -> String {
+    if !any_running {
+        return edit_label(edited, failed);
+    }
+    let files = |count: usize| if count == 1 { "file" } else { "files" };
+    let active = edited + pending;
+    if failed == 0 {
+        format!("Editing {active} {}", files(active))
+    } else {
+        format!("Editing {active} {}, {failed} failed", files(active))
+    }
+}
+
+/// Splits file rows into unique paths that completed (`edited`), paths whose every change failed
+/// (`failed_only`), paths that are still waiting/running and not yet completed (`pending_only`),
+/// and whether any row is still running (`any_running`).
+pub fn file_edit_paths<'a>(
+    rows: impl IntoIterator<Item = (&'a str, FileCallStatus)>,
+) -> (Vec<&'a str>, Vec<&'a str>, Vec<&'a str>, bool) {
+    let rows: Vec<(&str, FileCallStatus)> = rows.into_iter().collect();
+    let mut edited: Vec<&str> = Vec::new();
+    let mut pending_only: Vec<&str> = Vec::new();
+    let mut failed_only: Vec<&str> = Vec::new();
+    let mut any_running = false;
+    for (path, status) in &rows {
+        if *status == FileCallStatus::Running {
+            any_running = true;
+        }
+        if *status == FileCallStatus::Done && !edited.contains(path) {
+            edited.push(path);
+        }
+    }
+    for (path, status) in &rows {
+        if *status == FileCallStatus::Running
+            && !edited.contains(path)
+            && !pending_only.contains(path)
+        {
+            pending_only.push(path);
+        }
+    }
+    for (path, status) in &rows {
+        if *status == FileCallStatus::Failed
+            && !edited.contains(path)
+            && !pending_only.contains(path)
+            && !failed_only.contains(path)
+        {
+            failed_only.push(path);
+        }
+    }
+    (edited, failed_only, pending_only, any_running)
+}
+
 /// The paths a list of file rows edited, and the paths whose every change failed.
 pub fn edited_and_failed_paths<'a>(
     rows: impl IntoIterator<Item = (&'a str, bool)>,
 ) -> (Vec<&'a str>, Vec<&'a str>) {
-    let rows: Vec<(&str, bool)> = rows.into_iter().collect();
-    let mut edited: Vec<&str> = Vec::new();
-    for (path, failed) in &rows {
-        if !failed && !edited.contains(path) {
-            edited.push(path);
-        }
-    }
-    let mut failed_only: Vec<&str> = Vec::new();
-    for (path, failed) in &rows {
-        if *failed && !edited.contains(path) && !failed_only.contains(path) {
-            failed_only.push(path);
-        }
-    }
+    let (edited, failed_only, _, _) = file_edit_paths(rows.into_iter().map(|(path, failed)| {
+        (
+            path,
+            if failed {
+                FileCallStatus::Failed
+            } else {
+                FileCallStatus::Done
+            },
+        )
+    }));
     (edited, failed_only)
 }
 

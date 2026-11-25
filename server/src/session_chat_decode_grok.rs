@@ -174,7 +174,7 @@ pub fn decode_grok_transcript_line(line: &str, fallback_id: &str) -> Option<Sess
         "tool_call_update" => {
             let is_error = match update.get("status").and_then(Value::as_str)? {
                 "completed" => None,
-                "failed" => Some(true),
+                "failed" | "cancelled" | "canceled" | "rejected" => Some(true),
                 _ => return None,
             };
             Some(transcript_message(

@@ -264,6 +264,15 @@ mentions `ghostex-answer:`; older versions show plain links.
   short label such as an issue id; `name`, the answer's key (the title when
   there is none); `multiple` for several picks; `type: "text"` for a text box
   instead of choices (`placeholder` sets its hint). At most 20 questions.
+- One question per dimension: split a list that mixes kinds of choice (a
+  look, a layout, extras) into one question each, and use `multiple`
+  whenever the choices can combine, so a combined answer is several picks
+  rather than Other and a note. Keep a question pick one only when its
+  choices truly exclude each other, and say why in its `detail`; say there
+  that a mix is welcome in the note. A pick-any question may mark several
+  choices `recommended`. `ghostex visual check` warns about a pick-one list
+  that looks like several kinds of choice. When the answers arrive, say the
+  combined pick back in one line.
 - Link what you ask about: when a question is about a PR, issue, file, page,
   commit, thread or anything else the reader could open, link it in the
   question itself, so they can check it before answering. Write a Markdown
@@ -571,6 +580,16 @@ top (the header and the first lines), then in the window. Aim for the look of
   its choices in the same order. When every choice has its tied variant, the
   question shows only what was picked and its note, not the choices again, so
   put each option's trade-off on its card (a `.how` line, `.gx-stat`s).
+- **One question per dimension.** When the variants differ in more than one
+  way (a look, a layout, extras), split them: one `.gx-options` row and one
+  question for each kind of choice, never one long list that mixes them, so
+  A + D + G is three picks, not Other and a note. Give a question `multiple`
+  unless its choices truly exclude each other, and when they do, say why in
+  its `<p>` ("one surface only"). Say there that a mix is welcome in the
+  note, and mark every choice you recommend. `ghostex visual check` warns
+  about a pick-one list that looks like several kinds of choice. When the
+  answers arrive, say the combined pick back in one line ("Building A + D +
+  G").
 - **Not too long.** Header, options and question fit roughly one screen.
   Leave out what the reader won't use to decide: more pages are better than
   one long one.

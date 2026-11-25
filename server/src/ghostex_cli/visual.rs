@@ -434,6 +434,9 @@ fn check_command(args: &[String]) -> CliResult<()> {
     };
     if let Some((form, mended)) = question_form(&source, fenced_as_questions) {
         report_question_form(&form, &mended)?;
+        for warning in super::visual_choice_mix::form_warnings(&form) {
+            println!("Warning: {warning}");
+        }
         return warn_reused_tags(&form);
     }
     let visual = render(&source, options.width.unwrap_or(DEFAULT_WIDTH), &theme)

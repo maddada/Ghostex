@@ -200,6 +200,13 @@ pub(crate) fn check_page_command(
             }
         }
     }
+    let mixed = super::visual_choice_mix::page_warnings(&path);
+    if !mixed.is_empty() {
+        println!("Choices:");
+        for warning in mixed {
+            println!("  - {warning}");
+        }
+    }
     println!("Look at each screenshot before sending the page.");
     if repeated > 0 {
         return Err(CliError::Other(format!(

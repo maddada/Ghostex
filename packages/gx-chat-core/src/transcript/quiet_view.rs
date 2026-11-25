@@ -980,8 +980,12 @@ impl Counts {
             .filter(|tool| tool["sentMessage"] != true)
             .count();
         for file in list(row, "files") {
-            if let Some(path) = file["path"].as_str() {
-                self.files.insert(path.to_string());
+            if crate::transcript::simple::file_call_status_of(file)
+                == crate::transcript::simple::FileCallStatus::Done
+            {
+                if let Some(path) = file["path"].as_str() {
+                    self.files.insert(path.to_string());
+                }
             }
         }
         self.at(row["timestamp"].as_i64());

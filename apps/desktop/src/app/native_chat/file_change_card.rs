@@ -8,12 +8,12 @@
 //! `CDXC:SessionChat 2026-10-11 DECISION` on `file_change_card` there); this file only lays it out.
 //! The phone draws the same card in `apps/mobile/app/src/chat/native/transcript/FileChanges.tsx`.
 
-use super::cards::{SINGLE_LINE_CARD, TITLE_ROW_GAP, card_hover_fill};
+use super::cards::{card_hover_fill, SINGLE_LINE_CARD, TITLE_ROW_GAP};
 use super::chat_text_look::PROSE_SIZE;
-use super::disclosure_body::{DisclosureRail, disclosure_body};
-use super::quiet_work::{QuietEdit, file_names};
+use super::disclosure_body::{disclosure_body, DisclosureRail};
+use super::quiet_work::{file_names, QuietEdit};
 use super::tool_run::{
-    DESCRIBED_LABEL_OPACITY, ROW_PAD_X, TILE, boxed_card_body, boxed_header_corners,
+    boxed_card_body, boxed_header_corners, DESCRIBED_LABEL_OPACITY, ROW_PAD_X, TILE,
 };
 use super::{
     appearance::{ChatAppearance, ChatFilledButton as _},
@@ -21,14 +21,14 @@ use super::{
     transcript::text,
 };
 use crate::app::native_chat::cursor::ChatCursor as _;
+use ghostex_gx_chat_core::transcript::file_change_rows::{turn_files_fold, TurnFilesFold};
 use ghostex_gx_chat_core::TranscriptItem;
-use ghostex_gx_chat_core::transcript::file_change_rows::{TurnFilesFold, turn_files_fold};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, FontWeight, Hsla, InteractiveElement as _, IntoElement,
-    ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, div, px, rgb,
+    div, px, rgb, AnyElement, Context, FontWeight, Hsla, InteractiveElement as _, IntoElement,
+    ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 const MONO: &str = "JetBrainsMono Nerd Font";
 
@@ -117,6 +117,16 @@ fn status_icon(status: &str) -> &'static str {
         "deleted" => "titlebar/file-minus.svg",
         _ => "titlebar/file-text.svg",
     }
+}
+
+fn file_call_status(file: &Value) -> &str {
+    file["callStatus"]
+        .as_str()
+        .unwrap_or(if file["failed"] == true {
+            "failed"
+        } else {
+            "done"
+        })
 }
 
 fn icon(path: &'static str, size: f32, color: Hsla) -> AnyElement {
@@ -336,8 +346,11 @@ impl NativeChatView {
         let palette = Palette::of(p);
         let motion = self.disclosure_frame(key, expanded, cx);
         let body_shown = expanded || motion.is_some();
-        let any_failed = files.iter().any(|file| file["failed"] == true);
-        let all_failed = !files.is_empty() && files.iter().all(|file| file["failed"] == true);
+        let any_running = files.iter().any(|file| file_call_status(file) == "running");
+        let any_failed = files.iter().any(|file| file_call_status(file) == "failed");
+        let all_failed =
+            !files.is_empty() && files.iter().all(|file| file_call_status(file) == "failed");
+        let shimmer = any_running && self.snapshot["working"] == true && !cx.reduce_motion();
         let added = summary["added"].as_u64().unwrap_or(0);
         let removed = summary["removed"].as_u64().unwrap_or(0);
         let toggle_key = key.to_string();
@@ -356,6 +369,20 @@ impl NativeChatView {
             .chat_cursor_pointer();
         let trigger = if boxed {
             let hover = card_hover_fill(p);
+            let title_el = if shimmer {
+                self.running_shimmer(
+                    SharedString::from(format!("{key}:shimmer")),
+                    shape.title(div().flex_1().min_w_0().truncate(), p),
+                    label,
+                    p,
+                )
+            } else {
+                shape
+                    .title(div().flex_1().min_w_0().truncate(), p)
+                    .when(all_failed, |this| this.text_color(p.error()))
+                    .child(self.find_label(key, label))
+                    .into_any_element()
+            };
             boxed_header_corners(
                 trigger
                     .gap(px(TITLE_ROW_GAP * s))
@@ -367,13 +394,35 @@ impl NativeChatView {
                 p,
             )
             .child(shape.tile("titlebar/pencil.svg", p))
-            .child(
-                shape
-                    .title(div().flex_1().min_w_0().truncate(), p)
-                    .when(all_failed, |this| this.text_color(p.error()))
-                    .child(self.find_label(key, label)),
-            )
+            .child(title_el)
         } else {
+            let title_el = if shimmer {
+                self.running_shimmer(
+                    SharedString::from(format!("{key}:shimmer")),
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .font_weight(FontWeight::NORMAL)
+                        .text_size(px(PROSE_SIZE * s)),
+                    label,
+                    p,
+                )
+            } else {
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .truncate()
+                    .font_weight(FontWeight::NORMAL)
+                    .text_size(px(PROSE_SIZE * s))
+                    .text_color(if all_failed {
+                        p.error()
+                    } else {
+                        p.prose.opacity(DESCRIBED_LABEL_OPACITY)
+                    })
+                    .child(self.find_label(key, label))
+                    .into_any_element()
+            };
             trigger
                 .gap(px(8.0 * s))
                 .px(px(ROW_PAD_X * s))
@@ -392,20 +441,14 @@ impl NativeChatView {
                         .flex_shrink_0()
                         .child(icon("titlebar/pencil.svg", 13.0 * s, p.muted)),
                 )
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .truncate()
-                        .font_weight(FontWeight::NORMAL)
-                        .text_size(px(PROSE_SIZE * s))
-                        .text_color(if all_failed {
-                            p.error()
-                        } else {
-                            p.prose.opacity(DESCRIBED_LABEL_OPACITY)
-                        })
-                        .child(self.find_label(key, label)),
-                )
+                .child(title_el)
+        };
+        let status_mark = if any_running {
+            None
+        } else if any_failed {
+            Some(("titlebar/x.svg", p.error()))
+        } else {
+            Some(("titlebar/check.svg", p.success()))
         };
         let trigger = trigger
             .on_click(cx.listener(move |view, _, _, cx| {
@@ -414,15 +457,9 @@ impl NativeChatView {
             .when(added + removed > 0, |this| {
                 this.child(counts(added, removed, &palette, s))
             })
-            .child(icon(
-                if any_failed {
-                    "titlebar/x.svg"
-                } else {
-                    "titlebar/check.svg"
-                },
-                13.0 * s,
-                if any_failed { p.error() } else { p.success() },
-            ));
+            .when_some(status_mark, |this, (path, color)| {
+                this.child(icon(path, 13.0 * s, color))
+            });
         let review_paths: Vec<String> = summary["paths"]
             .as_array()
             .into_iter()
@@ -520,13 +557,46 @@ impl NativeChatView {
             "deleted" => palette.deleted,
             _ => p.muted,
         };
-        let failed = file["failed"] == true;
+        let call_status = file_call_status(file);
+        let failed = call_status == "failed";
+        let running = call_status == "running";
+        let shimmer = running && self.snapshot["working"] == true && !cx.reduce_motion();
         let added = file["added"].as_u64().unwrap_or(0);
         let removed = file["removed"].as_u64().unwrap_or(0);
         let filename = text(file, "filename");
         let parent = text(file, "parent");
         let menu_path = text(file, "path");
         let toggle_key = key.clone();
+        let filename_el = if shimmer {
+            self.running_shimmer(
+                SharedString::from(format!("{key}:shimmer")),
+                div()
+                    .flex_shrink_0()
+                    .whitespace_nowrap()
+                    .font_weight(FontWeight::NORMAL)
+                    .text_size(px(PROSE_SIZE * s)),
+                filename.clone(),
+                p,
+            )
+        } else {
+            div()
+                .flex_shrink_0()
+                .whitespace_nowrap()
+                .font_weight(FontWeight::NORMAL)
+                .text_size(px(PROSE_SIZE * s))
+                .text_color(if failed {
+                    p.error()
+                } else {
+                    p.prose.opacity(DESCRIBED_LABEL_OPACITY)
+                })
+                .child(filename.clone())
+                .into_any_element()
+        };
+        let status_mark = match call_status {
+            "done" => Some(("titlebar/check.svg", p.success())),
+            "failed" => Some(("titlebar/x.svg", p.error())),
+            _ => None,
+        };
         let header = div()
             .id(SharedString::from(format!("file-row:{key}")))
             .role(gpui::Role::Button)
@@ -569,19 +639,7 @@ impl NativeChatView {
                     .flex_shrink_0()
                     .child(icon(status_icon(status), 13.0 * s, glyph_color)),
             )
-            .child(
-                div()
-                    .flex_shrink_0()
-                    .whitespace_nowrap()
-                    .font_weight(FontWeight::NORMAL)
-                    .text_size(px(PROSE_SIZE * s))
-                    .text_color(if failed {
-                        p.error()
-                    } else {
-                        p.prose.opacity(DESCRIBED_LABEL_OPACITY)
-                    })
-                    .child(filename.clone()),
-            )
+            .child(filename_el)
             .when(!parent.is_empty(), |this| {
                 this.child(folder_label(parent, p.muted, 12.5 * s))
             })
@@ -598,15 +656,9 @@ impl NativeChatView {
             .when(added + removed > 0, |this| {
                 this.child(counts(added, removed, palette, s))
             })
-            .child(icon(
-                if failed {
-                    "titlebar/x.svg"
-                } else {
-                    "titlebar/check.svg"
-                },
-                13.0 * s,
-                if failed { p.error() } else { p.success() },
-            ));
+            .when_some(status_mark, |this, (path, color)| {
+                this.child(icon(path, 13.0 * s, color))
+            });
         let mut row = div()
             .flex()
             .flex_col()
