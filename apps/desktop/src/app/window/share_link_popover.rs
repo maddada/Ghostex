@@ -202,6 +202,12 @@ pub(crate) fn open_share_link_popover(
         ..Default::default()
     };
     let _ = cx.open_window(options, move |window, cx| {
+        // CDXC:Sharing 2026-11-26 WHY: Windows draws a pop-up window square, so the card's 8px
+        // corners showed the window's square fill behind them ("this modal ... is not rounded").
+        // DWM rounds the window at the card's own radius and the card keeps its border; macOS and
+        // Linux already show the card's corners.
+        #[cfg(all(target_os = "windows", not(ghostex_web)))]
+        super::popup_frame::round_popup_window(window, px(popup_menu_frame().radius), true);
         cx.new(|cx| ShareLinkPopoverWindow::new(target, remote, window, cx))
     });
 }

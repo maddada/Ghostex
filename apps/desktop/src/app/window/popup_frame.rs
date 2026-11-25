@@ -514,7 +514,8 @@ pub(crate) fn popup_card_radius(radius: gpui::Pixels, blurred: bool) -> gpui::Pi
 
 /// Rounds a popup window whose content draws its own rounded, bordered card: the chat composer's
 /// `/`, `$` and `@` list and the chat's menus. `blurred` is whether the window was opened with
-/// `WindowBackgroundAppearance::Blurred`; the card must be drawn at
+/// `WindowBackgroundAppearance::Blurred` (or `Opaque`: any background that fills the whole window,
+/// which DWM must round, unlike a transparent one); the card must be drawn at
 /// `popup_card_radius(radius, blurred)`.
 ///
 /// CDXC:PlatformSupport 2026-10-20 WHY:
