@@ -158,11 +158,23 @@ fn reachable(main: Bounds<Pixels>, frame: Bounds<Pixels>, screens: &Screens) -> 
     match screens
         .shown_on
         .iter()
-        .find(|display| display.intersect(&band) == band)
+        .find(|display| lies_on(**display, band))
     {
         Some(display) => fit(frame, *display),
         None => centred(main, frame.size, screens.home),
     }
+}
+
+/// Whether `inner` lies whole on `outer`, with half a point to spare.
+///
+/// CDXC:SessionChat 2026-11-26 WHY:
+/// On Windows at 175% every page window jumped back to the middle of the main window half a second after it was moved or resized, and a page never reopened where it was left. Frames there are not whole points (1024 device pixels is 585.142857 points), and `Bounds::intersect` rebuilds the size as `(origin + size) - origin`, which in f32 came back 1023.99994 wide, so a band lying on the display never equalled its intersection with it and every frame counted as unreachable. The test compares edges instead, with a margin far below anything a reader could see.
+fn lies_on(outer: Bounds<Pixels>, inner: Bounds<Pixels>) -> bool {
+    let slack = px(0.5);
+    inner.left() >= outer.left() - slack
+        && inner.top() >= outer.top() - slack
+        && inner.right() <= outer.right() + slack
+        && inner.bottom() <= outer.bottom() + slack
 }
 
 /// `size` (clamped to `display`) centred on the main window, moved onto `display` where it would
