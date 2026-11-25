@@ -569,12 +569,14 @@ pub fn is_placeholder_model_label(label: &str) -> bool {
 }
 
 /// Preferred family words for agents with an explicit default-model rule:
-/// Claude Code -> newest Opus; Codex -> newest Sol; Antigravity -> newest Neon.
+/// Claude Code -> newest Opus; Codex -> newest Sol; Antigravity -> newest Neon;
+/// Cursor CLI -> newest Composer.
 fn preferred_default_family_words(family: &str) -> Option<&'static [&'static str]> {
     match canonical_model_family(family) {
         "claude" => Some(&["opus"]),
         "codex" => Some(&["gpt", "sol"]),
         "antigravity" => Some(&["gemini", "neon"]),
+        "cursor" => Some(&["composer"]),
         _ => None,
     }
 }
@@ -664,6 +666,7 @@ pub fn preferred_default_model_fallback(
         "claude" => Some(("opus[1m]", "Opus 5.5", Some("high"))),
         "codex" => Some(("gpt-6.2-sol", "GPT 6.2 Sol", Some("medium"))),
         "antigravity" => Some(("gemini-4-neon", "Gemini 4 Neon", Some("high"))),
+        "cursor" => Some(("composer-2.5", "Composer 2.5", None)),
         _ => None,
     }
 }
