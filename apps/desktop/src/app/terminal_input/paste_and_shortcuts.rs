@@ -497,7 +497,7 @@ impl GhostexGpuiApp {
         // (CDXC:Hotkeys 2026-10-31, the chat view's Alt+S did nothing). Saved Prompts opens
         // for the chat on screen the same way (GitHub #756: it did nothing in a Native chat),
         // and so do Export Transcript, Attach, Agent Actions (the chat box's More actions) and
-        // Scroll to Bottom. Scroll to Top stays terminal only: the chat has no such action.
+        // Scroll to Top / Bottom (the oldest loaded message and the newest one).
         if matches!(
             action_id,
             "stashPrompt"
@@ -505,6 +505,7 @@ impl GhostexGpuiApp {
                 | "exportTranscript"
                 | "attachFileOrFolder"
                 | "toggleAgentActions"
+                | "scrollTerminalToTop"
                 | "scrollTerminalToBottom"
         ) && self.run_focused_chat_hotkey(action_id, window, cx)
         {

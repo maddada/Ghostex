@@ -78,6 +78,10 @@ impl GhostexGpuiApp {
                 });
                 true
             }
+            "scrollTerminalToTop" => {
+                view.update(cx, |view, cx| view.scroll_to_top_from_hotkey(cx));
+                true
+            }
             "scrollTerminalToBottom" => {
                 view.update(cx, |view, cx| view.scroll_to_bottom_from_hotkey(cx));
                 true

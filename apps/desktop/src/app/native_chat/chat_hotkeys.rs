@@ -244,6 +244,19 @@ impl NativeChatView {
         self.jump_to_bottom(cx);
     }
 
+    /// The Scroll Terminal to Top hotkey: the mirror of the jump to the newest message, to the
+    /// oldest message loaded. `scroll_to` also stops a chat at the bottom from following its tail
+    /// straight back (files_links.rs); older pages load from there as scrolling up does.
+    pub(crate) fn scroll_to_top_from_hotkey(&mut self, cx: &mut Context<Self>) {
+        self.release_answer_hold();
+        self.clear_message_hover();
+        self.list.scroll_to(gpui::ListOffset {
+            item_ix: 0,
+            offset_in_item: gpui::px(0.0),
+        });
+        cx.notify();
+    }
+
     /// Copies the agent's last reply, or with `code_block` the last fenced code block it wrote.
     /// Returns false when the chat has nothing to copy.
     pub(crate) fn copy_last_reply_from_hotkey(
