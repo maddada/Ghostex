@@ -9,9 +9,10 @@
 //! wrote into the thread so two agents shared one conversation.
 //!
 //! Defense in depth by platform:
-//! - Unix (macOS + Linux): every agent child starts in its own process group (`setpgid(0, 0)`,
-//!   so `pgid == child_pid`), and the host records `(host_pid, host_start, child_pid, child_pgid,
-//!   child_start, session_ref)` under `runtime_dir/acp-children/`.
+//! - Unix (macOS + Linux): every agent child starts in its own session and process group
+//!   (`setsid()`, so `pgid == child_pid` and it has no controlling terminal), and the host records
+//!   `(host_pid, host_start, child_pid, child_pgid, child_start, session_ref)` under
+//!   `runtime_dir/acp-children/`.
 //! - Linux: `PR_SET_PDEATHSIG(SIGTERM)` signals the child immediately when the host dies.
 //! - macOS: no `PR_SET_PDEATHSIG` exists, so the host spawns a lightweight kernel-idle watcher
 //!   (`ghostex acp-child-watch`) that blocks in `kqueue(EVFILT_PROC, NOTE_EXIT)` on both
@@ -64,21 +65,25 @@ impl ChildRecordTarget {
 
 /// Configure `command` before spawning an agent child inside `acp-host`.
 ///
-/// On Unix, places the child in its own process group (`pgid == child_pid`) so clean shutdown,
-/// the macOS watcher, and the self-heal barrier can stop the child and its descendants without
-/// touching the host or zmx shell. On Linux, also sets `PR_SET_PDEATHSIG(SIGTERM)` so the kernel
-/// signals the child immediately if the host dies hard (call only on the thread that lives as
-/// long as the host, i.e. each driver's main loop).
+/// On Unix, places the child in its own session and process group (`pgid == child_pid`) so clean
+/// shutdown, the macOS watcher, and the self-heal barrier can stop the child and its descendants
+/// without touching the host or zmx shell. On Linux, also sets `PR_SET_PDEATHSIG(SIGTERM)` so the
+/// kernel signals the child immediately if the host dies hard (call only on the thread that lives
+/// as long as the host, i.e. each driver's main loop).
+///
+/// CDXC:AgentProviders 2026-11-25 WHY: The child gets a new session (`setsid()`), not only a new process group (`setpgid(0, 0)`, 12.0.0 to 12.1.1). A group of its own that still has the session's terminal is a background group there, so the first descendant that touches the terminal (a zsh script using `read -d` run as an MCP headers helper, a password prompt on `/dev/tty`) gets SIGTTOU or SIGTTIN and the kernel stops the whole group, the agent included: it never answers `initialize`, the host times out and self-heal restarts it in a loop. The child's stdin, stdout and stderr are pipes, so it needs no terminal; without one those opens fail instead of freezing it.
 pub(super) fn end_with_host(command: &mut Command) -> &mut Command {
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
         #[cfg(target_os = "linux")]
         let host_pid = std::process::id() as libc::pid_t;
-        // SAFETY: the closure only makes async-signal-safe syscalls (setpgid, prctl, getppid, _exit).
+        // SAFETY: the closure only makes async-signal-safe syscalls (setsid, prctl, getppid, _exit).
         unsafe {
             command.pre_exec(move || {
-                if libc::setpgid(0, 0) != 0 {
+                // A freshly forked child is never a process-group leader, so `setsid` cannot fail
+                // with EPERM here; it makes the child the leader of a new session and group.
+                if libc::setsid() == -1 {
                     return Err(std::io::Error::last_os_error());
                 }
                 #[cfg(target_os = "linux")]
@@ -205,7 +210,7 @@ pub(super) fn force_kill_child(child: &mut Child) {
     {
         let cpid = child.id() as libc::pid_t;
         if cpid > 1 {
-            // SAFETY: `child` was spawned with `setpgid(0, 0)` and is not yet reaped by us, so
+            // SAFETY: `child` was spawned with `setsid()` and is not yet reaped by us, so
             // `-cpid` is still its dedicated process group.
             unsafe {
                 let _ = libc::kill(-cpid, libc::SIGKILL);
