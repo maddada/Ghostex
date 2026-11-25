@@ -41,15 +41,15 @@ const BODY_MAX_BYTES: usize = DATA_MAX_BYTES + 16 * 1024;
 /// The longest message an app may send to its chat.
 const SEND_MAX_CHARS: usize = 8 * 1024;
 
-/// A per-app count of calls in a sliding window.
-struct Limit {
+/// A per-app (or per-caller) count of calls in a sliding window.
+pub(super) struct Limit {
     calls: usize,
     window: Duration,
     seen: Mutex<Option<HashMap<String, Vec<Instant>>>>,
 }
 
 impl Limit {
-    const fn new(calls: usize, window: Duration) -> Self {
+    pub(super) const fn new(calls: usize, window: Duration) -> Self {
         Self {
             calls,
             window,
@@ -58,7 +58,7 @@ impl Limit {
     }
 
     /// Takes a slot for `id`; `false` when the app used them all.
-    fn take(&self, id: &str) -> bool {
+    pub(super) fn take(&self, id: &str) -> bool {
         let mut guard = self
             .seen
             .lock()
@@ -136,8 +136,16 @@ fn refuse(status: StatusCode, error: &str) -> RoutedResponse {
 }
 
 /// `OPTIONS /app/<id>/bridge`: the browser's check before a call with the token header, allowed
-/// only for the app's own sandboxed page.
-pub(crate) fn preflight(headers: &HeaderMap) -> RoutedResponse {
+/// only for the app's own sandboxed page, and answered 404 like every other route while Ghostex
+/// Apps is off (re-review nit).
+pub(crate) fn preflight(state: &AppState, headers: &HeaderMap) -> RoutedResponse {
+    preflight_answer(apps_on(&state.paths), headers)
+}
+
+fn preflight_answer(on: bool, headers: &HeaderMap) -> RoutedResponse {
+    if !on {
+        return refuse(StatusCode::NOT_FOUND, "Ghostex Apps is turned off.");
+    }
     if !origin_allowed(headers) {
         return refuse(StatusCode::FORBIDDEN, "Only the app itself may call this.");
     }
@@ -210,7 +218,7 @@ pub(crate) async fn handle(
         .get(TOKEN_HEADER)
         .and_then(|value| value.to_str().ok())
         .unwrap_or_default();
-    if !tokens::check(&id, token) {
+    if !tokens::check(&id, token, super::feature::generation(&state.paths)) {
         return refuse(
             StatusCode::FORBIDDEN,
             "Open this app from Ghostex to use ghostex.app.",
@@ -562,10 +570,13 @@ mod tests {
             HeaderValue::from_static("http://127.0.0.1:4000"),
         );
         assert!(!origin_allowed(&headers));
-        let answer = preflight(&headers);
+        let answer = preflight_answer(true, &headers);
         assert_eq!(answer.response.status(), StatusCode::FORBIDDEN);
         headers.insert(header::ORIGIN, HeaderValue::from_static("null"));
-        let answer = preflight(&headers);
+        // While Ghostex Apps is off the check answers 404, like the call itself.
+        let answer = preflight_answer(false, &headers);
+        assert_eq!(answer.response.status(), StatusCode::NOT_FOUND);
+        let answer = preflight_answer(true, &headers);
         assert_eq!(answer.response.status(), StatusCode::NO_CONTENT);
         assert_eq!(
             answer.response.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN],

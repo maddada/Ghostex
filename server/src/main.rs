@@ -1,4 +1,11 @@
 fn main() {
+    // Before the CLI check: the `ghostex` link and gxserver are one program, and the child must
+    // start with nothing else running (server/src/ghostex_apps/icon.rs).
+    if std::env::args_os().nth(1).as_deref()
+        == Some(std::ffi::OsStr::new(gxserver::DRAW_ICON_COMMAND))
+    {
+        std::process::exit(gxserver::run_draw_icon_child());
+    }
     if invoked_as_cli() {
         std::process::exit(gxserver::ghostex_cli::run());
     }

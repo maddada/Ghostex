@@ -62,6 +62,8 @@ pub(crate) mod file_memo;
 pub(crate) mod freebuff_activity;
 pub(crate) mod gbots;
 pub(crate) mod ghostex_apps;
+/// `gxserver __draw-ghostex-app-icon`, the child that draws an agent's SVG icon (ghostex_apps/icon.rs).
+pub use ghostex_apps::icon::{run_draw_icon_child, DRAW_ICON_COMMAND};
 pub mod ghostex_cli;
 pub mod git_ship_workflow;
 pub mod global_project_defaults;

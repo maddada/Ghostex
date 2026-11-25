@@ -61,9 +61,11 @@ pub fn read(path: &Path) -> io::Result<SettingsRead> {
 pub fn save(path: &Path, bytes: &[u8]) -> io::Result<Vec<String>> {
     let _lock = lock(path);
     let mut problems = Vec::new();
+    let mut before = None;
     match retry_while_busy(|| fs::read(path)) {
         Ok(previous) if parse_object(&previous).is_some() => {
-            refresh_backup(path, &previous, &mut problems)
+            refresh_backup(path, &previous, &mut problems);
+            before = parse_object(&previous);
         }
         Ok(previous) => {
             let copy = keep_corrupt_copy(path, &previous)?;
@@ -77,8 +79,62 @@ pub fn save(path: &Path, bytes: &[u8]) -> io::Result<Vec<String>> {
         Err(error) if error.kind() == ErrorKind::NotFound => {}
         Err(error) => return Err(error),
     }
+    if let Some(before) = &before {
+        count_switch_offs(path, before, bytes, &mut problems);
+    }
     write_durably(path, bytes)?;
     Ok(problems)
+}
+
+/// Switches whose every turn-off (`true` to anything else) [`save`] counts in
+/// `<settings file>.offs`, a JSON object of counts by key.
+///
+/// CDXC:GhostexApps 2026-11-26 WHY:
+/// Fable's re-review of 970a63ba9: gxserver drops every Ghostex Apps launch token when its settings watch reads the switch off, but the watch reads at most once a second, so turning the switch off and on again between two reads left an open app's token working. Every writer of the settings file (the desktop app, and gxserver itself on a computer without it) saves through here, so a count of turn-offs kept beside the file is a generation number no read can miss: gxserver binds each token to the count it was minted under (server/src/ghostex_apps/tokens.rs).
+const COUNTED_SWITCH_OFFS: &[&str] = &["ghostexAppsEnabled"];
+
+/// How many times `key` was turned off through [`save`]; 0 when never or when unreadable.
+pub fn switch_offs(path: &Path, key: &str) -> u64 {
+    fs::read(sibling(path, ".offs"))
+        .ok()
+        .and_then(|bytes| parse_object(&bytes))
+        .and_then(|counts| counts.get(key).and_then(Value::as_u64))
+        .unwrap_or(0)
+}
+
+fn count_switch_offs(
+    path: &Path,
+    before: &Map<String, Value>,
+    after: &[u8],
+    problems: &mut Vec<String>,
+) {
+    let after = parse_object(after).unwrap_or_default();
+    let on =
+        |settings: &Map<String, Value>, key: &str| settings.get(key) == Some(&Value::Bool(true));
+    let turned_off: Vec<&str> = COUNTED_SWITCH_OFFS
+        .iter()
+        .copied()
+        .filter(|key| on(before, key) && !on(&after, key))
+        .collect();
+    if turned_off.is_empty() {
+        return;
+    }
+    let offs_path = sibling(path, ".offs");
+    let mut counts = fs::read(&offs_path)
+        .ok()
+        .and_then(|bytes| parse_object(&bytes))
+        .unwrap_or_default();
+    for key in turned_off {
+        let next = counts.get(key).and_then(Value::as_u64).unwrap_or(0) + 1;
+        counts.insert(key.to_string(), Value::from(next));
+    }
+    let bytes = serde_json::to_vec(&Value::Object(counts)).unwrap_or_default();
+    if let Err(error) = write_durably(&offs_path, &bytes) {
+        problems.push(format!(
+            "Could not count a switch turned off in {}: {error}.",
+            file_name(&offs_path)
+        ));
+    }
 }
 
 fn refresh_backup(path: &Path, previous: &[u8], problems: &mut Vec<String>) {
@@ -265,4 +321,29 @@ fn utc_stamp(time: SystemTime) -> String {
         second_of_day % 3_600 / 60,
         second_of_day % 60
     )
+}
+
+#[cfg(test)]
+mod switch_off_tests {
+    use super::*;
+
+    #[test]
+    fn counts_each_turn_off_of_a_counted_switch() {
+        let dir = std::env::temp_dir().join(format!("ghostex-paths-offs-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("native-sidebar-settings.json");
+        let key = "ghostexAppsEnabled";
+        save(&path, br#"{"ghostexAppsEnabled": true}"#).unwrap();
+        assert_eq!(switch_offs(&path, key), 0);
+        // Off then on again, faster than anyone polling the file could see.
+        save(&path, br#"{"ghostexAppsEnabled": false}"#).unwrap();
+        save(&path, br#"{"ghostexAppsEnabled": true}"#).unwrap();
+        assert_eq!(switch_offs(&path, key), 1);
+        save(&path, br#"{"ghostexAppsEnabled": true, "theme": "dark"}"#).unwrap();
+        save(&path, br#"{"theme": "dark"}"#).unwrap();
+        assert_eq!(switch_offs(&path, key), 2);
+        save(&path, br#"{"theme": "light"}"#).unwrap();
+        assert_eq!(switch_offs(&path, key), 2);
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

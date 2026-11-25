@@ -136,7 +136,7 @@ async fn route_http_unboxed(
         return Box::pin(crate::ghostex_apps::serve(state.clone(), path, host)).await;
     }
     if method == Method::OPTIONS && crate::ghostex_apps::is_bridge_route(&path) {
-        return crate::ghostex_apps::bridge_preflight(&parts.headers);
+        return crate::ghostex_apps::bridge_preflight(&state, &parts.headers);
     }
     if method == Method::POST && crate::ghostex_apps::is_bridge_route(&path) {
         // Boxed: the routing future is large (see http_dispatch.rs).

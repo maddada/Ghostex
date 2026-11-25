@@ -9,7 +9,7 @@
 use std::{
     collections::HashMap,
     sync::Mutex,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime},
 };
 
 use rand::TryRng;
@@ -23,8 +23,34 @@ const PER_APP: usize = 16;
 
 struct Entry {
     app_id: String,
-    minted: Instant,
-    last_used: Instant,
+    /// The count of Ghostex Apps switch-offs it was minted under (feature.rs `generation`).
+    generation: u64,
+    minted: Moment,
+    last_used: Moment,
+}
+
+/// A moment by both clocks. `Instant` stops while a Mac sleeps, so a lid closed overnight did not
+/// count toward a token's life (re-review nit); the wall clock does, and the larger of the two
+/// elapsed times counts, so setting the clock back does not lengthen a life either.
+#[derive(Clone, Copy)]
+struct Moment {
+    steady: Instant,
+    wall: SystemTime,
+}
+
+impl Moment {
+    fn now() -> Self {
+        Self {
+            steady: Instant::now(),
+            wall: SystemTime::now(),
+        }
+    }
+
+    fn elapsed_at(self, now: Moment) -> Duration {
+        let steady = now.steady.saturating_duration_since(self.steady);
+        let wall = now.wall.duration_since(self.wall).unwrap_or_default();
+        steady.max(wall)
+    }
 }
 
 static TOKENS: Mutex<Option<HashMap<String, Entry>>> = Mutex::new(None);
@@ -34,17 +60,18 @@ fn with_tokens<T>(run: impl FnOnce(&mut HashMap<String, Entry>) -> T) -> T {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let tokens = guard.get_or_insert_with(HashMap::new);
-    let now = Instant::now();
+    let now = Moment::now();
     tokens.retain(|_, entry| live(entry, now));
     run(tokens)
 }
 
-fn live(entry: &Entry, now: Instant) -> bool {
-    now.duration_since(entry.minted) < LIFETIME && now.duration_since(entry.last_used) < IDLE_EXPIRY
+fn live(entry: &Entry, now: Moment) -> bool {
+    entry.minted.elapsed_at(now) < LIFETIME && entry.last_used.elapsed_at(now) < IDLE_EXPIRY
 }
 
-/// A new token for `app_id`: 128 random bits as hex, prefixed so it is recognisable in a report.
-pub(super) fn mint(app_id: &str) -> String {
+/// A new token for `app_id` under switch-off count `generation`: 128 random bits as hex, prefixed
+/// so it is recognisable in a report.
+pub(super) fn mint(app_id: &str, generation: u64) -> String {
     let mut bytes = [0u8; 16];
     rand::rngs::SysRng
         .try_fill_bytes(&mut bytes)
@@ -60,7 +87,7 @@ pub(super) fn mint(app_id: &str) -> String {
         let mut mine: Vec<(String, Instant)> = tokens
             .iter()
             .filter(|(_, entry)| entry.app_id == app_id)
-            .map(|(token, entry)| (token.clone(), entry.minted))
+            .map(|(token, entry)| (token.clone(), entry.minted.steady))
             .collect();
         if mine.len() >= PER_APP {
             mine.sort_by_key(|(_, minted)| *minted);
@@ -68,11 +95,12 @@ pub(super) fn mint(app_id: &str) -> String {
                 tokens.remove(old);
             }
         }
-        let now = Instant::now();
+        let now = Moment::now();
         tokens.insert(
             token.clone(),
             Entry {
                 app_id: app_id.to_string(),
+                generation,
                 minted: now,
                 last_used: now,
             },
@@ -81,15 +109,20 @@ pub(super) fn mint(app_id: &str) -> String {
     token
 }
 
-/// Whether `token` was minted for `app_id` and is still live; a match counts as a use.
-pub(super) fn check(app_id: &str, token: &str) -> bool {
+/// Whether `token` was minted for `app_id` under switch-off count `generation` and is still live;
+/// a match counts as a use. A token from before a switch-off is dropped.
+pub(super) fn check(app_id: &str, token: &str, generation: u64) -> bool {
     if !token.starts_with("gxa_") {
         return false;
     }
     with_tokens(|tokens| match tokens.get_mut(token) {
-        Some(entry) if entry.app_id == app_id => {
-            entry.last_used = Instant::now();
+        Some(entry) if entry.app_id == app_id && entry.generation == generation => {
+            entry.last_used = Moment::now();
             true
+        }
+        Some(entry) if entry.generation != generation => {
+            tokens.remove(token);
+            false
         }
         _ => false,
     })
@@ -113,43 +146,77 @@ mod tests {
     fn a_token_opens_only_its_own_app_until_revoked() {
         let app = "a".repeat(32);
         let other = "b".repeat(32);
-        let token = mint(&app);
-        assert!(check(&app, &token));
-        assert!(!check(&other, &token));
-        assert!(!check(&app, "gxa_not-a-token"));
-        assert!(!check(&app, ""));
+        let token = mint(&app, 0);
+        assert!(check(&app, &token, 0));
+        assert!(!check(&other, &token, 0));
+        assert!(!check(&app, "gxa_not-a-token", 0));
+        assert!(!check(&app, "", 0));
         revoke_app(&app);
-        assert!(!check(&app, &token));
+        assert!(!check(&app, &token, 0));
     }
 
     #[test]
     fn keeps_a_bounded_number_per_app() {
         let app = "c".repeat(32);
-        let first = mint(&app);
+        let first = mint(&app, 0);
         for _ in 0..PER_APP {
-            mint(&app);
+            mint(&app, 0);
         }
-        assert!(!check(&app, &first));
+        assert!(!check(&app, &first, 0));
+    }
+
+    #[test]
+    fn a_switch_off_drops_tokens_from_before_it() {
+        let app = "d".repeat(32);
+        let token = mint(&app, 4);
+        assert!(check(&app, &token, 4));
+        // Switched off and on again between two reads of the settings watch.
+        assert!(!check(&app, &token, 5));
+        assert!(!check(&app, &token, 4));
+    }
+
+    fn entry(minted: Moment, last_used: Moment) -> Entry {
+        Entry {
+            app_id: String::new(),
+            generation: 0,
+            minted,
+            last_used,
+        }
     }
 
     #[test]
     fn use_does_not_keep_a_token_past_its_lifetime() {
-        let now = Instant::now();
-        let Some(old) = now.checked_sub(LIFETIME + Duration::from_secs(1)) else {
+        let now = Moment::now();
+        let Some(old_steady) = now.steady.checked_sub(LIFETIME + Duration::from_secs(1)) else {
             return;
         };
-        let entry = Entry {
-            app_id: String::new(),
-            minted: old,
-            last_used: now,
+        let old = Moment {
+            steady: old_steady,
+            wall: now.wall - (LIFETIME + Duration::from_secs(1)),
         };
-        assert!(!live(&entry, now));
-        let idle = Entry {
-            app_id: String::new(),
-            minted: now,
-            last_used: now,
+        assert!(!live(&entry(old, now), now));
+        assert!(live(&entry(now, now), now));
+        let later = Moment {
+            steady: now.steady + IDLE_EXPIRY,
+            wall: now.wall + IDLE_EXPIRY,
         };
-        assert!(live(&idle, now));
-        assert!(!live(&idle, now + IDLE_EXPIRY));
+        assert!(!live(&entry(now, now), later));
+    }
+
+    #[test]
+    fn sleep_counts_toward_a_tokens_life() {
+        // While a Mac sleeps the steady clock stands still and the wall clock moves on.
+        let now = Moment::now();
+        let after_a_night = Moment {
+            steady: now.steady + Duration::from_secs(60),
+            wall: now.wall + LIFETIME,
+        };
+        assert!(!live(&entry(now, now), after_a_night));
+        // Setting the wall clock back does not lengthen it either.
+        let clock_set_back = Moment {
+            steady: now.steady + IDLE_EXPIRY,
+            wall: now.wall - Duration::from_secs(3600),
+        };
+        assert!(!live(&entry(now, now), clock_set_back));
     }
 }

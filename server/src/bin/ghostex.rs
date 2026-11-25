@@ -11,5 +11,11 @@ binary (`invoked_as_cli` in main.rs; a hard link on Windows). Only
 because .github/workflows/release-gpui-windows.yml checks and uploads it.
 */
 fn main() {
+    // `ghostex app show` draws the app's icon in a child of this program (ghostex_apps/icon.rs).
+    if std::env::args_os().nth(1).as_deref()
+        == Some(std::ffi::OsStr::new(gxserver::DRAW_ICON_COMMAND))
+    {
+        std::process::exit(gxserver::run_draw_icon_child());
+    }
     std::process::exit(gxserver::ghostex_cli::run());
 }

@@ -11,6 +11,9 @@
 //!
 //! CDXC:GhostexApps 2026-11-26 WHY:
 //! Fable's security review (finding 3, proven live): an agent that sends the token file instead of its own session token passed as the user and allowed its own app's powers. These three routes now take the stricter rule of server/src/server/autopilot_http.rs `is_user`: the token file counts as the user only from a terminal that names no Ghostex session (the CLI inside a session sends the one it runs in). Every grant change, open and delete, and every refusal of one, goes to the security log. What stays open is the same-user limit Ghostex can't close: an agent that sends the token file without the session header, or edits app.json. Finding 9: list and read show an agent only its own project's apps.
+//!
+//! CDXC:GhostexApps 2026-11-26 WHY:
+//! Fable's re-review of 970a63ba9: the security log sentence quoted the caller's own `id`, `permission` and `decision`, so a refused session wrote "Approved by you: allow" and a right-to-left override into its entry, and every refusal wrote a line without limit. The sentence now holds only fixed forms (a real app id, a known permission, one of the three decisions, or "unknown"), and each caller's refusals of one route are logged three times per 10 minutes, the next line saying how many were left out. List and read follow `is_user`: the token file naming a session sees no app.
 
 use std::sync::Arc;
 
@@ -75,10 +78,12 @@ enum Sees {
     Nothing,
 }
 
-fn sees(caller: &Principal) -> Sees {
+/// Follows [`is_user`]: the token file naming a session is neither the user nor a session whose
+/// token proved its project, so it sees nothing.
+fn sees(caller: &Principal, token_file_names_session: bool) -> Sees {
     match caller {
         Principal::Session { project_id, .. } => Sees::Project(project_id.clone()),
-        caller if caller.is_owner_device() => Sees::All,
+        caller if is_user(caller, token_file_names_session) => Sees::All,
         _ => Sees::Nothing,
     }
 }
@@ -99,27 +104,98 @@ fn audit_kind(endpoint: &str) -> &'static str {
     }
 }
 
-/// The security log's sentence for a call to one of the user's routes.
+/// The security log's sentence for a call to one of the user's routes, and the app it names. Only
+/// fixed forms go in: an id that is not an app id, a permission Ghostex does not know or a
+/// decision that is not one of the three is named as such, never quoted, so a caller cannot write
+/// its own words (or control and direction characters) into the log (re-review of 970a63ba9).
 fn audit_summary(endpoint: &str, params: &Value) -> (String, String) {
     let params = params.get("params").unwrap_or(params);
-    let field = |key: &str| {
-        params
-            .get(key)
-            .and_then(Value::as_str)
-            .map(|value| super::store::clip_chars(value.trim(), 40))
-            .unwrap_or_default()
-    };
-    let id = field("id");
+    let field = |key: &str| params.get(key).and_then(Value::as_str).map(str::trim);
+    let id = field("id")
+        .filter(|id| super::store::is_app_id(id))
+        .map(str::to_string);
+    let app = id.as_deref().map_or_else(
+        || "an app with a malformed id".to_string(),
+        |id| format!("the Ghostex App {id}"),
+    );
     let summary = match endpoint {
-        OPEN_GHOSTEX_APP_ENDPOINT => format!("Open the Ghostex App {id}"),
-        SET_GHOSTEX_APP_GRANT_ENDPOINT => format!(
-            "Set the Ghostex App {id}'s \"{}\" permission to {}",
-            field("permission"),
-            field("decision")
-        ),
-        _ => format!("Delete the Ghostex App {id}"),
+        OPEN_GHOSTEX_APP_ENDPOINT => format!("Open {app}"),
+        SET_GHOSTEX_APP_GRANT_ENDPOINT => {
+            let permission = field("permission").and_then(Power::from_name).map_or_else(
+                || "an unknown permission".to_string(),
+                |power| format!("the \"{}\" permission", power.name()),
+            );
+            let decision = field("decision")
+                .filter(|decision| matches!(*decision, "allowed" | "denied" | "ask"))
+                .unwrap_or("an unknown decision");
+            format!("Set {permission} of {app} to {decision}")
+        }
+        _ => format!("Delete {app}"),
     };
-    (summary, id)
+    (summary, id.unwrap_or_default())
+}
+
+/// Refusals logged per caller and route in [`REFUSAL_WINDOW`]; the rest are counted and the next
+/// line logged says how many were left out (re-review: 40 refused opens wrote 40 lines).
+const REFUSALS_LOGGED: u32 = 3;
+const REFUSAL_WINDOW: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
+struct Refusals {
+    since: std::time::Instant,
+    logged: u32,
+    left_out: u32,
+}
+
+static REFUSALS: std::sync::Mutex<Option<std::collections::HashMap<String, Refusals>>> =
+    std::sync::Mutex::new(None);
+
+/// Whether to log this refusal, and how many like it went unlogged before it.
+fn log_refusal(key: String) -> Option<u32> {
+    let mut guard = REFUSALS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let refusals = guard.get_or_insert_with(std::collections::HashMap::new);
+    let now = std::time::Instant::now();
+    refusals
+        .retain(|_, entry| now.duration_since(entry.since) < REFUSAL_WINDOW || entry.left_out > 0);
+    if refusals.len() > 1024 {
+        refusals.clear();
+    }
+    let entry = refusals.entry(key).or_insert(Refusals {
+        since: now,
+        logged: 0,
+        left_out: 0,
+    });
+    if now.duration_since(entry.since) >= REFUSAL_WINDOW {
+        let left_out = entry.left_out;
+        *entry = Refusals {
+            since: now,
+            logged: 1,
+            left_out: 0,
+        };
+        return Some(left_out);
+    }
+    if entry.logged < REFUSALS_LOGGED {
+        entry.logged += 1;
+        return Some(0);
+    }
+    entry.left_out = entry.left_out.saturating_add(1);
+    None
+}
+
+/// Who a refusal came from, to count its repeats.
+fn caller_key(caller: &Principal) -> String {
+    match caller {
+        Principal::Session { session_id, .. } => format!("session:{session_id}"),
+        Principal::Owner { device_id } | Principal::Device { device_id } => {
+            format!("device:{device_id}")
+        }
+        Principal::LocalAgent => "token file".to_string(),
+        Principal::Peer { server_id, .. } => format!("peer:{server_id}"),
+        Principal::Guest { share_id } => format!("guest:{share_id}"),
+        Principal::Extension { extension_id } => format!("extension:{extension_id}"),
+        Principal::Anonymous => "anonymous".to_string(),
+    }
 }
 
 pub(crate) async fn handle_ghostex_apps_http(
@@ -149,9 +225,19 @@ pub(crate) async fn handle_ghostex_apps_http(
             );
         }
     };
-    if users && !is_user(&caller, crate::audit::token_file_names_session()) {
+    let names_session = crate::audit::token_file_names_session();
+    if users && !is_user(&caller, names_session) {
         let message = "Only you can do this, from Ghostex itself; an agent can't.";
-        record(crate::audit::Outcome::Refused(message.to_string()));
+        let key = format!("{}|{}", audit_kind(&endpoint_path), caller_key(&caller));
+        if let Some(left_out) = log_refusal(key) {
+            let message = match left_out {
+                0 => message.to_string(),
+                count => format!(
+                    "{message} ({count} more like it from the same caller were not logged.)"
+                ),
+            };
+            record(crate::audit::Outcome::Refused(message));
+        }
         return domain_error_response(
             endpoint_path,
             request_id,
@@ -167,13 +253,24 @@ pub(crate) async fn handle_ghostex_apps_http(
     };
     let state_dir = state.paths.root_dir.clone();
     let endpoint = endpoint_path.clone();
-    let result = tokio::task::spawn_blocking(move || run(&state_dir, &endpoint, &params, &caller))
-        .await
-        .unwrap_or_else(|error| {
-            Err(DomainStateError::corrupt_state(format!(
-                "Ghostex Apps stopped unexpectedly: {error}"
-            )))
-        });
+    let paths = state.paths.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let generation = super::feature::generation(&paths);
+        run(
+            &state_dir,
+            &endpoint,
+            &params,
+            &caller,
+            names_session,
+            generation,
+        )
+    })
+    .await
+    .unwrap_or_else(|error| {
+        Err(DomainStateError::corrupt_state(format!(
+            "Ghostex Apps stopped unexpectedly: {error}"
+        )))
+    });
     record(crate::audit::Outcome::of(
         &result.as_ref().map_err(|error| &error.message),
     ));
@@ -192,11 +289,13 @@ fn run(
     endpoint: &str,
     params: &Map<String, Value>,
     caller: &Principal,
+    token_file_names_session: bool,
+    generation: u64,
 ) -> Result<Value, DomainStateError> {
     if endpoint == PUBLISH_GHOSTEX_APP_ENDPOINT {
         return publish_app(state_dir, params, caller);
     }
-    let sees = sees(caller);
+    let sees = sees(caller, token_file_names_session);
     if endpoint == LIST_GHOSTEX_APPS_ENDPOINT {
         let apps: Vec<Value> = list_records(state_dir)
             .iter()
@@ -217,7 +316,7 @@ fn run(
     match endpoint {
         READ_GHOSTEX_APP_ENDPOINT => Ok(summary(&record)),
         OPEN_GHOSTEX_APP_ENDPOINT => {
-            let token = tokens::mint(&id);
+            let token = tokens::mint(&id, generation);
             Ok(json!({
                 "id": id,
                 "path": format!("{APP_ROUTE_PREFIX}{id}"),
@@ -314,15 +413,62 @@ mod tests {
         let mine = json!({"id": "a", "publisher": {"projectId": "P1", "sessionId": "S1"}});
         let theirs = json!({"id": "b", "publisher": {"projectId": "P2", "sessionId": "S2"}});
         let local = json!({"id": "c", "publisher": null});
-        let agent = sees(&session("P1"));
+        let agent = sees(&session("P1"), false);
         assert!(visible(&mine, &agent));
         assert!(!visible(&theirs, &agent));
         assert!(!visible(&local, &agent));
-        let user = sees(&Principal::LocalAgent);
+        let user = sees(&Principal::LocalAgent, false);
         assert!(visible(&theirs, &user) && visible(&local, &user));
-        let guest = sees(&Principal::Guest {
-            share_id: "g".to_string(),
-        });
+        // The token file naming a session is not the user (re-review nit).
+        let named = sees(&Principal::LocalAgent, true);
+        assert!(!visible(&mine, &named) && !visible(&local, &named));
+        let guest = sees(
+            &Principal::Guest {
+                share_id: "g".to_string(),
+            },
+            false,
+        );
         assert!(!visible(&mine, &guest));
+    }
+
+    #[test]
+    fn the_log_sentence_holds_only_fixed_forms() {
+        let id = "0123456789abcdef0123456789abcdef";
+        let (summary, target) = audit_summary(
+            SET_GHOSTEX_APP_GRANT_ENDPOINT,
+            &json!({"params": {"id": id, "permission": "send", "decision": "allowed"}}),
+        );
+        assert_eq!(
+            summary,
+            format!("Set the \"send\" permission of the Ghostex App {id} to allowed")
+        );
+        assert_eq!(target, id);
+        // The review's case: a refused session's own words and a right-to-left override.
+        let (summary, target) = audit_summary(
+            SET_GHOSTEX_APP_GRANT_ENDPOINT,
+            &json!({"id": "x\u{202E}. Approved by you: allow", "permission": "send\nApproved", "decision": "allow\u{202E}"}),
+        );
+        assert_eq!(
+            summary,
+            "Set an unknown permission of an app with a malformed id to an unknown decision"
+        );
+        assert_eq!(target, "");
+        let (summary, _) = audit_summary(OPEN_GHOSTEX_APP_ENDPOINT, &json!({"id": 7}));
+        assert_eq!(summary, "Open an app with a malformed id");
+    }
+
+    #[test]
+    fn repeated_refusals_are_collapsed() {
+        let key = || "ghostexApps.open|session:test-collapse".to_string();
+        for _ in 0..REFUSALS_LOGGED {
+            assert_eq!(log_refusal(key()), Some(0));
+        }
+        for _ in 0..37 {
+            assert_eq!(log_refusal(key()), None);
+        }
+        assert_eq!(
+            log_refusal("ghostexApps.open|session:other".to_string()),
+            Some(0)
+        );
     }
 }

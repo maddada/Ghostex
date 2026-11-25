@@ -22,6 +22,15 @@ pub(crate) fn apps_on(paths: &GxserverPaths) -> bool {
     on_in(settings.as_ref())
 }
 
+/// How many times Ghostex Apps was switched off, counted by every save of the settings file
+/// (packages/paths/src/settings_file.rs `switch_offs`). A launch token works only under the count
+/// it was minted with, so switching off and on again between two reads of the settings watch still
+/// drops it (re-review of 970a63ba9).
+pub(crate) fn generation(paths: &GxserverPaths) -> u64 {
+    let path = crate::shared_settings_file::shared_settings_path(paths);
+    ghostex_paths::settings_file::switch_offs(&path, "ghostexAppsEnabled")
+}
+
 /// Called by the settings watch (server/shared_settings_watch.rs) with every settings read that
 /// changed something: while Ghostex Apps is off no launch token survives, so turning it off and on
 /// again never brings back a window opened before (review finding 7).

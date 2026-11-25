@@ -458,6 +458,7 @@ pub(crate) fn domain_error_response(
         "projectPathUnavailable" => StatusCode::CONFLICT,
         crate::accounts::launch::ACCOUNT_UNAVAILABLE => StatusCode::CONFLICT,
         "dependencyUnavailable" => StatusCode::SERVICE_UNAVAILABLE,
+        "rateLimited" => StatusCode::TOO_MANY_REQUESTS,
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     };
     let reason = crate::session_chat_send_diagnostics::SendFailureReason {

@@ -11,6 +11,7 @@ use serde_json::{json, Map, Value};
 use crate::{domain::DomainStateError, security::Principal};
 
 use super::{
+    bridge::Limit,
     icon::{icon_png, IconKind},
     manifest::declared_powers,
     serve::APP_ROUTE_PREFIX,
@@ -19,6 +20,9 @@ use super::{
 };
 
 pub(crate) const PUBLISH_GHOSTEX_APP_ENDPOINT: &str = "/api/publishGhostexApp";
+/// Publishes per session (or per caller from outside a session), counted before the icon is
+/// drawn, so a loop cannot keep gxserver drawing.
+static PUBLISHES: Limit = Limit::new(10, std::time::Duration::from_secs(60));
 /// The JSON body carries the app as an escaped string, which can grow it to twice its size, plus
 /// its icon in base64.
 pub(crate) const PUBLISH_GHOSTEX_APP_BODY_LIMIT_BYTES: usize = 2 * APP_MAX_BYTES + 1024 * 1024;
@@ -84,6 +88,16 @@ pub(super) fn publish_app(
     caller: &Principal,
 ) -> Result<Value, DomainStateError> {
     let publisher = publisher_of(caller)?;
+    let limit_key = publisher
+        .as_ref()
+        .map_or("you", |publisher| publisher.session_id.as_str());
+    if !PUBLISHES.take(limit_key) {
+        return Err(DomainStateError {
+            code: "rateLimited",
+            message: "Too many publishes from this session; wait a minute and publish again."
+                .to_string(),
+        });
+    }
     let text = |key: &str| {
         params
             .get(key)
