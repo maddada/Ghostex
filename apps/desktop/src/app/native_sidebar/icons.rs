@@ -44,7 +44,6 @@ fn render_session_icon(
     dragging: bool,
 ) -> AnyElement {
     let scale = appearance.scale;
-    let settings = &hud["settings"];
     let delayed = session
         .details
         .get("delayedSendDeadlineAt")
@@ -121,15 +120,16 @@ fn render_session_icon(
         )
         .into_any_element();
     }
-    let opacity = icon_opacity(
-        session,
-        settings,
-        appearance,
-        buttons_shown,
-        hovered,
-        dragging,
-    );
     if super::threads::is_coordinator(session) {
+        // CDXC:Coordinators 2026-11-25 WHY: the crown is not an agent logo but the one mark that tells a coordinator from its workers, so Hide session agent icons until hover (`hideSessionAgentIconUntilHover`, on in the compact presets) does not hide it, as it hides no tag or draft icon either; with it on, a coordinator row looked like any other. The crown keeps the row's focus, hover and sleep dimming.
+        let opacity = icon_opacity(
+            session,
+            &Value::Null,
+            appearance,
+            buttons_shown,
+            hovered,
+            dragging,
+        );
         return div()
             .size(px(15.0 * scale))
             .flex()

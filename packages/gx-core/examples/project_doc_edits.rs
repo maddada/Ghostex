@@ -137,6 +137,7 @@ fn group(group_id: &str, sidebar_session_ids: &[&str]) -> ghostex_gx_core::Group
                     is_multi_selected: false,
                     nesting: Default::default(),
                     machine_fold: None,
+                    thread_of: None,
                 })
                 .collect(),
             remote_machine: None,

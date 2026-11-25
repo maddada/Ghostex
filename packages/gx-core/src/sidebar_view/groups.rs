@@ -14,7 +14,7 @@ use super::inputs::{SectionId, SidebarSettings, SidebarUiState};
 use super::ordering::{held_out_of_working, order_rows_for_display, row_deadline_ms};
 use super::sections::{project_session_sections, SectionLayout};
 use super::tags::matches_session_filters;
-use super::threads::nest_threads;
+use super::threads::{nest_threads, thread_drawn_apart};
 use super::view::{
     FoldedWorktree, GroupActionTarget, GroupCore, GroupSummary, NeedsYou, ProjectContextView,
     RemoteMachineView, SessionRow, SessionView, ThreadTally, WorktreeView,
@@ -153,6 +153,7 @@ pub(crate) fn build_group(
     ui: &SidebarUiState,
     settings: &SidebarSettings,
     thread_tallies: &HashMap<SessionKey, ThreadTally>,
+    coordinator_titles: &HashMap<SessionKey, String>,
     now_ms: u64,
 ) -> GroupBuild {
     let rows: Vec<Arc<SessionRow>> = plan.rows.iter().map(|row| row.row.clone()).collect();
@@ -194,6 +195,7 @@ pub(crate) fn build_group(
                 is_visible,
                 nesting: Default::default(),
                 machine_fold: None,
+                thread_of: None,
                 is_multi_selected: ui
                     .selected_session_ids
                     .iter()
@@ -228,6 +230,7 @@ pub(crate) fn build_group(
         {
             session.nesting.threads = *tally;
         }
+        session.thread_of = thread_drawn_apart(&session.row, &session.nesting, coordinator_titles);
     }
     let summary = group_summary(&sessions);
     let core = GroupCore {
@@ -515,6 +518,7 @@ mod summary_tests {
             is_multi_selected: false,
             nesting: RowNesting::default(),
             machine_fold: None,
+            thread_of: None,
         }
     }
 

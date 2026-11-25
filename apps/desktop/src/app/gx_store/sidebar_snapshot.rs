@@ -60,6 +60,9 @@ struct CachedRow {
     /// The coordinator tree moves without the row changing: a thread of it starts working, or the
     /// user folds it.
     nesting: ghostex_gx_core::RowNesting,
+    /// A thread drawn apart from its coordinator's tree names that coordinator, which can be
+    /// renamed without the row changing.
+    thread_of: Option<String>,
     element: Arc<NativeSidebarSession>,
 }
 
@@ -80,6 +83,7 @@ impl CachedRow {
             && self.timer_label == *timer_label
             && self.last_interaction_label == *last_interaction_label
             && self.nesting == session.nesting
+            && self.thread_of == session.thread_of
     }
 }
 
@@ -816,6 +820,7 @@ fn session_element(
             timer_label,
             last_interaction_label,
             nesting: session.nesting,
+            thread_of: session.thread_of.clone(),
             element: element.clone(),
         },
     );
@@ -951,6 +956,11 @@ fn build_session(
         details.insert("isMainCoordinator".to_string(), Value::Bool(true));
     }
     insert_coordinator_nesting(&mut details, row, &session.nesting);
+    // A thread drawn apart from its coordinator's tree: the coordinator's title, which its thread
+    // mark names (gx-core `thread_drawn_apart`, native_sidebar/threads.rs `thread_apart_mark`).
+    if let Some(coordinator) = &session.thread_of {
+        details.insert("threadOf".to_string(), Value::String(coordinator.clone()));
+    }
     if let Some(fold) = &session.machine_fold {
         details.insert(
             "machineFold".to_string(),

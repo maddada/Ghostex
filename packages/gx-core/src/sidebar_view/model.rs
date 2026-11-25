@@ -25,7 +25,7 @@ use super::projects::ProjectMeta;
 use super::rows::{browser_row, session_row, RowContext};
 use super::spaces::SpacesState;
 use super::tags::{tag_label, TagCatalog};
-use super::threads::tally_threads;
+use super::threads::{coordinator_titles, tally_threads};
 use super::view::{MachineSummary, RemoteMachineView, SidebarView, ThreadTally};
 
 /// The inputs of one group, so a group that nothing touched is kept as it is.
@@ -56,6 +56,9 @@ struct GroupKey {
     expanded_machine_folds: (bool, bool),
     /// The threads of the group's coordinators, which may sit in other groups, by position.
     coordinator_threads: Vec<(usize, ThreadTally)>,
+    /// The titles of the coordinators the group's threads belong to, which may sit in other
+    /// groups, by position (`thread_drawn_apart`).
+    thread_coordinators: Vec<(usize, Option<String>)>,
     section_collapse: SectionCollapse,
     enable_parking: bool,
     sort_mode: super::inputs::SessionSortMode,
@@ -821,9 +824,21 @@ impl SidebarViewModel {
                 .flat_map(|plan| plan.rows.iter().map(|row| &row.row)),
             now_ms,
         );
+        // The coordinators a thread drawn apart from its tree names (`thread_drawn_apart`).
+        let coordinator_titles = coordinator_titles(
+            plans
+                .iter()
+                .flat_map(|plan| plan.rows.iter().map(|row| &row.row)),
+        );
         let mut builds: BTreeMap<String, GroupBuild> = BTreeMap::new();
         for plan in &plans {
-            let key = group_key(plan, &drawn_focus, effective, &thread_tallies);
+            let key = group_key(
+                plan,
+                &drawn_focus,
+                effective,
+                &thread_tallies,
+                &coordinator_titles,
+            );
             let reuse = previous
                 .as_mut()
                 .and_then(|previous| previous.groups.remove(&plan.group_id))
@@ -844,6 +859,7 @@ impl SidebarViewModel {
                         &effective.ui,
                         &effective.settings,
                         &thread_tallies,
+                        &coordinator_titles,
                         now_ms,
                     )
                 }
@@ -1333,6 +1349,7 @@ fn group_key(
     focus: &FocusKey,
     inputs: &SidebarInputs,
     thread_tallies: &HashMap<SessionKey, ThreadTally>,
+    coordinator_titles: &HashMap<SessionKey, String>,
 ) -> GroupKey {
     let is_active = focus.active_group_id.as_deref() == Some(plan.group_id.as_str());
     GroupKey {
@@ -1427,6 +1444,15 @@ fn group_key(
             .filter_map(|(index, row)| {
                 let key = row.row.key.as_ref()?;
                 Some((index, thread_tallies.get(key).copied()?))
+            })
+            .collect(),
+        thread_coordinators: plan
+            .rows
+            .iter()
+            .enumerate()
+            .filter_map(|(index, row)| {
+                let parent = row.row.coordinator_parent.as_ref()?;
+                Some((index, coordinator_titles.get(parent).cloned()))
             })
             .collect(),
         section_collapse: inputs

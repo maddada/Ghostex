@@ -4504,7 +4504,9 @@ version of the Projects features in Cursor and Claude Code.
   waiting on you; when none are waiting, how many are working; when neither,
   how many threads it lists. The icon and number are red when the number counts
   sessions waiting for approval, light blue when it counts threads waiting on
-  you, orange when it counts working threads, and grey otherwise. Its
+  you, orange when it counts working threads, and grey otherwise. Point at the
+  crown or the crew icon for a tooltip that says what they mean. The crown shows
+  even with **Card details: agent icon** (`hideSessionAgentIconUntilHover`) on. Its
   threads sit indented right under it with their own status dots: the ones
   working, waiting, or active in the last 2 hours. Older threads wait behind an
   "N older threads" row at the end, which lists them all (and "Hide older
@@ -4524,7 +4526,10 @@ version of the Projects features in Cursor and Claude Code.
   coordinator marks its finished threads as seen, so their blue dots clear
   (a thread waiting on a question or approval keeps its dot); otherwise opening
   its chat leaves the fold and the older threads as you set them; opening one of its threads
-  unfolds the coordinator so the thread shows. Click a thread to watch it or
+  unfolds the coordinator so the thread shows. A thread listed apart from its
+  coordinator (parked or snoozed, left by a closed coordinator, or in a worktree
+  listed as its own project) shows a small ↳ arrow before its title, and its
+  tooltip names the coordinator. Click a thread to watch it or
   talk to it directly; answer its questions and approvals there. A thread is
   named after its latest task and keeps that name, like the coordinator keeps
   its own (the agent's automatic naming never replaces it); when its

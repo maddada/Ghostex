@@ -5,6 +5,7 @@ use gpui::{
     AnyElement, FontWeight, InteractiveElement, IntoElement, ParentElement,
     StatefulInteractiveElement, Styled, div, px, rgb,
 };
+use gpui_component::tooltip::ManagedTooltipExt as _;
 use serde_json::{Value, json};
 
 impl GhostexGpuiApp {
@@ -30,6 +31,34 @@ impl GhostexGpuiApp {
             }
             _ => icon,
         };
+        // CDXC:Coordinators 2026-11-25 WHY: the crown is what names a coordinator, and a user who did not know it could not tell the coordinator from its workers, so it says so in the sidebar's tooltip (a gold one says main coordinator, CDXC:Coordinators 2026-11-12), plus what a click does while it folds threads. Chief of Staff's crown and a clock keep their own meaning.
+        let crown_tooltip = (super::threads::is_coordinator(session)
+            && !session.is_chief
+            && !(delayed || closing)
+            && self.native_sidebar.pointer_inside
+            && self.native_sidebar.menu.is_none()
+            && !cx.has_active_drag())
+        .then(|| {
+            let role = if super::threads::is_main_coordinator(session) {
+                "Main coordinator"
+            } else {
+                "Coordinator"
+            };
+            match fold {
+                Some(true) => format!("{role}: click to show its threads"),
+                Some(false) => format!("{role}: click to hide its threads"),
+                None => role.to_string(),
+            }
+        });
+        let tooltip_span = self
+            .native_sidebar
+            .session_card_bounds
+            .get(&session.session_id)
+            .map(|card| super::tooltips::SidebarTooltipSpan {
+                left: card.left().as_f32(),
+                right: card.right().as_f32(),
+            })
+            .unwrap_or_else(|| self.native_sidebar_tooltip_span(appearance.scale));
         div().id(format!("native-session-identity-{id}")).size(px(15.0 * appearance.scale)).flex_shrink_0().flex().items_center().justify_center().child(icon)
             .when_some(fold, |identity, collapsed| {
                 let id = id.clone();
@@ -74,6 +103,16 @@ impl GhostexGpuiApp {
                             cx,
                         )
                     })
+            })
+            .when_some(crown_tooltip, |identity, tooltip| {
+                let scale = appearance.scale;
+                identity.managed_discrete_tooltip_with_placement(
+                    tooltip_span.placement(),
+                    appearance.tooltip_delay,
+                    move |window, cx| {
+                        super::tooltips::sidebar_tooltip(tooltip.clone(), tooltip_span, scale, window, cx)
+                    },
+                )
             })
             .when(delayed || closing, |identity| identity.cursor_pointer().on_click(cx.listener(move |app, _, _, cx| {
                 cx.stop_propagation();

@@ -25,7 +25,7 @@ use crate::app::native_sidebar::session_list::{SESSION_HEIGHT, session_card_heig
 use crate::app::native_sidebar::status;
 use crate::app::native_sidebar::threads::{
     TreeAnchor, coordinator_fold_state, crew_badge, crew_tint, unified_clock_owns_fold,
-    unified_fold_key,
+    unified_fold_key, with_crew_tooltip,
 };
 
 /// The overlapping dots of everything under a card, folded or open, with its own status (gx-core
@@ -130,10 +130,15 @@ impl GhostexGpuiApp {
             _ => ghostex_gx_core::CoordinatorBadgeTone::Idle,
         };
         let badge = crew_badge(count, crew_tint(tone, appearance), appearance);
-        if !unified_clock_owns_fold(session) {
-            return Some(badge.into_any_element());
-        }
         let scale = appearance.scale;
+        if !unified_clock_owns_fold(session) {
+            // Information, with its words in the tooltip (`crew_badge_label`).
+            let span = (self.native_sidebar.pointer_inside
+                && self.native_sidebar.menu.is_none()
+                && !cx.has_active_drag())
+            .then(|| self.native_sidebar_tooltip_span(scale));
+            return Some(with_crew_tooltip(badge, session, appearance, span));
+        }
         let label = if collapsed {
             "Show threads"
         } else {
