@@ -191,7 +191,7 @@ fn hook_status_uses_pi_agent_extension_before_legacy_root_paths() {
     write_test_file(
         &agent_extension_path,
         &format!(
-            "// {PI_EXTENSION_MARKER} v8\nconst hook = \"{}\";\n",
+            "// {PI_EXTENSION_MARKER} v9\nconst hook = \"{}\";\n",
             path_string(&hook_paths.notify_hook_path)
         ),
     );

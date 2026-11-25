@@ -421,8 +421,19 @@ function isIdle(ctx: ExtensionContext): boolean {
   }
 }
 
+// A Pi the agent starts from its shell (`pi -p`) or through a subagent tool inherits the lead's
+// terminal environment and loads this extension too; its hooks would rebind the Ghostex session to
+// the child's transcript and take over the lead's chat. Only the terminal's own interactive agent
+// reports, the same rule the chat channel uses before it opens (chat_channel_source.rs).
+function isChildRun(ctx: ExtensionContext): boolean {
+  const typed = ctx as unknown as { mode?: unknown; hasUI?: unknown; agent?: { kind?: unknown } };
+  if (typed.mode !== undefined ? typed.mode !== "tui" : typed.hasUI === false) return true;
+  return typed.agent?.kind === "sub";
+}
+
 function sendHook(subcommand: string, ctx: ExtensionContext, extra: Record<string, unknown> = {}): void {
   if (process.env.GHOSTEX_PI_HOOKS_DISABLED === "1") return;
+  if (isChildRun(ctx)) return;
 
   const sessionId = firstString(ctx.sessionManager.getSessionId());
   if (!sessionId) return;
@@ -996,9 +1007,10 @@ pub(crate) fn current_plugin_marker(marker: &str) -> String {
     // input box, dialog, compaction and trust commands; OMP v7 keeps subagents' hooks off the lead;
     // OMP v8 reports its `task` spawns as SubagentStart/SubagentStop; v12 bounds each hook's
     // delivery and sends held hooks before a new session's; Pi v8 and OMP v13 run the owner check
-    // (`ghostex loopback-owner-check`) before each chat channel request.
+    // (`ghostex loopback-owner-check`) before each chat channel request; Pi v9 keeps print/json/rpc
+    // and subagent runs' hooks off the lead's session (#769).
     if marker == PI_EXTENSION_MARKER {
-        format!("{marker} v8")
+        format!("{marker} v9")
     } else if marker == AMP_PLUGIN_MARKER {
         format!("{marker} v5")
     } else if marker == OMP_EXTENSION_MARKER {
