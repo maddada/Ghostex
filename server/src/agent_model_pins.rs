@@ -283,15 +283,29 @@ pub(crate) fn explicit_settings_default_model(
 
 /// Resolves the concrete launch default `(model, effort, label)` for a new session or thread of
 /// `family`, in priority order:
-/// 1. Explicit per-agent Settings > Agents choice (`agentDefaultModels.<family>`)
-/// 2. Remembered "last used" choice picked in a chat (`launch_default(family)`)
-/// 3. Concrete default from the agent's live model list (`preferred_default_model`: newest Opus
-///    for Claude Code, newest Sol for Codex, newest Neon for Antigravity, else default/first).
+/// - For Cursor:
+///   1. User's own concrete default in Cursor's `cli-config.json` (returns `None` so Ghostex
+///      does not override Cursor's config with `--model` and lets `cursor-agent` start on it)
+///   2. Explicit Settings > Agents default (`agentDefaultModels.cursor`)
+///   3. Remembered "last used" choice picked in a chat (`launch_default("cursor")`)
+///   4. Otherwise `None` (never forces a hard-coded fallback at launch; `resolve_acp_model`
+///      uses Composer 2.5 only if `cursor-agent` also reports no concrete model).
+/// - For other families:
+///   1. Explicit per-agent Settings > Agents choice (`agentDefaultModels.<family>`)
+///   2. Remembered "last used" choice picked in a chat (`launch_default(family)`)
+///   3. Concrete default from the agent's live model list (`preferred_default_model`).
 pub(crate) fn resolve_launch_default(
     family: &str,
     settings: Option<&Map<String, Value>>,
 ) -> Option<ModelPin> {
     let family = pin_family(family)?;
+    if family == "cursor" {
+        // Cursor's own configured default outranks Settings > Agents and never gets overridden
+        // with `--model` (which would also rewrite `~/.cursor/cli-config.json`).
+        if cursor_config_default_model().is_some() {
+            return None;
+        }
+    }
     if let Some(model) = explicit_settings_default_model(family, settings) {
         let entry = crate::agent_model_catalog::catalog_model(family, &model);
         let label = entry
@@ -323,7 +337,7 @@ pub(crate) fn resolve_launch_default(
         }
     }
     // Cursor's `--model` flag rewrites `~/.cursor/cli-config.json` and rejects non-CLI names
-    // (CDXC:AgentProviders 2026-11-05), so only pin Cursor when the user explicitly picked one.
+    // (CDXC:AgentProviders 2026-11-05), so never force a hard-coded fallback at launch.
     if family == "cursor" {
         return None;
     }
@@ -930,7 +944,85 @@ fn prune_sessions(sessions: &mut BTreeMap<String, SessionReading>) {
 
 /// The model-related values of the agent's own settings, compared only to notice a change made
 /// outside Ghostex (never shown).
-pub(crate) fn settings_snapshot(family: &str) -> Value {
+pub(crate) fn cursor_cli_config_path() -> PathBuf {
+    if let Ok(dir) = std::env::var("CURSOR_CONFIG_DIR") {
+        let trimmed = dir.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed).join("cli-config.json");
+        }
+    }
+    if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+        let trimmed = xdg.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed)
+                .join("cursor")
+                .join("cli-config.json");
+        }
+    }
+    crate::resume_lookup::home_dir()
+        .join(".cursor")
+        .join("cli-config.json")
+}
+
+fn parse_cursor_cli_config_default(config: &Value) -> Option<(String, Option<String>)> {
+    let selected_id = config
+        .pointer("/selectedModel/modelId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let model_id = selected_id.or_else(|| {
+        config
+            .pointer("/model/modelId")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+    })?;
+    let base = model_id.split_once('[').map_or(model_id, |(b, _)| b.trim());
+    if base.is_empty()
+        || base.eq_ignore_ascii_case("auto-smart")
+        || ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(base)
+        || !launchable_model("cursor", model_id)
+    {
+        return None;
+    }
+    let params = selected_id
+        .and_then(|_| config.pointer("/selectedModel/parameters"))
+        .or_else(|| config.pointer(&format!("/modelParameters/{base}")))
+        .and_then(Value::as_array);
+    let effort = params.and_then(|entries| {
+        entries.iter().find_map(|entry| {
+            let key = entry.get("id").and_then(Value::as_str)?.trim();
+            if matches!(
+                key.to_ascii_lowercase().as_str(),
+                "effort" | "reasoning" | "reasoning_effort" | "thought_level"
+            ) {
+                entry
+                    .get("value")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|v| !v.is_empty())
+                    .map(|v| v.to_ascii_lowercase())
+            } else {
+                None
+            }
+        })
+    });
+    Some((model_id.to_string(), effort))
+}
+
+/// Concrete default `(model, effort)` configured in Cursor's own `cli-config.json`, or `None`
+/// when Cursor has no config file or is set to a placeholder (`auto`, `default`, `auto-smart`).
+pub(crate) fn cursor_config_default_model() -> Option<(String, Option<String>)> {
+    if cfg!(test) {
+        return None;
+    }
+    let config = fs::read_to_string(cursor_cli_config_path())
+        .ok()
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok())?;
+    parse_cursor_cli_config_default(&config)
+}
+
+fn settings_snapshot(family: &str) -> Value {
     let home = crate::accounts::launch::home().ok();
     let dir = |variable: &str, folder: &str| {
         std::env::var_os(variable)
@@ -980,18 +1072,22 @@ pub(crate) fn settings_snapshot(family: &str) -> Value {
             })
         }
         "cursor" => {
-            let config = home
-                .as_ref()
-                .and_then(|home| fs::read_to_string(home.join(".cursor/cli-config.json")).ok())
+            let config = fs::read_to_string(cursor_cli_config_path())
+                .ok()
                 .and_then(|text| serde_json::from_str::<Value>(&text).ok())
                 .unwrap_or(Value::Null);
             let model = config
-                .pointer("/model/modelId")
+                .pointer("/selectedModel/modelId")
+                .or_else(|| config.pointer("/model/modelId"))
                 .cloned()
                 .unwrap_or(Value::Null);
-            let parameters = model
-                .as_str()
-                .and_then(|id| config.pointer(&format!("/modelParameters/{id}")))
+            let parameters = config
+                .pointer("/selectedModel/parameters")
+                .or_else(|| {
+                    model
+                        .as_str()
+                        .and_then(|id| config.pointer(&format!("/modelParameters/{id}")))
+                })
                 .cloned()
                 .unwrap_or(Value::Null);
             json!({ "model": model, "parameters": parameters })

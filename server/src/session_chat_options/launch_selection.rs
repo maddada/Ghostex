@@ -265,7 +265,7 @@ fn launch_model_choice(family: &str, model: &str) -> Option<SessionChatDetectedC
         humanize_raw_model_slug, is_placeholder_model_label, is_placeholder_model_value,
     };
     if is_placeholder_model_value(model) {
-        return crate::agent_model_catalog::preferred_default_model(family)
+        return crate::agent_model_catalog::resolve_acp_model(family, None, None, None)
             .map(|(value, label, _)| launch_choice(&value, &label));
     }
     let (choice, from_catalog) = if let Some(entry) =

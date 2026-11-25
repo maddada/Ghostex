@@ -552,6 +552,48 @@ pub fn resolve_acp_model(
     raw_effort: Option<&str>,
     available_models: Option<&[Value]>,
 ) -> Option<(String, String, Option<String>)> {
+    resolve_acp_model_inner(family, raw_model, raw_effort, available_models, true)
+}
+
+fn resolve_cursor_fallback(
+    effort: Option<&str>,
+    available_models: Option<&[Value]>,
+) -> Option<(String, String, Option<String>)> {
+    if let Some((cfg_model, cfg_effort)) = crate::agent_model_pins::cursor_config_default_model() {
+        let combined_effort = effort.or(cfg_effort.as_deref());
+        if let Some(resolved) = resolve_acp_model_inner(
+            "cursor",
+            Some(&cfg_model),
+            combined_effort,
+            available_models,
+            false,
+        ) {
+            return Some(resolved);
+        }
+    }
+    if let Some(settings_model) =
+        crate::agent_model_pins::explicit_settings_default_model("cursor", None)
+    {
+        if let Some(resolved) = resolve_acp_model_inner(
+            "cursor",
+            Some(&settings_model),
+            effort,
+            available_models,
+            false,
+        ) {
+            return Some(resolved);
+        }
+    }
+    None
+}
+
+fn resolve_acp_model_inner(
+    family: &str,
+    raw_model: Option<&str>,
+    raw_effort: Option<&str>,
+    available_models: Option<&[Value]>,
+    allow_cursor_fallback: bool,
+) -> Option<(String, String, Option<String>)> {
     use ghostex_gx_chat_core::menus::catalog::{
         canonical_model_family, humanize_raw_model_slug, is_placeholder_model_label,
         is_placeholder_model_value, split_parenthesized_effort,
@@ -561,11 +603,17 @@ pub fn resolve_acp_model(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(|s| s.to_ascii_lowercase());
-    let raw = raw_model
-        .map(str::trim)
-        .filter(|s| !is_placeholder_model_value(s));
+    let raw = raw_model.map(str::trim).filter(|s| {
+        !is_placeholder_model_value(s)
+            && !(canonical == "cursor" && s.eq_ignore_ascii_case("auto-smart"))
+    });
 
     let Some(raw) = raw else {
+        if canonical == "cursor" && allow_cursor_fallback {
+            if let Some(resolved) = resolve_cursor_fallback(effort.as_deref(), available_models) {
+                return Some(resolved);
+            }
+        }
         let (value, label, default_effort) = preferred_default_model(canonical)?;
         return Some((value, label, effort.or(default_effort)));
     };
@@ -784,6 +832,11 @@ pub fn resolve_acp_model(
         effort = extracted_effort;
     }
     if is_placeholder_model_label(&label) {
+        if canonical == "cursor" && allow_cursor_fallback {
+            if let Some(resolved) = resolve_cursor_fallback(effort.as_deref(), available_models) {
+                return Some(resolved);
+            }
+        }
         let (value, fallback_label, default_effort) = preferred_default_model(canonical)?;
         return Some((value, fallback_label, effort.or(default_effort)));
     }
