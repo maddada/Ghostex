@@ -19,12 +19,39 @@ const SUPERVISOR_FILE: &str = "autopilot-supervisor.json";
 /// (`keeps_ghostex_title`).
 pub const SUPERVISOR_TITLE: &str = "Autopilot supervisor";
 
+/// The create mark (`runtimeSettings`) that starts the supervisor's agent without asking, whatever
+/// its own approvals setting says. gxserver's judge alone sends it: a create from anything but
+/// the user's own devices has it removed (`acp::approval::guard_create_session_params`), and the
+/// launch reads it once and drops it (agents/launch_plan.rs).
+///
+/// CDXC:Autopilot 2026-11-26 WHY:
+/// Issue #765 lets the supervisor run on any agent. It acts only through `ghostex autopilot decide` and Autopilot leaves its own cards alone (autopilot_runtime.rs `candidate`), so an agent that stopped to ask before each command would sit there unseen. Its first start runs with "run without asking" (`acceptAllMode: enabled`, which a native chat reads as Full access) and this mark makes a Terminal-based launch honour it over the agent's own setting; its later starts read gxserver's record (`starts_without_asking`).
+pub const SUPERVISOR_LAUNCH_KEY: &str = "autopilotSupervisorLaunch";
+
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SupervisorRecord {
     pub project_id: String,
     pub session_id: String,
     pub agent: String,
+    /// The model it started on; empty in a record from before any model could be picked.
+    #[serde(default)]
+    pub model: String,
+}
+
+impl SupervisorRecord {
+    pub fn model(&self) -> Option<&str> {
+        Some(self.model.as_str()).filter(|model| !model.is_empty())
+    }
+}
+
+/// Whether this session is Autopilot's supervisor, which every start runs without asking.
+pub fn starts_without_asking(session: &Value) -> bool {
+    let text = |key: &str| session.get(key).and_then(Value::as_str);
+    let (Some(project_id), Some(session_id)) = (text("projectId"), text("sessionId")) else {
+        return false;
+    };
+    supervisor_session().is_some_and(|(p, s)| p == project_id && s == session_id)
 }
 
 /// The record as last read or written by this process (`None` inside: there is none).

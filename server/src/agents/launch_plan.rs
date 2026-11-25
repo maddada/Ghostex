@@ -98,6 +98,12 @@ pub(crate) fn create_agent_session_params_for_project(
     // client-supplied `runtimeSettings` (so a caller cannot override `acceptAllMode: "disabled"`).
     runtime_settings.remove(crate::acp::SESSION_ACP_APPROVAL_LEVEL_KEY);
     runtime_settings.remove(crate::acp::approval::SESSION_ACP_APPROVAL_LEVEL_PICKED_KEY);
+    // Autopilot's supervisor starts without asking; the mark is read once and never kept, so a
+    // copy of the session starts as its agent's setting says.
+    let supervisor_launch = runtime_settings
+        .remove(crate::autopilot::SUPERVISOR_LAUNCH_KEY)
+        .and_then(|mark| mark.as_bool())
+        == Some(true);
     let agent_config = resolve_project_agent_config(project, &agent_id, Some(&launch_settings));
     let agent_icon = read_text_from_map(&agent_config, "icon")
         .or_else(|| read_text_from_map(&launch_settings, "icon"));
@@ -476,7 +482,11 @@ pub(crate) fn create_agent_session_params_for_project(
             };
             let mut plan = build_session_launch_plan_for_workspace(
                 AgentLaunchInput {
-                    accept_all_mode: read_text_from_map(&agent_config, "acceptAllMode")
+                    // Autopilot's supervisor runs without asking whatever its agent's own
+                    // setting says (crate::autopilot::starts_without_asking).
+                    accept_all_mode: supervisor_launch
+                        .then(|| "enabled".to_string())
+                        .or_else(|| read_text_from_map(&agent_config, "acceptAllMode"))
                         .or_else(|| read_text_from_map(&launch_settings, "acceptAllMode")),
                     agent_id: agent_id.clone(),
                     agent_session_id: read_text_from_map(&runtime_settings, "agentSessionId"),

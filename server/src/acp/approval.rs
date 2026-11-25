@@ -339,6 +339,9 @@ pub fn guard_create_session_params(
             // which Non-CLI `launch_plan.rs` reads to raise starting `acpApprovalLevel`.
             runtime.remove("gbot");
             runtime.remove("gbotHome");
+            // Nor Autopilot's supervisor mark, which starts the agent without asking
+            // (`crate::autopilot::starts_without_asking`).
+            runtime.remove(crate::autopilot::SUPERVISOR_LAUNCH_KEY);
         }
     }
     if !is_user_device {

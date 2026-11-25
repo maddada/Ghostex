@@ -5,8 +5,11 @@
 //!   summary since the switch went on, and the newest log lines (`limit`, 200 by default).
 //! - `op: "set"`: `patch` holds the choices to change (`enabled`, `scope`, `tier`, `limits`,
 //!   `answerQuestions`, `answerAfterMinutes`, `answerApprovals`, `readOnlyLeavePlan`,
-//!   `useLimitResets`, `supervisor`, `sweepSeconds`, `checkupMinutes`). Only the user's own
-//!   computer or phone may turn `useLimitResets` on; an agent's call is refused.
+//!   `useLimitResets`, `supervisor`, `supervisorPick`, `supervisorFallbacks`, `sweepSeconds`,
+//!   `checkupMinutes`). `supervisorPick` is `{agent, model, effort}` (effort empty for a model
+//!   with none); `supervisor` is the old `opusMedium` / `solHigh` (`custom` for any other pick).
+//!   Only the user's own computer or phone may turn `useLimitResets` on or change
+//!   `supervisorPick` / `supervisorFallbacks`; an agent's call is refused.
 //! - `op: "setProject"`: `projectId` and `on`; a worktree's main project is changed instead.
 //! - `op: "setSession"`: `projectId`, `sessionId` and `on` (`toggle: true` flips it).
 //! - `op: "decide"`: the supervisor's decision for one session (`ghostex autopilot decide`):
@@ -86,6 +89,9 @@ fn saved(result: std::io::Result<AutopilotConfig>) -> Result<AutopilotConfig, Do
 /// "Use a limit reset when an account hits its limit" spends the user's banked limit resets, so only the user turns it on: the desktop app's owner session, the token file their own terminal uses, or a paired phone. An agent's session token, another computer, an extension or a Collab guest is refused and the refusal is kept in the security log. Turning it off is open to everyone. As on every owner route, an agent that reads the token file itself instead of using its session token is the one way around this.
 const LIMIT_RESETS_ONLY_YOU: &str = "Only the user can turn on \"Use a limit reset when an account hits its limit\", in Settings > Autopilot or with ghostex autopilot limit-resets on in their own terminal outside Ghostex. Tell the user; never turn it on for them.";
 
+/// The supervisor runs without asking, so only the user picks the agent it runs on.
+const SUPERVISOR_ONLY_YOU: &str = "Only the user can change the agent, model or effort Autopilot's supervisor runs on, in Settings > Autopilot. Tell the user; never change it for them.";
+
 /// While "Use a limit reset when an account hits its limit" is on, turning Autopilot on arms it.
 const AUTOPILOT_ON_ONLY_YOU: &str = "While \"Use a limit reset when an account hits its limit\" is on, only the user can turn Autopilot on, in Settings > Autopilot or with ghostex autopilot on in their own terminal outside Ghostex. Tell the user; never turn it on for them.";
 
@@ -97,7 +103,8 @@ fn is_user(caller: &crate::security::Principal, token_file_names_session: bool) 
 }
 
 /// Why this patch is refused to a caller that is not the user, or `None`: it turns on "Use a limit
-/// reset when an account hits its limit", or turns Autopilot on while that switch is on (or with it).
+/// reset when an account hits its limit", changes the supervisor's agent, model or effort, or turns
+/// Autopilot on while that switch is on (or with it).
 fn refuses_limit_resets(
     before: &AutopilotConfig,
     patch: &Value,
@@ -112,6 +119,23 @@ fn refuses_limit_resets(
         return Some((
             "Turn on Autopilot's \"Use a limit reset when an account hits its limit\"",
             LIMIT_RESETS_ONLY_YOU,
+        ));
+    }
+    // CDXC:Autopilot 2026-11-26 DECISION:
+    // The supervisor runs without asking (#765), so which agent, model and effort it runs on is the
+    // user's to pick: an agent may still pick between the two old choices (`supervisor`), as before.
+    let changes = |key: &str| {
+        patch.get(key).is_some_and(|value| {
+            serde_json::to_value(before)
+                .ok()
+                .and_then(|before| before.get(key).cloned())
+                != Some(value.clone())
+        })
+    };
+    if changes("supervisorPick") || changes("supervisorFallbacks") {
+        return Some((
+            "Change the agent, model or effort Autopilot's supervisor runs on",
+            SUPERVISOR_ONLY_YOU,
         ));
     }
     if patch["enabled"] == true && !before.enabled && (before.use_limit_resets || resets_on) {

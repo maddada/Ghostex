@@ -69,7 +69,9 @@ pub struct HardLimits {
     pub post_publicly: bool,
 }
 
-/// The agent and model the judgment agent runs on.
+/// The old two-choice supervisor setting, kept so a file, a phone or a desktop from before
+/// [`SupervisorPick`] still reads and sets it. [`AutopilotConfig::supervisor_pick`] is the truth;
+/// this one is derived from it on every write (`Custom` for any other pick).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SupervisorModel {
@@ -78,23 +80,70 @@ pub enum SupervisorModel {
     OpusMedium,
     /// Codex, GPT 6.1 Sol (`gpt-6.1-sol`) at high: the user's "sol 6.1 high".
     SolHigh,
+    /// Any other agent, model or effort ([`AutopilotConfig::supervisor_pick`]).
+    Custom,
 }
 
 impl SupervisorModel {
-    /// The agent, model and effort the supervisor starts with.
-    pub fn launch(self) -> (&'static str, &'static str, &'static str) {
+    /// The pick this old choice stands for; `Custom` has none.
+    pub fn pick(self) -> Option<SupervisorPick> {
         match self {
-            Self::OpusMedium => ("claude", "opus[1m]", "medium"),
-            Self::SolHigh => ("codex", "gpt-6.1-sol", "high"),
+            Self::OpusMedium => Some(SupervisorPick::new("claude", "opus[1m]", "medium")),
+            Self::SolHigh => Some(SupervisorPick::new("codex", "gpt-6.1-sol", "high")),
+            Self::Custom => None,
         }
     }
 
-    /// The other choice, tried when this one's agent has no account with room.
-    pub fn other(self) -> Self {
-        match self {
-            Self::OpusMedium => Self::SolHigh,
-            Self::SolHigh => Self::OpusMedium,
+    fn of(pick: &SupervisorPick) -> Self {
+        [Self::OpusMedium, Self::SolHigh]
+            .into_iter()
+            .find(|preset| preset.pick().as_ref() == Some(pick))
+            .unwrap_or(Self::Custom)
+    }
+}
+
+/// The agent, model and effort the judgment agent (the supervisor) starts on, as a new session's
+/// picker names them: an agent id (`claude`, `codex`, `antigravity`, a `custom-…` agent), a model
+/// id of that agent's catalog, and an effort, empty for a model with none (Antigravity's are
+/// whole ids).
+///
+/// CDXC:Autopilot 2026-11-26 DECISION:
+/// Issue #765 asked for Antigravity's models as the supervisor, so Autopilot keeps going when Claude and Codex are at their limits. User: "show the model picker we show when user is on new session, he can pick any agent and any model and any effort there". The two fixed choices (Opus 5.5 medium, GPT 6.1 Sol high) become one pick of any agent, model and effort; a saved `supervisor: "opusMedium" | "solHigh"` still reads as that pick, and an older client that sets one still sets it. The supervisor always starts with the agent's "run without asking" (server/src/server/autopilot_judge.rs), so an agent that has none can't be picked.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SupervisorPick {
+    pub agent: String,
+    pub model: String,
+    pub effort: String,
+}
+
+impl SupervisorPick {
+    pub fn new(agent: &str, model: &str, effort: &str) -> Self {
+        Self {
+            agent: agent.to_string(),
+            model: model.to_string(),
+            effort: effort.to_string(),
         }
+    }
+
+    fn trimmed(self) -> Option<Self> {
+        let pick = Self::new(self.agent.trim(), self.model.trim(), self.effort.trim());
+        (!pick.agent.is_empty()).then_some(pick)
+    }
+
+    /// The pick the supervisor starts on when there is none: Opus 5.5 at medium.
+    pub fn default_pick() -> Self {
+        SupervisorModel::OpusMedium.pick().unwrap_or_default()
+    }
+
+    /// The model, or `None` for the agent's own default.
+    pub fn model(&self) -> Option<&str> {
+        Some(self.model.as_str()).filter(|model| !model.is_empty())
+    }
+
+    /// The effort, or `None` for a model with none.
+    pub fn effort(&self) -> Option<&str> {
+        Some(self.effort.as_str()).filter(|effort| !effort.is_empty())
     }
 }
 
@@ -138,7 +187,14 @@ pub struct AutopilotConfig {
     /// CDXC:Autopilot 2026-11-21 DECISION:
     /// User: "please add to sessions in ghostex the ability to see the resets for my claude accounts so i can enable this feature in the auto pilot to auto apply the reset." Settings > Accounts already had "Also use expiring Claude resets at a limit", which waits for a reset's last 24 hours; this one uses any reset Anthropic offers, soonest-expiring first, and only one whose grant clears the limit that is used up, so a Fable-only reset is never spent on the weekly limit (server/src/accounts/reset_watch.rs `decide`). It waits when the limit lifts on its own within 30 minutes. Each use goes to the security log and the bell.
     pub use_limit_resets: bool,
+    /// The old two-choice setting, derived from `supervisor_pick` ([`SupervisorModel`]).
     pub supervisor: SupervisorModel,
+    /// The agent, model and effort the supervisor starts on. Absent from a file written before
+    /// it: then `supervisor` names it.
+    pub supervisor_pick: Option<SupervisorPick>,
+    /// The picks tried in order when `supervisor_pick` has no room (its agent's accounts or models
+    /// are at their limits). Empty: Opus 5.5 at medium, then GPT 6.1 Sol at high.
+    pub supervisor_fallbacks: Vec<SupervisorPick>,
     pub sweep_seconds: u64,
     /// "Supervisor check-up": every this many minutes Ghostex looks for covered sessions that seem
     /// stuck in ways the rules don't settle, and wakes the supervisor only when it finds one. 0 is
@@ -168,6 +224,8 @@ impl Default for AutopilotConfig {
             read_only_leave_plan: false,
             use_limit_resets: false,
             supervisor: SupervisorModel::OpusMedium,
+            supervisor_pick: None,
+            supervisor_fallbacks: Vec::new(),
             sweep_seconds: SWEEP_DEFAULT_SECS,
             checkup_minutes: CHECKUP_DEFAULT_MINUTES,
             projects: BTreeMap::new(),
@@ -192,6 +250,24 @@ impl AutopilotConfig {
         if !self.answer_approvals_set {
             self.answer_approvals = true;
         }
+        let pick = self
+            .supervisor_pick
+            .take()
+            .and_then(SupervisorPick::trimmed)
+            .or_else(|| self.supervisor.pick())
+            .unwrap_or_else(SupervisorPick::default_pick);
+        self.supervisor = SupervisorModel::of(&pick);
+        self.supervisor_pick = Some(pick);
+        let mut fallbacks: Vec<SupervisorPick> = Vec::new();
+        for fallback in std::mem::take(&mut self.supervisor_fallbacks)
+            .into_iter()
+            .filter_map(SupervisorPick::trimmed)
+        {
+            if !fallbacks.contains(&fallback) {
+                fallbacks.push(fallback);
+            }
+        }
+        self.supervisor_fallbacks = fallbacks;
         if self.tier == Tier::Heal {
             self.tier = Tier::Decide;
             self.answer_questions = false;
@@ -199,6 +275,34 @@ impl AutopilotConfig {
             self.answer_approvals_set = true;
         }
         self
+    }
+
+    /// The pick the supervisor starts on.
+    pub fn supervisor_pick(&self) -> SupervisorPick {
+        self.supervisor_pick
+            .clone()
+            .or_else(|| self.supervisor.pick())
+            .unwrap_or_else(SupervisorPick::default_pick)
+    }
+
+    /// Every pick the supervisor may start on, the chosen one first and then its fallbacks (the
+    /// user's, else Opus 5.5 at medium and GPT 6.1 Sol at high), each once.
+    pub fn supervisor_candidates(&self) -> Vec<SupervisorPick> {
+        let fallbacks = if self.supervisor_fallbacks.is_empty() {
+            [SupervisorModel::OpusMedium, SupervisorModel::SolHigh]
+                .into_iter()
+                .filter_map(SupervisorModel::pick)
+                .collect()
+        } else {
+            self.supervisor_fallbacks.clone()
+        };
+        let mut candidates = vec![self.supervisor_pick()];
+        for fallback in fallbacks {
+            if !candidates.contains(&fallback) {
+                candidates.push(fallback);
+            }
+        }
+        candidates
     }
 
     /// Whether Autopilot covers a session, given its project and, for a worktree, the project it
@@ -368,6 +472,16 @@ pub fn apply_patch(config: &mut AutopilotConfig, patch: &Value) {
     if let Ok(mut next) = serde_json::from_value::<AutopilotConfig>(merged) {
         if patch.get("answerApprovals").is_some_and(Value::is_boolean) {
             next.answer_approvals_set = true;
+        }
+        // An older client sets the supervisor by its old name only: that names the pick.
+        if patch.get("supervisorPick").is_none() {
+            if let Some(pick) = patch
+                .get("supervisor")
+                .and_then(|value| serde_json::from_value::<SupervisorModel>(value.clone()).ok())
+                .and_then(SupervisorModel::pick)
+            {
+                next.supervisor_pick = Some(pick);
+            }
         }
         *config = next;
     }

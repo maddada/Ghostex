@@ -400,8 +400,10 @@ pub(crate) fn to_agent_resume_input(
                     command,
                     // A Claude the user restarted in Bypass from the Mode menu keeps starting in
                     // it (CDXC:SessionChat 2026-11-14 in session_chat_mode_restart.rs).
-                    (agent_id == "claude"
+                    ((agent_id == "claude"
                         && crate::session_chat_mode_restart::starts_in_bypass(&runtime_settings))
+                        // Autopilot's supervisor, by gxserver's own record of it.
+                        || crate::autopilot::starts_without_asking(session))
                     .then(|| "enabled".to_string())
                     .or_else(|| read_text_from_map(&agent_config, "acceptAllMode"))
                     .or_else(|| read_text_from_map(&launch_settings, "acceptAllMode"))

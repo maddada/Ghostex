@@ -14,14 +14,14 @@ use serde_json::{json, Map, Value};
 
 pub use config::{
     apply_patch, read_config, update_config, AutopilotConfig, HardLimits, Membership, Scope,
-    SupervisorModel, Tier, CHECKUP_MINUTES,
+    SupervisorPick, Tier, CHECKUP_MINUTES,
 };
 pub use log::{append as append_log, read_recent as read_log, summary, LogEntry, Outcome};
 pub use notes::{ensure_notes, next_wake_number, notes_dir, write_wake};
 pub use supervisor::{
     is_supervisor_project, keeps_ghostex_title, read_record as read_supervisor_record,
-    supervisor_session, write_record as write_supervisor_record, SupervisorRecord,
-    SUPERVISOR_TITLE,
+    starts_without_asking, supervisor_session, write_record as write_supervisor_record,
+    SupervisorRecord, SUPERVISOR_LAUNCH_KEY, SUPERVISOR_TITLE,
 };
 
 /// The choices as last read or written; the paths of this gxserver once the runtime started.

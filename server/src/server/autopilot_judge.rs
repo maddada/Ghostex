@@ -16,7 +16,7 @@ use std::sync::OnceLock;
 use axum::body::Body;
 use axum::http::{header, Method, Request};
 
-use crate::autopilot::{self, AutopilotConfig, SupervisorModel};
+use crate::autopilot::{self, AutopilotConfig, SupervisorPick};
 use crate::coordinators::SessionKey;
 use crate::presentation::presentation_activity;
 
@@ -172,13 +172,38 @@ fn live_supervisor(state: &AppState) -> Option<(SupervisorRecord, Value)> {
     (session["lifecycleState"].as_str() != Some("stopped")).then_some((record, session))
 }
 
-/// Starts a supervisor session on `pick`.
+/// Whether an agent can start as the supervisor: it needs a "run without asking" Ghostex can turn
+/// on, since nobody answers the supervisor's own cards. A custom agent (`custom-…`) is let through:
+/// its launch takes the one of the agent its icon names.
+pub(crate) fn supervisor_agent_allowed(agent: &str) -> bool {
+    let agent = agent.trim().to_ascii_lowercase();
+    if agent.starts_with("custom-") {
+        return true;
+    }
+    let family = crate::agents::identity::normalize_agent_id(Some(&agent)).unwrap_or(agent);
+    crate::agents::accept_all_spec(&family).is_some()
+}
+
+/// The picks the supervisor may start on, the chosen one first, without agents that can't run
+/// without asking.
+fn supervisor_candidates(config: &AutopilotConfig) -> Vec<SupervisorPick> {
+    config
+        .supervisor_candidates()
+        .into_iter()
+        .filter(|pick| supervisor_agent_allowed(&pick.agent))
+        .collect()
+}
+
+fn pick_has_room(paths: &crate::paths::GxserverPaths, pick: &SupervisorPick) -> bool {
+    crate::accounts::autopilot::agent_has_room(paths, &pick.agent, pick.model())
+}
+
+/// Starts a supervisor session on `pick`, with its agent running without asking.
 async fn start_supervisor_for(
     state: &Arc<AppState>,
-    pick: SupervisorModel,
+    pick: &SupervisorPick,
 ) -> std::result::Result<SupervisorRecord, String> {
     let dir = autopilot::ensure_notes(&state.paths).map_err(|error| error.to_string())?;
-    let (agent, model, effort) = SupervisorModel::launch(pick);
     let project = internal_rpc(
         state,
         "/api/addProjectPath",
@@ -190,18 +215,20 @@ async fn start_supervisor_for(
         .and_then(Value::as_str)
         .ok_or("Ghostex couldn't open the Autopilot project.")?
         .to_string();
-    let created = internal_rpc(
-        state,
-        "/api/createAgentSession",
-        json!({
-            "projectId": project_id,
-            "agentId": agent,
-            "agentModel": model,
-            "agentEffort": effort,
-            "title": SUPERVISOR_TITLE,
-        }),
-    )
-    .await?;
+    let mut params = json!({
+        "projectId": project_id,
+        "agentId": pick.agent,
+        "title": SUPERVISOR_TITLE,
+        "launchSettings": { "acceptAllMode": "enabled" },
+        "runtimeSettings": { autopilot::SUPERVISOR_LAUNCH_KEY: true },
+    });
+    if let Some(model) = pick.model() {
+        params["agentModel"] = json!(model);
+    }
+    if let Some(effort) = pick.effort() {
+        params["agentEffort"] = json!(effort);
+    }
+    let created = internal_rpc(state, "/api/createAgentSession", params).await?;
     let session_id = created
         .pointer("/session/sessionId")
         .and_then(Value::as_str)
@@ -210,7 +237,8 @@ async fn start_supervisor_for(
     let record = SupervisorRecord {
         project_id,
         session_id,
-        agent: agent.to_string(),
+        agent: pick.agent.clone(),
+        model: pick.model.clone(),
     };
     write_record(&state.paths, &record);
     Ok(record)
@@ -342,14 +370,32 @@ async fn wake(
         .lock()
         .map(|mut judge| std::mem::take(&mut judge.start_fresh))
         .unwrap_or(false);
-    let preferred = config.supervisor;
-    let other = preferred.other();
+    let candidates = supervisor_candidates(config);
     let record = match live_supervisor(state).filter(|_| !fresh) {
         Some((record, session)) => {
-            let provider_has_room =
-                crate::accounts::autopilot::agent_has_room(&state.paths, &record.agent);
             let session_at_limit =
                 crate::accounts::reset_used::waits_at_usage_limit(state, &session);
+            // An agent Ghostex reads no accounts for (Antigravity and the rest) is out of room on
+            // this model until the reset its own notice names.
+            let noted_limit = session_at_limit
+                && crate::accounts::autopilot::note_untracked_limit(
+                    &record.agent,
+                    record.model(),
+                    crate::session_chat_options::cached_session_chat_terminal_notice(
+                        state,
+                        &record.project_id,
+                        &record.session_id,
+                    )
+                    .as_ref()
+                    .and_then(crate::session_chat_notice::parse_notice_reset_duration),
+                    now,
+                );
+            let provider_has_room = !noted_limit
+                && crate::accounts::autopilot::agent_has_room(
+                    &state.paths,
+                    &record.agent,
+                    record.model(),
+                );
             if session_at_limit && provider_has_room {
                 // Another eligible account of this provider still has room: wait for account
                 // recovery to switch the live supervisor rather than abandoning its agent or
@@ -371,15 +417,18 @@ async fn wake(
                 // usage limit), switch the Autopilot supervisor to another configured agent with
                 // room (e.g. Codex) instead of waking a 100%-limited supervisor repeatedly. If no
                 // supervisor agent has room, park quietly without spamming notifications.
-                let fallback = [preferred, other].into_iter().find(|candidate| {
-                    let candidate_agent = candidate.launch().0;
-                    candidate_agent != record.agent
-                        && crate::accounts::autopilot::agent_has_room(&state.paths, candidate_agent)
+                // CDXC:Autopilot 2026-11-26: the candidates are the picked agent, model and
+                // effort and then its fallbacks (config.rs `supervisor_candidates`); another
+                // model of the same agent counts, since an Antigravity or a Claude model-only
+                // window can be at its limit while another model still has room.
+                let fallback = candidates.iter().find(|candidate| {
+                    !(candidate.agent == record.agent && candidate.model == record.model)
+                        && pick_has_room(&state.paths, candidate)
                 });
                 let Some(fallback) = fallback else {
                     return Err(PARKED_NO_USAGE.to_string());
                 };
-                let old_agent = record.agent.clone();
+                let old_agent = supervisor_name(&record.agent, record.model());
                 if presentation_activity(&session, &crate::presentation::now_iso()) != "working" {
                     let _ = internal_rpc(
                         state,
@@ -402,12 +451,10 @@ async fn wake(
                         session_id: switched.session_id.clone(),
                         title: SUPERVISOR_TITLE.to_string(),
                         project: "Autopilot".to_string(),
-                        saw: format!(
-                            "The {old_agent} supervisor's auto-switchable accounts are at their usage limit."
-                        ),
+                        saw: format!("The {old_agent} supervisor is at its usage limit."),
                         did: format!(
                             "Switched the Autopilot supervisor to {} while {old_agent} waits for reset.",
-                            switched.agent
+                            supervisor_name(&switched.agent, switched.model())
                         ),
                         rule: "supervisor-switch".to_string(),
                         outcome: autopilot::Outcome::Done,
@@ -417,15 +464,18 @@ async fn wake(
             }
         }
         None => {
-            let pick =
-                if crate::accounts::autopilot::agent_has_room(&state.paths, preferred.launch().0) {
-                    preferred
-                } else if crate::accounts::autopilot::agent_has_room(&state.paths, other.launch().0)
-                {
-                    other
-                } else {
-                    return Err(PARKED_NO_USAGE.to_string());
-                };
+            if candidates.is_empty() {
+                return Err(
+                    "The supervisor's agent can't run commands without asking. Pick another one in Settings > Autopilot."
+                        .to_string(),
+                );
+            }
+            let Some(pick) = candidates
+                .iter()
+                .find(|candidate| pick_has_room(&state.paths, candidate))
+            else {
+                return Err(PARKED_NO_USAGE.to_string());
+            };
             start_supervisor_for(state, pick)
                 .await
                 .map_err(|error| format!("Couldn't start the supervisor: {error}"))?
@@ -507,7 +557,7 @@ pub(super) async fn maybe_compact(state: Arc<AppState>) {
         return;
     };
     if presentation_activity(&session, &crate::presentation::now_iso()) == "working"
-        || !crate::accounts::autopilot::agent_has_room(&state.paths, &record.agent)
+        || !crate::accounts::autopilot::agent_has_room(&state.paths, &record.agent, record.model())
         || crate::accounts::reset_used::waits_at_usage_limit(&state, &session)
     {
         return;
@@ -631,12 +681,22 @@ pub(super) fn restore_title_at_start(state: &AppState) {
 /// What a failed start or wake depends on: the Autopilot settings and whether each agent has an
 /// account with room (a sign-in, a limit reset or a switch of model).
 fn setup_key(paths: &crate::paths::GxserverPaths, config: &AutopilotConfig) -> String {
+    let room: Vec<bool> = supervisor_candidates(config)
+        .iter()
+        .map(|pick| pick_has_room(paths, pick))
+        .collect();
     format!(
-        "{}|{}|{}",
+        "{}|{room:?}",
         serde_json::to_string(config).unwrap_or_default(),
-        crate::accounts::autopilot::agent_has_room(paths, "claude"),
-        crate::accounts::autopilot::agent_has_room(paths, "codex"),
     )
+}
+
+/// The supervisor's agent and model as the log names them ("antigravity gemini-4-neon").
+fn supervisor_name(agent: &str, model: Option<&str>) -> String {
+    match model {
+        Some(model) => format!("{agent} {model}"),
+        None => agent.to_string(),
+    }
 }
 
 fn retry_words(ms: i64) -> String {
