@@ -55,3 +55,13 @@ fn an_approval_a_question_and_a_failure_still_come_before_a_wait() {
     row.awaiting_approval = true;
     assert_eq!(session_status_group(&row), StatusGroup::NeedsYou);
 }
+
+#[test]
+fn a_question_on_a_waiting_row_stands_in_question_also_with_a_failure() {
+    let mut row = attention(Some(AttentionKind::NeedsInput));
+    row.pending_question_count = 1;
+    assert_eq!(session_status_group(&row), StatusGroup::Question);
+    // `unified_status` checks a question before a failure, so the failure does not move it.
+    row.program_status_failed = true;
+    assert_eq!(session_status_group(&row), StatusGroup::Question);
+}
