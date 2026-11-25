@@ -13,6 +13,15 @@ pub(crate) mod gx_chat {
         None
     }
 
+    /// Settings > Autopilot's supervisor pickers star models; the preview keeps none.
+    pub(crate) fn model_favorites() -> Vec<String> {
+        Vec::new()
+    }
+
+    pub(crate) fn toggle_model_favorite(_key: &str) -> Vec<String> {
+        Vec::new()
+    }
+
     pub(crate) mod session_directory {
         pub(crate) fn machine_icon(_machine_id: &str) -> &'static str {
             "titlebar/device-desktop.svg"
@@ -77,6 +86,11 @@ pub(crate) mod consts {
 pub(crate) mod helpers {
     use gpui::{FontWeight, Hsla, IntoElement, ParentElement as _, Styled as _, div, px, rgb, svg};
     use gpui_component::h_flex;
+
+    /// An agent logo's brand tone (app/helpers): the preview draws every logo white.
+    pub(crate) fn workspace_tab_agent_icon_accent_color(_icon: &str) -> u32 {
+        0xffffff
+    }
 
     use super::consts::*;
 

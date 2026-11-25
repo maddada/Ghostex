@@ -20,6 +20,7 @@ pub mod projection;
 pub mod refresh;
 pub mod selection;
 pub mod settle;
+pub mod standalone;
 pub mod traits;
 
 pub use crate::menus::picker::actions::handle;

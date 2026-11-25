@@ -10,6 +10,8 @@
 //!   with none); `supervisor` is the old `opusMedium` / `solHigh` (`custom` for any other pick).
 //!   Only the user's own computer or phone may turn `useLimitResets` on or change
 //!   `supervisorPick` / `supervisorFallbacks`; an agent's call is refused.
+//! - `op: "supervisorMenu"` / `op: "supervisorPick"`: the Supervisor model and When it's at its
+//!   limit rows' pickers (autopilot_supervisor_menu.rs).
 //! - `op: "setProject"`: `projectId` and `on`; a worktree's main project is changed instead.
 //! - `op: "setSession"`: `projectId`, `sessionId` and `on` (`toggle: true` flips it).
 //! - `op: "decide"`: the supervisor's decision for one session (`ghostex autopilot decide`):
@@ -161,6 +163,35 @@ fn handle(
     let before = autopilot::read_config(&state.paths);
     let after = match op.as_str() {
         "read" => None,
+        "supervisorMenu" => {
+            return Ok(super::autopilot_supervisor_menu::menu(
+                &repository,
+                &before,
+                params,
+            ))
+        }
+        "supervisorPick" => {
+            if !is_user(caller, crate::audit::token_file_names_session()) {
+                crate::audit::record(
+                    crate::audit::Action::new(
+                        "autopilot.widen",
+                        "Change the agent, model or effort Autopilot's supervisor runs on",
+                    ),
+                    crate::audit::Actor::current(),
+                    crate::audit::Outcome::Refused(SUPERVISOR_ONLY_YOU.to_string()),
+                    None,
+                );
+                return Err(DomainStateError {
+                    code: "forbidden",
+                    message: SUPERVISOR_ONLY_YOU.to_string(),
+                });
+            }
+            let (slot, pick) =
+                super::autopilot_supervisor_menu::pick(&repository, &before, params)?;
+            Some(saved(autopilot::update_config(&state.paths, |config| {
+                super::autopilot_supervisor_menu::apply(config, slot, pick)
+            }))?)
+        }
         "set" => {
             let patch = params
                 .get("patch")
@@ -227,7 +258,7 @@ fn handle(
         }
         other => {
             return Err(DomainStateError::bad_request(format!(
-                "Unknown op \"{other}\": use read, set, setProject or setSession."
+                "Unknown op \"{other}\": use read, set, setProject, setSession, supervisorMenu or supervisorPick."
             )))
         }
     };
@@ -374,8 +405,31 @@ fn read_view(
         "summary": autopilot::summary(&state.paths, since_ms),
         "log": autopilot::read_log(&state.paths, limit),
         "watching": super::autopilot_runtime::autopilot_runtime_watching(),
-        "supervisor": super::autopilot_judge::supervisor_view(&state.paths),
+        "supervisor": supervisor_view(state),
+        // The Supervisor model and When it's at its limit rows' buttons (logo, model, effort).
+        "supervisorLabels": super::autopilot_supervisor_menu::labels(config),
     })
+}
+
+/// The supervisor's session and wakes, with `label` naming the agent and model it runs on for the
+/// status line ("Antigravity, Orchestrator (Neon)").
+fn supervisor_view(state: &AppState) -> Value {
+    let mut view = super::autopilot_judge::supervisor_view(&state.paths);
+    if let Some(record) = autopilot::read_supervisor_record(&state.paths) {
+        let label = super::autopilot_supervisor_menu::pick_label(&autopilot::SupervisorPick::new(
+            &record.agent,
+            &record.model,
+            "",
+        ));
+        let agent = label["agentName"].as_str().unwrap_or(&record.agent);
+        view["label"] = json!(
+            match label["model"].as_str().filter(|model| !model.is_empty()) {
+                Some(model) if !record.model.is_empty() => format!("{agent}, {model}"),
+                _ => agent.to_string(),
+            }
+        );
+    }
+    view
 }
 
 /// Republishes what shows Autopilot: every project row (the sidebar menu's row comes and goes

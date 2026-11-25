@@ -80,7 +80,7 @@ pub(crate) use read_aloud::{
     read_aloud_dictating, read_aloud_on_screen, read_aloud_speech_ended, read_aloud_stop,
     read_aloud_voice_conversation,
 };
-pub(crate) use transport::current_model_catalog;
+pub(crate) use transport::{current_model_catalog, model_favorites, toggle_model_favorite};
 pub(crate) use worker::{ChatHostHandle, set_endpoint};
 pub(crate) use world::ChatHostOutput;
 

@@ -192,8 +192,9 @@ pub struct AutopilotConfig {
     /// The agent, model and effort the supervisor starts on. Absent from a file written before
     /// it: then `supervisor` names it.
     pub supervisor_pick: Option<SupervisorPick>,
-    /// The picks tried in order when `supervisor_pick` has no room (its agent's accounts or models
-    /// are at their limits). Empty: Opus 5.5 at medium, then GPT 6.1 Sol at high.
+    /// The user's "When it's at its limit" picks, tried in order when `supervisor_pick` has no room
+    /// (its agent's accounts or models are at their limits), before Opus 5.5 at medium and GPT 6.1
+    /// Sol at high. Empty is "Automatic": only those two.
     pub supervisor_fallbacks: Vec<SupervisorPick>,
     pub sweep_seconds: u64,
     /// "Supervisor check-up": every this many minutes Ghostex looks for covered sessions that seem
@@ -285,19 +286,17 @@ impl AutopilotConfig {
             .unwrap_or_else(SupervisorPick::default_pick)
     }
 
-    /// Every pick the supervisor may start on, the chosen one first and then its fallbacks (the
-    /// user's, else Opus 5.5 at medium and GPT 6.1 Sol at high), each once.
+    /// Every pick the supervisor may start on, each once: the chosen one, then the user's "When
+    /// it's at its limit" pick, then Opus 5.5 at medium and GPT 6.1 Sol at high.
+    ///
+    /// CDXC:Autopilot 2026-11-26 DECISION:
+    /// User (mockup Q5009, "fallback row"): Settings > Autopilot gets a "When it's at its limit" row with the same picker, "Automatic" by default. The two built-in choices still follow the user's fallback, so a supervisor whose pick and fallback are both at their limits keeps going on whichever of them has room.
     pub fn supervisor_candidates(&self) -> Vec<SupervisorPick> {
-        let fallbacks = if self.supervisor_fallbacks.is_empty() {
-            [SupervisorModel::OpusMedium, SupervisorModel::SolHigh]
-                .into_iter()
-                .filter_map(SupervisorModel::pick)
-                .collect()
-        } else {
-            self.supervisor_fallbacks.clone()
-        };
         let mut candidates = vec![self.supervisor_pick()];
-        for fallback in fallbacks {
+        let defaults = [SupervisorModel::OpusMedium, SupervisorModel::SolHigh]
+            .into_iter()
+            .filter_map(SupervisorModel::pick);
+        for fallback in self.supervisor_fallbacks.iter().cloned().chain(defaults) {
             if !candidates.contains(&fallback) {
                 candidates.push(fallback);
             }

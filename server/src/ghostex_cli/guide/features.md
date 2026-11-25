@@ -5200,9 +5200,11 @@ log notes it for you.
 with no recommended choice, or a session the rules could not keep moving. It
 starts the first time it is needed, as **Autopilot supervisor** in an
 **Autopilot** project that starts hidden in your sidebar (**Show hidden** lists
-it, and you can unhide it like any project), on the **Supervisor model** you pick under **Advanced** (Claude Opus 5.5 at medium or
-Codex GPT 6.1 Sol at high; the other one when that agent has no account with
-room). To read its chat and see why it did each thing, use **Open supervisor**
+it, and you can unhide it like any project), on the **Supervisor model** you pick under **Advanced**: any agent, model and
+effort from the new session's model picker (Claude Opus 5.5 at medium by
+default). When its pick is at its usage limit it moves to the one you set in
+**When it's at its limit**, then to Opus 5.5 at medium or GPT 6.1 Sol at high,
+whichever has room. To read its chat and see why it did each thing, use **Open supervisor**
 in Settings > Autopilot or in the Autopilot pill's menu (both show once it has
 started). It keeps notes
 (one running file, and one per session) that every wake reads first, so it

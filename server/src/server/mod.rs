@@ -125,6 +125,7 @@ mod autopilot_answers;
 mod autopilot_checkup;
 mod autopilot_http;
 mod autopilot_judge;
+mod autopilot_supervisor_menu;
 mod autopilot_runtime;
 pub mod background_tasks;
 mod boosts_http;

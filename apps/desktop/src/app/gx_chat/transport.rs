@@ -180,6 +180,34 @@ pub(crate) fn current_model_catalog()
         .or_else(ghostex_gx_chat_core::menus::catalog::bundled_agent_model_catalog)
 }
 
+/// The starred models every model picker shares (`ghostex.model-favorites`), for pickers outside a
+/// chat: Settings > Autopilot's supervisor rows (settings_modal/tabs/autopilot/supervisor_picker.rs).
+// The web build has no Settings window, so no supervisor picker reads these.
+#[cfg_attr(ghostex_web, allow(dead_code))]
+pub(crate) fn model_favorites() -> Vec<String> {
+    let key = ghostex_gx_chat_core::menus::picker::favorites::model_favorites_key();
+    let raw = storage::read(&key, super::platform::now_millis())
+        .ok()
+        .flatten();
+    ghostex_gx_chat_core::menus::picker::favorites::parse_model_favorites(raw.as_deref())
+}
+
+/// Stars or unstars `key` in the shared list; every chat's picker reads it when it next opens.
+// The web build has no Settings window, so no supervisor picker reads these.
+#[cfg_attr(ghostex_web, allow(dead_code))]
+pub(crate) fn toggle_model_favorite(key: &str) -> Vec<String> {
+    use ghostex_gx_chat_core::menus::picker::favorites::{
+        model_favorites_key, serialize_model_favorites, toggle_model_favorite,
+    };
+    let next = toggle_model_favorite(&model_favorites(), key);
+    let _ = storage::write(
+        &model_favorites_key(),
+        Some(&serialize_model_favorites(&next)),
+        super::platform::now_millis(),
+    );
+    next
+}
+
 /// `adoptPublishedAgentModelCatalog`: a pushed catalog replaces its computer's lineup only when it
 /// is at least as new as the one in effect, and reaches that computer's chats; this computer's is
 /// also cached for the next boot read.

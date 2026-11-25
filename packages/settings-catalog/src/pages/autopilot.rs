@@ -47,7 +47,9 @@ fn supervisor() -> Section {
         "supervisor",
         "Advanced",
         vec![
-            advanced(row("autopilotSupervisor", "Supervisor model", "The agent that wakes for judgment calls: Claude Opus 5.5 at medium, or Codex GPT 6.1 Sol at high. It starts on an account with room.")),
+            // CDXC:Autopilot 2026-11-26 SEE-ALSO: apps/desktop/src/app/window/settings_modal/tabs/autopilot/supervisor_picker.rs (issue #765: any agent, model and effort, and the fallback row).
+            advanced(row("autopilotSupervisor", "Supervisor model", "The agent that wakes for judgment calls: any agent, model and effort from the new session's model picker (Claude Opus 5.5 at medium by default). It runs commands without asking and starts on an account with room.")),
+            advanced(row("autopilotSupervisorFallback", "When it's at its limit", "What the supervisor moves to when its pick is at its usage limit: any agent, model and effort, or Automatic (Opus 5.5 at medium, then GPT 6.1 Sol at high, whichever has room).")),
             advanced(row("autopilotCheckup", "Supervisor check-up", "Off, or every 10 (the default), 20 or 30 minutes, or every hour: Ghostex looks for sessions that seem stuck in ways its rules don't settle (silent after a reload, told to carry on but doing nothing, failing again and again, saying the same thing in a loop, waiting on nothing) and wakes the supervisor only when it finds one, so a quiet check-up costs nothing. Also ghostex autopilot checkup.")),
             advanced(row("autopilotSweep", "Look at every session every", "How often Autopilot sweeps every session it covers, from 1 to 10 minutes (2 by default). A session whose turn ends is looked at right away.")),
         ],

@@ -27,6 +27,8 @@ use gpui_component::h_flex;
 use serde_json::{Value, json};
 use std::time::Duration;
 
+mod supervisor_picker;
+
 const CALL_TIMEOUT: Duration = Duration::from_secs(10);
 /// How often the open page reads the log and the summary again.
 const REFRESH_EVERY: Duration = Duration::from_secs(15);
@@ -48,6 +50,9 @@ pub(crate) struct AutopilotTab {
     /// Changes not yet saved; a read that lands meanwhile keeps them.
     saving: usize,
     was_active: bool,
+    /// The open "Supervisor model" or "When it's at its limit" picker (supervisor_picker.rs).
+    picker: Option<supervisor_picker::SupervisorPicker>,
+    picker_triggers: supervisor_picker::PickerTriggers,
     _refresh: Option<Task<()>>,
 }
 
@@ -90,6 +95,8 @@ impl AutopilotTab {
             log_limit: LOG_PAGE,
             saving: 0,
             was_active: true,
+            picker: None,
+            picker_triggers: Default::default(),
             _refresh: Some(refresh),
         }
     }
@@ -467,24 +474,60 @@ impl AutopilotTab {
             .as_str()
             .unwrap_or("opusMedium")
             .to_string();
-        let mut rows = vec![select_field(
-            self,
-            p,
-            "autopilotSupervisor",
-            RowSpec::new("Supervisor model").description(
-                "The agent that wakes only for judgment calls. It starts on whichever of your accounts has room.",
-            ),
-            None,
-            &[
-                option("Claude Opus 5.5 · Medium", "opusMedium"),
-                option("Codex GPT 6.1 Sol · High", "solHigh"),
-            ],
-            supervisor.as_str(),
-            Some(240.0),
-            |page: &mut Self, value, _, cx| page.set(json!({ "supervisor": value }), cx),
-            window,
-            cx,
-        )];
+        // CDXC:Autopilot 2026-11-26 SEE-ALSO: tabs/autopilot/supervisor_picker.rs (issue #765:
+        // the row opens the new session's picker; Q5009 adds the fallback row). An older gxserver
+        // sends no `supervisorLabels`, so its two choices stay a dropdown.
+        let pickers = self
+            .view
+            .as_ref()
+            .is_some_and(|view| view["supervisorLabels"].is_object());
+        let mut rows = if pickers {
+            let automatic = self
+                .view
+                .as_ref()
+                .is_none_or(|view| view["supervisorLabels"]["fallback"].is_null());
+            vec![
+                self.supervisor_pick_row(
+                    p,
+                    supervisor_picker::Slot::Supervisor,
+                    RowSpec::new("Supervisor model").description(
+                        "The agent that wakes only for judgment calls. It runs commands without asking and starts on whichever of your accounts has room.",
+                    ),
+                    window,
+                    cx,
+                ),
+                self.supervisor_pick_row(
+                    p,
+                    supervisor_picker::Slot::Fallback,
+                    RowSpec::new("When it's at its limit").description(if automatic {
+                        "Opus 5.5 or GPT 6.1 Sol, whichever has room."
+                    } else {
+                        "Then Opus 5.5 or GPT 6.1 Sol."
+                    }),
+                    window,
+                    cx,
+                ),
+            ]
+        } else {
+            vec![select_field(
+                self,
+                p,
+                "autopilotSupervisor",
+                RowSpec::new("Supervisor model").description(
+                    "The agent that wakes only for judgment calls. It starts on whichever of your accounts has room.",
+                ),
+                None,
+                &[
+                    option("Claude Opus 5.5 · Medium", "opusMedium"),
+                    option("Codex GPT 6.1 Sol · High", "solHigh"),
+                ],
+                supervisor.as_str(),
+                Some(240.0),
+                |page: &mut Self, value, _, cx| page.set(json!({ "supervisor": value }), cx),
+                window,
+                cx,
+            )]
+        };
         // CDXC:Autopilot 2026-11-18 SEE-ALSO: server/src/autopilot/config.rs (`checkup_minutes`, the user's words).
         let checkup = config["checkupMinutes"].as_u64().unwrap_or(10).to_string();
         rows.push(select_field(
@@ -562,9 +605,17 @@ impl AutopilotTab {
             Some(agent) => {
                 let wakes = supervisor["wakes"].as_u64().unwrap_or(0);
                 let waiting = supervisor["waiting"].as_u64().unwrap_or(0);
+                // Issue #765: the agent and model it really runs on ("Antigravity, Orchestrator
+                // (Neon)"), from gxserver; an older one sends only the agent's id.
+                let label = supervisor["label"]
+                    .as_str()
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| {
+                        if agent == "codex" { "Codex" } else { "Claude" }.to_string()
+                    });
+                let comma = if label.contains(',') { "," } else { "" };
                 format!(
-                    "Runs on {} under Autopilot in Main Hub. Woken {} time{}{}{}.",
-                    if agent == "codex" { "Codex" } else { "Claude" },
+                    "Runs on {label}{comma} under Autopilot in Main Hub. Woken {} time{}{}{}.",
                     wakes,
                     if wakes == 1 { "" } else { "s" },
                     supervisor["lastWakeAt"]
