@@ -685,20 +685,28 @@ const FOCUS_RING_FOR: std::time::Duration = std::time::Duration::from_millis(220
 /// smoothly (fade in and out) on them". The tinted box with its padding is gone; a thin outline is
 /// drawn outside the group as an overlay, so nothing inside moves. The user took the slower speed
 /// (Q4951, about 1.8 s; "quick" was 1200) and "make the outline shifted 10px from left/right/bottom
-/// please so it's not hugging items so close" ([`GROUP_BLINK_ROOM`]). The phone's `GROUP_BLINK_MS`
+/// please so it's not hugging items so close" ([`GROUP_BLINK_ROOM`]). Then, of its bottom edge
+/// running into the next group's header: "please make it not overlap and also pls make the color
+/// of the outline more transparent": the bottom edge is the group's own (its last card's 8 pt gap
+/// below it), and the line peaks at [`GROUP_BLINK_PEAK`]. The phone's `GROUP_BLINK_MS`
 /// (CoordinatorBoard.tsx) matches.
 const GROUP_BLINK_FOR: std::time::Duration = std::time::Duration::from_millis(1800);
 
-/// How far the outline sits outside the group on the left, right and bottom (its top is the group's
-/// own, above the header line). The board's lists keep 10 pt of padding inside their scroll area
-/// (`render_coordinator_board_dock`, `coordinator_board_menu_body`), so the outline lands within it, never clipped.
+/// How far the outline sits outside the group on the left and right. The board's lists keep 10 pt
+/// of padding inside their scroll area (`render_coordinator_board_dock`,
+/// `coordinator_board_menu_body`), so the outline lands within it, never clipped. Its top and
+/// bottom are the group's own edges: the groups above and below start right there, so going past
+/// them would draw over their headers.
 const GROUP_BLINK_ROOM: f32 = 10.0;
 
-/// The outline a jumped-to group blinks with: drawn [`GROUP_BLINK_ROOM`] outside the group's sides
-/// and bottom (absolute, so
-/// the group's own padding, margin, fill and border stay as they are), white in dark mode and near
-/// black in light mode, two smooth fades in and out over [`GROUP_BLINK_FOR`], then gone. Keyed by
-/// the jump's `seq`, so a second click on the same pill plays it again.
+/// The outline's opacity at the top of each blink: a soft line, not a full white one.
+const GROUP_BLINK_PEAK: f32 = 0.4;
+
+/// The outline a jumped-to group blinks with: drawn [`GROUP_BLINK_ROOM`] outside the group's sides,
+/// on its top and bottom edges (absolute, so the group's own padding, margin, fill and border stay
+/// as they are), white in dark mode and near black in light mode, two smooth fades in and out over
+/// [`GROUP_BLINK_FOR`], then gone. Keyed by the jump's `seq`, so a second click on the same pill
+/// plays it again.
 fn group_blink_outline(id: &str, seq: u64, p: &ChatAppearance, s: f32) -> impl IntoElement {
     use gpui::AnimationExt as _;
     let color: gpui::Hsla = if p.light {
@@ -712,7 +720,7 @@ fn group_blink_outline(id: &str, seq: u64, p: &ChatAppearance, s: f32) -> impl I
         .top_0()
         .left(room)
         .right(room)
-        .bottom(room)
+        .bottom_0()
         .rounded(px(14.0 * s))
         .border(px(1.5 * s))
         .border_color(color)
@@ -723,7 +731,7 @@ fn group_blink_outline(id: &str, seq: u64, p: &ChatAppearance, s: f32) -> impl I
             move |outline, delta| {
                 // sin² over two half-periods: 0 → 1 → 0 → 1 → 0, smooth at every turn.
                 let wave = (delta * std::f32::consts::TAU).sin();
-                outline.opacity(0.9 * wave * wave)
+                outline.opacity(GROUP_BLINK_PEAK * wave * wave)
             },
         )
 }
