@@ -433,20 +433,37 @@ pub(crate) fn wait_for_index_for_test(project_id: &str, session_id: &str) {
 
 /// Builds the index of every thread of this coordinator that has none yet (a resolved or stopped
 /// thread is never swept), once, on background threads.
+///
+/// CDXC:SessionChat 2026-11-26 WHY: the open-questions sweep calls this for every running
+/// coordinator every ten seconds. It read each thread's whole record and asked for its index row
+/// one by one (1,972 threads on the profiled Mac), and started a read for every thread whose
+/// session is gone, which `index_only` drops without writing the index, so those were started
+/// again every sweep. One query now lists the threads with no index whose session still exists.
 pub(crate) fn backfill_threads(
     state: &AppState,
     db: &rusqlite::Connection,
     project_id: &str,
     session_id: &str,
 ) {
-    let Ok(threads) = crate::coordinators::list_threads_for(db, project_id, session_id) else {
+    let Ok(mut statement) = db.prepare_cached(
+        "SELECT t.projectId, t.sessionId FROM coordinator_threads t \
+         WHERE t.coordinatorProjectId = ?1 AND t.coordinatorSessionId = ?2 \
+         AND NOT EXISTS (SELECT 1 FROM session_chat_resources r WHERE r.projectId = t.projectId AND r.sessionId = t.sessionId) \
+         AND EXISTS (SELECT 1 FROM sessions s WHERE s.projectId = t.projectId AND s.sessionId = t.sessionId) \
+         ORDER BY t.createdAt",
+    ) else {
         return;
     };
-    for thread in threads {
-        if has_row(db, &thread.project_id, &thread.session_id) {
-            continue;
-        }
-        start_index(state, &thread.project_id, &thread.session_id);
+    let Ok(threads) = statement
+        .query_map(rusqlite::params![project_id, session_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .and_then(|rows| rows.collect::<Result<Vec<_>, _>>())
+    else {
+        return;
+    };
+    for (thread_project_id, thread_session_id) in threads {
+        start_index(state, &thread_project_id, &thread_session_id);
     }
 }
 

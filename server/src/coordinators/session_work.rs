@@ -161,7 +161,8 @@ struct SessionWorkCache {
 /// wait on a release clears when one happens), and when.
 #[derive(Clone)]
 struct BuiltFrom {
-    items: Vec<WorkItem>,
+    /// `list_all_work_items`'s list, the same one while the items are unchanged.
+    items: std::sync::Arc<Vec<WorkItem>>,
     topic: Value,
     asked: Vec<(String, bool)>,
     deliveries: String,
@@ -359,7 +360,7 @@ fn session_value(items: &[WorkItem], topic: Value, key: &SessionKey) -> Value {
 /// republished), and every one that had a copy when the extension was turned on or off.
 pub(super) fn refresh_session_work(
     db: &Connection,
-    items: HashMap<SessionKey, Vec<WorkItem>>,
+    items: HashMap<SessionKey, std::sync::Arc<Vec<WorkItem>>>,
     topics: &Map<String, Value>,
     mut excluded: HashSet<SessionKey>,
 ) -> Vec<SessionKey> {

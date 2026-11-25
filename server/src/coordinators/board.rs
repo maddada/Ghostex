@@ -26,6 +26,8 @@
 //! coordinators that still use the board's verbs keep working.
 //! SEE-ALSO: server/src/coordinators/work.rs (the items), server/src/coordinators/panel.rs (the thread rows and the cache this is built beside), server/src/ghostex_cli/coordinator/board.rs (the CLI alias), server/src/storage/migrations/0055_coordinator_board.sql (the old items).
 
+use std::collections::HashMap;
+
 use chrono::{DateTime, Local, NaiveDate, Utc};
 use rusqlite::{params, Connection};
 use serde_json::{json, Map, Value};
@@ -524,7 +526,7 @@ fn board_group(status: &str, reason: &str) -> &'static str {
 fn item_row(
     item: &WorkItem,
     context: &WorkContext<'_>,
-    threads: &[Value],
+    rows_by_thread: &HashMap<(&str, &str), &Value>,
     today: NaiveDate,
     now: DateTime<Utc>,
 ) -> Option<Value> {
@@ -580,10 +582,9 @@ fn item_row(
             out["links"] = json!([item_link(&item.link)]);
         }
     } else if let Some(row) = item.threads.iter().find_map(|thread| {
-        threads.iter().find(|row| {
-            row["projectId"] == thread.project_id.as_str()
-                && row["sessionId"] == thread.session_id.as_str()
-        })
+        rows_by_thread
+            .get(&(thread.project_id.as_str(), thread.session_id.as_str()))
+            .copied()
     }) {
         // Its thread's links and PR, which its own row used to carry.
         if let Some(links) = row.get("links").filter(|links| links.is_array()) {
@@ -631,13 +632,22 @@ pub fn board_value(
 ) -> Value {
     let today = now.with_timezone(&Local).date_naive();
     let context = WorkContext::new(threads, items);
+    // Looked up by key instead of scanned for every thread and item (~2,000 threads and ~900
+    // items on one coordinator): each thread's first holder, and each key's first row.
+    let holders = super::work::thread_holders(items);
+    let mut rows_by_thread: HashMap<(&str, &str), &Value> = HashMap::new();
+    for row in threads {
+        if let (Some(project), Some(session)) =
+            (row["projectId"].as_str(), row["sessionId"].as_str())
+        {
+            rows_by_thread.entry((project, session)).or_insert(row);
+        }
+    }
     let mut rows: Vec<Value> = threads
         .iter()
         .filter_map(|row| {
             let (project, session) = (text(row, "projectId"), text(row, "sessionId"));
-            let holder = items
-                .iter()
-                .find(|item| item.has_thread(&project, &session));
+            let holder = holders.get(&(project.as_str(), session.as_str())).copied();
             let live = matches!(text(row, "state").as_str(), "working" | "waiting");
             let pin = match holder {
                 Some(item) if item.for_thread && item.finished_at.is_none() => Some(Pin::of(item)),
@@ -679,7 +689,7 @@ pub fn board_value(
         items
             .iter()
             .filter(|item| !item.for_thread)
-            .filter_map(|item| item_row(item, &context, threads, today, now)),
+            .filter_map(|item| item_row(item, &context, &rows_by_thread, today, now)),
     );
     let groups: Vec<Value> = BOARD_GROUPS
         .iter()

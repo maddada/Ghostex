@@ -265,7 +265,9 @@ struct PanelInputs {
     row_ids: Vec<(SessionKey, u64)>,
     /// The threads on other computers, built fresh every tick (`build_remote_row`).
     remote_rows: Vec<Value>,
-    items: Vec<super::work::WorkItem>,
+    /// The very list `list_all_work_items` gave while the items are unchanged, so comparing it
+    /// with the next one is a pointer comparison.
+    items: Arc<Vec<super::work::WorkItem>>,
     custom_tags: Value,
     intro_hidden: bool,
     /// The coordinator's Topic (session_work.rs), shown at the top of its Work panel.
@@ -324,6 +326,48 @@ fn row_generation(previous: Option<(u64, &Value)>, row: &Value) -> u64 {
         Some((generation, previous)) if previous == row => generation,
         _ => NEXT.fetch_add(1, Ordering::Relaxed),
     }
+}
+
+/// Each coordinator's session as last parsed, with the hash of the stored row it was parsed from
+/// (`read_session_row`); `None` when that row did not parse.
+type CoordinatorSessions = HashMap<SessionKey, (u64, Option<Value>)>;
+
+fn coordinator_sessions() -> &'static Mutex<CoordinatorSessions> {
+    static SESSIONS: OnceLock<Mutex<CoordinatorSessions>> = OnceLock::new();
+    SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// CDXC:Coordinators 2026-11-26 WHY:
+/// Every tick read and parsed each coordinator's whole session row (82 coordinators on the
+/// profiled Mac, up to an eighth of gxserver's CPU) only to learn when its current turn started. The row
+/// is still read every tick, but hashed as stored and parsed again only when a column changed;
+/// what it says is worked out from the parsed session every tick, as before.
+fn coordinator_session<'a>(
+    statement: Option<&mut rusqlite::CachedStatement<'_>>,
+    repository: &DomainRepository<'_>,
+    key: &SessionKey,
+    previous: &mut CoordinatorSessions,
+    next: &'a mut CoordinatorSessions,
+) -> Option<std::borrow::Cow<'a, Value>> {
+    let Some(statement) = statement else {
+        return repository
+            .get_session(&key.0, &key.1)
+            .ok()
+            .flatten()
+            .map(std::borrow::Cow::Owned);
+    };
+    let known = previous.get(key).map(|(hash, _)| *hash);
+    let (hash, stored) = read_session_row(statement, key, |hash| known != Some(hash))
+        .ok()
+        .flatten()?;
+    let session = match stored {
+        Some(row) => crate::domain::session_from_row(&repository.server_id, row).ok(),
+        None => previous.remove(key).and_then(|(_, session)| session),
+    };
+    next.insert(key.clone(), (hash, session));
+    next.get(key)
+        .and_then(|(_, session)| session.as_ref())
+        .map(std::borrow::Cow::Borrowed)
 }
 
 fn rows() -> &'static Mutex<HashMap<SessionKey, CachedRow>> {
@@ -1010,20 +1054,27 @@ pub fn refresh_coordinator_panels(
         chrono::DateTime<chrono::Utc>,
     )> = Vec::new();
     let mut turn_starts = super::turns::read_turn_starts(db);
+    let mut previous_sessions = coordinator_sessions()
+        .lock()
+        .map(|mut sessions| std::mem::take(&mut *sessions))
+        .unwrap_or_default();
+    let mut next_sessions = CoordinatorSessions::new();
     for coordinator in coordinators {
         let key = coordinator.key();
         if !session_exists(db, &key) {
             continue;
         }
         // The coordinator's own turns, for which of its items it is on (turns.rs).
-        if let Some(started) = repository
-            .get_session(&key.0, &key.1)
-            .ok()
-            .flatten()
-            .and_then(|session| {
-                crate::presentation::session_effective_working_started_at(&session, &generated_at)
-            })
-        {
+        if let Some(started) = coordinator_session(
+            session_rows.as_mut(),
+            repository,
+            &key,
+            &mut previous_sessions,
+            &mut next_sessions,
+        )
+        .and_then(|session| {
+            crate::presentation::session_effective_working_started_at(&session, &generated_at)
+        }) {
             super::turns::note_turn_start(db, &mut turn_starts, &key, &started);
         }
         let idle_floor = super::turns::idle_floor(&turn_starts, &key, now);
@@ -1120,6 +1171,9 @@ pub fn refresh_coordinator_panels(
             .map(|thread| build_remote_row(thread, now))
             .collect::<Vec<_>>();
         built.push((key, row_ids, remote_rows, idle_floor));
+    }
+    if let Ok(mut sessions) = coordinator_sessions().lock() {
+        *sessions = next_sessions;
     }
     let Ok(mut panels) = panels().lock() else {
         return Vec::new();

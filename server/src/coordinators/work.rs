@@ -23,7 +23,10 @@
 //! SEE-ALSO: server/src/coordinators/board.rs (the old board, now drawn from these items for older
 //! clients), server/src/storage/migrations/0074_coordinator_work_items.sql.
 
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 use chrono::{DateTime, Local, NaiveDate, Utc};
 use rusqlite::{params, Connection, OptionalExtension, Row};
@@ -420,6 +423,21 @@ impl WorkItem {
     }
 }
 
+/// Each thread's holder by (project, session): the first of `items` that has it on, the item
+/// `items.iter().find(|item| item.has_thread(project, session))` finds, read in one pass instead
+/// of a scan of every item for every thread (a coordinator here has ~2,000 threads, ~900 items).
+pub(super) fn thread_holders(items: &[WorkItem]) -> HashMap<(&str, &str), &WorkItem> {
+    let mut holders = HashMap::new();
+    for item in items {
+        for thread in &item.threads {
+            holders
+                .entry((thread.project_id.as_str(), thread.session_id.as_str()))
+                .or_insert(item);
+        }
+    }
+    holders
+}
+
 fn tag_words(text: &str) -> Vec<String> {
     ghostex_gx_chat_core::transcript::open_questions::tag_words(&text.replace('`', ""))
 }
@@ -460,11 +478,17 @@ pub fn list_work_items(
     db: &Connection,
     key: &SessionKey,
 ) -> Result<Vec<WorkItem>, DomainStateError> {
-    let mut statement = db
-        .prepare_cached(
-            "SELECT * FROM coordinator_work_items WHERE coordinatorProjectId = ?1 AND coordinatorSessionId = ?2 ORDER BY itemNumber",
-        )
-        .map_err(sql_error)?;
+    list_work_items_where(db, key, "SELECT * FROM coordinator_work_items WHERE coordinatorProjectId = ?1 AND coordinatorSessionId = ?2 ORDER BY itemNumber")
+}
+
+/// The items of one coordinator that `sql` (a query over `coordinator_work_items` taking the
+/// coordinator's key as ?1 and ?2) selects.
+fn list_work_items_where(
+    db: &Connection,
+    key: &SessionKey,
+    sql: &str,
+) -> Result<Vec<WorkItem>, DomainStateError> {
+    let mut statement = db.prepare_cached(sql).map_err(sql_error)?;
     let rows = statement
         .query_map([&key.0, &key.1], item_from_row)
         .map_err(sql_error)?
@@ -473,28 +497,109 @@ pub fn list_work_items(
     Ok(rows)
 }
 
+/// What `list_all_work_items` last read: each coordinator's items with a hash of their stored rows.
+fn all_items_cache() -> &'static std::sync::Mutex<HashMap<SessionKey, (u64, Arc<Vec<WorkItem>>)>> {
+    static CACHE: std::sync::OnceLock<
+        std::sync::Mutex<HashMap<SessionKey, (u64, Arc<Vec<WorkItem>>)>>,
+    > = std::sync::OnceLock::new();
+    CACHE.get_or_init(Default::default)
+}
+
+fn hash_row_columns(row: &Row<'_>, hasher: &mut impl Hasher) -> rusqlite::Result<()> {
+    use rusqlite::types::ValueRef;
+    for index in 0..row.as_ref().column_count() {
+        match row.get_ref(index)? {
+            ValueRef::Null => 0_u8.hash(hasher),
+            ValueRef::Integer(value) => (1_u8, value).hash(hasher),
+            ValueRef::Real(value) => (2_u8, value.to_bits()).hash(hasher),
+            ValueRef::Text(bytes) => (3_u8, bytes).hash(hasher),
+            ValueRef::Blob(bytes) => (4_u8, bytes).hash(hasher),
+        }
+    }
+    Ok(())
+}
+
 /// Every coordinator's items, for the supervisor's tick. A database without the table (a test
 /// fixture) reads as no items.
-pub fn list_all_work_items(db: &Connection) -> HashMap<SessionKey, Vec<WorkItem>> {
-    let mut items: HashMap<SessionKey, Vec<WorkItem>> = HashMap::new();
-    let Ok(mut statement) =
-        db.prepare_cached("SELECT * FROM coordinator_work_items ORDER BY itemNumber")
-    else {
+///
+/// CDXC:Coordinators 2026-11-26 WHY:
+/// The tick read and JSON-parsed every work item (1,078 rows, their history lists included) every
+/// two seconds although almost none had changed, which kept gxserver busy on the profiled Mac.
+/// Each coordinator's stored rows are now hashed as read, without parsing, and only a coordinator
+/// whose rows hash differently from last time is parsed again; the others keep the very same list,
+/// so the panels' "built from the same items" check is a pointer comparison.
+pub fn list_all_work_items(db: &Connection) -> HashMap<SessionKey, Arc<Vec<WorkItem>>> {
+    const SQL: &str = "SELECT * FROM coordinator_work_items ORDER BY itemNumber";
+    let mut items: HashMap<SessionKey, Arc<Vec<WorkItem>>> = HashMap::new();
+    let Ok(mut statement) = db.prepare_cached(SQL) else {
         return items;
     };
-    let Ok(rows) = statement.query_map([], |row| {
-        Ok((
-            (
+    // The rows as stored, hashed per coordinator in the order they are listed.
+    let mut hashers: HashMap<SessionKey, DefaultHasher> = HashMap::new();
+    {
+        let Ok(mut rows) = statement.query([]) else {
+            return items;
+        };
+        while let Ok(Some(row)) = rows.next() {
+            let (Ok(project_id), Ok(session_id)) = (
+                row.get::<_, String>("coordinatorProjectId"),
+                row.get::<_, String>("coordinatorSessionId"),
+            ) else {
+                continue;
+            };
+            let hasher = hashers.entry((project_id, session_id)).or_default();
+            if hash_row_columns(row, hasher).is_err() {
+                0xff_u8.hash(hasher);
+            }
+        }
+    }
+    let hashes: HashMap<SessionKey, u64> = hashers
+        .into_iter()
+        .map(|(key, hasher)| (key, hasher.finish()))
+        .collect();
+    let mut cache = all_items_cache()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut stale: std::collections::HashSet<&SessionKey> = std::collections::HashSet::new();
+    for (key, hash) in &hashes {
+        match cache.get(key) {
+            Some((cached, list)) if cached == hash => {
+                items.insert(key.clone(), Arc::clone(list));
+            }
+            _ => {
+                stale.insert(key);
+            }
+        }
+    }
+    if !stale.is_empty() {
+        let mut fresh: HashMap<SessionKey, Vec<WorkItem>> = HashMap::new();
+        if let Ok(rows) = statement.query_map([], |row| {
+            let key = (
                 row.get::<_, String>("coordinatorProjectId")?,
                 row.get::<_, String>("coordinatorSessionId")?,
-            ),
-            item_from_row(row)?,
-        ))
-    }) else {
-        return items;
-    };
-    for (key, item) in rows.flatten() {
-        items.entry(key).or_default().push(item);
+            );
+            if !stale.contains(&key) {
+                return Ok(None);
+            }
+            Ok(Some((key, item_from_row(row)?)))
+        }) {
+            for (key, item) in rows.flatten().flatten() {
+                fresh.entry(key).or_default().push(item);
+            }
+        }
+        for key in stale {
+            // A coordinator whose every row failed to parse has no items, as before.
+            let Some(list) = fresh.remove(key) else {
+                continue;
+            };
+            items.insert(key.clone(), Arc::new(list));
+        }
+    }
+    cache.clear();
+    for (key, list) in &items {
+        if let Some(hash) = hashes.get(key) {
+            cache.insert(key.clone(), (*hash, Arc::clone(list)));
+        }
     }
     items
 }
@@ -1483,13 +1588,14 @@ fn local_day(at: &str) -> Option<NaiveDate> {
 /// until they work or wait on the user again.
 fn loose_threads(threads: &[Value], items: &[WorkItem], now: DateTime<Utc>) -> Vec<Value> {
     let today = now.with_timezone(&Local).date_naive();
+    let holders = thread_holders(items);
     threads
         .iter()
         .filter_map(|row| {
             let (project, session) = (text(row, "projectId"), text(row, "sessionId"));
-            let holder = items
-                .iter()
-                .find(|item| item.has_thread(&project, &session));
+            let holder = holders
+                .get(&(project.as_str(), session.as_str()))
+                .copied();
             if let Some(holder) = holder {
                 let live = matches!(text(row, "state").as_str(), "working" | "waiting");
                 let dropped = holder.dropped_at.as_deref();
@@ -2669,7 +2775,14 @@ pub fn settle_chat_replies(
 /// Whether the coordinator has an open ask or Needs you item naming a tag, so its ledger is worth
 /// asking about tags (`settle_answered_items`).
 pub fn has_question_items(db: &Connection, key: &SessionKey) -> bool {
-    list_work_items(db, key).is_ok_and(|items| {
+    // Only the items that can pass the test below are read: not dropped, and with asks or Needs
+    // you and unfinished (the open-questions sweep asks this every ten seconds).
+    list_work_items_where(
+        db,
+        key,
+        "SELECT * FROM coordinator_work_items WHERE coordinatorProjectId = ?1 AND coordinatorSessionId = ?2 AND droppedAt IS NULL AND (asksJson != '[]' OR (finishedAt IS NULL AND status = 'needs')) ORDER BY itemNumber",
+    )
+    .is_ok_and(|items| {
         items.iter().any(|item| {
             item.dropped_at.is_none()
                 && (item.asks.iter().any(|ask| {
@@ -2727,11 +2840,26 @@ pub fn own_ask_holding(db: &Connection, key: &SessionKey, tag: &str) -> Option<S
 
 /// An ask with its own card (`chat_question` false) is not the chat's question, so a form or page
 /// that only shares its tag still counts as its own.
+///
+/// CDXC:Coordinators 2026-11-26 WHY: the open-questions sweep asks this of every running
+/// coordinator every ten seconds; it read and parsed every item whole (858 on the profiled Mac).
+/// Only the asks of items that have any are read now.
 pub fn ask_tags(db: &Connection, key: &SessionKey) -> std::collections::BTreeSet<String> {
-    list_work_items(db, key)
-        .unwrap_or_default()
-        .iter()
-        .flat_map(|item| item.asks.iter())
+    let Ok(mut statement) = db.prepare_cached(
+        "SELECT asksJson FROM coordinator_work_items WHERE coordinatorProjectId = ?1 AND coordinatorSessionId = ?2 AND asksJson != '[]' ORDER BY itemNumber",
+    ) else {
+        return Default::default();
+    };
+    let Ok(asks) = statement
+        .query_map([&key.0, &key.1], |row| {
+            Ok(json_list::<WorkAsk>(row, "asksJson"))
+        })
+        .and_then(|rows| rows.collect::<Result<Vec<_>, _>>())
+    else {
+        return Default::default();
+    };
+    asks.iter()
+        .flatten()
         .filter(|ask| ask.settles_with_chat())
         .map(|ask| ask.tag.to_ascii_uppercase())
         .filter(|tag| !tag.is_empty())

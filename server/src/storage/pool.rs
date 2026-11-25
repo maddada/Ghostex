@@ -14,7 +14,12 @@ use super::apply_wal_durability;
 pub(super) const DEFAULT_BUSY_TIMEOUT: Duration = Duration::from_millis(5_000);
 
 /// Open connections kept for reuse. Further concurrent borrowers open their own connection, which is closed when they drop it.
-const POOLED_CONNECTIONS_MAX_IDLE: usize = 6;
+///
+/// CDXC:ServerDaemon 2026-11-26 WHY: with 6, busy moments (the supervisor's tick, the sweeps and
+/// HTTP requests at once) borrowed more than were idle, so each extra borrower opened a fresh
+/// connection, ran its PRAGMAs and reparsed the whole schema, then closed it: 8.5% of gxserver's
+/// CPU in one sample on the profiled Mac. 16 keeps those warm for a few MB of page cache.
+const POOLED_CONNECTIONS_MAX_IDLE: usize = 16;
 
 /// Room for every hot statement the repositories prepare with `prepare_cached`.
 const POOLED_STATEMENT_CACHE_CAPACITY: usize = 64;
