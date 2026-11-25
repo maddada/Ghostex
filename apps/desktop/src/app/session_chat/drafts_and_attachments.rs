@@ -553,7 +553,9 @@ impl GhostexGpuiApp {
                         this.dispatch_gpui_workspace_action_toast(
                             "info",
                             "Switch to Native",
-                            "Switches to Native when this reply ends.",
+                            ghostex_gx_chat_core::extras::native_switch::queued_reason(
+                                value.get("wait").and_then(serde_json::Value::as_str),
+                            ),
                             cx,
                         );
                     } else if value.get("switched").and_then(serde_json::Value::as_bool)

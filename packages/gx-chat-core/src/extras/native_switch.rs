@@ -117,12 +117,7 @@ pub fn project(state: &ChatState) -> Option<NativeSwitchOffer> {
 
     let queued = state.session.switch_to_native_queued;
     let queued_tooltip = queued.then(|| {
-        let reason = match state.session.switch_to_native_wait.as_deref() {
-            Some("background") => "Switches to Native when background work ends.",
-            Some("answer") => "Switches to Native after you answer.",
-            // `"reply"`, or an older gxserver that does not say.
-            _ => "Switches to Native when this reply ends.",
-        };
+        let reason = queued_reason(state.session.switch_to_native_wait.as_deref());
         format!("{reason}\nClick × to cancel.")
     });
     // Keep the strip chip visible on Terminal chats (including coordinators) even when Native is
@@ -139,6 +134,19 @@ pub fn project(state: &ChatState) -> Option<NativeSwitchOffer> {
         native_default,
         show_menu_item: true,
     })
+}
+
+/// What a queued switch waits on, in the words the chip's tooltip and the queued toast use, from
+/// gxserver's `switchToNativeWait` (chat state) or `wait` (the `switchSessionCliToAcp` answer).
+/// SEE-ALSO: apps/mobile/app/src/chat/native/NativeChatScreen.tsx (`queuedSwitchReason`, the
+/// phone's copy for its toast).
+pub fn queued_reason(wait: Option<&str>) -> &'static str {
+    match wait {
+        Some("background") => "Switches to Native when background work ends.",
+        Some("answer") => "Switches to Native after you answer.",
+        // `"reply"`, or an older gxserver that does not say.
+        _ => "Switches to Native when this reply ends.",
+    }
 }
 
 /// Optimistically hides the strip chip for `family` in this chat while the host persists the dismissal.

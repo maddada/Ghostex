@@ -1704,6 +1704,7 @@ pub(crate) async fn switch_to_acp(
             "inFlight": true,
             "restarted": false,
             "family": family,
+            "wait": super::pending_switch::wait(project_id, session_id).map(SwitchWait::as_str),
         }));
     }
 
@@ -1734,6 +1735,7 @@ pub(crate) async fn switch_to_acp(
                 "restarted": false,
                 "family": family,
                 "reason": reason,
+                "wait": wait.as_str(),
             }));
         }
         SwitchSafety::CannotResume(reason) => {
@@ -1772,6 +1774,7 @@ pub(crate) async fn switch_to_acp(
                 "restarted": false,
                 "family": family,
                 "reason": error.message,
+                "wait": SwitchWait::Reply.as_str(),
             }))
         }
         Err(error) => Err(error),
