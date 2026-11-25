@@ -46,7 +46,9 @@ use crate::transcript::prose::prose_markdown;
 use crate::transcript::question_exchange::answered_question_exchange;
 use crate::transcript::question_forms::{question_forms, QuestionForm};
 use crate::transcript::sent_message::{project_sent_messages, resolve_recipients};
-use crate::transcript::simple::{calls_label, edit_label};
+use crate::transcript::simple::{
+    calls_label, file_call_status_of, file_edit_label, file_edit_paths, FileCallStatus,
+};
 use crate::transcript::system_cards::classify_system_card;
 use crate::transcript::tool_fold::{pair_tool_blocks, split_blocks, ToolPair};
 use crate::transcript::tool_rows::{
@@ -280,11 +282,15 @@ pub fn project_message(
             .filter_map(answered_question_exchange)
             .collect()
     };
-    let (changed_paths, failed_paths) = crate::transcript::simple::edited_and_failed_paths(
-        changes
-            .iter()
-            .map(|change| (change.path.as_str(), change.result_is_error())),
-    );
+    let (changed_paths, failed_paths, pending_paths, any_file_running) =
+        file_edit_paths(changes.iter().map(|change| {
+            let status = match (change.result.is_some(), change.result_is_error()) {
+                (_, true) => FileCallStatus::Failed,
+                (true, false) => FileCallStatus::Done,
+                (false, false) => FileCallStatus::Running,
+            };
+            (change.path.as_str(), status)
+        }));
 
     let mut projected = message_keys(message);
     projected.insert("text".to_string(), marked_body.into());
@@ -540,7 +546,13 @@ pub fn project_message(
     projected.insert("files".to_string(), Value::Array(files));
     projected.insert(
         "simpleFileLabel".to_string(),
-        edit_label(changed_paths.len(), failed_paths.len()).into(),
+        file_edit_label(
+            changed_paths.len(),
+            failed_paths.len(),
+            pending_paths.len(),
+            any_file_running,
+        )
+        .into(),
     );
     /* React counts only the work rows for this label: an answered question is conversation, so its
     card sits outside the group and is not one of the "N tool calls". */
@@ -1630,14 +1642,14 @@ fn turn_items(
                         files.extend(rows);
                     }
                 }
-                let (edited, failed) = crate::transcript::simple::edited_and_failed_paths(
-                    files.iter().filter_map(|file| {
+                let (edited, failed, pending, any_file_running) =
+                    file_edit_paths(files.iter().filter_map(|file| {
                         let path = file.get("path").and_then(Value::as_str)?;
-                        Some((path, file.get("failed") == Some(&Value::Bool(true))))
-                    }),
-                );
+                        Some((path, file_call_status_of(file)))
+                    }));
                 let mut changed: Vec<String> = edited.iter().map(|path| path.to_string()).collect();
                 let failed_files = failed.len();
+                let pending_files = pending.len();
                 // The range's file paths stand in for rows still on the server. A range the
                 // wake-ups after the prompt share holds their files too, so the prompt counts only
                 // the files of its own rows.
@@ -1706,11 +1718,25 @@ fn turn_items(
                     stats,
                     files_card: crate::transcript::file_change_rows::file_change_card(&files),
                     files,
-                    files_label: format!(
-                        "{changed_files} {} changed",
-                        if changed_files == 1 { "file" } else { "files" }
+                    files_label: if changed_files == 0 && (failed_files > 0 || any_file_running) {
+                        file_edit_label(
+                            changed_files,
+                            failed_files,
+                            pending_files,
+                            any_file_running,
+                        )
+                    } else {
+                        format!(
+                            "{changed_files} {} changed",
+                            if changed_files == 1 { "file" } else { "files" }
+                        )
+                    },
+                    simple_files_label: file_edit_label(
+                        changed_files,
+                        failed_files,
+                        pending_files,
+                        any_file_running,
                     ),
-                    simple_files_label: edit_label(changed_files, failed_files),
                     expandable: !collapsed_work.is_empty() || turn.section.is_some(),
                     deferred: deferred_value,
                     work: collapsed_work

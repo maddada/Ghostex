@@ -347,6 +347,9 @@ struct Turn {
     /// failed (rows arrive newest first, so a result is seen before its call).
     images: Vec<String>,
     failed_calls: BTreeSet<String>,
+    /// Failure flags of results with no `call_id` (newest first, popped by the `call_id: None`
+    /// call immediately before them).
+    unlinked_result_failed: Vec<bool>,
 }
 
 impl Turn {
@@ -365,14 +368,21 @@ impl Turn {
             self.end_id = Some(message.id.clone());
         }
         self.count += 1;
-        for block in &message.blocks {
+        for block in message.blocks.iter().rev() {
             if let SessionChatBlock::ToolResult {
-                is_error: Some(true),
-                call_id: Some(id),
-                ..
+                is_error, call_id, ..
             } = block
             {
-                self.failed_calls.insert(id.clone());
+                let errored = *is_error == Some(true);
+                match call_id {
+                    Some(id) if errored => {
+                        self.failed_calls.insert(id.clone());
+                    }
+                    None => {
+                        self.unlinked_result_failed.push(errored);
+                    }
+                    _ => {}
+                }
             }
             if let SessionChatBlock::ToolCall {
                 name,
@@ -380,12 +390,15 @@ impl Turn {
                 call_id,
             } = block
             {
-                // The thumbnails the folded turn shows before it is opened (CDXC:SessionChat
-                // 2026-11-02 in packages/gx-chat-core/src/transcript/read_images.rs).
-                let failed = call_id
-                    .as_ref()
-                    .is_some_and(|id| self.failed_calls.contains(id));
+                self.tool_calls += 1;
+                // The thumbnails and edited files the folded turn shows before it is opened
+                // (CDXC:SessionChat 2026-11-02 in packages/gx-chat-core/src/transcript/read_images.rs).
+                let failed = match call_id {
+                    Some(id) => self.failed_calls.contains(id),
+                    None => self.unlinked_result_failed.pop().unwrap_or(false),
+                };
                 if !failed {
+                    collect_file_paths(name, input, &mut self.files);
                     for path in ghostex_gx_chat_core::transcript::read_images::image_paths_in_call(
                         name, input, None,
                     )
@@ -395,10 +408,6 @@ impl Turn {
                         self.images.insert(0, path);
                     }
                 }
-            }
-            if let SessionChatBlock::ToolCall { name, input, .. } = block {
-                self.tool_calls += 1;
-                collect_file_paths(name, input, &mut self.files);
             }
         }
         let mut row = None;

@@ -21,7 +21,9 @@ use crate::transcript::chat_look::{
 use crate::transcript::file_change_rows::file_change_card;
 use crate::transcript::folded_cards::card_stats;
 use crate::transcript::read_images::{images_stat, push_once};
-use crate::transcript::simple::{calls_label, edit_label, edited_and_failed_paths};
+use crate::transcript::simple::{
+    calls_label, file_call_status_of, file_edit_label, file_edit_paths,
+};
 use crate::transcript::turns::worked_duration_label;
 use crate::transcript::work_summary::counted_work_stats;
 
@@ -162,11 +164,12 @@ fn merge(run: Vec<TranscriptItem>, hidden: Option<&[String]>) -> TranscriptItem 
             final_message,
         });
     }
-    let (_, failed) = edited_and_failed_paths(files.iter().filter_map(|file| {
+    let (_, failed, pending, any_file_running) = file_edit_paths(files.iter().filter_map(|file| {
         let path = file.get("path").and_then(Value::as_str)?;
-        Some((path, file.get("failed") == Some(&Value::Bool(true))))
+        Some((path, file_call_status_of(file)))
     }));
     let failed_files = failed.len();
+    let pending_files = pending.len();
     let changed_files = changed.len();
     // The renderers draw a reply's hover row exactly for these (desktop `has_reply_actions`, phone
     // `hasReplyActions`), so the button is never named onto a reply without one.
@@ -196,11 +199,20 @@ fn merge(run: Vec<TranscriptItem>, hidden: Option<&[String]>) -> TranscriptItem 
         label,
         stats,
         files_card: file_change_card(&files),
-        files_label: format!(
-            "{changed_files} {} changed",
-            if changed_files == 1 { "file" } else { "files" }
+        files_label: if changed_files == 0 && (failed_files > 0 || any_file_running) {
+            file_edit_label(changed_files, failed_files, pending_files, any_file_running)
+        } else {
+            format!(
+                "{changed_files} {} changed",
+                if changed_files == 1 { "file" } else { "files" }
+            )
+        },
+        simple_files_label: file_edit_label(
+            changed_files,
+            failed_files,
+            pending_files,
+            any_file_running,
         ),
-        simple_files_label: edit_label(changed_files, failed_files),
         files,
         expandable,
         work,

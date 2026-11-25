@@ -145,14 +145,18 @@ pub(crate) fn decode_messages(messages: &[Value]) -> Vec<SessionChatMessage> {
                                 timestamp,
                                 turn.as_deref(),
                             ));
-                            if matches!(state["status"].as_str(), Some("completed" | "error")) {
+                            let is_failed = matches!(
+                                state["status"].as_str(),
+                                Some("error" | "failed" | "rejected" | "cancelled" | "canceled")
+                            );
+                            if state["status"] == "completed" || is_failed {
                                 let mut output = Vec::new();
                                 for content in state["content"].as_array().into_iter().flatten() {
                                     if let Some(text) = content["text"].as_str() {
                                         output.push(text.to_string());
                                     }
                                 }
-                                if state["status"] == "error" {
+                                if is_failed && !state["error"].is_null() {
                                     output.push(
                                         state["error"]["message"]
                                             .as_str()
@@ -165,7 +169,7 @@ pub(crate) fn decode_messages(messages: &[Value]) -> Vec<SessionChatMessage> {
                                     SessionChatRole::Tool,
                                     vec![SessionChatBlock::ToolResult {
                                         output: output.join("\n"),
-                                        is_error: Some(state["status"] == "error"),
+                                        is_error: Some(is_failed),
                                         call_id: None,
                                         patch: None,
                                     }],

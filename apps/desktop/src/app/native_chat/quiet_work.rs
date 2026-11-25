@@ -5,20 +5,20 @@
 //! migrate.ts, staging.yml") and, once a line is opened, its steps on a thin rail, one per call.
 //! At Default nothing here runs.
 
-use super::completed_work_row::{FoldedCards, WorkTail, spaced_tail};
+use super::completed_work_row::{spaced_tail, FoldedCards, WorkTail};
 use super::file_actions::FileMenuExt as _;
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use crate::app::helpers::ThrottledAnimationExt as _;
 use crate::app::native_chat::cursor::ChatCursor as _;
-use ghostex_gx_chat_core::TranscriptItem;
 use ghostex_gx_chat_core::transcript::chat_look::AgentWork;
+use ghostex_gx_chat_core::TranscriptItem;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, FontWeight, HighlightStyle, Hsla, InteractiveElement as _, IntoElement,
-    ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, StyledText,
-    Window, div, px, svg,
+    div, px, svg, AnyElement, Context, FontWeight, HighlightStyle, Hsla, InteractiveElement as _,
+    IntoElement, ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _,
+    StyledText, Window,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::time::Duration;
 
 /// The space between a quiet line and the agent text that follows it.
@@ -146,6 +146,9 @@ pub(super) fn finished_mark<'a>(messages: impl IntoIterator<Item = &'a Value>) -
         message["tools"]
             .as_array()
             .is_some_and(|tools| tools.iter().any(|tool| tool["failed"] == true))
+            || message["files"]
+                .as_array()
+                .is_some_and(|files| files.iter().any(|file| file["failed"] == true))
     });
     if failed {
         QuietMark::Failed

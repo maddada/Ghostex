@@ -360,7 +360,10 @@ impl CursorTranscriptWriter {
             }
         }
 
-        let is_terminal = matches!(status, "completed" | "failed" | "cancelled");
+        let is_terminal = matches!(
+            status,
+            "completed" | "failed" | "cancelled" | "canceled" | "rejected"
+        );
         let ready_to_emit_call = !entry.emitted_call
             && (is_terminal
                 || entry.raw_input.as_object().is_some_and(|m| !m.is_empty())
@@ -664,7 +667,7 @@ pub(super) fn extract_acp_tool_result(
     tool: &ActiveToolBuffer,
     status: &str,
 ) -> (String, bool, Option<String>) {
-    let mut is_error = matches!(status, "failed" | "cancelled");
+    let mut is_error = matches!(status, "failed" | "cancelled" | "canceled" | "rejected");
     let mut diff: Option<String> = None;
 
     for item in &tool.content {
@@ -714,7 +717,13 @@ pub(super) fn extract_acp_tool_result(
         }
     }
 
-    if tool.raw_output.get("isError").and_then(Value::as_bool) == Some(true) {
+    if tool.raw_output.get("isError").and_then(Value::as_bool) == Some(true)
+        || tool.raw_output.get("rejected").and_then(Value::as_bool) == Some(true)
+        || tool
+            .raw_output
+            .get("error")
+            .is_some_and(|e| !e.is_null() && e.as_str() != Some(""))
+    {
         is_error = true;
     }
 

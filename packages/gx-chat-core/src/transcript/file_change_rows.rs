@@ -318,10 +318,10 @@ fn common_folder(files: &[Value]) -> String {
 pub fn file_change_card(files: &[Value]) -> Value {
     let mut paths: Vec<&str> = Vec::new();
     let (mut added, mut removed) = (0u64, 0u64);
-    let (edited, failed) =
-        crate::transcript::simple::edited_and_failed_paths(files.iter().filter_map(|file| {
+    let (edited, failed, pending, any_running) =
+        crate::transcript::simple::file_edit_paths(files.iter().filter_map(|file| {
             let path = file.get("path").and_then(Value::as_str)?;
-            Some((path, file.get("failed") == Some(&Value::Bool(true))))
+            Some((path, crate::transcript::simple::file_call_status_of(file)))
         }));
     for file in files {
         if let Some(path) = file.get("path").and_then(Value::as_str) {
@@ -334,7 +334,12 @@ pub fn file_change_card(files: &[Value]) -> Value {
     }
     let total = added + removed;
     serde_json::json!({
-        "title": crate::transcript::simple::edit_label(edited.len(), failed.len()),
+        "title": crate::transcript::simple::file_edit_label(
+            edited.len(),
+            failed.len(),
+            pending.len(),
+            any_running,
+        ),
         "folder": common_folder(files),
         "added": added,
         "removed": removed,
