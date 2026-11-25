@@ -1027,6 +1027,19 @@ impl Ledger {
         also_answered: &[String],
         page_answered: impl Fn(&str) -> bool,
     ) -> HashMap<String, bool> {
+        self.tag_outcomes(also_answered, page_answered)
+            .into_iter()
+            .map(|(tag, state)| (tag, state != TagState::Open))
+            .collect()
+    }
+
+    /// [`Ledger::tag_states`] with how each settled: answered, skipped or withdrawn, so a work
+    /// item's ask reads "Answered in the chat" only when the user answered it.
+    pub(crate) fn tag_outcomes(
+        &self,
+        also_answered: &[String],
+        page_answered: impl Fn(&str) -> bool,
+    ) -> HashMap<String, TagState> {
         let mut answered = self.answered.clone();
         answered.extend(also_answered.iter().cloned());
         let mut settled = settle_askers(&self.found, &answered);
@@ -1038,7 +1051,7 @@ impl Ledger {
         share_answers(&mut settled);
         linkable_tags(&settled)
             .into_iter()
-            .map(|tag| (tag.tag, tag.state != TagState::Open))
+            .map(|tag| (tag.tag, tag.state))
             .collect()
     }
 }
@@ -1454,12 +1467,21 @@ pub(crate) fn highest_question_tag(project_id: &str, session_id: &str) -> u64 {
 ///
 /// CDXC:SessionChat 2026-11-12 WHY:
 /// Issue #579: after a context compaction a coordinator lost count and reused tags it had already asked and the user had answered, and nothing told it. The chat now treats such a tag as a new question (gx-chat-core's `asks_alike`), and the agent can learn the tags already used and the next free one before it asks.
+///
+/// With `reserve` (`next-tag`), the tag it answers is taken for the caller (the session's to-do
+/// counter, session_needs_you `reserve_tag`), so the next caller gets the one after.
+///
+/// CDXC:Coordinators 2026-11-25 WHY:
+/// A thread took Q4846 from `next-tag` for a Live page while its coordinator's `item ask` took
+/// Q4846 too: `next-tag` only read the tags in use, and the page was not in the chat yet. Its
+/// answer then settled the unrelated ask. A tag `next-tag` gives out is now taken at once.
 pub(crate) fn read_question_tags(
     state: &AppState,
     db: &rusqlite::Connection,
     repository: &DomainRepository<'_>,
     project_id: &str,
     session_id: &str,
+    reserve: bool,
 ) -> Result<Value, DomainStateError> {
     let session = repository
         .get_session(project_id, session_id)?
@@ -1487,23 +1509,45 @@ pub(crate) fn read_question_tags(
         .flat_map(|item| item.asks.iter().map(|ask| ask.tag.to_ascii_uppercase()))
         .filter(|tag| !tag.is_empty())
         .collect();
-    // A Needs you to-do's tag is never given again either (session_needs_you/).
+    // A Needs you to-do's tag is never given again either (session_needs_you/), nor one given out
+    // before (`next-tag`, a published page's questions).
+    let todo_tags = crate::session_needs_you::todo_tags(db, &key);
     let highest = highest_q_tag(states.keys())
         .max(highest_q_tag(item_tags.iter()))
         .max(crate::session_needs_you::highest_tag(db, &key));
+    // An ask with its own card holds its tag even when a form or page in the chat used it too (a
+    // collision from before tags were checked): it reads as the board's.
+    let own_card_tags: Vec<String> = items
+        .iter()
+        .flat_map(|item| item.asks.iter())
+        .filter(|ask| ask.chat_question == Some(false))
+        .map(|ask| ask.tag.to_ascii_uppercase())
+        .collect();
     let mut tags: Vec<Value> = states
         .iter()
+        .filter(|(tag, _)| !own_card_tags.contains(tag))
         .map(|(tag, settled)| json!({ "tag": tag, "settled": settled, "where": "chat" }))
         .chain(
             item_tags
                 .iter()
-                .filter(|tag| !states.contains_key(*tag))
+                .filter(|tag| !states.contains_key(*tag) || own_card_tags.contains(tag))
                 .map(|tag| json!({ "tag": tag, "where": "board" })),
+        )
+        .chain(
+            todo_tags
+                .iter()
+                .filter(|tag| !states.contains_key(*tag) && !item_tags.contains(tag))
+                .map(|tag| json!({ "tag": tag, "where": "todo" })),
         )
         .collect();
     tags.sort_by(|a, b| a["tag"].as_str().cmp(&b["tag"].as_str()));
     tags.dedup_by(|a, b| a["tag"] == b["tag"]);
-    Ok(json!({ "tags": tags, "highest": highest, "next": format!("Q{}", highest + 1) }))
+    let next = if reserve {
+        crate::session_needs_you::reserve_tag(db, &key, highest)?
+    } else {
+        highest + 1
+    };
+    Ok(json!({ "tags": tags, "highest": highest, "next": format!("Q{next}") }))
 }
 
 /// Marks done the coordinator's Needs you items whose questions its chat has settled, from the
@@ -1529,12 +1573,28 @@ fn settle_board_items(
     };
     let queued = queued_answers(db, project_id, session_id);
     let states = match entry.lock() {
-        Ok(ledger) => ledger.tag_states(&queued, |id| {
+        Ok(ledger) => ledger.tag_outcomes(&queued, |id| {
             crate::visual_pages::page_answered(&state.paths.root_dir, id)
         }),
         Err(_) => return,
     };
-    let _ = crate::coordinators::settle_answered_items(db, &key, |tag| states.get(tag).copied());
+    let _ =
+        crate::coordinators::settle_answered_items_with(db, &key, |tag| states.get(tag).copied());
+}
+
+/// Brings the session's chat ledger up to date before a question tag is given out (a work item's
+/// `item ask`, a thread's `needs-you add`), so a form or page the chat just showed is counted.
+/// Blocking.
+pub(crate) fn read_up_to_date(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+    session_id: &str,
+) {
+    if let Ok(Some(session)) = repository.get_session(project_id, session_id) {
+        let _ = read_open(state, db, &session, false);
+    }
 }
 
 /// The forms and pages waiting on the user in this session, brought up to date first. Blocking.

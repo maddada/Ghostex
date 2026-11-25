@@ -2346,6 +2346,20 @@ pub(crate) fn handle_coordinator_http(
     // An ask a thread made with `ghostex needs-you add`: once the user answers it here, the
     // thread hears the answer too (session_needs_you/thread.rs).
     let thread_ask = crate::session_needs_you::thread_ask_of(db, endpoint_path, params);
+    // An ask takes the next free tag: the chat's ledger is read up to now first, so a form or page
+    // the chat showed seconds ago is counted, not only what the last sweep read.
+    if endpoint_path == "/api/coordinatorWork"
+        && params.get("op").and_then(Value::as_str) == Some("ask")
+    {
+        let text = |key: &str| params.get(key).and_then(Value::as_str).unwrap_or_default();
+        crate::session_chat_open_questions::read_up_to_date(
+            state,
+            db,
+            repository,
+            text("projectId"),
+            text("sessionId"),
+        );
+    }
     let output = coordinators::handle_coordinator_endpoint(endpoint_path, db, repository, params)?;
     if let Some(ask) = thread_ask {
         if let Some((project_id, session_id)) =

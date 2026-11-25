@@ -292,8 +292,11 @@ Rules for every question, whichever way you ask it:
 - **Tag:** Q1, Q2, … counting up across the whole conversation, never restarting or reusing a
   number; refer to it by tag and mark the answer you recommend. After a compaction, or when unsure of
   the count, run `ghostex coordinator next-tag` (newer Ghostex; a thread running it gets its
-  coordinator's); a `visual check` warning that a tag was already used means: give that question a
-  new tag.
+  coordinator's). Each `next-tag` takes the tag it prints, so a thread building a page and your own
+  `item ask` never get the same one. A `visual check` warning that a tag was already used means: give
+  that question a new tag. A tag a work item's own question or a to-do holds is refused outright
+  (`visual check` fails, `ghostex show` refuses the page): a page or form answer settles only the
+  question it asks, never an ask that only shares its tag.
 - Write a form's block to a file and send it only when `ghostex visual check <file>` shows no error.
   A page gets `ghostex visual check <page.html> --out <file.png>` before the user sees it; put that
   in the brief of a thread that builds one.
@@ -377,7 +380,8 @@ flag):
   `item delivered release v<x>` (or `ota`) brings back the items it delivered: check each and finish
   it.
 - `item done W<n> "<the one line worth keeping>"`: its open asks stay under Needs you until answered
-  or withdrawn.
+  or withdrawn. Asking on a finished item moves it back to Needs you; it finishes again by itself
+  once nothing is asked.
 - `item drop W<n>` for abandoned work (withdraws its asks); `item edit W<n> --status parked` for work
   set aside (Later).
 

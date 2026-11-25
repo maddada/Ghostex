@@ -27,8 +27,8 @@ pub(crate) const ASKS_GROUP_NAME: &str = "Pings";
 pub(crate) const INBOX_FULL_NAME: &str = "Session Inbox";
 
 pub(crate) use api::{
-    handle_needs_you_request, highest_tag, insert_needs_you, needs_you_identity,
-    route_board_answer, turn_ended, SESSION_NEEDS_YOU_ENDPOINT,
+    handle_needs_you_request, highest_tag, hold_tags, insert_needs_you, needs_you_identity,
+    reserve_tag, route_board_answer, todo_tags, turn_ended, SESSION_NEEDS_YOU_ENDPOINT,
 };
 pub(crate) use runner::handle_board_command_op;
 pub(crate) use store::{open_count, paste_refusal};

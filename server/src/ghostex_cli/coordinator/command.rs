@@ -670,6 +670,17 @@ fn list(parsed: &ParsedArgs) -> CliResult<()> {
     Ok(())
 }
 
+/// The session whose question tags `session` counts in: its coordinator's for a thread (whose
+/// questions the coordinator shows and the user answers there), its own otherwise.
+pub(crate) fn asking_conversation(session: Value, flags: &Flags) -> Value {
+    match read_view(&session, flags) {
+        Ok(view) if !agents::text(&view["coordinator"], "sessionId").is_empty() => {
+            view["coordinator"].clone()
+        }
+        _ => session,
+    }
+}
+
 /// `next-tag`: the next free question tag, one past the highest the coordinator's chat or its work
 /// items used (server/src/session_chat_open_questions.rs `read_question_tags`), so a coordinator
 /// that lost count (a context compaction) never reuses one (issue #579).
@@ -679,24 +690,26 @@ fn list(parsed: &ParsedArgs) -> CliResult<()> {
 /// `--coordinator`, a thread now gets its coordinator's next tag: `readCoordinator` on a thread's
 /// key answers with its coordinator (endpoint.rs `resolve_coordinator`); any other session keeps
 /// its own.
+///
+/// CDXC:Coordinators 2026-11-25 WHY: two callers that asked at once got the same tag (a thread's
+/// Live page and its coordinator's `item ask` both took Q4846, and the page's answer settled the
+/// ask). `reserve` makes gxserver take the tag it prints, so the next call gets the one after.
 fn next_tag(parsed: &ParsedArgs) -> CliResult<()> {
-    let (mut coordinator, flags) = target_coordinator(parsed)?;
+    let (coordinator, flags) = target_coordinator(parsed)?;
     let named = ["coordinator", "orchestrator", "session"]
         .iter()
         .any(|key| flag_text(&parsed.flags, key).is_some());
-    if !named {
-        if let Ok(view) = read_view(&coordinator, &flags) {
-            let owner = &view["coordinator"];
-            if !agents::text(owner, "sessionId").is_empty() {
-                coordinator = owner.clone();
-            }
-        }
-    }
+    let coordinator = if named {
+        coordinator
+    } else {
+        asking_conversation(coordinator, &flags)
+    };
     let tags = call_gxserver_rpc(
         "/api/readSessionChatQuestionTags",
         &json!({
             "projectId": coordinator["projectId"],
             "sessionId": coordinator["sessionId"],
+            "reserve": true,
         }),
         &flags,
     )?;

@@ -574,6 +574,8 @@ pub(super) async fn route_chat_http(
                     repository,
                     &read_project_id(params)?,
                     &read_session_id(params)?,
+                    // `next-tag` takes the tag it prints; `visual check` only reads.
+                    params.get("reserve").and_then(Value::as_bool) == Some(true),
                 )
             },
         ),

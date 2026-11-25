@@ -110,6 +110,74 @@ pub(crate) fn highest_tag(db: &rusqlite::Connection, key: &crate::coordinators::
         .map_or(0, |session| NeedsYouRecord::of(&session).last)
 }
 
+/// The tags this session's own to-dos hold, open or settled, uppercased: a work item's ask may not
+/// take one of them (`item ask --tag`), nor may a Live page (visual_pages/publish.rs).
+pub(crate) fn todo_tags(
+    db: &rusqlite::Connection,
+    key: &crate::coordinators::SessionKey,
+) -> Vec<String> {
+    let Some(session) = DomainRepository::new(db, "")
+        .get_session(&key.0, &key.1)
+        .ok()
+        .flatten()
+    else {
+        return Vec::new();
+    };
+    let record = NeedsYouRecord::of(&session);
+    record
+        .open
+        .iter()
+        .map(|item| item.tag.to_ascii_uppercase())
+        .chain(
+            record
+                .settled
+                .iter()
+                .map(|item| item.tag.to_ascii_uppercase()),
+        )
+        .filter(|tag| !tag.is_empty())
+        .collect()
+}
+
+/// Gives out the session's next free question tag, one past `floor` (the highest its chat, work
+/// items and to-dos use) and past every tag given out before, and keeps it taken in the to-do
+/// counter (`last`), so no other caller gets it: `ghostex coordinator next-tag` asked by a
+/// coordinator and its threads at once never answer the same tag.
+pub(crate) fn reserve_tag(
+    db: &rusqlite::Connection,
+    key: &crate::coordinators::SessionKey,
+    floor: u64,
+) -> Result<u64, DomainStateError> {
+    let _lock = store::write_lock();
+    let session = DomainRepository::new(db, "")
+        .get_session(&key.0, &key.1)?
+        .ok_or_else(|| bad("No such session."))?;
+    let mut record = NeedsYouRecord::of(&session);
+    let number = record.last.max(floor) + 1;
+    record.last = number;
+    store::write(db, &key.0, &key.1, &record)?;
+    Ok(number)
+}
+
+/// Keeps the tags up to `highest` taken (a published page's questions), so a tag given out next
+/// comes after them even before the chat shows the page.
+pub(crate) fn hold_tags(
+    db: &rusqlite::Connection,
+    key: &crate::coordinators::SessionKey,
+    highest: u64,
+) -> Result<(), DomainStateError> {
+    let _lock = store::write_lock();
+    let Some(session) = DomainRepository::new(db, "").get_session(&key.0, &key.1)? else {
+        return Ok(());
+    };
+    let mut record = NeedsYouRecord::of(&session);
+    if record.last >= highest {
+        return Ok(());
+    }
+    record.last = highest;
+    store::write(db, &key.0, &key.1, &record)?;
+    Ok(())
+}
+
 /// Who may keep a session's to-dos: the session's own agent, or the CLI in the user's own terminal
 /// (the token file, the desktop's owner session) naming it with `--session`. Any other session,
 /// a connected computer, a phone, a guest or an extension may not.
@@ -208,8 +276,16 @@ pub(crate) fn handle_needs_you_request(
             }
             .checked()?;
             if let Some(thread) = thread {
-                let added = super::thread::add_for_thread(db, repository, &thread, new)?;
+                // Its tag follows every question the coordinator's chat asked up to now.
                 let coordinator = thread.coordinator_key();
+                crate::session_chat_open_questions::read_up_to_date(
+                    state,
+                    db,
+                    repository,
+                    &coordinator.0,
+                    &coordinator.1,
+                );
+                let added = super::thread::add_for_thread(db, repository, &thread, new)?;
                 for (project_id, session_id) in
                     crate::coordinators::refresh_coordinator_panels(db, repository)
                 {
@@ -224,6 +300,13 @@ pub(crate) fn handle_needs_you_request(
                 );
                 return Ok(added);
             }
+            crate::session_chat_open_questions::read_up_to_date(
+                state,
+                db,
+                repository,
+                &project_id,
+                &session_id,
+            );
             let _lock = store::write_lock();
             let session = session_of(repository, &project_id, &session_id)?;
             let mut record = NeedsYouRecord::of(&session);

@@ -316,9 +316,13 @@ WORK ITEMS
   of sight: chores are never shown.
   ask puts something before the user, with a question tag (the next after the
   chat's, or --tag Q12 for one the chat asked and still waits on; a tag already
-  answered is refused). next-tag prints the next free tag, one past the highest
-  the chat or an ask used: take it after a context compaction, never reuse a
-  tag. The user reads the row with
+  answered, or held by another item's ask or a to-do, is refused). Only the
+  answer to its own question settles an ask: with --tag, the chat's form or
+  page answer; otherwise its own card, never a form or page that shares the
+  tag. Asking on a finished item moves it back to Needs you. next-tag prints
+  the next free tag, one past every tag the chat, an ask, a to-do or an earlier
+  next-tag used, and takes it so no one else gets it: take it after a context
+  compaction, never reuse a tag. The user reads the row with
   nothing else on screen, so its title is one short plain question or
   instruction that names its subject, about ten words ("Move the
   settings-folder project out of Work?", "Delete the branch fix/tab-drag?"):

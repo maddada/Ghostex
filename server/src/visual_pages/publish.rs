@@ -76,6 +76,18 @@ pub(crate) fn handle_publish_visual_page_http(
     let source = text("sourcePath")
         .map(std::path::Path::new)
         .filter(|path| path.is_absolute() && path.is_file());
+    let publisher = text("sessionRef")
+        .map(crate::agent_hooks::probing::parse_global_session_ref)
+        .and_then(|parts| match parts {
+            (Some(project_id), Some(session_id)) => Some((project_id, session_id)),
+            _ => None,
+        });
+    let tags = super::questions::page_tags(html);
+    if let (Some(key), false) = (&publisher, tags.is_empty()) {
+        if let Some(refusal) = taken_tag_refusal(state, key, &tags) {
+            return bad_request(endpoint_path, request_id, &refusal);
+        }
+    }
     let id = match write_page(
         &state.paths.root_dir,
         &title,
@@ -89,6 +101,13 @@ pub(crate) fn handle_publish_visual_page_http(
             }
             if let Some(source) = source {
                 super::retire::retire_earlier_from_same_file(state, &id, &source.to_string_lossy());
+            }
+            // Its tags are taken from now on, before the chat even shows the page: an ask or
+            // `next-tag` right after gives the tag after them.
+            if let (Some(key), Some(highest)) = (&publisher, highest_tag(&tags)) {
+                if let Ok(db) = crate::storage::open_gxserver_database(&state.paths) {
+                    let _ = crate::session_needs_you::hold_tags(&db, key, highest);
+                }
             }
             id
         }
@@ -115,6 +134,58 @@ pub(crate) fn handle_publish_visual_page_http(
             }),
         ),
     )
+}
+
+/// The highest `Q` number among `tags`.
+fn highest_tag(tags: &[String]) -> Option<u64> {
+    tags.iter()
+        .filter_map(|tag| tag.strip_prefix('Q')?.parse::<u64>().ok())
+        .max()
+}
+
+/// Why the page may not be published into the chat of `key`, or `None`: one of its question tags
+/// already belongs to another question there, a work item's ask with its own card or a Needs you
+/// to-do. A tag means one question, and the page's answer would settle that other one.
+///
+/// CDXC:Coordinators 2026-11-25 WHY:
+/// A thread's Live page tagged Q4846 was shown in the coordinator's chat while W1026's own ask
+/// "Post this reply on issue #746?" was Q4846; the user's answer on the page ("Keep the dot")
+/// settled the ask, which left Needs you unanswered. The page is refused with the next free tag.
+/// SEE-ALSO: server/src/coordinators/work.rs (`own_ask_holding`, `WorkAsk::chat_question`),
+/// server/src/session_chat_open_questions.rs (`read_question_tags`, `next-tag`).
+fn taken_tag_refusal(state: &AppState, key: &(String, String), tags: &[String]) -> Option<String> {
+    let db = crate::storage::open_gxserver_database(&state.paths).ok()?;
+    let todos = crate::session_needs_you::todo_tags(&db, key);
+    let taken: Vec<String> = tags
+        .iter()
+        .filter_map(|tag| {
+            crate::coordinators::own_ask_holding(&db, key, tag)
+                .map(|holder| format!("{tag} is {holder}"))
+                .or_else(|| {
+                    todos
+                        .iter()
+                        .any(|todo| todo == tag)
+                        .then(|| format!("{tag} is a Needs you to-do"))
+                })
+        })
+        .collect();
+    if taken.is_empty() {
+        return None;
+    }
+    let asked: Vec<String> = crate::coordinators::list_work_items(&db, key)
+        .unwrap_or_default()
+        .iter()
+        .flat_map(|item| item.asks.iter().map(|ask| ask.tag.to_ascii_uppercase()))
+        .collect();
+    let floor = crate::session_chat_open_questions::highest_question_tag(&key.0, &key.1)
+        .max(crate::session_needs_you::highest_tag(&db, key))
+        .max(highest_tag(&asked).unwrap_or(0))
+        .max(highest_tag(tags).unwrap_or(0));
+    Some(format!(
+        "This page's question tag is already taken in that chat: {}. A tag means one question, and an answer on the page would settle that one. Give the page's question a new tag (Q{} is free; `ghostex coordinator next-tag` gives one) and publish it again.",
+        taken.join("; "),
+        floor + 1
+    ))
 }
 
 fn bad_request(endpoint_path: String, request_id: String, message: &str) -> RoutedResponse {
