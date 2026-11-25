@@ -769,7 +769,14 @@ pub(crate) fn extract_safe_model_and_effort_from_command(
 ) -> (Option<String>, Option<String>) {
     if !matches!(
         family,
-        "claude" | "codex" | "antigravity" | "opencode" | "grok" | "hermes" | "cursor" | "pi"
+        "claude"
+            | "codex"
+            | "antigravity"
+            | "opencode"
+            | "grok"
+            | "hermes"
+            | "cursor"
+            | "pi"
             | "omp"
     ) {
         return (None, None);

@@ -5,7 +5,7 @@
 //!
 //! CDXC:AgentProviders 2026-09-28 SEE-ALSO:
 //! Ported from packages/shared/sidebar-agents.ts (deleted 2026-10-01) (`getDefaultSidebarAgentById` / `ByIcon`), packages/shared/sidebar-agent-accept-all.ts (deleted 2026-10-01) (`resolveAgentAcceptAllSpec`), packages/shared/session-chat-agents.ts (`resolveSessionChatTranscriptAgent`), packages/shared/ghostex-settings/option-tables.ts (deleted 2026-10-01) (`getPreferredAgentInterfaceOverrideOptions`), packages/shared/ghostex-settings/session-title-generation.ts (deleted 2026-10-01) (`getSessionTitleGenerationCommandPreview`) and packages/core-ui/settings-modal/drag-data.ts (deleted 2026-10-01); the data tables come from the generated catalog, so only this logic must follow those files.
-use super::super::super::catalog::{module, settings_catalog, SettingOption};
+use super::super::super::catalog::{SettingOption, module, settings_catalog};
 use serde_json::Value;
 use std::sync::OnceLock;
 
