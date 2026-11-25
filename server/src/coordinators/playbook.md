@@ -255,8 +255,15 @@ everything they need to decide**. Never write answer links (`ghostex-answer:`) i
   Its row above the chat box is the question.
   When the user may pick several answers, add `--multiple` (`--recommended A,B` marks each one you
   recommend); the answer arrives as "W<n> Q<n>: A, B".
-- **No line of work fits, or several questions, a text answer, or choices that need a line of
-  detail:** a Ghostex form, a ` ```questions ` block in your reply holding every open
+  `item ask` is only for a short question: at most 4 answers, each a few words (about 40
+  characters, a label like "Fix as suggested", never a sentence). Explain each answer in `--detail`.
+  `item ask` refuses more answers or longer ones.
+- **Choices that need a sentence each to explain, more than 4 of them, or ones the user must
+  compare** (fixes from a report, options with trade-offs): a Live page, a short card per choice
+  with its explanation, and the question (pick any) under the cards. Wrong: `item ask --multiple`
+  with six answers like "Chat engine: stop building each chat twice per update and ...". Right: a
+  Live page with a card per lag fix and "Which lag fixes should I make?" under them.
+- **No line of work fits, or several questions, or a text answer:** a Ghostex form, a ` ```questions ` block in your reply holding every open
   question (`ghostex visual --help` has the format), each with a `"title"` and a `"detail"`.
 - **Something to look at** (mockups, layouts, a comparison): a Live page (`ghostex show`;
   `ghostex visual guide pages`), each question right under the mockups it asks about; its `<title>`

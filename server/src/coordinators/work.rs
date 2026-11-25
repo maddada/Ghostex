@@ -1976,6 +1976,11 @@ pub fn handle_work_request(
                 // A to-do that asks the user to paste, post or run something must hold it in its
                 // Details (Q4860 "Refuse"; the why is at `paste_refusal`).
                 let answers = split_answers(&param_text(params, "answers").unwrap_or_default());
+                // At most 4 short answer labels; longer choices go on a Live page (the why is at
+                // `answers_refusal`).
+                if let Some(refusal) = super::ask_guard::answers_refusal(&answers) {
+                    return Err(bad(refusal));
+                }
                 let command = param_text(params, "command").unwrap_or_default();
                 if let Some(refusal) =
                     crate::session_needs_you::paste_refusal(&words, &detail, &command, &answers)

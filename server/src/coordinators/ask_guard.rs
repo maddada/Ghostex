@@ -400,6 +400,56 @@ pub fn ask_refusal(title: &str, detail: &str, items: &[WorkItem]) -> Option<Stri
     check_question(title, detail, items, "--detail")
 }
 
+/// Most answers an `item ask` may offer: its dropdown above the chat box holds a short pick, not a
+/// list to compare.
+pub const MAX_ASK_ANSWERS: usize = 4;
+
+/// Longest answer label (in trimmed, whitespace-collapsed characters) an `item ask` may offer; a
+/// longer one is cut off with "..." in the dropdown.
+pub const MAX_ASK_ANSWER_CHARS: usize = 40;
+
+// CDXC:Coordinators 2026-11-26 DECISION:
+// User (lag-fixes ask): an `item ask --multiple` with six answers, each a long sentence ("Chat
+// engine: stop building each chat twice per update and ..."), showed every one cut off with "..." in
+// the Work panel dropdown; it should have been a Live page. `item ask` now refuses more than 4 answers
+// or any answer over 40 characters, pointing at `--detail` for short labels and a Live page for
+// choices that need a sentence each.
+/// Why `item ask` refuses its answer list, or `None` when the answers fit its dropdown.
+pub fn answers_refusal(answers: &[String]) -> Option<String> {
+    // A trailing `*` marks a recommended answer as stored (`mark_answer_list`); it is not shown.
+    let answers: Vec<&str> = answers
+        .iter()
+        .map(|a| a.trim().trim_end_matches('*').trim())
+        .filter(|a| !a.is_empty())
+        .collect();
+    let mut problems = Vec::new();
+    if answers.len() > MAX_ASK_ANSWERS {
+        problems.push(format!(
+            "Too many answers ({}; most is {MAX_ASK_ANSWERS}). `item ask` is for a short pick. When there are more choices, or the user needs to compare them, put them on a Live page instead: a short card per choice with its explanation, and the question (pick any) under the cards.",
+            answers.len()
+        ));
+    }
+    let long: Vec<String> = answers
+        .iter()
+        .filter(|a| collapsed_char_count(a) > MAX_ASK_ANSWER_CHARS)
+        .map(|a| format!("\"{a}\" ({} characters)", collapsed_char_count(a)))
+        .collect();
+    if !long.is_empty() {
+        problems.push(format!(
+            "Answers are too long for the dropdown, which cuts them off with \"...\" (most is {MAX_ASK_ANSWER_CHARS} characters): {}. Make each answer a few-word label like \"Fix as suggested\" and explain each one in --detail. When each choice needs a sentence to explain, put them on a Live page instead: a short card per choice with its explanation, and the question under the cards.",
+            long.join(", ")
+        ));
+    }
+    match problems.len() {
+        0 => None,
+        1 => problems.into_iter().next(),
+        _ => Some(format!(
+            "This question cannot be asked yet:\n- {}",
+            problems.join("\n- ")
+        )),
+    }
+}
+
 /// Why `ghostex visual check` refuses a ```questions block question, or `None` when it may stand.
 pub fn form_question_refusal(title: &str, detail: &str) -> Option<String> {
     check_question(title, detail, &[], "\"detail\"")
