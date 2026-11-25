@@ -366,6 +366,34 @@ void GhostexGpuiDetachChildWindow(void *native_view) {
   }
 }
 
+/// CDXC:AppModal 2026-11-25 WHY:
+/// User: "even with pilot closed popups and questions lag, its a ghostex bug". A child window dragged by its own band (the page window, a dock row's question) trailed the pointer, while the main window and a popped-out session, the same window-server drag without a parent, glided. The window comes off its parent for the drag and goes back on at its new place once the button is up, at the parent's level and above it as before, so it moves with the main window again. `performDrag(with:)` returns at once and a mouse-up may never reach the app, so the button is polled. A window hidden or attached again meanwhile (app/visual_page_hidden.rs) is left as it is.
+void GhostexGpuiDetachChildWindowWhileDragged(void *native_view) {
+  NSWindow *window = GhostexGpuiCaptureWindowOfView(native_view);
+  NSWindow *parent = window.parentWindow;
+  if (!window || !parent) {
+    return;
+  }
+  [parent removeChildWindow:window];
+  __weak NSWindow *weakWindow = window;
+  __weak NSWindow *weakParent = parent;
+  NSTimer *timer = [NSTimer
+      timerWithTimeInterval:0.03
+                    repeats:YES
+                      block:^(NSTimer *poll) {
+                        if ((NSEvent.pressedMouseButtons & 1) != 0) {
+                          return;
+                        }
+                        [poll invalidate];
+                        NSWindow *child = weakWindow;
+                        NSWindow *owner = weakParent;
+                        if (child && owner && child.isVisible && child.parentWindow == nil) {
+                          [owner addChildWindow:child ordered:NSWindowAbove];
+                        }
+                      }];
+  [NSRunLoop.mainRunLoop addTimer:timer forMode:NSRunLoopCommonModes];
+}
+
 /// The display that holds the point (`x`, `y`) in GPUI's global space (CoreGraphics' global
 /// display space), or the main display when none does.
 static CGDirectDisplayID GhostexGpuiDisplayAtPoint(double x, double y) {

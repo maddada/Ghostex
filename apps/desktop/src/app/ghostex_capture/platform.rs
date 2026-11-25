@@ -70,6 +70,7 @@ unsafe extern "C" {
     fn GhostexGpuiScreensHaveSeparateSpaces() -> bool;
     fn GhostexGpuiPrimaryMouseButtonDown() -> bool;
     fn GhostexGpuiDetachChildWindow(native_view: *mut std::ffi::c_void);
+    fn GhostexGpuiDetachChildWindowWhileDragged(native_view: *mut std::ffi::c_void);
     fn GhostexGpuiPointerScreenLocation(x: *mut f64, y: *mut f64) -> bool;
 }
 
@@ -214,6 +215,18 @@ pub(crate) fn detach_from_parent(native: NativeWindow) {
     #[cfg(target_os = "macos")]
     unsafe {
         GhostexGpuiDetachChildWindow(native as *mut std::ffi::c_void)
+    };
+    #[cfg(not(target_os = "macos"))]
+    let _ = native;
+}
+
+/// Takes a child window off its parent for a drag of its own and puts it back once the mouse
+/// button is up (CDXC:AppModal 2026-11-25 in GpuiGhostexCapture.m). Nothing for a window without
+/// a parent, or elsewhere.
+pub(crate) fn detach_from_parent_while_dragged(native: NativeWindow) {
+    #[cfg(target_os = "macos")]
+    unsafe {
+        GhostexGpuiDetachChildWindowWhileDragged(native as *mut std::ffi::c_void)
     };
     #[cfg(not(target_os = "macos"))]
     let _ = native;
