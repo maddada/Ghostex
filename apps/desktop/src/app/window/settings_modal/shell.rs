@@ -446,11 +446,16 @@ impl Render for GpuiSettingsModalWindow {
         // Under glass a dialog nested in Settings veils the page in the theme's colour
         // (CDXC:Settings 2026-11-08 on `SettingsPalette::dialog_surface`).
         super::fields::set_settings_glass(window, p.glass.then(|| p.solid_dialog_surface()));
+        // Over an art theme the window is frosted glass (CDXC:Settings 2026-11-25 on
+        // `SettingsPalette::over_artwork`).
+        let frost = crate::app::helpers::frosted_glass_backdrop(gpui::Corners::default(), p.light);
         div()
             .id("settings-modal")
+            .relative()
             .size_full()
             .overflow_hidden()
             .bg(hsla(p.surface))
+            .children(frost)
             .font_family(SETTINGS_FONT)
             .text_size(px(14.0))
             .line_height(px(20.0))

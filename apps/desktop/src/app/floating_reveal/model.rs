@@ -264,9 +264,12 @@ impl GhostexGpuiApp {
     }
 
     /// What is folded away and could float back.
+    ///
+    /// CDXC:Workarea 2026-11-25 DECISION:
+    /// User, of the sidebar floating out over the work area on hover while collapsed in the Floating sidebar layout (at its own height and place): "what the is this man fix it like dont change the hight and position just minimzxe an dexpand". In that layout the collapsed sidebar never floats back: the card folds to the rail and Toggle sidebar opens it again in place. The Framed work area layout keeps the floating reveal.
     pub(crate) fn floating_reveal_available(&self) -> FloatingRevealContent {
         FloatingRevealContent {
-            sidebar: self.sidebar_collapsed,
+            sidebar: self.sidebar_collapsed && !crate::app::helpers::floating_sidebar_layout(),
             agents_column: self.view_panel_maximized(),
         }
     }

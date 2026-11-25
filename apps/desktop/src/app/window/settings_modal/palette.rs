@@ -74,7 +74,36 @@ const DEFAULT_GHOSTEX_ACCENT: u32 = 0x86d3f8;
 
 impl SettingsPalette {
     pub(crate) fn resolve(modal: &ModalPalette) -> Self {
-        Self::derive(modal).with_theme_roles()
+        let palette = Self::derive(modal).with_theme_roles();
+        if crate::app::helpers::window_art_frosted().is_some() {
+            palette.over_artwork()
+        } else {
+            palette
+        }
+    }
+
+    /// Settings over an art theme's artwork: the window is the dark frosted glass the chat box and
+    /// the sidebar card use (`frosted_glass_backdrop`, drawn by the window in shell.rs), and the
+    /// rail, the section cards and the inputs are faint washes of the ink with hairline edges over
+    /// it, instead of grey slabs.
+    ///
+    /// CDXC:Settings 2026-11-25 DECISION:
+    /// User, of Settings while an art theme shows: "next the settings page make it like them respective add some bhlurs and all also make it look clean spacing and all accorning to our rest of the redesigns". Over an artwork Settings takes the frosted glass of the chat box and the floating sidebar, with see-through cards (4.5% ink, 3.5% in light mode), hovers (8%) and hairlines (8%); menus keep their own fills. Without an artwork it is unchanged.
+    fn over_artwork(mut self) -> Self {
+        let ink = |alpha: f32| {
+            let value = if self.light { 0.0 } else { 1.0 };
+            Rgba {
+                r: value,
+                g: value,
+                b: value,
+                a: alpha,
+            }
+        };
+        self.surface = ink(0.0);
+        self.raised = ink(if self.light { 0.035 } else { 0.045 });
+        self.raised_hover = ink(0.08);
+        self.hairline = ink(0.08);
+        self
     }
 
     /// The theme roles over the derived colours (helpers/theme_roles.rs). Under glass, raised
