@@ -155,6 +155,9 @@ pub(crate) fn lean_codex_disabled_features_if_enabled() -> Vec<String> {
 
 /// `command` with the lean flags when it starts Codex for a coordinator's thread or a lead's linked
 /// session while "Lean Codex workers" is on; every other command as it is.
+///
+/// CDXC:AgentProviders 2026-11-25 FIX:
+/// GitHub #758: a Native Codex session's command is `ghostex acp-host --agent codex …`, which takes no Codex flags, so the `--disable <feature>` flags added at its first start made every Native Codex thread on a computer with Lean Codex workers on fail with "Unknown acp-host option: --disable" and drop to a shell. A Native Codex gets `--lean-worker` instead (a lead's session is marked only after its plan was made), and the host passes the same `--disable` flags to the Codex it starts (acp/driver_codex.rs).
 pub(crate) fn with_lean_codex_worker(
     family: Option<&str>,
     runtime_settings: Option<&Map<String, Value>>,
@@ -168,6 +171,15 @@ pub(crate) fn with_lean_codex_worker(
         || !lean_codex_workers_enabled()
     {
         return command.to_string();
+    }
+    if crate::acp::acp_family_from_launch_command(command).is_some() {
+        if command
+            .split_whitespace()
+            .any(|word| word == "--lean-worker")
+        {
+            return command.to_string();
+        }
+        return format!("{} --lean-worker", command.trim_end());
     }
     format!("{}{}", command.trim_end(), lean_codex_flags())
 }
