@@ -60,6 +60,8 @@ struct Kept {
     /// `session_chat_pending_rewind_generation` when it was read: a rewind recorded or cleared
     /// since changes the page without touching the file.
     rewinds: u64,
+    /// Byte size of any OMP local slash-command sidecar when the page was read (0 for non-Pi/OMP).
+    omp_sidecar_len: u64,
     /// Shared, so a hit copies the rows after letting the cache's lock go.
     page: std::sync::Arc<SessionChatTailPage>,
     /// The bytes the page was read from, for `KEPT_BYTES`.
@@ -88,6 +90,11 @@ pub(crate) fn tail_page(
         return read();
     };
     let rewinds = crate::session_chat_rewind_state::session_chat_pending_rewind_generation();
+    let omp_sidecar_len = if agent == SessionChatTranscriptAgent::Pi {
+        crate::session_chat_omp_local::sidecar_len_for_transcript(path)
+    } else {
+        0
+    };
     let key = Key {
         agent: std::mem::discriminant(&agent),
         path: path.to_path_buf(),
@@ -95,10 +102,11 @@ pub(crate) fn tail_page(
         before_offset,
     };
     if let Ok(mut kept) = kept().lock() {
-        if let Some(entry) = kept
-            .get_mut(&key)
-            .filter(|entry| entry.version == version && entry.rewinds == rewinds)
-        {
+        if let Some(entry) = kept.get_mut(&key).filter(|entry| {
+            entry.version == version
+                && entry.rewinds == rewinds
+                && entry.omp_sidecar_len == omp_sidecar_len
+        }) {
             entry.used = Instant::now();
             let page = entry.page.clone();
             drop(kept);
@@ -109,11 +117,17 @@ pub(crate) fn tail_page(
     note_read(path, caller, true, tail);
     let page = read()?;
     // Still the file (and the rewinds) that was read: a change during the read keeps nothing.
+    let current_sidecar_len = if agent == SessionChatTranscriptAgent::Pi {
+        crate::session_chat_omp_local::sidecar_len_for_transcript(path)
+    } else {
+        0
+    };
     if crate::session_chat::read_transcript_file_version(path)
         .ok()
         .as_ref()
         == Some(&version)
         && crate::session_chat_rewind_state::session_chat_pending_rewind_generation() == rewinds
+        && current_sidecar_len == omp_sidecar_len
     {
         // A cursor past the end (a stitched one encodes its hop) counts as the file's end.
         let bytes = match &page {
@@ -133,13 +147,16 @@ pub(crate) fn tail_page(
                 // Earlier versions of a growing transcript can never hit again; drop them right
                 // away so dead pages do not linger in memory until `KEPT_BYTES` fills.
                 kept.retain(|existing_key, existing| {
-                    existing_key.path != key.path || existing.version == version
+                    existing_key.path != key.path
+                        || (existing.version == version
+                            && existing.omp_sidecar_len == omp_sidecar_len)
                 });
                 kept.insert(
                     key.clone(),
                     Kept {
                         version,
                         rewinds,
+                        omp_sidecar_len,
                         page: shared,
                         bytes,
                         used: Instant::now(),
