@@ -212,4 +212,5 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0086_notification_feed_seen_at",
     "0087_session_agent_restarts",
     "0088_coordinator_thread_notes",
+    "0089_keep_coordinator_threads_under_coordinator",
 ];

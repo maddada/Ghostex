@@ -262,6 +262,10 @@ fn action_rows(
     // comparison: the menu that offers Unsnooze and the section that draws the row must change at
     // the identical millisecond.
     let snoozed = session_is_snoozed(row.timing.snoozed_until_ms, input.now_ms);
+    // A coordinator's thread always shows under its coordinator, so it offers none of the three
+    // shelves; a row still on one (sent by an older gxserver) keeps its way back (Unpin, Unpark,
+    // Unsnooze). CDXC:Coordinators 2026-11-25 in server/src/coordinators/thread_shelves.rs.
+    let thread = row.stays_under_coordinator();
     let rows = ActionRows {
         close: Some(layout_row(
             "close",
@@ -280,17 +284,18 @@ fn action_rows(
                 MenuCommand::command(message::set_session_sleeping(id, !sleeping)),
             )
         }),
-        pin: caps.can_pin_session.then(|| {
+        pin: (caps.can_pin_session && (!thread || row.is_pinned)).then(|| {
             layout_row(
                 "pin",
                 row.is_pinned,
                 MenuCommand::command(message::set_session_pinned(id, !row.is_pinned)),
             )
         }),
-        park: (!caps.is_browser_session && settings.enable_session_parking).then_some(park),
+        park: (!caps.is_browser_session && settings.enable_session_parking && (!thread || parked))
+            .then_some(park),
         tag: (caps.can_tag_session && !tags.is_empty())
             .then(|| layout_submenu("tagAs", tags.clone())),
-        snooze: (!caps.is_browser_session).then(|| {
+        snooze: (!caps.is_browser_session && (!thread || snoozed)).then(|| {
             if snoozed {
                 layout_row(
                     "snooze",

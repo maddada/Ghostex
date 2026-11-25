@@ -4526,10 +4526,14 @@ version of the Projects features in Cursor and Claude Code.
   coordinator marks its finished threads as seen, so their blue dots clear
   (a thread waiting on a question or approval keeps its dot); otherwise opening
   its chat leaves the fold and the older threads as you set them; opening one of its threads
-  unfolds the coordinator so the thread shows. A thread listed apart from its
-  coordinator (parked or snoozed, left by a closed coordinator, or in a worktree
-  listed as its own project) shows a small ↳ arrow before its title, and its
-  tooltip names the coordinator. Click a thread to watch it or
+  unfolds the coordinator so the thread shows. A thread always shows right
+  under its coordinator, whichever project, worktree or session group it runs
+  in: it has no Park, Pin or Snooze (in its menu, its hover buttons or by
+  dragging it onto Pinned or Parked, on the phone too), and threads that were
+  parked, pinned or snoozed earlier are back under their coordinator. A thread whose coordinator
+  the list does not show (it was closed, or a Space or filter hides it) shows a
+  small ↳ arrow before its title, and its tooltip names the coordinator. Click a
+  thread to watch it or
   talk to it directly; answer its questions and approvals there. A thread is
   named after its latest task and keeps that name, like the coordinator keeps
   its own (the agent's automatic naming never replaces it); when its
@@ -4578,8 +4582,7 @@ version of the Projects features in Cursor and Claude Code.
   from the card's), and the rest wait behind an "N older threads" row. A folded card shows its threads'
   status dots overlapping in place of its own, and a card whose thread needs you
   (an approval, a question, stuck or failed) leaves the Moving shelf for the top
-  of the list. A parked or snoozed thread sits on its own shelf instead, and a
-  thread whose coordinator is outside the active Space or in a hidden project
+  of the list. A thread whose coordinator is outside the active Space or in a hidden project
   shows as its own card (a search then finds it there, not under the
   coordinator). A
   search that matches a thread shows the way to it under its coordinator's card
@@ -4600,9 +4603,8 @@ version of the Projects features in Cursor and Claude Code.
   messages it, and the same conversation resumes under the coordinator with
   everything it knew. A message you send it in its chat reopens it the same
   way (typing in its terminal does not). Ask the coordinator to keep a thread open if you want to
-  look at it. A done thread kept open stays under its coordinator:
-  Ghostex never moves a coordinator's thread to Parked (you still can, by
-  hand). You can do it yourself too: right-click a thread and choose
+  look at it. A done thread kept open stays under its coordinator, drawn as
+  done. You can do it yourself too: right-click a thread and choose
   **Mark Thread Done** (greyed out while it is working or waiting on you) to
   mark it done and close its session, or **Reopen Thread** on a done thread to
   resume it under its coordinator. On the phone, long-press the thread.

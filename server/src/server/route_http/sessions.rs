@@ -412,6 +412,7 @@ pub(super) async fn route_sessions_http(
             |repository, db, params, _| {
                 // gxserver's own GBot marks stay as they are (gbots/markers.rs).
                 let params = crate::gbots::keep_gbot_marks(db, repository, params);
+                crate::coordinators::refuse_shelving_thread(db, &params)?;
                 // Single source of truth for ACP approval levels: `/api/updateSession` preserves
                 // stored `acpApprovalLevel` for all callers and refuses non-owner raises.
                 let current_session = match (
@@ -504,6 +505,7 @@ pub(super) async fn route_sessions_http(
                             &now,
                         )?,
                         "/api/snoozeSession" => {
+                            crate::coordinators::refuse_snoozing_thread(db, params)?;
                             let snoozed_until = params
                                 .get("snoozedUntil")
                                 .and_then(Value::as_str)

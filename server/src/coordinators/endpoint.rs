@@ -350,6 +350,12 @@ pub fn handle_coordinator_endpoint(
                 &coordinator_key.1,
                 &task,
             )?;
+            super::keep_thread_under_coordinator(
+                repository,
+                &thread_key.0,
+                &thread_key.1,
+                &now_iso(),
+            )?;
             // `start-thread` and `agents create` made this session for the coordinator, so it is
             // the coordinator's own work, never the user's: what the merged-thread cleanup tests
             // (server/work_cleanup_threads.rs). `coordinator link` of an existing session sets none.
@@ -594,7 +600,7 @@ fn finished_with_only_leftover_shells(session: &Value, thread: &ThreadRecord) ->
 /// User: "If I close those threads in the sidebar, would we still be able to reopen them and send there later if needed? Can we start doing this to make the sidebar less cluttered? Instead of moving them to Parked." So `ghostex coordinator resolve` closes a finished thread's session (`closeSession`, which skips parking) and `reopen` or a coordinator's message resumes the same conversation. Only `resolve --keep-open` still parks a done thread, so the sidebar's Sessions list keeps only the work in flight, and reopening unparks it. Supersedes the 2026-09-30 rule that every done thread was parked.
 ///
 /// CDXC:Coordinators 2026-11-14 DECISION:
-/// User: "i want u to stop parking sessions that are created by the coordinator after they're done. they should just always appear under the agent that created them, never get moved to parked". Ghostex never parks a coordinator's thread: `resolve --keep-open` (and Mark Thread Done with the session kept open) only marks it done, so it stays under its coordinator, drawn as done, and the Work panel's Clean up leaves a thread unparked too (route_http/work_links.rs). Only the user parks a thread, by hand. A reopen still unparks, so a thread the coordinator takes up again is back in its tree. Storage migration 0079 unparked, once, the done threads earlier versions had parked. Supersedes the 2026-10-01 rule that `--keep-open` parks a done thread.
+/// User: "i want u to stop parking sessions that are created by the coordinator after they're done. they should just always appear under the agent that created them, never get moved to parked". Ghostex never parks a coordinator's thread: `resolve --keep-open` (and Mark Thread Done with the session kept open) only marks it done, so it stays under its coordinator, drawn as done, and the Work panel's Clean up leaves a thread unparked too (route_http/work_links.rs). Since 2026-11-25 the user cannot park one either (thread_shelves.rs). A reopen still unparks, so a thread the coordinator takes up again is back in its tree. Storage migration 0079 unparked, once, the done threads earlier versions had parked. Supersedes the 2026-10-01 rule that `--keep-open` parks a done thread.
 pub(super) fn set_parked(
     repository: &DomainRepository<'_>,
     key: &SessionKey,

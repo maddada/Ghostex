@@ -66,7 +66,11 @@ pub fn bulk_menu(input: &BulkMenuInput<'_>) -> Option<Vec<MenuItem>> {
     menu.extend(rows(
         "Pin Selected",
         "pin-outline",
-        &keep(input.selected, |row| !row.is_pinned),
+        // A coordinator's thread is never pinned or parked (CDXC:Coordinators 2026-11-25 in
+        // server/src/coordinators/thread_shelves.rs).
+        &keep(input.selected, |row| {
+            !row.is_pinned && !row.stays_under_coordinator()
+        }),
         |session_id| message::set_session_pinned(session_id, true),
     ));
     menu.extend(rows(
@@ -77,7 +81,7 @@ pub fn bulk_menu(input: &BulkMenuInput<'_>) -> Option<Vec<MenuItem>> {
     ));
     let park: Vec<Value> = parking
         .iter()
-        .filter(|row| !row.is_parked)
+        .filter(|row| !row.is_parked && !row.stays_under_coordinator())
         .map(|row| message::set_session_parked(&row.sidebar_session_id, true))
         .collect();
     if !park.is_empty() {

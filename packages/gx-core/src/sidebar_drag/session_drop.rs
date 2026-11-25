@@ -263,6 +263,11 @@ pub fn plan_section_move(
         .iter()
         .find(|row| row.sidebar_session_id == session_id)?
         .is_pinned;
+    // A coordinator's thread is never pinned or parked, so Pinned and Parked take no drop of one
+    // (CDXC:Coordinators 2026-11-25 in server/src/coordinators/thread_shelves.rs).
+    if matches!(to, "pinned" | "parked") && stays_under_coordinator(model, session_id) {
+        return None;
+    }
     let parked = from == "parked";
     let mut messages = Vec::new();
     match to {
@@ -311,6 +316,18 @@ pub fn plan_section_move(
         _ => return None,
     }
     Some(messages)
+}
+
+/// Whether the list draws `session_id` as a coordinator's thread (`SessionRow::stays_under_coordinator`).
+fn stays_under_coordinator(model: &SidebarViewModel, session_id: &str) -> bool {
+    model
+        .view()
+        .groups
+        .iter()
+        .flat_map(|group| group.core.sessions.iter())
+        .any(|session| {
+            session.row.sidebar_session_id == session_id && session.row.stays_under_coordinator()
+        })
 }
 
 fn set_parked(session_id: &str, parked: bool) -> Value {

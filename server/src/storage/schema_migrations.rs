@@ -1404,4 +1404,8 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
         id: "0088_coordinator_thread_notes",
         sql: include_str!("migrations/0088_coordinator_thread_notes.sql"),
     },
+    Migration {
+        id: "0089_keep_coordinator_threads_under_coordinator",
+        sql: include_str!("migrations/0089_keep_coordinator_threads_under_coordinator.sql"),
+    },
 ];

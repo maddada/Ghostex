@@ -162,7 +162,7 @@ pub(crate) fn coordinator_titles<'a>(
 /// closed). `None` for a nested thread, a lead's linked session and every other row.
 ///
 /// CDXC:Coordinators 2026-11-25 WHY:
-/// A user could not tell which sessions were a coordinator's workers: a thread nests under its coordinator only when both are in the same group, and a thread in another project of the same computer is moved there (`thread_fold.rs`), but a parked or snoozed thread, one whose coordinator is closed, or one in a worktree project listed on its own (`thread_fold.rs` leaves those to `worktree_fold.rs`) is drawn flat and looks like any other session. Such a row carries a thread mark that names its coordinator (apps/desktop/src/app/native_sidebar/threads.rs `thread_apart_mark`); a nested thread's tree line already says it.
+/// A user could not tell which sessions were a coordinator's workers when one was drawn flat. Since the same day's decision in server/src/coordinators/thread_shelves.rs a thread is always drawn under its coordinator whenever the list shows that coordinator (in any group of the same computer, `thread_fold.rs`), so the only threads left apart are those whose coordinator the list does not show: it was closed (a done thread its close left open), or it sits in a Space or a filter that hides it, or it is Chief of Staff, whose sessions stay in their own projects. Such a row carries a thread mark that names its coordinator (apps/desktop/src/app/native_sidebar/threads.rs `thread_apart_mark`); a nested thread's tree line already says it.
 pub(crate) fn thread_drawn_apart(
     row: &SessionRow,
     nesting: &RowNesting,
@@ -250,12 +250,14 @@ pub(crate) fn lay_out_tree<N: Copy>(
     visit(TreeStep::Done(node, spot));
 }
 
+/// CDXC:Coordinators 2026-11-25 SEE-ALSO: the user's decision in server/src/coordinators/thread_shelves.rs ("they always appear below it. and no parking/pinning for those"). A coordinator's thread nests even when parked or snoozed (gxserver takes threads off those shelves, but a computer on an older gxserver can still send one); a lead's linked session still leaves the tree while parked or snoozed.
 fn is_nestable_thread(session: &SessionView, enable_parking: bool, now_ms: u64) -> bool {
     let row = &session.row;
-    row.coordinator_parent.is_some()
-        && !row.is_browser
-        && !(enable_parking && row.is_parked)
-        && !is_snoozed(row, now_ms)
+    row.stays_under_coordinator()
+        || (row.coordinator_parent.is_some()
+            && !row.is_browser
+            && !(enable_parking && row.is_parked)
+            && !is_snoozed(row, now_ms))
 }
 
 /// Reorders a group's rows (already in display order) so each thread follows its coordinator, its

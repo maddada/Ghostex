@@ -145,9 +145,13 @@ fn busy_rank(row: &SessionRow) -> u8 {
 }
 
 /// A row hangs from no coordinator in the Unified list: parked (while parking is on) or snoozed.
+/// A coordinator's own thread never does: it always shows under its coordinator
+/// (CDXC:Coordinators 2026-11-25 in server/src/coordinators/thread_shelves.rs), which supersedes
+/// "a parked or snoozed thread is its own card on its shelf" in the module comment above.
 fn detached(row: &SessionRow, settings: UnifiedSettings, now_ms: u64) -> bool {
-    (settings.enable_session_parking && row.is_parked)
-        || session_is_snoozed(row.timing.snoozed_until_ms, now_ms)
+    !row.stays_under_coordinator()
+        && ((settings.enable_session_parking && row.is_parked)
+            || session_is_snoozed(row.timing.snoozed_until_ms, now_ms))
 }
 
 /// Facts about a subtree, gathered once.

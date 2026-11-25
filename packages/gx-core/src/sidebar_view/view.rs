@@ -766,6 +766,13 @@ impl SessionRow {
         self.is_coordinator || self.is_lead
     }
 
+    /// A coordinator's own thread (not a session linked to a lead): it always shows under its
+    /// coordinator, so it offers no Park, Pin or Snooze and no drop into Pinned or Parked
+    /// (CDXC:Coordinators 2026-11-25 in server/src/coordinators/thread_shelves.rs).
+    pub fn stays_under_coordinator(&self) -> bool {
+        self.coordinator_parent.is_some() && !self.lead_linked && !self.is_browser
+    }
+
     pub fn has_question(&self) -> bool {
         ghostex_gx_protocol::session_has_question(self.pending_question_count, self.awaiting_answer)
     }

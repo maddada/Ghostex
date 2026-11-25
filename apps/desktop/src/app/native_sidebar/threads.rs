@@ -201,7 +201,7 @@ pub(crate) fn thread_apart_coordinator(session: &NativeSidebarSession) -> Option
 pub(crate) fn thread_apart_tooltip_line(session: &NativeSidebarSession) -> Option<String> {
     let coordinator = thread_apart_coordinator(session)?.trim();
     Some(if coordinator.is_empty() {
-        "Thread of a coordinator that is closed".to_string()
+        "Thread of a coordinator not in this list".to_string()
     } else {
         format!("Thread of coordinator {coordinator}")
     })
@@ -211,7 +211,7 @@ pub(crate) fn thread_apart_tooltip_line(session: &NativeSidebarSession) -> Optio
 /// muted ink of the row's other quiet badges; the row's title tooltip names the coordinator.
 ///
 /// CDXC:Coordinators 2026-11-25 WHY:
-/// A coordinator's workers that were parked, snoozed, left by a closed coordinator or in a worktree project listed on its own were drawn exactly like plain sessions, so nothing tied them to their coordinator (gx-core `thread_drawn_apart`). The mark sits where a nested thread's tree line ends, so both read as "under a coordinator"; its name goes in the title tooltip like a row's computer and worktree (`render_native_sidebar_session`), so it is not said twice.
+/// A coordinator's workers drawn away from it looked exactly like plain sessions, so nothing tied them to their coordinator (gx-core `thread_drawn_apart`). Since the same day's decision in server/src/coordinators/thread_shelves.rs a thread is never parked, pinned or snoozed and always moves under its coordinator when the list shows it, so the mark is left only on a thread whose coordinator the list does not show (closed, or hidden by a Space or filter). The mark sits where a nested thread's tree line ends, so both read as "under a coordinator"; its name goes in the title tooltip like a row's computer and worktree (`render_native_sidebar_session`), so it is not said twice.
 pub(crate) fn thread_apart_mark(
     session: &NativeSidebarSession,
     appearance: &SidebarAppearance,

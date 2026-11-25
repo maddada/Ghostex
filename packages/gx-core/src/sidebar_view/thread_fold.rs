@@ -1,8 +1,10 @@
-//! A coordinator's threads that live in another project of the same computer, listed under the
-//! coordinator in its own project's group.
+//! A coordinator's threads that sit in another group of the same computer (another project, a
+//! worktree project listed on its own, or another session group), listed under the coordinator in
+//! its own group.
 //!
 //! CDXC:Coordinators 2026-11-16 WHY:
-//! A thread is linked by session (`ghostex coordinator link`, `start-thread --project-id` or `--path`, `agents send --main-coordinator --if-none session`), and the linked session keeps running in its own project, but the Project sidebar nested threads only among the rows of one group, so a thread from another project stayed a plain row in that project while the CLI said it was the coordinator's (reported by the Kiwimake coordinator after linking a madda session). Its row now moves into the group that draws its coordinator, as a thread on another computer already does (`remote_thread_rows` in model.rs) and as the Unified sidebar's tree already nests across projects (`unified_sidebar/tree.rs`). Only the list moves: the session still runs in its own project's folder, and its menu, Files and Changes act on that project. A thread in a worktree of the coordinator's own project is left to `worktree_fold.rs` and the Worktree sessions show in their project setting, and Chief of Staff's sessions in other projects stay in those projects.
+//! A thread is linked by session (`ghostex coordinator link`, `start-thread --project-id` or `--path`, `agents send --main-coordinator --if-none session`), and the linked session keeps running in its own project, but the Project sidebar nested threads only among the rows of one group, so a thread from another project stayed a plain row in that project while the CLI said it was the coordinator's (reported by the Kiwimake coordinator after linking a madda session). Its row now moves into the group that draws its coordinator, as a thread on another computer already does (`remote_thread_rows` in model.rs) and as the Unified sidebar's tree already nests across projects (`unified_sidebar/tree.rs`). Only the list moves: the session still runs in its own project's folder, and its menu, Files and Changes act on that project. Chief of Staff's sessions in other projects stay in those projects.
+//! CDXC:Coordinators 2026-11-25 SEE-ALSO: the user's decision in server/src/coordinators/thread_shelves.rs ("i want threads that are under a coordinator to not be able to be away from it. they always appear below it"). A thread in a worktree project listed on its own, or in another session group of the coordinator's project, moves under its coordinator too (it was left in its own group before); a thread already in its coordinator's group (a worktree folded into its project by Worktree sessions show in their project) stays where it is.
 //! SEE-ALSO: apps/mobile/app/src/contract/coordinatorTree.ts (the phone's twin nesting).
 
 use std::collections::HashMap;
@@ -28,23 +30,6 @@ pub(super) fn fold_cross_project_threads(plans: &mut [GroupPlan], focus: &mut Fo
     if coordinators.is_empty() {
         return;
     }
-    // Worktree project -> the project it is a worktree of, whether its plan is still drawn or was
-    // already folded into its parent.
-    let worktree_parent: HashMap<&str, &str> = plans
-        .iter()
-        .flat_map(|plan| {
-            plan.project
-                .iter()
-                .chain(plan.folded_worktrees.iter().map(|folded| &folded.project))
-        })
-        .filter_map(|project| {
-            let worktree = project.worktree.as_ref()?;
-            Some((
-                project.project_id.as_str(),
-                worktree.parent_project_id.as_str(),
-            ))
-        })
-        .collect();
     let mut moves: Vec<(usize, usize, usize)> = Vec::new();
     for (from, plan) in plans.iter().enumerate() {
         for (at, row) in plan.rows.iter().enumerate() {
@@ -52,10 +37,7 @@ pub(super) fn fold_cross_project_threads(plans: &mut [GroupPlan], focus: &mut Fo
                 continue;
             };
             // Another computer's thread is already drawn under its coordinator.
-            if key.machine != parent.machine || key.project_id == parent.project_id {
-                continue;
-            }
-            if worktree_parent.get(key.project_id.as_str()) == Some(&parent.project_id.as_str()) {
+            if key.machine != parent.machine {
                 continue;
             }
             let Some(&to) = coordinators.get(parent) else {
@@ -85,7 +67,14 @@ pub(super) fn fold_cross_project_threads(plans: &mut [GroupPlan], focus: &mut Fo
         taken.push((to, row));
     }
     for (to, row) in taken.into_iter().rev() {
-        plans[to].rows.push(row);
+        // A row a session group and its project both list is drawn once, under its coordinator.
+        let listed = plans[to]
+            .rows
+            .iter()
+            .any(|drawn| drawn.row.sidebar_session_id == row.row.sidebar_session_id);
+        if !listed {
+            plans[to].rows.push(row);
+        }
     }
     if let Some(group_id) = moved_focus_to {
         focus.active_group_id = Some(group_id);
