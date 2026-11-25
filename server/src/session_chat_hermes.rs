@@ -633,13 +633,20 @@ fn sync_hermes_transcript_mirror(session_id: &str) -> Option<PathBuf> {
     let mut cursor = cursor.filter(|_| pure_append).unwrap_or_default();
 
     fs::create_dir_all(mirror_path.parent()?).ok()?;
-    if pure_append {
+    let (written_max_row_id, written_visible_count) = if pure_append {
         let mut file = fs::OpenOptions::new()
             .append(true)
             .open(&mirror_path)
             .ok()?;
         file.write_all(cursor.render_rows(&appended_rows).as_bytes())
             .ok()?;
+        let new_max = appended_rows
+            .iter()
+            .map(|row| row.row_id)
+            .max()
+            .unwrap_or(cursor.last_row_id);
+        let new_visible = cursor.visible_count + appended_rows.len() as i64;
+        (new_max, new_visible)
     } else {
         // Cold start, rewind, local slash command or in-place compaction: rebuild the whole mirror
         // from every row, hidden ones included (see `render_rows`), and swap it
@@ -651,6 +658,13 @@ fn sync_hermes_transcript_mirror(session_id: &str) -> Option<PathBuf> {
             }
             _ => Vec::new(),
         };
+        let new_max = db_rows
+            .iter()
+            .filter(|row| row.visible)
+            .map(|row| row.row_id)
+            .max()
+            .unwrap_or(0);
+        let new_visible = db_rows.iter().filter(|row| row.visible).count() as i64;
         let local_rows = if local_bytes > 0 {
             read_hermes_local_rows(&local_path)
         } else {
@@ -662,9 +676,10 @@ fn sync_hermes_transcript_mirror(session_id: &str) -> Option<PathBuf> {
         file.write_all(cursor.render_rows(&rows).as_bytes()).ok()?;
         drop(file);
         fs::rename(&temp_path, &mirror_path).ok()?;
-    }
-    cursor.last_row_id = max_row_id;
-    cursor.visible_count = visible_count;
+        (new_max, new_visible)
+    };
+    cursor.last_row_id = written_max_row_id;
+    cursor.visible_count = written_visible_count;
     cursor.last_local_bytes = local_bytes;
     cursors.insert(session_id.to_string(), cursor);
     Some(mirror_path)
