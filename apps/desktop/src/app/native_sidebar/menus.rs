@@ -137,6 +137,7 @@ impl GhostexGpuiApp {
             None,
             scale,
             None,
+            false,
             window,
             cx,
         );
@@ -163,26 +164,29 @@ impl GhostexGpuiApp {
         let toggle = opener.trigger.map(|trigger| (trigger, opener.press));
         let max_height = opener.max_height.map(|height| px(height * scale));
         Self::open_native_sidebar_menu(
-            items, anchor, placement, toggle, max_height, scale, None, window, cx,
+            items, anchor, placement, toggle, max_height, scale, None, false, window, cx,
         );
     }
 
-    /// The sidebar's menu hung beside `button`, `SIDEBAR_MENU_OWNER_GAP` to its right with its first
-    /// row level with it (left of it without room on the right), where submenus may go
-    /// (`native_sidebar_submenu_room`); where it fits on neither side it opens as a right-click's
-    /// does. The rail's ⋯ menu (app/sidebar_rail/menu.rs).
-    pub(crate) fn show_native_sidebar_menu_beside(
-        &self,
+    /// A menu of the rail's (app/sidebar_rail/: ⋯, a pinned icon's right-click), hung beside
+    /// `button`, `SIDEBAR_MENU_OWNER_GAP` to its right with its first row level with it (left of
+    /// it without room on the right), with the whole window to sit in. The rail draws it (`render_native_rail_menu`), not the sidebar, so it
+    /// shows whether or not the sidebar is drawn.
+    pub(crate) fn show_native_rail_menu(
         items: &Value,
         button: Bounds<Pixels>,
         scale: f32,
         window: &mut Window,
         cx: &mut gpui::App,
     ) {
+        let room = Bounds {
+            origin: Point::default(),
+            size: window.viewport_size(),
+        };
         let placement = SidebarMenuPlacement::Beside {
             parent: button,
             row: button,
-            room: self.native_sidebar_submenu_room(window),
+            room,
             gap: px(SIDEBAR_MENU_OWNER_GAP * scale),
         };
         Self::open_native_sidebar_menu(
@@ -192,7 +196,8 @@ impl GhostexGpuiApp {
             None,
             None,
             scale,
-            None,
+            Some(room),
+            true,
             window,
             cx,
         );
@@ -223,6 +228,7 @@ impl GhostexGpuiApp {
             opener.max_height.map(px),
             1.0,
             Some(region),
+            false,
             window,
             cx,
         );
@@ -395,6 +401,7 @@ impl GhostexGpuiApp {
                 None,
                 scale,
                 None,
+                false,
                 window,
                 cx,
             ),
@@ -427,6 +434,7 @@ impl GhostexGpuiApp {
         max_height: Option<Pixels>,
         scale: f32,
         region: Option<Bounds<Pixels>>,
+        rail: bool,
         window: &mut Window,
         cx: &mut gpui::App,
     ) {
@@ -515,6 +523,7 @@ impl GhostexGpuiApp {
                         // CDXC:Tooltips 2026-10-17 DECISION: User (2026-09-15): no tooltip may show while a context menu is open; the suppression is held for as long as the menu is. The one exception, the user's choice on 2026-10-17 ("real tooltip"): the (i) beside New Orchestrator… shows its benefits as a real tooltip while the menu is open, so the suppression is lifted only while the pointer is on that (i) (`set_native_sidebar_menu_info_hover` in agent_launcher_menu.rs). Every other tooltip stays hidden while a menu is open.
                         tooltips: Some(Root::suppress_tooltips(window, cx)),
                         region,
+                        rail,
                     });
                     if let Some(command) = on_open {
                         app.dispatch_native_sidebar_ui(command, cx);
@@ -935,6 +944,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> Option<AnyElement> {
         let region = match self.native_sidebar.menu.as_ref() {
+            Some(menu) if menu.rail => return None,
             Some(menu) => menu.region?,
             None => {
                 // Closed: take down the frosted hosts it used, sidebar drawn or not.
@@ -943,6 +953,20 @@ impl GhostexGpuiApp {
             }
         };
         self.render_native_menu_layers(region, window, cx)
+    }
+
+    /// A menu of the rail's (`show_native_rail_menu`), drawn by the rail: `frame` is the rail's
+    /// own frame, where the element that draws it sits. `None` for any other menu.
+    pub(crate) fn render_native_rail_menu(
+        &self,
+        frame: Bounds<Pixels>,
+        window: &Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> Option<AnyElement> {
+        if !self.native_sidebar.menu.as_ref().is_some_and(|menu| menu.rail) {
+            return None;
+        }
+        self.render_native_menu_layers(frame, window, cx)
     }
 
     /// The menu's layers, placed from `frame`'s origin (the element that draws them).

@@ -233,6 +233,8 @@ pub(crate) type RailBounds = Rc<Cell<Option<Bounds<Pixels>>>>;
 pub(crate) struct SidebarRailState {
     /// The ⋯ button.
     pub(crate) more_bounds: RailBounds,
+    /// The rail column itself, where its menus are drawn from (`render_native_rail_menu`).
+    pub(crate) frame: RailBounds,
     /// Where the next compact Theme editor opens beside: the pinned Theme button just clicked, or
     /// ⋯ for its menu's Theme row (host.rs); taken when the editor opens
     /// (native_app_modal_lifecycle.rs). None opens it at its usual place.

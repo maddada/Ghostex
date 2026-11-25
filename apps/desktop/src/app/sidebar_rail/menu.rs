@@ -403,8 +403,8 @@ impl GhostexGpuiApp {
         // about 40px away." It opened as a right-click's menu does, centred across the sidebar,
         // so it hangs beside ⋯ now, the sidebar menus' 3pt from it, its first row level with it.
         match bounds {
-            Some(button) => self.show_native_sidebar_menu_beside(&menu, button, scale, window, cx),
-            None => Self::show_native_sidebar_menu(&menu, pointer, scale, window, cx),
+            Some(button) => Self::show_native_rail_menu(&menu, button, scale, window, cx),
+            None => self.show_sidebar_rail_menu(&menu, None, pointer, window, cx),
         }
     }
 

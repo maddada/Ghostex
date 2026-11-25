@@ -210,11 +210,11 @@ impl GhostexGpuiApp {
                 })
     }
 
-    /// A rail right-click menu (a pinned icon's, a separator's, empty rail space's), hung beside
-    /// `button` as ⋯'s is, or beside the pointer without one.
+    /// A rail menu (⋯, a pinned icon's, a separator's, empty rail space's), hung beside `button`
+    /// as ⋯'s is, or beside the pointer without one, and drawn by the rail itself.
     ///
     /// CDXC:Sidebar 2026-11-25 WHY:
-    /// User: "i can't right click on an icon on the rail to unpin it pls fix". These menus opened as a right-click in the sidebar's list does (`show_native_sidebar_menu`), which takes its width from the sidebar's frame and centres the menu across it: with the sidebar hidden that frame is empty, so the menu had no width and nothing showed, and with it shown the menu came up over the sidebar, away from the icon. Hung beside the icon (`show_native_sidebar_menu_beside`, room in the whole window where the panels have hosts of their own), it shows next to it whatever the sidebar is doing, for every pinned icon: items, agents, hubs and links.
+    /// User: "i can't right click on an icon on the rail to unpin it pls fix". The rail's menus were the sidebar's menus, which only the sidebar draws (`render_native_sidebar_menu`), and the right-click ones opened as a right-click in the sidebar's list does (`show_native_sidebar_menu`), sized from the sidebar's frame and centred across it. With the sidebar hidden nothing drew them (⋯'s neither, in the web page), and its frame was empty, so a menu had no width; with it shown the menu came up over the sidebar, away from the icon. They are the rail's own now (`show_native_rail_menu`): hung beside the icon with the whole window as their room and drawn by the rail (`render_native_rail_menu`), so they show next to every pinned icon (items, agents, hubs, links) whatever the sidebar is doing.
     pub(super) fn show_sidebar_rail_menu(
         &self,
         menu: &serde_json::Value,
@@ -227,7 +227,7 @@ impl GhostexGpuiApp {
             origin: pointer,
             size: gpui::size(px(0.0), px(0.0)),
         });
-        self.show_native_sidebar_menu_beside(menu, anchor, 1.0, window, cx);
+        Self::show_native_rail_menu(menu, anchor, 1.0, window, cx);
     }
 
     /// Renders one section's pinned entries (separators, links, built-in rail items) in order,
@@ -457,8 +457,14 @@ impl GhostexGpuiApp {
                         );
                     }))
             });
+        // The rail's menus, drawn from its own frame (`show_sidebar_rail_menu`).
+        let frame = self.sidebar_rail.frame.clone();
+        let menu = frame
+            .get()
+            .and_then(|at| self.render_native_rail_menu(at, window, cx));
         v_flex()
             .id("ghostex-gpui-sidebar-rail")
+            .on_prepaint(move |rect, _, _| frame.set(Some(rect)))
             .w(px(RAIL_WIDTH))
             .h_full()
             .flex_shrink_0()
@@ -626,6 +632,7 @@ impl GhostexGpuiApp {
                 )
             })
             .child(foot_slot)
+            .children(menu)
             .into_any_element()
     }
 

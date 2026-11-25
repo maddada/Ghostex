@@ -230,6 +230,9 @@ pub(crate) struct SidebarMenuState {
     /// Where the menu may sit, when it opens outside the sidebar (the Beads view's menus, in the
     /// side panel); `None` keeps it inside the sidebar.
     pub(crate) region: Option<Bounds<Pixels>>,
+    /// A menu of the rail's (app/sidebar_rail/): the rail draws it, in the whole window
+    /// (`region`), so it shows while the sidebar is hidden (`render_native_rail_menu`).
+    pub(crate) rail: bool,
 }
 
 impl SidebarMenuPanel {
