@@ -1018,6 +1018,8 @@ impl ThemeTab {
                 "windowArtLight",
                 "windowArtDim",
                 "windowArtBlur",
+                "windowArtMonochrome",
+                "windowArtStyle",
                 "windowArtImage",
                 "windowArtImageLight",
                 "windowGlassLiveStyleDark",

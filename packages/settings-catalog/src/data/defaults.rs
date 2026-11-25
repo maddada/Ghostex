@@ -1081,6 +1081,9 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("windowArtLight", J::Str("none")),
     ("windowArtDim", J::Num(45.0)),
     ("windowArtBlur", J::Num(0.0)),
+    // CDXC:Theming 2026-11-25 (`stylise_artwork` in apps/desktop/src/app/helpers/window_art.rs): the artwork's style (ASCII or Dither) and whether it is drawn in the theme's text colour (Black and white) or its own colours.
+    ("windowArtMonochrome", J::Bool(true)),
+    ("windowArtStyle", J::Str("ascii")),
     // CDXC:Theming 2026-11-22 (`YOUR_IMAGE_ART_ID` in data/themes.rs): the user's own picture
     // behind the window, per computer; `savedThemes` are the looks saved under Your themes
     // (apps/desktop/src/app/window/settings_modal/tabs/theme/user_themes.rs).

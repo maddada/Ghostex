@@ -8651,7 +8651,10 @@ kept, so it shows at once after that. A theme applies its colours at once and it
 in when it arrives; offline the window stays solid in the theme's colour until it can download.
 Light themes paint their artwork in light mode too. While an artwork or Your image shows, the
 window is solid and **Strength** (how much of it shows through the sidebar and the work area),
-**Dimming** and **Blur** sit right under the strip; the Window transparency card below then says
+**Style** (how the artwork is drawn, rising from the bottom of the window and fading out toward
+the top, with a chat's text on a soft panel of the theme's colour: **ASCII**, the default, as characters over a soft blurred copy of it, or **Dither**, as
+halftone dots; `windowArtStyle`), **Black and white** (on, the default, draws the characters or dots
+in the theme's own text colour, off in the artwork's own colours; `windowArtMonochrome`), **Dimming** and **Blur** sit right under the strip; the Window transparency card below then says
 transparency is paused, with **Use transparency** to take the artwork off. Clicking a tile sets the whole look as one theme change, the same as
 `ghostex theme apply <theme> [--background art|live|transparent|solid]` (`ghostex theme list` lists them in the row's order, with their backgrounds; `ghostex theme background list` and `ghostex theme background set <image|art|live|transparent|solid>` pick a background); the line under the row then names it, with **Undo** (`ghostex theme undo`
 works too) and Change them. Hovering a look shows **Make it your own**, which opens a Help chat

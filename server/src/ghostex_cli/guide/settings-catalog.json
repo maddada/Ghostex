@@ -4367,6 +4367,44 @@
       "agentWritable": true
     },
     {
+      "key": "windowArtStyle",
+      "title": "Art style",
+      "subtitle": "How the artwork is drawn behind the window: ASCII (characters over a soft blurred copy of it) or Dither (halftone dots). Both rise from the bottom of the window and fade out toward the top, and a chat's text sits on a soft panel of the theme's colour.",
+      "tab": "theme",
+      "tabTitle": "Themes",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Themes",
+      "type": "enum",
+      "default": "ascii",
+      "options": [
+        {
+          "label": "ASCII",
+          "value": "ascii"
+        },
+        {
+          "label": "Dither",
+          "value": "dither"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "windowArtMonochrome",
+      "title": "Black and white art",
+      "subtitle": "Draw the artwork's characters or dots in the theme's own text colour. Turn off to draw them in the artwork's own colours.",
+      "tab": "theme",
+      "tabTitle": "Themes",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Themes",
+      "type": "boolean",
+      "default": true,
+      "agentWritable": true
+    },
+    {
       "key": "windowArtImage",
       "title": "Your image for dark mode",
       "subtitle": "The picture Your image paints behind the window in dark mode, as Ghostex keeps a copy of it on this computer. Pick it with Your image… at the end of Artwork in Themes. It stays on this computer when Settings sync.",
