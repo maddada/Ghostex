@@ -15,6 +15,7 @@ mod workspace;
 pub(crate) use agent::*;
 pub(crate) use api::*;
 pub(crate) use cli::{
+    cancel_machine_gh_login, machine_gh_login, sign_in_machine_gh, MachineGhLogin,
     project_cli_env_for_acp, project_cli_env_for_acp_resume, set_connector_cli_client,
     sign_in_connector_cli, sign_out_connector_cli, with_project_cli_env,
     with_project_cli_env_for_resume,

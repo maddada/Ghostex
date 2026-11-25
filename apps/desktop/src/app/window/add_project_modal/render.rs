@@ -67,6 +67,12 @@ impl GpuiAddProjectModalWindow {
     // -- keyboard routing -----------------------------------------------------------------------
 
     fn on_move_up(&mut self, _: &MoveUp, window: &mut Window, cx: &mut Context<Self>) {
+        if self.focused_field(window, cx) == Some(Field::Repository)
+            && self.move_repo_highlight(-1, cx)
+        {
+            cx.stop_propagation();
+            return;
+        }
         if matches!(self.focused_field(window, cx), Some(Field::Path) | None) {
             cx.stop_propagation();
             self.move_highlight(-1, cx);
@@ -74,6 +80,12 @@ impl GpuiAddProjectModalWindow {
     }
 
     fn on_move_down(&mut self, _: &MoveDown, window: &mut Window, cx: &mut Context<Self>) {
+        if self.focused_field(window, cx) == Some(Field::Repository)
+            && self.move_repo_highlight(1, cx)
+        {
+            cx.stop_propagation();
+            return;
+        }
         if matches!(self.focused_field(window, cx), Some(Field::Path) | None) {
             cx.stop_propagation();
             self.move_highlight(1, cx);
@@ -84,7 +96,12 @@ impl GpuiAddProjectModalWindow {
         cx.stop_propagation();
         match self.focused_field(window, cx) {
             Some(Field::FolderName) => self.submit_new_folder(window, cx),
-            Some(Field::Repository | Field::Branch) => self.submit_clone_sheet(window, cx),
+            Some(Field::Repository) => {
+                if !self.press_repo_enter(window, cx) {
+                    self.submit_clone_sheet(window, cx);
+                }
+            }
+            Some(Field::Branch) => self.submit_clone_sheet(window, cx),
             Some(Field::ProjectName) => self.submit_new_project(window, cx),
             Some(Field::Path) | None => self.press_enter(action.secondary, window, cx),
         }

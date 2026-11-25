@@ -147,7 +147,6 @@ pub(crate) fn sign_in(
     if tool == CliTool::Gws {
         super::client::ensure_client(paths, &dir)?;
     }
-    stop_login(&dir);
     let mut command = crate::platform::process::background_command(&program);
     match tool {
         CliTool::Gh => command.args([
@@ -162,6 +161,104 @@ pub(crate) fn sign_in(
         ]),
         CliTool::Gws => command.args(["auth", "login"]),
     };
+    for (name, value) in tool_env(paths, workspace, tool) {
+        command.env(name, value);
+    }
+    let workspace = workspace.to_string();
+    run_login(tool, command, dir, move |_| notify_changed(&workspace))
+}
+
+/// The key the computer's own `gh` login waits under (it has no workspace folder).
+fn machine_gh_key() -> PathBuf {
+    PathBuf::from("<computer gh login>")
+}
+
+/// How the computer's own `gh` login went: `None` while none was started.
+static MACHINE_GH_RESULT: Mutex<Option<MachineGhLogin>> = Mutex::new(None);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum MachineGhLogin {
+    Waiting,
+    Done,
+    Failed,
+}
+
+fn set_machine_gh_result(result: MachineGhLogin) {
+    *MACHINE_GH_RESULT
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner) = Some(result);
+}
+
+/// CDXC:AddProject 2026-11-25 DECISION:
+/// User, of signing in from Add Project's GitHub repository list: "we must use gh cli please".
+/// The computer's own `gh auth login --web` runs here (no workspace folder, gh's usual storage, as
+/// when the user signs in from a terminal on that computer), and only the one-time code and
+/// GitHub's device page leave gxserver. Ghostex stores no token; the remote computer's own `gh`
+/// holds the sign-in, which is the one its clones use.
+/// SEE-ALSO: server/src/github_repositories.rs (the `/api/githubSignIn` request).
+pub(crate) fn sign_in_machine_gh(
+    on_done: impl FnOnce(bool) + Send + 'static,
+) -> Result<CliSignIn, String> {
+    let program = executable(CliTool::Gh).ok_or_else(|| {
+        "GitHub CLI (gh) isn't installed on this computer. Install it first, then sign in again."
+            .to_string()
+    })?;
+    let mut command = crate::platform::process::background_command(&program);
+    command.args([
+        "auth",
+        "login",
+        "--hostname",
+        "github.com",
+        "--git-protocol",
+        "https",
+        "--web",
+    ]);
+    command.env("GH_NO_UPDATE_NOTIFIER", "1");
+    let started = run_login(CliTool::Gh, command, machine_gh_key(), move |ended| {
+        // A login replaced by a newer one leaves the newer one's state alone.
+        let Some(success) = ended else {
+            return;
+        };
+        set_machine_gh_result(if success {
+            MachineGhLogin::Done
+        } else {
+            MachineGhLogin::Failed
+        });
+        on_done(success);
+    })?;
+    set_machine_gh_result(MachineGhLogin::Waiting);
+    Ok(started)
+}
+
+/// Where the computer's own `gh` login stands.
+pub(crate) fn machine_gh_login() -> Option<MachineGhLogin> {
+    *MACHINE_GH_RESULT
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Stops the computer's own `gh` login, if one is waiting.
+pub(crate) fn cancel_machine_gh_login() {
+    stop_login(&machine_gh_key());
+    let mut result = MACHINE_GH_RESULT
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    if *result == Some(MachineGhLogin::Waiting) {
+        *result = None;
+    }
+}
+
+/// Runs a login that prints its link and waits for the browser: reads the link (and `gh`'s code),
+/// leaves the login waiting under `key` and calls `finished` with whether it succeeded once it
+/// ends or is stopped (`None` when a newer login under `key` replaced it). A login already waiting
+/// under `key` is replaced.
+fn run_login(
+    tool: CliTool,
+    mut command: std::process::Command,
+    key: PathBuf,
+    finished: impl FnOnce(Option<bool>) + Send + 'static,
+) -> Result<CliSignIn, String> {
+    stop_login(&key);
     command
         .env("PATH", crate::platform::live_path::value())
         .stdin(Stdio::null())
@@ -171,9 +268,6 @@ pub(crate) fn sign_in(
     {
         use std::os::unix::process::CommandExt;
         command.process_group(0);
-    }
-    for (name, value) in tool_env(paths, workspace, tool) {
-        command.env(name, value);
     }
     let mut child = command
         .spawn()
@@ -209,19 +303,32 @@ pub(crate) fn sign_in(
             tool.name()
         ));
     };
-    with_active(|active| active.insert(dir.clone(), child));
-    let workspace = workspace.to_string();
+    let pid = child.id();
+    with_active(|active| active.insert(key.clone(), child));
     std::thread::spawn(move || {
         let deadline = std::time::Instant::now() + LOGIN_WITHIN;
         loop {
             std::thread::sleep(Duration::from_secs(1));
-            let done = with_active(|active| match active.get_mut(&dir) {
-                Some(child) => !matches!(child.try_wait(), Ok(None)),
-                None => true,
+            // `None` once the login ended (or another one replaced it); `Some(true)` when it
+            // ended signed in.
+            let ended = with_active(|active| match active.get_mut(&key) {
+                Some(child) if child.id() == pid => match child.try_wait() {
+                    Ok(None) => None,
+                    Ok(Some(status)) => Some(status.success()),
+                    Err(_) => Some(false),
+                },
+                _ => Some(false),
             });
-            if done || std::time::Instant::now() >= deadline {
-                stop_login(&dir);
-                notify_changed(&workspace);
+            let timed_out = std::time::Instant::now() >= deadline;
+            if ended.is_some() || timed_out {
+                let replaced =
+                    with_active(|active| active.get(&key).is_some_and(|child| child.id() != pid));
+                if replaced {
+                    finished(None);
+                } else {
+                    stop_login(&key);
+                    finished(Some(ended.unwrap_or(false)));
+                }
                 return;
             }
         }

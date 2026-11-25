@@ -100,6 +100,7 @@ impl GpuiAddProjectModalWindow {
         } else if self.machine_menu_open {
             self.machine_menu_open = false;
             cx.notify();
+        } else if self.close_repo_list(cx) {
         } else if self.sheet.is_some() {
             self.close_sheet(window, cx);
         } else if self.suggested_mode {

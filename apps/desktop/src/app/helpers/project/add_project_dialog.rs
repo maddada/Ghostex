@@ -71,6 +71,19 @@ pub(crate) fn gpui_add_project_dialog_params(
             forwarded.insert("parentPath".to_string(), serde_json::json!(parent_path));
         }
         GpuiAddProjectDialogOperation::DiscoverSourceControl => {}
+        GpuiAddProjectDialogOperation::ListRepositories => {
+            forwarded.insert("provider".to_string(), serde_json::json!("github"));
+            if params.get("refresh").and_then(serde_json::Value::as_bool) == Some(true) {
+                forwarded.insert("refresh".to_string(), serde_json::json!(true));
+            }
+        }
+        GpuiAddProjectDialogOperation::GithubSignIn => {
+            let action = params
+                .get("action")
+                .and_then(serde_json::Value::as_str)
+                .filter(|action| matches!(*action, "start" | "status" | "cancel"))?;
+            forwarded.insert("action".to_string(), serde_json::json!(action));
+        }
         GpuiAddProjectDialogOperation::LookupRepository => {
             let provider = gpui_add_project_dialog_bounded_text(params, "provider", 64)?;
             let repository = gpui_add_project_dialog_bounded_text(params, "repository", 512)?;
@@ -155,6 +168,8 @@ pub(crate) fn gpui_add_project_dialog_translate_local_windows_paths(
         GpuiAddProjectDialogOperation::Places => &["pin", "unpin"],
         GpuiAddProjectDialogOperation::CancelCloneJob
         | GpuiAddProjectDialogOperation::DiscoverSourceControl
+        | GpuiAddProjectDialogOperation::GithubSignIn
+        | GpuiAddProjectDialogOperation::ListRepositories
         | GpuiAddProjectDialogOperation::InstallSourceControlTool
         | GpuiAddProjectDialogOperation::ReadSourceControlTool
         | GpuiAddProjectDialogOperation::ListMachines

@@ -481,7 +481,10 @@ pub(super) async fn route_projects_http(
         "/api/createProjectDirectory" => {
             handle_create_project_directory_http(&state, endpoint.path, request_id, &body_json)
         }
-        "/api/discoverSourceControl" | "/api/lookupRepository" => {
+        "/api/discoverSourceControl"
+        | "/api/lookupRepository"
+        | "/api/listRepositories"
+        | "/api/githubSignIn" => {
             handle_source_control_http(&state, endpoint.path, request_id, &body_json).await
         }
         "/api/projectView" => {

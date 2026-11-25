@@ -52,6 +52,22 @@ impl GpuiAddProjectModalWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        self.sheet_field_with_end(skin, input, icon, None, invalid, disabled, window, cx)
+    }
+
+    /// [`Self::sheet_field`] with an icon at its end (the repository list's chevron).
+    #[allow(clippy::too_many_arguments)]
+    fn sheet_field_with_end(
+        &self,
+        skin: &AddProjectSkin,
+        input: &Entity<InputState>,
+        icon: Option<&'static str>,
+        end_icon: Option<&'static str>,
+        invalid: bool,
+        disabled: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let focused = gpui::Focusable::focus_handle(input.read(cx), cx).is_focused(window);
         h_flex()
             .h(px(32.0))
@@ -89,6 +105,11 @@ impl GpuiAddProjectModalWindow {
                         .text_color(hsla(skin.fg())),
                 ),
             )
+            .children(end_icon.map(|icon| {
+                div()
+                    .flex_shrink_0()
+                    .child(modal_icon(icon, 13.0, skin.muted()))
+            }))
             .into_any_element()
     }
 
@@ -285,7 +306,8 @@ impl GpuiAddProjectModalWindow {
         if self.pending_discovery_machine_id.is_some() {
             body.push(self.sheet_hint(skin, "Checking source control providers...", false));
         }
-        if !readiness.ready {
+        // A signed-out GitHub is signed in from the repository list instead (repo_picker.rs).
+        if !readiness.ready && !self.repo_picker_signs_in() {
             let install_status = self
                 .tool_install
                 .as_ref()
@@ -339,19 +361,35 @@ impl GpuiAddProjectModalWindow {
                     .into_any_element(),
             );
         }
+        // With GitHub's repository list the field ends in a chevron (repo_picker.rs).
+        let picker = self.repo_picker_available();
+        let repo_field = self.sheet_field_with_end(
+            skin,
+            &self.repo_input.clone(),
+            Some(source_icon(source)),
+            picker.then_some(ICON_CHEVRON_DOWN),
+            false,
+            busy,
+            window,
+            cx,
+        );
+        let repo_list = self.repo_list_element(skin, window, cx);
         body.push(
             v_flex()
                 .gap(px(6.0))
                 .child(self.sheet_label(skin, "Repository"))
-                .child(self.sheet_field(
-                    skin,
-                    &self.repo_input.clone(),
-                    Some(source_icon(source)),
-                    false,
-                    busy,
-                    window,
-                    cx,
-                ))
+                .child({
+                    let bounds = self.repo_field_bounds.clone();
+                    div().relative().child(repo_field).child(
+                        gpui::canvas(
+                            move |field, _window, _cx| bounds.set(Some(field)),
+                            |_, _, _, _| {},
+                        )
+                        .absolute()
+                        .size_full(),
+                    )
+                })
+                .children(repo_list)
                 .into_any_element(),
         );
         let destination = self.clone_destination(d);

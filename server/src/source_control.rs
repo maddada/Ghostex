@@ -11,6 +11,8 @@ use crate::{
     platform::process::NoConsoleWindow, repository_clone::canonical_repository_lookup_url,
 };
 
+mod repositories;
+
 /*
 CDXC:AddProject 2026-07-30:
 The Add Project dialog offers "clone from GitHub / GitLab" rows, and whether
@@ -173,6 +175,11 @@ pub async fn dispatch_source_control_endpoint(
             let cwd = resolve_probe_cwd(params.get("cwd"), home_dir)?;
             Ok(json!({ "repository": lookup_repository(params, &cwd).await? }))
         }
+        "/api/listRepositories" => {
+            let cwd = resolve_probe_cwd(params.get("cwd"), home_dir)?;
+            Ok(repositories::list_repositories(params, &cwd).await)
+        }
+        "/api/githubSignIn" => repositories::github_sign_in(params).await,
         _ => Err(SourceControlError::not_found(format!(
             "{endpoint_path} is not a gxserver source control endpoint."
         ))),
@@ -553,6 +560,17 @@ async fn run_probe(
     cwd: &Path,
     timeout_ms: u64,
 ) -> Result<ProbeOutput, String> {
+    run_probe_up_to(executable, args, cwd, timeout_ms, PROBE_OUTPUT_LIMIT_BYTES).await
+}
+
+/// [`run_probe`] keeping up to `output_limit` bytes of each stream (the repository list is long).
+async fn run_probe_up_to(
+    executable: &str,
+    args: &[&str],
+    cwd: &Path,
+    timeout_ms: u64,
+    output_limit: usize,
+) -> Result<ProbeOutput, String> {
     let mut command = Command::new(executable);
     command
         .args(args)
@@ -599,13 +617,13 @@ async fn run_probe(
     };
     Ok(ProbeOutput {
         exit_code: output.status.code().unwrap_or(1),
-        stderr: capped_text(&output.stderr),
-        stdout: capped_text(&output.stdout),
+        stderr: capped_text(&output.stderr, output_limit),
+        stdout: capped_text(&output.stdout, output_limit),
     })
 }
 
-fn capped_text(bytes: &[u8]) -> String {
-    let limit = bytes.len().min(PROBE_OUTPUT_LIMIT_BYTES);
+fn capped_text(bytes: &[u8], limit: usize) -> String {
+    let limit = bytes.len().min(limit);
     String::from_utf8_lossy(&bytes[..limit]).to_string()
 }
 

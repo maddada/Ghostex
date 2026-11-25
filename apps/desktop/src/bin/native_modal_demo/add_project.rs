@@ -11,7 +11,8 @@
 //! `machines` (the computer menu), `noproviders`, `oldserver` (a machine without places),
 //! `projectsfolder` (a Default projects folder of ~/dev), `projectsfolder-add` (New project named
 //! `widgets`, then Create), `newproject`, `newproject-start` (its Start list), `ambiguous`
-//! (owner/repo typed) and `pasted-url`. `script:<step>;<step>` runs any `preview_step` steps.
+//! (owner/repo typed), `pasted-url`, `repos` (GitHub's repository list), `repos-filter` ("web"
+//! typed, one row down), `repos-signedout` and `repos-signin` (the one-time code). `script:<step>;<step>` runs any `preview_step` steps.
 use super::add_project_modal::*;
 use gpui::{App, AppContext as _, Entity, WindowHandle};
 use gpui_component::Root;
@@ -208,6 +209,46 @@ struct Options {
     blocked: bool,
     /// Answers `places` like a gxserver from before the picker: unknown endpoint.
     old_server: bool,
+    /// The computer's `gh` is signed out: the repository list offers the sign-in.
+    github_signed_out: bool,
+}
+
+/// Clone a repo's GitHub repository list: the account `story`, two organisations and a
+/// repository shared by someone else, newest push first (repo_picker.rs).
+fn demo_repositories() -> Value {
+    let hours_ago = |hours: i64| (chrono::Utc::now() - chrono::Duration::hours(hours)).to_rfc3339();
+    let repo =
+        |owner: &str, organization: bool, name: &str, private: bool, fork: bool, hours: i64| {
+            json!({
+                "owner": owner,
+                "ownerKind": if organization { "organization" } else { "user" },
+                "name": name,
+                "private": private,
+                "fork": fork,
+                "pushedAt": hours_ago(hours),
+                "url": format!("https://github.com/{owner}/{name}"),
+                "sshUrl": format!("git@github.com:{owner}/{name}.git"),
+            })
+        };
+    json!({
+        "status": "ready",
+        "viewer": "story",
+        "fromCache": false,
+        "repositories": [
+            repo("acme", true, "storefront-web", true, false, 5),
+            repo("story", false, "notes-web", false, false, 30),
+            repo("acme", true, "billing-api", true, false, 50),
+            repo("story", false, "dotfiles", false, false, 80),
+            repo("northwind", true, "website", true, false, 24 * 20),
+            repo("story", false, "tinyhttp", false, true, 24 * 40),
+            repo("acme", true, "design-system", false, false, 24 * 60),
+            repo("jdoe", false, "recipes-webapp", true, false, 24 * 90),
+            repo("story", false, "personal-website", true, false, 24 * 200),
+            repo("acme", true, "docs-web", false, false, 24 * 300),
+            repo("northwind", true, "inventory", true, false, 24 * 400),
+            repo("story", false, "zed", false, true, 24 * 500),
+        ],
+    })
 }
 
 fn home_of(machine_id: &str) -> &'static str {
@@ -497,6 +538,24 @@ impl Mock {
                     { "installHint": "Azure DevOps support needs a CLI Ghostex does not ship yet.", "provider": "azure-devops", "status": "missing" },
                 ] } }))
             }
+            "listRepositories" => {
+                if options.old_server {
+                    return Err("Unknown endpoint.".to_string());
+                }
+                if options.github_signed_out {
+                    return Ok(
+                        json!({ "status": "signedOut", "detail": "You are not logged into any GitHub hosts." }),
+                    );
+                }
+                Ok(demo_repositories())
+            }
+            "githubSignIn" => Ok(match text("action").as_str() {
+                "start" => {
+                    json!({ "state": "waiting", "code": "4F2A-91C3", "url": "https://github.com/login/device" })
+                }
+                "cancel" => json!({ "state": "idle" }),
+                _ => json!({ "state": "waiting" }),
+            }),
             "lookupRepository" => match options.lookup_error {
                 Some(error) => Err(error.to_string()),
                 None => {
@@ -706,6 +765,8 @@ impl LiveGxserver {
             "createDirectory" => "/api/createProjectDirectory",
             "discoverSourceControl" => "/api/discoverSourceControl",
             "lookupRepository" => "/api/lookupRepository",
+            "listRepositories" => "/api/listRepositories",
+            "githubSignIn" => "/api/githubSignIn",
             "places" => "/api/projectPickerPlaces",
             "previewClone" => "/api/previewRepositoryClone",
             "readCloneJob" => "/api/readRepositoryCloneJob",
@@ -787,6 +848,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         running_polls: if state == "cloning" { 1000 } else { 2 },
         blocked: state == "blocked",
         old_server: state == "oldserver",
+        github_signed_out: matches!(state, "repos-signedout" | "repos-signin"),
     });
     let latency = Duration::from_millis(match state {
         "slow" => 60_000,
@@ -935,6 +997,10 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             "open:/Users/story/dev/ghostex/sidebar",
         ],
         "repository" => vec!["clone", "source:github"],
+        "repos" => vec!["clone"],
+        "repos-filter" => vec!["clone", "repo:web", "repo-key:down"],
+        "repos-signedout" => vec!["clone"],
+        "repos-signin" => vec!["clone", "github-sign-in"],
         "lookupfail" => vec![
             "clone",
             "source:github",

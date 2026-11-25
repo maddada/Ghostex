@@ -302,6 +302,10 @@ pub(crate) enum GpuiAddProjectDialogOperation {
     CancelCloneJob,
     CreateDirectory,
     DiscoverSourceControl,
+    /// The chosen computer's `gh auth login --web`: start it, read where it stands, or stop it.
+    GithubSignIn,
+    /// The GitHub repositories the chosen computer's `gh` can read, for Clone a repo's list.
+    ListRepositories,
     /// Starts gxserver's managed install of a provider CLI (`gh`, `glab`) from its row.
     InstallSourceControlTool,
     ListMachines,
@@ -323,6 +327,8 @@ impl GpuiAddProjectDialogOperation {
             "cancelCloneJob" => Some(Self::CancelCloneJob),
             "createDirectory" => Some(Self::CreateDirectory),
             "discoverSourceControl" => Some(Self::DiscoverSourceControl),
+            "githubSignIn" => Some(Self::GithubSignIn),
+            "listRepositories" => Some(Self::ListRepositories),
             "installSourceControlTool" => Some(Self::InstallSourceControlTool),
             "readSourceControlTool" => Some(Self::ReadSourceControlTool),
             "listMachines" => Some(Self::ListMachines),
@@ -342,6 +348,8 @@ impl GpuiAddProjectDialogOperation {
             Self::CancelCloneJob => "cancelCloneJob",
             Self::CreateDirectory => "createDirectory",
             Self::DiscoverSourceControl => "discoverSourceControl",
+            Self::GithubSignIn => "githubSignIn",
+            Self::ListRepositories => "listRepositories",
             Self::InstallSourceControlTool => "installSourceControlTool",
             Self::ReadSourceControlTool => "readSourceControlTool",
             Self::ListMachines => "listMachines",
@@ -360,6 +368,8 @@ impl GpuiAddProjectDialogOperation {
             Self::CancelCloneJob => Some("/api/cancelRepositoryCloneJob"),
             Self::CreateDirectory => Some("/api/createProjectDirectory"),
             Self::DiscoverSourceControl => Some("/api/discoverSourceControl"),
+            Self::GithubSignIn => Some("/api/githubSignIn"),
+            Self::ListRepositories => Some("/api/listRepositories"),
             Self::InstallSourceControlTool | Self::ReadSourceControlTool => {
                 Some("/api/managedTools")
             }
@@ -378,6 +388,8 @@ impl GpuiAddProjectDialogOperation {
             Self::Browse => GPUI_ADD_PROJECT_DIALOG_BROWSE_TIMEOUT,
             Self::DiscoverSourceControl | Self::Places => GPUI_ADD_PROJECT_DIALOG_DISCOVERY_TIMEOUT,
             Self::LookupRepository | Self::PreviewClone => GPUI_ADD_PROJECT_DIALOG_LOOKUP_TIMEOUT,
+            Self::ListRepositories => GPUI_ADD_PROJECT_DIALOG_REPOSITORY_LIST_TIMEOUT,
+            Self::GithubSignIn => GPUI_ADD_PROJECT_DIALOG_SIGN_IN_TIMEOUT,
             Self::CancelCloneJob
             | Self::CreateDirectory
             | Self::ReadCloneJob

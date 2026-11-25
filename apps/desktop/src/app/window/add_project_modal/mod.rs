@@ -17,6 +17,7 @@ mod model;
 mod new_project;
 mod paths;
 mod render;
+mod repo_picker;
 mod sheets;
 mod skin;
 mod steps;

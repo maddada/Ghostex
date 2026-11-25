@@ -9,6 +9,7 @@ use super::input::*;
 use super::model::*;
 use super::new_project::*;
 use super::paths::*;
+use super::repo_picker::{RepoList, RepoSignIn, SignInAction};
 use gpui::{
     App, AppContext as _, Bounds, Context, Entity, FocusHandle, Pixels, ScrollHandle, Subscription,
     Window,
@@ -245,6 +246,16 @@ pub(super) enum Pending {
     NewProjectInspect {
         key: String,
     },
+    /// Clone a repo's GitHub repository list (repo_picker.rs): the kept one, or a fresh one.
+    RepoList {
+        machine_id: String,
+        refresh: bool,
+    },
+    /// The computer's own `gh auth login` for that list (repo_picker.rs).
+    GithubSignIn {
+        machine_id: String,
+        action: SignInAction,
+    },
 }
 
 /// A spot the picker has been, for Back and Forward.
@@ -318,6 +329,15 @@ pub(crate) struct GpuiAddProjectModalWindow {
     pub(super) clone_job_id: Option<String>,
     /// The running clone's latest git progress line (`Receiving objects: 45% …`).
     pub(super) clone_progress: Option<String>,
+    /// Clone a repo's GitHub repository list per computer, whether it is open, the repository the
+    /// arrows moved to, and a sign-in in progress (repo_picker.rs).
+    pub(super) repo_lists: HashMap<String, RepoList>,
+    pub(super) repo_list_open: bool,
+    pub(super) repo_highlight: Option<String>,
+    pub(super) repo_sign_in: Option<RepoSignIn>,
+    pub(super) repo_list_scroll: ScrollHandle,
+    /// Where the Repository field is on screen, for its floating list.
+    pub(super) repo_field_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
     pub(super) path_input: Entity<InputState>,
     pub(super) branch_input: Entity<InputState>,
     pub(super) folder_name_input: Entity<InputState>,
@@ -435,6 +455,16 @@ impl GpuiAddProjectModalWindow {
                 },
             ),
             on_change(&repo_input, window, cx, Self::on_repo_input_changed),
+            // The repository list opens with the field's focus and closes when it leaves.
+            cx.subscribe_in(
+                &repo_input,
+                window,
+                |this: &mut Self, _input, event: &InputEvent, _window, cx| match event {
+                    InputEvent::Focus => this.set_repo_list_open(true, cx),
+                    InputEvent::Blur => this.set_repo_list_open(false, cx),
+                    _ => {}
+                },
+            ),
             on_change(
                 &project_name_input,
                 window,
@@ -514,6 +544,12 @@ impl GpuiAddProjectModalWindow {
             new_project_inspect_key: None,
             clone_job_id: None,
             clone_progress: None,
+            repo_lists: HashMap::new(),
+            repo_list_open: false,
+            repo_highlight: None,
+            repo_sign_in: None,
+            repo_list_scroll: ScrollHandle::new(),
+            repo_field_bounds: Rc::new(Cell::new(None)),
             path_input,
             branch_input,
             folder_name_input,
@@ -651,6 +687,11 @@ impl GpuiAddProjectModalWindow {
             }
         }
 
+        // Clone a repo's GitHub repository list, once per machine (repo_picker.rs).
+        if cloning && self.clone_source == AddProjectSourceId::Github {
+            self.load_repo_list(&machine_id, cx);
+        }
+
         // The open folder's listing, with what each folder is, and the typed path inspected.
         let browse_key = format!(
             "{machine_id}|{}|{}|{}|{}|{}|{}|{:?}",
@@ -783,7 +824,11 @@ impl GpuiAddProjectModalWindow {
     /// The path field shows the query; it is only rewritten when the state moved it.
     fn sync_path_input(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         // The repository field's hint names what the chosen source takes.
-        let placeholder = repository_placeholder(self.clone_source);
+        let placeholder = if self.repo_picker_available() {
+            "Find a repository or paste a URL".to_string()
+        } else {
+            repository_placeholder(self.clone_source)
+        };
         if placeholder != self.repo_placeholder {
             self.repo_placeholder = placeholder.clone();
             self.repo_input.update(cx, |input, cx| {
@@ -941,6 +986,13 @@ impl GpuiAddProjectModalWindow {
                 let discovery = result
                     .ok()
                     .and_then(|value| read_add_project_discovery(&value).ok());
+                if discovery.as_ref().is_some_and(|discovery| {
+                    discovery.providers.iter().any(|provider| {
+                        provider.provider == Some(AddProjectSourceId::Github) && provider.available
+                    })
+                }) {
+                    self.retry_missing_repo_list(&machine_id);
+                }
                 self.discovery.insert(machine_id, discovery);
                 self.pending_discovery_machine_id = None;
             }
@@ -1106,6 +1158,15 @@ impl GpuiAddProjectModalWindow {
             }
             Pending::NewProjectInspect { key } => {
                 self.receive_new_project_inspection(key, result);
+            }
+            Pending::RepoList {
+                machine_id,
+                refresh,
+            } => {
+                self.receive_repo_list(machine_id, refresh, result, cx);
+            }
+            Pending::GithubSignIn { machine_id, action } => {
+                self.receive_github_sign_in(machine_id, action, result, cx);
             }
             Pending::CreateFolder {
                 machine_id,

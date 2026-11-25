@@ -871,6 +871,15 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         */
         | "/api/discoverSourceControl"
         | "/api/lookupRepository"
+        /*
+        CDXC:AddProject 2026-11-25:
+        The GitHub repository list and its sign-in run on the chosen computer like lookup does:
+        the list holds only repository names and clone URLs from that computer's own `gh`, and
+        the sign-in hands back only GitHub's one-time code and its device page. The token stays
+        in that computer's `gh`.
+        */
+        | "/api/listRepositories"
+        | "/api/githubSignIn"
         | "/api/listExtensions"
         | "/api/extensionsCatalog"
         | "/api/extensionStoreContent"

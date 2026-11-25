@@ -13,5 +13,8 @@ pub(crate) use launch::{
     project_cli_env_for_acp, project_cli_env_for_acp_resume, with_project_cli_env,
     with_project_cli_env_for_resume,
 };
-pub(crate) use signin::set_changed_listener;
+pub(crate) use signin::{
+    cancel_machine_gh_login, machine_gh_login, set_changed_listener, sign_in_machine_gh,
+    MachineGhLogin,
+};
 pub(crate) use tools::status;

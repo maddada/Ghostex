@@ -381,6 +381,8 @@ impl GpuiAddProjectModalWindow {
             return;
         }
         self.sheet = Some(Sheet::Clone);
+        // GitHub's repository list opens with the panel, unless a repository came with it.
+        self.repo_list_open = prefill.is_none();
         self.new_folder_name = None;
         self.clone_preview = None;
         self.clone_flow = None;
@@ -466,6 +468,8 @@ impl GpuiAddProjectModalWindow {
             self.clone_options.shallow_clone |= parsed.shallow_clone;
         }
         self.clone_repo_text = value;
+        self.repo_list_open = true;
+        self.repo_highlight = None;
         self.clone_preview = None;
         self.clone_flow = None;
         self.clone_generation += 1;
@@ -871,6 +875,23 @@ impl GpuiAddProjectModalWindow {
             set(&self.branch_input.clone(), branch, window, cx);
             self.clone_options.branch_name = branch.to_string();
             cx.notify();
+        } else if step == "github-sign-in" {
+            self.start_github_sign_in(cx);
+        } else if let Some(key) = step.strip_prefix("repo-key:") {
+            match key {
+                "down" => {
+                    self.move_repo_highlight(1, cx);
+                }
+                "up" => {
+                    self.move_repo_highlight(-1, cx);
+                }
+                "enter" => {
+                    if !self.press_repo_enter(window, cx) {
+                        self.submit_clone_sheet(window, cx);
+                    }
+                }
+                _ => {}
+            }
         } else if step == "clone-submit" {
             self.submit_clone_sheet(window, cx);
         } else if step == "create" {

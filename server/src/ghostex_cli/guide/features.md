@@ -7455,11 +7455,22 @@ path, or a path with shell-escaped spaces to browse it; `saved-machine:/path`
 selects a saved machine by name or ID. GitHub, GitLab, Bitbucket, Azure DevOps,
 and other Git URLs offer Clone a repo. Bare `owner/repo` offers Local folder and
 GitHub repository. Clone a repo (its button at the top of Add Project) opens a
-panel beside the folders: pick where it comes from (Git URL, GitHub, GitLab,
-Bitbucket, Azure DevOps; a missing GitHub or GitLab CLI installs from there),
-type or paste the repository, and it is cloned into the folder you have open
-(click folders on the left to choose another; a folder that is already there is
-refused). Copied `git clone`, `gh repo clone`, and `glab repo clone` commands
+panel beside the folders: pick where it comes from (GitHub, picked when the
+panel opens, then Git URL, GitLab, Bitbucket, Azure DevOps; a missing GitHub or
+GitLab CLI installs from there), type or paste the repository, and it is cloned
+into the folder you have open (click folders on the left to choose another; a
+folder that is already there is refused). With GitHub picked, the Repository
+field lists your repositories from the GitHub CLI (`gh`) on the computer you are
+cloning onto: one line each (a lock when private, a fork mark, the time since
+the last push), grouped as your own account, then each organisation, then
+Shared with you, newest push first. Type to filter, use the arrow keys and
+Enter to pick, and Escape to close the list; a typed `owner/repo`, URL or clone
+command not in the list still clones as before. The list from the last time
+shows at once while a fresh one loads. When that computer's `gh` is signed
+out, Sign in runs its `gh auth login` and shows GitHub's one-time code with
+Open github.com; the list fills in once you approve. Ghostex stores no GitHub
+token. The phone's Add Project has the same list. An older Ghostex on that
+computer keeps the plain field. Copied `git clone`, `gh repo clone`, and `glab repo clone` commands
 prefill the repository, destination folder name, branch (`-b` or `--branch`),
 and supported options (`--single-branch`, `--depth 1`); the panel also has
 Branch, Clone branch only and Shallow clone. Repository file links identify the

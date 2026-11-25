@@ -464,6 +464,11 @@ pub(crate) const GPUI_ADD_PROJECT_DIALOG_ADD_TIMEOUT: Duration = Duration::from_
 pub(crate) const GPUI_ADD_PROJECT_DIALOG_BROWSE_TIMEOUT: Duration = Duration::from_secs(15);
 pub(crate) const GPUI_ADD_PROJECT_DIALOG_DISCOVERY_TIMEOUT: Duration = Duration::from_secs(30);
 pub(crate) const GPUI_ADD_PROJECT_DIALOG_LOOKUP_TIMEOUT: Duration = Duration::from_secs(20);
+/// `gh api --paginate` over every page of the repositories (321 took about 5 seconds; gxserver stops it at 120).
+pub(crate) const GPUI_ADD_PROJECT_DIALOG_REPOSITORY_LIST_TIMEOUT: Duration =
+    Duration::from_secs(130);
+/// Starting `gh auth login --web` waits up to 20 seconds for its one-time code.
+pub(crate) const GPUI_ADD_PROJECT_DIALOG_SIGN_IN_TIMEOUT: Duration = Duration::from_secs(30);
 pub(crate) const GPUI_ADD_PROJECT_DIALOG_JOB_TIMEOUT: Duration = Duration::from_secs(20);
 pub(crate) const GPUI_ADD_PROJECT_DIALOG_CLONE_WATCH_INTERVAL: Duration = Duration::from_secs(5);
 // CDXC:AddProject 2026-07-30: ~10 minutes of native follow-up for a remote clone
