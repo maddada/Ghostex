@@ -122,9 +122,19 @@ pub(crate) fn build_source_readiness(
     readiness
 }
 
-/// `orderedAddProjectSources`: Git URL first, then ready providers, each bucket by label.
+/// `orderedAddProjectSources`: GitHub first, then Git URL, then the other providers with
+/// ready ones first, each bucket by label.
+///
+/// CDXC:AddProject 2026-11-25 DECISION:
+/// User: "pls make github the main option and first one here." GitHub leads the From row
+/// whatever its readiness (an unready GitHub still shows its setup hint), Git URL follows,
+/// and the remaining providers keep their ready-first, by-label order.
+/// SEE-ALSO: window.rs (GitHub is the default source), apps/mobile/app src/addProject/sources.ts.
 pub(crate) fn ordered_sources(readiness: &AddProjectReadiness) -> Vec<AddProjectSourceId> {
-    let mut providers = AddProjectSourceId::PROVIDERS.to_vec();
+    let mut providers: Vec<AddProjectSourceId> = AddProjectSourceId::PROVIDERS
+        .into_iter()
+        .filter(|source| *source != AddProjectSourceId::Github)
+        .collect();
     providers.sort_by(|left, right| {
         let left_ready = readiness[left.index()].ready;
         let right_ready = readiness[right.index()].ready;
@@ -134,7 +144,7 @@ pub(crate) fn ordered_sources(readiness: &AddProjectReadiness) -> Vec<AddProject
                 .cmp(&source_label(*right).to_lowercase())
         })
     });
-    let mut sources = vec![AddProjectSourceId::Url];
+    let mut sources = vec![AddProjectSourceId::Github, AddProjectSourceId::Url];
     sources.extend(providers);
     sources
 }

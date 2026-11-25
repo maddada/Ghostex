@@ -488,7 +488,7 @@ impl GpuiAddProjectModalWindow {
             pending_places: HashSet::new(),
             places_seq: HashMap::new(),
             last_selected_folder: None,
-            clone_source: AddProjectSourceId::Url,
+            clone_source: AddProjectSourceId::Github,
             clone_repo_text: String::new(),
             clone_flow: None,
             clone_options: CloneOptions::default(),

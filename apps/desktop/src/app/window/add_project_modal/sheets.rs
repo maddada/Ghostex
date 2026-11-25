@@ -231,7 +231,7 @@ impl GpuiAddProjectModalWindow {
         let busy = self.busy.is_some();
         let cloning = self.busy == Some(Busy::Clone);
         let mut body: Vec<AnyElement> = Vec::new();
-        // The sources, in today's order: Git URL first, then the ready providers.
+        // The sources: GitHub first, then Git URL, then the other providers (ready first).
         let hover = skin.muted_fill_at(0.7);
         let sources: Vec<AnyElement> = ordered_sources(&d.readiness)
             .into_iter()
