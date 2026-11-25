@@ -119,6 +119,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     into.note = composer.note.document();
     into.catch_up = crate::composer::catch_up::document(state);
     into.files_links = crate::composer::files_links::document(state, context);
+    into.sent_history = crate::composer::sent_history::document(state, context);
 
     let card_visible = notice_visible(state);
     let choice_pending = terminal_choice_pending(state, notice.as_ref());

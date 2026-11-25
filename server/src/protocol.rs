@@ -707,6 +707,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/readSessionChatImage"
         // CDXC:SessionChat 2026-11-12 WHY: remote-allowed like readSessionChat: the whole text of a tool output the phone got cut lives in the transcript of the machine that runs the session (session_chat_tool_outputs.rs).
         | "/api/readSessionChatToolOutput"
+        // CDXC:SessionChat 2026-11-26 WHY: remote-allowed like readSessionChat: the History pill's list of sent messages reads the transcript of the machine that runs the session (session_chat_sent.rs).
+        | "/api/readSessionChatSent"
         | "/api/answerSessionChatPrompt"
         | "/api/interruptSessionChat"
         | "/api/acknowledgeSessionChatDraftHandoff"

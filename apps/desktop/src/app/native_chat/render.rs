@@ -177,6 +177,7 @@ impl Render for NativeChatView {
         self.hold_text_width_while_sliding(&p);
         self.sync_search_scroll();
         self.sync_files_links_jump();
+        self.sync_sent_history_jump();
         self.sync_open_question_jump(window);
         // A card above the composer that is opening or closing needs the next frame; the
         // transcript's rows ask for theirs as they are drawn.

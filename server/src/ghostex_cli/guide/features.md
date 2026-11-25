@@ -2311,6 +2311,20 @@ yourself carry quotes: a Collab guest's or another agent's never do. Agents read
 never reused (after Rewind to here the next message gets a new one), a fork keeps
 the numbers up to where it was cut, a queued message gets its number once the
 agent has it, and only messages written after the update that added IDs have one.
+History: once a chat has a message you sent, the strip at the top of the chat box
+shows a History pill (a clock with a backward arrow), right of the ↓ Scroll to
+bottom pill when that shows (on the phone, after the view chips). Click it for
+every message you sent in this chat as a card: its words (up to 3 lines), its
+pictures and files, and its time (hover the time for the full date). The oldest is
+at the top and the list opens scrolled to your latest; scroll up and older messages
+load, 50 at a time, including messages sent before message IDs existed. Search
+your words or file names, or type M3 for that message; All, With attachments and
+Text only narrow the list. Click a card to jump to its message in the chat. Point
+at a card for its buttons: Jump to it, Copy, Put back in the chat box (its
+words and pictures go into the chat box, below anything already there), Copy
+reference and Reference in chat (a message with an ID), and Fork from here and
+Rewind to here where the message's own ⋯ menu offers them. On the phone, tap a card
+to jump and hold it for the same actions.
 Questions, work items and Live pages have the same two rows, **Copy reference**
 and **Reference in chat**: in the ⋯ and right-click menus of the rows above the
 chat box and of Needs you, on a card in the Work panel, on a question in a form

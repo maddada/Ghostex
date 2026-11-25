@@ -15,6 +15,7 @@ pub mod delivery_card;
 pub mod document;
 pub mod draft_sync;
 pub mod files_links;
+pub mod sent_history;
 pub mod first_message;
 pub mod ghostex_skills;
 pub mod history;

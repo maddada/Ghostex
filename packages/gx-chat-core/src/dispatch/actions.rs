@@ -171,7 +171,13 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::FilesLinksClose
         | ActionKind::FilesLinksFilter
         | ActionKind::FilesLinksShowAll
-        | ActionKind::FilesLinksJump => Family::Composer,
+        | ActionKind::FilesLinksJump
+        | ActionKind::SentHistory
+        | ActionKind::SentHistoryClose
+        | ActionKind::SentHistoryFilter
+        | ActionKind::SentHistoryKind
+        | ActionKind::SentHistoryMore
+        | ActionKind::SentHistoryJump => Family::Composer,
 
         ActionKind::SelectOption
         | ActionKind::RestartInMode

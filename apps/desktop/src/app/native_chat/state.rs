@@ -444,6 +444,18 @@ pub(crate) struct NativeChatView {
     pub(crate) board: super::coordinator_board::CoordinatorBoardView,
     pub(super) files_links_closing: bool,
     pub(super) files_links_jump_revision: u64,
+    /// History (sent_history.rs): the search field, the window it was made in, the cards' list and
+    /// the ids it draws, the jump it last scrolled to, where the pill is, and a menu opening before
+    /// the core's list says it is open.
+    pub(super) sent_history_input: Option<Entity<InputState>>,
+    pub(super) sent_history_subscription: Option<Subscription>,
+    pub(super) sent_history_input_window: Option<gpui::WindowId>,
+    pub(super) sent_history_list: gpui::ListState,
+    pub(super) sent_history_ids: Vec<String>,
+    pub(super) sent_history_jump_revision: u64,
+    pub(super) sent_history_pill_bounds:
+        std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
+    pub(super) sent_history_opening: bool,
     /// The question jump this pane last scrolled to (`None` before its first document), and the
     /// highlight on the question it landed on (open_questions.rs).
     pub(super) open_question_jump_revision: Option<u64>,
@@ -856,6 +868,14 @@ impl NativeChatView {
             board: Default::default(),
             files_links_closing: false,
             files_links_jump_revision: 0,
+            sent_history_input: None,
+            sent_history_subscription: None,
+            sent_history_input_window: None,
+            sent_history_list: super::sent_history::sent_history_list_state(),
+            sent_history_ids: Vec::new(),
+            sent_history_jump_revision: 0,
+            sent_history_pill_bounds: Default::default(),
+            sent_history_opening: false,
             open_question_jump_revision: None,
             question_flash: None,
             question_list: Default::default(),

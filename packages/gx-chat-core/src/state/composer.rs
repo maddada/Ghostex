@@ -46,6 +46,8 @@ pub struct ComposerState {
     pub catch_up: crate::composer::catch_up::CatchUpState,
     /// The Files and links card.
     pub files_links: crate::composer::files_links::FilesLinksState,
+    /// The History pill's list of sent messages.
+    pub sent_history: crate::composer::sent_history::SentHistoryState,
     /// The stash badge and the note dot.
     pub chrome: ComposerChromeState,
     /// Which toolbar controls the renderer could not fit.

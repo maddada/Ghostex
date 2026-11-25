@@ -102,6 +102,8 @@ pub enum ChatRpcMethod {
     /// Every attachment, file and link the session and its threads mentioned
     /// (`composer/files_links.rs`).
     ReadSessionFilesLinks,
+    /// The messages the user sent in this chat, for the History pill (`composer/sent_history.rs`).
+    ReadSessionChatSent,
     /// What the Session details panel shows (`extras/session_details/`).
     ReadSessionDetails,
     /// Where the session runs, for the where pill (`extras/where_pill.rs`).
@@ -180,6 +182,7 @@ impl ChatRpcMethod {
             Self::EditSessionChatFirstMessage => "editSessionChatFirstMessage",
             Self::CatchUpSession => "catchUpSession",
             Self::ReadSessionFilesLinks => "readSessionFilesLinks",
+            Self::ReadSessionChatSent => "readSessionChatSent",
             Self::ReadSessionDetails => "readSessionDetails",
             Self::ReadSessionWhere => "readSessionWhere",
             Self::StopSessionBackgroundTask => "stopSessionBackgroundTask",
@@ -248,6 +251,7 @@ impl ChatRpcMethod {
             "editSessionChatFirstMessage" => Self::EditSessionChatFirstMessage,
             "catchUpSession" => Self::CatchUpSession,
             "readSessionFilesLinks" => Self::ReadSessionFilesLinks,
+            "readSessionChatSent" => Self::ReadSessionChatSent,
             "readSessionDetails" => Self::ReadSessionDetails,
             "readSessionWhere" => Self::ReadSessionWhere,
             "stopSessionBackgroundTask" => Self::StopSessionBackgroundTask,

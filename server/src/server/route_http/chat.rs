@@ -59,6 +59,15 @@ pub(super) async fn route_chat_http(
                 routed
             }
         }
+        "/api/readSessionChatSent" => {
+            crate::session_chat_sent::handle_read_session_chat_sent_http(
+                state.clone(),
+                endpoint.path,
+                request_id,
+                body_json.clone(),
+            )
+            .await
+        }
         "/api/readSessionChatToolOutput" => {
             crate::session_chat_tool_outputs::handle_read_tool_output_http(
                 &state,

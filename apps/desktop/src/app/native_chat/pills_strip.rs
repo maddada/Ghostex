@@ -1,7 +1,9 @@
 //! The pill strip along the chat box's top edge (composer.rs): a faintly tinted band inside the box,
 //! with a hairline under it and the box's top corners, holding the chat's pills on the right: the
 //! armed timers, the ? (a question waits), Resources, Workers, Links, Tasks, Subagents and
-//! Background, and the ↓ jump-to-bottom at the left of them while the strip shows. Pills that don't
+//! Background, and the ↓ jump-to-bottom at the left of them while the strip shows, then the History
+//! pill (sent_history.rs), which alone is enough to show the strip once the chat has a message the
+//! user sent. Pills that don't
 //! fit scroll sideways, each fading out before an edge that hides more reaches it (`pill_opacities`). With no pill there is no strip; it grows
 //! in and shrinks away with the chat box's own ease. Each pill opens its menu above the box, lined up
 //! with the pill.
@@ -692,6 +694,7 @@ impl NativeChatView {
                 || self.where_pill().is_some()
                 || chips
                 || self.links_pill.is_some()
+                || self.snapshot["sentHistory"]["enabled"] == true
                 || !self.strip_pill_ids().is_empty()
                 || self.open_question_pill_text().is_some())
     }
@@ -768,11 +771,14 @@ impl NativeChatView {
         } else {
             (Vec::new(), None, Vec::new(), Vec::new())
         };
-        // The ↓ at the left of the pills, so it appearing moves none of them.
+        // The ↓ at the left of the pills, so it appearing moves none of them, then History
+        // (sent_history.rs), the leftmost pill that always shows: right of the ↓, so the passing
+        // arrow never moves it (CDXC:SessionChat 2026-11-26 in gx-chat-core sent_history.rs).
         let scrolling: Vec<(StripItem, AnyElement)> = (shown && left_bottom)
             .then(|| self.scroll_bottom_icon_pill(p, cx))
             .flatten()
             .into_iter()
+            .chain(shown.then(|| self.sent_history_pill(p, cx)).flatten())
             .map(|pill| (StripItem::Fixed, pill))
             .chain(pills)
             .collect();

@@ -179,6 +179,7 @@ fn trigger_id(id: &str) -> &'static str {
         super::where_pill::WHERE_MENU => super::where_pill::WHERE_TRIGGER,
         ghostex_gx_chat_core::extras::autopilot::AUTOPILOT_PILL => AUTOPILOT_TRIGGER,
         super::boosts::BOOST_MENU => super::boosts::BOOST_TRIGGER,
+        super::sent_history::SENT_MENU => super::sent_history::SENT_TRIGGER,
         _ => "chat-pill-subagents",
     }
 }
@@ -221,6 +222,7 @@ fn menu_width(id: &str) -> f32 {
         super::coordinator_intro::INTRO_MENU => super::coordinator_intro::INTRO_MENU_WIDTH,
         super::where_pill::WHERE_MENU => super::where_pill::WHERE_MENU_WIDTH,
         super::boosts::BOOST_MENU => super::boosts::BOOST_MENU_WIDTH,
+        super::sent_history::SENT_MENU => super::sent_history::SENT_MENU_WIDTH,
         _ => 520.0,
     }
 }
@@ -318,7 +320,7 @@ pub(super) fn pill_menu_column(
 }
 
 /// An icon pill's glyph.
-fn pill_glyph(icon: &'static str, color: gpui::Hsla, s: f32) -> AnyElement {
+pub(super) fn pill_glyph(icon: &'static str, color: gpui::Hsla, s: f32) -> AnyElement {
     svg()
         .path(icon)
         .size(px(16.0 * s))
@@ -329,7 +331,7 @@ fn pill_glyph(icon: &'static str, color: gpui::Hsla, s: f32) -> AnyElement {
 /// An icon-only pill, the label pills' height: built the way they are (a 16px line, 2px above and
 /// below, a 1px edge), so the two never drift apart under a zoom. Its width is fixed, so the ? pill
 /// swapping its glyph for a count never moves the pills beside it.
-fn icon_pill(
+pub(super) fn icon_pill(
     id: &'static str,
     content: AnyElement,
     p: &ChatAppearance,
@@ -783,6 +785,9 @@ impl NativeChatView {
         if id == super::boosts::BOOST_PREVIEW {
             return self.boost_preview_height();
         }
+        if id == super::sent_history::SENT_MENU {
+            return self.sent_history_menu_height();
+        }
         if id == "filesLinks" {
             let scale = ChatAppearance::current(&self.snapshot).scale;
             let pane = f32::from(self.bounds.get().size.height) / scale;
@@ -819,6 +824,7 @@ impl NativeChatView {
             super::where_pill::WHERE_MENU => self.where_menu_body(p, cx),
             super::boosts::BOOST_MENU => self.boost_menu_body(p, window, cx),
             super::boosts::BOOST_PREVIEW => self.boost_preview_body(p),
+            super::sent_history::SENT_MENU => self.sent_history_menu_body(p, window, cx),
             super::coordinator_board::BOARD_MENU => self.coordinator_board_menu_body(p, cx),
             super::coordinator_board::BOARD_COLUMNS_MENU => self.board_columns_body(p, cx),
             super::session_details::SESSION_DETAILS_MENU => {
@@ -862,6 +868,9 @@ impl NativeChatView {
         }
         if trigger == super::boosts::BOOST_TRIGGER {
             self.boost_preview = None;
+        }
+        if trigger == super::sent_history::SENT_TRIGGER {
+            self.sent_history_menu_closed(cx);
         }
     }
 }

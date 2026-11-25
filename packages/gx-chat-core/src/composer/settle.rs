@@ -287,6 +287,7 @@ pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Ve
                 .or_else(|| settle_note_read(state, *request_id, outcome))
                 .or_else(|| crate::composer::catch_up::settle(state, *request_id, outcome))
                 .or_else(|| crate::composer::files_links::settle(state, *request_id, outcome))
+                .or_else(|| crate::composer::sent_history::settle(state, *request_id, outcome))
                 .or_else(|| settle_attachment_import(state, context, *request_id, outcome))
                 .or_else(|| settle_draft_push(state, *request_id, outcome));
             match claimed {
@@ -325,6 +326,7 @@ pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Ve
     effects.extend(request_catalogs(state));
     effects.extend(crate::composer::draft_sync::settle(state, context));
     effects.extend(crate::composer::files_links::advance_jump(state, context));
+    effects.extend(crate::composer::sent_history::advance_jump(state, context));
     effects.extend(crate::questions::resource_modal::advance(state, context));
     // The two latches `NativeComposerChrome.projection` sets on the way to its answer. They live
     // here because `document()` holds `&ChatState` and could only set them on a clone.

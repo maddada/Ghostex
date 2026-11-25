@@ -296,6 +296,13 @@ action_kinds! {
     FilesLinksFilter => "filesLinksFilter",
     FilesLinksShowAll => "filesLinksShowAll",
     FilesLinksJump => "filesLinksJump",
+    // History (`composer/sent_history.rs`).
+    SentHistory => "sentHistory",
+    SentHistoryClose => "sentHistoryClose",
+    SentHistoryFilter => "sentHistoryFilter",
+    SentHistoryKind => "sentHistoryKind",
+    SentHistoryMore => "sentHistoryMore",
+    SentHistoryJump => "sentHistoryJump",
     MarkdownSaveOpen => "markdownSaveOpen",
     MarkdownSaveFolder => "markdownSaveFolder",
     MarkdownSaveName => "markdownSaveName",

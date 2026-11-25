@@ -260,6 +260,21 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
             string_param(action, "messageId"),
             action.param("timestamp").and_then(Value::as_i64),
         ),
+        ActionKind::SentHistory => crate::composer::sent_history::toggle(state),
+        ActionKind::SentHistoryClose => crate::composer::sent_history::close(state),
+        ActionKind::SentHistoryFilter => {
+            crate::composer::sent_history::set_query(state, text_param(action))
+        }
+        ActionKind::SentHistoryKind => {
+            crate::composer::sent_history::set_filter(state, string_param(action, "filter"))
+        }
+        ActionKind::SentHistoryMore => crate::composer::sent_history::more(state),
+        ActionKind::SentHistoryJump => crate::composer::sent_history::jump(
+            state,
+            context,
+            string_param(action, "messageId"),
+            action.param("timestamp").and_then(Value::as_i64),
+        ),
         ActionKind::SendKey => {
             crate::composer::send::send_key(
                 state,

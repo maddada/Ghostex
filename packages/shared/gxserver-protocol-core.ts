@@ -233,6 +233,7 @@ export type GxserverEndpointPath =
   | '/api/readSessionChatReport'
   | '/api/catchUpSession'
   | '/api/readSessionFilesLinks'
+  | '/api/readSessionChatSent'
   | '/api/readSessionChatSkills'
   | '/api/readSessionChatFiles'
   | '/api/sendSessionChatMessage'

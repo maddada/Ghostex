@@ -210,6 +210,9 @@ pub struct Document {
     /// The Files and links card. Family d.
     #[serde(default)]
     pub files_links: crate::composer::files_links::FilesLinks,
+    /// The History pill and its list of sent messages. Family d.
+    #[serde(default)]
+    pub sent_history: crate::composer::sent_history::SentHistory,
     pub interaction: Interaction,
     /// The toast in the scroll-to-bottom pill's place: "Press Escape again to interrupt" while a
     /// first Escape waits, then the red "Agent was interrupted". Family d.

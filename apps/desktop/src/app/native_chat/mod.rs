@@ -57,6 +57,7 @@ mod error_card;
 mod file_actions;
 mod file_change_card;
 mod files_links;
+mod sent_history;
 mod first_message_card;
 mod focus;
 pub(crate) mod fonts;
