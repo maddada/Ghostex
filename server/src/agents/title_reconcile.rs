@@ -194,7 +194,7 @@ pub(crate) fn reconcile_agent_metadata_title(
     // A Native agent's own title must not overwrite a name the user set by hand in Ghostex
     // (same rule Terminal-based OpenCode follows in `state_update.rs`).
     if !user_requested_title
-        && metadata_title.provider == "acp-state"
+        && (metadata_title.provider == "acp-state" || crate::acp::session_is_acp(&session))
         && session.get("title").and_then(Value::as_str) != Some(metadata_title.title.as_str())
         && (read_text_from_map(&runtime_settings, "titleSource").as_deref() == Some("user")
             || (read_text_from_map(&runtime_settings, "pendingAgentTitleRequestTitleSource")

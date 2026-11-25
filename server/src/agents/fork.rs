@@ -914,6 +914,36 @@ pub(crate) fn request_session_rename(
         startup_text: None,
     });
     if is_agent_associated(&session, &identity) {
+        if crate::acp::session_is_acp(&session) {
+            // Native (`acp-host`) sessions have no interactive CLI reading `/rename` from the
+            // zmx PTY. Persist the title directly in Ghostex's session record so it takes effect
+            // immediately and stays protected from agent-metadata overwrites in `title_reconcile`.
+            let mut runtime_settings = object_field(&session, "runtimeSettings");
+            runtime_settings.insert(
+                "titleSource".to_string(),
+                json!(read_text(params, "titleSource").unwrap_or_else(|| "user".to_string())),
+            );
+            runtime_settings.remove("pendingAgentTitleRequestRequestedAt");
+            runtime_settings.remove("pendingAgentTitleRequestStatus");
+            runtime_settings.remove("pendingAgentTitleRequestTitle");
+            runtime_settings.remove("pendingAgentTitleRequestTitleSource");
+            runtime_settings.remove("pendingAgentTitleRequestFailedAt");
+            let mut update = lifecycle_update(lifecycle);
+            update.insert(
+                "runtimeSettings".to_string(),
+                Value::Object(runtime_settings),
+            );
+            update.insert("title".to_string(), Value::String(title));
+            let updated = repository.update_session(&update)?;
+            return Ok(json!({
+                "changed": true,
+                "pendingAgentMetadata": false,
+                "projection": project_session_title_projection(&updated),
+                "reason": "acp-local-title-applied",
+                "session": updated,
+                "shouldSendAgentRenameCommand": false,
+            }));
+        }
         if identity
             .agent_id
             .as_deref()
