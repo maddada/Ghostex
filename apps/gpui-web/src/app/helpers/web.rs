@@ -106,6 +106,9 @@ pub(crate) const WINDOW_GLASS_MENU_ALPHA: f32 = 0.78;
 /// A menu's frosted blur samples the desktop behind its native window; a canvas menu has none.
 pub(crate) fn apply_frosted_menu_blur(_window: &gpui::Window) {}
 
+/// The page window's ⋯ menu's stronger blur; the page draws no page window.
+pub(crate) fn apply_raised_menu_blur(_window: &gpui::Window) {}
+
 /// A page has no window glass, so a tooltip bubble has no blur to set.
 pub(crate) fn apply_frosted_tooltip_blur(_window: &gpui::Window) {}
 

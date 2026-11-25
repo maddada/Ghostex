@@ -56,7 +56,9 @@ fn page_id_param(body: &Value) -> Result<String, DomainStateError> {
 /// and how many it asks (`page_question_counts`, null for a page with no questions; added
 /// 2026-11-11 for the dock's page rows); `projectId` and `sessionId` the session that published
 /// it, null for none (added 2026-11-13 for the page window's Snooze); `starred` whether the page
-/// or a version of its file is starred in that session's chat, null without one (added 2026-11-16).
+/// or a version of its file is starred in that session's chat, null without one (added 2026-11-16);
+/// `createdAtMs` when it was published, in milliseconds since the epoch, null when its record has no
+/// time (added 2026-11-25 for the page window's ⋯ menu).
 pub(crate) fn handle_read_http(
     state: &AppState,
     endpoint_path: String,
@@ -98,6 +100,12 @@ pub(crate) fn handle_read_http(
         }
         _ => None,
     };
+    let created_at_ms = record
+        .as_ref()
+        .and_then(|record| record.get("createdAt"))
+        .and_then(Value::as_str)
+        .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+        .map(|at| at.timestamp_millis());
     routed_json(
         Some(endpoint_path),
         StatusCode::OK,
@@ -113,6 +121,7 @@ pub(crate) fn handle_read_http(
                 "projectId": project_id,
                 "sessionId": session_id,
                 "starred": starred,
+                "createdAtMs": created_at_ms,
             }),
         ),
     )

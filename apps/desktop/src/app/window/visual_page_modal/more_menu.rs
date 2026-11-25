@@ -4,9 +4,9 @@
 //!
 //! The page is a native CEF view that nothing drawn in this window can sit above, so the menu
 //! always opens in a host window of its own (`FrostedHostKind::PageWindowMenu`) just under the ⋯
-//! button: frosted like the sidebar's menus under window glass, the sidebar menu's solid fill
-//! otherwise. Its rows are the sessions sidebar's (34px rows, 6px inset, 8px corners, 16px icons,
-//! the shared popup menu colours), as the coordinator board's card menu builds them.
+//! button: raised glass under window glass, a solid fill otherwise, with the page's title on top
+//! and its rows in labelled sections (`more_menu_panel.rs`, CDXC:SessionChat 2026-11-25). On macOS
+//! the host window casts the menu's soft shadow (`frosted_host.rs`).
 //!
 //! CDXC:SessionChat 2026-11-13 DECISION:
 //! User: "in the desktop's floating Ghostex page window, add a ⋯ (three dots) button next to the close and minimize buttons, and move Export page, Import answers and Open externally (open in browser) into its menu instead of separate buttons. Same menu look as other Ghostex ⋯ menus." Supersedes the round Open in browser button of the 2026-11-04 DECISION in visual_page_modal.rs and the round Export button added the same day as exported pages (server/src/visual_pages/exported.rs).
@@ -15,11 +15,11 @@
 //! SEE-ALSO: apps/desktop/src/app/native_sidebar/menus.rs (the menu look), apps/desktop/src/app/native_chat/coordinator_board.rs `board_card_menu_panel` (the same rows in a host window), server/src/visual_pages/import.rs (Import answers).
 
 use super::more_menu_panel::{
-    MENU_WIDTH, MenuInk, SNOOZE_HOURS, SUBMENU_WIDTH, height, menu_rows, panel, snooze_rows,
+    MENU_WIDTH, MenuInk, MenuLine, SNOOZE_HOURS, SUBMENU_WIDTH, first_row_top, height, menu_lines,
+    panel, snooze_lines,
 };
 use super::{GpuiVisualPageModalWindow, VisualPageModalCommand};
 use crate::app::gx_store::gx_rpc;
-use crate::app::native_sidebar::SIDEBAR_MENU_ROW_HEIGHT;
 use crate::app::window::frosted_host::{
     FrostedHostKind, frosted_hosting_active, hide_frosted_host, show_frosted_host,
 };
@@ -43,7 +43,7 @@ enum MoreAction {
     Star,
 }
 
-/// The menu's actions, in the order of the panel's rows (`more_menu_panel::menu_rows`): Snooze
+/// The menu's actions, in the order of the panel's rows (`more_menu_panel::menu_lines`): Snooze
 /// first while the page waits for answers.
 fn actions(snooze: bool, star: Option<bool>) -> Vec<MoreAction> {
     let mut actions = Vec::with_capacity(6);
@@ -83,6 +83,26 @@ impl GpuiVisualPageModalWindow {
         self.page_session.as_ref().and(self.page_starred)
     }
 
+    /// The menu's lines for this page as it is now.
+    fn more_menu_lines(&self) -> Vec<MenuLine> {
+        let age = self.page_created_ms.map(|created| {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(created, |now| now.as_millis() as i64);
+            match ghostex_gx_chat_core::transcript::message_time::age_label(now, created).as_str() {
+                "now" => "just now".to_string(),
+                "yesterday" => "yesterday".to_string(),
+                label => format!("{label} ago"),
+            }
+        });
+        menu_lines(
+            &self.title,
+            age.as_deref(),
+            self.can_snooze(),
+            self.star_state(),
+        )
+    }
+
     /// Draws the open menu again (its Star page row changed).
     pub(super) fn refresh_more_menu(&mut self, cx: &mut Context<Self>) {
         if self.more_menu.is_some() {
@@ -100,11 +120,11 @@ impl GpuiVisualPageModalWindow {
         let Some(button) = self.more_button.get() else {
             return;
         };
-        let rows = menu_rows(self.can_snooze(), self.star_state()).len();
+        let lines = self.more_menu_lines();
         let left = (button.right() - px(MENU_WIDTH)).max(px(8.0));
         let frame = Bounds::new(
             point(left, button.bottom() + px(MENU_GAP)),
-            size(px(MENU_WIDTH), px(height(rows, SIDEBAR_MENU_ROW_HEIGHT))),
+            size(px(MENU_WIDTH), px(height(&lines))),
         );
         self.more_menu = Some(OpenMoreMenu {
             frame,
@@ -122,6 +142,8 @@ impl GpuiVisualPageModalWindow {
         };
         let snooze = self.can_snooze();
         let star = self.star_state();
+        let lines = self.more_menu_lines();
+        let snooze_top = first_row_top(&lines);
         let light = self.glass.light;
         let view = cx.entity();
         show_frosted_host(
@@ -134,7 +156,7 @@ impl GpuiVisualPageModalWindow {
                 panel(
                     "visual-page-more-menu",
                     menu_ink(light),
-                    menu_rows(snooze, star),
+                    lines.clone(),
                     menu.snooze.then_some(0),
                     Rc::new(move |index, cx| {
                         let Some(action) = actions(snooze, star).get(index).copied() else {
@@ -154,16 +176,14 @@ impl GpuiVisualPageModalWindow {
         // Beside the menu's Snooze row, on the side toward the page: the menu sits at the window's
         // right, so its lengths open to its left.
         // Snooze is the menu's first row: the lengths' first row lines up with it.
-        let row_top = menu.frame.top() + px(1.0);
+        let sub_lines = snooze_lines();
+        let row_top = menu.frame.top() + px(snooze_top - first_row_top(&sub_lines));
         let sub = Bounds::new(
             point(
                 (menu.frame.left() - px(SUBMENU_WIDTH + SUBMENU_GAP)).max(px(8.0)),
                 row_top,
             ),
-            size(
-                px(SUBMENU_WIDTH),
-                px(height(SNOOZE_HOURS.len(), SIDEBAR_MENU_ROW_HEIGHT)),
-            ),
+            size(px(SUBMENU_WIDTH), px(height(&sub_lines))),
         );
         let view = cx.entity();
         show_frosted_host(
@@ -176,7 +196,7 @@ impl GpuiVisualPageModalWindow {
                 panel(
                     "visual-page-snooze-menu",
                     menu_ink(light),
-                    snooze_rows(),
+                    sub_lines.clone(),
                     None,
                     Rc::new(move |index, cx| {
                         let Some((hours, _)) = SNOOZE_HOURS.get(index).copied() else {
@@ -421,38 +441,44 @@ impl GpuiVisualPageModalWindow {
     }
 }
 
-/// The menus' colours: the page's own light-gray glass, as the window's round controls wear it
-/// (`ControlGlass` in visual_page_modal.rs), white glass in light mode; solid without window glass.
+/// The menus' colours: raised grey glass, white glass in light mode; solid without window glass.
 ///
 /// CDXC:SessionChat 2026-11-13 DECISION:
-/// User, of the ⋯ menu and its Snooze lengths drawn in the app's dark menu fill over the page's dusk: the user hates black on the glass design, so both take a frosted light-gray glass (white in light mode) like the page's own controls. Same day, "put snooze as top option here": Snooze is the menu's first row (`more_menu_panel::menu_rows`).
+/// User, of the ⋯ menu and its Snooze lengths drawn in the app's dark menu fill over the page's dusk: the user hates black on the glass design, so both take a frosted light-gray glass (white in light mode) like the page's own controls. Same day, "put snooze as top option here": Snooze is the menu's first row (`more_menu_panel::menu_lines`).
+///
+/// CDXC:SessionChat 2026-11-25 DECISION:
+/// User, picking option A of the menu mockup: "A (but bit darker bg in darkmode pls)". Light mode is A's white glass at 70%; dark mode is a step darker than A's grey glass (#3A3A40 at 60%): #2C2C32 at 70%, still grey glass and well above the app's #171717 pop-ups.
 fn menu_ink(light: bool) -> MenuInk {
     let frosted = frosted_hosting_active();
     if light {
         MenuInk {
             foreground: gpui::rgb(0x18181b).into(),
             muted: gpui::rgb(0x71717b).into(),
-            hover: gpui::rgba(0x0000000f).into(),
-            border: gpui::rgba(0x4343432e).into(),
+            icon: gpui::rgb(0x3f3f46).into(),
+            hover: gpui::rgba(0x0000000e).into(),
+            border: gpui::rgba(0x00000014).into(),
+            line: gpui::rgba(0x00000014).into(),
+            top_edge: gpui::rgba(0xffffffe6).into(),
             fill: if frosted {
-                gpui::rgba(0xffffffd6).into()
+                gpui::rgba(0xffffffb3).into()
             } else {
                 gpui::rgb(0xf7f7f8).into()
             },
-            row_height: SIDEBAR_MENU_ROW_HEIGHT,
         }
     } else {
         MenuInk {
             foreground: gpui::rgb(0xf4f4f5).into(),
-            muted: gpui::rgb(0xb4b4bb).into(),
-            hover: gpui::rgba(0xffffff1c).into(),
-            border: gpui::rgba(0xffffff2e).into(),
+            muted: gpui::rgb(0xa6a6ae).into(),
+            icon: gpui::rgb(0xd4d4d8).into(),
+            hover: gpui::rgba(0xffffff1a).into(),
+            border: gpui::rgba(0xffffff24).into(),
+            line: gpui::rgba(0xffffff17).into(),
+            top_edge: gpui::rgba(0xffffff17).into(),
             fill: if frosted {
-                gpui::rgba(0x52525acc).into()
+                gpui::rgba(0x2c2c32b3).into()
             } else {
-                gpui::rgb(0x4a4a50).into()
+                gpui::rgb(0x2c2c32).into()
             },
-            row_height: SIDEBAR_MENU_ROW_HEIGHT,
         }
     }
 }

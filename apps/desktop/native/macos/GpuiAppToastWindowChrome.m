@@ -469,6 +469,25 @@ void GhostexGpuiSetWindowIgnoresMouse(void *nativeView, bool ignores) {
   }
 }
 
+// Gives a pop-up window (whose chrome removal took its shadow away) a shadow, or takes it off, and
+// works its shape out again from what the window drew last (the page window's ⋯ menu,
+// frosted_host.rs `host_casts_shadow`).
+void GhostexGpuiSetWindowCastsShadow(void *nativeView, bool casts) {
+  @autoreleasepool {
+    if (nativeView == NULL) {
+      return;
+    }
+    NSWindow *window = ((__bridge NSView *)nativeView).window;
+    if (window == nil) {
+      return;
+    }
+    if (window.hasShadow != casts) {
+      window.hasShadow = casts;
+    }
+    [window invalidateShadow];
+  }
+}
+
 // Names a window so AppKit-side observers can tell it apart (the sidebar's outside-click monitor
 // in GpuiCefAppKitHooks.m recognises the frosted sidebar menu this way).
 void GhostexGpuiSetWindowIdentifier(void *nativeView, const char *identifier) {

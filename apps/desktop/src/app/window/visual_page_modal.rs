@@ -160,6 +160,9 @@ pub(crate) struct GpuiVisualPageModalWindow {
     /// Whether the page is starred in that session's chat (`readVisualPageSource`'s `starred`, a
     /// gxserver from 2026-11-16 on), for the menu's Star page; `None` until it says.
     page_starred: Option<bool>,
+    /// When the page was published, in milliseconds since the epoch (`readVisualPageSource`'s
+    /// `createdAtMs`, a gxserver from 2026-11-25 on), for the ⋯ menu's age; `None` until it says.
+    page_created_ms: Option<i64>,
     /// The press in another window counted last, so the same press is never counted twice.
     counted_press: Option<Instant>,
     /// The page's right-click menu, while it may still be open (`open_page_context_menu`).
@@ -272,6 +275,7 @@ impl GpuiVisualPageModalWindow {
             more_menu: None,
             page_session: None,
             page_starred: None,
+            page_created_ms: None,
             more_button: Rc::default(),
             refreshing: false,
             counted_press: None,
