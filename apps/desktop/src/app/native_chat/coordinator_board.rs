@@ -673,6 +673,57 @@ pub(crate) struct BoardFocus {
 /// How long a shown card keeps its ring.
 const FOCUS_RING_FOR: std::time::Duration = std::time::Duration::from_millis(2200);
 
+/// How long a jumped-to group's outline takes to blink twice (fade in and out, twice).
+///
+/// CDXC:Coordinators 2026-11-25 DECISION:
+/// User, of the Work panel opening at In progress from a status pill: "it's shifting the layout of
+/// the in progress please lets not do this ... i just want a quick white outline that blinks twice
+/// smoothly (fade in and out) on them". The tinted box with its padding is gone; a thin outline is
+/// drawn outside the group as an overlay, so nothing inside moves. The user took the slower speed
+/// (Q4951, about 1.8 s; "quick" was 1200) and "make the outline shifted 10px from left/right/bottom
+/// please so it's not hugging items so close" ([`GROUP_BLINK_ROOM`]). The phone's `GROUP_BLINK_MS`
+/// (CoordinatorBoard.tsx) matches.
+const GROUP_BLINK_FOR: std::time::Duration = std::time::Duration::from_millis(1800);
+
+/// How far the outline sits outside the group on the left, right and bottom (its top is the group's
+/// own, above the header line). The board's lists keep 10 pt of padding inside their scroll area
+/// (`render_coordinator_board_dock`, `coordinator_board_menu_body`), so the outline lands within it, never clipped.
+const GROUP_BLINK_ROOM: f32 = 10.0;
+
+/// The outline a jumped-to group blinks with: drawn [`GROUP_BLINK_ROOM`] outside the group's sides
+/// and bottom (absolute, so
+/// the group's own padding, margin, fill and border stay as they are), white in dark mode and near
+/// black in light mode, two smooth fades in and out over [`GROUP_BLINK_FOR`], then gone. Keyed by
+/// the jump's `seq`, so a second click on the same pill plays it again.
+fn group_blink_outline(id: &str, seq: u64, p: &ChatAppearance, s: f32) -> impl IntoElement {
+    use gpui::AnimationExt as _;
+    let color: gpui::Hsla = if p.light {
+        gpui::hsla(0.0, 0.0, 0.08, 1.0)
+    } else {
+        gpui::hsla(0.0, 0.0, 1.0, 1.0)
+    };
+    let room = px(-GROUP_BLINK_ROOM * s);
+    div()
+        .absolute()
+        .top_0()
+        .left(room)
+        .right(room)
+        .bottom(room)
+        .rounded(px(14.0 * s))
+        .border(px(1.5 * s))
+        .border_color(color)
+        .opacity(0.0)
+        .with_animation(
+            gpui::SharedString::from(format!("chat-board-group-blink:{id}:{seq}")),
+            gpui::Animation::new(GROUP_BLINK_FOR),
+            move |outline, delta| {
+                // sin² over two half-periods: 0 → 1 → 0 → 1 → 0, smooth at every turn.
+                let wave = (delta * std::f32::consts::TAU).sin();
+                outline.opacity(0.9 * wave * wave)
+            },
+        )
+}
+
 /// How long a row's first × click waits for the second, as the links list's ×
 /// (native_sidebar/links_list.rs) does.
 const REMOVE_ARMED_FOR: std::time::Duration = std::time::Duration::from_secs(3);
@@ -3388,12 +3439,8 @@ impl NativeChatView {
                 .rounded(px(10.0 * s))
                 .when_some(group_focus, |section, focus| {
                     section
-                        .border_1()
-                        .border_color(icon_color.opacity(if p.light { 0.45 } else { 0.50 }))
-                        .bg(icon_color.opacity(if p.light { 0.08 } else { 0.12 }))
-                        .px(px(4.0 * s))
-                        .py(px(2.0 * s))
                         .child(scroll_into_view(scroll.clone(), focus.tries.clone(), s))
+                        .child(group_blink_outline(&id, focus.seq, p, s))
                 })
                 .drag_over::<BoardCardDrag>(move |style, _, _, _| style.bg(drop_fill))
                 .on_drop(cx.listener(move |this, drag: &BoardCardDrag, _, cx| {
