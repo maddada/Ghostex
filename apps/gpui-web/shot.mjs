@@ -44,6 +44,20 @@ function chromeBinary() {
     }
     throw new Error('Install Chrome or Playwright Chromium to run GPUI web screenshots.');
   }
+  if (process.platform === 'linux') {
+    const cache = join(process.env.XDG_CACHE_HOME ?? join(homedir(), '.cache'), 'ms-playwright');
+    const builds = existsSync(cache) ? readdirSync(cache).filter((name) => /^chromium-\d+$/.test(name)).sort().reverse() : [];
+    for (const build of builds) {
+      for (const rel of ['chrome-linux/chrome', 'chrome-linux64/chrome']) {
+        const candidate = join(cache, build, rel);
+        if (existsSync(candidate)) return candidate;
+      }
+    }
+    for (const candidate of ['/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable']) {
+      if (existsSync(candidate)) return candidate;
+    }
+    throw new Error('Install Chromium, Google Chrome, or Playwright Chromium to run GPUI web screenshots.');
+  }
   const cache = join(homedir(), 'Library/Caches/ms-playwright');
   const builds = existsSync(cache) ? readdirSync(cache).filter((name) => /^chromium-\d+$/.test(name)).sort() : [];
   for (const build of builds.reverse()) {
@@ -62,8 +76,19 @@ const chrome = spawn(
     // Without these Chrome asks the macOS keychain for its "Chrome Safe Storage" key; where a sandbox blocks the keychain macOS shows a "Keychain Not Found" popup.
     '--use-mock-keychain',
     '--password-store=basic',
-    '--enable-unsafe-webgpu',
-    ...(process.platform === 'darwin' ? ['--use-angle=metal'] : []),
+    ...(process.platform === 'linux'
+      ? [
+          '--disable-webgpu',
+          '--disable-vulkan',
+          '--use-gl=angle',
+          '--use-angle=swiftshader',
+          '--enable-webgl',
+          '--ignore-gpu-blocklist',
+        ]
+      : [
+          '--enable-unsafe-webgpu',
+          ...(process.platform === 'darwin' ? ['--use-angle=metal'] : []),
+        ]),
     '--remote-debugging-port=0',
     `--user-data-dir=${profileDir}`,
     `--window-size=${width},${height}`,
