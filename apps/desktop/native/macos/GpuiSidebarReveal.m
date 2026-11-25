@@ -7,6 +7,8 @@
 
 void GhostexGpuiCEFRefreshSidebarPointerInside(void);
 void GhostexGpuiShowChildWindowAboveParent(NSWindow *child, NSWindow *parent);
+// The parent, or the one a drag took the window off (GpuiGhostexCapture.m).
+NSWindow *GhostexGpuiCarryingWindow(NSWindow *window);
 
 // CDXC:Sidebar 2026-09-09 DECISION:
 // User: the collapsed sessions sidebar should slide in fluidly from the left edge on hover and use the same animation in reverse when the pointer leaves.
@@ -433,7 +435,7 @@ static bool GhostexGpuiNativeRevealUpdate(void *rootPtr, void *popupPtr, bool en
   NSWindow *parent = root.window;
   GhostexGpuiSidebarReveal *state = objc_getAssociatedObject(popup, GhostexGpuiSidebarRevealKey);
   NSWindow *keyRoot = NSApp.keyWindow;
-  while (keyRoot.parentWindow) keyRoot = keyRoot.parentWindow;
+  while (GhostexGpuiCarryingWindow(keyRoot)) keyRoot = GhostexGpuiCarryingWindow(keyRoot);
   if (!enabled || !parent.visible || parent.miniaturized || !NSApp.active || keyRoot != parent) {
     [state hide];
     objc_setAssociatedObject(popup, GhostexGpuiSidebarRevealKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -564,7 +566,7 @@ int GhostexGpuiNativeSidebarRevealRequest(void *rootPtr, double width, double ti
   NSView *root = (__bridge NSView *)rootPtr;
   NSWindow *parent = root.window;
   NSWindow *keyRoot = NSApp.keyWindow;
-  while (keyRoot.parentWindow) keyRoot = keyRoot.parentWindow;
+  while (GhostexGpuiCarryingWindow(keyRoot)) keyRoot = GhostexGpuiCarryingWindow(keyRoot);
   if (!parent || !parent.visible || parent.miniaturized || !NSApp.active || keyRoot != parent) return 0;
   NSRect body = root.bounds;
   body.size.height = MAX(0, body.size.height - titlebarHeight);

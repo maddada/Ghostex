@@ -3,6 +3,7 @@
 #import <objc/runtime.h>
 
 extern void GhostexGpuiCEFFocusGpuiRootView(void *nativeView);
+extern NSWindow *GhostexGpuiCarryingWindow(NSWindow *window);
 extern void GhostexGpuiCEFFocusNativeView(void *nativeView);
 
 @interface GhostexUsageKeyboardFocus : NSObject
@@ -410,8 +411,9 @@ bool GhostexGpuiWindowIsAttachedTo(void *childNativeView, void *parentNativeView
     if (child == nil || parent == nil || child == parent) {
       return false;
     }
-    for (NSWindow *ancestor = child.parentWindow; ancestor != nil;
-         ancestor = ancestor.parentWindow) {
+    // A child dragged off its parent (GpuiGhostexCapture.m) is still carried by it.
+    for (NSWindow *ancestor = GhostexGpuiCarryingWindow(child); ancestor != nil;
+         ancestor = GhostexGpuiCarryingWindow(ancestor)) {
       if (ancestor == parent) {
         return true;
       }

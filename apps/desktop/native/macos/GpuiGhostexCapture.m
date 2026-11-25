@@ -11,6 +11,7 @@
 #import <AppKit/AppKit.h>
 #import <Carbon/Carbon.h>
 #import <CoreGraphics/CoreGraphics.h>
+#import <objc/runtime.h>
 
 extern void GhostexGpuiCaptureHotkeyPressed(uint32_t hotkey_id);
 
@@ -356,18 +357,61 @@ bool GhostexGpuiPrimaryMouseButtonDown(void) {
   return (NSEvent.pressedMouseButtons & 1) != 0;
 }
 
+/// Marks a window Ghostex put aside (`GhostexGpuiDetachChildWindow`), so the end of a drag that
+/// was still going leaves it off its parent.
+static char GhostexGpuiPutAsideKey;
+/// The parent a window dragged off it goes back to (`GhostexGpuiDetachChildWindowWhileDragged`).
+static char GhostexGpuiDragParentKey;
+
+@interface GhostexGpuiDragParent : NSObject
+@property(nonatomic, weak) NSWindow *window;
+@end
+@implementation GhostexGpuiDragParent
+@end
+
+static void GhostexGpuiSetDragParent(NSWindow *window, NSWindow *parent) {
+  GhostexGpuiDragParent *holder = nil;
+  if (parent) {
+    holder = [GhostexGpuiDragParent new];
+    holder.window = parent;
+  }
+  objc_setAssociatedObject(window, &GhostexGpuiDragParentKey, holder,
+                           OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+/// The window carrying `window`: its parent, or the parent a drag took it off until the drag ends,
+/// so what walks up to the main window (closing what a window carries, the sidebar reveal's key
+/// window check) still reaches it mid-drag.
+NSWindow *GhostexGpuiCarryingWindow(NSWindow *window) {
+  if (window == nil) {
+    return nil;
+  }
+  if (window.parentWindow) {
+    return window.parentWindow;
+  }
+  GhostexGpuiDragParent *holder =
+      objc_getAssociatedObject(window, &GhostexGpuiDragParentKey);
+  return holder.window;
+}
+
 /// Takes a child window off its parent, so ordering the parent front never shows it again while it
 /// is put aside (a hidden Ghostex page, app/visual_page_hidden.rs).
 void GhostexGpuiDetachChildWindow(void *native_view) {
   NSWindow *window = GhostexGpuiCaptureWindowOfView(native_view);
+  if (!window) {
+    return;
+  }
+  objc_setAssociatedObject(window, &GhostexGpuiPutAsideKey, @YES,
+                           OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  GhostexGpuiSetDragParent(window, nil);
   NSWindow *parent = window.parentWindow;
-  if (window && parent) {
+  if (parent) {
     [parent removeChildWindow:window];
   }
 }
 
 /// CDXC:AppModal 2026-11-25 WHY:
-/// User: "even with pilot closed popups and questions lag, its a ghostex bug". A child window dragged by its own band (the page window, a dock row's question) trailed the pointer, while the main window and a popped-out session, the same window-server drag without a parent, glided. The window comes off its parent for the drag and goes back on at its new place once the button is up, at the parent's level and above it as before, so it moves with the main window again. `performDrag(with:)` returns at once and a mouse-up may never reach the app, so the button is polled. A window hidden or attached again meanwhile (app/visual_page_hidden.rs) is left as it is.
+/// User: "even with pilot closed popups and questions lag, its a ghostex bug". A child window dragged by its own band (the page window, a dock row's question) trailed the pointer, while the main window and a popped-out session, the same window-server drag without a parent, glided. The window comes off its parent for the drag and goes back on at its new place once the button is up, at the parent's level and above it as before, so it moves with the main window again. `performDrag(with:)` returns at once and a mouse-up may never reach the app, so the button is polled. A window Ghostex put aside or attached again meanwhile (app/visual_page_hidden.rs) is left as it is; while the whole app is hidden the release waits for it to come back, since every window then reads as not visible. It goes back only onto a parent still on screen (not closed, not minimised), and until then `GhostexGpuiCarryingWindow` names that parent, so the window still counts as carried by it.
 /// Only the page window's and the dock question's bands ask for this (`child_window_drag_region`); every other drag region keeps the drag it always had. A parent in full screen keeps its child for the drag too: the child is in the parent's full-screen Space only as its child, so taking it off there could move it out of that Space.
 void GhostexGpuiDetachChildWindowWhileDragged(void *native_view) {
   NSWindow *window = GhostexGpuiCaptureWindowOfView(native_view);
@@ -375,6 +419,8 @@ void GhostexGpuiDetachChildWindowWhileDragged(void *native_view) {
   if (!window || !parent || (parent.styleMask & NSWindowStyleMaskFullScreen) != 0) {
     return;
   }
+  objc_setAssociatedObject(window, &GhostexGpuiPutAsideKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  GhostexGpuiSetDragParent(window, parent);
   [parent removeChildWindow:window];
   __weak NSWindow *weakWindow = window;
   __weak NSWindow *weakParent = parent;
@@ -382,13 +428,22 @@ void GhostexGpuiDetachChildWindowWhileDragged(void *native_view) {
       timerWithTimeInterval:0.03
                     repeats:YES
                       block:^(NSTimer *poll) {
-                        if ((NSEvent.pressedMouseButtons & 1) != 0) {
+                        // A hidden app reports every window as not visible: wait for it to come
+                        // back rather than read that as the window put aside.
+                        if ((NSEvent.pressedMouseButtons & 1) != 0 || NSApp.isHidden) {
                           return;
                         }
                         [poll invalidate];
                         NSWindow *child = weakWindow;
                         NSWindow *owner = weakParent;
-                        if (child && owner && child.isVisible && child.parentWindow == nil) {
+                        if (!child) {
+                          return;
+                        }
+                        GhostexGpuiSetDragParent(child, nil);
+                        bool putAside =
+                            objc_getAssociatedObject(child, &GhostexGpuiPutAsideKey) != nil;
+                        if (owner && owner.isVisible && !owner.isMiniaturized && child.isVisible &&
+                            !putAside && child.parentWindow == nil) {
                           [owner addChildWindow:child ordered:NSWindowAbove];
                         }
                       }];

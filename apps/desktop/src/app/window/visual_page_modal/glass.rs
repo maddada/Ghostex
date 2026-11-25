@@ -122,6 +122,12 @@ impl GpuiVisualPageModalWindow {
         }));
     }
 
+    /// Brings a page shown again up to date at once (app/visual_page_hidden.rs): the glass check
+    /// skips it while it is hidden.
+    pub(crate) fn refresh_page_glass(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.sync_page_glass(true, window, cx);
+    }
+
     /// `keep`: the look also goes into the documents the page loads later (a reload, Refresh);
     /// otherwise only into the current one.
     fn sync_page_glass(&mut self, keep: bool, window: &mut Window, cx: &mut Context<Self>) {

@@ -118,12 +118,16 @@ impl GhostexGpuiApp {
         // It was taken off the main window when hidden (`detach_from_parent`); it moves with the
         // main window again.
         let main_window_native_view = self.parent_ns_view;
-        let _ = page.window.update(cx, |_, window, _| {
+        let view = page.view.clone();
+        let _ = page.window.update(cx, |_, window, cx| {
             crate::app::window::attach_gpui_app_modal_window_to_main_window(
                 window,
                 main_window_native_view,
             );
             window.activate_window();
+            // A hidden page skips the glass check, so a theme, tint or wallpaper changed meanwhile
+            // reaches it now rather than on the next check.
+            view.update(cx, |view, cx| view.refresh_page_glass(window, cx));
         });
         self.native_app_modal = Some(NativeAppModal {
             kind: GpuiAppModalKind::VisualPage,

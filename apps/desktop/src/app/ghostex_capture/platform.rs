@@ -222,14 +222,10 @@ pub(crate) fn detach_from_parent(native: NativeWindow) {
 
 /// Takes a child window off its parent for a drag of its own and puts it back once the mouse
 /// button is up (CDXC:AppModal 2026-11-25 in GpuiGhostexCapture.m). Nothing for a window without
-/// a parent, or elsewhere.
+/// a parent. macOS only, as its one caller (`child_window_drag_region`) is.
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 pub(crate) fn detach_from_parent_while_dragged(native: NativeWindow) {
-    #[cfg(target_os = "macos")]
-    unsafe {
-        GhostexGpuiDetachChildWindowWhileDragged(native as *mut std::ffi::c_void)
-    };
-    #[cfg(not(target_os = "macos"))]
-    let _ = native;
+    unsafe { GhostexGpuiDetachChildWindowWhileDragged(native as *mut std::ffi::c_void) };
 }
 
 /// Keeps an ordinary window above other apps' windows while `on_top`, or puts it back among them.
