@@ -86,6 +86,17 @@ pub(crate) fn gpui_finish_desktop_control_setup(
 }
 
 pub(crate) fn gpui_repair_ghostex_cli_commands() -> Result<String, String> {
+    gpui_repair_ghostex_cli(false)
+}
+
+/// Settings > Integrations' Repair: the startup repair plus, when the launchers sit in
+/// ~/.local/bin off PATH, the PATH line written into the user's shell startup file (CDXC:Cli
+/// 2026-11-25 in packages/paths/src/shell_path_line.rs). Startup never edits shell files.
+pub(crate) fn gpui_repair_ghostex_cli_from_settings() -> Result<String, String> {
+    gpui_repair_ghostex_cli(true)
+}
+
+fn gpui_repair_ghostex_cli(add_path_line: bool) -> Result<String, String> {
     if gpui_uses_isolated_storage() {
         return Err("This isolated app does not replace the shared ghostex or gx commands. Use cargo xtask gx-isolated from its checkout.".to_string());
     }
@@ -119,11 +130,13 @@ pub(crate) fn gpui_repair_ghostex_cli_commands() -> Result<String, String> {
 
     let gx_result =
         gpui_install_ghostex_cli_command("gx", &cli_binary_path, &cli_dir, &install_dirs);
-    let path_hint = gpui_cli_user_bin_path_hint(
-        &gpui_home_dir().join(".local/bin"),
-        &path_entries,
-        &gpui_home_dir(),
-    )
+    let home = gpui_home_dir();
+    let user_bin = home.join(".local/bin");
+    let path_hint = if add_path_line && gpui_cli_user_bin_off_path(&user_bin, &path_entries) {
+        Some(gpui_add_cli_folder_to_shell_path(&home))
+    } else {
+        gpui_cli_user_bin_path_hint(&user_bin, &path_entries, &home)
+    }
     .map(|hint| format!(" {hint}"))
     .unwrap_or_default();
     match gx_result {
@@ -148,26 +161,91 @@ pub(crate) fn gpui_repair_ghostex_cli_commands() -> Result<String, String> {
 /// a terminal outside Ghostex still answered "command not found". When the launchers are there and
 /// the folder is not on PATH, the link's result says so and gives the line to add. Windows keeps
 /// its own PATH handling.
+/// CDXC:Cli 2026-11-25 WHY: the app's own PATH is the one the desktop session gave it, which never
+/// read the shell's startup file, so a folder that file adds counts as on PATH for terminals; else
+/// the row stayed amber after Repair added the line.
 pub(crate) fn gpui_cli_user_bin_path_hint(
     user_bin: &Path,
     path_entries: &[PathBuf],
     home: &Path,
 ) -> Option<String> {
-    if cfg!(windows) || path_entries.iter().any(|entry| entry == user_bin) {
+    if !gpui_cli_user_bin_off_path(user_bin, path_entries) {
         return None;
     }
-    let launcher = user_bin.join(gpui_cli_wrapper_name("ghostex"));
-    if !gpui_path_exists_or_is_symlink(&launcher) {
+    let fix = gpui_cli_path_fix_in(std::env::var("SHELL").ok().as_deref(), home);
+    if fix.in_startup_file {
         return None;
     }
-    let shown = user_bin
-        .strip_prefix(home)
-        .map(|rest| format!("~/{}", rest.to_string_lossy()))
-        .unwrap_or_else(|_| gpui_path_string(user_bin));
     Some(format!(
-        "{shown} is not on your PATH, so terminals outside Ghostex will not find ghostex or gx. {}",
-        gpui_cli_path_fix(std::env::var("SHELL").ok().as_deref()).instruction()
+        "{} is not on your PATH, so terminals outside Ghostex will not find ghostex or gx. {}",
+        ghostex_paths::shell_path_line::shown_path(user_bin, home),
+        fix.instruction()
     ))
+}
+
+/// True when Ghostex's `ghostex` launcher is in `user_bin` and that folder is not on the app's PATH.
+pub(crate) fn gpui_cli_user_bin_off_path(user_bin: &Path, path_entries: &[PathBuf]) -> bool {
+    !cfg!(windows)
+        && !path_entries.iter().any(|entry| entry == user_bin)
+        && gpui_path_exists_or_is_symlink(&user_bin.join(gpui_cli_wrapper_name("ghostex")))
+}
+
+/// True when the launchers sit in ~/.local/bin off the app's PATH but the shell's startup file
+/// adds that folder, so new terminals find them.
+pub(crate) fn gpui_cli_user_bin_added_by_startup_file(home: &Path) -> bool {
+    gpui_cli_user_bin_off_path(&home.join(".local/bin"), &gpui_cli_path_entries())
+        && gpui_cli_path_fix_in(std::env::var("SHELL").ok().as_deref(), home).in_startup_file
+}
+
+/// Asks gxserver to write the PATH line into the user's shell startup file, and says what it did,
+/// keeping the line in the text for people who would rather add it by hand.
+fn gpui_add_cli_folder_to_shell_path(home: &Path) -> String {
+    let shell = std::env::var("SHELL").ok();
+    let fix = gpui_cli_path_fix_in(shell.as_deref(), home);
+    let manual = format!(
+        "~/.local/bin is not on your PATH, so terminals outside Ghostex will not find ghostex or gx. {}",
+        fix.instruction()
+    );
+    if !fix.repairable {
+        return manual;
+    }
+    let answer = gpui_gxserver_rpc_result_waiting_out_restart(
+        "/api/machineIntegrations",
+        &serde_json::json!({
+            "action": "addCliFolderToPath",
+            "shell": shell.as_deref().filter(|shell| !shell.trim().is_empty()).unwrap_or("sh"),
+        }),
+        Duration::from_secs(20),
+    );
+    let files = match answer {
+        Ok(answer) => answer
+            .get("files")
+            .and_then(serde_json::Value::as_array)
+            .cloned()
+            .unwrap_or_default(),
+        Err(error) => {
+            return format!("Ghostex couldn't add ~/.local/bin to your PATH: {error} {manual}");
+        }
+    };
+    let named = |added: bool| {
+        files
+            .iter()
+            .filter(|file| file.get("added").and_then(serde_json::Value::as_bool) == Some(added))
+            .filter_map(|file| file.get("path").and_then(serde_json::Value::as_str))
+            .collect::<Vec<_>>()
+            .join(" and ")
+    };
+    let (added, already) = (named(true), named(false));
+    let line = &fix.command;
+    match (added.is_empty(), already.is_empty()) {
+        (false, _) => format!(
+            "Added ~/.local/bin to your PATH in {added} ({line}). Open a new terminal to use ghostex and gx."
+        ),
+        (true, false) => format!(
+            "{already} already adds ~/.local/bin to your PATH. Open a new terminal to use ghostex and gx."
+        ),
+        (true, true) => manual,
+    }
 }
 
 /// The line that puts ~/.local/bin on PATH for the user's shell, and where it goes.
@@ -176,6 +254,12 @@ pub(crate) struct GpuiCliPathFix {
     pub(crate) command: String,
     /// Where it goes, in words: a shell file, or "run it once" for fish.
     pub(crate) place: String,
+    /// The startup files, as `~/…` (`and`-joined).
+    pub(crate) files: String,
+    /// Repair can write the line (a shell whose syntax Ghostex knows).
+    pub(crate) repairable: bool,
+    /// One of those files already adds the folder.
+    pub(crate) in_startup_file: bool,
 }
 
 impl GpuiCliPathFix {
@@ -186,22 +270,34 @@ impl GpuiCliPathFix {
 
 /// `shell` is `$SHELL`; its file name picks the profile the user's terminals read.
 pub(crate) fn gpui_cli_path_fix(shell: Option<&str>) -> GpuiCliPathFix {
-    let name = shell
-        .map(|shell| shell.rsplit('/').next().unwrap_or(shell).trim())
-        .unwrap_or_default();
-    let export = "export PATH=\"$HOME/.local/bin:$PATH\"".to_string();
-    let (command, place) = match name {
-        "fish" => (
-            "fish_add_path $HOME/.local/bin".to_string(),
-            "Run this once in fish (it keeps the folder for new terminals)",
-        ),
-        "zsh" => (export, "Add this line to ~/.zshrc"),
-        "bash" => (export, "Add this line to ~/.bashrc"),
-        _ => (export, "Add this line to ~/.profile"),
+    gpui_cli_path_fix_in(shell, &gpui_home_dir())
+}
+
+/// [`gpui_cli_path_fix`] for the startup files under `home`. A missing `$SHELL` reads as sh
+/// (~/.profile); a shell Ghostex does not write (tcsh, nu) gets the ~/.profile line to add by hand.
+pub(crate) fn gpui_cli_path_fix_in(shell: Option<&str>, home: &Path) -> GpuiCliPathFix {
+    use ghostex_paths::shell_path_line::{self as line, ShellKind};
+    let shell = shell.map(str::trim).filter(|shell| !shell.is_empty());
+    let known = ShellKind::from_shell(shell.unwrap_or("sh"));
+    let kind = known.unwrap_or(ShellKind::Posix);
+    let paths = line::startup_files(home, kind, cfg!(target_os = "macos"));
+    let files = paths
+        .iter()
+        .map(|path| line::shown_path(path, home))
+        .collect::<Vec<_>>()
+        .join(" and ");
+    let place = match kind {
+        ShellKind::Fish => {
+            "Run this once in fish (it keeps the folder for new terminals)".to_string()
+        }
+        _ => format!("Add this line to {files}"),
     };
     GpuiCliPathFix {
-        command,
-        place: place.to_string(),
+        command: kind.command().to_string(),
+        place,
+        files,
+        repairable: known.is_some(),
+        in_startup_file: paths.iter().any(|path| line::file_adds_local_bin(path)),
     }
 }
 

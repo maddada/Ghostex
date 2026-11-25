@@ -163,7 +163,7 @@ pub(crate) fn gpui_run_ghostex_cli_settings_action(
 ) -> GpuiGhostexCliActionResult {
     match action {
         GpuiGhostexCliSettingsAction::InstallGhostexCli => {
-            match gpui_repair_ghostex_cli_commands() {
+            match gpui_repair_ghostex_cli_from_settings() {
                 Ok(message) => GpuiGhostexCliActionResult::success(action, message),
                 Err(message) => GpuiGhostexCliActionResult::failure(action, message),
             }

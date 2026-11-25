@@ -8,6 +8,8 @@
 //! attention), `integrations` (permissions off), `integrations-permissions` (SpaceO needs a restart
 //! for Accessibility and lacks Screen Recording), `integrations-trycua-missing`,
 //! `integrations-update` (a Trycua update available), `integrations-skills` (some skills installed),
+//! `integrations-cli-path` (ghostex in ~/.local/bin off PATH, before Repair),
+//! `integrations-cli-path-repaired` (the same after Repair added the line to ~/.zshrc),
 //! `hotkeys-page` (the Hotkeys page), `hotkeys-recording` (a recorder listening),
 //! `hotkeys-duplicate` (two actions on one chord), `theme`, `theme-light-scheme`, `theme-more`
 //! (every More options open), `theme-custom` (Custom colours in both modes),
@@ -245,7 +247,9 @@ pub(super) fn open_message(state: &str) -> Option<Value> {
         | "integrations-permissions"
         | "integrations-trycua-missing"
         | "integrations-update"
-        | "integrations-skills" => "integrations",
+        | "integrations-skills"
+        | "integrations-cli-path"
+        | "integrations-cli-path-repaired" => "integrations",
         "hotkeys-page" | "hotkeys-recording" | "hotkeys-duplicate" => "hotkeys",
         state if state.starts_with("theme") => "theme",
         _ => return None,
@@ -291,7 +295,7 @@ fn ghostex_cli_status(state: &str) -> Value {
     };
     let update_available = state == "integrations-update";
     let skills = state == "integrations-skills";
-    json!({
+    let mut status = json!({
         "cliSkillInstalled": skills,
         "browserSkillInstalled": false,
         "computerUseSkillInstalled": skills,
@@ -329,7 +333,22 @@ fn ghostex_cli_status(state: &str) -> Value {
         "installed": true,
         "moveCodexSessionSkillInstalled": false,
         "type": "ghostexCliStatus"
-    })
+    });
+    // The ~/.local/bin-off-PATH row before and after Repair (cli_status.rs `gpui_cli_problem`).
+    if state == "integrations-cli-path" {
+        status["installed"] = json!(false);
+        status["ghostexPath"] = Value::Null;
+        status["cliProblem"] = json!(
+            "ghostex and gx are in ~/.local/bin, but that folder is not on your PATH, so terminals cannot find them. Press Repair to add this line to ~/.zshrc, or add it yourself, then open a new terminal."
+        );
+        status["cliFixCommand"] = json!("export PATH=\"$HOME/.local/bin:$PATH\"");
+    } else if state == "integrations-cli-path-repaired" {
+        status["ghostexPath"] = Value::Null;
+        status["detail"] = json!(
+            "Ghostex CLI linked. ghostex and gx now launch this GPUI app build where available. Added ~/.local/bin to your PATH in ~/.zshrc (export PATH=\"$HOME/.local/bin:$PATH\"). Open a new terminal to use ghostex and gx."
+        );
+    }
+    status
 }
 
 fn os_integration_status(state: &str) -> Value {

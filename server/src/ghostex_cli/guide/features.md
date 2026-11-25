@@ -8438,9 +8438,12 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   Linux; never into a mise, asdf or other version-manager shims folder,
   `~/.cargo/bin` or `~/.bun/bin`). When the command is not usable, Settings >
   Integrations > Ghostex CLI says why under Command line tool. When
-  `~/.local/bin` is not on your PATH it names the shell file to edit
-  (`~/.zshrc`, `~/.bashrc` or `~/.profile`) and shows the line with a copy
-  button: `export PATH="$HOME/.local/bin:$PATH"` (in fish,
+  `~/.local/bin` is not on your PATH, Repair adds the line that puts it there
+  to your shell's startup file (`~/.zshrc`; `~/.bashrc`, plus `~/.bash_profile`
+  on a Mac; `~/.config/fish/config.fish`; `~/.profile` for sh), once, marked
+  "Added by Ghostex", and says which file it changed; open a new terminal
+  afterwards. The row also shows the line with a copy button for adding it
+  yourself: `export PATH="$HOME/.local/bin:$PATH"` (in fish,
   `fish_add_path $HOME/.local/bin`, run once).
 
 ## More than one window

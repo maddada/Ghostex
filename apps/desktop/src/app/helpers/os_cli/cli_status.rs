@@ -137,10 +137,22 @@ pub(crate) fn gpui_cli_problem(
     }
     if local_bin_off_path {
         let fix = gpui_cli_path_fix(shell);
+        let by_hand = if fix.command.starts_with("fish") {
+            "run it once in fish"
+        } else {
+            "add it yourself"
+        };
+        let what_to_do = if fix.repairable {
+            format!(
+                "Press Repair to add this line to {}, or {by_hand}, then open a new terminal.",
+                fix.files
+            )
+        } else {
+            format!("{}, then open a new terminal.", fix.place)
+        };
         return Some(GpuiCliProblem {
             summary: format!(
-                "ghostex and gx are in ~/.local/bin, but that folder is not on your PATH, so terminals cannot find them. {}, then open a new terminal.",
-                fix.place
+                "ghostex and gx are in ~/.local/bin, but that folder is not on your PATH, so terminals cannot find them. {what_to_do}"
             ),
             fix: Some(fix),
         });
@@ -166,7 +178,12 @@ pub(crate) fn gpui_ghostex_cli_status_message_with_cua_update_check(
         Ok(probe) => (probe, None),
         Err(message) => (GpuiGhostexCliProbe::default(), Some(message)),
     };
-    let ghostex_usable = probe.ghostex_usable;
+    // A launcher in ~/.local/bin that the shell's startup file puts on PATH is ready for new
+    // terminals even though the app's own PATH lacks the folder (CDXC:Cli 2026-11-25).
+    let ghostex_usable = probe.ghostex_usable
+        || (!cfg!(target_os = "windows")
+            && probe.ghostex_path.is_none()
+            && gpui_cli_user_bin_added_by_startup_file(&gpui_home_dir()));
     let local_bin_off_path = !cfg!(target_os = "windows")
         && gpui_cli_user_bin_path_hint(
             &gpui_home_dir().join(".local/bin"),

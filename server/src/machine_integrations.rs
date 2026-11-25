@@ -1,6 +1,8 @@
 //! `POST /api/machineIntegrations`: the integrations of the machine this gxserver runs on, as
 //! Settings > Integrations shows them for a picked machine: its platform, the `ghostex` command its
-//! new terminals run, and every bundled agent skill with Install and Uninstall.
+//! new terminals run, and every bundled agent skill with Install and Uninstall. Its
+//! `addCliFolderToPath` action writes the line that puts ~/.local/bin on PATH into the user's
+//! shell startup file (Settings > Integrations' Repair).
 //!
 //! CDXC:RemoteMachines 2026-10-26 DECISION:
 //! User: "we need to show a dropdown at the top on agents page showing all the machines in settings and allowing us to update different remote machines. also same for integrations page (all should go through gxserver on that remote machine basically)". Agent CLIs and Tools already had gxserver APIs (`/api/agentCliMaintenance`, `/api/managedTools`); the skills and the CLI row were read and installed by the desktop app, so this endpoint gives every client the same answer from the machine's own gxserver. Installs run the code `ghostex <skill> install-skill` runs (`agent_skills::install_agent_skills` with the package source the CLI resolves); uninstall removes the canonical copy as the desktop's Uninstall does.
@@ -41,6 +43,16 @@ pub(crate) async fn dispatch(
             let skill = skill_param(params)?;
             uninstall_skill(paths.agent_config_home_dir(), &skill)?;
             status(paths).await
+        }
+        "addCliFolderToPath" => {
+            let home = paths.agent_config_home_dir().to_path_buf();
+            let shell = params
+                .get("shell")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            tokio::task::spawn_blocking(move || add_cli_folder_to_path(&home, shell.as_deref()))
+                .await
+                .map_err(internal)?
         }
         _ => Err(DomainStateError::bad_request(
             "Unknown integrations action.",
@@ -228,6 +240,42 @@ pub(crate) fn uninstall_skill(home: &Path, skill: &str) -> Result<(), DomainStat
         let _ = ghostex_agent_sync::fsx::remove_link(&link);
     }
     Ok(())
+}
+
+/// Appends the line that puts ~/.local/bin on PATH to the startup files of the user's shell
+/// (`shell` when a client names the one it sees, else the login shell), once each (CDXC:Cli
+/// 2026-11-25 in packages/paths/src/shell_path_line.rs). Answers each file with what was done, and
+/// the line itself for people who would rather add it by hand.
+fn add_cli_folder_to_path(home: &Path, shell: Option<&str>) -> Result<Value, DomainStateError> {
+    use ghostex_paths::shell_path_line::{self as line, AddOutcome, ShellKind};
+    if cfg!(windows) {
+        return Err(DomainStateError::bad_request(
+            "Windows keeps the ghostex command on PATH itself.",
+        ));
+    }
+    let shell = shell
+        .map(str::to_string)
+        .filter(|shell| !shell.trim().is_empty())
+        .unwrap_or_else(crate::platform::shell::user_login_shell_path);
+    let Some(kind) = ShellKind::from_shell(&shell) else {
+        return Err(DomainStateError::bad_request(format!(
+            "Ghostex can't add lines to {shell}'s startup file. Add ~/.local/bin to PATH in its settings."
+        )));
+    };
+    let mut files = Vec::new();
+    for path in line::startup_files(home, kind, cfg!(target_os = "macos")) {
+        let shown = line::shown_path(&path, home);
+        let outcome = line::add_line(&path, kind).map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("Ghostex couldn't add the line to {shown}: {error}"),
+        })?;
+        files.push(json!({
+            "path": shown,
+            "added": matches!(outcome, AddOutcome::Added { .. }),
+            "created": matches!(outcome, AddOutcome::Added { created: true }),
+        }));
+    }
+    Ok(json!({ "command": kind.command(), "files": files }))
 }
 
 fn internal(error: impl std::fmt::Display) -> DomainStateError {
