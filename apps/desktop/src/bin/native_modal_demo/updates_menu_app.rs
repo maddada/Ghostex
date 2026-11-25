@@ -83,6 +83,19 @@ pub(crate) mod helpers {
     /// The app's spinner rate (app/helpers/indicator_animation.rs).
     pub(crate) const INDICATOR_MAX_FPS: f32 = 30.0;
 
+    /// The demo paints no theme artwork, so Settings never draws its frosted glass over one
+    /// (app/helpers/window_art.rs `window_art_frosted` and `frosted_glass_backdrop`).
+    pub(crate) fn window_art_frosted() -> Option<()> {
+        None
+    }
+
+    pub(crate) fn frosted_glass_backdrop(
+        _radii: gpui::Corners<gpui::Pixels>,
+        _light: bool,
+    ) -> Option<gpui::AnyElement> {
+        None
+    }
+
     /// The app's theme roles (app/helpers/theme_roles.rs): backed by real catalog resolution so
     /// `native-modal-demo` can preview any built-in theme with its exact tokens.
     struct DemoRoles {
