@@ -22,7 +22,6 @@ pub(crate) struct GpuiRemoteReverseTunnel {
     pub(crate) peer_port: u16,
     /// The forward in the user's SSH master, taken back when the tunnel ends (GitHub #496).
     forward: Option<GpuiRemoteSharedSshForward>,
-    _askpass: Option<GpuiRemoteAskpassScript>,
 }
 
 impl GpuiRemoteReverseTunnel {
@@ -84,7 +83,6 @@ pub(crate) fn gpui_open_remote_reverse_tunnel(
             remote_port,
             peer_port,
             forward: GpuiRemoteSharedSshForward::new(config, "-R", forward.as_str()),
-            _askpass: None,
         });
     }
     let target_arguments = gpui_remote_ssh_target_arguments(config).ok()?;
@@ -126,13 +124,18 @@ pub(crate) fn gpui_open_remote_reverse_tunnel(
             }
         });
     match receiver.recv_timeout(REVERSE_TUNNEL_PORT_WAIT) {
-        Ok(remote_port) if matches!(child.try_wait(), Ok(None)) => Some(GpuiRemoteReverseTunnel {
-            child: Some(child),
-            remote_port,
-            peer_port,
-            forward: None,
-            _askpass: askpass,
-        }),
+        Ok(remote_port) if matches!(child.try_wait(), Ok(None)) => {
+            // ssh reported the forward, so it has signed in and never asks again: the
+            // saved-password helper stops answering now rather than at the end of its window
+            // (askpass_broker.rs).
+            drop(askpass);
+            Some(GpuiRemoteReverseTunnel {
+                child: Some(child),
+                remote_port,
+                peer_port,
+                forward: None,
+            })
+        }
         _ => {
             gpui_forget_remote_tunnel(child.id());
             let _ = child.kill();

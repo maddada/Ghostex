@@ -102,7 +102,7 @@ pub(crate) fn gpui_read_remote_ssh_password_from_keychain(
 }
 
 /// The saved password reaches ssh's askpass helper through a named pipe in a private (0700)
-/// folder: the helper reads one line from it with the shell's own `read`, and this app's broker
+/// folder: the helper reads the answer from it with `/bin/cat`, and this app's broker
 /// thread answers each read with the password from the system keyring (askpass_broker.rs).
 /// `serve` says how long: terminals until they close, tunnels and one-shot commands only while
 /// their ssh signs in.
@@ -110,8 +110,8 @@ pub(crate) fn gpui_read_remote_ssh_password_from_keychain(
 /// CDXC:RemoteMachines 2026-11-14 WHY: The helper used to read a Unix socket with `nc -U`, which
 /// Linux distributions don't install by default (Arch/Omarchy has no `nc` at all), so a computer
 /// added through Easy Connect, which signs in with its saved SSH password, failed with "requires
-/// netcat-openbsd" until the user installed it by hand. A pipe needs no program at all, on macOS
-/// and on every Linux, with the same access rule (only this user can open the folder) and
+/// netcat-openbsd" until the user installed it by hand. A pipe needs only `cat`, on macOS and on
+/// every Linux, with the same access rule (only this user can open the folder) and
 /// nothing written to disk. Don't bring back a helper that needs a program the system may lack.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) fn gpui_remote_ssh_askpass_script(

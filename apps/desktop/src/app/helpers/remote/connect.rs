@@ -525,6 +525,12 @@ pub(crate) const GPUI_REMOTE_PACKAGE_INCOMPLETE_MESSAGE: &str = "The gxserver pa
 pub(crate) const GPUI_REMOTE_NO_SAVED_PASSWORD_MESSAGE: &str = "The machine refused the login: no SSH password is saved for it, and it accepted no SSH key from this computer. Enter its SSH password in Settings > Remote > this machine. On Windows, that is the account password, not the Windows Hello PIN.";
 pub(crate) const GPUI_REMOTE_RUNTIME_BROKEN_MESSAGE: &str = "Ghostex on that machine answers, but it can't find its session program (zmx), so new sessions there can't start.";
 
+/// What the saved-password helper prints when ssh runs it after its sign-in window ended
+/// (app/helpers/remote/askpass_broker.rs). Matched below, ahead of the "saved SSH password" check,
+/// so the user is not told to save a password that is fine.
+pub(crate) const GPUI_ASKPASS_WINDOW_ENDED_TEXT: &str =
+    "Ghostex had stopped answering this connection's sign-in when SSH asked for the password.";
+
 pub(crate) fn gpui_remote_sanitized_process_failure(
     default_message: &str,
     result: &GpuiRemoteProcessResult,
@@ -544,6 +550,9 @@ pub(crate) fn gpui_remote_sanitized_process_failure(
         return format!(
             "{who}, so Ghostex did not send it the access token. Stop that program on the machine (an administrator can find it with `sudo lsof -nP -iTCP:58744 -sTCP:LISTEN`), then reconnect."
         );
+    }
+    if stderr.contains(&GPUI_ASKPASS_WINDOW_ENDED_TEXT.to_ascii_lowercase()) {
+        return "SSH took more than a minute to ask for the password, so Ghostex no longer answered it. The saved password is fine; connect again.".to_string();
     }
     if stderr.contains("saved ssh password") || stderr.contains("ssh password helper") {
         return "Ghostex could not read the saved SSH password from secure system storage. Open Remote settings and save the password again.".to_string();

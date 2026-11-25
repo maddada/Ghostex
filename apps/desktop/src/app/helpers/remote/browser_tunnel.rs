@@ -26,8 +26,6 @@ enum BrowserTransport {
         /// The `-D` forward in the user's SSH master, taken back when the tunnel stops
         /// (GitHub #496).
         forward: Mutex<Option<GpuiRemoteSharedSshForward>>,
-        #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
-        _askpass: Option<GpuiRemoteAskpassScript>,
     },
     /// The machine's gxserver connector, which the proxy dials for each connection.
     Gxserver,
@@ -143,7 +141,6 @@ pub(crate) fn start_remote_browser_tunnel(
                 "-D",
                 dynamic_forward.as_str(),
             )),
-            _askpass: None,
         };
         gpui_wait_for_remote_browser_forward(&transport, forward_port)?;
         return start_proxy(
@@ -177,9 +174,11 @@ pub(crate) fn start_remote_browser_tunnel(
     let transport = BrowserTransport::Ssh {
         child: Mutex::new(Some(child)),
         forward: Mutex::new(None),
-        _askpass: askpass,
     };
     gpui_wait_for_remote_browser_forward(&transport, forward_port)?;
+    // The forward answers, so ssh has signed in and never asks again: the saved-password helper
+    // stops answering now rather than at the end of its window (askpass_broker.rs).
+    drop(askpass);
     start_proxy(
         reservation,
         tcp_proxy::BrowserUpstream::Socks(forward_port),

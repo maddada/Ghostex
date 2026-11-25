@@ -1,7 +1,8 @@
 //! How a saved SSH password reaches ssh on macOS and Linux: ssh runs the askpass helper script,
-//! the helper reads one line from a named pipe in a private folder, and a broker thread of this
-//! app answers each read with the password from the system keyring. `ssh_process.rs` decides when
-//! to make one; everything about the folder, the pipe and the broker is here.
+//! the helper reads the answer from a named pipe in a private folder with `/bin/cat`, and a broker
+//! thread of this app answers each read with the password from the system keyring.
+//! `ssh_process.rs` decides when to make one; everything about the folder, the pipe and the
+//! broker is here.
 //!
 //! CDXC:RemoteMachines 2026-11-26 WHY:
 //! A security review of the blocking broker (5b7469b4b) found, among others: two helper folders
@@ -48,6 +49,14 @@ pub(crate) const GPUI_ASKPASS_HANDSHAKE_WINDOW: Duration = Duration::from_secs(6
 const SERVED_PAUSE: Duration = Duration::from_millis(3);
 const LONGEST_PAUSE: Duration = Duration::from_millis(500);
 
+/// How long `stop` waits for the broker to return before leaving it to finish on its own (it
+/// checks `cancel` before writing, so it can only stop).
+const STOP_WAIT: Duration = Duration::from_secs(2);
+
+/// How long a retired pipe stays open for reading and writing, so a helper that opened it in the
+/// instant it was taken away gets an empty answer rather than waiting for a writer forever.
+const RETIRED_PIPE_HOLD: Duration = Duration::from_millis(100);
+
 const FOLDER_PREFIX: &str = "gxap-";
 const SCRIPT_NAME: &str = "a";
 const PIPE_NAME: &str = "p";
@@ -83,13 +92,20 @@ impl GpuiAskpassFolder {
     }
 
     fn fill(&self) -> io::Result<()> {
-        // `read` takes one line and closes the pipe without waiting for the end of the stream,
-        // and needs no program of its own (see CDXC:RemoteMachines 2026-11-14 in ssh_process.rs).
+        // `/bin/cat` takes the answer in one read: the broker writes it in one write and answers
+        // each helper once, so two readers at the same moment get the whole line or nothing,
+        // never a part (the shell's `read` took one byte at a time, 2026-11-26). A pipe that is
+        // gone means the sign-in window ended, which gets its own message
+        // (`GPUI_ASKPASS_WINDOW_ENDED_TEXT`, mapped in connect.rs).
+        let pipe = gpui_shell_single_quote(gpui_path_string(self.pipe.as_path()).as_str());
         let contents = format!(
             concat!(
                 "#!/bin/sh\n",
-                "password=\n",
-                "IFS= read -r password <{} || password=\n",
+                "if [ ! -p {pipe} ]; then\n",
+                "  printf '%s\\n' {ended} >&2\n",
+                "  exit 1\n",
+                "fi\n",
+                "password=$(/bin/cat {pipe} </dev/null) || password=\n",
                 "if [ -z \"$password\" ]; then\n",
                 "  printf '%s\\n' 'Ghostex saved SSH password unavailable.' >&2\n",
                 "  exit 1\n",
@@ -97,7 +113,8 @@ impl GpuiAskpassFolder {
                 "printf '%s\\n' \"$password\"\n",
                 "unset password\n",
             ),
-            gpui_shell_single_quote(gpui_path_string(self.pipe.as_path()).as_str())
+            pipe = pipe,
+            ended = gpui_shell_single_quote(GPUI_ASKPASS_WINDOW_ENDED_TEXT),
         );
         let mut script = fs::OpenOptions::new()
             .write(true)
@@ -164,8 +181,24 @@ fn linux_runtime_directory() -> Option<PathBuf> {
     (directory.is_absolute()
         && metadata.is_dir()
         && metadata.uid() == effective_uid()
-        && metadata.mode() & 0o077 == 0)
-        .then_some(directory)
+        && metadata.mode() & 0o077 == 0
+        && mounted_with_exec(&directory))
+    .then_some(directory)
+}
+
+/// ssh runs the helper from this folder, so a `noexec` mount cannot hold it.
+#[cfg(target_os = "linux")]
+fn mounted_with_exec(directory: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt as _;
+    let Ok(path) = std::ffi::CString::new(directory.as_os_str().as_bytes()) else {
+        return false;
+    };
+    // SAFETY: `path` is NUL-terminated and `stat` is a plain C struct the call fills in.
+    let mut stat: libc::statvfs = unsafe { std::mem::zeroed() };
+    if unsafe { libc::statvfs(path.as_ptr(), &mut stat) } != 0 {
+        return false;
+    }
+    stat.f_flag & libc::ST_NOEXEC == 0
 }
 
 fn effective_uid() -> u32 {
@@ -419,10 +452,13 @@ fn answer_helpers(shared: &Shared, mut secret: GpuiAskpassSecret) {
                 password.fill(0);
                 break;
             }
-            let _ = stream
-                .write_all(password.as_slice())
-                .and_then(|()| stream.write_all(b"\n"));
+            // One write, so the line reaches the pipe whole and a reader takes it in one read.
+            let mut line = Vec::with_capacity(password.len() + 1);
+            line.extend_from_slice(password.as_slice());
+            line.push(b'\n');
             password.fill(0);
+            let _ = stream.write_all(line.as_slice());
+            line.fill(0);
         }
         // Closing the pipe ends the helper's read; with nothing written it reports the password
         // as unavailable.
@@ -457,21 +493,30 @@ fn stop(shared: &Shared, server: &thread::Thread) {
     // never read.
     let wake = open_for_reading(&shared.pipe).filter(|wake| shared.identity.is(wake));
     if wake.is_some() {
+        // Bounded: a broker still in a slow keyring read (or one a swapped pipe kept asleep) is
+        // left to see `cancel` on its own rather than holding up the drop.
+        let until = Instant::now() + STOP_WAIT;
         let mut state = shared.state();
         while !state.server_done {
+            let now = Instant::now();
+            if now >= until {
+                break;
+            }
             state = shared
                 .changed
-                .wait(state)
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
+                .wait_timeout(state, until - now)
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .0;
         }
     }
     drop(wake);
     retire_pipe(shared);
 }
 
-/// Moves the pipe aside, so no new helper can open it, then ends a helper that opened it just
-/// before (it would wait for a writer forever; opening and closing it once ends its read empty),
-/// and removes it.
+/// Moves the pipe aside, so no new helper can open it, and removes it. A helper that opened it
+/// just before would wait for a writer forever: the pipe is held open for reading and writing for
+/// `RETIRED_PIPE_HOLD`, which lets a helper already waiting, or one whose open lands in that time,
+/// through to an empty read when it closes. Nothing is ever written to it.
 fn retire_pipe(shared: &Shared) {
     // Only the FIFO made for this broker is moved; anything else at the path is left for the
     // owner's removal of the folder.
@@ -486,14 +531,23 @@ fn retire_pipe(shared: &Shared) {
     if fs::rename(&shared.pipe, &retired).is_err() {
         return;
     }
-    if let Ok(release) = fs::OpenOptions::new()
+    let hold = fs::OpenOptions::new()
+        .read(true)
         .write(true)
         .custom_flags(libc::O_NONBLOCK | libc::O_NOFOLLOW)
         .open(&retired)
-    {
-        drop(release);
-    }
+        .ok()
+        .filter(|hold| shared.identity.is(hold));
     let _ = fs::remove_file(&retired);
+    if let Some(hold) = hold {
+        // Held off the caller's thread: a drop may run on the UI thread.
+        let _ = thread::Builder::new()
+            .name("gpui-askpass-retire".to_string())
+            .spawn(move || {
+                thread::sleep(RETIRED_PIPE_HOLD);
+                drop(hold);
+            });
+    }
 }
 
 /// Opens the pipe for writing, sleeping in the kernel until a reader has it open. Rust's `open`
@@ -628,9 +682,81 @@ mod tests {
         thread::sleep(Duration::from_millis(600));
         assert!(!fixture.folder.pipe.exists());
         assert!(broker.shared.state().server_done);
-        let (ok, stdout) = fixture.ask();
-        assert!(!ok && stdout.is_empty());
+        let output = Command::new(&fixture.folder.script).output().unwrap();
+        assert!(!output.status.success() && output.stdout.is_empty());
+        // Its own message, not the "save the password again" one (connect.rs).
+        assert!(String::from_utf8_lossy(&output.stderr).contains(GPUI_ASKPASS_WINDOW_ENDED_TEXT));
         drop(broker);
+        assert_eq!(fixture.reads(), 1);
+    }
+
+    #[test]
+    fn two_helpers_at_once_get_the_whole_answer_or_nothing() {
+        let fixture = Fixture::new("pair");
+        let broker = fixture.broker(GpuiAskpassServe::UntilDropped, Duration::ZERO);
+        let mut answered = 0;
+        for _ in 0..20 {
+            let helpers: Vec<_> = (0..2)
+                .map(|_| {
+                    let script = fixture.folder.script.clone();
+                    thread::spawn(move || Command::new(script).output().unwrap())
+                })
+                .collect();
+            for helper in helpers {
+                let output = helper.join().unwrap();
+                if output.status.success() {
+                    assert_eq!(output.stdout, answer());
+                    answered += 1;
+                } else {
+                    assert!(output.stdout.is_empty());
+                }
+            }
+        }
+        drop(broker);
+        assert!(answered >= 20, "{answered} of 40 answered");
+    }
+
+    #[test]
+    fn a_helper_that_opens_as_the_pipe_is_retired_is_let_go() {
+        let fixture = Fixture::new("retire");
+        let broker = fixture.broker(GpuiAskpassServe::UntilDropped, Duration::ZERO);
+        // Another name for the same FIFO stands in for a helper that looked the pipe up just
+        // before it was moved away and opens it just after.
+        let late = fixture.folder.directory.join("late");
+        fs::hard_link(&fixture.folder.pipe, &late).unwrap();
+        drop(broker);
+        let started = Instant::now();
+        let mut reader = fs::File::open(&late).unwrap();
+        let mut read = Vec::new();
+        io::Read::read_to_end(&mut reader, &mut read).unwrap();
+        assert!(read.is_empty());
+        assert!(started.elapsed() < Duration::from_secs(2));
+        assert_eq!(fixture.reads(), 0);
+    }
+
+    #[test]
+    fn a_drop_never_waits_long_for_a_slow_keyring_read() {
+        let fixture = Fixture::new("slow");
+        let broker = GpuiAskpassBroker::start(
+            fixture.folder.pipe.clone(),
+            GpuiAskpassServe::UntilDropped,
+            Duration::ZERO,
+            fixture.secret(STOP_WAIT + Duration::from_millis(1_500)),
+        )
+        .unwrap();
+        let script = fixture.folder.script.clone();
+        let helper = thread::spawn(move || Command::new(script).output().unwrap());
+        thread::sleep(Duration::from_millis(100));
+        let started = Instant::now();
+        drop(broker);
+        let waited = started.elapsed();
+        assert!(
+            waited < STOP_WAIT + Duration::from_millis(500),
+            "{waited:?}"
+        );
+        // The broker finishes its read later, sees `cancel` and writes nothing.
+        let output = helper.join().unwrap();
+        assert!(!output.status.success() && output.stdout.is_empty());
         assert_eq!(fixture.reads(), 1);
     }
 
