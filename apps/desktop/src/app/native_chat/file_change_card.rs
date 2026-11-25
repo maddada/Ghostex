@@ -8,12 +8,12 @@
 //! `CDXC:SessionChat 2026-10-11 DECISION` on `file_change_card` there); this file only lays it out.
 //! The phone draws the same card in `apps/mobile/app/src/chat/native/transcript/FileChanges.tsx`.
 
-use super::cards::{card_hover_fill, SINGLE_LINE_CARD, TITLE_ROW_GAP};
+use super::cards::{SINGLE_LINE_CARD, TITLE_ROW_GAP, card_hover_fill};
 use super::chat_text_look::PROSE_SIZE;
-use super::disclosure_body::{disclosure_body, DisclosureRail};
-use super::quiet_work::{file_names, QuietEdit};
+use super::disclosure_body::{DisclosureRail, disclosure_body};
+use super::quiet_work::{QuietEdit, file_names};
 use super::tool_run::{
-    boxed_card_body, boxed_header_corners, DESCRIBED_LABEL_OPACITY, ROW_PAD_X, TILE,
+    DESCRIBED_LABEL_OPACITY, ROW_PAD_X, TILE, boxed_card_body, boxed_header_corners,
 };
 use super::{
     appearance::{ChatAppearance, ChatFilledButton as _},
@@ -21,14 +21,14 @@ use super::{
     transcript::text,
 };
 use crate::app::native_chat::cursor::ChatCursor as _;
-use ghostex_gx_chat_core::transcript::file_change_rows::{turn_files_fold, TurnFilesFold};
 use ghostex_gx_chat_core::TranscriptItem;
+use ghostex_gx_chat_core::transcript::file_change_rows::{TurnFilesFold, turn_files_fold};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, px, rgb, AnyElement, Context, FontWeight, Hsla, InteractiveElement as _, IntoElement,
-    ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _,
+    AnyElement, Context, FontWeight, Hsla, InteractiveElement as _, IntoElement,
+    ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, div, px, rgb,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 const MONO: &str = "JetBrainsMono Nerd Font";
 
