@@ -496,7 +496,17 @@ impl SessionChatTerminalNotice {
     decides whether a reading inherits the key) still ignores the key.
     */
     fn same_permission_request(&self, other: &SessionChatTerminalNotice) -> bool {
-        self.kind != SESSION_CHAT_NOTICE_PERMISSION_PROMPT || self.detected_at == other.detected_at
+        !self.is_permission_request() || self.detected_at == other.detected_at
+    }
+
+    /// A permission prompt read off the screen: the agent's own (`permissionPrompt`), or OMP's
+    /// approval that the chat leaves to the terminal because its dialog does not show what it asks
+    /// (CDXC:SessionChat 2026-11-25 in session_chat_omp_blocking.rs), which is a request of its own
+    /// in every rule a permission prompt has.
+    pub fn is_permission_request(&self) -> bool {
+        self.kind == SESSION_CHAT_NOTICE_PERMISSION_PROMPT
+            || self.kind == SESSION_CHAT_NOTICE_OMP_INPUT_BLOCKED
+                && self.title == crate::session_chat_omp_blocking::OMP_TOOL_APPROVAL_TITLE
     }
 
     /*
@@ -535,9 +545,13 @@ impl SessionChatTerminalNotice {
 
     /// A permission prompt that holds the agent's input and that Ghostex is not answering itself:
     /// an approval only the user can grant, the same test a coordinator thread's screen wait makes
-    /// (`ThreadScreenWait::from_screen` in coordinators/state.rs).
+    /// (`ThreadScreenWait::from_screen` in coordinators/state.rs). OMP's approval that the chat
+    /// leaves to the terminal is one too.
     pub fn is_screen_approval(&self) -> bool {
-        self.kind == SESSION_CHAT_NOTICE_PERMISSION_PROMPT && self.blocks_input && !self.auto_trust
+        !self.auto_trust
+            && (self.kind == SESSION_CHAT_NOTICE_PERMISSION_PROMPT && self.blocks_input
+                || self.kind == SESSION_CHAT_NOTICE_OMP_INPUT_BLOCKED
+                    && self.is_permission_request())
     }
 
     /// The session's login can never answer again (its organization disabled Claude

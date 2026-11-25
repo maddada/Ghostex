@@ -737,6 +737,40 @@ pub(super) async fn run_session_chat_send_worker(
                         break;
                     }
                 }
+                SessionChatSendStep::GuardOmpApprovalRequest {
+                    tool,
+                    summary,
+                    allow,
+                } => {
+                    let key = capture_session_terminal_text(&zmx_name)
+                        .await
+                        .and_then(|screen| {
+                            crate::session_chat_omp_blocking::omp_card_answer_key(
+                                &screen, &tool, &summary, allow,
+                            )
+                        });
+                    let Some(key) = key else {
+                        outcome = Err(SessionChatSendError::not_attempted(
+                            "OMP's approval changed before the answer could be sent.".to_string(),
+                        ));
+                        break;
+                    };
+                    if let Err(error) = write_session_chat_payload(
+                        &project_id,
+                        &session_id,
+                        &zmx_name,
+                        &source,
+                        &key,
+                    )
+                    .await
+                    {
+                        outcome = Err(SessionChatSendError::new(
+                            SessionChatSendFailure::Write,
+                            error,
+                        ));
+                        break;
+                    }
+                }
                 SessionChatSendStep::CloseUnwatchedCodexTranscriptPager => {
                     if let Err(error) = crate::session_chat_codex_pager::close_unwatched_pager(
                         &project_id,

@@ -59,6 +59,16 @@ pub enum SessionChatSendStep {
     VerifyTerminalPicker {
         agent: String,
     },
+    /// Answer a chat card for OMP's tool approval at the front of the send queue: read the screen
+    /// and type the Approve row's keys (`allow`) or Escape only while the dialog shows exactly the
+    /// card's request (`omp_card_answer_key`), the keys read from that same screen; otherwise stop
+    /// the job and type nothing. The request can change between the card's check and this step:
+    /// another client or the terminal answered it, and OMP showed the next call's dialog.
+    GuardOmpApprovalRequest {
+        tool: String,
+        summary: String,
+        allow: bool,
+    },
     /// Move any existing agent-TUI composer draft into Saved Prompts before
     /// chat takes ownership of the input line. The prompt-editor handshake
     /// answers only after the CLI has durably stashed and cleared that draft.

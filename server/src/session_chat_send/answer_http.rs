@@ -134,11 +134,12 @@ dialog the capture missed, or its running turn). Since 2026-11-07 this held for 
 went to whatever dialog was up.
 SEE-ALSO: server/src/session_chat_omp_blocking.rs (`read_omp_permission_dialog`), packages/gx-chat-core/src/questions/actions.rs (`with_shown_approval`).
 */
+/// The card's tool and summary once the dialog on `screen` shows exactly its request.
 fn verify_omp_hook_answer_targets_dialog(
     session: &Value,
     params: &serde_json::Map<String, Value>,
     screen: Option<&str>,
-) -> Result<(), DomainStateError> {
+) -> Result<(String, String), DomainStateError> {
     let answer_in_terminal = |message: &str| DomainStateError {
         code: crate::session_chat_send::ANSWER_IN_TERMINAL,
         message: message.to_string(),
@@ -196,14 +197,15 @@ fn verify_omp_hook_answer_targets_dialog(
     {
         return Err(prompt_changed());
     }
-    match summary {
-        Some(summary)
-            if crate::session_chat_omp_blocking::omp_permission_dialog_shows(screen, &summary)
-                != Some(true) =>
-        {
-            Err(prompt_changed())
-        }
-        _ => Ok(()),
+    // The dialog's whole request must be the card's (CDXC:SessionChat 2026-11-25 DECISION in
+    // session_chat_omp_blocking.rs `omp_permission_request_match`).
+    let Some(summary) = summary else {
+        return Err(not_shown());
+    };
+    match crate::session_chat_omp_blocking::omp_permission_request_match(&dialog, &summary) {
+        crate::session_chat_omp_blocking::OmpRequestMatch::Same => Ok((tool, summary)),
+        crate::session_chat_omp_blocking::OmpRequestMatch::Other => Err(prompt_changed()),
+        crate::session_chat_omp_blocking::OmpRequestMatch::NotUnique => Err(not_shown()),
     }
 }
 
@@ -1153,7 +1155,7 @@ async fn answer_session_chat_prompt(
             // The hook's approval card (no `noticeDetectedAt`) is applied to OMP's dialog only when
             // that dialog shows the card's request (`verify_omp_hook_answer_targets_dialog`), its
             // Deny included: OMP's Deny is an Escape into whatever dialog is up.
-            let omp_screen = if omp && !params.contains_key("noticeDetectedAt") {
+            let omp_card = if omp && !params.contains_key("noticeDetectedAt") {
                 if approval_send.is_empty() {
                     if let Err(error) =
                         verify_answer_targets_shown_prompt(state, &target, &params).await
@@ -1163,31 +1165,36 @@ async fn answer_session_chat_prompt(
                 }
                 let screen =
                     crate::session_chat_send::capture_session_terminal_text(&target.zmx_name).await;
-                if let Err(error) = verify_omp_hook_answer_targets_dialog(
+                match verify_omp_hook_answer_targets_dialog(
                     &target.session,
                     &params,
                     screen.as_deref(),
                 ) {
-                    return domain_error_response(endpoint_path, request_id, error);
+                    Ok(card) => Some(card),
+                    Err(error) => return domain_error_response(endpoint_path, request_id, error),
                 }
-                Some(screen)
             } else {
                 None
             };
-            if approval_send.is_empty() {
+            if let Some((tool, summary)) = omp_card {
+                // The dialog is checked again, and the keys read, at the front of the send queue
+                // from the screen they go to (`GuardOmpApprovalRequest` in steps.rs).
+                vec![
+                    crate::session_chat_send::SessionChatSendStep::GuardOmpApprovalRequest {
+                        tool,
+                        summary,
+                        allow: !approval_send.is_empty(),
+                    },
+                ]
+            } else if approval_send.is_empty() {
                 vec![crate::session_chat_send::SessionChatSendStep::Write(
                     crate::session_chat_send::SESSION_CHAT_INTERRUPT.to_string(),
                 )]
             } else if omp {
-                // OMP reads a typed "1" as the start of a "deny and send" message, so its Allow is
-                // the Approve row of the dialog it shows now (`detect_omp_permission_picker`).
-                let screen = match omp_screen {
-                    Some(screen) => screen,
-                    None => {
-                        crate::session_chat_send::capture_session_terminal_text(&target.zmx_name)
-                            .await
-                    }
-                };
+                // OMP reads a typed "1" as the start of a "deny and send" message, so a notice's
+                // Allow is the Approve row of the dialog it shows now (`detect_omp_permission_picker`).
+                let screen =
+                    crate::session_chat_send::capture_session_terminal_text(&target.zmx_name).await;
                 let Some(answer_key) = screen
                     .as_deref()
                     .and_then(crate::session_chat_omp_blocking::detect_omp_permission_picker)

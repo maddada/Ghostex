@@ -157,7 +157,16 @@ pub(crate) fn choices(card: &Value) -> Vec<Choice> {
             return out;
         }
     }
-    // A hook approval with no screen reading: the thread card's Allow and Deny.
+    // A hook approval with no screen reading: the thread card's Allow and Deny. OMP's screen card
+    // that leaves its approval to the terminal (a dialog that does not show what it asks) offers
+    // none: gxserver refuses them there (CDXC:SessionChat 2026-11-25 in
+    // server/src/session_chat_send/answer_http.rs).
+    if notice
+        .as_ref()
+        .is_some_and(|notice| notice.passthrough && notice.kind == "ompInputBlocked")
+    {
+        return Vec::new();
+    }
     if let Some(InteractivePrompt::Approval {
         tool,
         summary,

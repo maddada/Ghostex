@@ -334,9 +334,7 @@ impl SessionChatOptionDetector {
                 // notice, whose banners a repaint can drop for one read.
                 None => {
                     let kept = |notice: &crate::session_chat_notice::SessionChatTerminalNotice| {
-                        !(detected.captured
-                            && notice.kind
-                                == crate::session_chat_notice::SESSION_CHAT_NOTICE_PERMISSION_PROMPT)
+                        !(detected.captured && notice.is_permission_request())
                     };
                     cached_notice
                         .filter(|notice| kept(notice))
