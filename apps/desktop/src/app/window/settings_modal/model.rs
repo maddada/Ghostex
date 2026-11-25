@@ -25,6 +25,8 @@ pub(crate) enum SettingsTabId {
     Terminal,
     Notifications,
     FilesLinks,
+    /// Browser (id `browser`), right after Files & Links (CDXC:Settings 2026-11-26 at `RAIL_ORDER`).
+    Browser,
     PowerSleep,
     /// Themes (id `theme`): the first page of the rail's Interface group.
     Theme,
@@ -69,7 +71,7 @@ pub(crate) enum RailTier {
     /// Themes, Text & Fonts, Size & Zoom, Window & Layout (CDXC:Settings 2026-11-18 at
     /// `SettingsTabId::tier`).
     Interface,
-    /// Chat, Sidebar & Sessions, Terminal, Files & Links, Projects.
+    /// Chat, Boosts, Sidebar & Sessions, Terminal, Files & Links, Browser, Projects.
     Working,
     /// Hotkeys, Dictation, Voice Agent.
     KeyboardVoice,
@@ -111,7 +113,7 @@ impl SettingsTabId {
     /// `RailTier`) ending with About, then the Extensions page (the catalog) at the rail's bottom with the pages
     /// that fold under it ([`Self::EXTENSIONS_GROUP`]). Pages the shell filters (OS Integration,
     /// Connectors, Debugging, the built-in extensions' pages) leave the rail while they are off.
-    pub(crate) const RAIL_ORDER: [SettingsTabId; 37] = [
+    pub(crate) const RAIL_ORDER: [SettingsTabId; 38] = [
         SettingsTabId::Updates,
         SettingsTabId::Experience,
         SettingsTabId::Theme,
@@ -123,6 +125,9 @@ impl SettingsTabId {
         SettingsTabId::Sidebar,
         SettingsTabId::Terminal,
         SettingsTabId::FilesLinks,
+        // CDXC:Settings 2026-11-26 DECISION:
+        // User (Q5021-Q5023, #762): a Settings > Browser page gathers the Browser's settings, in the Working group right after Files & Links: Let agents open and switch pages without asking (new, `agentPagesOpenWithoutAsking`) and Agents open pages in; Open links in and Open session links in (from Files & Links > Browser); Show pages in their own row and Reload open pages on launch (from Files & Links > Browser), and Browser sleeps after (from Power & Sleep > Auto Sleep, whose Views auto sleep after still sets it); the Chromium runtime (CEF) row (from Integrations > Embedded browser, which keeps a line pointing here because the runtime also serves the VS Code view, website views and HTML in Files); and this window's workspace's Browser sign-ins and Site permissions (Workspaces keeps them for every workspace). The Grok Bot rows stay on Files & Links. It is a catalog group like the other General pages (packages/settings-catalog/src/general/browser.rs), so search, the Help files and `initialTab`/`initialSection: "browser"` reach it.
+        SettingsTabId::Browser,
         SettingsTabId::Projects,
         SettingsTabId::Hotkeys,
         SettingsTabId::Dictation,
@@ -188,6 +193,7 @@ impl SettingsTabId {
             | SettingsTabId::Sidebar
             | SettingsTabId::Terminal
             | SettingsTabId::FilesLinks
+            | SettingsTabId::Browser
             | SettingsTabId::Boosts
             | SettingsTabId::Projects => RailTier::Working,
             SettingsTabId::Hotkeys | SettingsTabId::Dictation | SettingsTabId::VoiceAgent => {
@@ -220,6 +226,7 @@ impl SettingsTabId {
             SettingsTabId::Terminal => Some("terminal"),
             SettingsTabId::Notifications => Some("notifications"),
             SettingsTabId::FilesLinks => Some("tools"),
+            SettingsTabId::Browser => Some("browser"),
             SettingsTabId::PowerSleep => Some("system"),
             _ => None,
         }
@@ -247,6 +254,7 @@ impl SettingsTabId {
             SettingsTabId::Terminal => "terminal",
             SettingsTabId::Notifications => "notifications",
             SettingsTabId::FilesLinks => "tools",
+            SettingsTabId::Browser => "browser",
             SettingsTabId::PowerSleep => "system",
             SettingsTabId::Theme => "theme",
             SettingsTabId::TextFonts => "textFonts",
@@ -304,6 +312,7 @@ impl SettingsTabId {
             SettingsTabId::Terminal => "Terminal",
             SettingsTabId::Notifications => "Notifications",
             SettingsTabId::FilesLinks => "Files & Links",
+            SettingsTabId::Browser => "Browser",
             SettingsTabId::PowerSleep => "Power & Sleep",
             // CDXC:Settings 2026-10-31 DECISION: User: "let's also rename the theme page in settings to Interface". Only its name changed: its stored id stays `theme`, so saved navigation, `ghostex settings open --tab theme` and old deep links keep working, and `interface` opens it too. Since 2026-11-18 (`tier`) Interface names the rail group and this first page of it is Themes; `theme` and `interface` still open it.
             SettingsTabId::Theme => "Themes",
@@ -348,6 +357,8 @@ impl SettingsTabId {
             SettingsTabId::Terminal => "modals/settings/terminal-2.svg",
             SettingsTabId::Notifications => "modals/settings/bell.svg",
             SettingsTabId::FilesLinks => "modals/settings/file-text.svg",
+            // browser.svg is Window & Layout's.
+            SettingsTabId::Browser => "modals/settings/world.svg",
             SettingsTabId::PowerSleep => "modals/settings/moon.svg",
             SettingsTabId::Theme => "modals/settings/palette.svg",
             SettingsTabId::TextFonts => "modals/settings/typography.svg",
@@ -420,6 +431,9 @@ pub(crate) struct SettingsOpenRequest {
     /// The project the Projects page opens on: `initialProjectId`, else the opening window's
     /// current project (filled in by the host).
     pub(crate) initial_project_id: Option<String>,
+    /// The workspace of the window that opened Settings, `None` for the default workspace (filled in
+    /// by the host, never by the open message): Settings > Browser's sign-in rows act on it.
+    pub(crate) window_workspace_id: Option<String>,
     /// Opens the Pick Color dialog of this colour setting (the preview binary's `pick-color`
     /// state, and the host where it has no system colour panel; no open message carries it).
     pub(crate) open_color_picker: Option<String>,
@@ -496,6 +510,7 @@ impl SettingsOpenRequest {
             initial_view_scope_key: optional_text(message, "initialViewScopeKey"),
             initial_project_id: optional_text(message, "initialProjectId")
                 .filter(|id| !id.trim().is_empty()),
+            window_workspace_id: None,
             open_color_picker: None,
             open_select: None,
             gxserver_rpc_available: false,
@@ -652,6 +667,7 @@ mod tests {
                         "Sidebar & Sessions",
                         "Terminal",
                         "Files & Links",
+                        "Browser",
                         "Projects"
                     ]
                 ),

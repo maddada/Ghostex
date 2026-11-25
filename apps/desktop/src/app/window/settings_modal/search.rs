@@ -524,11 +524,12 @@ impl GeneralSearch {
 }
 
 /// The anchor a General scroll target lands on (`mainSettingsSectionRefs`): a page's group id
-/// scrolls to its first section (Files & Links to File opening, Power & Sleep to Auto Sleep,
+/// scrolls to its first section (Files & Links to File opening, Browser to Agents, Power & Sleep to Auto Sleep,
 /// Notifications to Sounds, the old Advanced group to Sleeping Sessions), a section to itself.
 pub(crate) fn general_scroll_anchor(target: &str) -> &str {
     match target {
         "tools" => "fileOpening",
+        "browser" => "browserAgents",
         "system" => "autoSleep",
         "sounds" => "notifications",
         "advanced" => "sleepingSessions",

@@ -253,15 +253,13 @@ impl GhostexGpuiApp {
     /// `ghostex browser open` names the agent's own project, which is often not the one on screen. Such a page goes into that project's parked tab model the way a parked page's popup does: the project on screen keeps its panel, view and tabs, and focus stays put.
     /// The project's saved view moves to Browser, as the open would have done on screen, a toast says where the page went, and the page is shown when the project is next on screen (`land_pending_parked_browser_open`).
     /// The page itself is made at once, hidden, under the Browser profile of the project's own workspace (`start_parked_browser_page`), so the agent's next step (`ghostex_list_pages`, a snapshot, a click) finds a page to drive. This supersedes the 2026-10-25 rule that made it only when the project came on screen, which left the embedded-browser-use loop with no page. A reused tab whose page is already running parked goes to the address at once, as a live one would.
-    /// `announce` is false for an agent's background open (`open_browser_url_in_background`),
-    /// which shows no toast.
+    /// An agent's background open takes `open_browser_url_in_parked_project_background` instead.
     pub(crate) fn open_browser_url_in_parked_project(
         &mut self,
         project_id: &str,
         url: String,
         reuse: GpuiBrowserRendererOpenReuse,
         remote_machine_id: Option<String>,
-        announce: bool,
         cx: &mut gpui::Context<Self>,
     ) {
         let active_profile_id = self.browser_profiles.active_profile_id();
@@ -306,11 +304,6 @@ impl GhostexGpuiApp {
         if !self.start_parked_browser_page(project_id, tab_id, cx) {
             self.waiting_parked_browser_pages
                 .insert((project_id.to_string(), tab_id));
-        }
-        if !announce {
-            self.persist_shell_layout_state();
-            cx.notify();
-            return;
         }
         let project_title = self
             .parked_project_title(project_id)
@@ -520,6 +513,65 @@ impl GhostexGpuiApp {
                     .remove(&(project_id, tab_id));
             }
         }
+    }
+
+    /// An agent's background open (`open_browser_url_in_background`) for a project that is not on
+    /// screen. CDXC:Browser 2026-11-26 DECISION (#762 review B5): unlike a plain open it changes
+    /// nothing the user meets when they come back to that project: the page goes in a new tab
+    /// that is not selected (or navigates `agent_tab`, that agent's own earlier page, without
+    /// selecting it), the project's saved view is not moved to Browser and the page is not queued
+    /// to be shown (`queue_parked_browser_tab`), and no toast says it opened. The page is still
+    /// made at once, hidden, so the agent's tools can drive it. Answers the agent's tab.
+    pub(crate) fn open_browser_url_in_parked_project_background(
+        &mut self,
+        project_id: &str,
+        url: String,
+        reuse: GpuiBrowserRendererOpenReuse,
+        agent_tab: Option<BrowserTabId>,
+        remote_machine_id: Option<String>,
+        cx: &mut gpui::Context<Self>,
+    ) -> Option<BrowserTabId> {
+        let active_profile_id = self.browser_profiles.active_profile_id();
+        let parked_tabs = self
+            .parked_browser_tabs_by_project
+            .entry(project_id.to_string())
+            .or_insert_with(|| BrowserTabModel::shell_address_only_with_profile(active_profile_id));
+        let tab_id = match parked_tabs.agent_background_open_reuse_tab(
+            agent_tab,
+            &url,
+            reuse,
+            remote_machine_id.as_deref(),
+        ) {
+            Some(tab_id) => {
+                parked_tabs.load_tab_url(tab_id, url.clone())?;
+                if let Some(surface) = self
+                    .parked_browser_runtimes_by_project
+                    .get(project_id)
+                    .and_then(|runtime| runtime.surfaces.get(&tab_id))
+                {
+                    surface.update(cx, |surface, _| surface.load_url(&url));
+                }
+                tab_id
+            }
+            None => {
+                let tab_id = parked_tabs.add_loaded_popup_tab(
+                    url,
+                    active_profile_id,
+                    cef::BrowserPopupPlacement::Background,
+                )?;
+                if let Some(tab) = parked_tabs.tabs.iter_mut().find(|tab| tab.id == tab_id) {
+                    tab.remote_machine_id = remote_machine_id;
+                }
+                tab_id
+            }
+        };
+        if !self.start_parked_browser_page(project_id, tab_id, cx) {
+            self.waiting_parked_browser_pages
+                .insert((project_id.to_string(), tab_id));
+        }
+        self.persist_shell_layout_state();
+        cx.notify();
+        Some(tab_id)
     }
 
     /// `tab_id`, now in front of `project_id`'s parked tab model, is shown when the project is next

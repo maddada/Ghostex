@@ -18,6 +18,7 @@ pub const PAGE_INTROS: &[(&str, &str)] = &[
     ("windowLayout", "The window's frame, its buttons, the outline of the active pane, and how panels open and dock."),
     ("notifications", "Sounds and alerts when an agent finishes or needs you."),
     ("tools", "Where files, links and dev servers open: in Ghostex, your browser or your editor."),
+    ("browser", "The Browser view: how agents and links open pages in it, how its pages run, and its sign-ins."),
     ("system", "What Ghostex does when your computer starts, when idle views sleep, and keeping the computer awake."),
     ("dictation", "Talk instead of typing: the engine that turns speech into text, the hotkey and past recordings."),
     ("voiceAgent", "A spoken conversation about your sessions: its provider, voice, speed and memory."),

@@ -44,7 +44,7 @@ pub const DEBUG_SHOW_MODALS: [&str; 2] = ["rail-intro", "native-mode-intro"];
 /// The tabs `ghostex settings open --tab` may name, each a `SettingsTabId` id
 /// (apps/desktop/src/app/window/settings_modal/model.rs). Keep in lockstep with
 /// `SETTINGS_MODAL_TABS` in server/src/ghostex_cli/settings.rs, which checks `--tab` first.
-pub const SETTINGS_MODAL_TABS: [&str; 34] = [
+pub const SETTINGS_MODAL_TABS: [&str; 35] = [
     "settings",
     "experience",
     "chat",
@@ -52,6 +52,7 @@ pub const SETTINGS_MODAL_TABS: [&str; 34] = [
     "terminal",
     "notifications",
     "tools",
+    "browser",
     "system",
     "theme",
     "interface",

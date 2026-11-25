@@ -85,6 +85,21 @@ pub(crate) fn pin_agent_background_browser_open(
     true
 }
 
+/// CDXC:SwitchRequests 2026-11-26 DECISION:
+/// User (Q5021-Q5022, #762): with "Let agents open and switch pages without asking" on (Settings >
+/// Browser, or the toast's Always), an agent's page open needs no toast: it opens and comes on
+/// screen as if the user had clicked Open. Only page opens: switching chats, projects, settings
+/// and paths still asks. The setting is the user's alone (`agent_denied_key` in the settings
+/// catalog keeps agents from turning it on).
+pub(crate) fn agent_page_opens_allowed(state: &AppState, action: &str) -> bool {
+    matches!(action, "openBrowser" | "openBrowserPane")
+        && crate::shared_settings_file::read_shared_settings(&state.paths).and_then(|settings| {
+            settings
+                .get(ghostex_settings_catalog::help::AGENT_PAGES_OPEN_WITHOUT_ASKING_SETTING)
+                .and_then(Value::as_bool)
+        }) == Some(true)
+}
+
 /// Returns `Some((project_id, session_id))` when the caller is an agent session whose switch
 /// requests must become clickable toasts instead of stealing focus.
 ///

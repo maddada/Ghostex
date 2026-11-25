@@ -766,6 +766,11 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("readAgentLiveStatus", J::Bool(true)),
     // CDXC:AgentGuide 2026-11-02 DECISION: User (#263): "if user asks for browser we ask which the user prefers (internal ghostex browser, or external browser)", and (Q1069) the answer is kept in this setting, which the note and `ghostex agent-guide` then state so agents stop asking. Ask until the user picks.
     ("agentPreviewBrowser", J::Str("ask")),
+    // CDXC:SwitchRequests 2026-11-26 DECISION: User (Q5021-Q5022, #762): off by default, so an agent's page open asks with a toast first; the toast's Always or Settings > Browser turns it on, and only the user can (help/mod.rs `AGENT_PAGES_OPEN_WITHOUT_ASKING_SETTING`).
+    (
+        crate::help::AGENT_PAGES_OPEN_WITHOUT_ASKING_SETTING,
+        J::Bool(false),
+    ),
     // CDXC:MarkedHandovers 2026-10-11 DECISION: User: "force the marked handovers for coordinators/orchestrator threads and their children by default and make it disabled by default for non-orchestrator/child threads". This switch covers every other session and stays off by default; threads mark regardless. Since 2026-11-11 coordinators follow this switch too, unless `orchestratorPlainReplies` is on (CDXC:Coordinators 2026-11-11 DECISION in server/src/coordinators/role.rs).
     // CDXC:MarkedHandovers 2026-11-13 DECISION: User (Q2963 "A"), after a user lost their coordinators' marked sections in 11.4.0 without changing anything: Marked handovers is one setting with three values, Off, Coordinators only and Every session (`MARKED_HANDOVERS_OPTIONS`), "Coordinators only" by default, so coordinators mark their replies again out of the box while other sessions stay as they were. Supersedes the boolean above and `orchestratorPlainReplies` (Coordinators answer without markers), which is gone: a saved true here reads as Every session, false or nothing as Coordinators only, and plain coordinator replies with this off as Off (`migrate_marked_handovers` in lib.rs). Threads mark their reports under every value.
     ("markedHandovers", J::Str("coordinators")),

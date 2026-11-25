@@ -723,7 +723,10 @@ pub(crate) async fn handle_renderer_command_http(
         &action,
         &mut payload,
     );
-    if !background_open && crate::switch_requests::is_agent_switch_request_action(&action) {
+    if !background_open
+        && crate::switch_requests::is_agent_switch_request_action(&action)
+        && !crate::switch_requests::agent_page_opens_allowed(state, &action)
+    {
         if let Some((caller_project_id, caller_session_id)) =
             crate::switch_requests::caller_agent_session(state, caller)
         {

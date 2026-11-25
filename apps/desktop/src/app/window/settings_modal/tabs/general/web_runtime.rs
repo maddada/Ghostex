@@ -1,5 +1,5 @@
-//! The Chromium runtime (CEF) row of the Integrations page: status, Install / Reinstall /
-//! Uninstall, and the undo while a change waits for the next launch.
+//! The Chromium runtime (CEF) row of the Browser page (its Web runtime section): status, Install /
+//! Reinstall / Uninstall, and the undo while a change waits for the next launch.
 //!
 //! CDXC:CefRuntime 2026-10-29 DECISION:
 //! User: "A small row in Settings > Integrations". The web runtime left the Extensions store, so
@@ -8,6 +8,9 @@
 //! from plugins_modal.rs (`pluginSettingsStatus`); the actions are its `reinstallPlugin`,
 //! `uninstallPlugin` and `cancelPluginChange` handlers (delayed_send/app_modal_sidebar_command/
 //! settings_tools.rs).
+//! CDXC:Settings 2026-11-26: the row moved from Integrations > Embedded browser to Settings >
+//! Browser (CDXC:Settings 2026-11-26 at `SettingsTabId::RAIL_ORDER` in model.rs); Integrations keeps
+//! a line pointing here.
 use super::super::super::fields::{
     ListItemStatus, SizedButtonSize, SizedButtonVariant, full_value_tooltip, is_long_value,
     settings_icon, settings_list_item, settings_sized_button, settings_square_button,
@@ -15,7 +18,7 @@ use super::super::super::fields::{
 };
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::post_store_message;
-use super::{ICON_DEVICE_DESKTOP, ICON_REFRESH, ICON_TRASH, IntegrationsTab};
+use super::GeneralTab;
 use gpui::{
     AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
     Styled as _, div, px,
@@ -23,8 +26,12 @@ use gpui::{
 use gpui_component::h_flex;
 use serde_json::{Value, json};
 
-const TITLE: &str = "Chromium runtime (CEF)";
-pub(super) const DESCRIPTION: &str = "The optional web runtime for the Browser, the VS Code view, website and extension views, and HTML files in Files. It also installs from the first view that needs it.";
+const ICON_DEVICE_DESKTOP: &str = "modals/settings/device-desktop.svg";
+const ICON_REFRESH: &str = "modals/settings/refresh.svg";
+const ICON_TRASH: &str = "modals/settings/trash.svg";
+
+pub(crate) const TITLE: &str = "Chromium runtime (CEF)";
+pub(crate) const DESCRIPTION: &str = "The optional web runtime for the Browser, the VS Code view, website and extension views, and HTML files in Files. It also installs from the first view that needs it.";
 
 /// The row's detail line: the status label, the version, a change waiting for the next launch, and
 /// the last error.
@@ -54,8 +61,8 @@ fn detail(runtime: &Value) -> String {
     parts.join(" · ")
 }
 
-impl IntegrationsTab {
-    /// The component status is read when Integrations opens without one.
+impl GeneralTab {
+    /// The component status is read when the Browser page opens without one.
     pub(super) fn request_web_runtime_status_if_missing(&mut self, cx: &mut Context<Self>) {
         if self
             .store
@@ -122,7 +129,7 @@ impl IntegrationsTab {
         if let Some(change) = runtime["pendingChange"].as_str() {
             controls.push(settings_sized_button(
                 p,
-                "integrations-web-runtime-cancel-change",
+                "browser-web-runtime-cancel-change",
                 if change == "reinstall" {
                     "Cancel reinstall"
                 } else {
@@ -145,7 +152,7 @@ impl IntegrationsTab {
         } else if status == Some("notInstalled") {
             controls.push(settings_sized_button(
                 p,
-                "integrations-web-runtime-install",
+                "browser-web-runtime-install",
                 "Install",
                 Some("modals/settings/download.svg"),
                 None,
@@ -164,7 +171,7 @@ impl IntegrationsTab {
         } else {
             controls.push(settings_square_button(
                 p,
-                "integrations-web-runtime-reinstall",
+                "browser-web-runtime-reinstall",
                 ICON_REFRESH,
                 None,
                 SizedButtonVariant::Ghost,
@@ -183,7 +190,7 @@ impl IntegrationsTab {
             if runtime["canUninstall"].as_bool() == Some(true) {
                 controls.push(settings_square_button(
                     p,
-                    "integrations-web-runtime-uninstall",
+                    "browser-web-runtime-uninstall",
                     ICON_TRASH,
                     None,
                     SizedButtonVariant::Ghost,

@@ -60,7 +60,19 @@ pub const GENERAL_GROUPS: &[GeneralGroup] = &[
     group(
         "tools",
         "Files & Links",
-        &["fileOpening", "browser", "editor", "terminalDevServers"],
+        &["fileOpening", "grokWeb", "editor", "terminalDevServers"],
+    ),
+    // CDXC:Settings 2026-11-26: the Browser page, after Files & Links (general/browser.rs).
+    group(
+        "browser",
+        "Browser",
+        &[
+            "browserAgents",
+            "browserLinks",
+            "browserPages",
+            "browserRuntime",
+            "browserSignIns",
+        ],
     ),
     group("notifications", "Notifications", &["sounds"]),
     group(
@@ -102,6 +114,7 @@ pub fn general_navigation() -> Vec<NavItem> {
         nav("terminal", "Terminal"),
         nav("notifications", "Notifications"),
         nav("tools", "Files & Links"),
+        nav("browser", "Browser"),
         nav("system", "Power & Sleep"),
     ]
 }

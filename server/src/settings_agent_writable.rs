@@ -46,7 +46,11 @@ fn agent_writable_keys() -> &'static HashSet<String> {
 /// Ghostex phones, `Principal::is_owner_device()`) may sync through
 /// `updateSettingsPatch`, while agents (`Session`), Collab guests (`Guest`),
 /// extensions (`Extension`), and remote peers (`Peer`) remain blocked.
-const OWNER_DEVICE_ONLY_API_KEYS: &[&str] = &["analyticsEnabled"];
+/// `agentPagesOpenWithoutAsking` is the toast's Always on a paired phone (#762).
+const OWNER_DEVICE_ONLY_API_KEYS: &[&str] = &[
+    "analyticsEnabled",
+    ghostex_settings_catalog::help::AGENT_PAGES_OPEN_WITHOUT_ASKING_SETTING,
+];
 
 /// The keys of `patch` the API may not change, in the patch's order. "Trust project folders
 /// automatically" may be turned off here but never on (packages/settings-catalog/src/folder_trust.rs).

@@ -818,11 +818,15 @@ impl GhostexGpuiApp {
                                     }
                                 }
                                 Some(BrowserRuntimeOwner::Parked(project_id)) => {
+                                    // CDXC:Browser 2026-11-26 WHY (#762 review B10): a parked
+                                    // project's page is never on screen, so its popups open
+                                    // beside it like any hidden page's, never as the tab that
+                                    // project shows when the user comes back to it.
                                     this.open_parked_browser_popup_tab(
                                         &project_id,
                                         requested_url,
                                         remote_machine_id,
-                                        placement,
+                                        cef::BrowserPopupPlacement::Background,
                                         cx,
                                     );
                                 }

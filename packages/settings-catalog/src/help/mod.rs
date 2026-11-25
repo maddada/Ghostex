@@ -124,8 +124,17 @@ pub struct Catalog {
 }
 
 /// Keys whose value must never be read or written by an agent, whatever their type.
+/// "Let agents open and switch pages without asking" (Settings > Browser): with it on, an agent's
+/// page open skips the switch toast and comes on screen (server/src/switch_requests.rs).
+///
+/// CDXC:SwitchRequests 2026-11-26 DECISION: User (Q5021-Q5022, #762): the toast gets an Always
+/// button that turns this on. It lets an agent change what the user is looking at, so only the user
+/// may turn it on (their Settings window, the toast's Always, a paired phone): never an agent
+/// through gxserver's API or `ghostex settings set`.
+pub const AGENT_PAGES_OPEN_WITHOUT_ASKING_SETTING: &str = "agentPagesOpenWithoutAsking";
+
 fn agent_denied_key(key: &str) -> bool {
-    if key == "analyticsEnabled" {
+    if key == "analyticsEnabled" || key == AGENT_PAGES_OPEN_WITHOUT_ASKING_SETTING {
         return true;
     }
     let lowered = key.to_lowercase();

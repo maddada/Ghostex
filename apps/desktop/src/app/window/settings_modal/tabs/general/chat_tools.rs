@@ -1,5 +1,5 @@
-//! Chat and the Tools group of General: Browser, Dev Servers, Editor and
-//! File opening.
+//! Chat and the Tools group of General (Files & Links): File opening, Grok Bot, Editor and Dev
+//! Servers. The Browser's rows are on their own page (browser.rs).
 use super::super::super::catalog::SettingOption;
 use super::super::super::catalog::settings_catalog;
 use super::super::super::fields::{
@@ -403,73 +403,21 @@ fn orchestrator_playbook_row(
     Some(setting_row(&g.p, KEY, spec, None, control, cx))
 }
 
-fn browser_section(
+/// The Grok Bot view's rows (claude_web/grok.rs), shown while the Grok Bot extension is on: the
+/// catalog hides a feature's `settingKeys` while the feature is off. They stayed here when the
+/// Browser's rows moved to Settings > Browser (CDXC:Settings 2026-11-26 in browser.rs).
+fn grok_web_section(
     page: &mut GeneralTab,
     g: &GeneralCx,
     window: &mut Window,
     cx: &mut Context<GeneralTab>,
 ) -> Option<PageBlock> {
-    if !g.search.subsection_visible("browser", g.power_visible) {
+    let s = "grokWeb";
+    if !g.search.subsection_visible(s, g.power_visible) {
         return None;
     }
     let mut rows: Vec<AnyElement> = Vec::new();
-    rows.extend(page.select(
-        g,
-        "browser",
-        "webLinkOpenTarget",
-        "Open links in",
-        "Open web links from terminal output (Command-click), session chat, and detected dev servers in the project Browser view or the system default browser.",
-        g.options("WEB_LINK_OPEN_TARGET_OPTIONS"),
-        None,
-        false,
-        window,
-        cx,
-    ));
-    rows.extend(page.select(
-        g,
-        "browser",
-        "agentPreviewBrowser",
-        "Agents open pages in",
-        "Where an agent opens a page it built for you, such as a website preview: the project Browser view or your default browser. Ask has the agent ask you the first time and save your answer here.",
-        g.options("AGENT_PREVIEW_BROWSER_OPTIONS"),
-        None,
-        false,
-        window,
-        cx,
-    ));
-    rows.extend(page.select(
-        g,
-        "browser",
-        "sessionLinkOpenTarget",
-        "Open session links in",
-        "Open a session's pull requests, issues and Linear tickets (the chips after its title and its links list) in the project Browser view or the system default browser. The phone follows this setting too.",
-        g.options("SESSION_LINK_OPEN_TARGET_OPTIONS"),
-        None,
-        false,
-        window,
-        cx,
-    ));
-    rows.extend(page.toggle(
-        g,
-        "browser",
-        "browserPagesInViewRow",
-        "Show pages in their own row",
-        "Show the Browser as one tab in the side panel's tab bar, with its pages as a row of tabs under it, instead of each page as a tab beside the views.",
-        false,
-        cx,
-    ));
-    rows.extend(page.toggle(
-        g,
-        "browser",
-        "reloadBrowserTabsOnStartup",
-        "Reload open pages on launch",
-        "Automatically reload the open project's browser tabs when Ghostex starts so pages are ready before you click them.",
-        false,
-        cx,
-    ));
-    // The Grok extension's rows (claude_web/grok.rs), shown while it is on: the catalog hides a
-    // feature's `settingKeys` while the feature is off.
-    if g.visible("browser", "grokWebStartPage") {
+    if g.visible(s, "grokWebStartPage") {
         let spec = g.spec(
             "grokWebStartPage",
             "Grok Bot start page",
@@ -490,7 +438,7 @@ fn browser_section(
             cx,
         ));
     }
-    if g.visible("browser", "grokWebLogins") {
+    if g.visible(s, "grokWebLogins") {
         let spec = g.spec(
             "grokWebLogins",
             "Grok Bot logins",
@@ -501,14 +449,8 @@ fn browser_section(
             page, &g.p, spec, None, &value, window, cx,
         ));
     }
-    settings_section(
-        &g.p,
-        g.section_title("browser", "Browser"),
-        None,
-        None,
-        rows,
-    )
-    .map(|section| PageBlock::section("browser", section))
+    settings_section(&g.p, g.section_title(s, "Grok Bot"), None, None, rows)
+        .map(|section| PageBlock::section(s, section))
 }
 
 fn dev_servers_section(
@@ -909,7 +851,7 @@ fn marked_handovers_section(
 }
 
 /// The Files & Links page (the old Tools group: CDXC:Settings 2026-10-29 in model.rs): where
-/// files and links open, the editor rows, then dev servers.
+/// files open, the Grok Bot view's rows, the editor rows, then dev servers.
 pub(super) fn files_links_sections(
     page: &mut GeneralTab,
     g: &GeneralCx,
@@ -918,7 +860,7 @@ pub(super) fn files_links_sections(
 ) -> Vec<PageBlock> {
     [
         file_opening_section(page, g, window, cx),
-        browser_section(page, g, window, cx),
+        grok_web_section(page, g, window, cx),
         editor_section(page, g, cx),
         dev_servers_section(page, g, window, cx),
     ]

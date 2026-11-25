@@ -24,16 +24,14 @@ pub(crate) fn file_opening() -> Section {
     )
 }
 
-pub(crate) fn browser() -> Section {
+/// The Grok Bot view's rows, shown while the Grok Bot extension is on. They stayed on Files &
+/// Links when the Browser's rows moved to their own page (CDXC:Settings 2026-11-26 in
+/// general/browser.rs).
+pub(crate) fn grok_web() -> Section {
     section(
-        "browser",
-        "Browser",
+        "grokWeb",
+        "Grok Bot",
         vec![
-            row("webLinkOpenTarget", "Open links in", "Open web links from terminal output (Command-click), session chat, and detected dev servers in the project Browser view or the system default browser.").options(WEB_LINK_OPEN_TARGET_OPTIONS),
-            row("agentPreviewBrowser", "Agents open pages in", "Where an agent opens a page it built for you, such as a website preview: the project Browser view or your default browser. Ask has the agent ask you the first time and save your answer here.").options(AGENT_PREVIEW_BROWSER_OPTIONS),
-            row("sessionLinkOpenTarget", "Open session links in", "Open a session's pull requests, issues and Linear tickets (the chips after its title and its links list) in the project Browser view or the system default browser. The phone follows this setting too.").options(SESSION_LINK_OPEN_TARGET_OPTIONS),
-            row("browserPagesInViewRow", "Show pages in their own row", "Show the Browser as one tab in the side panel's tab bar, with its pages as a row of tabs under it, instead of each page as a tab beside the views. Pages open, close, sleep and drag as before."),
-            row("reloadBrowserTabsOnStartup", "Reload open pages on launch", "Automatically reload the open project's browser tabs when Ghostex starts so pages are ready before you click them."),
             row("grokWebStartPage", "Grok Bot start page", "The page the Grok Bot view opens on, for every Grok Bot login: grok.com, or a page of your own such as one of your Grok bots. Left empty, or not a web address, it opens grok.com. Shown while the Grok Bot extension is on."),
             row("grokWebLogins", "Grok Bot logins", "The Grok Bot logins the bar above the Grok Bot page switches between, each with its own sign-in. Add one there or here; removing one signs it out. Shown while the Grok Bot extension is on."),
         ],

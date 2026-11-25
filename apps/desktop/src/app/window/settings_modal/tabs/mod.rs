@@ -53,6 +53,7 @@ pub(crate) fn settings_tab_view(
         | SettingsTabId::Terminal
         | SettingsTabId::Notifications
         | SettingsTabId::FilesLinks
+        | SettingsTabId::Browser
         | SettingsTabId::PowerSleep => cx
             .new(|cx| general::GeneralTab::new(store.clone(), tab, window, cx))
             .into(),

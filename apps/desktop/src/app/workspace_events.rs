@@ -428,7 +428,6 @@ impl GhostexGpuiApp {
                         url,
                         message.reuse,
                         remote_machine_id,
-                        true,
                         cx,
                     );
                 }
@@ -494,13 +493,15 @@ impl GhostexGpuiApp {
     }
 
     /// CDXC:Browser 2026-11-26 DECISION:
-    /// User (Q4999, #762): `ghostex browser open --background` (and the `ghostex_open_page` browser tool) loads the page in a tab of `project_id` without changing what the user is looking at: no view switch, no tab selected on screen, no keyboard focus, no toast, and never the system browser in its place. A project off screen gets the page in its parked Browser, as any targeted open does, minus the toast. The project on screen gets a new tab that is not selected (the empty placeholder takes it only while the Browser is not on screen), or a tab it already has that is not on screen, navigated in place. A tab on screen is never navigated: one already at the address is reused as it is, otherwise a new tab opens beside it. The page is made at once, hidden and sized like the Browser panel (`size_background_browser_page`), so the agent's tools can drive it.
+    /// User (Q4999, #762): `ghostex browser open --background` (and the `ghostex_open_page` browser tool) loads the page in a tab of `project_id` without changing what the user is looking at: no view switch, no tab selected on screen, no keyboard focus, no toast, and never the system browser in its place. A project off screen gets the page in its parked Browser, as any targeted open does, minus the toast. The project on screen gets a new tab that is not selected, or the agent's own earlier page when that is not on screen, navigated in place (the 2026-11-26 decision below). A tab on screen is never navigated: one already at the address is reused as it is, otherwise a new tab opens beside it. The page is made at once, hidden and sized like the Browser panel (`size_background_browser_page`), so the agent's tools can drive it.
+    /// CDXC:Browser 2026-11-26 DECISION (#762 review B5, B6): a background open changes nothing the user sees now or next, in any project. The page always gets a new tab beside the others, never selected, so the Browser comes back on the tab it was on (it no longer takes the empty placeholder either), and an off-screen project's saved view and pending page stay as they were. The only tab it reuses is `agent_tab`, the page this same agent session opened before (`agent_background_open_reuse_tab`); any other tab is the user's and is never navigated. The toast's Always (`agentPagesOpenWithoutAsking`) is the other road, the one where an agent's open does switch the view, because the user chose it.
     /// Answers the tab that is now the agent's page, or why nothing opened.
     pub(crate) fn open_browser_url_in_background(
         &mut self,
         project_id: &str,
         url: &str,
         reuse: GpuiBrowserRendererOpenReuse,
+        agent_tab: Option<BrowserTabId>,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> Result<BrowserTabId, &'static str> {
@@ -529,18 +530,15 @@ impl GhostexGpuiApp {
             if realign_browser_model {
                 self.swap_browser_tabs_to_project_id(self.agents_workspace_project_id.clone(), cx);
             }
-            self.open_browser_url_in_parked_project(
-                project_id,
-                url,
-                reuse,
-                remote_machine_id,
-                false,
-                cx,
-            );
             return self
-                .pending_parked_browser_opens
-                .get(project_id)
-                .copied()
+                .open_browser_url_in_parked_project_background(
+                    project_id,
+                    url,
+                    reuse,
+                    agent_tab,
+                    remote_machine_id,
+                    cx,
+                )
                 .ok_or("The page could not be opened");
         }
         if self.browser_tabs_project_id.as_deref() != Some(project_id) {
@@ -548,10 +546,12 @@ impl GhostexGpuiApp {
         }
         let browser_on_screen = self.browser_surfaces_may_be_visible();
         let shown = self.browser_tabs.rendered_active_loaded_tab_ids();
-        let reused = self
-            .browser_tabs
-            .find_renderer_open_reuse_tab(&url, reuse, remote_machine_id.as_deref())
-            .map(|(_, tab_id)| tab_id);
+        let reused = self.browser_tabs.agent_background_open_reuse_tab(
+            agent_tab,
+            &url,
+            reuse,
+            remote_machine_id.as_deref(),
+        );
         let reused = match reused {
             Some(tab_id) if browser_on_screen && shown.contains(&tab_id) => {
                 if self
@@ -578,14 +578,10 @@ impl GhostexGpuiApp {
             None => {
                 let profile_id = self.browser_profiles.active_profile_id();
                 let placement = cef::BrowserPopupPlacement::Background;
-                let tab_id = if browser_on_screen {
-                    self.browser_tabs
-                        .add_loaded_popup_tab(url.clone(), profile_id, placement)
-                } else {
-                    self.browser_tabs
-                        .open_loaded_popup_tab(url.clone(), profile_id, placement)
-                }
-                .ok_or("The page could not be opened")?;
+                let tab_id = self
+                    .browser_tabs
+                    .add_loaded_popup_tab(url.clone(), profile_id, placement)
+                    .ok_or("The page could not be opened")?;
                 if let Some(tab) = self
                     .browser_tabs
                     .tabs

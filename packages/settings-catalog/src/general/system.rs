@@ -54,7 +54,7 @@ pub(crate) fn auto_sleep() -> Section {
         vec![
             // CDXC:Settings 2026-10-29 DECISION (cleanup Q17): one Views auto sleep after row sets the four
             // per-view times; the per-view rows stay under Show Advanced.
-            row("autoSleepViews", "Views auto sleep after", "When inactive VS Code, Git, Project and Browser panes sleep, or Off. Sets the four per-view times below.")
+            row("autoSleepViews", "Views auto sleep after", "When inactive VS Code, Git, Project and Browser panes sleep, or Off. Sets the four per-view times: VS Code, Git and Project below, and Browser sleeps after on Settings > Browser.")
             .num_options(AUTO_SLEEP_IDLE_MINUTE_OPTIONS),
             row(
                 "autoSleepCodeEditorIdleMinutes",
@@ -72,12 +72,6 @@ pub(crate) fn auto_sleep() -> Section {
                 "autoSleepProjectEditorIdleMinutes",
                 "Project sleeps after",
                 "Choose when inactive Project panes sleep, or turn Auto Sleep off. Off also keeps Files, Beads and Automate awake when more than three views are open.",
-            )
-            .num_options(AUTO_SLEEP_IDLE_MINUTE_OPTIONS),
-            row(
-                "autoSleepBrowserIdleMinutes",
-                "Browser sleeps after",
-                "Choose when inactive browser panes sleep, or turn Auto Sleep off. Off also keeps the Browser awake when more than three views are open.",
             )
             .num_options(AUTO_SLEEP_IDLE_MINUTE_OPTIONS),
             row(

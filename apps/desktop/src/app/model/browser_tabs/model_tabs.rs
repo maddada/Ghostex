@@ -190,6 +190,34 @@ impl BrowserTabModel {
         Some((pane_id, tab_id))
     }
 
+    /// CDXC:Browser 2026-11-26 WHY (#762 review B6): a background open (`ghostex browser open
+    /// --background`) may reuse only `agent_tab`, the page that same agent session opened, never a
+    /// tab of the user's that happens to share the address or site: navigating that would throw
+    /// away what the user had there (a half-written comment) without their say. `reuse` keeps its
+    /// meaning for that one tab: `none` never, `exact` the same address, `similar` the same site.
+    pub(crate) fn agent_background_open_reuse_tab(
+        &self,
+        agent_tab: Option<BrowserTabId>,
+        url: &str,
+        reuse: GpuiBrowserRendererOpenReuse,
+        remote_machine_id: Option<&str>,
+    ) -> Option<BrowserTabId> {
+        let tab = self.tab(agent_tab?)?;
+        if tab.remote_machine_id.as_deref() != remote_machine_id {
+            return None;
+        }
+        let reusable = match reuse {
+            GpuiBrowserRendererOpenReuse::None => false,
+            GpuiBrowserRendererOpenReuse::Exact => tab.url == url,
+            GpuiBrowserRendererOpenReuse::Similar => {
+                tab.url == url
+                    || browser_url_origin_key(url)
+                        .is_some_and(|origin| browser_url_origin_key(&tab.url) == Some(origin))
+            }
+        };
+        reusable.then_some(tab.id)
+    }
+
     pub(crate) fn load_pane_active_tab_url(
         &mut self,
         pane_id: BrowserPaneId,

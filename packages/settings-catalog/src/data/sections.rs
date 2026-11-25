@@ -599,11 +599,6 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
     (
         "tools",
         &[
-            "webLinkOpenTarget",
-            "agentPreviewBrowser",
-            "sessionLinkOpenTarget",
-            "browserPagesInViewRow",
-            "reloadBrowserTabsOnStartup",
             "grokWebStartPage",
             "grokWebLogins",
             "codeServerLinkVscodeUserConfig",
@@ -619,6 +614,21 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
             "changesHideTestFiles",
             "beadsViewLayout",
             "docsOpenFilesAsTabs",
+        ],
+    ),
+    (
+        "browser",
+        &[
+            "agentPagesOpenWithoutAsking",
+            "agentPreviewBrowser",
+            "webLinkOpenTarget",
+            "sessionLinkOpenTarget",
+            "browserPagesInViewRow",
+            "reloadBrowserTabsOnStartup",
+            "autoSleepBrowserIdleMinutes",
+            "webRuntime",
+            "browserSignins",
+            "browserSitePermissions",
         ],
     ),
     (
@@ -649,7 +659,6 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
             "autoSleepCodeEditorIdleMinutes",
             "autoSleepGitEditorIdleMinutes",
             "autoSleepProjectEditorIdleMinutes",
-            "autoSleepBrowserIdleMinutes",
             "keepViewsLoaded",
             "projectSwitchKeepAliveMinutes",
             "autoSleepAgentIdleMinutes",
@@ -823,17 +832,27 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
             "docsOpenFilesAsTabs",
         ],
     ),
+    ("grokWeb", &["grokWebStartPage", "grokWebLogins"]),
     (
-        "browser",
+        "browserAgents",
+        &["agentPagesOpenWithoutAsking", "agentPreviewBrowser"],
+    ),
+    (
+        "browserLinks",
+        &["webLinkOpenTarget", "sessionLinkOpenTarget"],
+    ),
+    (
+        "browserPages",
         &[
-            "webLinkOpenTarget",
-            "agentPreviewBrowser",
-            "sessionLinkOpenTarget",
             "browserPagesInViewRow",
             "reloadBrowserTabsOnStartup",
-            "grokWebStartPage",
-            "grokWebLogins",
+            "autoSleepBrowserIdleMinutes",
         ],
+    ),
+    ("browserRuntime", &["webRuntime"]),
+    (
+        "browserSignIns",
+        &["browserSignins", "browserSitePermissions"],
     ),
     (
         "editor",
@@ -859,7 +878,6 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
             "autoSleepCodeEditorIdleMinutes",
             "autoSleepGitEditorIdleMinutes",
             "autoSleepProjectEditorIdleMinutes",
-            "autoSleepBrowserIdleMinutes",
             "keepViewsLoaded",
             "projectSwitchKeepAliveMinutes",
             "autoSleepAgentIdleMinutes",
@@ -1122,11 +1140,6 @@ pub const MAIN_SETTINGS_SECTION_SETTING_KEYS: &[(&str, &[&str])] = &[
     (
         "tools",
         &[
-            "webLinkOpenTarget",
-            "agentPreviewBrowser",
-            "sessionLinkOpenTarget",
-            "browserPagesInViewRow",
-            "reloadBrowserTabsOnStartup",
             "grokWebStartPage",
             "grokWebLogins",
             "codeServerLinkVscodeUserConfig",
@@ -1142,6 +1155,21 @@ pub const MAIN_SETTINGS_SECTION_SETTING_KEYS: &[(&str, &[&str])] = &[
             "changesHideTestFiles",
             "beadsViewLayout",
             "docsOpenFilesAsTabs",
+        ],
+    ),
+    (
+        "browser",
+        &[
+            "agentPagesOpenWithoutAsking",
+            "agentPreviewBrowser",
+            "webLinkOpenTarget",
+            "sessionLinkOpenTarget",
+            "browserPagesInViewRow",
+            "reloadBrowserTabsOnStartup",
+            "autoSleepBrowserIdleMinutes",
+            "webRuntime",
+            "browserSignins",
+            "browserSitePermissions",
         ],
     ),
     (
@@ -1172,7 +1200,6 @@ pub const MAIN_SETTINGS_SECTION_SETTING_KEYS: &[(&str, &[&str])] = &[
             "autoSleepCodeEditorIdleMinutes",
             "autoSleepGitEditorIdleMinutes",
             "autoSleepProjectEditorIdleMinutes",
-            "autoSleepBrowserIdleMinutes",
             "keepViewsLoaded",
             "projectSwitchKeepAliveMinutes",
             "autoSleepAgentIdleMinutes",
@@ -1277,11 +1304,27 @@ pub const MAIN_SETTINGS_SUBSECTION_NAVIGATION: J = J::Obj(&[
                 ("id", J::Str("fileOpening")),
                 ("title", J::Str("File opening")),
             ]),
-            J::Obj(&[("id", J::Str("browser")), ("title", J::Str("Browser"))]),
+            J::Obj(&[("id", J::Str("grokWeb")), ("title", J::Str("Grok Bot"))]),
             J::Obj(&[("id", J::Str("editor")), ("title", J::Str("Editor"))]),
             J::Obj(&[
                 ("id", J::Str("terminalDevServers")),
                 ("title", J::Str("Dev Servers")),
+            ]),
+        ]),
+    ),
+    (
+        "browser",
+        J::Arr(&[
+            J::Obj(&[("id", J::Str("browserAgents")), ("title", J::Str("Agents"))]),
+            J::Obj(&[("id", J::Str("browserLinks")), ("title", J::Str("Links"))]),
+            J::Obj(&[("id", J::Str("browserPages")), ("title", J::Str("Pages"))]),
+            J::Obj(&[
+                ("id", J::Str("browserRuntime")),
+                ("title", J::Str("Web runtime")),
+            ]),
+            J::Obj(&[
+                ("id", J::Str("browserSignIns")),
+                ("title", J::Str("Sign-ins")),
             ]),
         ]),
     ),
@@ -1305,10 +1348,15 @@ pub const MAIN_SETTINGS_SUBSECTION_PARENT_IDS: &[(&str, &str)] = &[
     ("terminal", "terminal"),
     ("terminalBehavior", "terminal"),
     ("terminalScrolling", "terminal"),
-    ("browser", "tools"),
+    ("grokWeb", "tools"),
     ("terminalDevServers", "tools"),
     ("editor", "tools"),
     ("fileOpening", "tools"),
+    ("browserAgents", "browser"),
+    ("browserLinks", "browser"),
+    ("browserPages", "browser"),
+    ("browserRuntime", "browser"),
+    ("browserSignIns", "browser"),
 ];
 
 /// CDXC:Sessions 2026-06-26-06:27:

@@ -277,11 +277,18 @@ impl GhostexGpuiApp {
                     };
                     let message = gpui_sidebar_open_browser_url_from_json(&payload.to_string())
                         .map_err(|_| RendererCommandError::Failed)?;
+                    // Only this agent's own earlier page may be reused (#762 review B6).
+                    let agent_tab = agent_session
+                        .as_deref()
+                        .and_then(|session| self.browser_agent_pages.get(session))
+                        .filter(|(owner, _)| *owner == project_id)
+                        .map(|(_, tab_id)| *tab_id);
                     return Ok(
                         match self.open_browser_url_in_background(
                             &project_id,
                             &message.url,
                             message.reuse,
+                            agent_tab,
                             window,
                             cx,
                         ) {

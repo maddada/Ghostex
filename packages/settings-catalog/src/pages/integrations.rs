@@ -22,7 +22,8 @@ pub(crate) fn integrations() -> Section {
             row("spaceo", "SpaceO", "On an Apple Silicon Mac with macOS 14 or later, install SpaceO so agents can use Mac apps on their own hidden screen while you keep your own screen, pointer and focus. Ghostex runs the official installer and keeps SpaceO running in the background, and agents read ghostex spaceo guide to use it; once installed, update, reinstall or uninstall it from the same row."),
             row("spaceoPermissions", "SpaceO Permissions", "SpaceO needs Accessibility to click and type in apps, and Screen Recording to take screenshots of the apps it runs."),
             row("managedTools", "Tools", "Install, update, reinstall or uninstall the tools Ghostex sets up for you: Node.js and npm, uv, Homebrew, Linux system tools, Beads, and the GitHub and GitLab CLIs. Each Install button says how it installs; your own copies are used when you have them.").options(&[opt("Node.js and npm", "node"), opt("uv (Python)", "uv"), opt("Homebrew", "homebrew"), opt("System tools (curl, unzip, git)", "systemTools"), opt("Beads (bd)", "beads"), opt("GitHub CLI (gh)", "gh"), opt("GitLab CLI (glab)", "glab")]),
-            row("webRuntime", "Chromium runtime (CEF)", "Install, reinstall or uninstall the optional web runtime used by the Browser, the VS Code view, website and extension views, and HTML files in Files. It also installs from the first view that needs it."),
+            // The Chromium runtime (CEF) row moved to Settings > Browser (CDXC:Settings 2026-11-26
+            // in general/browser.rs); the page keeps a line pointing there.
         ],
     )
 }

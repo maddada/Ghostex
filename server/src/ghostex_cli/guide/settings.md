@@ -184,13 +184,8 @@ How to use this file:
 - **Beads view layout** `beadsViewLayout` (one of tree | board; default board): Choose whether the Beads view opens as a Tree (every bead under its epic) or as the Board. The Tree | Board switch in the view's header changes this too. Option labels: tree = Tree, board = Board.
 - **Audio** `audioFileOpenTarget` (one of files | system-app; default files): Choose whether audio files linked in agent chat or the terminal, or opened with `ghostex open`, play in Files or open in the system app. Formats Files cannot play, such as .m4a, always open in the system app. Option labels: files = Files, system-app = System App.
 - **Open files show as** `docsOpenFilesAsTabs` (boolean, default true): A list: the files open in the Files view are the Open Files list in the files sidebar. Tabs: they are a row of tabs above the document; every file you open, from the files list, Quick Access or a chat link, gets a tab, and each keeps its own unsaved changes and notes.
-### Browser
+### Grok Bot
 
-- **Open links in** `webLinkOpenTarget` (one of internal-browser | system-default-browser; default internal-browser): Open web links from terminal output (Command-click), session chat, and detected dev servers in the project Browser view or the system default browser. Option labels: internal-browser = Internal Browser, system-default-browser = System Default Browser.
-- **Agents open pages in** `agentPreviewBrowser` (one of ask | internal-browser | system-default-browser; default ask): Where an agent opens a page it built for you, such as a website preview: the project Browser view or your default browser. Ask has the agent ask you the first time and save your answer here. Option labels: ask = Ask, internal-browser = Ghostex Browser, system-default-browser = My default browser.
-- **Open session links in** `sessionLinkOpenTarget` (one of embedded | external; default embedded): Open a session's pull requests, issues and Linear tickets (the chips after its title and its links list) in the project Browser view or the system default browser. The phone follows this setting too. Option labels: embedded = Internal Browser, external = System Default Browser.
-- **Show pages in their own row** `browserPagesInViewRow` (boolean, default false): Show the Browser as one tab in the side panel's tab bar, with its pages as a row of tabs under it, instead of each page as a tab beside the views. Pages open, close, sleep and drag as before.
-- **Reload open pages on launch** `reloadBrowserTabsOnStartup` (boolean, default false) [advanced]: Automatically reload the open project's browser tabs when Ghostex starts so pages are ready before you click them.
 - **Grok Bot start page** `grokWebStartPage` (text, default https://grok.com/): The page the Grok Bot view opens on, for every Grok Bot login: grok.com, or a page of your own such as one of your Grok bots. Left empty, or not a web address, it opens grok.com. Shown while the Grok Bot extension is on.
 - **Grok Bot logins** `grokWebLogins` (structured value; change it in Settings, not with `ghostex settings set`): The Grok Bot logins the bar above the Grok Bot page switches between, each with its own sign-in. Add one there or here; removing one signs it out. Shown while the Grok Bot extension is on.
 ### Editor
@@ -202,6 +197,28 @@ How to use this file:
 
 - **Detect running servers in terminals** `terminalDevServerDetectionEnabled` (boolean, default true): Detect localhost dev server URLs from terminal output.
 - **Ignored ports** `terminalDevServerIgnoredPortRules` (structured value; change it in Settings, not with `ghostex settings set`) [advanced]: Hide detected servers on specific ports or inclusive port ranges.
+## Browser (tab `browser`)
+
+### Agents
+
+- **Let agents open and switch pages without asking** `agentPagesOpenWithoutAsking` (boolean, default false) [not agent-writable]: When an agent opens a page, the Browser shows it right away instead of asking with a toast first. The toast's Always button turns this on.
+- **Agents open pages in** `agentPreviewBrowser` (one of ask | internal-browser | system-default-browser; default ask): Where an agent opens a page it built for you, such as a website preview: the project Browser view or your default browser. Ask has the agent ask you the first time and save your answer here. Option labels: ask = Ask, internal-browser = Ghostex Browser, system-default-browser = My default browser.
+### Links
+
+- **Open links in** `webLinkOpenTarget` (one of internal-browser | system-default-browser; default internal-browser): Open web links from terminal output (Command-click), session chat, and detected dev servers in the project Browser view or the system default browser. Option labels: internal-browser = Internal Browser, system-default-browser = System Default Browser.
+- **Open session links in** `sessionLinkOpenTarget` (one of embedded | external; default embedded): Open a session's pull requests, issues and Linear tickets (the chips after its title and its links list) in the project Browser view or the system default browser. The phone follows this setting too. Option labels: embedded = Internal Browser, external = System Default Browser.
+### Pages
+
+- **Show pages in their own row** `browserPagesInViewRow` (boolean, default false): Show the Browser as one tab in the side panel's tab bar, with its pages as a row of tabs under it, instead of each page as a tab beside the views. Pages open, close, sleep and drag as before.
+- **Reload open pages on launch** `reloadBrowserTabsOnStartup` (boolean, default false) [advanced]: Automatically reload the open project's browser tabs when Ghostex starts so pages are ready before you click them.
+- **Browser sleeps after** `autoSleepBrowserIdleMinutes` (number one of 0 | 5 | 10 | 15 | 30 | 60 | 120 | 300; default 10) [advanced]: Choose when inactive browser panes sleep, or turn Auto Sleep off. Off also keeps the Browser awake when more than three views are open. Power & Sleep's Views auto sleep after sets it too. Option labels: 0 = Off, 5 = 5 minutes, 10 = 10 minutes, 15 = 15 minutes, 30 = 30 minutes, 60 = 1 hour, 120 = 2 hours, 300 = 5 hours.
+### Web runtime
+
+- **Chromium runtime (CEF)** `webRuntime` (Settings UI row without a settings key; use `ghostex settings open`): Install, reinstall or uninstall the optional web runtime used by the Browser, the VS Code view, website and extension views, and HTML files in Files. It also installs from the first view that needs it.
+### Sign-ins
+
+- **Browser sign-ins** `browserSignins` (Settings UI row without a settings key; use `ghostex settings open`): Sign this window's workspace's Browser out of every site. Each workspace's Browser keeps its own cookies; Settings > Workspaces has the same button for every workspace.
+- **Site permissions** `browserSitePermissions` (Settings UI row without a settings key; use `ghostex settings open`): Forget your Allow and Don't Allow answers to sites in this window's workspace's Browser, such as a site connecting to apps on this computer, so each site asks again.
 ## Power & Sleep (tab `system`)
 
 ### When your computer starts
@@ -215,11 +232,10 @@ How to use this file:
 - **Notify me when it steps in** `memoryGuardNotify` (boolean, default true): A notification on this computer and your phone whenever Ghostex stops or restarts something to free memory. Needs Stop sessions that run the computer out of memory.
 ### Auto Sleep
 
-- **Views auto sleep after** `autoSleepViews` (Settings UI row without a settings key; use `ghostex settings open`): When inactive VS Code, Git, Project and Browser panes sleep, or Off. Sets the four per-view times below.
+- **Views auto sleep after** `autoSleepViews` (Settings UI row without a settings key; use `ghostex settings open`): When inactive VS Code, Git, Project and Browser panes sleep, or Off. Sets the four per-view times: VS Code, Git and Project below, and Browser sleeps after on Settings > Browser.
 - **VS Code sleeps after** `autoSleepCodeEditorIdleMinutes` (number one of 0 | 5 | 10 | 15 | 30 | 60 | 120 | 300; default 10) [advanced]: Choose when inactive VS Code panes sleep, or turn Auto Sleep off. Off also keeps Code awake when more than three views are open. Option labels: 0 = Off, 5 = 5 minutes, 10 = 10 minutes, 15 = 15 minutes, 30 = 30 minutes, 60 = 1 hour, 120 = 2 hours, 300 = 5 hours.
 - **Git sleeps after** `autoSleepGitEditorIdleMinutes` (number one of 0 | 5 | 10 | 15 | 30 | 60 | 120 | 300; default 5) [advanced]: Choose when inactive Git panes sleep, or turn Auto Sleep off. Option labels: 0 = Off, 5 = 5 minutes, 10 = 10 minutes, 15 = 15 minutes, 30 = 30 minutes, 60 = 1 hour, 120 = 2 hours, 300 = 5 hours.
 - **Project sleeps after** `autoSleepProjectEditorIdleMinutes` (number one of 0 | 5 | 10 | 15 | 30 | 60 | 120 | 300; default 5) [advanced]: Choose when inactive Project panes sleep, or turn Auto Sleep off. Off also keeps Files, Beads and Automate awake when more than three views are open. Option labels: 0 = Off, 5 = 5 minutes, 10 = 10 minutes, 15 = 15 minutes, 30 = 30 minutes, 60 = 1 hour, 120 = 2 hours, 300 = 5 hours.
-- **Browser sleeps after** `autoSleepBrowserIdleMinutes` (number one of 0 | 5 | 10 | 15 | 30 | 60 | 120 | 300; default 10) [advanced]: Choose when inactive browser panes sleep, or turn Auto Sleep off. Off also keeps the Browser awake when more than three views are open. Option labels: 0 = Off, 5 = 5 minutes, 10 = 10 minutes, 15 = 15 minutes, 30 = 30 minutes, 60 = 1 hour, 120 = 2 hours, 300 = 5 hours.
 - **Keep views loaded** `keepViewsLoaded` (boolean, default false) [advanced]: Keep the side panel views you open loaded when you switch projects or workspaces, without the three-view limit or the previous project's time limit. Auto Sleep and Sleep still apply. Uses more memory.
 - **Keep the last project running for** `projectSwitchKeepAliveMinutes` (number 0 to 60 default 10) [advanced]: After you switch to another project or Space, keep the terminals, chats, and view that were open in the previous project running for this many minutes so switching back is instant. 0 releases them right away. Keep views loaded (Auto Sleep) keeps every side panel view until its Auto Sleep time instead.
 - **Agents sleep after** `autoSleepAgentIdleMinutes` (number one of 0 | 5 | 10 | 15 | 30 | 60 | 120 | 300; default 0): Choose when eligible agent terminals sleep, or turn Auto Sleep off. Option labels: 0 = Off, 5 = 5 minutes, 10 = 10 minutes, 15 = 15 minutes, 30 = 30 minutes, 60 = 1 hour, 120 = 2 hours, 300 = 5 hours.
@@ -513,7 +529,6 @@ How to use this file:
 - **SpaceO** `spaceo` (Settings UI row without a settings key; use `ghostex settings open`): On an Apple Silicon Mac with macOS 14 or later, install SpaceO so agents can use Mac apps on their own hidden screen while you keep your own screen, pointer and focus. Ghostex runs the official installer and keeps SpaceO running in the background, and agents read ghostex spaceo guide to use it; once installed, update, reinstall or uninstall it from the same row. Only on macOS.
 - **SpaceO Permissions** `spaceoPermissions` (Settings UI row without a settings key; use `ghostex settings open`): SpaceO needs Accessibility to click and type in apps, and Screen Recording to take screenshots of the apps it runs. Only on macOS.
 - **Tools** `managedTools` (Settings UI row without a settings key; use `ghostex settings open`): Install, update, reinstall or uninstall the tools Ghostex sets up for you: Node.js and npm, uv, Homebrew, Linux system tools, Beads, and the GitHub and GitLab CLIs. Each Install button says how it installs; your own copies are used when you have them.
-- **Chromium runtime (CEF)** `webRuntime` (Settings UI row without a settings key; use `ghostex settings open`): Install, reinstall or uninstall the optional web runtime used by the Browser, the VS Code view, website and extension views, and HTML files in Files. It also installs from the first view that needs it.
 ### Floating Capture
 
 - **Switch to the session after sending** `ghostexCaptureSwitchToSession` (boolean, default true): After a prompt is sent from Floating Capture, the Ghostex window shows the session it went to, without coming in front of the app you are in.

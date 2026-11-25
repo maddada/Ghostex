@@ -2975,108 +2975,13 @@
       "agentWritable": true
     },
     {
-      "key": "webLinkOpenTarget",
-      "title": "Open links in",
-      "subtitle": "Open web links from terminal output (Command-click), session chat, and detected dev servers in the project Browser view or the system default browser.",
-      "tab": "tools",
-      "tabTitle": "Files & Links",
-      "section": "browser",
-      "sectionTitle": "Browser",
-      "type": "enum",
-      "default": "internal-browser",
-      "options": [
-        {
-          "label": "Internal Browser",
-          "value": "internal-browser"
-        },
-        {
-          "label": "System Default Browser",
-          "value": "system-default-browser"
-        }
-      ],
-      "agentWritable": true
-    },
-    {
-      "key": "agentPreviewBrowser",
-      "title": "Agents open pages in",
-      "subtitle": "Where an agent opens a page it built for you, such as a website preview: the project Browser view or your default browser. Ask has the agent ask you the first time and save your answer here.",
-      "tab": "tools",
-      "tabTitle": "Files & Links",
-      "section": "browser",
-      "sectionTitle": "Browser",
-      "type": "enum",
-      "default": "ask",
-      "options": [
-        {
-          "label": "Ask",
-          "value": "ask"
-        },
-        {
-          "label": "Ghostex Browser",
-          "value": "internal-browser"
-        },
-        {
-          "label": "My default browser",
-          "value": "system-default-browser"
-        }
-      ],
-      "agentWritable": true
-    },
-    {
-      "key": "sessionLinkOpenTarget",
-      "title": "Open session links in",
-      "subtitle": "Open a session's pull requests, issues and Linear tickets (the chips after its title and its links list) in the project Browser view or the system default browser. The phone follows this setting too.",
-      "tab": "tools",
-      "tabTitle": "Files & Links",
-      "section": "browser",
-      "sectionTitle": "Browser",
-      "type": "enum",
-      "default": "embedded",
-      "options": [
-        {
-          "label": "Internal Browser",
-          "value": "embedded"
-        },
-        {
-          "label": "System Default Browser",
-          "value": "external"
-        }
-      ],
-      "agentWritable": true
-    },
-    {
-      "key": "browserPagesInViewRow",
-      "title": "Show pages in their own row",
-      "subtitle": "Show the Browser as one tab in the side panel's tab bar, with its pages as a row of tabs under it, instead of each page as a tab beside the views. Pages open, close, sleep and drag as before.",
-      "tab": "tools",
-      "tabTitle": "Files & Links",
-      "section": "browser",
-      "sectionTitle": "Browser",
-      "type": "boolean",
-      "default": false,
-      "agentWritable": true
-    },
-    {
-      "key": "reloadBrowserTabsOnStartup",
-      "title": "Reload open pages on launch",
-      "subtitle": "Automatically reload the open project's browser tabs when Ghostex starts so pages are ready before you click them.",
-      "tab": "tools",
-      "tabTitle": "Files & Links",
-      "section": "browser",
-      "sectionTitle": "Browser",
-      "type": "boolean",
-      "default": false,
-      "advanced": true,
-      "agentWritable": true
-    },
-    {
       "key": "grokWebStartPage",
       "title": "Grok Bot start page",
       "subtitle": "The page the Grok Bot view opens on, for every Grok Bot login: grok.com, or a page of your own such as one of your Grok bots. Left empty, or not a web address, it opens grok.com. Shown while the Grok Bot extension is on.",
       "tab": "tools",
       "tabTitle": "Files & Links",
-      "section": "browser",
-      "sectionTitle": "Browser",
+      "section": "grokWeb",
+      "sectionTitle": "Grok Bot",
       "type": "string",
       "default": "https://grok.com/",
       "agentWritable": true
@@ -3087,8 +2992,8 @@
       "subtitle": "The Grok Bot logins the bar above the Grok Bot page switches between, each with its own sign-in. Add one there or here; removing one signs it out. Shown while the Grok Bot extension is on.",
       "tab": "tools",
       "tabTitle": "Files & Links",
-      "section": "browser",
-      "sectionTitle": "Browser",
+      "section": "grokWeb",
+      "sectionTitle": "Grok Bot",
       "type": "json",
       "default": [],
       "agentWritable": false
@@ -3168,6 +3073,193 @@
       "agentWritable": false
     },
     {
+      "key": "agentPagesOpenWithoutAsking",
+      "title": "Let agents open and switch pages without asking",
+      "subtitle": "When an agent opens a page, the Browser shows it right away instead of asking with a toast first. The toast's Always button turns this on.",
+      "tab": "browser",
+      "tabTitle": "Browser",
+      "section": "browserAgents",
+      "sectionTitle": "Agents",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": false
+    },
+    {
+      "key": "agentPreviewBrowser",
+      "title": "Agents open pages in",
+      "subtitle": "Where an agent opens a page it built for you, such as a website preview: the project Browser view or your default browser. Ask has the agent ask you the first time and save your answer here.",
+      "tab": "browser",
+      "tabTitle": "Browser",
+      "section": "browserAgents",
+      "sectionTitle": "Agents",
+      "type": "enum",
+      "default": "ask",
+      "options": [
+        {
+          "label": "Ask",
+          "value": "ask"
+        },
+        {
+          "label": "Ghostex Browser",
+          "value": "internal-browser"
+        },
+        {
+          "label": "My default browser",
+          "value": "system-default-browser"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "webLinkOpenTarget",
+      "title": "Open links in",
+      "subtitle": "Open web links from terminal output (Command-click), session chat, and detected dev servers in the project Browser view or the system default browser.",
+      "tab": "browser",
+      "tabTitle": "Browser",
+      "section": "browserLinks",
+      "sectionTitle": "Links",
+      "type": "enum",
+      "default": "internal-browser",
+      "options": [
+        {
+          "label": "Internal Browser",
+          "value": "internal-browser"
+        },
+        {
+          "label": "System Default Browser",
+          "value": "system-default-browser"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "sessionLinkOpenTarget",
+      "title": "Open session links in",
+      "subtitle": "Open a session's pull requests, issues and Linear tickets (the chips after its title and its links list) in the project Browser view or the system default browser. The phone follows this setting too.",
+      "tab": "browser",
+      "tabTitle": "Browser",
+      "section": "browserLinks",
+      "sectionTitle": "Links",
+      "type": "enum",
+      "default": "embedded",
+      "options": [
+        {
+          "label": "Internal Browser",
+          "value": "embedded"
+        },
+        {
+          "label": "System Default Browser",
+          "value": "external"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "browserPagesInViewRow",
+      "title": "Show pages in their own row",
+      "subtitle": "Show the Browser as one tab in the side panel's tab bar, with its pages as a row of tabs under it, instead of each page as a tab beside the views. Pages open, close, sleep and drag as before.",
+      "tab": "browser",
+      "tabTitle": "Browser",
+      "section": "browserPages",
+      "sectionTitle": "Pages",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "reloadBrowserTabsOnStartup",
+      "title": "Reload open pages on launch",
+      "subtitle": "Automatically reload the open project's browser tabs when Ghostex starts so pages are ready before you click them.",
+      "tab": "browser",
+      "tabTitle": "Browser",
+      "section": "browserPages",
+      "sectionTitle": "Pages",
+      "type": "boolean",
+      "default": false,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "autoSleepBrowserIdleMinutes",
+      "title": "Browser sleeps after",
+      "subtitle": "Choose when inactive browser panes sleep, or turn Auto Sleep off. Off also keeps the Browser awake when more than three views are open. Power & Sleep's Views auto sleep after sets it too.",
+      "tab": "browser",
+      "tabTitle": "Browser",
+      "section": "browserPages",
+      "sectionTitle": "Pages",
+      "type": "number",
+      "default": 10,
+      "options": [
+        {
+          "label": "Off",
+          "value": "0"
+        },
+        {
+          "label": "5 minutes",
+          "value": "5"
+        },
+        {
+          "label": "10 minutes",
+          "value": "10"
+        },
+        {
+          "label": "15 minutes",
+          "value": "15"
+        },
+        {
+          "label": "30 minutes",
+          "value": "30"
+        },
+        {
+          "label": "1 hour",
+          "value": "60"
+        },
+        {
+          "label": "2 hours",
+          "value": "120"
+        },
+        {
+          "label": "5 hours",
+          "value": "300"
+        }
+      ],
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "webRuntime",
+      "title": "Chromium runtime (CEF)",
+      "subtitle": "Install, reinstall or uninstall the optional web runtime used by the Browser, the VS Code view, website and extension views, and HTML files in Files. It also installs from the first view that needs it.",
+      "tab": "browser",
+      "tabTitle": "Browser",
+      "section": "browserRuntime",
+      "sectionTitle": "Web runtime",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "browserSignins",
+      "title": "Browser sign-ins",
+      "subtitle": "Sign this window's workspace's Browser out of every site. Each workspace's Browser keeps its own cookies; Settings > Workspaces has the same button for every workspace.",
+      "tab": "browser",
+      "tabTitle": "Browser",
+      "section": "browserSignIns",
+      "sectionTitle": "Sign-ins",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "browserSitePermissions",
+      "title": "Site permissions",
+      "subtitle": "Forget your Allow and Don't Allow answers to sites in this window's workspace's Browser, such as a site connecting to apps on this computer, so each site asks again.",
+      "tab": "browser",
+      "tabTitle": "Browser",
+      "section": "browserSignIns",
+      "sectionTitle": "Sign-ins",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
       "key": "startServerAtLogin",
       "title": "Start Ghostex's server when you log in",
       "subtitle": "Runs Ghostex's server in the background from the moment you log in, so your other computers, your phone and coordinators keep working while the app is closed.",
@@ -3230,7 +3322,7 @@
     {
       "key": "autoSleepViews",
       "title": "Views auto sleep after",
-      "subtitle": "When inactive VS Code, Git, Project and Browser panes sleep, or Off. Sets the four per-view times below.",
+      "subtitle": "When inactive VS Code, Git, Project and Browser panes sleep, or Off. Sets the four per-view times: VS Code, Git and Project below, and Browser sleeps after on Settings > Browser.",
       "tab": "system",
       "tabTitle": "Power & Sleep",
       "section": "autoSleep",
@@ -3376,53 +3468,6 @@
       "sectionTitle": "Auto Sleep",
       "type": "number",
       "default": 5,
-      "options": [
-        {
-          "label": "Off",
-          "value": "0"
-        },
-        {
-          "label": "5 minutes",
-          "value": "5"
-        },
-        {
-          "label": "10 minutes",
-          "value": "10"
-        },
-        {
-          "label": "15 minutes",
-          "value": "15"
-        },
-        {
-          "label": "30 minutes",
-          "value": "30"
-        },
-        {
-          "label": "1 hour",
-          "value": "60"
-        },
-        {
-          "label": "2 hours",
-          "value": "120"
-        },
-        {
-          "label": "5 hours",
-          "value": "300"
-        }
-      ],
-      "advanced": true,
-      "agentWritable": true
-    },
-    {
-      "key": "autoSleepBrowserIdleMinutes",
-      "title": "Browser sleeps after",
-      "subtitle": "Choose when inactive browser panes sleep, or turn Auto Sleep off. Off also keeps the Browser awake when more than three views are open.",
-      "tab": "system",
-      "tabTitle": "Power & Sleep",
-      "section": "autoSleep",
-      "sectionTitle": "Auto Sleep",
-      "type": "number",
-      "default": 10,
       "options": [
         {
           "label": "Off",
@@ -11653,17 +11698,6 @@
           "value": "glab"
         }
       ],
-      "agentWritable": false
-    },
-    {
-      "key": "webRuntime",
-      "title": "Chromium runtime (CEF)",
-      "subtitle": "Install, reinstall or uninstall the optional web runtime used by the Browser, the VS Code view, website and extension views, and HTML files in Files. It also installs from the first view that needs it.",
-      "tab": "integrations",
-      "tabTitle": "Integrations",
-      "section": "integrations",
-      "sectionTitle": "Integrations",
-      "type": "ui",
       "agentWritable": false
     },
     {

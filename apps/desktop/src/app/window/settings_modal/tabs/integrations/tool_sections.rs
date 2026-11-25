@@ -6,6 +6,8 @@
 //! User: "can we please have everything related to computer use/spaceo/browser use and their skills in 1 place together under integrations. right now the skill is not next to the install for cua and stuff pls fix". Each tool's skill row sits right after its install rows instead of in the Agent skills list, which keeps the other skills and the Refresh and Uninstall all buttons. Supersedes the "Desktop control" section of the 2026-09-09 decision on `skills_section`.
 //! SEE-ALSO: integrations/remote_machine.rs (the same sections for a picked machine).
 
+use super::super::super::fields::{RowSpec, setting_row};
+use super::super::general;
 use super::*;
 
 pub(super) const COMPUTER_BROWSER_USE_TITLE: &str = "Computer & browser use";
@@ -117,32 +119,52 @@ impl IntegrationsTab {
             .map(IntoElement::into_any_element)
     }
 
-    /// The Chromium runtime is what the browser panes run on, so it is this skill's install. It
-    /// also serves other views, which the section's text says.
+    /// The Chromium runtime is what the browser panes run on, so this section kept its row until
+    /// it moved to Settings > Browser (CDXC:Settings 2026-11-26 at `SettingsTabId::RAIL_ORDER` in
+    /// model.rs). The runtime also serves the VS Code view, website and extension views and HTML
+    /// in Files, so `show_runtime_pointer` keeps a line here that says where it went and opens it.
     pub(super) fn embedded_browser_section(
         &mut self,
         p: &SettingsPalette,
         status: Option<&Value>,
         checking: bool,
-        show_runtime: bool,
+        show_runtime_pointer: bool,
         show_skills: bool,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let mut rows = Vec::new();
-        if show_runtime {
-            rows.push(self.web_runtime_status_row(p, cx));
+        if show_runtime_pointer {
+            rows.push(setting_row(
+                p,
+                "webRuntimeMoved",
+                RowSpec::new(general::web_runtime::TITLE).description(
+                    "Moved to Settings > Browser. It also runs the VS Code view, website and extension views, and HTML files in Files.",
+                ),
+                None,
+                settings_button(
+                    p,
+                    "integrations-web-runtime-open-browser",
+                    "Open Browser settings",
+                    None,
+                    ButtonVariant::Outline,
+                    false,
+                    None,
+                    |page: &mut Self, _window, cx| {
+                        let store = page.store.clone();
+                        store.update(cx, |store, cx| {
+                            store.set_active_tab(SettingsTabId::Browser, cx)
+                        });
+                    },
+                    cx,
+                ),
+                cx,
+            ));
         }
         if show_skills {
             rows.extend(self.tool_skill_rows(p, SkillHome::EmbeddedBrowser, status, checking, cx));
         }
-        settings_section(
-            p,
-            EMBEDDED_BROWSER_TITLE,
-            show_runtime.then(|| web_runtime::DESCRIPTION.into()),
-            None,
-            rows,
-        )
-        .map(IntoElement::into_any_element)
+        settings_section(p, EMBEDDED_BROWSER_TITLE, None, None, rows)
+            .map(IntoElement::into_any_element)
     }
 }
 
@@ -177,7 +199,6 @@ mod tests {
             ("Fast Computer", "bundledAgentSkills"),
             ("cua-driver", "bundledAgentSkills"),
             ("Fast Computer & Browser Use Permissions", "cuaPermissions"),
-            ("Chromium runtime", "webRuntime"),
         ];
         for (query, key) in cases {
             let search = extra_tab_search(query, "integrations", false, &[]);

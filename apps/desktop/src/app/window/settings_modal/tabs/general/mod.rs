@@ -1,11 +1,12 @@
 //! The pages the General page split into (CDXC:Settings 2026-10-29 in model.rs), one `GeneralTab`
 //! per page: Chat; Sidebar & Sessions (Sidebar, Session Cards, Sidebar Tags, Sleeping Sessions);
 //! Terminal (Terminal, Terminal Behavior, Terminal Scrolling); Notifications (Sounds); Files &
-//! Links (File opening, Browser, Editor, Dev Servers); Power & Sleep (When your computer starts,
-//! Memory, Auto Sleep, Power). They
+//! Links (File opening, Grok Bot, Editor, Dev Servers); Browser (Agents, Links, Pages, Web runtime,
+//! Sign-ins: browser.rs); Power & Sleep (When your computer starts, Memory, Auto Sleep, Power). They
 //! share the General search (`GeneralSearch`). Each page's advanced rows render in a second pass
 //! into a collapsed Advanced fold at its bottom (CDXC:Settings 2026-10-29 in search.rs).
 //! Experimental and Reset to defaults moved to About.
+mod browser;
 mod chat_tools;
 mod commands_pane;
 mod computer_startup;
@@ -17,6 +18,7 @@ mod sidebar;
 mod system;
 mod terminal;
 pub(super) mod terminal_font;
+pub(super) mod web_runtime;
 
 use super::super::catalog::{SettingOption, module, settings_catalog};
 use super::super::fields::advanced_fold_header;
@@ -76,6 +78,10 @@ impl GeneralTab {
             && settings_catalog().flag(module::SEARCH_CATALOG, "IS_WINDOWS_HOST")
         {
             page.load_powershell(cx);
+        }
+        // The Chromium runtime (CEF) row's status (web_runtime.rs).
+        if tab == SettingsTabId::Browser {
+            page.request_web_runtime_status_if_missing(cx);
         }
         // The preview binary's `orchestrator-playbook…-edit` and `…-armed` states open its editor.
         if let Some(state) = preview_state
@@ -410,6 +416,7 @@ impl Render for GeneralTab {
                 SettingsTabId::Terminal => terminal::sections(page, g, window, cx),
                 SettingsTabId::Notifications => system::notifications_sections(page, g, window, cx),
                 SettingsTabId::FilesLinks => chat_tools::files_links_sections(page, g, window, cx),
+                SettingsTabId::Browser => browser::sections(page, g, window, cx),
                 SettingsTabId::PowerSleep => system::power_sleep_sections(page, g, window, cx),
                 _ => Vec::new(),
             };

@@ -38,7 +38,6 @@ mod spaceo;
 mod tool_sections;
 mod tools;
 mod updates;
-mod web_runtime;
 
 const SKILLS_MODULE: &str = super::super::catalog::module::AGENT_SKILLS;
 
@@ -412,7 +411,6 @@ impl IntegrationsTab {
             remote: remote_machine::RemoteIntegrations::default(),
         };
         page.start_permission_polling(cx);
-        page.request_web_runtime_status_if_missing(cx);
         page
     }
 
@@ -1556,7 +1554,9 @@ impl Render for IntegrationsTab {
                     &p,
                     status,
                     checking,
-                    search.row_visible(section, "webRuntime"),
+                    // The Chromium runtime (CEF) row is on Settings > Browser; while browsing,
+                    // this section keeps a line pointing there (tool_sections.rs).
+                    !search.tab.is_searching,
                     show_skills,
                     cx,
                 )

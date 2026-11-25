@@ -37,6 +37,7 @@ const SETTINGS_MODAL_TABS: &[&str] = &[
     "terminal",
     "notifications",
     "tools",
+    "browser",
     "system",
     "theme",
     "interface",
@@ -539,6 +540,12 @@ pub(crate) fn not_writable_error(entry: &CatalogEntry) -> CliError {
         "ui" => "it is a Settings UI action, not a stored value".to_string(),
         _ if entry.tab == "accounts" || entry.tab == "remote" => {
             "it is account or remote-pairing state".to_string()
+        }
+        _ if entry.key
+            == ghostex_settings_catalog::help::AGENT_PAGES_OPEN_WITHOUT_ASKING_SETTING =>
+        {
+            "it decides whether agents may switch the user's view, so only the user changes it"
+                .to_string()
         }
         _ => "it may hold a secret".to_string(),
     };

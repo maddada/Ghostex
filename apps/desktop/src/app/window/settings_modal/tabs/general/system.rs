@@ -50,7 +50,7 @@ fn auto_sleep_section(
             .spec(
                 "autoSleepViews",
                 "Views auto sleep after",
-                "When inactive VS Code, Git, Project and Browser panes sleep, or Off, which also keeps them awake when more than three views are open. Sets the four per-view times.",
+                "When inactive VS Code, Git, Project and Browser panes sleep, or Off, which also keeps them awake when more than three views are open. Sets the four per-view times, Browser sleeps after on Settings > Browser among them.",
             )
             .modified(VIEW_KEYS.iter().any(|key| g.values.is_modified(key)));
         let reset: PageAction<GeneralTab> = Rc::new(|page: &mut GeneralTab, _window, cx| {
@@ -104,11 +104,6 @@ fn auto_sleep_section(
             "Choose when inactive Project panes sleep, or turn Auto Sleep off. Off also keeps Files, Beads and Automate awake when more than three views are open.",
         ),
         (
-            "autoSleepBrowserIdleMinutes",
-            "Browser sleeps after",
-            "Choose when inactive browser panes sleep, or turn Auto Sleep off. Off also keeps the Browser awake when more than three views are open.",
-        ),
-        (
             "autoSleepAgentIdleMinutes",
             "Agents sleep after",
             "Choose when eligible agent terminals sleep, or turn Auto Sleep off.",
@@ -125,7 +120,9 @@ fn auto_sleep_section(
             window,
             cx,
         ));
-        if key == "autoSleepBrowserIdleMinutes" {
+        // Browser sleeps after is on Settings > Browser since 2026-11-26 (browser.rs); Views auto
+        // sleep after above still sets it with the other three.
+        if key == "autoSleepProjectEditorIdleMinutes" {
             rows.extend(page.toggle(
                 g,
                 s,

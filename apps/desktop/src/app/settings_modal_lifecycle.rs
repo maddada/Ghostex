@@ -128,6 +128,8 @@ impl GhostexGpuiApp {
         if request.initial_project_id.is_none() {
             request.initial_project_id = self.active_project_id_for_view_scope();
         }
+        // Settings > Browser's sign-in rows act on this window's workspace.
+        request.window_workspace_id = self.gx_store_window_non_default_workspace_id();
         // The React page got its gxserver RPC from the page bootstrap; here it is the local token.
         request.gxserver_rpc_available = read_gpui_gxserver_auth_token().is_ok();
         request.read_aloud_voices = crate::app::read_aloud::voice_options();

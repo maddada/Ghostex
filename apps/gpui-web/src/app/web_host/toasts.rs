@@ -539,6 +539,38 @@ impl GhostexGpuiApp {
         true
     }
 
+    /// The browser toast's Always (#762): saves "Let agents open and switch pages without asking"
+    /// on the computer through gxserver, as the chat's own settings switches do, then opens the
+    /// page as Open does.
+    pub(crate) fn always_accept_gpui_switch_request_toast(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let mut patch = serde_json::Map::new();
+        patch.insert(
+            ghostex_settings_catalog::help::AGENT_PAGES_OPEN_WITHOUT_ASKING_SETTING.to_string(),
+            serde_json::Value::Bool(true),
+        );
+        let mut settings = crate::shared_settings::shared_sidebar_settings_snapshot()
+            .object()
+            .clone();
+        settings.extend(patch.clone());
+        crate::shared_settings::install(settings);
+        cx.spawn(async move |_, _| {
+            let _ = crate::app::gx_store::gx_rpc(
+                None,
+                "/api/dispatchRendererCommand",
+                serde_json::json!({
+                    "action": "updateSettingsPatch",
+                    "payload": { "patch": patch, "source": "toast:always" },
+                }),
+            )
+            .await;
+        })
+        .detach();
+        self.accept_gpui_switch_request_toast(None, cx)
+    }
+
     pub(crate) fn open_gpui_switch_request_external(&mut self, cx: &mut Context<Self>) -> bool {
         let url = self
             .web_host

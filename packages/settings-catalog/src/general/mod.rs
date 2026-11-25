@@ -1,4 +1,5 @@
 //! The General pages' search rows (layout.rs), one function per section.
+mod browser;
 mod chat;
 mod experience;
 mod sidebar;
@@ -14,7 +15,12 @@ pub fn sections(platform: Platform) -> Vec<Section> {
     vec![
         experience::experience(),
         tools::file_opening(),
-        tools::browser(),
+        tools::grok_web(),
+        browser::agents(),
+        browser::links(),
+        browser::pages(),
+        browser::web_runtime(),
+        browser::sign_ins(),
         tools::editor(),
         system::computer_startup(),
         system::memory_guard(),

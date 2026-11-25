@@ -180,6 +180,24 @@ impl GhostexGpuiApp {
         true
     }
 
+    /// The browser toast's Always (#762): turns on "Let agents open and switch pages without
+    /// asking" with the same save a Settings change takes, then opens the page as Open does.
+    pub(crate) fn always_accept_gpui_switch_request_toast(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let mut patch = serde_json::Map::new();
+        patch.insert(
+            ghostex_settings_catalog::help::AGENT_PAGES_OPEN_WITHOUT_ASKING_SETTING.to_string(),
+            Value::Bool(true),
+        );
+        self.handle_gpui_app_modal_update_settings_patch_message(
+            &json!({ "patch": patch, "source": "toast:always", "type": "updateSettingsPatch" }),
+            cx,
+        );
+        self.accept_gpui_switch_request_toast(None, cx)
+    }
+
     /// Opens a visible browser switch-request toast's URL in the default external browser instead
     /// of Ghostex's built-in Browser (`Open external` button or `openSwitchRequestExternal`
     /// hotkey). Returns `true` if a browser switch-request toast was visible and handled.
