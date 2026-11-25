@@ -35,6 +35,7 @@ impl GhostexGpuiApp {
         &self,
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
+        let (edge_offset, grab_side) = sidebar_divider_grab_edge();
         div()
             .id("ghostex-gpui-sidebar-resize-divider")
             .relative()
@@ -46,33 +47,39 @@ impl GhostexGpuiApp {
             // is the only edge. It stays the grab target.
             // Under glass the ring starts at this divider's snapped edge.
             .child(crate::app::element::work_area_frame_sidebar_edge_marker())
-            // The workspace beside the sidebar is often a CEF page (Browser, Docs), so the
-            // whole grab strip lies over the native sidebar.
             .child(resize_rail_deferred_strip(
-                resize_rail_grab_strip(
-                    "ghostex-gpui-sidebar-resize-grab-strip",
-                    WorkspaceSplitAxis::Horizontal,
-                    ResizeRailGrabSide::Leading,
-                )
-                .on_hover(cx.listener(|this, hovered, _, cx| {
-                    this.set_sidebar_divider_hovering(*hovered, cx);
-                }))
-                .on_mouse_move(cx.listener(|this, _event: &MouseMoveEvent, _window, cx| {
-                    this.set_sidebar_divider_hovering(true, cx);
-                }))
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(|this, event: &MouseDownEvent, window, cx| {
-                        this.handle_sidebar_divider_mouse_down(event, window, cx);
-                    }),
-                )
-                .when(self.sidebar_divider_hover_visible, |this| {
-                    this.child(resize_rail_hover_line(
-                        "ghostex-gpui-sidebar-resize-divider-hover-line",
-                        WorkspaceSplitAxis::Horizontal,
-                        ResizeRailGrabSide::Leading,
-                    ))
-                }),
+                div()
+                    .absolute()
+                    .top_0()
+                    .bottom_0()
+                    .left(px(edge_offset))
+                    .w(px(SIDEBAR_DIVIDER_WIDTH))
+                    .child(
+                        resize_rail_grab_strip(
+                            "ghostex-gpui-sidebar-resize-grab-strip",
+                            WorkspaceSplitAxis::Horizontal,
+                            grab_side,
+                        )
+                        .on_hover(cx.listener(|this, hovered, _, cx| {
+                            this.set_sidebar_divider_hovering(*hovered, cx);
+                        }))
+                        .on_mouse_move(cx.listener(|this, _event: &MouseMoveEvent, _window, cx| {
+                            this.set_sidebar_divider_hovering(true, cx);
+                        }))
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                                this.handle_sidebar_divider_mouse_down(event, window, cx);
+                            }),
+                        )
+                        .when(self.sidebar_divider_hover_visible, |this| {
+                            this.child(resize_rail_hover_line(
+                                "ghostex-gpui-sidebar-resize-divider-hover-line",
+                                WorkspaceSplitAxis::Horizontal,
+                                grab_side,
+                            ))
+                        }),
+                    ),
             ))
     }
 
@@ -140,6 +147,9 @@ impl GhostexGpuiApp {
         let x = position.x.as_f32();
         let (start_x, end_x) =
             gpui_sidebar_divider_x_bounds(self.sidebar_width + self.sidebar_rail_width());
+        // The band is the line the strip sits on: the card's left border under the frame.
+        let (edge_offset, _) = sidebar_divider_grab_edge();
+        let (start_x, end_x) = (start_x + edge_offset, end_x + edge_offset);
 
         // CDXC:Sidebar 2026-09-20 WHY:
         // The divider used to start below the titlebar row. That row is gone, so the body row and
@@ -380,6 +390,19 @@ impl GhostexGpuiApp {
         self.command_pane_side = saved_side;
         self.command_pane.resize_drag = None;
         self.clear_command_resize_hover_state();
+    }
+}
+
+/// Where the sidebar's grab strip and hover line sit, as an offset from the divider's left edge, and
+/// which side of that line the strip covers.
+///
+/// CDXC:Sidebar 2026-11-25 DECISION:
+/// User: "can we please make the line for resizing appear exactly on the frame's left line (so when i resize the line isnt off where i expect to hover?". In the Framed work area layout the card's left border sits one gutter right of the divider (the divider's 1pt and the card's 5pt of padding), so the hover line drawn on the divider showed in the middle of the gutter, short of the edge the user sees and aims for. The strip and its line move onto the card's left border, the strip straddling it so the hit area is centred on that border, and the line's extra pixel goes into the gutter, never over the card's content, which may be a CEF page clipped inside the border (`ResizeRailGrabSide::FrameEdge`). The Floating sidebar layout has no frame on the work area, and its sidebar card's right border already runs along the divider, so it keeps the strip on the sidebar's side (`Leading`) as before. The divider stays where it is, so the drag, the double-click reset and the glass ring that starts at its snapped edge are unchanged.
+pub(crate) fn sidebar_divider_grab_edge() -> (f32, ResizeRailGrabSide) {
+    if floating_sidebar_layout() {
+        (0.0, ResizeRailGrabSide::Leading)
+    } else {
+        (WORK_AREA_FRAME_MARGIN, ResizeRailGrabSide::FrameEdge)
     }
 }
 

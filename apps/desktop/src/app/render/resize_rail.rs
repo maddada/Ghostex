@@ -30,6 +30,10 @@ pub(crate) enum ResizeRailGrabSide {
     Straddle,
     Leading,
     Trailing,
+    /// The rail is a frame's border whose trailing side may be a CEF page clipped inside it: the
+    /// strip straddles the border like `Straddle`, so the hit area is centred on it, and the hover
+    /// line's extra pixel goes on the leading side, as `Leading`'s does, so a page never hides it.
+    FrameEdge,
 }
 
 /// The sides of a pane that touch a resize rail. The pane leaves its own border off those sides so the
@@ -67,7 +71,7 @@ impl RailFacingEdges {
 
 fn resize_rail_strip_leading_reach(side: ResizeRailGrabSide) -> f32 {
     match side {
-        ResizeRailGrabSide::Straddle => RESIZE_RAIL_GRAB_REACH,
+        ResizeRailGrabSide::Straddle | ResizeRailGrabSide::FrameEdge => RESIZE_RAIL_GRAB_REACH,
         ResizeRailGrabSide::Leading => RESIZE_RAIL_GRAB_ONE_SIDED_REACH,
         ResizeRailGrabSide::Trailing => 0.0,
     }
@@ -75,7 +79,7 @@ fn resize_rail_strip_leading_reach(side: ResizeRailGrabSide) -> f32 {
 
 fn resize_rail_strip_trailing_reach(side: ResizeRailGrabSide) -> f32 {
     match side {
-        ResizeRailGrabSide::Straddle => RESIZE_RAIL_GRAB_REACH,
+        ResizeRailGrabSide::Straddle | ResizeRailGrabSide::FrameEdge => RESIZE_RAIL_GRAB_REACH,
         ResizeRailGrabSide::Leading => 0.0,
         ResizeRailGrabSide::Trailing => RESIZE_RAIL_GRAB_ONE_SIDED_REACH,
     }
@@ -120,7 +124,7 @@ pub(crate) fn resize_rail_hover_line(
     let rail_offset = resize_rail_strip_leading_reach(side);
     let extra = SIDEBAR_DIVIDER_HOVER_LINE_WIDTH - WORKSPACE_SPLIT_HANDLE_THICKNESS;
     let offset = match side {
-        ResizeRailGrabSide::Leading => rail_offset - extra,
+        ResizeRailGrabSide::Leading | ResizeRailGrabSide::FrameEdge => rail_offset - extra,
         ResizeRailGrabSide::Straddle | ResizeRailGrabSide::Trailing => rail_offset,
     };
     let line = div().absolute().bg(sidebar_divider_hover_line_color());
