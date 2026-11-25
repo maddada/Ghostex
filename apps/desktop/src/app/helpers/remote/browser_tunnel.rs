@@ -3,7 +3,7 @@ mod tcp_proxy;
 use crate::app::helpers::*;
 use crate::*;
 use std::{
-    io::{BufRead, BufReader, Read, Write},
+    io::{BufRead, BufReader, ErrorKind, Read, Write},
     net::{TcpListener, TcpStream},
     process::{Child, Stdio},
     sync::{
@@ -186,9 +186,22 @@ pub(crate) fn start_remote_browser_tunnel(
         let _ = std::thread::Builder::new()
             .name("ghostex-remote-browser-tunnel".into())
             .spawn(move || {
-                for line in BufReader::new(stderr).lines().map_while(Result::ok) {
-                    if ssh_reported_own_listener(&line, forward_port) {
-                        listening.store(true, Ordering::Release);
+                let mut log = SshForwardLog::new(forward_port);
+                let mut stderr = BufReader::new(stderr);
+                let mut line = Vec::new();
+                // Bytes to each newline, so a line that is not UTF-8 (a `ProxyCommand` writing to
+                // the same stderr) neither stops the draining nor the readiness check.
+                loop {
+                    line.clear();
+                    match stderr.read_until(b'\n', &mut line) {
+                        Ok(0) => break,
+                        Ok(_) => {
+                            if log.line(&String::from_utf8_lossy(&line)) {
+                                listening.store(true, Ordering::Release);
+                            }
+                        }
+                        Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                        Err(_) => break,
                     }
                 }
             });
@@ -208,12 +221,31 @@ pub(crate) fn start_remote_browser_tunnel(
     )
 }
 
-/// Whether an ssh log line says ssh itself is listening on `127.0.0.1:port`. ssh logs it at `-v`
-/// only after its bind succeeded.
-fn ssh_reported_own_listener(line: &str, port: u16) -> bool {
-    line.trim_end().ends_with(&format!(
-        "Local forwarding listening on 127.0.0.1 port {port}."
-    ))
+/// Follows the browser tunnel's ssh log (`-v`) to the point where ssh itself holds the forward's
+/// port. ssh logs "Local forwarding listening on 127.0.0.1 port N." just before it binds, so that
+/// line alone proves nothing; "Entering interactive session." comes after the forwards are set up,
+/// and with `ExitOnForwardFailure=yes` a failed bind ends ssh before it can be printed.
+struct SshForwardLog {
+    listening: String,
+    asked_to_listen: bool,
+}
+
+impl SshForwardLog {
+    fn new(port: u16) -> Self {
+        Self {
+            listening: format!("Local forwarding listening on 127.0.0.1 port {port}."),
+            asked_to_listen: false,
+        }
+    }
+
+    /// Takes one log line; `true` once ssh holds the port.
+    fn line(&mut self, line: &str) -> bool {
+        let line = line.trim_end();
+        if line.ends_with(self.listening.as_str()) {
+            self.asked_to_listen = true;
+        }
+        self.asked_to_listen && line.ends_with("Entering interactive session.")
+    }
 }
 
 /// Waits until SSH's dynamic forward on `port` answers SOCKS, the proof that it works. On failure
@@ -222,8 +254,8 @@ fn ssh_reported_own_listener(line: &str, port: u16) -> bool {
 /// CDXC:RemoteMachines 2026-11-26 WHY: the port is reserved and released before ssh binds it, so
 /// another local program could take it first and answer SOCKS; with `ExitOnForwardFailure` ssh
 /// only exits after it has signed in, and until then that program counted as the tunnel and saw
-/// the machine's browser traffic. When ssh's own process is the tunnel, `listening` says ssh
-/// logged its bind of this exact port; once it holds the port nobody else can listen there.
+/// the machine's browser traffic. When ssh's own process is the tunnel, `listening` says ssh's log
+/// showed it holding this exact port (`SshForwardLog`); once it does, nobody else can listen there.
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 fn gpui_wait_for_remote_browser_forward(
     transport: &BrowserTransport,
@@ -265,21 +297,46 @@ pub(crate) fn start_remote_browser_tunnel(
 
 #[cfg(test)]
 mod tests {
-    use super::ssh_reported_own_listener;
+    use super::SshForwardLog;
+
+    fn ready_after(port: u16, lines: &[&str]) -> bool {
+        let mut log = SshForwardLog::new(port);
+        lines.iter().any(|line| log.line(line))
+    }
+
+    const LISTENING: &str = "debug1: Local forwarding listening on 127.0.0.1 port 51234.";
+    const ENTERING: &str = "debug1: Entering interactive session.";
 
     #[test]
-    fn only_ssh_s_own_bind_of_this_port_counts() {
-        let line = "debug1: Local forwarding listening on 127.0.0.1 port 51234.";
-        assert!(ssh_reported_own_listener(line, 51234));
-        assert!(ssh_reported_own_listener(&format!("{line}\r"), 51234));
-        assert!(!ssh_reported_own_listener(line, 5123));
-        assert!(!ssh_reported_own_listener(
-            "debug1: Local forwarding listening on ::1 port 51234.",
-            51234
+    fn ready_only_once_ssh_enters_its_session_after_listening_on_this_port() {
+        assert!(ready_after(
+            51234,
+            &[LISTENING, "debug1: channel 0: new port-listener", ENTERING]
         ));
-        assert!(!ssh_reported_own_listener(
-            "bind [127.0.0.1]:51234: Address already in use",
-            51234
+        // Windows' ssh ends its lines with \r\n.
+        assert!(ready_after(
+            51234,
+            &[&format!("{LISTENING}\r"), &format!("{ENTERING}\r")]
+        ));
+        // ssh logs the listening line before bind(): alone, or after a failed bind, it is not
+        // ready.
+        assert!(!ready_after(51234, &[LISTENING]));
+        assert!(!ready_after(
+            51234,
+            &[
+                LISTENING,
+                "bind [127.0.0.1]:51234: Address already in use",
+                "Could not request local forwarding.",
+            ]
+        ));
+        assert!(!ready_after(51234, &[ENTERING, LISTENING]));
+        assert!(!ready_after(5123, &[LISTENING, ENTERING]));
+        assert!(!ready_after(
+            51234,
+            &[
+                "debug1: Local forwarding listening on ::1 port 51234.",
+                ENTERING
+            ]
         ));
     }
 }

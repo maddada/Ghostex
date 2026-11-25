@@ -630,6 +630,75 @@ pub(crate) fn gpui_remote_ssh_tunnel_options(config: &GpuiRemoteMachineConfig) -
     if !config.reuse_ssh_connection {
         arguments.extend(["-o".to_string(), "ControlPath=none".to_string()]);
     }
-    arguments.extend(["-o".to_string(), "ForkAfterAuthentication=no".to_string()]);
+    // CDXC:RemoteMachines 2026-11-26 WHY: OpenSSH before 8.7 (Ubuntu 20.04, Debian 11, RHEL 8,
+    // the ssh built into Windows 10 and into Windows 11 before 24H2) refuses to start on an option
+    // it does not know, so this one made every tunnel fail there. Those versions cannot fork after
+    // sign-in at all, so it is only needed from 8.7 on. Not `IgnoreUnknown`: on the command line it
+    // replaces the user's own `IgnoreUnknown`, and their config then fails.
+    if gpui_remote_ssh_knows_fork_after_authentication() {
+        arguments.extend(["-o".to_string(), "ForkAfterAuthentication=no".to_string()]);
+    }
     arguments
+}
+
+/// Whether this computer's ssh is OpenSSH 8.7 or later, which knows `ForkAfterAuthentication`.
+/// Asked once with `ssh -V`; an ssh whose version cannot be read is taken as older, since adding
+/// an option it does not know stops every tunnel, while leaving it out only matters to a user
+/// config that sets it to yes.
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
+fn gpui_remote_ssh_knows_fork_after_authentication() -> bool {
+    static KNOWS: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *KNOWS.get_or_init(|| {
+        let output = gpui_remote_background_command(&gpui_remote_ssh_executable())
+            .arg("-V")
+            .stdin(std::process::Stdio::null())
+            .output();
+        output.ok().is_some_and(|output| {
+            let text = [output.stderr, output.stdout].concat();
+            gpui_openssh_version(&String::from_utf8_lossy(&text))
+                .is_some_and(|version| version >= (8, 7))
+        })
+    })
+}
+
+/// `(major, minor)` from `ssh -V` output such as `OpenSSH_10.3p1, LibreSSL 3.3.6` or
+/// `OpenSSH_for_Windows_8.1p1, LibreSSL 3.0.2`.
+pub(crate) fn gpui_openssh_version(text: &str) -> Option<(u32, u32)> {
+    let rest = &text[text.find("OpenSSH_")? + "OpenSSH_".len()..];
+    let rest = rest.strip_prefix("for_Windows_").unwrap_or(rest);
+    let (major, rest) = rest.split_once('.')?;
+    let minor: String = rest.chars().take_while(char::is_ascii_digit).collect();
+    Some((major.parse().ok()?, minor.parse().ok()?))
+}
+
+#[cfg(test)]
+mod openssh_version_tests {
+    use super::gpui_openssh_version;
+
+    #[test]
+    fn reads_the_version_ssh_prints() {
+        assert_eq!(
+            gpui_openssh_version("OpenSSH_10.3p1, LibreSSL 3.3.6\n"),
+            Some((10, 3))
+        );
+        assert_eq!(
+            gpui_openssh_version("OpenSSH_8.2p1 Ubuntu-4ubuntu0.11, OpenSSL 1.1.1f"),
+            Some((8, 2))
+        );
+        assert_eq!(
+            gpui_openssh_version("OpenSSH_for_Windows_8.1p1, LibreSSL 3.0.2\r\n"),
+            Some((8, 1))
+        );
+        assert_eq!(
+            gpui_openssh_version("OpenSSH_for_Windows_9.5p1, LibreSSL 3.8.2"),
+            Some((9, 5))
+        );
+        assert_eq!(
+            gpui_openssh_version("OpenSSH_8.7p1, OpenSSL 3.0.7"),
+            Some((8, 7))
+        );
+        assert!(gpui_openssh_version("OpenSSH_8.6p1").unwrap() < (8, 7));
+        assert_eq!(gpui_openssh_version("Dropbear v2022.83"), None);
+        assert_eq!(gpui_openssh_version(""), None);
+    }
 }
