@@ -723,7 +723,17 @@ fn default_theme(platform: Platform) -> Theme {
             changes.set(key, &value);
         }
     }
-    changes.fill_roles("dark");
+    // Default puts back the shipped theme colours themselves (Polar Night's borders and fills
+    // too), not the clean fills the other looks take (CDXC:Theming 2026-11-25 WHY on
+    // `fill_roles`).
+    for role in THEME_ROLES {
+        let key = format!("dark.{}", role.id);
+        if changes.get(&key).is_none() {
+            if let Some(value) = default_text(platform, &key) {
+                changes.set(&key, &value);
+            }
+        }
+    }
     let shipped = |key: &str| default_text(platform, key).unwrap_or_default();
     let solid = shipped("windowGlass") == "opaque";
     let has_default_art = artwork_by_id(&shipped("windowArt")).is_some();
