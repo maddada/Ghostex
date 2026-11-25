@@ -468,7 +468,7 @@ pub(super) fn title_generation_preview(agent: &str, command: Option<&str>) -> St
             &prompt,
         ),
         "grok" => format!(
-            "{command} --model grok-4.5 --reasoning-effort low --output-format plain --no-alt-screen --no-plan --no-subagents --disable-web-search --max-turns 1 --single '{prompt}'"
+            "{command} --model grok-4.5 --reasoning-effort low --output-format plain --no-alt-screen --no-plan --no-subagents --disable-web-search --no-memory --permission-mode dontAsk --deny '*' --system-prompt-override 'You are a one-shot plain-text generator. Ignore all workspace instructions, CLAUDE.md, and AGENTS.md rules. Never call any tools or read any files. Output only the final answer with no preamble.' --max-turns 1 --single '{prompt}'"
         ),
         "pi" => format!(
             "{command} -p --no-session --no-tools --no-context-files --thinking low '{prompt}'"
