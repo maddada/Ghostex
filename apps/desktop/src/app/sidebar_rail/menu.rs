@@ -192,9 +192,7 @@ impl GhostexGpuiApp {
         if items.is_empty() {
             return;
         }
-        rows.push(
-            json!({ "label": group, "heading": true, "checked": false, "disabled": false }),
-        );
+        rows.push(json!({ "label": group, "heading": true, "checked": false, "disabled": false }));
         for item in items {
             let pinned = layout.contains(item.key);
             let (icon, agent_icon) = menu_icon(item.key);

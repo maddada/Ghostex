@@ -138,7 +138,9 @@ impl GhostexGpuiApp {
                     let lowest = main.bottom() - window_size.height - px(8.0);
                     gpui::point(
                         main.left() + anchor.right() + px(6.0),
-                        (main.top() + anchor.top()).min(lowest).max(main.top() + px(8.0)),
+                        (main.top() + anchor.top())
+                            .min(lowest)
+                            .max(main.top() + px(8.0)),
                     )
                 }
                 None => gpui::point(

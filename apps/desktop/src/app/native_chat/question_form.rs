@@ -1232,7 +1232,9 @@ impl NativeChatView {
             }));
         }
         div()
-            .id(gpui::SharedString::from(format!("question-form-more:{id}:{index}")))
+            .id(gpui::SharedString::from(format!(
+                "question-form-more:{id}:{index}"
+            )))
             .opacity(0.0)
             .group_hover("native-chat-form-question", |style| style.opacity(1.0))
             .role(gpui::Role::Button)
@@ -1256,10 +1258,12 @@ impl NativeChatView {
                     .size(px(14.0 * s))
                     .text_color(p.muted),
             )
-            .on_click(cx.listener(move |chat, event: &gpui::ClickEvent, window, cx| {
-                cx.stop_propagation();
-                chat.show_dock_row_menu(rows.clone(), event.position(), window, cx);
-            }))
+            .on_click(
+                cx.listener(move |chat, event: &gpui::ClickEvent, window, cx| {
+                    cx.stop_propagation();
+                    chat.show_dock_row_menu(rows.clone(), event.position(), window, cx);
+                }),
+            )
             .into_any_element()
     }
 }

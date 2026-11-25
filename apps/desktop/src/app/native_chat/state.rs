@@ -458,8 +458,7 @@ pub(crate) struct NativeChatView {
     pub(super) sent_history_list: gpui::ListState,
     pub(super) sent_history_ids: Vec<String>,
     pub(super) sent_history_jump_revision: u64,
-    pub(super) sent_history_pill_bounds:
-        std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
+    pub(super) sent_history_pill_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
     pub(super) sent_history_opening: bool,
     /// The History card whose ⋯ menu is open (sent_history.rs), drawn inside the History menu.
     pub(super) sent_history_card_menu: Option<String>,

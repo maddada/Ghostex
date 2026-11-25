@@ -311,7 +311,10 @@ impl GpuiVisualPageModalWindow {
                 if let (Some(text), Some(session)) =
                     (self.page_reference(), self.source_session.clone())
                 {
-                    (self.host)(VisualPageModalCommand::ReferenceInChat { session, text }, cx);
+                    (self.host)(
+                        VisualPageModalCommand::ReferenceInChat { session, text },
+                        cx,
+                    );
                     (self.host)(VisualPageModalCommand::Hide, cx);
                 }
             }

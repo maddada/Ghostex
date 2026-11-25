@@ -32,14 +32,9 @@ pub(super) fn quote(state: &AppState, db: &Connection, scope: &Scope, number: u6
     let Some(params) = params.as_object() else {
         return missing();
     };
-    let Ok((work, _)) = crate::coordinators::handle_work_request(
-        db,
-        key,
-        &threads,
-        params,
-        0,
-        &Default::default(),
-    ) else {
+    let Ok((work, _)) =
+        crate::coordinators::handle_work_request(db, key, &threads, params, 0, &Default::default())
+    else {
         return missing();
     };
     let Some(item) = work["items"]
@@ -80,7 +75,11 @@ pub(super) fn quote(state: &AppState, db: &Connection, scope: &Scope, number: u6
     if !on_it.is_empty() {
         lines.push(format!(
             "{}: {}",
-            if on_it.len() == 1 { "Thread" } else { "Threads" },
+            if on_it.len() == 1 {
+                "Thread"
+            } else {
+                "Threads"
+            },
             on_it.join(", ")
         ));
     }

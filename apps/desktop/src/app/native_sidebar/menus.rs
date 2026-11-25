@@ -963,7 +963,12 @@ impl GhostexGpuiApp {
         window: &Window,
         cx: &mut gpui::Context<Self>,
     ) -> Option<AnyElement> {
-        if !self.native_sidebar.menu.as_ref().is_some_and(|menu| menu.rail) {
+        if !self
+            .native_sidebar
+            .menu
+            .as_ref()
+            .is_some_and(|menu| menu.rail)
+        {
             return None;
         }
         self.render_native_menu_layers(frame, window, cx)

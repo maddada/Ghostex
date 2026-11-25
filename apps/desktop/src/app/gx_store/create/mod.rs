@@ -15,13 +15,13 @@ mod browser;
 mod claim;
 mod cloud_box_setup;
 mod command_terminal;
-mod shown_command_terminal;
 mod coordinator;
 mod focus_created;
 mod folder_pick;
 mod help_chat_timing;
 mod os_integration;
 mod projects;
+mod shown_command_terminal;
 mod terminal;
 
 pub(crate) use claim::CreateHost;

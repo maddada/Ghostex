@@ -146,7 +146,9 @@ pub(super) fn quote(found: Option<FoundQuestion>, written: &str) -> QuotedItem {
             ghostex_gx_chat_core::transcript::item_references::cut(answer, 200)
         ));
     }
-    lines.push(format!("`ghostex question show {written}` prints all of it."));
+    lines.push(format!(
+        "`ghostex question show {written}` prints all of it."
+    ));
     QuotedItem {
         heading: format!("{written} ({})", facts.join(", ")),
         lines: Some(lines),

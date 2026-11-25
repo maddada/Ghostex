@@ -39,7 +39,10 @@ pub(crate) fn chat_question(
     tag: &str,
 ) -> Option<ChatQuestion> {
     let repository = DomainRepository::new(db, state.metadata.server_id.as_str());
-    let session = repository.get_session(project_id, session_id).ok().flatten()?;
+    let session = repository
+        .get_session(project_id, session_id)
+        .ok()
+        .flatten()?;
     let _ = super::read_open(state, db, &session, false);
     let queued = super::queued_answers(db, project_id, session_id);
     let ledger_key = crate::server::session_observer_key(project_id, session_id);
@@ -102,7 +105,14 @@ pub(crate) fn chat_question(
         .map(|choice| (choice.label.clone(), choice.recommended))
         .collect();
     if tag_state == Some(TagState::Answered) || tag_state == Some(TagState::Skipped) {
-        found.answer = form_answer(&repository, db, project_id, session_id, &form.id, &question.key);
+        found.answer = form_answer(
+            &repository,
+            db,
+            project_id,
+            session_id,
+            &form.id,
+            &question.key,
+        );
     }
     Some(found)
 }
@@ -118,9 +128,10 @@ fn form_answer(
     form_id: &str,
     key: &str,
 ) -> Option<Value> {
-    let read =
-        crate::session_chat_resources::read_resource(repository, db, project_id, session_id, form_id)
-            .ok()?;
+    let read = crate::session_chat_resources::read_resource(
+        repository, db, project_id, session_id, form_id,
+    )
+    .ok()?;
     let message = read["messages"].as_array()?.get(1)?;
     let text: Vec<&str> = message["blocks"]
         .as_array()?

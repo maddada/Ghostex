@@ -78,26 +78,25 @@ fn handle_chat_questions_request(
         )));
     }
     let written = text("ref");
-    let reference = ghostex_gx_chat_core::transcript::item_references::parse_question_href(
-        &format!(
+    let reference =
+        ghostex_gx_chat_core::transcript::item_references::parse_question_href(&format!(
             "{}{}",
             ghostex_gx_chat_core::transcript::item_references::QUESTION_LINK_SCHEME,
             written.trim_start_matches('#')
-        ),
-    )
-    .ok_or_else(|| {
-        bad(format!(
+        ))
+        .ok_or_else(|| {
+            bad(format!(
             "\"{written}\" is not a question tag. Write it as Q12, or G9jt7.Q12 for another chat's."
         ))
-    })?;
+        })?;
     let (project_id, session_id) = (text("projectId"), text("sessionId"));
     let scope = match &reference.session_id {
-        Some(other) if *other != session_id => Scope::of_session(db, other).ok_or_else(|| {
-            crate::domain::DomainStateError {
+        Some(other) if *other != session_id => {
+            Scope::of_session(db, other).ok_or_else(|| crate::domain::DomainStateError {
                 code: "notFound",
                 message: format!("This computer has no session {other}."),
-            }
-        })?,
+            })?
+        }
         _ => Scope::of(db, &project_id, &session_id),
     };
     let mut questions: Vec<Value> = Vec::new();

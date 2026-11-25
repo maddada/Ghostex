@@ -151,8 +151,12 @@ pub(crate) fn page_overview(gxserver_state_dir: &Path, id: &str) -> Option<PageO
             .filter(|value| !value.is_empty())
             .map(str::to_string)
     };
-    let (title, questions) = page_questions(gxserver_state_dir, id)
-        .unwrap_or_else(|| (text("title").unwrap_or_else(|| "Live page".into()), Vec::new()));
+    let (title, questions) = page_questions(gxserver_state_dir, id).unwrap_or_else(|| {
+        (
+            text("title").unwrap_or_else(|| "Live page".into()),
+            Vec::new(),
+        )
+    });
     Some(PageOverview {
         title,
         created_at: text("createdAt"),
