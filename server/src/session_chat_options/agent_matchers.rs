@@ -1148,7 +1148,10 @@ pub(super) fn match_pi_statusline(line: &str) -> Option<SessionChatDetectedSelec
         }
         _ => return None,
     };
-    if !is_pi_family_model_id(model) || provider.is_some_and(|p| !is_pi_family_model_id(p)) {
+    if !is_pi_family_model_id(model)
+        || model.eq_ignore_ascii_case("unknown")
+        || provider.is_some_and(|p| !is_pi_family_model_id(p) || p.eq_ignore_ascii_case("unknown"))
+    {
         return None;
     }
     let value = provider.map_or_else(|| model.to_string(), |p| format!("{p}/{model}"));
