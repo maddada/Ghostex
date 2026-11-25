@@ -203,7 +203,11 @@ pub(crate) fn primary_mouse_button_down() -> bool {
     {
         unsafe { GhostexGpuiPrimaryMouseButtonDown() }
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        windows::primary_mouse_button_down()
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         false
     }
@@ -384,6 +388,22 @@ mod windows {
                 SWP_NOACTIVATE | SWP_SHOWWINDOW | order,
             );
         }
+    }
+
+    /// CDXC:SessionChat 2026-11-26 WHY:
+    /// This always answered "not held" on Windows, so a Live page window dragged or resized and then held still for half a second mid-drag was "put back" (`frame::settle`) while the button was still down. `GetAsyncKeyState` reads the physical buttons, so with the buttons swapped in Settings the primary one is the right button.
+    pub(super) fn primary_mouse_button_down() -> bool {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+            GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON,
+        };
+        use windows_sys::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_SWAPBUTTON};
+        let primary = if unsafe { GetSystemMetrics(SM_SWAPBUTTON) } != 0 {
+            VK_RBUTTON
+        } else {
+            VK_LBUTTON
+        };
+        let state = unsafe { GetAsyncKeyState(i32::from(primary)) };
+        state as u16 & 0x8000 != 0
     }
 
     pub(super) fn focus(native: usize) {
