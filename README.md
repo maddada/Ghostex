@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="#install">Download</a> ·
-  <a href="https://youtu.be/QzjFB4J6-8E">3-minute tour</a> ·
+  <a href="https://youtu.be/QzjFB4J6-8E">3-minute tour</a> · 
   <a href="https://ghostex.dev">Website</a> ·
   <a href="https://discord.gg/df7b3G92CS">Discord</a>
 </p>
