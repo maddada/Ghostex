@@ -22,7 +22,7 @@ use crate::transcript::file_change_rows::file_change_card;
 use crate::transcript::folded_cards::card_stats;
 use crate::transcript::read_images::{images_stat, push_once};
 use crate::transcript::simple::{
-    calls_label, file_call_status_of, file_edit_label, file_edit_paths,
+    calls_label, calls_open_label, file_call_status_of, file_edit_label, file_edit_paths,
 };
 use crate::transcript::turns::worked_duration_label;
 use crate::transcript::work_summary::counted_work_stats;
@@ -577,6 +577,10 @@ fn only_what_waits(row: &mut crate::document::ProjectedMessage, keep_words: bool
     }
     let waiting: Vec<&Value> = waiting.iter().collect();
     fields.insert("simpleToolLabel".into(), calls_label(&waiting).into());
+    fields.insert(
+        "simpleToolOpenLabel".into(),
+        calls_open_label(&waiting).into(),
+    );
     fields.remove("fileCard");
     let waiting_files = fields
         .get_mut("files")

@@ -47,7 +47,8 @@ use crate::transcript::question_exchange::answered_question_exchange;
 use crate::transcript::question_forms::{question_forms, QuestionForm};
 use crate::transcript::sent_message::{project_sent_messages, resolve_recipients};
 use crate::transcript::simple::{
-    calls_label, file_call_status_of, file_edit_label, file_edit_paths, FileCallStatus,
+    calls_label, calls_open_label, file_call_status_of, file_edit_label, file_edit_paths,
+    FileCallStatus,
 };
 use crate::transcript::system_cards::classify_system_card;
 use crate::transcript::tool_fold::{pair_tool_blocks, split_blocks, ToolPair};
@@ -587,6 +588,10 @@ pub fn project_message(
     projected.insert(
         "simpleToolLabel".to_string(),
         calls_label(&call_rows).into(),
+    );
+    projected.insert(
+        "simpleToolOpenLabel".to_string(),
+        calls_open_label(&call_rows).into(),
     );
     // The pictures the message's calls opened from disk, which its turn's fold keeps showing
     // (`read_images.rs`).

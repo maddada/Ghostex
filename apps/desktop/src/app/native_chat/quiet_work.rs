@@ -606,7 +606,14 @@ impl NativeChatView {
                     .filter(|stat| stat["kind"] != look.title_kind.as_str())
                     .cloned()
                     .collect();
-                quiet_segments(&look.title, &rest, p)
+                // Opened, a turn of one call says what kind of call it was
+                // (gx-chat-core `QuietTurnLook::open_title`).
+                let words = if expanded && !look.open_title.is_empty() {
+                    &look.open_title
+                } else {
+                    &look.title
+                };
+                quiet_segments(words, &rest, p)
             }
             None => quiet_segments(label, stats, p),
         };

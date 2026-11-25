@@ -499,7 +499,12 @@ impl NativeChatView {
         let s = p.scale;
         let expandable = *expandable;
         // Titled by its calls, the card leads with that count's icon and leaves it out of the pills.
+        // Opened, a turn of one call says what kind of call it was and its row says which
+        // (gx-chat-core `QuietTurnLook::open_title`); shut, it keeps the call's own words.
         let (label, tile) = match title {
+            Some(look) if expanded && !look.open_title.is_empty() => {
+                (look.open_title.clone(), stat_icon(&look.title_kind))
+            }
             Some(look) => (look.title.clone(), stat_icon(&look.title_kind)),
             None => (label.clone(), "titlebar/chat-card-clock.svg"),
         };

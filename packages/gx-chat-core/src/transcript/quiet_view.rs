@@ -363,6 +363,10 @@ pub struct QuietTurnLook {
     /// The `kind` of the stat `title` names, which the pills then leave out.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub title_kind: String,
+    /// The title while the card is open, when it differs from `title`: a turn of one call says
+    /// what kind of call it was ("Read 1 file", `simple::calls_open_label`), its row says which.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub open_title: String,
     /// The row draws its calls straight on the rail, with no card or line of its own; opening the
     /// Quiet View line reads back its rows still on the server.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -386,6 +390,9 @@ pub struct QuietTurnMark {
 struct TurnRow {
     row: usize,
     title: Option<(String, String)>,
+    /// The card's title while it is open, when a turn of one call reads otherwise
+    /// ([`one_call_title`]).
+    open_title: String,
     turns: Vec<(usize, String)>,
     /// Its rows still on the server, as opening its card or line would read them.
     loads: Vec<QuietLoad>,
@@ -437,15 +444,23 @@ impl TurnRow {
         let kind = |stat: &Value| stat["kind"].as_str().unwrap_or_default().to_string();
         // The tool calls name the turn; failing those, the first count that is not the files
         // (a Reduced line says its files after the counts, with their line counts).
+        let mut open_title = String::new();
         let title = stats
             .iter()
             .find(|stat| stat["kind"] == "tools")
             .or_else(|| stats.iter().find(|stat| stat["kind"] != "files"))
             .and_then(|stat| Some((stat["label"].as_str()?.to_string(), kind(stat))))
-            .map(|(title, kind)| (one_call_title(&title, &kind, work).unwrap_or(title), kind));
+            .map(|(title, kind)| match one_call_title(&title, &kind, work) {
+                Some((shut, open)) => {
+                    open_title = open;
+                    (shut, kind)
+                }
+                None => (title, kind),
+            });
         Some(Self {
             row,
             title,
+            open_title,
             turns,
             loads,
         })
@@ -455,12 +470,13 @@ impl TurnRow {
 /// A turn's card titled "1 tool call" says what the call did instead, as a group of one call
 /// does (`simple::calls_label`), when the turn's rows are here to read it: the one call among
 /// its rows that the count counts (not an answered question or a message sent). `None` keeps the
-/// count's own title, as for a turn whose rows are still on the server.
+/// count's own title, as for a turn whose rows are still on the server. Its second half is the
+/// title while the card is open, which says what kind of call it was (`simple::calls_open_label`).
 fn one_call_title(
     title: &str,
     kind: &str,
     work: &[crate::document::ProjectedMessage],
-) -> Option<String> {
+) -> Option<(String, String)> {
     if kind != "tools" || title != crate::transcript::simple::tool_count_label(1) {
         return None;
     }
@@ -471,7 +487,12 @@ fn one_call_title(
             tool["hasCall"] == true && tool["exchange"] != true && tool["sentMessage"] != true
         })
         .collect();
-    (calls.len() == 1).then(|| crate::transcript::simple::calls_label(&calls))
+    (calls.len() == 1).then(|| {
+        (
+            crate::transcript::simple::calls_label(&calls),
+            crate::transcript::simple::calls_open_label(&calls),
+        )
+    })
 }
 
 /// The looks of the finished turns `line` holds (see [`QuietTurnLook`]) and the reads opening it
@@ -520,6 +541,7 @@ fn turn_looks(line: &mut QuietStretch, rows: &[TurnRow], names_time: bool) {
                 row: turn.row,
                 title: title.clone(),
                 title_kind: kind.clone(),
+                open_title: turn.open_title.clone(),
                 ..QuietTurnLook::default()
             })
             .into_iter()

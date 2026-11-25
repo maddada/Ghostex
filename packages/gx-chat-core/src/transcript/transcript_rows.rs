@@ -169,6 +169,15 @@ pub fn tool_rows(
                 .into(),
             );
             row.insert("description".to_string(), description.into());
+            // What kind of call it was ("Read", "Ran"), for an opened one-call group's header
+            // (`simple::calls_open_label`).
+            if let Some(verb) = pair
+                .call_name()
+                .and_then(|name| tool_label(name, input, working_directory, true))
+                .and_then(|label| label.verb)
+            {
+                row.insert("verb".to_string(), verb.into());
+            }
             // The file the call names, for the row's file menu (Copy Path and the folder row,
             // CDXC:SessionChat 2026-10-17 in apps/desktop/src/app/native_chat/file_actions.rs).
             if let Some(path) = crate::transcript::tool_summary::tool_file_path(

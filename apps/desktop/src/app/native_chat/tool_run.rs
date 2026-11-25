@@ -223,9 +223,14 @@ impl NativeChatView {
             let awaiting = tools.iter().any(|tool| tool["awaitingApproval"] == true);
             let expanded = self.is_expanded(&key, awaiting || (quiet && p.work_open));
             let motion = self.disclosure_frame(&key, expanded, cx);
+            // Opened, a group of one says what kind of call it was and its row says which
+            // (gx-chat-core `simple::calls_open_label`); shut, it keeps the call's own words.
+            let label = match text(message, "simpleToolOpenLabel") {
+                open if expanded && !open.is_empty() => open,
+                _ => text(message, "simpleToolLabel"),
+            };
             let heading = if quiet {
                 let running = tools.iter().any(|tool| tool["status"] == "running");
-                let label = text(message, "simpleToolLabel");
                 self.quiet_work_line(
                     QuietLine {
                         key: key.clone(),
@@ -253,21 +258,14 @@ impl NativeChatView {
                 self.quiet_card_flush = true;
                 self.boxed_card_heading(
                     key.clone(),
-                    text(message, "simpleToolLabel"),
+                    label,
                     expanded,
                     expanded || motion.is_some(),
                     p,
                     cx,
                 )
             } else {
-                self.disclosure(
-                    key.clone(),
-                    text(message, "simpleToolLabel"),
-                    expanded,
-                    None,
-                    p,
-                    cx,
-                )
+                self.disclosure(key.clone(), label, expanded, None, p, cx)
             };
             let mut rows = vec![heading];
             if expanded || motion.is_some() {

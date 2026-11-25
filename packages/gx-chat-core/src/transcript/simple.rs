@@ -139,3 +139,34 @@ pub fn calls_label(calls: &[&serde_json::Value]) -> String {
         _ => tool_count_label(calls.len()),
     }
 }
+
+/// The title of an opened group of tool calls (`simpleToolOpenLabel`): what kind of call a group
+/// of one was ("Read 1 file", "Ran 1 command", "Searched 1 time"), read off its row's `verb`, or
+/// "1 tool call" when the kind has no count of its own; a longer group keeps [`calls_label`].
+///
+/// CDXC:SessionChat 2026-11-25 DECISION: User, of an opened one-call card whose header and only
+/// row both read "Read …/Screenshots/2026-11-25_Ghostex_21-03-28@2x.png", picking B on
+/// ~/.local/share/agent-work/Ghostex/tool-dup/page.html: once opened, the header says what kind of
+/// call it is and the row under it says which, the same shape as a group of several calls. The
+/// row keeps its verb, as a longer group's rows do. Shut, the card keeps the call's own words
+/// ([`calls_label`], the 2026-11-15 decision above), since nothing under it repeats them. Every
+/// host draws this while the group is open (desktop `tool_run.rs`, phone `ToolRows.tsx`).
+pub fn calls_open_label(calls: &[&serde_json::Value]) -> String {
+    let [only] = calls else {
+        return calls_label(calls);
+    };
+    match only["verb"].as_str().unwrap_or_default() {
+        verb @ ("Read" | "Viewed" | "Edited" | "Wrote" | "Created" | "Deleted" | "Moved"
+        | "Copied" | "Downloaded") => format!("{verb} 1 file"),
+        "Counted lines in" => "Read 1 file".to_string(),
+        "Ran"
+        | "Ran a script"
+        | "Sent input to a running command"
+        | "Waited for a running command" => "Ran 1 command".to_string(),
+        "Searched for" | "Found files" | "Searched the page for" => "Searched 1 time".to_string(),
+        "Searched the web for" => "Searched the web 1 time".to_string(),
+        verb @ ("Fetched" | "Opened") => format!("{verb} 1 page"),
+        "Listed" => "Listed 1 folder".to_string(),
+        _ => tool_count_label(1),
+    }
+}
