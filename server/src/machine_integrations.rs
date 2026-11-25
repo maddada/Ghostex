@@ -132,13 +132,19 @@ async fn status(paths: &GxserverPaths) -> Result<Value, DomainStateError> {
     let platform = platform();
     let skills = skill_rows(&home, platform);
     // What a new terminal on this machine runs as `ghostex` (the agent CLI probe's PATH).
-    let cli_path =
-        tokio::task::spawn_blocking(move || crate::agent_cli::process::resolve("ghostex", &home))
-            .await
-            .map_err(internal)?;
+    let (cli_path, path_fix) = tokio::task::spawn_blocking(move || {
+        let cli_path = crate::agent_cli::process::resolve("ghostex", &home);
+        let path_fix = cli_path
+            .is_none()
+            .then(|| cli_path_fix_offer(&home, &crate::platform::shell::user_login_shell_path()))
+            .flatten();
+        (cli_path, path_fix)
+    })
+    .await
+    .map_err(internal)?;
     Ok(json!({
         "platform": platform,
-        "ghostexCli": { "installed": cli_path.is_some(), "path": cli_path },
+        "ghostexCli": { "installed": cli_path.is_some(), "path": cli_path, "pathFix": path_fix },
         "skills": skills,
     }))
 }
@@ -240,6 +246,28 @@ pub(crate) fn uninstall_skill(home: &Path, skill: &str) -> Result<(), DomainStat
         let _ = ghostex_agent_sync::fsx::remove_link(&link);
     }
     Ok(())
+}
+
+/// What `addCliFolderToPath` would do, for a client that offers it as a button (the phone's Ghostex
+/// CLI row): only when Ghostex's `ghostex` launcher is in ~/.local/bin, the login shell is one
+/// Ghostex writes, and no startup file of it adds the folder yet. A gxserver without this field
+/// has no `addCliFolderToPath`, so clients show no button for it.
+fn cli_path_fix_offer(home: &Path, shell: &str) -> Option<Value> {
+    use ghostex_paths::shell_path_line::{self as line, ShellKind};
+    if cfg!(windows) || !home.join(".local/bin/ghostex").exists() {
+        return None;
+    }
+    let kind = ShellKind::from_shell(shell)?;
+    let files = line::startup_files(home, kind, cfg!(target_os = "macos"));
+    if files.iter().any(|path| line::file_adds_local_bin(path)) {
+        return None;
+    }
+    let shown = files
+        .iter()
+        .map(|path| line::shown_path(path, home))
+        .collect::<Vec<_>>()
+        .join(" and ");
+    Some(json!({ "files": shown, "command": kind.command() }))
 }
 
 /// Appends the line that puts ~/.local/bin on PATH to the startup files of the user's shell
