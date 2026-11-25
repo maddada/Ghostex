@@ -66,6 +66,19 @@ function Invoke-CargoReleaseBuild([string[]]$CargoArguments) {
     cargo build --release @CargoArguments @TimingsArguments --message-format=json-render-diagnostics |
         Set-Content -Encoding UTF8 -Path (Join-Path $ReleaseDir "ghostex-build-units.jsonl")
 }
+<#
+CDXC:Build 2026-11-25 DECISION:
+`cargo xtask start` (GHOSTEX_LOCAL_START=1) builds the two leaf crates, ghostex-gpui and gxserver, the way the macOS and Linux starts do: opt-level 0 with incremental codegen, unless `--optimized` (GHOSTEX_START_OPTIMIZED=1). Every dependency keeps release optimization and its profile hash, so kache still serves it. The release workflow runs this script without GHOSTEX_LOCAL_START and keeps the plain release profile.
+SEE-ALSO: build-linux-rust.sh, build-macos-rust.sh, tooling/xtask/src/util.rs (KACHE_INCREMENTAL_CRATES, without which kache strips the incremental flag).
+#>
+function Get-LocalStartProfileArguments([string]$Package) {
+    if ($env:GHOSTEX_LOCAL_START -ne "1") { return @() }
+    $Arguments = @("--config", "profile.release.package.$Package.incremental=true")
+    if ($env:GHOSTEX_START_OPTIMIZED -ne "1") {
+        $Arguments += @("--config", "profile.release.package.$Package.opt-level=0")
+    }
+    return $Arguments
+}
 $AppName = "Ghostex"
 $AppDir = Join-Path $GpuiDir "build/windows/$AppName"
 $OnDemandComponents = $env:GHOSTEX_ON_DEMAND_ASSETS -eq "1"
@@ -135,7 +148,7 @@ if ($BuildApp) {
     # libghostty-vt (GHOSTEX_ZIG override honored by apps/desktop/build.rs).
     Push-Location $GpuiDir
     try {
-        Invoke-CargoReleaseBuild @("--bin", "ghostex-gpui-cef-bootstrap", "--bin", "ghostex-gpui", "--bin", "ghostex-gpui-cef-helper", "--bin", "ghostex-windows-installer", "--bin", "ghostex-windows-installer-pack")
+        Invoke-CargoReleaseBuild (@("--bin", "ghostex-gpui-cef-bootstrap", "--bin", "ghostex-gpui", "--bin", "ghostex-gpui-cef-helper", "--bin", "ghostex-windows-installer", "--bin", "ghostex-windows-installer-pack") + (Get-LocalStartProfileArguments "ghostex-gpui"))
         if ($LASTEXITCODE -ne 0) { throw "cargo build failed" }
     }
     finally {
@@ -147,7 +160,7 @@ if ($BuildRuntime) {
     Push-Location (Join-Path $RepoRoot "server")
     try {
         # The app ships gxserver.exe alone (ghostex.exe is made on the PC, apps/desktop/src/windows_cli_link.rs); ghostex.exe is still compiled because .github/workflows/release-gpui-windows.yml checks and uploads it.
-        Invoke-CargoReleaseBuild @("--bin", "gxserver", "--bin", "ghostex")
+        Invoke-CargoReleaseBuild (@("--bin", "gxserver", "--bin", "ghostex") + (Get-LocalStartProfileArguments "gxserver"))
         if ($LASTEXITCODE -ne 0) { throw "Native Windows runtime build failed" }
     }
     finally { Pop-Location }
