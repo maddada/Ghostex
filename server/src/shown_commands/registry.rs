@@ -57,12 +57,6 @@ impl ShownCommand {
             command: command.into(),
         }
     }
-
-    /// A terminal titled with its own command.
-    fn titled_by_command(command: impl Into<String>) -> Self {
-        let command = command.into();
-        Self::new(command.clone(), command)
-    }
 }
 
 pub(crate) async fn resolve(
@@ -95,42 +89,56 @@ pub(crate) async fn resolve(
         }
         LINUX_GO_BACK => {
             let version = arg("version").unwrap_or_default();
-            let command =
-                crate::app_update::go_back_command(&version).ok_or_else(|| no_command(id))?;
+            let command = crate::app_update::go_back_command(&version).ok_or_else(|| {
+                DomainStateError::bad_request(
+                    "Ghostex can't go back to that version with a command on this computer.",
+                )
+            })?;
             Ok(ShownCommand::new(
                 format!("Go back to {}", version.trim_start_matches('v')),
                 command,
             ))
         }
-        GH_AUTH_LOGIN => Ok(ShownCommand::titled_by_command("gh auth login")),
-        GLAB_AUTH_LOGIN => Ok(ShownCommand::titled_by_command("glab auth login")),
-        GH_PROJECTS_SCOPE => Ok(ShownCommand::titled_by_command(
+        GH_AUTH_LOGIN => Ok(ShownCommand::new("Sign in to GitHub", "gh auth login")),
+        GLAB_AUTH_LOGIN => Ok(ShownCommand::new("Sign in to GitLab", "glab auth login")),
+        GH_PROJECTS_SCOPE => Ok(ShownCommand::new(
+            "Allow GitHub Projects",
             crate::work_mode::GITHUB_PROJECTS_SCOPE_COMMAND,
         )),
-        GWS_AUTH_SETUP => Ok(ShownCommand::titled_by_command("gws auth setup")),
+        GWS_AUTH_SETUP => Ok(ShownCommand::new(
+            "Set up Google Workspace",
+            "gws auth setup",
+        )),
         TEAM_DEPLOY | TEAM_SLACK_CONNECT | TEAM_LINEAR_CONNECT => {
-            let verb = match id {
-                TEAM_DEPLOY => "deploy",
-                TEAM_SLACK_CONNECT => "slack-connect",
-                _ => "linear-connect",
+            let (verb, title) = match id {
+                TEAM_DEPLOY => ("deploy", "Deploy the team"),
+                TEAM_SLACK_CONNECT => ("slack-connect", "Connect Slack"),
+                _ => ("linear-connect", "Connect Linear"),
             };
             let name = team_workspace_name(state, arg("workspaceId")).await?;
-            Ok(ShownCommand::titled_by_command(team_command(verb, &name)))
+            Ok(ShownCommand::new(title, team_command(verb, &name)))
         }
         SSH_SERVER => {
             let command = tokio::task::spawn_blocking(crate::remote_access::manual_ssh_command)
                 .await
                 .ok()
                 .flatten()
-                .ok_or_else(|| no_command(id))?;
+                .ok_or_else(|| {
+                    DomainStateError::bad_request(
+                        "Ghostex has no command to turn on SSH access on this computer.",
+                    )
+                })?;
             Ok(ShownCommand::new("Turn on SSH access", command))
         }
         SSH_SIGN_IN => {
             let machine_id = arg("machineId").unwrap_or_default();
             let settings = crate::shared_settings_file::read_shared_settings(&state.paths);
-            let command = ssh_sign_in_command(settings.as_ref(), &machine_id)
-                .ok_or_else(|| no_command(id))?;
-            Ok(ShownCommand::titled_by_command(command))
+            let command = ssh_sign_in_command(settings.as_ref(), &machine_id).ok_or_else(|| {
+                DomainStateError::bad_request(
+                    "That computer doesn't reuse an SSH connection, so there is nothing to sign in to.",
+                )
+            })?;
+            Ok(ShownCommand::new("Sign in over SSH", command))
         }
         CLAUDE_SWAP_INSTALL => Ok(ShownCommand::new(
             "Install Claude Swap",
@@ -140,7 +148,7 @@ pub(crate) async fn resolve(
             "Install Codex Swap",
             crate::accounts::model::Provider::Codex.install_command(&home),
         )),
-        BUN_UPGRADE => Ok(ShownCommand::titled_by_command("bun upgrade")),
+        BUN_UPGRADE => Ok(ShownCommand::new("Update Bun", "bun upgrade")),
         SYSTEM_TOOLS_INSTALL => {
             let command = tokio::task::spawn_blocking(move || {
                 crate::managed_tools::system_tools::terminal_command(&home)
@@ -148,7 +156,11 @@ pub(crate) async fn resolve(
             .await
             .ok()
             .flatten()
-            .ok_or_else(|| no_command(id))?;
+            .ok_or_else(|| {
+                DomainStateError::bad_request(
+                    "This computer has the system tools, or installs them without a terminal.",
+                )
+            })?;
             Ok(ShownCommand::new("Install system tools", command))
         }
         AGENTBOX_STEP => {
@@ -164,7 +176,9 @@ pub(crate) async fn resolve(
             let command = answer["command"]
                 .as_str()
                 .filter(|text| !text.trim().is_empty())
-                .ok_or_else(|| no_command(id))?;
+                .ok_or_else(|| {
+                    DomainStateError::bad_request("That Cloud Boxes step has no command.")
+                })?;
             let title = answer["title"]
                 .as_str()
                 .filter(|title| !title.trim().is_empty())
@@ -185,14 +199,14 @@ async fn team_workspace_name(
     state: &AppState,
     workspace_id: Option<String>,
 ) -> Result<String, DomainStateError> {
-    let workspace_id = workspace_id
-        .ok_or_else(|| DomainStateError::bad_request(crate::workspaces::NO_SUCH_WORKSPACE))?;
+    let workspace_id =
+        workspace_id.ok_or_else(|| DomainStateError::bad_request("Name the team's workspace."))?;
     let paths = state.paths.clone();
     tokio::task::spawn_blocking(move || {
         let db =
             crate::storage::open_gxserver_database(&paths).map_err(|error| DomainStateError {
                 code: "internalError",
-                message: format!("SQLite gxserver state error: {error}"),
+                message: format!("The workspace could not be read: {error}"),
             })?;
         let workspaces = crate::workspaces::read_sidebar_workspaces(&db)?;
         let id = crate::workspaces::find_workspace_id(&workspaces, &workspace_id)
