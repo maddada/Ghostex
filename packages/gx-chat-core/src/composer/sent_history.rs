@@ -409,6 +409,9 @@ pub struct SentHistory {
     pub caption: String,
     /// The quiet line when nothing is listed.
     pub empty_label: String,
+    /// The search field's hint: "Search your messages, or type M2", naming a message number the
+    /// list holds (the newest), or no number while none is listed.
+    pub search_placeholder: String,
     pub jump: Option<SentJump>,
 }
 
@@ -830,6 +833,10 @@ pub fn document(state: &ChatState, context: &ChatContext) -> SentHistory {
     } else {
         "No sent messages in this chat yet.".to_string()
     };
+    let search_placeholder = match history.cards.iter().rev().find_map(|card| card.number) {
+        Some(number) => format!("Search your messages, or type M{number}"),
+        None => "Search your messages".to_string(),
+    };
     SentHistory {
         enabled,
         open,
@@ -842,6 +849,7 @@ pub fn document(state: &ChatState, context: &ChatContext) -> SentHistory {
         has_more: open && history.has_more,
         caption,
         empty_label,
+        search_placeholder,
         jump: history.jump,
     }
 }

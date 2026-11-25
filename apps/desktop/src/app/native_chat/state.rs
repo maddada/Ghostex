@@ -453,6 +453,8 @@ pub(crate) struct NativeChatView {
     pub(super) sent_history_input: Option<Entity<InputState>>,
     pub(super) sent_history_subscription: Option<Subscription>,
     pub(super) sent_history_input_window: Option<gpui::WindowId>,
+    /// The hint the search field shows (the core's `searchPlaceholder`).
+    pub(super) sent_history_hint: String,
     pub(super) sent_history_list: gpui::ListState,
     pub(super) sent_history_ids: Vec<String>,
     pub(super) sent_history_jump_revision: u64,
@@ -880,6 +882,7 @@ impl NativeChatView {
             sent_history_input: None,
             sent_history_subscription: None,
             sent_history_input_window: None,
+            sent_history_hint: String::new(),
             sent_history_list: super::sent_history::sent_history_list_state(),
             sent_history_ids: Vec::new(),
             sent_history_jump_revision: 0,

@@ -939,6 +939,14 @@ pub fn worked_duration_label(started_at: Option<i64>, completed_at: Option<i64>)
     if seconds < 60 {
         return format!("Worked for {seconds}s");
     }
+    // An hour or more reads in hours and minutes ("Worked for 2h 40m"), as a tool call's time does
+    // (`work_summary::tool_duration_label`), never "Worked for 160m".
+    if seconds >= 3600 {
+        return format!(
+            "Worked for {}",
+            crate::transcript::work_summary::tool_duration_label(seconds * 1000)
+        );
+    }
     let minutes = seconds / 60;
     let remainder = seconds % 60;
     if remainder > 0 {

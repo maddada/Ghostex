@@ -262,17 +262,29 @@ impl NativeChatView {
         });
     }
 
-    /// The search field, made once in the menu's own window, with the caret in it.
+    /// The search field, made once in the menu's own window, with the caret in it. Its hint is the
+    /// core's (`searchPlaceholder`, naming a message number the list holds), kept in step as the
+    /// cards arrive.
     fn sync_sent_history_input(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let here = window.window_handle().window_id();
-        if self.sent_history_input.is_some() && self.sent_history_input_window == Some(here) {
-            return;
+        let hint = match text(&self.snapshot["sentHistory"], "searchPlaceholder") {
+            hint if hint.is_empty() => "Search your messages".to_string(),
+            hint => hint,
+        };
+        if let Some(input) = self.sent_history_input.clone() {
+            if self.sent_history_input_window == Some(here) {
+                if self.sent_history_hint != hint {
+                    self.sent_history_hint = hint.clone();
+                    input.update(cx, |state, cx| state.set_placeholder(hint, window, cx));
+                }
+                return;
+            }
         }
         self.sent_history_input_window = Some(here);
+        self.sent_history_hint = hint.clone();
         let query = text(&self.snapshot["sentHistory"], "query");
         let input = cx.new(|cx| {
-            let mut state =
-                InputState::new(window, cx).placeholder("Search your messages, or type M3");
+            let mut state = InputState::new(window, cx).placeholder(hint);
             state.set_value(query, window, cx);
             state
         });

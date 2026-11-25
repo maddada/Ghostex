@@ -1044,6 +1044,16 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
 /// A Needs you card's dock row (`BoardRow::dock`): the dock's row with its key (a work item ask,
 /// a form or page as `dock-questions:<id>`), a line of work's Done row by its item, or for a thread
 /// (which the dock never lists) a row in the dock's shape that opens it.
+/// The keys of the rows the Inbox shows only as another row's sources (`duplicates`).
+fn merged_dock_keys(dock_rows: &[Value]) -> std::collections::HashSet<String> {
+    dock_rows
+        .iter()
+        .flat_map(|dock| dock["duplicates"].as_array().into_iter().flatten())
+        .map(|duplicate| text(duplicate, "key").to_string())
+        .filter(|key| !key.is_empty())
+        .collect()
+}
+
 fn dock_row_of(row: &BoardRow, raw: &Value, dock_rows: &[Value]) -> Value {
     let key = match row.key.strip_prefix("question:") {
         Some(id) => format!("dock-questions:{id}"),
@@ -1188,8 +1198,21 @@ pub fn coordinator_board_with(
                 row.dock = dock_row_of(row, raw, dock_rows);
             }
         }
+        // What the Inbox folded into another row as one of its sources (a page posted twice, an
+        // ask a page also asks: `work_cards::group_duplicate_rows`) is neither a row nor a count
+        // here, so the header, the pills and the Inbox say the same number.
+        let merged = dock_rows.as_deref().map(merged_dock_keys).unwrap_or_default();
+        let before = rows.len();
+        rows.retain(|row| !merged.contains(&row.key));
+        total = total.saturating_sub(before - rows.len());
         if id == "needs" {
             let mut questions = question_rows(state, now_ms);
+            questions.retain(|question| {
+                !question
+                    .key
+                    .strip_prefix("question:")
+                    .is_some_and(|id| merged.contains(&format!("dock-questions:{id}")))
+            });
             // Each with the dock's actions for its form or page (Reply, Open, Dismiss, Snooze).
             for question in &mut questions {
                 if let Some(id) = question.key.strip_prefix("question:") {
@@ -1677,24 +1700,42 @@ pub fn blocked_pill(board: &Value) -> Option<ChatPill> {
 
 /// The Work panel group holding the row `key`, when the panel has it.
 pub fn work_panel_group(state: &ChatState, key: &str) -> Option<String> {
-    crate::extras::work_source::work_of(state)
-        .map(crate::extras::work_panel::work_board)
-        .and_then(|board| {
-            board["groups"].as_array()?.iter().find_map(|group| {
-                group["rows"]
-                    .as_array()?
-                    .iter()
-                    .any(|row| row["key"] == key)
-                    .then(|| text(group, "id").to_string())
-            })
+    work_panel_row(state, key).map(|(group, _)| group)
+}
+
+/// The Work panel's group and row key for `key`. An item the panel lists only through its asks
+/// (one that is with the user just for them, `only_asking` in `work_panel::work_board_at`) has no
+/// row of its own, so its first ask's row stands for it.
+fn work_panel_row(state: &ChatState, key: &str) -> Option<(String, String)> {
+    let work = crate::extras::work_source::work_of(state)?;
+    let board = crate::extras::work_panel::work_board(work);
+    let groups = board["groups"].as_array()?;
+    let find = |pick: &dyn Fn(&Value) -> bool| {
+        groups.iter().find_map(|group| {
+            group["rows"]
+                .as_array()?
+                .iter()
+                .find(|row| pick(row))
+                .map(|row| (text(group, "id").to_string(), text(row, "key").to_string()))
         })
+    };
+    if let Some(found) = find(&|row| row["key"] == key) {
+        return Some(found);
+    }
+    let reference = work["items"]
+        .as_array()?
+        .iter()
+        .find(|item| item["key"] == key)
+        .map(|item| text(item, "ref"))
+        .filter(|reference| !reference.is_empty())?;
+    find(&|row| row["askRow"] == true && row["ref"] == reference)
 }
 
 /// The Work panel opens at the row `key` (an item's `work:12`, an ask's `work-ask:W3:Q12`): its
 /// group unfolds and shows every row, and the renderers open the panel and ring the row, the chat
 /// staying where it is (`open_questions::show`).
 pub fn focus_row(state: &mut ChatState, key: &str) -> Vec<crate::effect::Effect> {
-    let Some(group) = work_panel_group(state, key) else {
+    let Some((group, key)) = work_panel_row(state, key) else {
         return vec![crate::effect::Effect::Toast {
             level: "info".to_string(),
             message: "That isn't on this chat's Work panel any more.".to_string(),
