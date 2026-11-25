@@ -877,15 +877,21 @@ impl NativeChatView {
             // and D: a hairline across the drawer above each group header (when something sits
             // above it) with the header as a small uppercase label, and the group's rows a step
             // quieter (`DockRowLook::quiet`). Icons and titles keep the pings' columns.
+            // Then, of the lines: "let's please not show the lines when it's collapsed, show only
+            // when expanded". A group's line shows only while that group is open.
             let shown_above = rows.len().min(if all { rows.len() } else { limit }) > 0;
+            let snoozed_open = self.expanded.contains(DOCK_SNOOZED_ROWS);
+            let recent_open = self.expanded.contains(DOCK_RECENT_ROWS)
+                || self.expanded.contains(DOCK_LEGACY_DONE_ROWS)
+                || self.expanded.contains(DOCK_LEGACY_ANSWERED_ROWS);
             if !snoozed.is_empty() {
-                if shown_above {
+                if shown_above && snoozed_open {
                     list = list.child(dock_group_divider(p));
                 }
                 list = list.children(self.work_dock_snoozed(&snoozed, p, cx));
             }
             if !recent.is_empty() {
-                if shown_above || !snoozed.is_empty() {
+                if recent_open && (shown_above || !snoozed.is_empty()) {
                     list = list.child(dock_group_divider(p));
                 }
                 list = list.children(self.work_dock_recent(&recent, p, cx));
