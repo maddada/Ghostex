@@ -1,7 +1,7 @@
 use serde_json::{json, Map, Value};
 
 use super::{
-    derive_program_status, effective_program_app, program_status_combines_entry,
+    derive_entry_program_status, effective_program_app, program_status_combines_entry,
     program_status_display_text, program_status_entry,
 };
 
@@ -14,7 +14,7 @@ pub(crate) fn presentation_program_status(project_id: &str, session_id: &str) ->
     if entry.records.is_empty() && !governs {
         return None;
     }
-    let derived = derive_program_status(&entry.records);
+    let derived = derive_entry_program_status(&entry);
     let mut output = Map::new();
     output.insert("governs".to_string(), json!(governs));
     output.insert("state".to_string(), json!(derived.state));

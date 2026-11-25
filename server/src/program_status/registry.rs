@@ -92,6 +92,88 @@ pub(crate) struct SessionProgramStatus {
     /// so applying the same report again reuses the event id instead of
     /// notifying the user a second time.
     pub notified: Option<(String, String)>,
+    /// The agent conversation the session follows (its `agentSessionId`), read from the session
+    /// row, so an OpenCode terminal's records can be narrowed to that conversation's own.
+    pub conversation: Option<String>,
+}
+
+/// CDXC:SessionStatus 2026-11-26 WHY:
+/// GitHub #764: OpenCode's TUI writes one OSC 7501 record per open tab that works or waits (its
+/// tabs are shared by every TUI in the folder) plus a root record that sums them up ("2 sessions
+/// working"), so every OpenCode terminal in a folder carried a busy sibling's `working`, "working
+/// wins" kept a finished chat working until the sibling finished, and its thread report waited.
+/// For OpenCode the session's status now comes from its own conversation's record only: that record
+/// when there is one, otherwise the root record as `idle` (the program is still there, its own
+/// conversation neither works nor waits). Other programs' records count as before, and so does an
+/// OpenCode session whose conversation Ghostex does not know.
+/// SEE-ALSO: OpenCode packages/tui/src/context/program-status.ts (`recordID`, the root summary),
+/// server/src/hookless_activity/opencode.rs (`follow_terminal_switches`, which reads all records).
+pub(crate) fn program_status_own_records(
+    entry: &SessionProgramStatus,
+) -> std::borrow::Cow<'_, [ProgramStatusRecord]> {
+    use std::borrow::Cow;
+    let records = &entry.records;
+    let Some(conversation) = entry.conversation.as_deref() else {
+        return Cow::Borrowed(records);
+    };
+    let Some(root) = records.iter().find(|record| record.id.is_empty()) else {
+        return Cow::Borrowed(records);
+    };
+    if root.app.as_deref() != Some("opencode") {
+        return Cow::Borrowed(records);
+    }
+    let own_id = opencode_record_id(conversation);
+    if let Some(own) = records.iter().find(|record| record.id == own_id) {
+        return Cow::Owned(vec![own.clone()]);
+    }
+    Cow::Owned(vec![ProgramStatusRecord {
+        state: "idle".to_string(),
+        kind: None,
+        progress: None,
+        title: None,
+        msg: None,
+        ..root.clone()
+    }])
+}
+
+/// The record id OpenCode's TUI gives a conversation (`recordID` in its program-status.ts):
+/// the id itself when it fits OSC 7501's 1 to 32 bytes of `[A-Za-z0-9_.+-]`, else a hash of it.
+fn opencode_record_id(conversation: &str) -> String {
+    let fits = (1..=32).contains(&conversation.len())
+        && conversation
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'+' | b'-'));
+    if fits {
+        return conversation.to_string();
+    }
+    use sha2::{Digest, Sha256};
+    let hash = hex::encode(Sha256::digest(conversation.as_bytes()));
+    format!("ses_{}", &hash[..16])
+}
+
+/// The session's state derived from the records that belong to it.
+pub(crate) fn derive_entry_program_status(
+    entry: &SessionProgramStatus,
+) -> super::DerivedProgramStatus {
+    super::derive_program_status(&program_status_own_records(entry))
+}
+
+/// Note the conversation a stored session row follows (its `agentSessionId`).
+pub(crate) fn note_program_status_conversation(session: &Value) {
+    let Some((project_id, session_id)) = session_ids(session) else {
+        return;
+    };
+    let conversation = session
+        .pointer("/runtimeSettings/agentSessionId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    if let Ok(mut registry) = registry().lock() {
+        if let Some(entry) = registry.get_mut(&registry_key(&project_id, &session_id)) {
+            entry.conversation = conversation;
+        }
+    }
 }
 
 pub(crate) fn set_program_status_notified(
@@ -208,11 +290,10 @@ pub(crate) fn track_program_status_agreement(
     if let Some(agent) = agent {
         entry.agent = Some(agent.to_string());
     }
-    let program_state = entry.applied_state.clone().unwrap_or_else(|| {
-        super::derive_program_status(&entry.records)
-            .state
-            .to_string()
-    });
+    let program_state = entry
+        .applied_state
+        .clone()
+        .unwrap_or_else(|| derive_entry_program_status(entry).state.to_string());
     let detected = entry
         .detection_activity
         .clone()
@@ -474,7 +555,7 @@ pub(crate) fn program_status_combined_state(session: &Value) -> Option<&'static 
     let (Some(project_id), Some(session_id)) = (text("projectId"), text("sessionId")) else {
         return None;
     };
+    note_program_status_conversation(session);
     let entry = program_status_entry(project_id, session_id)?;
-    program_status_combines_entry(Some(&entry))
-        .then(|| super::derive_program_status(&entry.records).state)
+    program_status_combines_entry(Some(&entry)).then(|| derive_entry_program_status(&entry).state)
 }

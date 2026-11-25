@@ -13,12 +13,12 @@ use crate::session_status::parse_iso_ms;
 use crate::storage::open_gxserver_database;
 
 use super::{
-    derive_program_status, forget_program_status, log_settled_program_status_mismatches,
-    mark_program_status_unsupported, observe_program_opinion, program_status_activity,
-    program_status_applied_key, program_status_combines_entry, program_status_entry,
-    set_program_status_applied, set_program_status_applied_key, set_program_status_notified,
-    start_program_status_detection_shadow, store_program_status_snapshot,
-    take_program_status_detection_shadow, ProgramStatusRecord,
+    derive_entry_program_status, forget_program_status, log_settled_program_status_mismatches,
+    mark_program_status_unsupported, note_program_status_conversation, observe_program_opinion,
+    program_status_activity, program_status_applied_key, program_status_combines_entry,
+    program_status_entry, set_program_status_applied, set_program_status_applied_key,
+    set_program_status_notified, start_program_status_detection_shadow,
+    store_program_status_snapshot, take_program_status_detection_shadow, ProgramStatusRecord,
 };
 
 /// One program-status line of `zmx watch-title` / `wmx watch-title`.
@@ -194,7 +194,14 @@ pub(crate) fn apply_program_status(
         }
         return;
     }
-    let derived = derive_program_status(&entry.records);
+    // OpenCode names the conversations that work or wait (GitHub #764): learn which one is this
+    // session's before deriving, so a sibling's record does not decide its status.
+    let entry = if names_opencode_conversations(&entry.records) {
+        refresh_program_status_conversation(state, project_id, session_id).unwrap_or(entry)
+    } else {
+        entry
+    };
+    let derived = derive_entry_program_status(&entry);
     let key = program_status_applied_key(&derived);
     if entry.applied_key.as_deref() == Some(key.as_str()) {
         if records_changed {
@@ -358,6 +365,27 @@ pub(crate) fn apply_program_status(
     if let Ok(Some(session)) = repository.get_session(project_id, session_id) {
         schedule_stale_activity_presentation_refresh(state, &session, "program-status");
     }
+}
+
+/// OpenCode records that name a conversation (they only exist while one works or waits).
+fn names_opencode_conversations(records: &[ProgramStatusRecord]) -> bool {
+    records
+        .iter()
+        .any(|record| record.id.is_empty() && record.app.as_deref() == Some("opencode"))
+        && records.iter().any(|record| !record.id.is_empty())
+}
+
+/// Read the session's conversation from its row into the registry; the entry as it is now.
+fn refresh_program_status_conversation(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> Option<super::SessionProgramStatus> {
+    let db = open_gxserver_database(&state.paths).ok()?;
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let session = repository.get_session(project_id, session_id).ok()??;
+    note_program_status_conversation(&session);
+    program_status_entry(project_id, session_id)
 }
 
 enum FinishedTurnStep {
