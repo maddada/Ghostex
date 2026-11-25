@@ -75,16 +75,17 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         ActionKind::AppendToDraft => {
             // `inline`: a pill that joins the words already there (a message's Reference in chat),
             // a space apart, rather than a quote on lines of its own.
-            // The phone's message menu names no draft: the chat box's own text is the draft.
+            // The phone's message menu and History name no draft: the chat box's own text is the
+            // draft, so what is added goes after the words already there instead of over them.
+            let draft = action
+                .param("draft")
+                .and_then(Value::as_str)
+                .unwrap_or(state.composer.text.as_str())
+                .to_string();
             let content = if action.param("inline") == Some(&Value::Bool(true)) {
-                let draft = action
-                    .param("draft")
-                    .and_then(Value::as_str)
-                    .unwrap_or(state.composer.text.as_str())
-                    .to_string();
                 crate::transcript::message_numbers::append_inline(&draft, text_param(action))
             } else {
-                append_draft_text(string_param(action, "draft"), text_param(action))
+                append_draft_text(&draft, text_param(action))
             };
             let caret = content.encode_utf16().count();
             vec![Effect::SetComposerText {

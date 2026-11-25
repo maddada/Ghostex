@@ -2321,13 +2321,15 @@ messages load before you reach the top, 40 at a time, including messages sent
 before message IDs existed. Opened again, it shows at once (the last few chats'
 lists are kept) and adds what you sent since. Search
 your words or file names, or type M3 for that message; All, With attachments and
-Text only narrow the list. Click a card to jump to its message in the chat. Point
-at a card for Copy and ⋯ at its top right; ⋯ lists the rest by name, in the
-order of the ⋯ under a message: Copy reference and Reference in chat (a message
-with an ID), Jump to message and Put back in the chat box (its words and pictures
-go into the chat box, below anything already there), then Rewind to here and Fork
-from here where the message's own ⋯ menu offers them. On the phone, tap a card to
-jump and hold it for the same actions as named buttons.
+Text only narrow the list. Click a card to put its message (words and pictures)
+in the chat box: History closes, the message goes below anything already there
+after a blank line, and the caret sits at its end. Point at a card for Copy, Jump
+to message (the arrow, which scrolls the chat to it) and ⋯ at its top right; ⋯
+lists the rest by name, in the order of the ⋯ under a message: Copy reference
+and Reference in chat (a message with an ID), Jump to message and Put back in the
+chat box, then Rewind to here and Fork from here where the message's own ⋯ menu
+offers them. On the phone, tap a card to put it in the chat box and hold it for
+Copy, Jump to message and the rest as named buttons.
 Questions, work items and Live pages have the same two rows, **Copy reference**
 and **Reference in chat**: in the ⋯ and right-click menus of the rows above the
 chat box and of Needs you, on a card in the Work panel, on a question in a form

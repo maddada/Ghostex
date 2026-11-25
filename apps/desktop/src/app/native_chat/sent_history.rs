@@ -1,10 +1,18 @@
 //! History: the icon pill in the chat box's pill strip, right of the scroll to bottom arrow
 //! (pills_strip.rs), and the popover it opens above the chat box: every message the user sent in
 //! this chat as cards, oldest at the top and opening at the newest, under a search field and the
-//! All / With attachments / Text only filters. A card's click jumps the transcript to its message.
-//! Pointing at a card shows Copy and ⋯ at its top right; the ⋯ menu names the rest: Copy reference
-//! and Reference in chat, Jump to message and Put back in the chat box, Rewind to here and Fork
-//! from here, the rows and look of the ⋯ under a message (message_actions.rs).
+//! All / With attachments / Text only filters. A card's click closes History and puts its message
+//! in the chat box, after a blank line when the box has words already, the caret at its end.
+//! Pointing at a card shows Copy, Jump to message and ⋯ at its top right; the ⋯ menu names the
+//! rest: Copy reference and Reference in chat, Jump to message and Put back in the chat box, Rewind
+//! to here and Fork from here, the rows and look of the ⋯ under a message (message_actions.rs).
+//!
+//! CDXC:SessionChat 2026-11-26 DECISION:
+//! User: "please make clicking on the chat paste it in the chat box not take me to it. add a button
+//! to go to next to the copy button (between it and the 3 dots button". From the mockup page they
+//! picked the arrow up and right named "Jump to message", the icon and words of the ⋯ menu's row
+//! (Q5024 A), and, when the chat box already has words, the message on a new line at the end, as
+//! Put back does (Q5025 C). The ⋯ menu keeps its rows.
 //!
 //! CDXC:SessionChat 2026-11-26 DECISION:
 //! User, of the seven bare icons on a card: "i want 3 dots here next to the copy button on the top
@@ -531,7 +539,7 @@ impl NativeChatView {
     }
 
     /// One card: its time and (on hover) its buttons, up to three lines of its words, and its
-    /// pictures and files. A click anywhere else on it jumps to the message.
+    /// pictures and files. A click anywhere else on it puts the message in the chat box.
     fn sent_history_card(
         &mut self,
         index: usize,
@@ -544,7 +552,6 @@ impl NativeChatView {
         let s = p.scale;
         let id = text(&item, "id");
         let group = SharedString::from(format!("sent-card:{id}"));
-        let timestamp = item["timestamp"].as_i64();
         let time = item["time"]["label"]
             .as_str()
             .unwrap_or_default()
@@ -579,7 +586,7 @@ impl NativeChatView {
                 .child(text(file, "label"))
                 .into_any_element()
         }));
-        let jump_id = id.clone();
+        let draft = text(&item, "draft");
         let menu_open = self.sent_history_card_menu.as_deref() == Some(id.as_str());
         let menu = menu_open.then(|| self.sent_card_menu(&item, p, cx));
         div()
@@ -589,7 +596,7 @@ impl NativeChatView {
                     .id(SharedString::from(format!("sent-card:{id}")))
                     .group(group.clone())
                     .role(gpui::Role::Button)
-                    .aria_label(format!("Jump to: {}", text(&item, "preview")))
+                    .aria_label(format!("Put in the chat box: {}", text(&item, "preview")))
                     .w_full()
                     .flex()
                     .flex_col()
@@ -608,10 +615,7 @@ impl NativeChatView {
                     .relative()
                     .on_click(cx.listener(move |chat, _, _, cx| {
                         chat.close_pill_menu(cx);
-                        chat.invoke(
-                            json!({"type": "sentHistoryJump", "messageId": jump_id, "timestamp": timestamp}),
-                            cx,
-                        );
+                        chat.append_to_draft(&draft, false, cx);
                     }))
                     .child(
                         div()
@@ -690,7 +694,8 @@ impl NativeChatView {
             .into_any_element()
     }
 
-    /// A card's two buttons at its top right: Copy, and ⋯ for the rest (`sent_card_menu`).
+    /// A card's buttons at its top right: Copy, Jump to message, and ⋯ for the rest
+    /// (`sent_card_menu`).
     fn sent_card_buttons(
         &self,
         item: &Value,
@@ -719,6 +724,8 @@ impl NativeChatView {
                 .child(svg().path(icon).size(px(14.0 * s)).text_color(p.foreground))
         };
         let copy = json!({"type": "copyText", "text": text(item, "copyText")});
+        let jump =
+            json!({"type": "sentHistoryJump", "messageId": id, "timestamp": item["timestamp"]});
         let menu_id = id.clone();
         vec![
             button("copy", "Copy", "titlebar/copy.svg", false)
@@ -727,6 +734,17 @@ impl NativeChatView {
                     chat.run_sent_card_command(&copy, cx);
                 }))
                 .into_any_element(),
+            button(
+                "jump",
+                "Jump to message",
+                "titlebar/arrow-up-right.svg",
+                false,
+            )
+            .on_click(cx.listener(move |chat, _, _, cx| {
+                cx.stop_propagation();
+                chat.run_sent_card_command(&jump, cx);
+            }))
+            .into_any_element(),
             button("more", "More actions", "titlebar/dots.svg", menu_open)
                 .aria_expanded(menu_open)
                 .on_click(cx.listener(move |chat, event: &gpui::ClickEvent, _, cx| {
