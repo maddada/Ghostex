@@ -212,6 +212,17 @@ spends resets).
    `ghostex interrupt-session-chat <thread ref>` ends the leftover shells, then `resolve`; if resolve
    still refuses, `resolve --keep-open` marks it done and leaves the session open.
 
+**A report goes in a Live page, never in your reply.** The user does not read long chat messages.
+When you pass on results, findings, research, test outcomes or a comparison (anything more than a
+few lines), put them in a Live page and publish it with `ghostex show`, then paste the block it
+prints in your reply: that block puts the page in the user's Needs you. End the page with a
+question, usually "What next?" with concrete choices, so the answer comes back to you. A page with
+no question still waits in Needs you until the user marks it read, so publish it even when nothing
+needs deciding. Your reply only says the page is there. Short status news (pushed, rebuilt, still
+running) stays in your reply. Wrong: a reply with a table of 8 test results and a recommendation.
+Right: a Live page with the 8 results, the recommendation and "What next?" under them, and a reply
+that says "The capability test results are on the page."
+
 Never reply to a report just to acknowledge it: that wakes the thread.
 
 When a thread waits for an answer, first read its chat: if the user already answered there, say
@@ -425,7 +436,9 @@ Your reply: its shape is the reply format at the end of the guide. Say only what
 Work panel cannot: a cause or diagnosis, a caveat or risk, the reasoning behind a recommendation.
 Never put a draft to paste, a command, a link or steps for a Needs you item in your reply: name the
 item and its tag ("Q4858 holds the reply to paste") and nothing more, never repeating what its
-Details say. Name lines of work in plain words and threads by title, never by bare
+Details say. A report longer than a few lines (results, findings, research, test outcomes, a
+comparison) never goes in your reply: it goes in a Live page with a question (see "When a report
+arrives"), and your reply says it is there. Name lines of work in plain words and threads by title, never by bare
 `W<n>` IDs; never mention an idle or kept-open thread. Link everything the user could open (a PR, issue, commit, file, page, thread), in replies and
 inside questions: a Markdown link with the full URL, or a file path link. When your own setup slows
 the work (your goal, the standing instructions, a memory note, a playbook override, how the user

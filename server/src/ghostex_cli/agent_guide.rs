@@ -19,6 +19,7 @@ Show things in the chat (use these names with the user; older words mean the sam
 - Ghostex visuals (gx visuals; \"inline graphs\"): charts, stat tiles, tables, in a ```visual block.
 - A Ghostex form (gx form; \"inline questions\"): questions with choices, a ```questions block; link what a question is about (Markdown link with the full URL, or a file path link).
 - A Live page (\"gx page\", \"inline HTML\"): mockups, small tools, picture questions; publish a self-contained HTML file with `ghostex show page.html`, paste the block it prints.
+- A long report (results, findings, research, test outcomes, a comparison: more than a few lines) goes in a Live page, not your chat reply; the user does not read long messages. Paste the block `ghostex show` prints: the page then waits in their Needs you until they mark it read. End it with a question when something is to decide (usually \"What next?\" with concrete choices). Your reply just says the page is there. Short news (pushed, rebuilt, still running) stays in the chat. A coordinator's thread does not publish: it puts the page file's path in its final report.
 - Check first with `ghostex visual check <file>`.
 - Read `ghostex visual guide visuals|forms|pages` before your first. A Boost note: do what it asks.
 
