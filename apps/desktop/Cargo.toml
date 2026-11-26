@@ -122,6 +122,8 @@ sha2 = "0.11"
 hex = "0.4"
 # CDXC:Release 2026-10-28 WHY: the AppImage updater checks the release signature (RSA/SHA-256, src/appimage_signature.rs) with the ring version rustls already links through ureq, so this is a direct-dependency promotion, not a new download.
 ring = "0.17"
+# CDXC:VoiceMode 2026-11-26 DECISION: User picked `sys-locale` for the voice agent's "Same as the calling device" (the system language a desktop call sends, src/app/voice_agent/conversation.rs). It reads the preferred languages on macOS, Windows and Linux and was already in the graph through gpui's cosmic-text, so this is a direct-dependency promotion, not a new download.
+sys-locale = "0.3"
 tar = "0.4"
 tokio = { version = "1", features = ["rt", "net", "time", "sync", "io-util", "macros"] }
 tokio-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }

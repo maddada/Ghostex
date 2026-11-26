@@ -19,7 +19,7 @@ use super::conversation::FOCUS_NOT_FOUND;
 use super::conversation::{ClientFrame, Conversation, Input};
 use super::focus::FocusScope;
 use super::provider::{self, ConnectError, Provider};
-use super::{announcements, dictation, keys, prompt, registry, tools};
+use super::{announcements, call_language, dictation, keys, prompt, registry, tools};
 use crate::auth::{is_authorized_session_client_headers, is_authorized_session_client_token};
 use crate::protocol::{protocol_mismatch_error, rpc_error};
 use crate::server::{
@@ -146,6 +146,7 @@ pub(crate) async fn handle_voice(
                     focus,
                     gbot,
                     client_remote,
+                    language,
                 };
                 run_conversation_socket(state, socket, conversation_id, start, caller_token, client)
                     .await
@@ -194,6 +195,9 @@ struct Start {
     gbot: Option<String>,
     /// `clientRemote=1`: the client is not on this computer.
     client_remote: bool,
+    /// `language=<code>`: the language of the device placing the call, which the call speaks while
+    /// `voiceAgentLanguage` is `device` (`call_language.rs`).
+    language: Option<String>,
 }
 
 async fn run_conversation_socket(
@@ -204,6 +208,7 @@ async fn run_conversation_socket(
     caller_token: String,
     client: String,
 ) {
+    let start_language = start.language.clone();
     let (tx, resumed) = match conversation_id {
         Some(id) => match registry::sender(&id) {
             Some(tx) => (tx, true),
@@ -216,6 +221,8 @@ async fn run_conversation_socket(
                         focus: call.focus,
                         gbot: None,
                         client_remote: call.client_remote,
+                        // The device that came back says its language again.
+                        language: start_language.clone(),
                     };
                     super::warn(
                         &state,
@@ -385,6 +392,7 @@ async fn start_conversation(
         focus,
         gbot,
         client_remote,
+        language,
     } = start;
     let start_focus = focus.clone().filter(|_| gbot.is_some());
     if let Some(bot) = gbot.as_deref() {
@@ -521,12 +529,17 @@ async fn start_conversation(
         .and_then(|bot| super::gbot_call::voice_for(bot, provider))
         .unwrap_or_else(|| keys::selected_voice(&state.paths, provider));
     let keyterms = keyterms(state).await;
-    // "Answer when I say "reply"" (keys.rs): the model is told about the turn word, and a Regular
+    // The call's language and turn words (`call_language.rs`): the model speaks it, the provider's
+    // recognizer is told it, and a turn ends on its words.
+    let call_language = call_language::for_call(&keys::read_settings(&state.paths), language.as_deref());
+    // "Answer when I say "reply"" (keys.rs): the model is told about the turn words, and a Regular
     // call's turn detection stops answering by itself (`Provider::waiting_for_turn_word`).
     let wait_for_reply = keys::wait_for_reply(&state.paths);
-    let mut instructions = prompt::instructions(focus.as_ref());
+    let mut instructions = prompt::instructions(focus.as_ref(), call_language.code);
     if wait_for_reply {
-        instructions.push_str(super::conversation::TURN_WORD_INSTRUCTIONS);
+        instructions.push_str(&super::conversation::turn_word_instructions(
+            &call_language.turn_words,
+        ));
     }
     let mut update = provider.session_update(
         &voice,
@@ -534,6 +547,7 @@ async fn start_conversation(
         &tools::definitions(focus.as_ref()),
         &keyterms,
         push_to_talk,
+        call_language.code,
     );
     if wait_for_reply {
         update = provider.waiting_for_turn_word(update);
@@ -622,6 +636,7 @@ async fn start_conversation(
         update,
         push_to_talk,
         wait_for_reply,
+        call_language,
         focus,
         client_remote,
         upstream,

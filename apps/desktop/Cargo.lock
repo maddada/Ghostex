@@ -2617,6 +2617,7 @@ dependencies = [
  "similar 3.2.1",
  "sonora",
  "sonora-common-audio",
+ "sys-locale",
  "sysinfo 0.39.6",
  "tar",
  "tokio",
