@@ -227,7 +227,17 @@ pub(super) fn browser_mcp_click(args: &Value, state: &mut McpState) -> CliResult
     }
     let page_says_reachable = point.get("reachable") == Some(&Value::Bool(true));
     let mut refusal = None;
+    let wary = state
+        .script_clicks_until
+        .get(&page_id)
+        .is_some_and(|until| std::time::Instant::now() < *until);
     let pressed = match (&target, target.as_ref().and_then(|target| target.point)) {
+        (Some(_), Some(_)) if wary => {
+            refusal = Some(
+                "A recent press on this page was refused (it scrolled or something came under the pointer), so it gets the script click for a minute",
+            );
+            Pressed::NotTried
+        }
         (Some(target), Some(at)) if page_says_reachable => {
             refusal = press_refusal(state, &page_id, target, at)?;
             match refusal {
@@ -237,6 +247,12 @@ pub(super) fn browser_mcp_click(args: &Value, state: &mut McpState) -> CliResult
         }
         _ => Pressed::NotTried,
     };
+    if matches!(pressed, Pressed::Moved | Pressed::Covered) || refusal == Some(PAGE_SCROLLED) {
+        state.script_clicks_until.insert(
+            page_id.clone(),
+            std::time::Instant::now() + SCRIPT_CLICKS_AFTER_REFUSAL,
+        );
+    }
     let reachable = page_says_reachable;
     let mut clicked = if pressed == Pressed::Pressed {
         json!({ "method": "mouse" })
@@ -335,6 +351,11 @@ fn file_chooser_opened(state: &mut McpState, page_id: &str) -> bool {
     pump_client_events(state, page_id);
     opened
 }
+
+/// How long a page gets only the script click after a press on it was refused because it scrolled
+/// or something came under the pointer (re-check 5 of #762): a page racing the checks needs many
+/// tries, and an honest page almost never trips one.
+const SCRIPT_CLICKS_AFTER_REFUSAL: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// How the mouse press went.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

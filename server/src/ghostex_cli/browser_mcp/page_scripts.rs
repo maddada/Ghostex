@@ -107,6 +107,8 @@ pub(super) const GHOSTEX_CLICK_POINT_SCRIPT: &str = r##"function ghostexClickPoi
   const element = document.querySelector(selector);
   if (!element) throw new Error(`Element not found: ${selector}`);
   element.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
+  // A whole-pixel scroll: the press check refuses a view scrolled by part of a pixel (2x screens).
+  window.scrollTo({ left: Math.round(window.scrollX), top: Math.round(window.scrollY), behavior: "instant" });
   const rect = element.getBoundingClientRect();
   const isFileField = (node) => node instanceof HTMLInputElement && node.type === "file";
   const fileControl = (node) => Boolean(node) && (isFileField(node) || isFileField(node.closest?.("label")?.control));

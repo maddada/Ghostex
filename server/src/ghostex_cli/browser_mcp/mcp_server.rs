@@ -27,6 +27,9 @@ pub(super) struct McpState {
     pub(super) options: McpServerOptions,
     pub(super) ref_maps: HashMap<String, HashMap<String, String>>,
     pub(super) selected_page_id: Option<String>,
+    /// Page id -> until when `ghostex_click` uses only the script click there, after a press on it
+    /// was refused because the page scrolled or something came under the pointer (mcp_tools.rs).
+    pub(super) script_clicks_until: HashMap<String, std::time::Instant>,
 }
 
 impl McpState {
@@ -38,6 +41,7 @@ impl McpState {
             options,
             ref_maps: HashMap::new(),
             selected_page_id,
+            script_clicks_until: HashMap::new(),
         }
     }
 }

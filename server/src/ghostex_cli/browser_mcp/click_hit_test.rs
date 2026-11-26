@@ -4,6 +4,7 @@
 //! CDXC:Browser 2026-11-26 DECISION:
 //! Coordinator, on the user's behalf (re-check of #762, N2): the checks that decide whether a real press may go to an element ran in the page's own script world, so a hostile page could answer them falsely (patching `elementFromPoint`, replacing `HTMLIFrameElement`, hiding a frame in a closed shadow root) or time a swap to the moment between the check and the press, and land one trusted click in a framed site (a like, follow, sign-in or pay button). The press is now decided here instead: the element is found with `DOM.querySelector`, its centre comes from `DOM.getContentQuads`, and the node really at that point comes from `DOM.getNodeForLocation`, which hit-tests the page's layout through every shadow root, open or closed. The press goes only when that node is in the page itself (the main frame), is not a frame, object or embed, and is the element or inside it (its whole subtree, shadow roots included, from `DOM.describeNode`). After the mouse moves there the same check runs again, after a short random wait, as one DevTools call, and the press follows at once; no page function runs between the move and the press, so the page cannot tell when to swap. The check runs once more while the button is down: a frame slid in during that last gap took the press, so the button is released at the far corner of the view, and no click comes of it there (a click needs the release on what took the press). A page could still win by sliding a frame in for the press and out again before that check; that takes two swaps each timed to within a DevTools round trip. Anything else gets the script click, as before. The page script still scrolls the element into view, names a file field and reports which element took the press, but none of that decides the press.
 //! Coordinator, on the user's behalf (re-check 4 of #762, S1): the press point is in the view's coordinates and `DOM.getNodeForLocation` takes the document's, so on a scrolled page the checks looked above where the press landed (a frame there got a trusted click, and buttons below the fold lost their real press). Each check now reads the view's scroll offset fresh (`Page.getLayoutMetrics`' `cssVisualViewport`) and adds it to the point; the press is refused when the page scrolled since the point was worked out, or is pinch-zoomed.
+//! Coordinator, on the user's behalf (re-check 5 of #762, S2): the hit test takes whole pixels while the press lands at the exact point, so on a 2x screen a view scrolled by half a pixel let a frame just below the tested point take the press. A view scrolled by part of a pixel is refused, and the point script rounds the scroll after `scrollIntoView` so honest pages keep their real click. After a press on a page is refused because the page scrolled or something came under the pointer, that page gets the script click for a minute (`SCRIPT_CLICKS_AFTER_REFUSAL`, mcp_tools.rs), since such an attack needs many tries and an honest page almost never trips it.
 //! SEE-ALSO: server/src/server/cef_devtools_scope.rs (the DOM commands a session's tools may send), server/src/ghostex_cli/browser_mcp/page_scripts.rs (`GHOSTEX_CLICK_POINT_SCRIPT`).
 
 use super::*;
@@ -49,6 +50,9 @@ pub(super) struct ViewOffset {
     scale: f64,
 }
 
+/// The refusal for a view that scrolled between the checks.
+pub(super) const PAGE_SCROLLED: &str = "The page scrolled";
+
 /// The view's offset in a `Page.getLayoutMetrics` answer.
 fn view_offset(metrics: &Value) -> Option<ViewOffset> {
     let viewport = metrics
@@ -77,7 +81,13 @@ pub(super) fn document_point(
         return Err("The page is zoomed in");
     }
     if (now.page_x - then.page_x).abs() > 0.5 || (now.page_y - then.page_y).abs() > 0.5 {
-        return Err("The page scrolled");
+        return Err(PAGE_SCROLLED);
+    }
+    // The hit test takes whole pixels while the press lands at the exact point, so a view
+    // scrolled by part of a pixel (a 2x screen) would test a point beside the press.
+    let whole = |offset: f64| (offset - offset.round()).abs() < 0.001;
+    if !whole(now.page_x) || !whole(now.page_y) {
+        return Err("The page is scrolled by part of a pixel");
     }
     Ok((
         (point.0 as f64 + now.page_x).round() as i64,
@@ -387,9 +397,13 @@ mod tests {
             Ok((100, 300))
         );
         assert_eq!(
-            document_point((60, 480), at(30.0, 2700.5, 1.0), at(30.0, 2700.5, 1.0)),
-            Ok((90, 3181))
+            document_point((60, 480), at(30.0, 2700.0, 1.0), at(30.0, 2700.0, 1.0)),
+            Ok((90, 3180))
         );
+        // Scrolled by half a pixel (re-check 5, S2, a 2x screen): the hit test cannot look exactly
+        // where the press lands, so no press.
+        assert!(document_point((60, 480), at(0.0, 200.5, 1.0), at(0.0, 200.5, 1.0)).is_err());
+        assert!(document_point((60, 480), at(0.25, 200.0, 1.0), at(0.25, 200.0, 1.0)).is_err());
         // Scrolled since the point was worked out, pinch-zoomed, or unknown: no press.
         assert!(document_point((100, 100), at(0.0, 200.0, 1.0), at(0.0, 260.0, 1.0)).is_err());
         assert!(document_point((100, 100), at(0.0, 0.0, 1.5), at(0.0, 0.0, 1.5)).is_err());
