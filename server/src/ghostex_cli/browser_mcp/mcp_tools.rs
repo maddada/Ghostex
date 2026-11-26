@@ -156,9 +156,39 @@ pub(super) fn browser_mcp_console_logs(args: &Value, state: &mut McpState) -> Cl
     }))
 }
 
+/// CDXC:Browser 2026-11-26 WHY:
+/// Release 12.3.0 smoke: a page an agent opened in the background (`ghostex_open_page`) stayed
+/// laid out in a 1×1 view, so every `ghostex_click` on it fell back to the script click (no element
+/// is in a 1px view) and the snapshot listed nothing in view. The desktop gives the hidden page the
+/// Browser panel's frame (`size_background_browser_page`), but Chromium applies a hidden view's new
+/// size only when something captures it, which is why `ghostex_screenshot` "fixed" it. A hidden page
+/// still at 1×1 gets a one-pixel capture first, which makes Chromium take that frame.
+fn give_hidden_page_its_size(state: &mut McpState, page_id: &str) -> CliResult<()> {
+    let still_one_pixel = evaluate_function(
+        state,
+        page_id,
+        "function ghostexUnsizedHiddenPage() { return document.visibilityState === \"hidden\" && window.innerWidth <= 1 && window.innerHeight <= 1; }",
+        json!([]),
+    )?;
+    if still_one_pixel == Some(Value::Bool(true)) {
+        client_call(
+            state,
+            page_id,
+            "Page.captureScreenshot",
+            json!({
+                "clip": { "height": 1, "scale": 1, "width": 1, "x": 0, "y": 0 },
+                "format": "png",
+                "fromSurface": true,
+            }),
+        )?;
+    }
+    Ok(())
+}
+
 pub(super) fn browser_mcp_snapshot(args: &Value, state: &mut McpState) -> CliResult<Value> {
     let page = get_ghostex_cdp_client(args, state)?;
     let page_id = page_id_of(&page);
+    give_hidden_page_its_size(state, &page_id)?;
     let limit = normalize_positive_integer_opt(defined(args.get("limit")).cloned()).unwrap_or(120);
     let snapshot = evaluate_function(state, &page_id, GHOSTEX_SNAPSHOT_SCRIPT, json!([limit]))?;
     let mut ref_map: HashMap<String, String> = HashMap::new();
@@ -209,6 +239,7 @@ pub(super) fn browser_mcp_click(args: &Value, state: &mut McpState) -> CliResult
     let page = get_ghostex_cdp_client(args, state)?;
     let page_id = page_id_of(&page);
     let selector = resolve_browser_element_selector(args, state, &page_id)?;
+    give_hidden_page_its_size(state, &page_id)?;
     let guard = format!("__ghostexClickGuard_{}", uuid::Uuid::new_v4().simple());
     let point = evaluate_function(
         state,
