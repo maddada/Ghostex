@@ -2699,7 +2699,11 @@ can open it in your browser or close it; or System browser, your default web
 browser. The popup hides, still open, when you click outside it or press its Hide
 button: a pill in the row above the chat box (the page's title and how many of its
 questions you answered, for example 3/16) brings it back as you left it, and the x that
-shows when you point at the pill closes it. Your answers reach the agent the same way
+shows when you point at the pill closes it. To keep the popup up while you click
+around and work in other threads, turn on the Keep open pin among its round
+buttons: clicks in Ghostex then leave it where it is, and Hide, the x and Escape
+still put it away. Ghostex remembers the pin for every page you open after, in
+any project and on your other computers. Your answers reach the agent the same way
 from all three, and the picture viewer and the remembered scroll position below work in all three.
 A page that links to other pages the agent wrote beside it (a cover page and its decks) opens
 each one in place when you click it, also for an agent on another computer. A page opened
@@ -2818,7 +2822,7 @@ form is answered once you have typed an answer for each of its questions.
 Quoted lines and a tag followed by other words ("Q12 what does it mean?")
 answer nothing. When you answer a question some other way, by doing what it
 asked, the agent withdraws it so it stops counting as open. Settings: `chatPageOpenTarget` (`popup`,
-`files` or `system-browser`) and
+`files` or `system-browser`), `chatPageKeepOpen` (the popup's Keep open pin) and
 (under the page's Advanced fold) `chatSendOnPick`, which makes picking an answer send a
 card that asks a single choice question right away, without Send answers
 (off by default; cards with several questions, multiple choice, Other or text

@@ -10248,6 +10248,18 @@
       "agentWritable": false
     },
     {
+      "key": "chatPageKeepOpen",
+      "title": "chatPageKeepOpen",
+      "subtitle": "App-managed state saved with the settings; not a user preference.",
+      "tab": "about",
+      "tabTitle": "About",
+      "section": "internalState",
+      "sectionTitle": "Internal state (not user settings)",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": false
+    },
+    {
       "key": "coordinatorBoardCollapsedColumns",
       "title": "coordinatorBoardCollapsedColumns",
       "subtitle": "App-managed state saved with the settings; not a user preference.",

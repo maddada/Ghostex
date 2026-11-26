@@ -1,5 +1,5 @@
 //! The floating window a chat page card opens: an agent's published HTML page (`ghostex show`)
-//! over the chat, hidden by a click away or its Hide button, closed by Escape or its close button. The page's own script
+//! over the chat, hidden by a click away (unless its Keep open pin is on, `keep_open`) or its Hide button, closed by Escape or its close button. The page's own script
 //! (`page.rs`) opens its pictures in a viewer inside the page and remembers where the reader left
 //! it, and a refresh button appears when the page's file changed on disk (`source.rs`).
 //!
@@ -64,6 +64,9 @@ const ICON_CLOSE: &str = "titlebar/x.svg";
 const ICON_MORE: &str = "titlebar/dots.svg";
 const ICON_REFRESH: &str = "titlebar/refresh.svg";
 const ICON_HIDE: &str = "titlebar/window-minimize.svg";
+/// The pin pair the app's other pins use (session popup, links list, account usage).
+const ICON_PIN_OFF: &str = "titlebar/pin-outline.svg";
+const ICON_PIN_ON: &str = "titlebar/pin-filled.svg";
 /// A focus loss this soon after a press in another window is that press, already counted.
 const SAME_CLICK: Duration = Duration::from_millis(400);
 /// Its own browser profile, so a page's storage never mixes with the Browser's or an
@@ -81,6 +84,9 @@ pub(crate) enum VisualPageModalCommand {
     /// A click away or the Hide button: the window is put aside, still running
     /// (app/visual_page_hidden.rs).
     Hide,
+    /// The Keep open pin was turned on or off: the app saves it for every page window after this
+    /// one (`chatPageKeepOpen`, `keep_open`).
+    KeepOpen { on: bool },
     /// What its pill shows while it is hidden changed: whether a question is unanswered and how
     /// many are answered (`source.rs`), or the page's own title arrived for a page opened without
     /// one.
@@ -142,6 +148,8 @@ pub(crate) struct GpuiVisualPageModalWindow {
     question_counts: Option<(u64, u64)>,
     /// The window is put aside (`set_hidden`).
     hidden: bool,
+    /// The Keep open pin is on: clicks in Ghostex leave the window up (`keep_open`).
+    keep_open: bool,
     /// When the window was last shown; presses elsewhere from before do not count.
     shown_at: Instant,
     palette: ModalPalette,
@@ -274,6 +282,7 @@ impl GpuiVisualPageModalWindow {
             questions_left: false,
             question_counts: None,
             hidden: false,
+            keep_open: keep_open(),
             shown_at: Instant::now(),
             palette,
             url,
@@ -650,11 +659,20 @@ impl GpuiVisualPageModalWindow {
         }));
     }
 
-    /// A click away hides the window (CDXC:SessionChat 2026-11-11 DECISION above).
+    /// A click away hides the window (CDXC:SessionChat 2026-11-11 DECISION above), unless the Keep
+    /// open pin is on (`keep_open`).
     fn click_away(&mut self, cx: &mut Context<Self>) {
-        if !self.hidden {
+        if !self.hidden && !self.keep_open {
             (self.host)(VisualPageModalCommand::Hide, cx);
         }
+    }
+
+    /// The Keep open pin's click: the window takes it at once, and the app saves it for the page
+    /// windows after it.
+    fn toggle_keep_open(&mut self, cx: &mut Context<Self>) {
+        self.keep_open = !self.keep_open;
+        (self.host)(VisualPageModalCommand::KeepOpen { on: self.keep_open }, cx);
+        cx.notify();
     }
 
     /// A page opened without a title (a plain link to its address) is named by its own title,
@@ -708,6 +726,9 @@ impl GpuiVisualPageModalWindow {
             self.check_questions_left_soon(cx);
         } else {
             self.shown_at = Instant::now();
+            // A page put aside before the pin was changed in another page window wears the
+            // latest pick when it comes back.
+            self.keep_open = keep_open();
         }
     }
 
@@ -791,6 +812,26 @@ impl GpuiVisualPageModalWindow {
                 (this.host)(VisualPageModalCommand::Hide, cx)
             }),
         );
+        // The Keep open pin sits beyond the ⋯ menu (CDXC:SessionChat 2026-11-26 DECISION on
+        // `keep_open`): filled and in the page's ink while it is on, as the mockup's pin is.
+        let (pin_icon, pin_label, pin_glass) = if self.keep_open {
+            (
+                ICON_PIN_ON,
+                "Kept open: clicks in Ghostex don't hide it",
+                ControlGlass {
+                    icon: glass.text,
+                    ..glass
+                },
+            )
+        } else {
+            (ICON_PIN_OFF, "Keep open", glass)
+        };
+        let pin = control_button("visual-page-keep-open", pin_icon, pin_label, pin_glass).on_click(
+            cx.listener(|this, _, _, cx| {
+                this.close_more_menu(cx);
+                this.toggle_keep_open(cx);
+            }),
+        );
         // The ⋯ menu (Export page, Import answers, Open in browser) sits beside Hide and Close
         // (CDXC:SessionChat 2026-11-13 DECISION in more_menu.rs); its button's bounds place the menu.
         let more_bounds = self.more_button.clone();
@@ -810,13 +851,27 @@ impl GpuiVisualPageModalWindow {
         let (leading_close, trailing_close) = if super::round_close_button::close_buttons_on_left()
         {
             (
-                Some(h_flex().gap(px(6.0)).child(close).child(hide).child(more)),
+                Some(
+                    h_flex()
+                        .gap(px(6.0))
+                        .child(close)
+                        .child(hide)
+                        .child(more)
+                        .child(pin),
+                ),
                 None,
             )
         } else {
             (
                 None,
-                Some(h_flex().gap(px(6.0)).child(more).child(hide).child(close)),
+                Some(
+                    h_flex()
+                        .gap(px(6.0))
+                        .child(pin)
+                        .child(more)
+                        .child(hide)
+                        .child(close),
+                ),
             )
         };
         h_flex()
@@ -1105,6 +1160,24 @@ impl ModalCornerClose for GpuiVisualPageModalWindow {
     fn shows_corner_close(&self, _cx: &App) -> bool {
         false
     }
+
+    /// The Keep open pin leaves the window up on a click in Ghostex (`keep_open`).
+    fn keeps_open_on_click_away(&self, _window: &Window, _cx: &App) -> bool {
+        self.keep_open
+    }
+}
+
+/// The Keep open pin as last left in any page window, on any project and (synced) any of the
+/// user's computers: Settings' `chatPageKeepOpen`.
+///
+/// CDXC:SessionChat 2026-11-26 DECISION:
+/// User picked "Build the Keep open pin" for GitHub issue #778 (triage-1126c, Q5156: on Windows the page window "closes" on a click back in the main window, while they want to read it as they work in other threads), with: "add the pin, and make all live pages remember what the user picked for that pin basically so next time he opens a live page it's pinned/unpinned based on last time (across all projects etc)". A pin among the band's round controls turns Keep open on and off. While it is on, presses in Ghostex's other windows and Ghostex coming back by a click leave the window up and where it was (it stays above the main window, its parent); Hide, ×, Escape, sending its answers, a link opening in the app's Browser and opening another dialog still put it aside or close it as before. The pick is one setting, not per page or project: every page window opens with the last pick, a page put aside comes back with it, and it syncs to the user's other computers whatever Settings > Sync says (gx-core `ALWAYS_SYNCED_KEYS`). Off by default, so the 2026-11-11 click away stays the default.
+fn keep_open() -> bool {
+    shared_settings::shared_sidebar_settings_snapshot()
+        .object()
+        .get("chatPageKeepOpen")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
 }
 
 #[cfg(test)]

@@ -383,11 +383,24 @@ impl GhostexGpuiApp {
             self.dismiss_page_window_context_menu(page_window, cx);
             return;
         }
+        // The Keep open pin, saved for every page window after this one and synced
+        // (CDXC:SessionChat 2026-11-26 DECISION on `keep_open` in window/visual_page_modal.rs).
+        if let VisualPageModalCommand::KeepOpen { on } = command {
+            self.handle_gpui_app_modal_update_settings_patch_message(
+                &serde_json::json!({
+                    "patch": { "chatPageKeepOpen": on },
+                    "source": "visualPage:keepOpen",
+                }),
+                cx,
+            );
+            return;
+        }
         if self.shown_visual_page_key(cx) != Some(key) {
             return;
         }
         let url = match command {
             VisualPageModalCommand::TabChanged
+            | VisualPageModalCommand::KeepOpen { .. }
             | VisualPageModalCommand::PictureStalePage { .. } => return,
             VisualPageModalCommand::Hide => {
                 self.hide_visual_page_modal(cx);
