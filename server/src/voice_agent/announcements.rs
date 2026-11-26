@@ -94,6 +94,7 @@ pub(super) fn ensure_running(state: &Arc<AppState>) {
                             project_id: row.project_id.clone(),
                             session_id: row.session_id.clone(),
                             server_id: row.computer.as_ref().map(|c| c.server_id.clone()),
+                            sub_thread: row.thread_of.is_some(),
                             model_text: None,
                         });
                         continue;
@@ -131,6 +132,7 @@ pub(super) fn ensure_running(state: &Arc<AppState>) {
                         project_id: row.project_id.clone(),
                         session_id: row.session_id.clone(),
                         server_id: row.computer.as_ref().map(|c| c.server_id.clone()),
+                        sub_thread: row.thread_of.is_some(),
                         model_text: None,
                     });
                 }

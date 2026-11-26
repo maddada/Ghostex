@@ -354,6 +354,7 @@ mod tests {
             project_id: project_id.to_string(),
             session_id: session_id.to_string(),
             server_id: None,
+            sub_thread: false,
             model_text: None,
         }
     }

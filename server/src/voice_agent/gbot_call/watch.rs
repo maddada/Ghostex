@@ -96,6 +96,7 @@ fn announcement(
         project_id: scope.project_id.clone(),
         session_id: scope.session_id.clone(),
         server_id: None,
+        sub_thread: false,
         model_text: Some(model_text),
     }
 }

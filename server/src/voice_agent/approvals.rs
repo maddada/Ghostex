@@ -151,6 +151,7 @@ fn announce(
         project_id: pending.project_id.clone(),
         session_id: pending.session_id.clone(),
         server_id: None,
+        sub_thread: false,
         model_text: Some(model_text),
     }]));
 }

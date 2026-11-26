@@ -717,10 +717,12 @@ impl Conversation {
             }
             Input::Announce(announcements) => {
                 for announcement in announcements {
-                    if let Some(scope) = &self.focus {
-                        if !scope.wants(&announcement) {
-                            continue;
-                        }
+                    let wanted = match &self.focus {
+                        Some(scope) => scope.wants(&announcement),
+                        None => announcement.reaches_all_sessions_call(),
+                    };
+                    if !wanted {
+                        continue;
                     }
                     let finished_focus = announcement.kind == "turnFinished"
                         && announcement.server_id.is_none()
@@ -1529,6 +1531,7 @@ impl Conversation {
                 project_id: scope.project_id.clone(),
                 session_id: scope.session_id.clone(),
                 server_id: None,
+                sub_thread: false,
                 model_text: Some(focus::closed_message(&scope.title)),
             });
         }
