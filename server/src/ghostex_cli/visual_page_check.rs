@@ -1792,7 +1792,10 @@ mod tests {
         assert_eq!(found["picks"], json!(["agy usage", "notices"]), "{found}");
         assert_eq!(kit["made"][0]["tag"], "Q1", "{found}");
         assert_eq!(kit["made"][0]["choices"][0]["recommended"], true, "{found}");
-        assert_eq!(kit["made"][0]["choices"][1]["label"], "B. Only the notice", "{found}");
+        assert_eq!(
+            kit["made"][0]["choices"][1]["label"], "B. Only the notice",
+            "{found}"
+        );
         assert_eq!(kit["empty"].as_array().unwrap().len(), 1, "{found}");
         assert_eq!(kit["empty"][0]["tag"], "Q2", "{found}");
         let orphans: Vec<(&str, bool)> = kit["orphans"]
