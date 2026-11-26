@@ -313,7 +313,7 @@ fn ago(ended_at: chrono::DateTime<chrono::Utc>) -> String {
 /// The message Continue adds to the conversation.
 pub(super) fn continue_message(memory: &Memory) -> String {
     format!(
-        "{MEMORY_PREFIX} The user wants to continue your previous voice conversation, which ended {}. Your notes from it: {}\nIn one short sentence, say where things stood, then ask what they want to do next. Sessions may have changed since then, so check with your tools before saying what a session is doing now.",
+        "{MEMORY_PREFIX} The user wants to continue your previous voice conversation, which ended {}. Your notes from it: {}\nSay in one short sentence where things stood, then wait for the user. Sessions may have changed since then, so check with your tools before saying what a session is doing now.",
         ago(memory.ended_at),
         memory.summary
     )

@@ -150,16 +150,28 @@ fn said_words(words: &[String]) -> String {
 
 /// The line the agent opens the call with: that it is connected, what it can do in this call, and
 /// with `wait_for_reply` (a Regular call with the setting on), to say one of `words` when finished.
+///
+/// CDXC:VoiceMode 2026-11-26 WHY: the user did not know the voice agent can approve or deny what a
+/// session waits on. The opening line now says so once, and only when the call has
+/// `answer_prompt` (`tools::definitions` for its scope), so it never claims more than the call can
+/// do; a call with a GBot keeps its own opening without this line. "Read you their replies" left
+/// the line to keep it short.
 pub(super) fn intro_line(
     focus: Option<&FocusScope>,
     wait_for_reply: bool,
     words: &[String],
 ) -> String {
+    let answers = offers_answers(focus);
     let can_do = match focus {
-        None => "I can tell you what your sessions are doing, read you their replies, send them prompts and answer their questions.".to_string(),
+        None if answers => "I can tell you what your sessions are doing, send them prompts, answer their questions, and approve or deny what they wait on.".to_string(),
+        None => "I can tell you what your sessions are doing and send them prompts.".to_string(),
         Some(scope) if scope.gbot.is_some() => String::new(),
+        Some(scope) if answers => format!(
+            "I can tell you what {} is doing, send it prompts, answer its questions, and approve or deny what it waits on.",
+            scope.title
+        ),
         Some(scope) => format!(
-            "I can tell you what {} is doing, read you its replies, send it prompts and answer its questions.",
+            "I can tell you what {} is doing and send it prompts.",
             scope.title
         ),
     };
@@ -175,6 +187,17 @@ pub(super) fn intro_line(
         ));
     }
     line
+}
+
+/// Whether the call's tools can answer questions and approvals (`answer_prompt`).
+fn offers_answers(focus: Option<&FocusScope>) -> bool {
+    super::tools::definitions(focus)
+        .as_array()
+        .is_some_and(|tools| {
+            tools
+                .iter()
+                .any(|tool| tool.get("name").and_then(serde_json::Value::as_str) == Some("answer_prompt"))
+        })
 }
 
 /// The message that asks the model to open the call with `line`: word for word in English, and

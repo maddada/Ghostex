@@ -208,7 +208,7 @@ pub(super) fn briefing_message(scope: &FocusScope, facts: &Value, moved: bool) -
         format!("This call is about one session: \"{}\".", scope.title)
     };
     format!(
-        "{FOCUS_PREFIX} {opening} What it is and where it stands: {facts}\nIn one short sentence, name the session and say where it stands (what it last did or what it waits on), then ask what the user wants. Do not read the messages out."
+        "{FOCUS_PREFIX} {opening} What it is and where it stands: {facts}\nIn one short sentence, name the session and say where it stands (what it last did or what it waits on), then wait for the user. Do not read the messages out."
     )
 }
 
@@ -225,7 +225,7 @@ pub(super) fn widened_message(previous: Option<&str>) -> String {
 /// The model's line when the focused session closed.
 pub(super) fn closed_message(title: &str) -> String {
     format!(
-        "\"{title}\" was closed. Tell the user in one short sentence, and offer to talk about all their sessions instead."
+        "\"{title}\" was closed. Tell the user in one short sentence, and that they can say \"all sessions\" to talk about the others."
     )
 }
 
