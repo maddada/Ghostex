@@ -342,10 +342,12 @@ impl Conversation {
         }
     }
 
-    /// Reads the session list once in the background, so the call knows it at once instead of at
-    /// the watcher's next pass; it arrives as `Input::Sessions`.
+    /// Reads the session list once in the background when a call about all sessions starts, so
+    /// the model knows it at once instead of at the watcher's next pass; it arrives as
+    /// `Input::Sessions`. A call about one session waits for the watcher: the list it reads also
+    /// decides whether that session was closed (`follow_focus`), which stays the watcher's call.
     pub(super) fn read_sessions(&self) {
-        if self.focus.as_ref().is_some_and(|scope| scope.gbot.is_some()) {
+        if self.focus.is_some() {
             return;
         }
         let (state, tx) = (self.state.clone(), self.tx.clone());
