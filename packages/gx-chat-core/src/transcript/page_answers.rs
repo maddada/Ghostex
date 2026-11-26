@@ -319,6 +319,13 @@ fn display_value(value: &Value) -> String {
                 .collect::<Vec<_>>()
                 .join(", ")
         }
+        // A menus question's answer (server/src/visual_pages/kit.rs, `type="menus"`): each menu's
+        // value in order, "claude · opus[1m] · high", not JSON.
+        Value::Object(fields) if fields.values().all(Value::is_string) => fields
+            .values()
+            .filter_map(Value::as_str)
+            .collect::<Vec<_>>()
+            .join(" · "),
         other => other.to_string(),
     })
 }

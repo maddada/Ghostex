@@ -208,7 +208,11 @@ pub(crate) fn written_questions(html: &str) -> Vec<PageQuestion> {
             copy += 1;
         }
         used.push(key.clone());
-        let text = attribute(head, "type").is_some_and(|kind| kind.eq_ignore_ascii_case("text"));
+        // A menus question (kit.rs `question`) has no choices to list either: its answer is the
+        // value of each of its named menus.
+        let text = attribute(head, "type").is_some_and(|kind| {
+            kind.eq_ignore_ascii_case("text") || kind.eq_ignore_ascii_case("menus")
+        });
         questions.push(PageQuestion {
             key,
             tag: decode(attribute(head, "tag").unwrap_or_default().trim()),

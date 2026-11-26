@@ -75,7 +75,10 @@
 //! User 2026-10-30: no note box under each option in pages, for every page and for customers. The kit no longer makes the box (its collect, restore, lock and CSS are gone); the Pick button, each question's own "Note (optional)" box and the form's closing notes box stay. Answers to pages sent earlier with a `"<question> · <choice> (note)"` key still show in the answers card (packages/gx-chat-core/src/transcript/page_answers.rs reads them), but the kit sends no new ones. Superseded for rows on 2026-11-20 (Q4235): every row of a list has a Note again (`bindRows`, KIT_SCRIPT); pictures still have none.
 //! User: "question cards in the html having different width is an absolute NO GO … all take up the width as they should": every question card fills the column, even when a page's own CSS centres it with auto margins (which shrink a grid item to its content).
 //! User: the picked mockup's outline must never be cut off and needs more padding so it is not tight on the design: a tagged option gets 14px of room and a 2px ring inside its own box (content-box, so a fixed-width mockup keeps its width), because an outline drawn outside the box is clipped by a scrolling wrapper such as an `overflow-x:auto` frame.
-//! User: every question page offers "Other / none of these" with a note box, consistently, instead of each agent hand-rolling it, and the reader may leave a question unanswered. No choice is ever preselected; an agent marks the one it recommends with a Recommended mark and the reader picks. Mockups can use the full width of the page between or above the questions, and the Answered note is as wide as the question cards.
+//! User: every question page offers "Other / none of these" with a note box, consistently, instead of each agent hand-rolling it, and the reader may leave a question unanswered. No choice is preselected unless the agent marks it `picked` (the SessionChat 2026-11-26 DECISION below); an agent marks the one it recommends with a Recommended mark and the reader picks. Mockups can use the full width of the page between or above the questions, and the Answered note is as wide as the question cards.
+//!
+//! CDXC:SessionChat 2026-11-26 DECISION:
+//! The coordinator's setup interview: the user asked for questions "prefilled with a recommendation so it can be sent as is", then picked "Prefilled" over "blank means Recommended" and "Three menus per kind of work: agent, model, effort" over a list of ready combos. So a `<gx-choice picked>` (a `<gx-pick picked>`, or `data-picked` on a `data-pick` row) opens already picked when the page has no saved draft; the reader can clear it like any pick, and sending without a click sends it. A `<gx-question type="menus">` holds named `<select>` menus (usually in a `.gx-menus` row of `<label>`s): each opens on its `selected` option, its answer is `{ "<menu name>": "<value>" }`, and an `<option data-when="agent=claude,codex">` shows only while that menu of the same question has one of those values (`agent=Cursor; model=Opus 5.5` needs both; a menu whose pick got hidden moves to a visible option with the same value, else its visible `data-default` option, else its first). The user then asked for the picker as "proper controls in Ghostex's style ... not plain selects", so `<select data-look="tiles">` draws its options as logo tiles in a wrapping grid (`data-logo` names the logo's class, `data-note` adds a small line) and `data-look="seg"` as wrapping segmented buttons, the pick marked in pick ink; the hidden select stays what the answer reads. Supersedes "No choice is ever preselected" of 2026-10-30 for these marks only: an unmarked page still opens blank.
 //!
 //! CDXC:SessionChat 2026-11-02 DECISION:
 //! User: "make the 'recommended' tag more subtle, not like a pill, and not all caps." The recommended choice in a question and the recommended variant's `.gx-ribbon` both show the same quiet mark: a small muted "Recommended" in sentence case after a faint star in the pick colour (`--gx-pick`, neutral ink since 2026-11-04, theme.rs), with no pill, fill or border. The chat's own question card (apps/desktop/src/app/native_chat/ask_card.rs `recommended_mark`, the phone's askCard.tsx `RecommendedMark`) shows the same mark. The ribbon sits centred just above its card instead of on the card's top edge, so no card's title or layout moves for it (beside the title it pushed long titles onto two lines).
@@ -215,6 +218,28 @@ gx-question.gx-answered .gx-choice[aria-checked=true] .gx-mark{border-color:var(
 .gx-note::placeholder,.gx-text::placeholder{color:var(--gx-muted)}
 .gx-note[readonly],.gx-text[readonly]{resize:none}
 .gx-note[hidden],.gx-text[hidden]{display:none}
+/* A menus question (`type="menus"`, see the SessionChat 2026-11-26 DECISION on KIT_SCRIPT `question`): its named menus side by side, wrapping on a phone. */
+.gx-menus{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0 0}
+.gx-menus>label{display:flex;flex-direction:column;gap:4px;flex:1 1 150px;min-width:0;font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--gx-muted)}
+.gx-menu{display:flex;flex-direction:column;gap:6px;min-width:0;margin:12px 0 0}
+.gx-menu-label{font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--gx-muted)}
+gx-question select[hidden]{display:none}
+/* A menu drawn as buttons (`<select data-look="tiles|seg">`): logo tiles in a wrapping grid, or segmented buttons that wrap; the pick is marked in pick ink. A menu with one choice left reads as text. */
+.gx-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,158px),1fr));gap:8px}
+.gx-tiles>button{display:flex;align-items:center;gap:10px;min-width:0;padding:10px 12px;border-radius:12px;background:var(--gx-option);border:1px solid var(--gx-option-border);color:var(--gx-fg);font:550 13px/1.25 var(--font-sans);text-align:left;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.gx-tiles>button>span{min-width:0;overflow-wrap:anywhere}
+.gx-tiles>button small{display:block;margin-top:2px;font-size:11.5px;font-weight:400;color:var(--gx-muted)}
+.gx-tiles>button:hover{border-color:var(--gx-line-strong)}
+.gx-tiles>button[aria-pressed=true]{border-color:var(--gx-pick);box-shadow:inset 0 0 0 1px var(--gx-pick)}
+.gx-seg.gx-seg-wrap{display:flex;flex-wrap:wrap;max-width:100%;box-sizing:border-box}
+.gx-seg.gx-seg-wrap>button[aria-pressed=true]{background:var(--gx-option);color:var(--gx-fg);box-shadow:inset 0 0 0 1.5px var(--gx-pick)}
+.gx-tiles>button[hidden],.gx-seg>button[hidden],.gx-tiles[hidden],.gx-seg[hidden],.gx-menu-only[hidden]{display:none}
+.gx-tiles>button:disabled,.gx-seg>button:disabled{cursor:default}
+.gx-menu-only{font-size:13px;color:var(--gx-muted)}
+.gx-logo{flex:none;display:inline-block;width:20px;height:20px;background:var(--c,var(--gx-fg));-webkit-mask:center/contain no-repeat;mask:center/contain no-repeat}
+gx-question select{display:block;width:100%;min-width:0;box-sizing:border-box;height:34px;font:inherit;font-size:13.5px;font-weight:500;letter-spacing:0;color:var(--gx-fg);background:var(--gx-option);border:1px solid var(--gx-option-border);border-radius:9px;padding:0 10px}
+gx-question select:focus{outline:none;border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in srgb,var(--ring) 20%,transparent)}
+gx-question select:disabled{opacity:1;cursor:default}
 textarea.gx-src{display:none!important}
 .gx-box{position:relative;overflow-wrap:anywhere;white-space:pre-wrap;cursor:text;-webkit-user-modify:read-write-plaintext-only}
 .gx-box[contenteditable=false]{-webkit-user-modify:read-only;cursor:default}
@@ -674,7 +699,7 @@ function question(qe,index,used,changed){
   var title=(qe.getAttribute("title")||"").trim(),key=(qe.getAttribute("name")||"").trim()||title||"Question "+(index+1);
   for(var n=2;used[key];n++)key=key.replace(/ \(\d+\)$/,"")+" ("+n+")";
   used[key]=true;
-  var multiple=qe.hasAttribute("multiple"),text=(qe.getAttribute("type")||"").toLowerCase()==="text";
+  var multiple=qe.hasAttribute("multiple"),kind=(qe.getAttribute("type")||"").toLowerCase(),text=kind==="text",menus=kind==="menus";
   var titleId="gx-q-"+index,head=el("div","gx-q-head"),heading=el("div","gx-q-heading"),tile=el("span","gx-q-tile"),tag=qe.getAttribute("tag");
   qe.removeAttribute("title");
   tile.innerHTML=TILE_ICON;head.append(tile,heading);
@@ -689,12 +714,47 @@ function question(qe,index,used,changed){
   kids(qe).forEach(function(node){if(node.nodeName==="GX-CHOICE")choiceEls.push(node);else desc.append(node);});
   choiceEls=inVariantOrder(choiceEls,key,(tag||"").trim());
   qe.textContent="";qe.append(head);
-  linkText(desc);if(desc.textContent.trim()||desc.querySelector("img,svg,canvas,table"))qe.append(desc);
+  linkText(desc);if(desc.textContent.trim()||desc.querySelector("img,svg,canvas,table,select"))qe.append(desc);
+  if(menus){
+    var sels=Array.prototype.slice.call(desc.querySelectorAll("select[name]")),mnote=el("textarea","gx-note");mnote.rows=1;mnote.placeholder="Note (optional)";mnote.setAttribute("aria-label","Note");mnote.addEventListener("input",notify);
+    /* An option with `data-when="agent=claude,codex"` shows only while that menu of this question has one of those values (`a=x; b=y` needs both); a menu whose pick got hidden moves to a visible option with the same value, else its visible `data-default` option, else its first visible one. The same value may repeat under different conditions (an effort per model), so a value is always set on a visible option. */
+    var byName=function(n){return sels.filter(function(s){return s.name===n;})[0];};
+    var fit=function(){sels.forEach(function(s){
+      Array.prototype.forEach.call(s.options,function(o){var w=o.getAttribute("data-when");if(!w)return;var ok=w.split(";").every(function(part){var i=part.indexOf("=");if(i<0)return true;var dep=byName(part.slice(0,i).trim());return !dep||part.slice(i+1).split(",").map(function(v){return v.trim();}).indexOf(dep.value)>=0;});o.hidden=!ok;o.disabled=!ok;});
+      var cur=s.options[s.selectedIndex];if(cur&&!cur.disabled)return;
+      var shown=Array.prototype.filter.call(s.options,function(o){return !o.disabled;}),pick=(cur&&shown.filter(function(o){return o.value===cur.value;})[0])||shown.filter(function(o){return o.hasAttribute("data-default");})[0]||shown[0];if(pick)pick.selected=true;});if(paint)paint();};
+    /* Menus drawn as buttons; the hidden select stays what the answer reads. */
+    var looks=[];
+    sels.forEach(function(s){var look=s.getAttribute("data-look");if(look!=="tiles"&&look!=="seg")return;
+      var box=el("div",look==="tiles"?"gx-tiles":"gx-seg gx-seg-wrap"),only=el("div","gx-menu-only");box.setAttribute("role","radiogroup");if(s.getAttribute("aria-label"))box.setAttribute("aria-label",s.getAttribute("aria-label"));
+      s.hidden=true;s.after(box,only);
+      var btns=Array.prototype.map.call(s.options,function(o){var b=el("button");b.type="button";b.setAttribute("role","radio");
+        var logo=o.getAttribute("data-logo");if(logo)b.append(el("i","gx-logo "+logo));
+        var t=el("span",null,o.textContent),n=o.getAttribute("data-note");if(n)t.append(el("small",null,n));b.append(t);
+        b.addEventListener("click",function(){if(b.disabled||o.disabled)return;o.selected=true;fit();notify();});box.append(b);return b;});
+      looks.push({s:s,box:box,only:only,btns:btns});});
+    var paint=function(){looks.forEach(function(l){var shown=[];Array.prototype.forEach.call(l.s.options,function(o,i){var b=l.btns[i],on=o.selected&&!o.disabled;b.hidden=o.disabled;b.setAttribute("aria-checked",on?"true":"false");b.setAttribute("aria-pressed",on?"true":"false");if(!o.disabled)shown.push(o);});
+      var one=shown.length===1;l.box.hidden=one;l.only.hidden=!one;l.only.textContent=one?shown[0].textContent:"";});};
+    var press=function(off){looks.forEach(function(l){l.btns.forEach(function(b){b.disabled=off;});});};
+    var setv=function(s,v){var same=Array.prototype.filter.call(s.options,function(o){return o.value===v;}),o=same.filter(function(o){return !o.disabled;})[0]||same[0];if(o)o.selected=true;};
+    sels.forEach(function(s){s.addEventListener("change",function(){fit();notify();});});
+    has=function(){return sels.some(function(s){return !!s.value;})||!!mnote.value.trim();};
+    fit();qe.append(mnote);
+    var menusQ={el:qe,title:title,key:key,tag:(tag||"").trim(),choices:[],
+      collect:function(out){var v={};sels.forEach(function(s){v[s.name]=s.value;});out[key]=sels.length?v:SKIPPED;var w=mnote.value.trim();if(w)out[key+" (note)"]=w;},
+      restore:function(answers){var v=answers[key];if(v&&typeof v==="object"&&!Array.isArray(v))sels.forEach(function(s){if(typeof v[s.name]==="string"){setv(s,v[s.name]);fit();}});mnote.value=typeof answers[key+" (note)"]==="string"?answers[key+" (note)"]:"";live();},
+      prefill:function(){sels.forEach(function(s){var d=Array.prototype.filter.call(s.options,function(o){return o.defaultSelected;})[0];if(d)d.selected=true;});fit();live();},
+      lock:function(){answered(has());press(true);sels.forEach(function(s){s.disabled=true;});mnote.readOnly=true;if(!mnote.value)mnote.hidden=true;},
+      lockPreview:function(){qe.classList.remove("gx-answered","gx-unanswered");answered(has());qe.classList.add("gx-outside-preview");press(true);sels.forEach(function(s){s.disabled=true;});mnote.readOnly=true;mnote.hidden=!mnote.value.trim();},
+      unlock:function(){qe.classList.remove("gx-answered","gx-unanswered","gx-outside-preview");press(false);sels.forEach(function(s){s.disabled=false;});mnote.readOnly=false;mnote.hidden=false;live();}};
+    live();return menusQ;
+  }
   if(text){
     var area=el("textarea","gx-text");area.placeholder=qe.getAttribute("placeholder")||"Your answer (optional)";area.setAttribute("aria-labelledby",titleId);
     has=function(){return !!area.value.trim();};area.addEventListener("input",notify);qe.append(area);
     return{el:qe,title:title,key:key,tag:(tag||"").trim(),choices:[],collect:function(out){out[key]=area.value.trim()||SKIPPED;},
       restore:function(answers){area.value=(typeof answers[key]==="string"&&answers[key]!==SKIPPED)?answers[key]:"";live();},
+      prefill:function(){},
       lock:function(){answered(!!area.value.trim());area.readOnly=true;if(!area.value)area.hidden=true;},
       lockPreview:function(){qe.classList.remove("gx-answered","gx-unanswered");answered(!!area.value.trim());qe.classList.add("gx-outside-preview");area.readOnly=true;area.hidden=!area.value.trim();},
       unlock:function(){qe.classList.remove("gx-answered","gx-unanswered","gx-outside-preview");area.readOnly=false;area.hidden=false;live();}};
@@ -703,19 +763,19 @@ function question(qe,index,used,changed){
   list.setAttribute("role",multiple?"group":"radiogroup");list.setAttribute("aria-labelledby",titleId);
   var note=el("textarea","gx-note");note.rows=1;note.setAttribute("aria-label","Note");note.addEventListener("input",notify);
   function sync(){note.placeholder=other.on()?"What would you prefer instead? (optional)":"Note (optional)";if(note.__gxBox)boxState(note);}
-  function choice(nodes,value,recommended,label){
+  function choice(nodes,value,recommended,label,picked){
     var button=el("button","gx-choice"),body=el("span","gx-choice-body"),index=choices.length,letter=index<26?String.fromCharCode(97+index):String(index+1);
     button.type="button";button.setAttribute("role",multiple?"checkbox":"radio");button.setAttribute("aria-checked","false");
 
     nodes.forEach(function(node){body.append(node);});
     if(recommended)body.insertBefore(el("span","gx-rec","Recommended"),body.querySelector(":scope>small"));
     button.append(el("span","gx-mark"),body,el("span","gx-letter",letter));list.append(button);
-    var c={button:button,value:value,label:label,letter:letter,recommended:!!recommended,on:function(){return button.getAttribute("aria-checked")==="true";},set:function(v){button.setAttribute("aria-checked",v?"true":"false");}};
+    var c={button:button,value:value,label:label,letter:letter,recommended:!!recommended,picked:!!picked,on:function(){return button.getAttribute("aria-checked")==="true";},set:function(v){button.setAttribute("aria-checked",v?"true":"false");}};
     /* A pick toggles; one of N replaces the pick. */
     button.addEventListener("click",function(){var on=!c.on();if(on)choices.forEach(function(o){if(!multiple||o.exclusive||c.exclusive)o.set(false);});c.set(on);sync();notify();if(on&&c===other)note.focus();});
     choices.push(c);return c;
   }
-  choiceEls.forEach(function(ce){var label=labelText(ce);choice(kids(ce),(ce.getAttribute("value")||"").trim()||label,ce.hasAttribute("recommended"),label);});
+  choiceEls.forEach(function(ce){var label=labelText(ce);choice(kids(ce),(ce.getAttribute("value")||"").trim()||label,ce.hasAttribute("recommended"),label,ce.hasAttribute("picked"));});
   var other=choice([document.createTextNode(OTHER)],OTHER,false,OTHER);other.button.classList.add("gx-other");
   has=function(){return choices.some(function(c){return c.on();})||!!note.value.trim();};
   sync();qe.append(list,note);
@@ -724,6 +784,7 @@ function question(qe,index,used,changed){
     restore:function(answers){var v=answers[key],picked=Array.isArray(v)?v:v==null?[]:[v];
       choices.forEach(function(c){c.set(picked.indexOf(c.value)>=0);});
       note.value=typeof answers[key+" (note)"]==="string"?answers[key+" (note)"]:"";sync();live();},
+    prefill:function(){var first=true;choices.forEach(function(c){var on=c.picked&&(multiple||first);if(on)first=false;c.set(on);});sync();live();},
     lock:function(){answered(choices.some(function(c){return c.on();})||!!note.value.trim());choices.forEach(function(c){c.button.disabled=true;});note.readOnly=true;if(!note.value)note.hidden=true;},
     lockPreview:function(){qe.classList.remove("gx-answered","gx-unanswered");answered(choices.some(function(c){return c.on();})||!!note.value.trim());qe.classList.add("gx-outside-preview");choices.forEach(function(c){c.button.disabled=true;});note.readOnly=true;note.hidden=!note.value.trim();},
     unlock:function(){qe.classList.remove("gx-answered","gx-unanswered","gx-outside-preview");choices.forEach(function(c){c.button.disabled=false;});note.readOnly=false;note.hidden=false;sync();live();}};
@@ -812,8 +873,8 @@ function addRowChoices(root){
     rows.forEach(function(n){
       if(!asksFor(rowAsks(n),q))return;
       var v=rowValue(n),l=rowLabel(n);
-      if(have.some(function(c){var cl=labelText(c),cv=(c.getAttribute("value")||"").trim()||cl;return cv===v||cl===l||cl===v;}))return;
-      var c=document.createElement("gx-choice");c.setAttribute("value",v);if(rowRecommended(n))c.setAttribute("recommended","");c.textContent=l;qe.append(c);have.push(c);
+      var had=have.filter(function(c){var cl=labelText(c),cv=(c.getAttribute("value")||"").trim()||cl;return cv===v||cl===l||cl===v;})[0];if(had){if(n.hasAttribute("picked")||n.hasAttribute("data-picked"))had.setAttribute("picked","");return;}
+      var c=document.createElement("gx-choice");c.setAttribute("value",v);if(rowRecommended(n))c.setAttribute("recommended","");if(n.hasAttribute("picked")||n.hasAttribute("data-picked"))c.setAttribute("picked","");c.textContent=l;qe.append(c);have.push(c);
     });
   });
 }
@@ -984,6 +1045,8 @@ function setup(root){
   function collect(){var out={};questions.forEach(function(q){q.collect(out);});if(seen)out.seen=true;var t=notes&&notes.value.trim();if(t)out[notesKey]=t;return out;}
   function restore(answers){questions.forEach(function(q){q.restore(answers);});if(notes)notes.value=typeof answers[notesKey]==="string"?answers[notesKey]:"";}
   function syncOptions(){options.forEach(function(o){o.sync();});}
+  /* Before the reader touches anything: the picks the agent marked `picked` (and each menu's `selected` option), so a page can be sent as it opens. */
+  function prefill(){questions.forEach(function(q){q.prefill();});}
   function syncSeenButton(){if(!seen||exported||!archiveState||!sendState||button.disabled)return;var sending=hasReply();button.setAttribute("data-gx-mode",sending?"send":"archive");archiveState.setAttribute("aria-hidden",sending?"true":"false");sendState.setAttribute("aria-hidden",sending?"false":"true");button.setAttribute("data-gx-tip",sending?"Send to agent":"Archive");button.setAttribute("aria-label",sending?"Send to agent":"Archive");}
   /* The reader's picks so far are kept on the host (PAGE_API's draft), so closing and reopening the page loses nothing. */
   function changed(){syncOptions();syncSeenButton();if(window.ghostex&&ghostex.__saveDraft)ghostex.__saveDraft("kit",collect());}
@@ -1233,7 +1296,7 @@ function setup(root){
   /* An exported page has no Ghostex to send to: Send becomes Export answers, which shows the answers to copy or download, and the page stays open for more (exported.rs). */
   exported=!!ghostex.exported;
   if(exported){if(seen){button.classList.remove("gx-send-seen");button.removeAttribute("data-gx-mode");button.removeAttribute("aria-label");archiveState=sendState=null;button.textContent="";button.append(label);}else{var svg=button.querySelector("svg");if(svg)svg.remove();}label.textContent="Export answers";button.setAttribute("data-gx-tip","Export answers");skipAll.remove();infoText=seen?"Exports that you saw the page, with your reply if you write one.":"Questions you leave blank are exported as skipped.";info.setAttribute("aria-label",infoText);info.setAttribute("data-gx-tip",infoText);}
-  var saved=ghostex.__draft&&ghostex.__draft("kit");if(saved&&typeof saved==="object"){restore(saved);syncOptions();}
+  var saved=ghostex.__draft&&ghostex.__draft("kit");if(saved&&typeof saved==="object")restore(saved);else prefill();syncOptions();
   syncSeenButton();
   /* Pasted images: see the Clipboard DECISIONs on KIT_SCRIPT. */
   var pendingImages=0,kept={},keptSize=0,savedThumbs=ghostex.__draft&&ghostex.__draft("thumbs");
@@ -1314,7 +1377,7 @@ function setup(root){
   allPills();
   setupOutsideAnswers();
   /* A newer draft than the one the page was served came after it loaded (PAGE_API's "gx-draft", sent only before the reader changed anything): show it. */
-  document.addEventListener("gx-draft",function(){if(button.disabled||previewState)return;var s=ghostex.__draft("kit"),t=ghostex.__draft("thumbs");boxes().forEach(function(b){b.value="";});restore(s&&typeof s==="object"?s:{});if(t&&typeof t==="object")Object.keys(t).forEach(function(k){keepSmall(k,t[k]);});syncOptions();allPills();syncSeenButton();});
+  document.addEventListener("gx-draft",function(){if(button.disabled||previewState)return;var s=ghostex.__draft("kit"),t=ghostex.__draft("thumbs");boxes().forEach(function(b){b.value="";});if(s&&typeof s==="object")restore(s);else{restore({});prefill();}if(t&&typeof t==="object")Object.keys(t).forEach(function(k){keepSmall(k,t[k]);});syncOptions();allPills();syncSeenButton();});
   function send(out,sent){
     if(pendingImages){status.classList.add("gx-error");status.textContent="Wait for the pasted image to finish saving.";return;}
     if(exported){status.classList.remove("gx-error");ghostex.submit(out).then(function(){status.textContent="Answers exported. Send them back to whoever shared this page.";});return;}
