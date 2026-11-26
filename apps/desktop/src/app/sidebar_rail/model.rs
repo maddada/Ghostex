@@ -186,6 +186,20 @@ pub(crate) struct RailLinkPin {
     pub(crate) showing: bool,
 }
 
+/// An enabled extension's side panel view, as its ⋯ row and its pin (`ext:<id>`) show it
+/// (packages/gx-core/src/sidebar_rail.rs, `RAIL_EXTENSION_PIN_PREFIX`). The web build lists none.
+#[cfg_attr(ghostex_web, allow(dead_code))]
+#[derive(Clone)]
+pub(crate) struct RailExtensionView {
+    pub(crate) id: String,
+    /// Its view's title: the tooltip and the ⋯ row's label.
+    pub(crate) title: String,
+    /// The extension's own icon.
+    pub(crate) image: Option<std::sync::Arc<gpui::Image>>,
+    /// Its view is the one in the side panel.
+    pub(crate) showing: bool,
+}
+
 /// What a rail button draws: its tooltip, and its artwork (an image, such as a link's site icon,
 /// stands in for the outline icon when there is one).
 #[derive(Clone)]

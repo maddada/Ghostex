@@ -79,13 +79,20 @@ pub(crate) fn pin_agent_background_browser_open(
 /// and paths still asks. The setting is the user's alone (`agent_denied_key` in the settings
 /// catalog keeps agents from turning it on). Such an open is still logged, quietly
 /// (`record_agent_open` in browser_agent_limits.rs, #762 follow-up).
+///
+/// An extension's view opened in the side panel counts as a page open here too
+/// (CDXC:Extensions 2026-11-26 in extensions/open_view.rs, #772).
 pub(crate) fn agent_page_opens_allowed(state: &AppState, action: &str) -> bool {
-    matches!(action, "openBrowser" | "openBrowserPane")
-        && crate::shared_settings_file::read_shared_settings(&state.paths).and_then(|settings| {
-            settings
-                .get(ghostex_settings_catalog::help::AGENT_PAGES_OPEN_WITHOUT_ASKING_SETTING)
-                .and_then(Value::as_bool)
-        }) == Some(true)
+    matches!(
+        action,
+        "openBrowser"
+            | "openBrowserPane"
+            | crate::extensions::open_view::OPEN_EXTENSION_VIEW_ACTION
+    ) && crate::shared_settings_file::read_shared_settings(&state.paths).and_then(|settings| {
+        settings
+            .get(ghostex_settings_catalog::help::AGENT_PAGES_OPEN_WITHOUT_ASKING_SETTING)
+            .and_then(Value::as_bool)
+    }) == Some(true)
 }
 
 /// "Agents open pages in" (`agentPreviewBrowser`) is My default browser: the toast's External
@@ -422,6 +429,47 @@ pub(crate) fn emit_renderer_command_toast(
     request
 }
 
+/// Broadcasts the switch toast for an agent's or an extension's open of an extension's view in
+/// a project's side panel (extensions/open_view.rs): "<agent> wants to open <view>", the project
+/// under it, Open (and Always on the desktop, as for a page).
+pub(crate) fn emit_extension_view_toast(
+    state: &AppState,
+    requester: &crate::extensions::open_view::OpenViewRequester,
+    view_title: &str,
+    project_id: &str,
+    payload: Map<String, Value>,
+) -> SwitchRequest {
+    use crate::extensions::open_view::OpenViewRequester;
+    let (requester_title, requester_icon) = match requester {
+        OpenViewRequester::Agent {
+            project_id,
+            session_id,
+        } => lookup_requester(state, project_id, session_id),
+        OpenViewRequester::Extension { .. } | OpenViewRequester::User => (None, None),
+    };
+    let title = match requester_title.as_deref() {
+        Some(requester) => format!("{requester} wants to open {view_title}"),
+        None => format!("Open {view_title}"),
+    };
+    let request = SwitchRequest {
+        id: Uuid::new_v4().to_string(),
+        action: crate::extensions::open_view::OPEN_EXTENSION_VIEW_ACTION.to_string(),
+        payload: Value::Object(payload),
+        title,
+        subtitle: lookup_project_name(state, project_id),
+        primary_label: "Open".to_string(),
+        icon: requester_icon,
+        requester_title,
+        project_id: Some(project_id.to_string()),
+        session_id: None,
+        external_browser: None,
+        external_url: None,
+        created_at: chrono::Utc::now().to_rfc3339(),
+    };
+    broadcast_switch_request(state, &request);
+    request
+}
+
 fn broadcast_switch_request(state: &AppState, request: &SwitchRequest) {
     state.event_hub.broadcast(json!({
         "protocolVersion": GXSERVER_PROTOCOL_VERSION,
@@ -442,7 +490,11 @@ fn lookup_requester(
     (session_display_title(&session), session_icon_slug(&session))
 }
 
-fn lookup_session(state: &AppState, project_id: &str, session_id: &str) -> Option<Value> {
+pub(crate) fn lookup_session(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> Option<Value> {
     let db = open_gxserver_database(&state.paths).ok()?;
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
     repository
@@ -451,7 +503,7 @@ fn lookup_session(state: &AppState, project_id: &str, session_id: &str) -> Optio
         .flatten()
 }
 
-fn lookup_project_name(state: &AppState, project_id: &str) -> Option<String> {
+pub(crate) fn lookup_project_name(state: &AppState, project_id: &str) -> Option<String> {
     let db = open_gxserver_database(&state.paths).ok()?;
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
     let project = repository

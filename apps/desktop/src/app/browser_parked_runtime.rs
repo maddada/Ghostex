@@ -328,7 +328,7 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
-    fn parked_project_title(&self, project_id: &str) -> Option<String> {
+    pub(crate) fn parked_project_title(&self, project_id: &str) -> Option<String> {
         ProjectKey::parse_workspace_project_id(project_id)
             .and_then(|key| self.gx_store.core.presentation().project(&key))
             .map(|project| project.title.trim().to_string())

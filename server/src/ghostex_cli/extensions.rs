@@ -18,6 +18,7 @@ pub fn extensions_command(args: &[String]) -> CliResult<()> {
         Some("state") => state_command(&args[1..]),
         Some("panel") => crate::ghostex_cli::extension_panel::panel_command(&args[1..]),
         Some("message") => crate::ghostex_cli::extension_panel::message_command(&args[1..]),
+        Some("open") => open_command(&args[1..]),
         None | Some("help") | Some("-h") | Some("--help") => {
             println!("{}", crate::ghostex_cli::usage::extensions_usage());
             Ok(())
@@ -70,6 +71,118 @@ fn list_command(args: &[String]) -> CliResult<()> {
         );
     }
     Ok(())
+}
+
+/// `extensions open <id> [--session <ref>] [--placement view] [--background]`: the extension's view
+/// in the side panel of the session's project, the calling session's by default
+/// (server/src/extensions/open_view.rs decides whether it shows, asks first or opens in the
+/// background).
+fn open_command(args: &[String]) -> CliResult<()> {
+    let parsed = parse_args(args);
+    if parsed.flags.truthy("help") || parsed.flags.truthy("h") {
+        println!("{}", crate::ghostex_cli::usage::extensions_usage());
+        return Ok(());
+    }
+    let id = one_required_arg("extensions open", &parsed.rest)?;
+    if let Some(placement) = parsed.flags.text("placement") {
+        if placement.trim() != "view" {
+            return Err(CliError::Other(format!(
+                "--placement {placement} can't be opened: only --placement view (the side panel) can."
+            )));
+        }
+    }
+    let mut payload = Map::new();
+    payload.insert("id".to_string(), Value::String(id.clone()));
+    if parsed.flags.truthy("background") {
+        payload.insert("background".to_string(), Value::Bool(true));
+    }
+    let selector = parsed
+        .flags
+        .text("session")
+        .or_else(|| parsed.flags.text("sessionId"))
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let (project_id, session_id) = match &selector {
+        Some(selector) => {
+            let mut flags = parsed.flags.clone();
+            flags.0.remove("projectId");
+            let session =
+                crate::ghostex_cli::selector::resolve_cli_session_selector(selector, &flags)?;
+            let text = |key: &str| {
+                session
+                    .get(key)
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(str::to_string)
+            };
+            let session_id = text("sessionId");
+            let project_id = text("projectId").or_else(|| {
+                let global_ref = text("globalRef")?;
+                crate::agent_hooks::probing::parse_global_session_ref(&global_ref).0
+            });
+            match (project_id, session_id) {
+                (Some(project_id), Some(session_id)) => (Some(project_id), Some(session_id)),
+                _ => {
+                    return Err(CliError::Other(format!(
+                        "Session \"{selector}\" does not report a project id."
+                    )))
+                }
+            }
+        }
+        None => match session_reference_from_environment() {
+            Some((project_id, session_id)) => (Some(project_id), Some(session_id)),
+            None => (None, None),
+        },
+    };
+    if let (Some(project_id), Some(session_id)) = (project_id, session_id) {
+        payload.insert("projectId".to_string(), Value::String(project_id));
+        payload.insert("sessionId".to_string(), Value::String(session_id));
+    }
+    let result = call_gxserver_rpc(
+        "/api/openExtensionView",
+        &Value::Object(payload),
+        &parsed.flags,
+    )?;
+    if parsed.flags.truthy("json") {
+        print_json(&result);
+        return Ok(());
+    }
+    let flag = |key: &str| result.get(key) == Some(&Value::Bool(true));
+    if flag("toastShown") {
+        println!(
+            "Asked the user: Ghostex shows an Open button for {id}. It opens when they click it."
+        );
+    } else if flag("alreadyShowing") {
+        println!("{id} is already showing in the side panel.");
+    } else if flag("background") {
+        println!("Added {id} to the project's side panel without showing it.");
+    } else {
+        println!("Opened {id} in the side panel.");
+    }
+    Ok(())
+}
+
+/// The calling session's `(projectId, sessionId)`, from the ids every Ghostex pane exports.
+fn session_reference_from_environment() -> Option<(String, String)> {
+    let text = |key: &str| {
+        std::env::var(key)
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    };
+    if let Some(global_ref) = text("GHOSTEX_GLOBAL_SESSION_REF") {
+        if let (Some(project_id), Some(session_id)) =
+            crate::agent_hooks::probing::parse_global_session_ref(&global_ref)
+        {
+            return Some((project_id, session_id));
+        }
+    }
+    let native = text("GHOSTEX_NATIVE_SESSION_ID")?;
+    let (project_id, session_id) = native.split_once(':')?;
+    let (project_id, session_id) = (project_id.trim(), session_id.trim());
+    (!project_id.is_empty() && !session_id.is_empty())
+        .then(|| (project_id.to_string(), session_id.to_string()))
 }
 
 fn catalog_command(args: &[String]) -> CliResult<()> {

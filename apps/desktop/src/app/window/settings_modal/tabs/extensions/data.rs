@@ -765,6 +765,7 @@ pub(crate) fn permission_label(permission: &str) -> String {
         "agents.message" => "Hear from your agents",
         "sessions.message" => "Message a thread when you tap its panel",
         "agents.note" => "Tell new agent sessions about it",
+        "views.open" => "Open its view in the side panel",
         other => other,
     }
     .to_string()
@@ -788,6 +789,9 @@ pub(crate) fn permission_description(permission: &str) -> &'static str {
         }
         "agents.note" => {
             "Adds one short line to what agent sessions are told when they start, except coordinators and their threads."
+        }
+        "views.open" => {
+            "Open its own view in a project's side panel. You get an Open button first unless you let agents open pages without asking."
         }
         _ => "",
     }

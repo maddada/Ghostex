@@ -49,7 +49,7 @@ pub const RAIL_FOOT_ITEM: &str = "settings";
 /// Every item, in ⋯ menu order.
 ///
 /// CDXC:Sidebar 2026-11-21 DECISION:
-/// User: views on the rail "don't make sense", "even when I have a view open in the side panel, don't show it in the left-side rail"; the rail is for agents and hubs (Hermes, the Claude and Grok bots, Voice Call, All Automations, Main Hub, Agents Hub, Search). So the side panel views (Files, Changes, Browser, Project Board, Dev servers, Resources, Extensions) are no rail items: never an icon, not even while open, never a pin, and no Views group in ⋯ (coordinator's call; they stay in the side panel and their usual buttons). Notifications left too: the bell is in the sidebar's top bar. Saved pins of theirs are not read, and the desktop drops them from the settings file once (`drop_retired_rail_pins` in packages/settings-catalog). Supersedes the Views group and the Notifications row of the 2026-11-20 rail.
+/// User: views on the rail "don't make sense", "even when I have a view open in the side panel, don't show it in the left-side rail"; the rail is for agents and hubs (Hermes, the Claude and Grok bots, Voice Call, All Automations, Main Hub, Agents Hub, Search). So the side panel views (Files, Changes, Browser, Project Board, Dev servers, Resources, Extensions) are no rail items: never an icon, not even while open, never a pin, and no Views group in ⋯ (coordinator's call; they stay in the side panel and their usual buttons). Notifications left too: the bell is in the sidebar's top bar. Saved pins of theirs are not read, and the desktop drops them from the settings file once (`drop_retired_rail_pins` in packages/settings-catalog). Supersedes the Views group and the Notifications row of the 2026-11-20 rail. Since 2026-11-26 the user's extensions' views are pinnable (`RAIL_EXTENSION_PIN_PREFIX`); the built-in views stay off.
 pub const RAIL_ITEMS: &[RailItem] = &[
     item("search", "Search", "Go to"),
     item("findPrompts", "Search by Prompt", "Go to"),
@@ -117,6 +117,24 @@ pub fn rail_link_pin_id(key: &str) -> Option<&str> {
         .filter(|id| !id.is_empty())
 }
 
+/// The start of an extension view's pin key (`ext:<id>`): an installed extension with a side
+/// panel view.
+///
+/// CDXC:Sidebar 2026-11-26 DECISION:
+/// User (#772 follow-up): "please also allow me to pin views / extensions that are views that get shown as a view to the left rail (only show enabled ones please)". This narrows the 2026-11-21 rule on `RAIL_ITEMS` that kept side panel views off the rail: the built-in views stay off, but every enabled extension with a side panel view is a row under Extensions in ⋯, pinnable like a link, and a click opens or focuses its view in the side panel the way `ghostex extensions open` does. Its pin is `ext:<id>` in `sidebarRailPins`, the same list and order as every other pin. The desktop knows which extensions are on, so it draws (and lists) only those: a pin of an extension that is off or uninstalled is kept but not drawn, as a pinned Hermes is while bots are off, and it comes back when the extension does.
+pub const RAIL_EXTENSION_PIN_PREFIX: &str = "ext:";
+
+/// The pin key of extension `id`'s view.
+pub fn rail_extension_pin_key(id: &str) -> String {
+    format!("{RAIL_EXTENSION_PIN_PREFIX}{id}")
+}
+
+/// The extension id of pin `key`, when it is an extension view's.
+pub fn rail_extension_pin_id(key: &str) -> Option<&str> {
+    key.strip_prefix(RAIL_EXTENSION_PIN_PREFIX)
+        .filter(|id| !id.is_empty())
+}
+
 /// The start of a separator's key (`sep:<id>`): a thin horizontal divider line on the rail.
 ///
 /// CDXC:Sidebar 2026-11-22 DECISION:
@@ -148,9 +166,12 @@ pub fn next_rail_separator_key<S: AsRef<str>>(pins: &[S]) -> String {
     }
 }
 
-/// Whether `key` can be pinned: a rail item, a link, or a separator.
+/// Whether `key` can be pinned: a rail item, a link, an extension's view, or a separator.
 fn pinnable(key: &str) -> bool {
-    rail_item(key).is_some() || rail_link_pin_id(key).is_some() || is_rail_separator_key(key)
+    rail_item(key).is_some()
+        || rail_link_pin_id(key).is_some()
+        || rail_extension_pin_id(key).is_some()
+        || is_rail_separator_key(key)
 }
 
 /// The section of the rail where a pinned entry sits: top (below Toggle sidebar, above ⋯) or
@@ -344,7 +365,11 @@ pub fn rail_layout(settings: &Map<String, Value>) -> RailLayout {
         }
         let known = match rail_link_pin_id(key) {
             Some(id) => links.iter().any(|link| link.id == id),
-            None => rail_item(key).is_some() || is_rail_separator_key(key),
+            None => {
+                rail_item(key).is_some()
+                    || rail_extension_pin_id(key).is_some()
+                    || is_rail_separator_key(key)
+            }
         };
         if known && !layout.contains(key) {
             let target = if in_bottom {
@@ -476,6 +501,28 @@ mod tests {
         );
         assert_eq!(rail_pins(&settings), ["claude", "grok"]);
         assert_eq!(rail_pins(&Map::new()), RAIL_DEFAULT_PINS);
+    }
+
+    #[test]
+    fn extension_view_pins_are_kept_in_order() {
+        let mut settings = Map::new();
+        settings.insert(
+            RAIL_PINS_SETTINGS_KEY.to_string(),
+            serde_json::json!(["search", "ext:mobile-pane", "ext:", "claude"]),
+        );
+        assert_eq!(
+            rail_pins(&settings),
+            ["search", "ext:mobile-pane", "claude"]
+        );
+        assert_eq!(
+            rail_extension_pin_id("ext:mobile-pane"),
+            Some("mobile-pane")
+        );
+        assert_eq!(rail_extension_pin_key("mobile-pane"), "ext:mobile-pane");
+        assert_eq!(
+            rail_pins_with(PINS, "ext:mobile-pane", true),
+            ["search", "notifications", "mainHub", "ext:mobile-pane"]
+        );
     }
 
     #[test]

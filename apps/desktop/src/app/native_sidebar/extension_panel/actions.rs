@@ -68,6 +68,7 @@ fn permission_label(permission: &str) -> &'static str {
         "agents.message" => "Hear from your agents",
         "sessions.message" => "Message a thread when you tap its panel",
         "agents.note" => "Tell new agent sessions about it",
+        "views.open" => "Open its view in the side panel",
         _ => "this permission",
     }
 }

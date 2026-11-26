@@ -211,6 +211,27 @@ pub enum RendererVerb {
     ShowDebugModal {
         name: String,
     },
+    /// `openExtensionView`: an installed extension's view in a project's side panel. gxserver
+    /// sends it after checking who asked (server/src/extensions/open_view.rs), and the switch
+    /// toast's Open sends it again with `mode: show`.
+    OpenExtensionView {
+        extension_id: String,
+        project_id: String,
+        mode: ExtensionViewOpenMode,
+        /// Bring the project on screen when it is not (the user asked, or clicked Open).
+        switch_project: bool,
+    },
+}
+
+/// How `openExtensionView` opens the view (server/src/extensions/open_view.rs `OpenViewMode`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExtensionViewOpenMode {
+    /// Open or focus it on screen.
+    Show,
+    /// Add its tab to the project without showing or focusing it.
+    Background,
+    /// Answer `alreadyShowing` when it is in front of the project, `needsAsk` otherwise.
+    Ask,
 }
 
 fn string<'a>(payload: &'a Value, key: &str) -> Option<&'a str> {
@@ -389,6 +410,24 @@ pub fn plan_renderer_command(
             .filter(|name| DEBUG_SHOW_MODALS.contains(&name.as_str()))
             .map(|name| RendererVerb::ShowDebugModal { name })
             .ok_or(RendererCommandError::UnknownDebugModal),
+        "openExtensionView" => {
+            let extension_id =
+                trimmed(payload, "extensionId").ok_or(RendererCommandError::Failed)?;
+            let project_id = trimmed(payload, "projectId")
+                .and_then(|project_id| known_project_id(core, &project_id))
+                .ok_or(RendererCommandError::NoMatchingProject)?;
+            let mode = match string(payload, "mode") {
+                Some("background") => ExtensionViewOpenMode::Background,
+                Some("ask") => ExtensionViewOpenMode::Ask,
+                _ => ExtensionViewOpenMode::Show,
+            };
+            Ok(RendererVerb::OpenExtensionView {
+                extension_id,
+                project_id,
+                mode,
+                switch_project: payload.get("switchProject").and_then(Value::as_bool) == Some(true),
+            })
+        }
         _ => Err(RendererCommandError::Unsupported),
     }
 }

@@ -283,6 +283,37 @@ impl GhostexGpuiApp {
                 ));
                 continue;
             }
+            // A pinned extension view (`ext:<id>`): its icon and title, its view in the side
+            // panel. Not drawn while the extension is off or its view can't open here.
+            if ghostex_gx_core::sidebar_rail::rail_extension_pin_id(key).is_some() {
+                let Some(view) = self.sidebar_rail_extension_pin(key) else {
+                    continue;
+                };
+                let state = RailItemState {
+                    available: true,
+                    showing: view.showing,
+                    badge: None,
+                };
+                let face = RailButtonFace {
+                    label: view.title,
+                    icon: gpui::SharedString::new_static("titlebar/puzzle.svg"),
+                    icon_size: RAIL_ICON,
+                    image: view.image,
+                };
+                entries.push(self.render_sidebar_rail_button(
+                    key.clone(),
+                    face,
+                    state,
+                    RailButtonLook {
+                        on: view.showing,
+                        temporary: false,
+                    },
+                    Some(target),
+                    appearance,
+                    cx,
+                ));
+                continue;
+            }
             // The gear's pin shows it at the foot, wherever it sits in the list.
             let Some(item) = rail_item(key).filter(|item| item.key != RAIL_FOOT_ITEM) else {
                 continue;
@@ -712,6 +743,10 @@ impl GhostexGpuiApp {
                         app.run_sidebar_rail_item(item.key, window, cx);
                     } else if let Some(id) = ghostex_gx_core::sidebar_rail::rail_link_pin_id(&key) {
                         app.run_sidebar_rail_link(id, window, cx);
+                    } else if let Some(id) =
+                        ghostex_gx_core::sidebar_rail::rail_extension_pin_id(&key)
+                    {
+                        app.run_sidebar_rail_extension(id, window, cx);
                     }
                 })
             })

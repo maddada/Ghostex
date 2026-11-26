@@ -224,6 +224,16 @@ pub(super) async fn route_control_http(
             )
             .await
         }
+        crate::extensions::open_view::OPEN_EXTENSION_VIEW_ENDPOINT => {
+            crate::extensions::open_view::handle_open_extension_view_http(
+                &state,
+                &caller,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
+        }
         crate::extensions::ext_api::PAGE_TOKEN_RPC_ENDPOINT => {
             crate::extensions::ext_api::handle_page_token_rpc(
                 state.clone(),

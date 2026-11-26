@@ -8173,7 +8173,20 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   agents: its install card then asks **Also install its skill for your agents**
   (unticked at first). The skill goes where Ghostex's own skills go, an update
   refreshes it, and uninstalling the extension removes it; it never replaces a
-  skill of the same name you already have, and says so instead. CLI: `ghostex extensions list`,
+  skill of the same name you already have, and says so instead.
+  An agent can open an installed, enabled extension's view in the side panel of its
+  project, for example a phone mirror when it starts testing on a device:
+  `ghostex extensions open <id>` (or `--session <ref>` for another session's project).
+  It opens the way an agent's Browser page does: unless you let agents open pages
+  without asking (Settings > Browser, or Always on the toast), you get a toast with
+  Open and Always first, and `--background` only adds the view's tab without showing
+  it. A view already in front needs nothing, and your own terminal opens it at once.
+  An extension's own server can do the same for its own view only, when you gave it
+  **Open its view in the side panel** (`views.open`) on its install card. With the
+  rail on, every enabled view extension is also a row in the rail's ⋯ menu under
+  Extensions: pin it to keep its icon on the rail, and a click opens or focuses its
+  view in the side panel. Turning the extension off or uninstalling it takes the icon
+  away. CLI: `ghostex extensions list`, `ghostex extensions open <id>`,
   `ghostex extensions state <id> --set pinned=true`.
 - **Claude** is a built-in extension, off by default: turn it on with its switch
   in Settings > Extensions > Built-in to use claude.ai inside Ghostex.

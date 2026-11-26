@@ -38,7 +38,7 @@ fn agents_section(
         s,
         AGENT_PAGES_OPEN_WITHOUT_ASKING_SETTING,
         "Let agents open and switch pages without asking",
-        "When an agent opens a page, it opens right away, where Agents open pages in says, instead of asking with a toast first. The toast's Always button turns this on.",
+        "When an agent opens a page, it opens right away, where Agents open pages in says, instead of asking with a toast first. The same goes for an extension's view an agent opens in the side panel. The toast's Always button turns this on.",
         false,
         cx,
     ));

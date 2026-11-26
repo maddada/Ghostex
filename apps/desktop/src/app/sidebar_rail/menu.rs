@@ -8,7 +8,8 @@ use serde_json::{Value, json};
 use ghostex_gx_core::custom_links::CUSTOM_LINK_COMMAND_TYPE;
 use ghostex_gx_core::sidebar_rail::{
     RAIL_COMMAND_TYPE, RAIL_FOOT_ITEM, RAIL_ITEMS, RAIL_MENU_GROUPS, RailLayout, RailSection,
-    is_rail_separator_key, rail_item, rail_layout, rail_link_pin_id,
+    is_rail_separator_key, rail_extension_pin_id, rail_extension_pin_key, rail_item, rail_layout,
+    rail_link_pin_id,
 };
 
 use super::model::RailDropTarget;
@@ -142,6 +143,7 @@ impl GhostexGpuiApp {
         for group in first {
             self.push_sidebar_rail_menu_group(&mut rows, group, &layout, cx);
         }
+        self.push_sidebar_rail_extension_rows(&mut rows, &layout);
         // The user's links and Add link… under their own heading (app/custom_links/), plus
         // Layout separators. A page in a browser cannot edit rail pins or open custom links.
         #[cfg(not(ghostex_web))]
@@ -218,6 +220,44 @@ impl GhostexGpuiApp {
             if cfg!(ghostex_web) {
                 if let Some(row) = row.as_object_mut() {
                     row.remove("secondary");
+                }
+            }
+            rows.push(row);
+        }
+    }
+
+    /// The Extensions group of ⋯: every enabled extension with a side panel view that is not on
+    /// the rail, under its own heading, each with its pin (CDXC:Sidebar 2026-11-26 on gx-core
+    /// `RAIL_EXTENSION_PIN_PREFIX`). Nothing when there is none.
+    fn push_sidebar_rail_extension_rows(&self, rows: &mut Vec<Value>, layout: &RailLayout) {
+        let views: Vec<_> = self
+            .sidebar_rail_extension_views()
+            .into_iter()
+            .filter(|view| !layout.contains(&rail_extension_pin_key(&view.id)))
+            .collect();
+        if views.is_empty() {
+            return;
+        }
+        rows.push(
+            json!({ "label": "Extensions", "heading": true, "checked": false, "disabled": false }),
+        );
+        for view in views {
+            let key = rail_extension_pin_key(&view.id);
+            let mut row = json!({
+                "label": view.title,
+                "icon": "puzzle",
+                "command": command("run", &key),
+                "checked": false,
+                "disabled": false,
+                "secondary": pin_button(&key, false),
+            });
+            // The extension's own icon stands in for the glyph, as an agent's logo does.
+            if let Some(image) = &view.image {
+                use base64::Engine as _;
+                let encoded = base64::engine::general_purpose::STANDARD.encode(image.bytes());
+                row["imageDataUrl"] = json!(format!("data:image/svg+xml;base64,{encoded}"));
+                if let Some(row) = row.as_object_mut() {
+                    row.remove("icon");
                 }
             }
             rows.push(row);
@@ -431,13 +471,15 @@ impl GhostexGpuiApp {
             self.dismiss_native_sidebar_menu(cx);
             return true;
         }
-        // A rail item, a pinned link (`link:<id>`), or a separator (`sep:<id>`).
+        // A rail item, a pinned link (`link:<id>`), an extension's view (`ext:<id>`), or a
+        // separator (`sep:<id>`).
         let Some(key) = command
             .get("key")
             .and_then(Value::as_str)
             .filter(|key| {
                 rail_item(key).is_some()
                     || rail_link_pin_id(key).is_some()
+                    || rail_extension_pin_id(key).is_some()
                     || is_rail_separator_key(key)
             })
             .map(str::to_string)
@@ -452,6 +494,8 @@ impl GhostexGpuiApp {
                         app.run_sidebar_rail_item(item.key, window, cx);
                     } else if let Some(id) = rail_link_pin_id(&key) {
                         app.run_sidebar_rail_link(id, window, cx);
+                    } else if let Some(id) = rail_extension_pin_id(&key) {
+                        app.run_sidebar_rail_extension(id, window, cx);
                     }
                 });
             }

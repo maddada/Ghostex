@@ -889,6 +889,62 @@ impl GpuiAppToastWindow {
                 )
             });
 
+        // CDXC:SwitchRequests 2026-11-26 DECISION: User (Q5021 = B, Q5022 = A, #762): an
+        // agent's page open gets "Always" after Open: it opens the page as Open does and turns
+        // on "Let agents open and switch pages without asking" (Settings > Browser), so later
+        // page opens come on screen without this toast. An extension's view counts as a page here
+        // (CDXC:Extensions 2026-11-26 in server/src/extensions/open_view.rs, #772). Neutral; Open stays the one strong
+        // button. Not on a remote computer's toast: the setting is read by the
+        // gxserver the agent runs on, and this one only saves this computer's settings.
+        let always_button = (sr.machine_id.is_none()
+            && matches!(
+                sr.request.action.as_str(),
+                "openBrowser" | "openBrowserPane" | "openExtensionView"
+            ))
+        .then(|| {
+            let app_always = self.app.clone();
+            div()
+                .id("ghostex-gpui-switch-request-always")
+                .flex_shrink_0()
+                .h(px(26.0))
+                .px(px(10.0))
+                .rounded(px(6.0))
+                .border_1()
+                .border_color(secondary_border)
+                .bg(secondary_bg)
+                .text_color(colors.title)
+                .text_size(px(12.0))
+                .font_weight(FontWeight::MEDIUM)
+                .flex()
+                .items_center()
+                .cursor_pointer()
+                .hover(move |button| button.bg(secondary_hover_bg))
+                .tooltip(|window, cx| {
+                    Tooltip::new("Open, and open agents' pages without asking from now on")
+                        .build(window, cx)
+                })
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|_this, _event: &MouseDownEvent, window, cx| {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                    }),
+                )
+                .on_mouse_up(
+                    MouseButton::Left,
+                    cx.listener(move |_this, _event: &MouseUpEvent, window, cx| {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                        let app = app_always.clone();
+                        cx.defer(move |cx| {
+                            let _ = app.update(cx, |app, cx| {
+                                app.always_accept_gpui_switch_request_toast(cx);
+                            });
+                        });
+                    }),
+                )
+                .child("Always")
+        });
         if sr.external_url.is_some() {
             // CDXC:SwitchRequests 2026-11-26 DECISION: User (Q5026 = A, Q5027 = A, #762): the
             // Open external button became an External browser switch at the left of the row
@@ -981,61 +1037,6 @@ impl GpuiAppToastWindow {
                         )
                     })
                 });
-            // CDXC:SwitchRequests 2026-11-26 DECISION: User (Q5021 = B, Q5022 = A, #762): an
-            // agent's page open gets "Always" after Open: it opens the page as Open does and turns
-            // on "Let agents open and switch pages without asking" (Settings > Browser), so later
-            // page opens come on screen without this toast. Neutral; Open stays the one strong
-            // button. Not on a remote computer's toast: the setting is read by the
-            // gxserver the agent runs on, and this one only saves this computer's settings.
-            let always_button = (sr.machine_id.is_none()
-                && matches!(
-                    sr.request.action.as_str(),
-                    "openBrowser" | "openBrowserPane"
-                ))
-            .then(|| {
-                let app_always = self.app.clone();
-                div()
-                    .id("ghostex-gpui-switch-request-always")
-                    .flex_shrink_0()
-                    .h(px(26.0))
-                    .px(px(10.0))
-                    .rounded(px(6.0))
-                    .border_1()
-                    .border_color(secondary_border)
-                    .bg(secondary_bg)
-                    .text_color(colors.title)
-                    .text_size(px(12.0))
-                    .font_weight(FontWeight::MEDIUM)
-                    .flex()
-                    .items_center()
-                    .cursor_pointer()
-                    .hover(move |button| button.bg(secondary_hover_bg))
-                    .tooltip(|window, cx| {
-                        Tooltip::new("Open, and open agents' pages without asking from now on")
-                            .build(window, cx)
-                    })
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(|_this, _event: &MouseDownEvent, window, cx| {
-                            window.prevent_default();
-                            cx.stop_propagation();
-                        }),
-                    )
-                    .on_mouse_up(
-                        MouseButton::Left,
-                        cx.listener(move |_this, _event: &MouseUpEvent, window, cx| {
-                            window.prevent_default();
-                            cx.stop_propagation();
-                            let app = app_always.clone();
-                            cx.defer(move |cx| {
-                                let _ = app.update(cx, |app, cx| {
-                                    app.always_accept_gpui_switch_request_toast(cx);
-                                });
-                            });
-                        }),
-                    )
-                    .child("Always")
-            });
             div()
                 .flex()
                 .flex_col()
@@ -1068,6 +1069,7 @@ impl GpuiAppToastWindow {
                 .child(leading_icon)
                 .child(text_column)
                 .child(primary_button)
+                .children(always_button)
                 .into_any_element()
         }
     }

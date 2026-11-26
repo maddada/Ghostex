@@ -1,5 +1,6 @@
 mod context;
 mod launch;
+mod open_view;
 mod permissions;
 mod rpc;
 mod snapshot;

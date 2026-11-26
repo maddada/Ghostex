@@ -274,6 +274,29 @@ impl GhostexGpuiApp {
             == ViewScopeState::Shown
     }
 
+    /// `view_scope_allows` for `project_id`, on screen or not. A project that is not on screen is
+    /// resolved by its own override and the default: its spaces are known only while it is the
+    /// active project (the sidebar HUD carries them).
+    pub(crate) fn view_scope_allows_in_project(&self, key: &str, project_id: &str) -> bool {
+        let active = self
+            .latest_sidebar_project_snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.active_project_id.as_ref())
+            .map(|id| id.0.as_str());
+        if active == Some(project_id) {
+            return self.view_scope_allows(key);
+        }
+        let settings = shared_settings::shared_sidebar_settings_snapshot();
+        let Some(scope) = settings
+            .object()
+            .get("viewScopes")
+            .and_then(|map| map.get(key))
+        else {
+            return true;
+        };
+        ViewScope::from_json(scope).resolve(Some(project_id), &[]) == ViewScopeState::Shown
+    }
+
     /// The scope key for a view tab, which is what a right-click menu writes an override under.
     /// Custom views keep their own availability rule, so they have no scope key.
     pub(crate) fn titlebar_mode_view_scope_key(&self, mode: TitlebarMode) -> Option<String> {

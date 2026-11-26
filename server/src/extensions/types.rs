@@ -152,6 +152,10 @@ pub enum ExtensionPermission {
     /// User (Q3431, Thread brief): sessions start their brief "automatic, but only when the Thread brief extension is installed and enabled. With it off or uninstalled, nothing happens and no session is touched." An extension's line rides the launch note Ghostex already rewrites at every start and resume (agents/marked_handovers.rs `with_launch_notes`), which coordinators and threads never take, so it reaches ordinary sessions only and stops at the next start once the extension is off, uninstalled or this permission removed. The user grants it on the install card like every other permission.
     #[serde(rename = "agents.note")]
     AgentsNote,
+    /// Its server may open or focus its own view in a project's side panel
+    /// (`/api/ext/v1/openView`, extensions/open_view.rs), the way an agent's open goes.
+    #[serde(rename = "views.open")]
+    ViewsOpen,
 }
 
 impl ExtensionPermission {
@@ -170,6 +174,7 @@ impl ExtensionPermission {
             Self::AgentsMessage => "agents.message",
             Self::SessionsMessage => "sessions.message",
             Self::AgentsNote => "agents.note",
+            Self::ViewsOpen => "views.open",
         }
     }
 

@@ -1407,6 +1407,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         // 2026-11-17 DECISION at `terminal_may_approve` in security/policy.rs): loopback only,
         // where the caller's process can be traced.
         | "/api/proveOwnerHandover" => full_local(path),
+        // `ghostex extensions open`: opens an extension's view in this computer's app
+        // (extensions/open_view.rs); an extension's own server uses `/api/ext/v1/openView`.
+        crate::extensions::open_view::OPEN_EXTENSION_VIEW_ENDPOINT => full_local(path),
         "/api/updateAuth"
         | "/api/updateListenerConfig"
         | "/api/installTool"

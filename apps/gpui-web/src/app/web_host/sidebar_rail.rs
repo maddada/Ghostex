@@ -76,4 +76,27 @@ impl GhostexGpuiApp {
         _cx: &mut gpui::Context<Self>,
     ) {
     }
+
+    /// A page in a browser has no extension views in its side panel, so the rail lists and draws
+    /// none (`ext:<id>` pins, packages/gx-core/src/sidebar_rail.rs).
+    pub(crate) fn sidebar_rail_extension_views(
+        &self,
+    ) -> Vec<crate::app::sidebar_rail::RailExtensionView> {
+        Vec::new()
+    }
+
+    pub(crate) fn sidebar_rail_extension_pin(
+        &self,
+        _key: &str,
+    ) -> Option<crate::app::sidebar_rail::RailExtensionView> {
+        None
+    }
+
+    pub(crate) fn run_sidebar_rail_extension(
+        &mut self,
+        _id: &str,
+        _window: &mut Window,
+        _cx: &mut gpui::Context<Self>,
+    ) {
+    }
 }

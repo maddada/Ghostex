@@ -9,6 +9,7 @@
 //! | `GET /api/ext/v1/projects` | the extension, with `projects.read` | This computer's projects |
 //! | `GET /api/ext/v1/sessions?project=` | the extension, with `sessions.read` | Its sessions and what they are doing |
 //! | `GET /api/ext/v1/events` | the extension, and you and your agents (its panel events only) | Server-sent events: `panelChanged`, `checklistEdited`, `textEdited`, `panelAction`, and `projectsChanged` / `sessionsChanged` with the matching read permission |
+//! | `POST /api/ext/v1/openView` `{session? \| project?, background?}` | the extension, with `views.open` | Opens or focuses its own view in that project's side panel (open_view.rs: a toast unless the user lets agents open pages without asking) |
 //! | `POST /api/ext/v1/panelAction` `{extension, surface?, session?, blockId, itemId?, edit? \| action?, data?, baseRevision?}` | your Ghostex apps and phones | A tap: an editable checklist's or text's edit gxserver applies, or an `extension` action passed to the extension |
 //!
 //! The extension is the one whose server holds the bearer token (`GHOSTEX_API_TOKEN`, given to
@@ -183,11 +184,11 @@ pub(crate) async fn serve_ext_api(
         (&Method::GET, "events") => return events(state, caller, query).await,
         (&Method::GET, "panel" | "projects" | "sessions")
         | (&Method::PUT | &Method::PATCH, "panel")
-        | (&Method::POST, "panelAction" | "agentMessage" | "sessionMessage") => {}
+        | (&Method::POST, "panelAction" | "agentMessage" | "sessionMessage" | "openView") => {}
         (
             _,
             "panel" | "projects" | "sessions" | "events" | "panelAction" | "agentMessage"
-            | "sessionMessage",
+            | "sessionMessage" | "openView",
         ) => {
             return refuse(
                 StatusCode::METHOD_NOT_ALLOWED,
@@ -227,6 +228,12 @@ pub(crate) async fn serve_ext_api(
             }
         }
     };
+    if route == "openView" {
+        return match open_view(&state, &caller, &body).await {
+            Ok(result) => answer(StatusCode::OK, result),
+            Err(error) => refuse_error(error),
+        };
+    }
     let route = route.to_string();
     let blocking_state = state.clone();
     let outcome = tokio::task::spawn_blocking(move || {
@@ -254,6 +261,62 @@ pub(crate) async fn serve_ext_api(
         }
         Err(error) => refuse_error(error),
     }
+}
+
+/// `POST /api/ext/v1/openView` `{session? | project?, background?}`: the extension's own server
+/// opens or focuses its own view in the side panel of `session`'s project (`<projectId>:<sessionId>`)
+/// or of `project`, with `views.open` (open_view.rs decides whether it shows, waits on a toast or
+/// opens in the background). Only the extension's own token; naming another extension is refused.
+async fn open_view(
+    state: &AppState,
+    caller: &Caller,
+    body: &Value,
+) -> Result<Value, ExtensionError> {
+    let Caller::Extension(own) = caller else {
+        return Err(forbidden(
+            "Only the extension's own server opens its view this way. Agents and you use `ghostex extensions open <id>`.",
+        ));
+    };
+    let text = |key: &str| {
+        body.get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    };
+    // Naming another extension is refused by open_view.rs (`extension_open_refusal`).
+    let id = text("extension").unwrap_or_else(|| own.clone());
+    let project_id = match (text("session"), text("project")) {
+        (Some(session), _) => {
+            let (project_id, session_id) = session.split_once(':').ok_or_else(|| {
+                ExtensionError::bad_request("session must be <projectId>:<sessionId>.")
+            })?;
+            if crate::switch_requests::lookup_session(state, project_id, session_id).is_none() {
+                return Err(ExtensionError::not_found(format!("No session {session}.")));
+            }
+            project_id.to_string()
+        }
+        (None, Some(project)) => {
+            if crate::switch_requests::lookup_project_name(state, &project).is_none() {
+                return Err(ExtensionError::not_found(format!("No project {project}.")));
+            }
+            project
+        }
+        (None, None) => {
+            return Err(ExtensionError::bad_request(
+                "Name where to open it: {\"session\": \"<projectId>:<sessionId>\"} or {\"project\": \"<projectId>\"}.",
+            ))
+        }
+    };
+    let background = body.get("background").and_then(Value::as_bool) == Some(true);
+    super::open_view::open_extension_view(
+        state,
+        super::open_view::OpenViewRequester::Extension { id: own.clone() },
+        &id,
+        &project_id,
+        background,
+    )
+    .await
 }
 
 /// The answer, and whether a panel changed (so clients hear of it).

@@ -3,6 +3,7 @@ pub(crate) mod catalog;
 pub(crate) mod ext_api;
 pub(crate) mod http;
 pub(crate) mod install;
+pub(crate) mod open_view;
 pub(crate) mod panel;
 pub(crate) mod process;
 pub(crate) mod registry;

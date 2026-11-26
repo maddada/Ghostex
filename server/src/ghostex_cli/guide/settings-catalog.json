@@ -3075,7 +3075,7 @@
     {
       "key": "agentPagesOpenWithoutAsking",
       "title": "Let agents open and switch pages without asking",
-      "subtitle": "When an agent opens a page, it opens right away, where Agents open pages in says, instead of asking with a toast first. The toast's Always button turns this on.",
+      "subtitle": "When an agent opens a page, it opens right away, where Agents open pages in says, instead of asking with a toast first. The same goes for an extension's view an agent opens in the side panel. The toast's Always button turns this on.",
       "tab": "browser",
       "tabTitle": "Browser",
       "section": "browserAgents",

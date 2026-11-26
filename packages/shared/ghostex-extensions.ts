@@ -20,6 +20,7 @@ export const GHOSTEX_EXTENSION_PERMISSIONS = [
   'agents.message',
   'sessions.message',
   'agents.note',
+  'views.open',
 ] as const;
 
 export type GhostexExtensionPermission = (typeof GHOSTEX_EXTENSION_PERMISSIONS)[number];

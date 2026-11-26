@@ -4,7 +4,7 @@
 use gpui::Window;
 use serde_json::json;
 
-use super::model::{RailBadge, RailItemState, RailLinkPin};
+use super::model::{RailBadge, RailExtensionView, RailItemState, RailLinkPin};
 use crate::GhostexGpuiApp;
 use crate::app::claude_web::{TakeoverPage, WebPlace};
 use crate::app::native_sidebar::actions::NativeSidebarAction;
@@ -90,6 +90,76 @@ impl GhostexGpuiApp {
             image,
             showing,
         })
+    }
+
+    /// Every enabled extension with a side panel view this project can show, by title: the rail's
+    /// Extensions rows in ⋯ (CDXC:Sidebar 2026-11-26 on gx-core `RAIL_EXTENSION_PIN_PREFIX`).
+    pub(crate) fn sidebar_rail_extension_views(&self) -> Vec<RailExtensionView> {
+        let mut views: Vec<RailExtensionView> = self
+            .extensions_snapshot
+            .installed
+            .keys()
+            .filter_map(|id| self.sidebar_rail_extension_view(id))
+            .collect();
+        views.sort_by(|left, right| {
+            left.title
+                .to_lowercase()
+                .cmp(&right.title.to_lowercase())
+                .then_with(|| left.id.cmp(&right.id))
+        });
+        views
+    }
+
+    /// The pinned extension view `key` (`ext:<id>`) while its extension is on and its view can
+    /// open here; a pin of one that is off, hidden here or uninstalled is not drawn.
+    pub(crate) fn sidebar_rail_extension_pin(&self, key: &str) -> Option<RailExtensionView> {
+        let id = ghostex_gx_core::sidebar_rail::rail_extension_pin_id(key)?;
+        self.sidebar_rail_extension_view(id)
+    }
+
+    fn sidebar_rail_extension_view(&self, id: &str) -> Option<RailExtensionView> {
+        let extension_id = crate::ExtensionId::new(id)?;
+        let mode = crate::TitlebarMode::Extension(extension_id);
+        if !self.extension_view_installed(extension_id) || !self.titlebar_mode_available(mode) {
+            return None;
+        }
+        Some(RailExtensionView {
+            id: id.to_string(),
+            title: self.extension_view_title(extension_id),
+            image: self
+                .extensions_snapshot
+                .installed
+                .get(id)
+                .map(|extension| extension.icon_image.clone()),
+            showing: self.active_mode == mode,
+        })
+    }
+
+    /// A click on a pinned extension view, or its ⋯ row: opens or focuses its view in the side
+    /// panel, through the same path as `ghostex extensions open` (app/extensions/open_view.rs).
+    pub(crate) fn run_sidebar_rail_extension(
+        &mut self,
+        id: &str,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(extension_id) = crate::ExtensionId::new(id) else {
+            return;
+        };
+        let mode = crate::TitlebarMode::Extension(extension_id);
+        if self.active_mode == mode {
+            self.focus_project_editor_surface(mode, window, cx);
+            return;
+        }
+        if let Err(error) = self.open_extension_view_in_side_panel(
+            id,
+            None,
+            ghostex_gx_core::ExtensionViewOpenMode::Show,
+            false,
+            cx,
+        ) {
+            log::warn!("Rail: could not open the extension view {id}: {error}");
+        }
     }
 
     /// A click on a pinned link: its page opens, or closes when it is the one showing.

@@ -201,7 +201,7 @@ How to use this file:
 
 ### Agents
 
-- **Let agents open and switch pages without asking** `agentPagesOpenWithoutAsking` (boolean, default false) [not agent-writable]: When an agent opens a page, it opens right away, where Agents open pages in says, instead of asking with a toast first. The toast's Always button turns this on.
+- **Let agents open and switch pages without asking** `agentPagesOpenWithoutAsking` (boolean, default false) [not agent-writable]: When an agent opens a page, it opens right away, where Agents open pages in says, instead of asking with a toast first. The same goes for an extension's view an agent opens in the side panel. The toast's Always button turns this on.
 - **Agents open pages in** `agentPreviewBrowser` (one of ask | internal-browser | system-default-browser; default ask): Where an agent opens a page it built for you, such as a website preview: the project Browser view or your default browser. Ask has the agent ask you the first time and save your answer here. The External browser switch on an agent's page toast sets this too. Option labels: ask = Ask, internal-browser = Ghostex Browser, system-default-browser = My default browser.
 ### Links
 

@@ -43,6 +43,12 @@ Commands:
                                         (ghostex extensions panel --help)
   message <id> <name> [<json>|-]        Inside an agent: send the extension a message about
                                         this session and print its answer
+  open <id> [--session <ref>] [--placement view] [--background] [--json]
+                                        Open or focus an installed extension's view in the
+                                        side panel of the session's project (default: this
+                                        session's). From an agent the user gets an Open toast
+                                        first, unless they let agents open pages without
+                                        asking; --background adds the tab without showing it
 
 Only the user installs extensions, from Settings > Extensions, where Ghostex shows what each
 one may do before it is installed. The CLI, agents and other computers are refused: tell the

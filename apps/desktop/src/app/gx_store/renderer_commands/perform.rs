@@ -408,6 +408,32 @@ impl GhostexGpuiApp {
             // `ghostex debug show-modal` is for the desktop app on the user's own computer.
             #[cfg(ghostex_web)]
             RendererVerb::ShowDebugModal { .. } => Err(RendererCommandError::Unsupported),
+            RendererVerb::OpenExtensionView {
+                extension_id,
+                project_id,
+                mode,
+                switch_project,
+            } => {
+                // The switch toast's Open is the user's yes: it may bring the project on screen.
+                let switch_project = switch_project || allow_rename_focus_hop;
+                Ok(
+                    match self.open_extension_view_in_side_panel(
+                        &extension_id,
+                        Some(&project_id),
+                        mode,
+                        switch_project,
+                        cx,
+                    ) {
+                        Ok(answer) => answer,
+                        Err(error) => json!({
+                            "accepted": false,
+                            "action": action,
+                            "error": error,
+                            "ok": false,
+                        }),
+                    },
+                )
+            }
             RendererVerb::ToggleSidebarCollapsed => {
                 // With Claude on, showing the sidebar leaves Claude (app/claude_web/takeover.rs).
                 self.toggle_sidebar_from_user(cx);
