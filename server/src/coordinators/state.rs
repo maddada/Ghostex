@@ -919,8 +919,9 @@ pub fn screen_waits_on_approval(session: &Value) -> bool {
 }
 
 /// The permission prompt or folder-trust question a thread's screen last showed, as a chat frame
-/// carries it. With no screen wait recorded, OMP's terminal card for a bash hook card no screen
-/// reading has shown yet (CDXC:SessionChat 2026-11-26 in session_chat_notice/classify.rs).
+/// carries it. With no screen wait recorded, OMP's terminal card for a bash hook card answered in
+/// the terminal that no screen reading has shown yet (CDXC:SessionChat 2026-11-26 in
+/// session_chat_notice/classify.rs).
 pub fn screen_wait_notice(session: &Value) -> Option<Value> {
     match recorded_screen_wait(session) {
         Some(wait) => wait.notice,

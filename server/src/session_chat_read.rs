@@ -992,8 +992,8 @@ pub(crate) async fn handle_read_session_chat_http(
         get watchdog notices here, which is why the merge happens on the read
         path too and not only in the follower's reader.
         */
-        // OMP's terminal card for a bash hook card no screen reading has shown yet
-        // (CDXC:SessionChat 2026-11-26 in session_chat_notice/classify.rs).
+        // OMP's terminal card for a bash hook card answered in the terminal that no screen reading
+        // has shown yet (CDXC:SessionChat 2026-11-26 in session_chat_notice/classify.rs).
         if let Some(notice) = crate::session_chat_notice::with_omp_hook_terminal_notice(
             terminal_agent.as_deref(),
             stored_prompt.as_deref(),

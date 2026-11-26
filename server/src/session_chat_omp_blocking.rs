@@ -58,11 +58,13 @@ pub const OMP_TOOL_APPROVAL: OmpBlockingScreen = OmpBlockingScreen {
     detail: "Approve or deny the pending tool call in the terminal before sending a message.",
 };
 
-/// Whether OMP's hook card for `tool` is answered in the terminal whatever its dialog shows:
-/// bash, whose `Command:` line never shows trailing whitespace (CDXC:SessionChat 2026-11-26
-/// DECISION above `omp_shown_request`).
-pub fn omp_hook_card_answered_in_terminal(tool: &str) -> bool {
+/// Whether OMP's hook card for `tool` with `summary` is answered in the terminal whatever its
+/// dialog shows: a bash card whose command shows no unique request (`omp_bash_request`), such as
+/// a command over several lines or one the card cut (CDXC:SessionChat 2026-11-26 DECISION above
+/// `omp_shown_request`).
+pub fn omp_bash_card_answered_in_terminal(tool: &str, summary: Option<&str>) -> bool {
     crate::session_chat_interactive::normalize_session_chat_tool_name(tool) == "bash"
+        && summary.and_then(omp_bash_request).is_none()
 }
 
 /// Whether `text` shows OMP's live tool approval, with or without a message typed into it ("Deny
@@ -596,9 +598,11 @@ pub enum OmpRequestMatch {
 }
 
 /// The one request an OMP approval dialog shows, read back from the lines OMP 18.21 draws for it:
-/// an MCP tool's `Arguments:` followed by the whole arguments as JSON.
+/// bash's `Command: <command>` on one line (`omp_bash_request`), or an MCP tool's `Arguments:`
+/// followed by the whole arguments as JSON.
 #[derive(Clone, Debug, PartialEq)]
 pub enum OmpShownRequest {
+    Command(String),
     Arguments(serde_json::Value),
 }
 
@@ -609,20 +613,33 @@ is answered in the terminal, with neither Allow nor Deny from the card; two requ
 is exactly identical may answer each other.
 
 CDXC:SessionChat 2026-11-26 DECISION:
-User: bash approvals in OMP are answered in the terminal too, on the phone and in a coordinator,
-because the screen cannot show whether a command ends in spaces.
+User: bash approvals in OMP keep Allow and Deny, in the chat, on the phone and in a coordinator,
+when the card's command matches the command on screen exactly. Spaces at the end are not
+compared, so a stale card may answer a command that differs from its own only in spaces at the
+end; the user accepted that. What stays in the terminal shows only Open terminal. This replaces
+the decision of the same day that bash approvals in OMP are answered in the terminal.
 
 CDXC:SessionChat 2026-11-25 WHY:
 So a dialog's request is compared as its content, and only OMP's own display formatting is
-removed: the frame, its padding and the indentation of each line (OMP 18.21 draws an MCP tool's
-arguments as indented JSON under `Arguments:`, whose indentation is JSON whitespace). Wherever the
-drawing cannot be read back without loss, the dialog shows no unique request: bash's
-`Command: ${command}` (one line in a frame padded with spaces, so trailing whitespace never
-shows), anything OMP or the card cut (an ellipsis, OMP's "… elided", "… allowed segments"), text
-with control or invisible characters, arguments that are no whole JSON, arguments the card names
-only by their path, and any other tool's own approval details. The 2026-11-07 check passed a card
-whose summary occurred anywhere in the dialog, and the first 2026-11-25 version compared both
-sides with their whitespace collapsed, so `printf 'a  b'` passed for `printf 'a b'`.
+removed: the frame, its padding and the indentation of each line (OMP 18.21 draws
+`Command: ${command}` on one line, and an MCP tool's arguments as indented JSON under
+`Arguments:`, whose indentation is JSON whitespace). Spaces inside a command are content: two
+commands that differ only in them are two requests. Wherever the drawing cannot be read back
+without loss, the dialog shows no unique request: anything OMP or the card cut (an ellipsis,
+OMP's "… elided", "… allowed segments"), a command drawn over several lines, text with control or
+invisible characters, arguments that are no whole JSON, arguments the card names only by their
+path, and any other tool's own approval details. The 2026-11-07 check passed a card whose
+summary occurred anywhere in the dialog, and the first 2026-11-25 version compared both sides
+with their whitespace collapsed, so `printf 'a  b'` passed for `printf 'a b'`.
+
+CDXC:SessionChat 2026-11-26 WHY:
+OMP pads its frame with spaces (U+0020), so a command's spaces at the end never show, and the
+frame's padding cannot be told from them: a bash request is compared without them, on the card
+and on the screen (`omp_bash_request`), which is the residual case the user accepted. Any other
+whitespace or invisible character at the end (a tab, a non-breaking or other Unicode space, a
+zero-width character) is not padding and could be part of an argument, and a command ending in a
+backslash makes the space after it meaningful (an escaped space): such a command shows no unique
+request, on either side, and is answered in the terminal.
 */
 /// The request `request` (a dialog's lines below its title) shows, when it shows exactly one.
 pub fn omp_shown_request(request: &[String]) -> Option<OmpShownRequest> {
@@ -643,18 +660,32 @@ pub fn omp_shown_request(request: &[String]) -> Option<OmpShownRequest> {
     if shown.iter().any(|line| line.contains('\u{2026}')) {
         return None;
     }
-    // bash's `Command: <command>` cannot be read back without loss: OMP draws it on one line in a
-    // frame padded with spaces, so a command's trailing whitespace never shows, and two commands
-    // that differ only there look the same. So it shows no unique request, and its approval is
-    // answered in the terminal (CDXC:SessionChat 2026-11-26 DECISION above).
-    if shown[0].starts_with("Command:") {
-        return None;
+    if let Some(command) = shown[0].strip_prefix("Command:") {
+        let command = command.strip_prefix(' ').unwrap_or(command);
+        return (shown.len() == 1)
+            .then(|| omp_bash_request(command))
+            .flatten()
+            .map(|command| OmpShownRequest::Command(command.to_string()));
     }
     let arguments = shown
         .join("\n")
         .strip_prefix("Arguments:")
         .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())?;
     json_reads_back_verbatim(&arguments).then_some(OmpShownRequest::Arguments(arguments))
+}
+
+/// The bash request `command` (a card's command, or the command OMP's `Command:` line shows) stands
+/// for, as it is compared: without the spaces (U+0020) at its end, which OMP's frame padding hides.
+/// `None` when it shows no unique request: nothing left, a cut command, a control or invisible
+/// character anywhere, any other whitespace at its end, or a backslash at its end
+/// (CDXC:SessionChat 2026-11-26 WHY above `omp_shown_request`).
+pub fn omp_bash_request(command: &str) -> Option<&str> {
+    let command = command.trim_end_matches(' ');
+    (!command.is_empty()
+        && !command.contains('\u{2026}')
+        && reads_back_verbatim(command)
+        && !command.ends_with(|c: char| c == '\\' || c.is_whitespace()))
+    .then_some(command)
 }
 
 /// Text a terminal frame shows as it is: no control characters (tabs, line breaks, escapes) and
@@ -678,8 +709,8 @@ fn json_reads_back_verbatim(value: &serde_json::Value) -> bool {
     }
 }
 
-/// Whether the dialog shows exactly the card's request (CDXC:SessionChat 2026-11-25 DECISION
-/// above `omp_shown_request`).
+/// Whether the dialog shows exactly the card's request (CDXC:SessionChat 2026-11-25 and
+/// 2026-11-26 DECISIONs above `omp_shown_request`).
 pub fn omp_permission_request_match(
     dialog: &OmpPermissionDialog,
     summary: &str,
@@ -691,6 +722,13 @@ pub fn omp_permission_request_match(
         return OmpRequestMatch::NotUnique;
     }
     match shown {
+        // Both sides without the spaces at their end (`omp_bash_request`); a card whose own
+        // command shows no unique request is answered in the terminal.
+        OmpShownRequest::Command(command) => match omp_bash_request(summary) {
+            None => OmpRequestMatch::NotUnique,
+            Some(card) if card == command => OmpRequestMatch::Same,
+            Some(_) => OmpRequestMatch::Other,
+        },
         OmpShownRequest::Arguments(arguments) => {
             if arguments.to_string() == summary {
                 OmpRequestMatch::Same
@@ -868,15 +906,18 @@ fn read_omp_approval_frame(
         .trim_matches(|c| matches!(c, '\u{256d}' | '\u{256e}' | '\u{2500}'))
         .trim()
         .to_string();
+    // Only the frame and its padding (spaces, U+0020) are removed: any other whitespace at a line's
+    // end is not OMP's and stays, so a request showing it is no unique one (CDXC:SessionChat
+    // 2026-11-26 WHY above `omp_shown_request`).
     let request_lines: Vec<String> = text
         .lines()
         .skip(request.start)
         .take(request.len())
         .map(|raw| {
             strip_ansi_sgr(raw)
-                .trim()
+                .trim_matches(' ')
                 .trim_matches(|c| matches!(c, '\u{2502}' | '\u{2503}'))
-                .trim()
+                .trim_matches(' ')
                 .to_string()
         })
         .filter(|line| !line.is_empty())

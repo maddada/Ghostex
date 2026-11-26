@@ -49,8 +49,8 @@ fn an_approval_right_above_the_composer_is_live() {
 }
 
 /// `screen`'s approval redrawn as an MCP tool's, whose dialog shows its whole request as JSON under
-/// `Arguments:`. A bash dialog's `Command:` shows no unique request (OMP pads the frame, so a
-/// command's trailing spaces never show), so OMP's rows and the chat's answers are an MCP tool's.
+/// `Arguments:`, so OMP's rows and the chat's answers are checked on a request other than bash's
+/// `Command:` too.
 pub(crate) fn as_mcp(screen: &str, command: &str) -> String {
     screen
         .replace("Allow tool: bash", "Allow tool: mcp__files__read")
@@ -86,19 +86,37 @@ fn the_open_approval_is_a_permission_card_with_omps_rows() {
     }
 }
 
-/// A bash approval, as captured live, is the terminal card: no rows and no answers from the chat,
-/// because the frame cannot show whether its command ends in spaces (CDXC:SessionChat 2026-11-26
-/// in session_chat_omp_blocking.rs). It still holds the chat's sends.
+/// A bash approval, as captured live, shows its command on one line: it is a permission card with
+/// OMP's own rows, like an MCP tool's, and it holds the chat's sends (CDXC:SessionChat 2026-11-26
+/// DECISION in session_chat_omp_blocking.rs). Its request is the command without the frame's
+/// padding.
 #[test]
-fn a_bash_approval_is_the_terminal_card_and_holds_sends() {
-    for screen in [PI, BOX, OMP_APPROVAL] {
+fn a_bash_approval_that_shows_its_command_is_a_permission_card_with_omps_rows() {
+    for (screen, command) in [
+        (PI, CAPTURED),
+        (BOX, CAPTURED),
+        (OMP_APPROVAL, "echo cap-b"),
+    ] {
         let notice = classify_session_chat_terminal_notice(Some("omp"), screen).expect("notice");
-        assert_eq!(notice.kind, SESSION_CHAT_NOTICE_OMP_INPUT_BLOCKED);
-        assert_eq!(notice.title, APPROVAL);
-        assert!(notice.choices.is_empty());
-        assert!(!notice.is_answerable());
+        assert_eq!(notice.kind, SESSION_CHAT_NOTICE_PERMISSION_PROMPT);
+        let rows: Vec<(&str, bool)> = notice
+            .choices
+            .iter()
+            .map(|choice| (choice.label.as_str(), choice.selected))
+            .collect();
+        assert_eq!(rows, [("Approve", true), ("Deny", false)]);
+        assert!(notice.is_answerable());
         assert!(notice.blocks_input());
-        assert!(detect_omp_permission_picker(screen).is_none());
+        assert!(!notice.passes_keys_through());
+        assert!(detect_omp_permission_picker(screen).is_some());
+        assert_eq!(
+            crate::session_chat_omp_blocking::read_omp_permission_dialog(screen)
+                .expect("dialog")
+                .shown,
+            Some(crate::session_chat_omp_blocking::OmpShownRequest::Command(
+                command.to_string()
+            ))
+        );
         let readiness = detect_session_chat_composer_readiness(Some("omp"), screen, Some(&notice));
         assert_ne!(readiness.state, SessionChatComposerState::Ready);
     }

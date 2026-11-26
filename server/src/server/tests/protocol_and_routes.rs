@@ -942,8 +942,7 @@ async fn omp_tool_approval_probe_after_http_action(action: OmpApprovalAction) {
     let session_id = session["sessionId"].as_str().unwrap();
     let zmx_name = session["zmxName"].as_str().expect("terminal name");
     drop(db);
-    // A dialog that shows its request (an MCP tool's arguments): bash's `Command:` is answered in
-    // the terminal (CDXC:SessionChat 2026-11-26 in session_chat_omp_blocking.rs).
+    // A dialog that shows its request, here an MCP tool's arguments.
     let first = crate::session_chat_tests::omp_tool_approval::as_mcp(
         include_str!("../../session_chat_tests/fixtures/omp-tool-approval-pi.txt"),
         crate::session_chat_tests::omp_tool_approval::CAPTURED,

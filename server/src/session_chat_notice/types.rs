@@ -529,7 +529,8 @@ impl SessionChatTerminalNotice {
     }
 
     /// OMP's tool approval that the chat leaves to the terminal (`OMP_TOOL_APPROVAL_TITLE`), read
-    /// off the screen or derived from a stored bash hook card (`with_omp_hook_terminal_notice`).
+    /// off the screen or derived from a stored bash hook card answered in the terminal
+    /// (`with_omp_hook_terminal_notice`).
     /// Its card passes no keys (CDXC:SessionChat 2026-11-26 above `answer_terminal_key` in
     /// session_chat_resume_picker.rs), though it is marked `passthrough` like the other screens
     /// whose keys the chat passes on.

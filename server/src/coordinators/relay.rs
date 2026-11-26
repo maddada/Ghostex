@@ -81,8 +81,9 @@ pub fn relay_card(session: &Value) -> Option<Value> {
         .unwrap_or_default()
         .to_string();
     // OMP's card for an approval it leaves to the terminal (a dialog that does not show what it
-    // asks, any bash approval): relayed like a permission prompt, so the coordinator's card says to
-    // answer in the terminal, with no Allow or Deny, which gxserver would refuse.
+    // asks, a bash command that shows no unique request): relayed like a permission prompt, so the
+    // coordinator's card says to answer in the terminal, with no Allow or Deny, which gxserver
+    // would refuse.
     let terminal_only_omp = notice_kind == "ompInputBlocked"
         && notice
             .as_ref()
@@ -118,12 +119,12 @@ pub fn relay_card(session: &Value) -> Option<Value> {
     CDXC:Coordinators 2026-11-26 WHY:
     The stored prompt goes as its chat frame carries it (`prompt`); a trust question has none, and
     neither has OMP's terminal-only card. By the owner's decision (CDXC:SessionChat 2026-11-25
-    DECISION in session_chat_send/omp_approval_answer.rs) such a card (bash, a tool-only dialog
-    such as annotation_open, an eval cell) has no Allow and no Deny in a coordinator. The chat core
-    at upstream 56b2016cd (the closest core that can be checked; which core a released client
-    carries is not known) draws a hook card's Allow and Deny beside any notice without rows, so the
-    card carries the notice alone, as an eval cell's card always did; its key still names the
-    stored prompt.
+    DECISION in session_chat_send/omp_approval_answer.rs) such a card (a bash command that shows no
+    unique request, a tool-only dialog such as annotation_open, an eval cell) has no Allow and no
+    Deny in a coordinator. The chat core at upstream 56b2016cd (the closest core that can be
+    checked; which core a released client carries is not known) draws a hook card's Allow and Deny
+    beside any notice without rows, so the card carries the notice alone, as an eval cell's card
+    always did; its key still names the stored prompt.
     */
     if kind != "trust" && !terminal_only_omp {
         if let Some(prompt) = stored_text

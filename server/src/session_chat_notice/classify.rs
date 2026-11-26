@@ -440,16 +440,18 @@ fn notice_from_omp_blocking_screen(
 
 /*
 CDXC:SessionChat 2026-11-26 WHY:
-The owner decided that OMP's bash approvals are answered in the terminal, on the phone and in a
-coordinator, because the screen cannot show whether a command ends in spaces. Until gxserver had
-read the screen, the stored hook card reached the chat alone, and with no notice beside it the
-chat core drew Allow and Deny, which gxserver then refused (`answerInTerminal`). So the card the
-screen reading gives such an approval (`OMP_TOOL_APPROVAL`, Open terminal) is derived from the
-stored bash hook card while the session shows no notice: a notice the session shows comes first,
-and the derived one ends with the stored card. Its `detectedAt` names the stored card (a time
-taken from the card's hash), so every producer of a frame restates the same instance, and the
-next card is a new one.
-SEE-ALSO: server/src/session_chat_omp_blocking.rs (`omp_hook_card_answered_in_terminal`).
+A bash hook card whose own command shows no unique request (a command over several lines, one the
+card cut, one ending in a backslash or in whitespace other than spaces) is answered in the
+terminal whatever OMP's dialog shows (the owner's decision above `omp_shown_request` in
+session_chat_omp_blocking.rs). Until gxserver had read the screen, the stored hook card reached
+the chat alone, and with no notice beside it the chat core drew Allow and Deny, which gxserver
+then refused (`answerInTerminal`). So the card the screen reading gives such an approval
+(`OMP_TOOL_APPROVAL`, Open terminal) is derived from that stored bash hook card while the session
+shows no notice: a notice the session shows comes first, and the derived one ends with the stored
+card. Its `detectedAt` names the stored card (a time taken from the card's hash), so every
+producer of a frame restates the same instance, and the next card is a new one. A bash card whose
+command does show a unique request keeps its Allow and Deny, as an MCP tool's card does.
+SEE-ALSO: server/src/session_chat_omp_blocking.rs (`omp_bash_card_answered_in_terminal`).
 */
 /// `notice`, or OMP's terminal card for the stored hook card `stored` of an OMP session (`agent`)
 /// that is answered in the terminal, while there is no `notice`.
@@ -463,12 +465,17 @@ pub fn with_omp_hook_terminal_notice(
     }
     let stored = stored?;
     let Some(crate::session_chat_interactive::SessionChatInteractivePrompt::Approval {
-        tool, ..
+        tool,
+        summary,
+        ..
     }) = crate::session_chat::parse_stored_session_chat_prompt(stored)
     else {
         return None;
     };
-    if !crate::session_chat_omp_blocking::omp_hook_card_answered_in_terminal(&tool) {
+    if !crate::session_chat_omp_blocking::omp_bash_card_answered_in_terminal(
+        &tool,
+        summary.as_deref(),
+    ) {
         return None;
     }
     let mut derived = notice_from_omp_blocking_screen(

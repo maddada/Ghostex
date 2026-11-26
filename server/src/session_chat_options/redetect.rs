@@ -191,10 +191,10 @@ pub(crate) fn emit_session_chat_options_state_frame(
     let prompt = crate::agents::session_chat_prompt_setting(&session)
         .as_deref()
         .and_then(crate::session_chat::parse_stored_session_chat_prompt);
-    // OMP's terminal card for a bash hook card no screen reading has shown yet
-    // (CDXC:SessionChat 2026-11-26 in session_chat_notice/classify.rs). Every producer that
-    // restates the session through this frame (send-queue updates, probes, coordinators) carries
-    // it, since the frame replaces the client's notice.
+    // OMP's terminal card for a bash hook card answered in the terminal that no screen reading has
+    // shown yet (CDXC:SessionChat 2026-11-26 in session_chat_notice/classify.rs). Every producer
+    // that restates the session through this frame (send-queue updates, probes, coordinators)
+    // carries it, since the frame replaces the client's notice.
     let derived_notice = screen
         .notice
         .is_none()

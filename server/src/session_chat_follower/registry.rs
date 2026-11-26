@@ -227,9 +227,9 @@ pub(crate) fn sync_session_chat_follower_for_session(
                 &session_id,
                 detection.notice,
             );
-            // OMP's terminal card for a bash hook card no screen reading has shown yet
-            // (CDXC:SessionChat 2026-11-26 in session_chat_notice/classify.rs). The stored card is
-            // read only for an OMP session that shows no notice.
+            // OMP's terminal card for a bash hook card answered in the terminal that no screen
+            // reading has shown yet (CDXC:SessionChat 2026-11-26 in session_chat_notice/classify.rs).
+            // The stored card is read only for an OMP session that shows no notice.
             if detection.notice.is_none()
                 && crate::session_chat_options::session_chat_option_agent(terminal_agent.as_deref())
                     == Some(crate::session_chat_options::SessionChatOptionAgent::Omp)

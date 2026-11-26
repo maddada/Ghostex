@@ -18,6 +18,11 @@ User: a stale card never answers another request; an approval Ghostex cannot tie
 is answered in the terminal, with neither Allow nor Deny from the card (also from a card that was
 already open); two requests whose text is exactly identical may answer each other.
 
+CDXC:SessionChat 2026-11-26 DECISION:
+User: bash approvals keep Allow and Deny when the card's command matches the screen exactly, and a
+stale bash card may answer a command that differs from its own only in spaces at the end (the
+decision above `omp_shown_request` in session_chat_omp_blocking.rs).
+
 CDXC:SessionChat 2026-11-25 WHY:
 OMP's approval dialog shows its request only when the tool draws one (bash's `Command:`, an MCP
 tool's `Arguments:`); for every other tool it shows just "Allow tool: <name>", the same for any two
@@ -179,8 +184,9 @@ pub(crate) fn is_omp_approval_guard(steps: &[SessionChatSendStep]) -> bool {
 
 /// Refuses (`answerInTerminal`) a key passed on to an OMP session (`terminalKey`) while the
 /// session's notice is OMP's tool approval card, as a fresh read of the screen gives it or as it is
-/// derived from the stored bash hook card before the screen shows one (CDXC:SessionChat 2026-11-26
-/// DECISION above `answer_terminal_key` in session_chat_resume_picker.rs).
+/// derived from a stored bash hook card answered in the terminal before the screen shows one
+/// (CDXC:SessionChat 2026-11-26 DECISION above `answer_terminal_key` in
+/// session_chat_resume_picker.rs).
 pub(crate) async fn refuse_key_on_omp_tool_approval(
     state: &AppState,
     target: &SessionChatSendTarget,
