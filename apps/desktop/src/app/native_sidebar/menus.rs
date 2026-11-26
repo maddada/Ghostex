@@ -524,6 +524,7 @@ impl GhostexGpuiApp {
                         tooltips: Some(Root::suppress_tooltips(window, cx)),
                         region,
                         rail,
+                        opened_at: web_time::Instant::now(),
                     });
                     if let Some(command) = on_open {
                         app.dispatch_native_sidebar_ui(command, cx);

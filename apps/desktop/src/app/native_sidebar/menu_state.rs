@@ -233,6 +233,9 @@ pub(crate) struct SidebarMenuState {
     /// A menu of the rail's (app/sidebar_rail/): the rail draws it, in the whole window
     /// (`region`), so it shows while the sidebar is hidden (`render_native_rail_menu`).
     pub(crate) rail: bool,
+    /// When the menu opened: an outside press reported from before then cannot close it
+    /// (`dismiss_gpui_sidebar_menu_for_outside_press`).
+    pub(crate) opened_at: web_time::Instant,
 }
 
 impl SidebarMenuPanel {

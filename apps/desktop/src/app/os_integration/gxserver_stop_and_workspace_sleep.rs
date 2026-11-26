@@ -181,4 +181,32 @@ impl GhostexGpuiApp {
         }
         open
     }
+
+    /// The AppKit observer's report of a press outside the sidebar (`pressed_at`, taken as the
+    /// press came in): closes the sidebar's menu unless that menu opened after the press.
+    ///
+    /// CDXC:Sidebar 2026-11-26 WHY:
+    /// User (#775): "i still don't see anything when i right click on the rail even tho i asked
+    /// for this to be fixed like 20 times". The observer sees every press before GPUI does and its
+    /// report runs later, on the next turn of the main loop. A right-click on the rail is outside
+    /// the sidebar's rectangle and opens the rail's menu on the press itself, so the report then
+    /// closed the menu that very press had just opened, before it was ever drawn (⋯ worked: it
+    /// opens on the release). A menu opened by the press is the press's own doing, and GPUI's
+    /// click-outside already closed whatever was open before it, so only an older menu closes.
+    #[cfg(target_os = "macos")]
+    pub(crate) fn dismiss_gpui_sidebar_menu_for_outside_press(
+        &mut self,
+        pressed_at: web_time::Instant,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        if self
+            .native_sidebar
+            .menu
+            .as_ref()
+            .is_some_and(|menu| menu.opened_at > pressed_at)
+        {
+            return false;
+        }
+        self.dispatch_gpui_sidebar_dismiss_context_menus(cx)
+    }
 }

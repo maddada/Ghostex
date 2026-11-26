@@ -229,6 +229,9 @@ pub extern "C" fn GhostexGpuiSidebarPointerInsideChanged(inside: bool) {
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 pub extern "C" fn GhostexGpuiSidebarOutsideMouseDown() {
+    // Taken now, before GPUI handles this press: a menu the press itself opens stays open
+    // (`dismiss_gpui_sidebar_menu_for_outside_press`).
+    let pressed_at = web_time::Instant::now();
     let Some(target) = gpui_sidebar_pointer_callback_target() else {
         return;
     };
@@ -238,7 +241,7 @@ pub extern "C" fn GhostexGpuiSidebarOutsideMouseDown() {
     foreground
         .spawn(async move {
             let _ = app.update(&mut async_app, |this, cx| {
-                this.dispatch_gpui_sidebar_dismiss_context_menus(cx);
+                this.dismiss_gpui_sidebar_menu_for_outside_press(pressed_at, cx);
             });
         })
         .detach();
