@@ -548,11 +548,9 @@ pub enum OmpRequestMatch {
 }
 
 /// The one request an OMP approval dialog shows, read back from the lines OMP 18.21 draws for it:
-/// bash's `Command: <command>` on one line, or an MCP tool's `Arguments:` followed by the whole
-/// arguments as JSON.
+/// an MCP tool's `Arguments:` followed by the whole arguments as JSON.
 #[derive(Clone, Debug, PartialEq)]
 pub enum OmpShownRequest {
-    Command(String),
     Arguments(serde_json::Value),
 }
 
@@ -562,19 +560,21 @@ User: a stale card never answers another request; an approval Ghostex cannot tie
 is answered in the terminal, with neither Allow nor Deny from the card; two requests whose text
 is exactly identical may answer each other.
 
+CDXC:SessionChat 2026-11-26 DECISION:
+User: bash approvals in OMP are answered in the terminal too, on the phone and in a coordinator,
+because the screen cannot show whether a command ends in spaces.
+
 CDXC:SessionChat 2026-11-25 WHY:
 So a dialog's request is compared as its content, and only OMP's own display formatting is
-removed: the frame, its padding and the indentation of each line (OMP 18.21 draws
-`Command: ${command}` on one line, and an MCP tool's arguments as indented JSON under
-`Arguments:`, whose indentation is JSON whitespace). Spaces inside a command are content: two
-commands that differ only in them are two requests. Wherever the drawing cannot be read back
-without loss, the dialog shows no unique request: a command OMP or the card cut (an ellipsis,
-OMP's "… elided", "… allowed segments"), a command drawn as segments or over several lines, a
-command ending in a backslash (the frame's padding hides a space after it), text with control or
-invisible characters, arguments that are no whole JSON, arguments the card names only by their
-path, and any other tool's own approval details. The 2026-11-07 check passed a card whose
-summary occurred anywhere in the dialog, and the first 2026-11-25 version compared both sides
-with their whitespace collapsed, so `printf 'a  b'` passed for `printf 'a b'`.
+removed: the frame, its padding and the indentation of each line (OMP 18.21 draws an MCP tool's
+arguments as indented JSON under `Arguments:`, whose indentation is JSON whitespace). Wherever the
+drawing cannot be read back without loss, the dialog shows no unique request: bash's
+`Command: ${command}` (one line in a frame padded with spaces, so trailing whitespace never
+shows), anything OMP or the card cut (an ellipsis, OMP's "… elided", "… allowed segments"), text
+with control or invisible characters, arguments that are no whole JSON, arguments the card names
+only by their path, and any other tool's own approval details. The 2026-11-07 check passed a card
+whose summary occurred anywhere in the dialog, and the first 2026-11-25 version compared both
+sides with their whitespace collapsed, so `printf 'a  b'` passed for `printf 'a b'`.
 */
 /// The request `request` (a dialog's lines below its title) shows, when it shows exactly one.
 pub fn omp_shown_request(request: &[String]) -> Option<OmpShownRequest> {
@@ -595,12 +595,12 @@ pub fn omp_shown_request(request: &[String]) -> Option<OmpShownRequest> {
     if shown.iter().any(|line| line.contains('\u{2026}')) {
         return None;
     }
-    if let Some(command) = shown[0].strip_prefix("Command: ") {
-        return (shown.len() == 1
-            && !command.trim().is_empty()
-            && reads_back_verbatim(command)
-            && !command.ends_with('\\'))
-        .then(|| OmpShownRequest::Command(command.to_string()));
+    // bash's `Command: <command>` cannot be read back without loss: OMP draws it on one line in a
+    // frame padded with spaces, so a command's trailing whitespace never shows, and two commands
+    // that differ only there look the same. So it shows no unique request, and its approval is
+    // answered in the terminal (CDXC:SessionChat 2026-11-26 DECISION above).
+    if shown[0].starts_with("Command:") {
+        return None;
     }
     let arguments = shown
         .join("\n")
@@ -643,16 +643,6 @@ pub fn omp_permission_request_match(
         return OmpRequestMatch::NotUnique;
     }
     match shown {
-        // The frame's padding hides a command's trailing whitespace.
-        OmpShownRequest::Command(command) => {
-            if !reads_back_verbatim(summary) || summary.ends_with(char::is_whitespace) {
-                OmpRequestMatch::NotUnique
-            } else if command == summary {
-                OmpRequestMatch::Same
-            } else {
-                OmpRequestMatch::Other
-            }
-        }
         OmpShownRequest::Arguments(arguments) => {
             if arguments.to_string() == summary {
                 OmpRequestMatch::Same
