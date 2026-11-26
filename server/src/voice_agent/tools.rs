@@ -1343,11 +1343,6 @@ async fn answer_prompt(
     args: &Value,
 ) -> Result<Value, String> {
     let session = resolve_session(state, memory, args, Purpose::Answer).await?;
-    // Answers that name questions by ref are for the question forms and pages in its chat.
-    if question_forms::names_questions(args) {
-        return question_forms::answer(state, &session, args).await;
-    }
-    let chat = read_chat(state, &session, 20).await?;
     /*
     CDXC:VoiceMode 2026-11-26 DECISION:
     User: voice mode keeps answering OMP's row selections it read out; the answer is bound to the
@@ -1357,18 +1352,27 @@ async fn answer_prompt(
     gxserver answers an OMP row pick only for the notice it names (`noticeDetectedAt`), and in the
     terminal when it names none (session_chat_send/omp_approval_answer.rs). So the pick names the
     selection `get_pending_prompt` read out, never one read now: before anything else, while that
-    read-out is unanswered, the screen must still show it. Anything else on screen now (another OMP
-    request, a question, a dialog, another approval), or two different selections read out, is
-    refused with nothing typed, and the model reads out anew. An OMP selection the model answers
-    without having read it out is left to the terminal.
+    read-out is unanswered, the screen must still show it. Anything else (another OMP request, a
+    question, also one the answer names by ref, a dialog, another approval), or two different
+    selections read out, is refused with nothing typed, and the model reads out anew. An OMP
+    selection the model answers without having read it out is left to the terminal.
     */
-    let shown = omp_row_selection(&session, &chat);
     let read_out_anew = || {
         format!(
             "Nothing was answered: what \"{}\" asks now is not the OMP approval you read out. Call get_pending_prompt again and read its options out to the user before answering.",
             session.title
         )
     };
+    // Answers that name questions by ref are for the question forms and pages in its chat, and
+    // never for an OMP selection still waiting on the answer the user gave for it.
+    if question_forms::names_questions(args) {
+        if memory.take_omp_read(&session).is_some() {
+            return Err(read_out_anew());
+        }
+        return question_forms::answer(state, &session, args).await;
+    }
+    let chat = read_chat(state, &session, 20).await?;
+    let shown = omp_row_selection(&session, &chat);
     let omp_notice = match (memory.take_omp_read(&session), shown) {
         (None, None) => None,
         (None, Some(_)) => {
