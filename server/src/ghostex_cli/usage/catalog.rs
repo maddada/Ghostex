@@ -649,8 +649,8 @@ pub fn usage() -> String {
             "What a workspace does when an agent's connector call would send, post, change or delete something: ask on a card in the session (the default), allow it, or never run it, for every call or one tool",
         ),
         format_help_command(
-            "connectors executor [status] | enable | disable | catalog [words] | add <app> | add-mcp <name> <url> | connect <app> | remove <app> | tools [app] | call <app> <tool> [--args <json>]  (each takes --workspace name|id)",
-            "A workspace's Executor: turn it on (Ghostex downloads Executor the first time), add apps from its catalog or by MCP server address, sign them in, list their tools and run one that only reads",
+            "connectors executor [status] | install | sign-in [--host <url>] [--no-open] | sign-out | remove-old",
+            "This computer's Executor CLI, shared by every workspace: install it with Executor's own installer, sign it in to executor.sh (or a self-hosted Executor) or out, and remove what the old built-in Executor left. Add apps and their accounts in Executor itself",
         ),
         format_help_command(
             "team join <invite link> [--name n] [--slack-user U… --slack-code gxl_…] | status | invite | identity [--slack-user U… --slack-code gxl_…] [--linear-user id] | threads <ticket> | ping | leave | deploy [--team-name n] [--project slug] [--convex-team slug] [--dev]  (each takes --workspace name|id)",

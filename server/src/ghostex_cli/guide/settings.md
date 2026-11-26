@@ -914,9 +914,9 @@ How to use this file:
 - **Composio apps** `composioApps` (Settings UI row without a settings key; use `ghostex settings open`): Connect Gmail, Google Calendar, Slack, Notion, GitHub, Linear and more apps for a workspace's agents.
 ### Executor
 
-- **Executor** `executorEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Turn on Executor for a workspace; Ghostex downloads it the first time and runs it on this computer.
-- **Executor apps** `executorApps` (Settings UI row without a settings key; use `ghostex settings open`): Add apps from Executor's catalog or any remote MCP server, sign them in and remove them.
-- **Sign-in callback address** `executorCallbackUrl` (Settings UI row without a settings key; use `ghostex settings open`): The address to give an app's developer console when it needs your own sign-in app (OAuth client).
+- **Executor CLI** `executorCli` (Settings UI row without a settings key; use `ghostex settings open`): The Executor CLI installed on this computer and its one sign-in, which every workspace's agents share: install it, sign in to executor.sh or a self-hosted Executor, or sign out.
+- **Executor apps** `executorApps` (Settings UI row without a settings key; use `ghostex settings open`): The apps the Executor CLI's sign-in reaches; add apps and their accounts in Executor itself.
+- **Apps on the old Executor** `executorOldApps` (Settings UI row without a settings key; use `ghostex settings open`): The apps Ghostex's own Executor had, listed until you remove their data or 30 days pass; add them again in Executor.
 ### When agents change something
 
 - **Ask, Allow or Never** `connectorRulesDefault` (Settings UI row without a settings key; use `ghostex settings open`): What a workspace does before an agent sends, posts, creates, changes or deletes something through a connector: ask on a card, allow it, or never run it.

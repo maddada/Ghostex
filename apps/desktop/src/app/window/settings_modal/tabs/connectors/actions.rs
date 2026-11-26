@@ -3,6 +3,7 @@
 use super::super::super::store::{post_store_message, store_gxserver_rpc};
 use super::ConnectorsTab;
 use super::data::{self, busy_key};
+use super::executor::EXECUTOR_KEY;
 use super::signin_panel::{DoneWhen, PendingSignIn};
 use gpui::Context;
 use serde_json::{Value, json};
@@ -11,11 +12,10 @@ use std::time::Duration;
 const READ_TIMEOUT: Duration = Duration::from_secs(15);
 /// Composio is called over the network.
 const COMPOSIO_TIMEOUT: Duration = Duration::from_secs(120);
-/// Executor may have to start first (up to 90 seconds), and an added app is built before the
-/// answer comes back.
-const EXECUTOR_TIMEOUT: Duration = Duration::from_secs(300);
-/// While Executor downloads or starts (which sends no event until it is done), the page reads
-/// again this often.
+/// The Executor CLI's sign-in and sign-out reach its host.
+const EXECUTOR_TIMEOUT: Duration = Duration::from_secs(90);
+/// While the Executor CLI installs (which sends no event until it is done), the page reads again
+/// this often.
 const PENDING_REREAD: Duration = Duration::from_secs(3);
 
 impl ConnectorsTab {
@@ -53,19 +53,13 @@ impl ConnectorsTab {
         );
     }
 
-    /// Reads again in a moment while a workspace's Executor is downloading or starting.
+    /// Reads again in a moment while the Executor CLI installs.
     fn reread_while_pending(&mut self, cx: &mut Context<Self>) {
-        let pending = data::workspaces(self.connectors.as_ref())
-            .iter()
-            .filter_map(|workspace| workspace.get("executor"))
-            .any(|executor| {
-                let installing = executor
-                    .get("install")
-                    .and_then(|install| install.get("status"))
-                    .and_then(Value::as_str)
-                    .is_some_and(|status| matches!(status, "queued" | "running"));
-                installing || data::flag(executor, "starting")
-            });
+        let pending = self
+            .connectors
+            .as_ref()
+            .and_then(|connectors| connectors.get("executor"))
+            .is_some_and(super::executor::installing);
         if !pending || self.pending_reread.is_some() {
             return;
         }
@@ -155,11 +149,7 @@ impl ConnectorsTab {
         match result.get("url").and_then(Value::as_str) {
             Some(url) if !data::flag(result, "alreadyConnected") => {
                 self.clear_note(workspace, section);
-                let done_when = if section == "executor" {
-                    DoneWhen::ExecutorApp(what.to_string())
-                } else {
-                    DoneWhen::ComposioApp(what.to_string())
-                };
+                let done_when = DoneWhen::ComposioApp(what.to_string());
                 self.begin_sign_in(
                     workspace,
                     section,
@@ -249,136 +239,79 @@ impl ConnectorsTab {
         );
     }
 
-    // ---- Executor ------------------------------------------------------------------------------
+    // ---- Executor CLI --------------------------------------------------------------------------
 
-    pub(super) fn executor_set_enabled(
-        &mut self,
-        workspace: &str,
-        enabled: bool,
-        cx: &mut Context<Self>,
-    ) {
-        let (path, failure) = if enabled {
-            ("/api/enableExecutor", "Couldn't turn Executor on")
-        } else {
-            ("/api/disableExecutor", "Couldn't turn Executor off")
-        };
+    pub(super) fn executor_install(&mut self, cx: &mut Context<Self>) {
         self.act(
-            workspace,
-            "executor-enable",
-            path,
+            EXECUTOR_KEY,
+            "install",
+            "/api/installExecutorCli",
             json!({}),
-            EXECUTOR_TIMEOUT,
-            failure,
+            READ_TIMEOUT,
+            "Couldn't start Executor's installer",
             |_, _, _, _| {},
             cx,
         );
     }
 
-    pub(super) fn executor_search(
-        &mut self,
-        workspace: &str,
-        query: String,
-        cx: &mut Context<Self>,
-    ) {
+    /// Starts `executor login` (to `host`, a self-hosted Executor) and shows its code.
+    pub(super) fn executor_sign_in(&mut self, host: Option<String>, cx: &mut Context<Self>) {
+        let mut params = json!({});
+        if let Some(host) = host.filter(|host| !host.is_empty()) {
+            params["host"] = json!(host);
+        }
         self.act(
-            workspace,
-            "executor-search",
-            "/api/searchExecutorCatalog",
-            json!({ "query": query }),
+            EXECUTOR_KEY,
+            "sign-in",
+            "/api/signInExecutorCli",
+            params,
             EXECUTOR_TIMEOUT,
-            "Couldn't search Executor's catalog",
-            |page, workspace, result, _| {
-                page.catalog_results
-                    .insert(workspace.to_string(), data::list(&result, "apps"));
-            },
-            cx,
-        );
-    }
-
-    pub(super) fn executor_add(
-        &mut self,
-        workspace: &str,
-        catalog_id: &str,
-        cx: &mut Context<Self>,
-    ) {
-        let added = catalog_id.to_string();
-        self.act(
-            workspace,
-            &format!("executor-add-{catalog_id}"),
-            "/api/addExecutorApp",
-            json!({ "app": catalog_id }),
-            EXECUTOR_TIMEOUT,
-            "Couldn't add the app",
-            move |page, workspace, result, _| {
-                if let Some(results) = page.catalog_results.get_mut(workspace) {
-                    results.retain(|entry| data::text(entry, "id") != added);
+            "Couldn't start the Executor sign-in",
+            |page, workspace, result, cx| {
+                let url = data::text(&result, "url");
+                if url.is_empty() {
+                    return;
                 }
-                let name = result
-                    .get("app")
-                    .map(|app| data::text(app, "name"))
-                    .filter(|name| !name.is_empty())
-                    .unwrap_or(added);
-                page.note(
+                page.executor_host_open = false;
+                let code = Some(data::text(&result, "code")).filter(|code| !code.is_empty());
+                page.begin_sign_in(
                     workspace,
                     "executor",
-                    format!("Added {name}. Sign it in below."),
+                    PendingSignIn {
+                        title: "Finish signing in to the Executor CLI".to_string(),
+                        url,
+                        code,
+                        done_when: DoneWhen::ExecutorCli,
+                    },
+                    cx,
                 );
             },
             cx,
         );
     }
 
-    pub(super) fn executor_add_mcp(
-        &mut self,
-        workspace: &str,
-        name: String,
-        url: String,
-        cx: &mut Context<Self>,
-    ) {
+    pub(super) fn executor_sign_out(&mut self, cx: &mut Context<Self>) {
         self.act(
-            workspace,
-            "executor-add-mcp",
-            "/api/addExecutorMcpServer",
-            json!({ "name": name, "url": url }),
+            EXECUTOR_KEY,
+            "sign-out",
+            "/api/signOutExecutorCli",
+            json!({}),
             EXECUTOR_TIMEOUT,
-            "Couldn't add the MCP server",
-            |page, workspace, _, _| {
-                for field in ["mcp-name", "mcp-url"] {
-                    page.fields
-                        .texts
-                        .remove(&super::executor::input_id(workspace, field));
-                }
-                page.note(workspace, "executor", "Added. Sign it in below if it asks.");
-            },
-            cx,
-        );
-    }
-
-    pub(super) fn executor_remove(&mut self, workspace: &str, app: &str, cx: &mut Context<Self>) {
-        self.act(
-            workspace,
-            &format!("executor-remove-{app}"),
-            "/api/removeExecutorApp",
-            json!({ "app": app }),
-            EXECUTOR_TIMEOUT,
-            "Couldn't remove the app",
+            "Couldn't sign the Executor CLI out",
             |_, _, _, _| {},
             cx,
         );
     }
 
-    pub(super) fn executor_connect(&mut self, workspace: &str, app: &str, cx: &mut Context<Self>) {
-        let app_name = app.to_string();
+    pub(super) fn executor_remove_old(&mut self, cx: &mut Context<Self>) {
         self.act(
-            workspace,
-            &format!("executor-connect-{app}"),
-            "/api/connectExecutorApp",
-            json!({ "app": app }),
-            EXECUTOR_TIMEOUT,
-            "Couldn't start the sign-in",
-            move |page, workspace, result, cx| {
-                page.open_answer(workspace, "executor", &result, &app_name, cx)
-            },
+            EXECUTOR_KEY,
+            "remove-old",
+            "/api/removeOldExecutor",
+            json!({}),
+            READ_TIMEOUT,
+            "Couldn't remove the old Executor's data",
+            |_, _, _, _| {},
             cx,
         );
     }

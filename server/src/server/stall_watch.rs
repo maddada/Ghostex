@@ -80,11 +80,8 @@ const LONG_BY_DESIGN: &[&str] = &[
     "/api/signInComposio",
     "/api/refreshComposio",
     "/api/signInConnectorCli",
-    "/api/connectExecutorApp",
-    "/api/addExecutorApp",
-    "/api/addExecutorMcpServer",
-    "/api/enableExecutor",
-    "/api/searchExecutorCatalog",
+    "/api/signInExecutorCli",
+    "/api/signOutExecutorCli",
     "/api/computers/",
 ];
 

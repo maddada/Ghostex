@@ -39,9 +39,9 @@ fn workspace_tools(state: &AppState, workspace: &str) -> Vec<Value> {
         return tools;
     }
     let mut tools = composio::mcp_tools(&state.paths, workspace);
-    if executor::enabled(&state.paths, workspace) {
-        // A workspace whose Executor can't start still gets its Composio tools.
-        if let Ok(executor_tools) = executor::agent_tools(&state.paths, workspace) {
+    if executor::enabled() {
+        // A workspace whose Executor can't answer still gets its Composio tools.
+        if let Ok(executor_tools) = executor::agent_tools() {
             tools.extend(executor_tools);
         }
     }

@@ -5,7 +5,7 @@
 //! CDXC:ServerDaemon 2026-11-03 DECISION:
 //! User: Ghostex's data folders had reached 5.4 GB with nothing ever deleted. The age limits are a gxserver feature for every user ("gxserver feature for everyone"), applied silently ("None, just do it quietly"; no Settings page, settings or CLI verb) and from the first run ("Nothing, just run it"; no notice or prompt). The limits themselves sit beside each rule.
 //!
-//! SEE-ALSO: server/src/storage_cleanup/, server/src/codex_rollout_archive.rs (`prune_unread_mirrors`), server/src/visual_pages/store.rs (`prune_old_pages`), server/src/connectors/executor/process.rs (`discard_previous_traces`).
+//! SEE-ALSO: server/src/storage_cleanup/, server/src/codex_rollout_archive.rs (`prune_unread_mirrors`), server/src/visual_pages/store.rs (`prune_old_pages`).
 
 use super::*;
 

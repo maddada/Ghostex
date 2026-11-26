@@ -1,6 +1,6 @@
-//! `ghostex connectors executor`: a workspace's Executor (crate::connectors): turning it on
-//! (downloading Executor the first time), its apps from Executor's catalog or an MCP server URL,
-//! their sign-ins and their tools.
+//! `ghostex connectors executor`: the computer's Executor CLI (crate::connectors): its state,
+//! installing it with Executor's own installer, signing it in (`executor login`) or out, and
+//! removing what the old built-in Executor left. Apps and their accounts are managed in Executor.
 
 use std::time::{Duration, Instant};
 
@@ -11,195 +11,126 @@ use super::connectors::slow;
 use super::output::print_json;
 use super::rpc::{self, CliError, CliResult};
 
-/// How long `enable` waits for the download and the first start.
-const ENABLE_WAIT: Duration = Duration::from_secs(15 * 60);
+/// How long `install` follows the installer and `sign-in` waits for the browser.
+const WAIT_AT_MOST: Duration = Duration::from_secs(15 * 60);
 
 fn call(path: &str, params: &Map<String, Value>, flags: &Flags) -> CliResult<Value> {
     rpc::call_gxserver_rpc(path, &Value::Object(params.clone()), &slow(flags))
 }
 
-fn executor_status(params: &Map<String, Value>, flags: &Flags) -> CliResult<Value> {
-    let result =
-        rpc::call_gxserver_rpc("/api/readConnectors", &Value::Object(params.clone()), flags)?;
-    Ok(result
-        .pointer("/workspaces/0/executor")
-        .cloned()
-        .unwrap_or(Value::Null))
+fn executor_status(flags: &Flags) -> CliResult<Value> {
+    let result = rpc::call_gxserver_rpc("/api/readConnectors", &json!({}), flags)?;
+    Ok(result.get("executor").cloned().unwrap_or(Value::Null))
 }
 
-/// `ghostex connectors executor [status] | enable | disable | catalog [words] | add <catalog-app>
-/// | add-mcp <name> <url> | connect <app> [--no-open] | remove <app> | tools [app] | call <app>
-/// <tool> [--args <json>]`.
+/// `ghostex connectors executor [status] | install | sign-in [--host <url>] [--no-open] |
+/// sign-out | remove-old`.
 pub(super) fn executor_command(
     rest: &[String],
-    mut params: Map<String, Value>,
+    params: Map<String, Value>,
     flags: &Flags,
     open_in_browser: impl Fn(&str) -> CliResult<()>,
 ) -> CliResult<()> {
     let subcommand = rest.first().map(String::as_str).unwrap_or("status");
-    let args = rest.get(1..).unwrap_or_default();
-    let open = !flags.contains("no-open");
     match subcommand {
         "status" => {
-            print_json(&executor_status(&params, flags)?);
+            print_json(&executor_status(flags)?);
             Ok(())
         }
-        "enable" | "on" => {
-            call("/api/enableExecutor", &params, flags)?;
-            wait_until_running(&params, flags)
+        "install" => {
+            call("/api/installExecutorCli", &params, flags)?;
+            wait_for_install(flags)
         }
-        "disable" | "off" => {
-            call("/api/disableExecutor", &params, flags)?;
-            println!("Executor is off in this workspace. Its apps and sign-ins are kept for when you turn it on again.");
-            Ok(())
-        }
-        "catalog" | "search" => {
-            params.insert("query".to_string(), json!(args.join(" ")));
-            let result = call("/api/searchExecutorCatalog", &params, flags)?;
-            let apps = result.get("apps").and_then(Value::as_array).cloned().unwrap_or_default();
-            if apps.is_empty() {
-                println!("No catalog app matches.");
+        "sign-in" | "login" => {
+            let mut params = params;
+            if let Some(host) = flags.text("host") {
+                params.insert("host".to_string(), json!(host));
             }
-            for app in apps {
-                let text = |key: &str| app.get(key).and_then(Value::as_str).unwrap_or_default().to_string();
-                let sign_in = app
-                    .get("signIn")
-                    .and_then(Value::as_array)
-                    .map(|kinds| kinds.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(", "))
-                    .filter(|kinds| !kinds.is_empty())
-                    .unwrap_or_else(|| "no sign-in".to_string());
-                println!("{}  {}  ({sign_in})\n    {}", text("id"), text("name"), text("description"));
+            let started = call("/api/signInExecutorCli", &params, flags)?;
+            let url = started.get("url").and_then(Value::as_str).unwrap_or_default();
+            let code = started.get("code").and_then(Value::as_str).unwrap_or_default();
+            println!("Open {url}\nand check it shows the code {code}, then approve.");
+            if !flags.contains("no-open") {
+                open_in_browser(url)?;
             }
+            wait_for_sign_in(flags)
+        }
+        "sign-out" | "logout" => {
+            call("/api/signOutExecutorCli", &params, flags)?;
+            println!("The Executor CLI is signed out on this computer.");
             Ok(())
         }
-        "add" => {
-            let app = args.join(" ");
-            if app.trim().is_empty() {
-                return Err(CliError::Other(
-                    "Name the catalog app: ghostex connectors executor add <app>. Find it with ghostex connectors executor catalog <words>.".to_string(),
-                ));
-            }
-            params.insert("app".to_string(), json!(app.trim()));
-            let result = call("/api/addExecutorApp", &params, flags)?;
-            print_json(&result.get("app").cloned().unwrap_or(Value::Null));
-            Ok(())
-        }
-        "add-mcp" => {
-            let (Some(name), Some(url)) = (args.first(), args.get(1)) else {
-                return Err(CliError::Other(
-                    "Give a name and the server's address: ghostex connectors executor add-mcp <name> <https://…>.".to_string(),
-                ));
-            };
-            params.insert("name".to_string(), json!(name));
-            params.insert("url".to_string(), json!(url));
-            let result = call("/api/addExecutorMcpServer", &params, flags)?;
-            print_json(&result.get("app").cloned().unwrap_or(Value::Null));
-            Ok(())
-        }
-        "connect" => {
-            params.insert("app".to_string(), json!(args.join(" ")));
-            let result = call("/api/connectExecutorApp", &params, flags)?;
-            let name = result.get("name").and_then(Value::as_str).unwrap_or("The app");
-            match result.get("url").and_then(Value::as_str) {
-                Some(url) => {
-                    println!("Sign in to {name} in your browser:\n{url}");
-                    if open {
-                        open_in_browser(url)?;
-                    }
-                }
-                None => println!("{name} needs no sign-in, or is already signed in."),
-            }
-            Ok(())
-        }
-        "remove" => {
-            params.insert("app".to_string(), json!(args.join(" ")));
-            let result = call("/api/removeExecutorApp", &params, flags)?;
-            println!(
-                "Removed {}.",
-                result.get("removed").and_then(Value::as_str).unwrap_or("the app")
-            );
-            Ok(())
-        }
-        "tools" => {
-            if !args.is_empty() {
-                params.insert("app".to_string(), json!(args.join(" ")));
-            }
-            let result = call("/api/listExecutorTools", &params, flags)?;
-            print_json(&result.get("apps").cloned().unwrap_or(Value::Null));
-            Ok(())
-        }
-        "call" => {
-            let (Some(app), Some(tool)) = (args.first(), args.get(1)) else {
-                return Err(CliError::Other(
-                    "Name the app and the tool: ghostex connectors executor call <app> <tool> [--args '<json>'].".to_string(),
-                ));
-            };
-            let input = match flags.string_value("args") {
-                Some(text) => serde_json::from_str::<Value>(text)
-                    .map_err(|error| CliError::Other(format!("--args is not valid JSON: {error}")))?,
-                None => json!({}),
-            };
-            params.insert("app".to_string(), json!(app));
-            params.insert("tool".to_string(), json!(tool));
-            params.insert("input".to_string(), input);
-            let result = call("/api/callExecutorTool", &params, flags)?;
-            println!("{}", result.get("output").and_then(Value::as_str).unwrap_or_default());
+        "remove-old" => {
+            call("/api/removeOldExecutor", &params, flags)?;
+            println!("Removed what the old built-in Executor left on this computer.");
             Ok(())
         }
         other => Err(CliError::Other(format!(
-            "Unknown executor command \"{other}\". Use status, enable, disable, catalog, add, add-mcp, connect, remove, tools or call."
+            "Unknown executor command \"{other}\". Use status, install, sign-in, sign-out or remove-old."
         ))),
     }
 }
 
-/// Follows the download and the first start, printing the download's progress.
-fn wait_until_running(params: &Map<String, Value>, flags: &Flags) -> CliResult<()> {
-    let deadline = Instant::now() + ENABLE_WAIT;
+/// Follows the installer, printing its output.
+fn wait_for_install(flags: &Flags) -> CliResult<()> {
+    let deadline = Instant::now() + WAIT_AT_MOST;
     let mut printed = 0usize;
-    // A download finished earlier in this gxserver's life is not shown again.
-    let mut following = false;
     loop {
-        let status = executor_status(params, flags)?;
-        let install_active = matches!(
-            status.pointer("/install/status").and_then(Value::as_str),
-            Some("queued" | "running")
-        );
-        following |= install_active;
-        if let Some(output) = status
-            .pointer("/install/output")
-            .and_then(Value::as_str)
-            .filter(|_| following)
-        {
+        let status = executor_status(flags)?;
+        if let Some(output) = status.pointer("/install/output").and_then(Value::as_str) {
             if output.len() > printed {
                 print!("{}", &output[printed..]);
                 printed = output.len();
             }
         }
-        if status.get("running").and_then(Value::as_bool) == Some(true) {
-            println!("Executor is running in this workspace.");
-            return Ok(());
-        }
-        if let Some(error) = status
-            .pointer("/install/error")
-            .and_then(Value::as_str)
-            .filter(|_| following || status.get("installed") == Some(&Value::Bool(false)))
-        {
-            return Err(CliError::Other(format!(
-                "Executor couldn't be installed: {error}"
-            )));
-        }
-        let starting = status.get("starting").and_then(Value::as_bool) == Some(true);
-        if let Some(error) = status.get("error").and_then(Value::as_str) {
-            if !starting {
-                return Err(CliError::Other(format!("Executor couldn't start: {error}")));
+        match status.pointer("/install/status").and_then(Value::as_str) {
+            Some("queued" | "running") => {}
+            _ if status.get("installed") == Some(&Value::Bool(true)) => {
+                println!("The Executor CLI is installed. Sign it in with: ghostex connectors executor sign-in");
+                return Ok(());
+            }
+            _ => {
+                let error = status
+                    .pointer("/install/error")
+                    .and_then(Value::as_str)
+                    .unwrap_or("it isn't found afterwards");
+                return Err(CliError::Other(format!(
+                    "The Executor CLI couldn't be installed: {error}"
+                )));
             }
         }
         if Instant::now() >= deadline {
             return Err(CliError::Other(
-                "Executor is still getting ready. Check with ghostex connectors executor status."
+                "The installer is still running. Check with ghostex connectors executor status."
                     .to_string(),
             ));
         }
         std::thread::sleep(Duration::from_secs(2));
+    }
+}
+
+/// Waits until the browser approval finished and the CLI reports its sign-in.
+fn wait_for_sign_in(flags: &Flags) -> CliResult<()> {
+    let deadline = Instant::now() + WAIT_AT_MOST;
+    loop {
+        std::thread::sleep(Duration::from_secs(2));
+        let status = executor_status(flags)?;
+        if status.get("signedIn") == Some(&Value::Bool(true)) {
+            match status.get("error").and_then(Value::as_str) {
+                Some(error) => println!("Signed in, but: {error}"),
+                None => println!("The Executor CLI is signed in."),
+            }
+            return Ok(());
+        }
+        if status.get("signingIn") != Some(&Value::Bool(true)) {
+            return Err(CliError::Other(
+                "The sign-in ended without signing in. Try again.".to_string(),
+            ));
+        }
+        if Instant::now() >= deadline {
+            return Err(CliError::Other(
+                "Nobody approved the sign-in in time.".to_string(),
+            ));
+        }
     }
 }

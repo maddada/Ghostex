@@ -8456,18 +8456,21 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   takes `--workspace <name>`, and `ghostex connectors help` lists them all,
   so an agent can set connectors up for you. Settings › Connectors (shown while
   Connectors is on) does the same with buttons, one section per
-  workspace: the Composio sign-in and apps, Executor and its apps, the
-  Ask/Allow/Never rules and the `gh` and `gws` sign-ins.
+  workspace (the Composio sign-in and apps, the Ask/Allow/Never rules and
+  the `gh` and `gws` sign-ins) and one Executor section for the computer.
 - Agents use connectors on their own: every Claude and Codex session that
   starts or resumes while Connectors is on gets its workspace's connector
-  tools (Composio's and, when Executor is on, Executor's), so you can just
+  tools (Composio's and, once the Executor CLI is signed in, Executor's), so you can just
   ask an agent to read your mail or file a Linear issue. Apps connected
   later reach running sessions within seconds. Reads run at once. Before an
   agent sends, posts, creates, changes or deletes anything, Ghostex shows a
   card in that session's chat: Approve, Always allow (stop asking for that
   tool in this workspace) or Deny, and the session shows waiting on you in
   the sidebar until it is answered; a card nobody answers ends after 30
-  minutes. A program an agent runs through Executor asks only for the steps
+  minutes. Every Executor tool call (`executor_call`) counts as one that may
+  change something, since Executor doesn't say beforehand which tools only
+  read, so it asks until you pick Always allow for that tool; a program an
+  agent runs through Executor (`executor_execute`) asks only for the steps
   whose app asks for approval. `ghostex connectors rules` shows what a
   workspace does with such calls, and `ghostex connectors rule <tool|all>
   <ask|allow|never|default>` changes it, for example `rule all never` so
@@ -8486,24 +8489,24 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   or Use usual goes back). An Internal client only signs in accounts of its
   own Google organization, so a personal Gmail needs an External one. This is
   part of Connectors and also experimental.
-- Executor is the second way Connectors links apps, next to Composio, and
-  runs on this computer. `ghostex connectors executor enable` turns it on for
-  a workspace (the first time, Ghostex downloads Executor). Each workspace
-  gets its own Executor with its own apps and sign-ins; it starts when needed
-  and stops after 15 minutes unused. Find an app in Executor's catalog with
-  `ghostex connectors executor catalog <words>` and add it with `ghostex
-  connectors executor add <app>`, or add any remote MCP server with `ghostex
-  connectors executor add-mcp <name> <url>` (Linear's is
-  `https://mcp.linear.app/mcp`). Sign it in with `ghostex connectors executor
-  connect <app>`, which opens your browser; some catalog apps, Google's for
-  example, first need your own OAuth client from that app's developer
-  console. `ghostex connectors executor tools [app]` lists an app's tools and
-  `ghostex connectors executor call <app> <tool> --args '<json>'` runs one
-  that only reads; anything else is refused for now. `ghostex connectors
-  executor remove <app>` removes an app, and `ghostex connectors executor
-  disable` turns Executor off for the workspace but keeps its apps and
-  sign-ins for next time. `ghostex connectors executor` shows its state.
-  Every command takes `--workspace <name>`.
+- Executor is the second way Connectors links apps, next to Composio, through
+  the Executor CLI installed on this computer (Executor 2; Ghostex uses the
+  one on your PATH or in `~/.executor` and never downloads its own copy).
+  Its one sign-in is the computer's: every workspace's agents and every other
+  harness that uses the CLI share it. `ghostex connectors executor install`
+  runs Executor's own installer, `ghostex connectors executor sign-in` signs
+  the CLI in to executor.sh (it prints a link and a code and opens your
+  browser; add `--host <https address>` for a self-hosted Executor), and
+  `ghostex connectors executor sign-out` signs it out for everything on the
+  computer. Until it is signed in, agents get no Executor tools. Apps and
+  their accounts are added in Executor itself (Manage in Executor in Settings
+  > Connectors opens it); agents reach them only through Ghostex's
+  `executor_*` tools, so Ghostex's cards and rules answer Executor's
+  approvals. `ghostex connectors executor` shows the CLI's version, sign-in,
+  approval mode and apps; Ghostex needs Executor's model approval mode, the
+  default. Apps the old built-in Executor had are listed once, so you can add
+  them again in Executor; their data is deleted after 30 days or with
+  `ghostex connectors executor remove-old`.
 - Ask Ghostex AI is a row of the sidebar's menu (below Keep Awake), and Extensions, Dev
   servers and Resources are under Tools. Each opens a panel under the menu
   button that closes when you click away. Ask Ghostex AI and Resources are

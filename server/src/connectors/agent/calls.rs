@@ -3,7 +3,7 @@
 //! waits for Ghostex's card (`cards.rs`).
 //!
 //! CDXC:Connectors 2026-10-16 DECISION:
-//! User (Q12): agents also get Executor's `execute` programs, and a step inside a program asks only when its app declares approval. So Ghostex asks before each `executor_call` that isn't read-only, but a program can change things its apps don't guard. Ghostex answers Executor's approval pauses itself after its card, and agents never get `resume`.
+//! User (Q12): agents also get Executor's `execute` programs, and a step inside a program asks only when its app declares approval. So Ghostex asks before each `executor_call` (through the Executor CLI it can't tell which only read, connectors/executor/agent.rs), but a program can change things its apps don't guard. Ghostex answers Executor's approval pauses itself after its card, and agents never get `resume`.
 
 use std::sync::Arc;
 
@@ -169,12 +169,9 @@ async fn composio_call(
 }
 
 async fn executor_step(
-    state: &Arc<AppState>,
-    session: &AgentSession,
-    work: impl FnOnce(&crate::paths::GxserverPaths, &str) -> Result<Step, String> + Send + 'static,
+    work: impl FnOnce() -> Result<Step, String> + Send + 'static,
 ) -> Result<Step, String> {
-    let (paths, workspace) = (state.paths.clone(), session.workspace.clone());
-    blocking(move || work(&paths, &workspace))
+    blocking(work)
         .await
         .unwrap_or_else(|| Err("The call stopped unexpectedly.".to_string()))
 }
@@ -191,12 +188,8 @@ async fn executor_call(
     match tool.as_str() {
         "call" => {
             let planned = {
-                let (paths, workspace, arguments) = (
-                    state.paths.clone(),
-                    session.workspace.clone(),
-                    arguments.clone(),
-                );
-                blocking(move || executor::plan_calls(&paths, &workspace, &arguments))
+                let arguments = arguments.clone();
+                blocking(move || executor::plan_calls(&arguments))
                     .await
                     .unwrap_or_else(|| Err("The call stopped unexpectedly.".to_string()))
             };
@@ -204,7 +197,8 @@ async fn executor_call(
                 Ok(planned) => planned,
                 Err(error) => return text_result(error, true),
             };
-            let writes: Vec<_> = planned.into_iter().filter(|call| !call.read_only).collect();
+            // Nothing says which Executor tools only read, so every call follows the rules.
+            let writes = planned;
             if !writes.is_empty() {
                 let keys: Vec<String> = writes.iter().map(|call| call.key.clone()).collect();
                 let permission = permission(
@@ -233,10 +227,7 @@ async fn executor_call(
         }
         _ => {}
     }
-    let mut step = executor_step(state, session, move |paths, workspace| {
-        executor::call(paths, workspace, &tool, &arguments)
-    })
-    .await;
+    let mut step = executor_step(move || executor::call(&tool, &arguments)).await;
     for _ in 0..MAX_PAUSES {
         let (request_id, key, label, input) = match step {
             Err(error) => return text_result(error, true),
@@ -265,10 +256,7 @@ async fn executor_call(
         if approve {
             approved.push(key);
         }
-        step = executor_step(state, session, move |paths, workspace| {
-            executor::resume(paths, workspace, &request_id, approve)
-        })
-        .await;
+        step = executor_step(move || executor::resume(&request_id, approve)).await;
     }
     text_result(
         "The program asked for approval too many times, so Ghostex stopped answering it.",

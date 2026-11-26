@@ -1,7 +1,7 @@
 //! Whether Connectors is on: its built-in extension switch (`connectorsHidden`, off by default;
 //! CDXC:Extensions 2026-10-19 and 2026-11-09 in packages/settings-catalog/src/data/official_extensions.rs).
-//! The CLI hides and refuses its verbs, the routes refuse, and the Executor's idle-stop thread
-//! starts only once a Connectors route is actually served.
+//! The CLI hides and refuses its verbs, the routes refuse, and the Executor CLI's MCP relay
+//! starts only once an agent's Executor tool call is actually served.
 
 use ghostex_settings_catalog::built_in_extensions::{self, CONNECTORS};
 use serde_json::Value;
