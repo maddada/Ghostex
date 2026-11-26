@@ -320,6 +320,10 @@ pub struct SessionChatTerminalNotice {
     pub send_failure_prompt_id: Option<String>,
     /// Server-side delivery policy for this particular detected state.
     blocks_input: bool,
+    /// The identity of the exact request an OMP approval's rows answer (`omp_request_identity` in
+    /// session_chat_omp_blocking.rs): part of what makes two readings the same notice, never sent
+    /// to a client.
+    request_identity: Option<String>,
 }
 
 impl SessionChatTerminalNotice {
@@ -355,6 +359,7 @@ impl SessionChatTerminalNotice {
             checkboxes_detail: None,
             send_failure_prompt_id: None,
             blocks_input: session_chat_notice_kind_blocks_input(kind),
+            request_identity: None,
         }
     }
 
@@ -416,6 +421,17 @@ impl SessionChatTerminalNotice {
         self
     }
 
+    /// Binds the notice to the exact request its rows answer (`request_identity`).
+    pub(crate) fn with_request_identity(mut self, identity: String) -> Self {
+        self.request_identity = Some(identity);
+        self
+    }
+
+    /// The identity of the exact request this notice's rows answer, when it was read with one.
+    pub(crate) fn request_identity(&self) -> Option<&str> {
+        self.request_identity.as_deref()
+    }
+
     /// CDXC:SessionChat 2026-10-11 WHY: the chat cannot read these screens row by row (other agents' pickers and dialogs, and Codex's own screens its dialog reader does not know), so while one owns the input the chat passes keys through to the terminal and shows the screen region (`screenTail`) live; see the DECISION in session_chat_resume_picker.rs.
     pub fn passes_keys_through(&self) -> bool {
         self.dialog.is_none()
@@ -459,6 +475,9 @@ impl SessionChatTerminalNotice {
                 && self.dialog == other.dialog
                 && self.conversation_lock == other.conversation_lock
                 && self.auto_trust == other.auto_trust
+                // The exact request, which the words can show alike for two requests
+                // (CDXC:SessionChat 2026-11-26 in session_chat_omp_blocking.rs).
+                && self.request_identity == other.request_identity
                 // Labels only: the highlight moves whenever the user arrows
                 // around in the terminal, and re-minting `detectedAt` for that
                 // would resurrect a card they just dismissed.
@@ -605,6 +624,11 @@ impl SessionChatTerminalNotice {
         if let Some(request) = self.permission_request.as_ref() {
             identity.push('\u{1f}');
             identity.push_str(&request.to_value().to_string());
+        }
+        // Two OMP approvals whose words read alike differ in their exact request.
+        if let Some(request) = self.request_identity.as_deref() {
+            identity.push('\u{1f}');
+            identity.push_str(request);
         }
         // The dialog id is the plain panel's hash, which a side answer read whole does not change.
         if let Some(side_question) = self

@@ -126,10 +126,18 @@ highlight, as the one the answer was verified against; the send worker then type
 its own read still shows that dialog, rows and highlight (`omp_row_answer_key`). A pick from a
 client that names no notice (one from before 2026-11-05) has no earlier read to bind to: it is
 taken from the answer's own read, as before, and still goes through the send worker's guard.
+
+CDXC:SessionChat 2026-11-26 WHY:
+The same notice includes the identity of the exact request its rows answer
+(`omp_request_identity` in session_chat_omp_blocking.rs), so the detector gives a request whose
+words merely read alike a `detectedAt` of its own and a pick made on the earlier one fails the
+admission. A named notice without that identity ties the pick to no one request, so it is
+answered in the terminal (the owner's decision above `verify_omp_hook_answer_targets_dialog`).
 */
 /// The pick of OMP's row `choice_index` on `screen`. When the answer names the notice `verified`
 /// it was checked against, only while `screen` shows that notice's dialog: the same notice
-/// (`same_notice`: its dialog's words, command and row labels) with the same row highlighted.
+/// (`same_notice`: its dialog's words, its exact request and its row labels) with the same row
+/// highlighted.
 /// `Ok(None)`: `screen` shows no OMP dialog with that row and the answer names no notice.
 pub(crate) fn omp_row_pick_on_verified_notice(
     screen: Option<&str>,
@@ -141,11 +149,19 @@ pub(crate) fn omp_row_pick_on_verified_notice(
             crate::session_chat_omp_blocking::omp_row_pick(screen, choice_index)
         }));
     };
+    let answer_in_terminal = |message: &str| DomainStateError {
+        code: crate::session_chat_send::ANSWER_IN_TERMINAL,
+        message: message.to_string(),
+    };
+    if verified.request_identity().is_none() {
+        return Err(answer_in_terminal(
+            "This answer doesn't name an OMP approval Ghostex can tie to one request. Answer it in the terminal.",
+        ));
+    }
     let Some(screen) = screen else {
-        return Err(DomainStateError {
-            code: crate::session_chat_send::ANSWER_IN_TERMINAL,
-            message: crate::session_chat_send::OMP_APPROVAL_UNREAD.to_string(),
-        });
+        return Err(answer_in_terminal(
+            crate::session_chat_send::OMP_APPROVAL_UNREAD,
+        ));
     };
     let highlight = |notice: &crate::session_chat_notice::SessionChatTerminalNotice| {
         notice.choices.iter().position(|choice| choice.selected)

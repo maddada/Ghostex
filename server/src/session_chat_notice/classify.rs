@@ -800,10 +800,14 @@ pub fn classify_session_chat_terminal_notice(
         }
     }
     if agent == SessionChatOptionAgent::Omp {
-        if let Some((picker, command)) =
+        if let Some((picker, command, request)) =
             crate::session_chat_omp_blocking::detect_omp_permission_picker_with_command(screen_text)
         {
-            return Some(notice_from_picker(&screen, picker).with_approval_command(command));
+            return Some(
+                notice_from_picker(&screen, picker)
+                    .with_approval_command(command)
+                    .with_request_identity(request),
+            );
         }
         if let Some(blocking) =
             crate::session_chat_omp_blocking::detect_omp_blocking_screen(screen_text)

@@ -506,11 +506,14 @@ pub fn detect_omp_permission_picker(text: &str) -> Option<SessionChatTerminalPic
     read_omp_permission_picker(text).map(|(picker, _)| picker)
 }
 
-/// The same live picker with the command lines its dialog actually shows, for the folded card.
+/// The same live picker with the command lines its dialog actually shows, for the folded card,
+/// and the server-only identity of the exact request it asks about (`omp_request_identity`).
 pub fn detect_omp_permission_picker_with_command(
     text: &str,
-) -> Option<(SessionChatTerminalPicker, Option<String>)> {
-    let (picker, request) = read_omp_permission_picker(text)?;
+) -> Option<(SessionChatTerminalPicker, Option<String>, String)> {
+    let (picker, request, dialog) =
+        read_omp_approval_frame(text).filter(|(_, _, dialog)| dialog.shown.is_some())?;
+    let identity = omp_request_identity(&dialog);
     let mut command = String::new();
     let mut found = false;
     for raw in text.lines().skip(request.start).take(request.len()) {
@@ -540,7 +543,35 @@ pub fn detect_omp_permission_picker_with_command(
             found = true;
         }
     }
-    Some((picker, (!command.trim().is_empty()).then_some(command)))
+    Some((
+        picker,
+        (!command.trim().is_empty()).then_some(command),
+        identity,
+    ))
+}
+
+/*
+CDXC:SessionChat 2026-11-26 WHY:
+The chat's row card shows OMP's dialog in its display words (`detail`, space-collapsed), so two
+MCP requests whose arguments differ only in a double or non-breaking space read the same, and the
+detector gave the second the first one's `detectedAt`: a row picked on the first passed the
+answer's admission for the second. So the notice also carries the identity of the exact request
+(the dialog's tool and its request lines as drawn, the same ones a row pick and the send worker
+compare), which decides together with the words whether a reading is the same notice and keeps
+its `detectedAt`. The identity never leaves gxserver and cannot be read back: it is an HMAC-SHA256
+under a key drawn at random once per process, chosen over a random id mapped to each request
+because a map would have to keep the request itself to recognise it again. A restart draws a new
+key, so the request read after it is a new notice and a pick made before it is refused.
+*/
+/// The server-only identity of the exact request `dialog` asks about: its tool and its request
+/// lines as drawn, keyed with this process's secret.
+fn omp_request_identity(dialog: &OmpPermissionDialog) -> String {
+    static KEY: std::sync::LazyLock<ring::hmac::Key> = std::sync::LazyLock::new(|| {
+        ring::hmac::Key::generate(ring::hmac::HMAC_SHA256, &ring::rand::SystemRandom::new())
+            .expect("OS RNG failed")
+    });
+    let request = serde_json::json!([dialog.tool, dialog.request]).to_string();
+    hex::encode(ring::hmac::sign(&KEY, request.as_bytes()).as_ref())
 }
 
 /// How OMP's live approval dialog relates to the request a chat card names by its summary
