@@ -652,6 +652,7 @@ impl Drop for DictationHistory {
             && let Ok(mut child) = child.lock()
         {
             let _ = child.kill();
+            let _ = child.wait();
         }
     }
 }

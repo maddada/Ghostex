@@ -124,9 +124,10 @@ impl GpuiRemoteGxserverConnection {
         if let Some(cancel) = self.presentation_stream_cancel.as_ref() {
             cancel.store(true, Ordering::SeqCst);
         }
-        if let Some(child) = self.child.as_mut() {
+        if let Some(mut child) = self.child.take() {
             gpui_forget_remote_tunnel(child.id());
             let _ = child.kill();
+            let _ = child.wait();
         }
         // A forward ssh registered in the user's master outlives the client that asked for it.
         self.forward = None;

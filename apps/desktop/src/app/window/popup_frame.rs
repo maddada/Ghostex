@@ -110,12 +110,23 @@ pub(crate) fn fade_in_popup_window(window: &Window, reduce_motion: bool) {
     {
         // Kept until the user confirms the main window no longer flickers.
         use std::io::Write as _;
+        const MAX_TRACE_BYTES: u64 = 1024 * 1024;
         let directory = crate::support_logs::logs_directory();
         let _ = std::fs::create_dir_all(&directory);
+        let trace_path = directory.join("usage-popup-trace.log");
+        if std::fs::metadata(&trace_path)
+            .map(|meta| meta.len())
+            .unwrap_or(0)
+            > MAX_TRACE_BYTES
+        {
+            let backup = directory.join("usage-popup-trace.log.1");
+            let _ = std::fs::remove_file(&backup);
+            let _ = std::fs::rename(&trace_path, &backup);
+        }
         if let Ok(mut file) = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
-            .open(directory.join("usage-popup-trace.log"))
+            .open(&trace_path)
         {
             let _ = writeln!(
                 file,

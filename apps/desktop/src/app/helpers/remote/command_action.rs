@@ -219,9 +219,14 @@ pub(crate) fn gpui_command_action_status_file_path(session_id: CommandSessionId)
 }
 
 pub(crate) fn prune_stale_gpui_command_action_temp_files(directory: &Path) {
-    const STALE_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
+    const TEMP_STALE_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
+    const STATE_STALE_AFTER: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
-    let Some(cutoff) = SystemTime::now().checked_sub(STALE_AFTER) else {
+    let now = SystemTime::now();
+    let Some(temp_cutoff) = now.checked_sub(TEMP_STALE_AFTER) else {
+        return;
+    };
+    let Some(state_cutoff) = now.checked_sub(STATE_STALE_AFTER) else {
         return;
     };
     let Ok(entries) = fs::read_dir(directory) else {
@@ -230,14 +235,22 @@ pub(crate) fn prune_stale_gpui_command_action_temp_files(directory: &Path) {
     for entry in entries.flatten() {
         let name = entry.file_name();
         let name = name.to_string_lossy();
-        if !name.starts_with("command-session-") || !name.ends_with(".command.tmp") {
+        if !name.starts_with("command-session-") {
             continue;
         }
-        let Ok(metadata) = entry.metadata() else {
+        let cutoff = if name.ends_with(".command.tmp") {
+            temp_cutoff
+        } else if name.ends_with(".state") {
+            state_cutoff
+        } else {
+            continue;
+        };
+        let path = entry.path();
+        let Ok(metadata) = fs::symlink_metadata(&path) else {
             continue;
         };
         if metadata.is_file() && metadata.modified().is_ok_and(|modified| modified <= cutoff) {
-            let _ = fs::remove_file(entry.path());
+            let _ = fs::remove_file(&path);
         }
     }
 }

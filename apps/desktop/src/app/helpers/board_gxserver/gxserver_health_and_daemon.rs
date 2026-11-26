@@ -1364,6 +1364,23 @@ fn gpui_bootout_all_ghostex_launchd_jobs() {
             .stderr(std::process::Stdio::null())
             .status();
     }
+    // Isolated/test profiles leave their LaunchAgent plists behind in ~/Library/LaunchAgents
+    // after bootout, so launchd reloads them at the next login. Remove plists strictly under the
+    // isolated prefix.
+    if prefix.starts_with("com.madda.ghostex-isolated.")
+        && let Some(home) = env::var_os("HOME")
+    {
+        let agents_dir = PathBuf::from(home).join("Library/LaunchAgents");
+        if let Ok(entries) = fs::read_dir(&agents_dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                if name.starts_with(&prefix) && name.ends_with(".plist") {
+                    let _ = fs::remove_file(entry.path());
+                }
+            }
+        }
+    }
 }
 
 /// Last few launch-log lines so a startup-timeout toast can say why, matching
