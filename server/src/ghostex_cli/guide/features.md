@@ -753,8 +753,8 @@ pin shows at its right: click it to put the item on the rail. Drag any pinned
 icon, link or separator into any order in either the top group or the bottom
 group of the rail (a straight horizontal drop line shows where it will land).
 Right-click a pinned icon (its menu opens right beside it) to add a separator
-below it or unpin it; a link's and a separator's menus can also move it up, down,
-to the top or to the bottom. An unpinned item is back in ⋯. Right-clicking empty space on the rail (or ⋯) also lets you add a separator
+below it or unpin it (a link's menu also has Edit… and Change icon…); a
+separator's menu can also move it up, down, to the top or to the bottom. An unpinned item is back in ⋯. Right-clicking empty space on the rail (or ⋯) also lets you add a separator
 to the top or bottom group or add a link. Clicking a
 row you have not pinned opens it at once. When that row opens a page (Hermes,
 Claude, Grok Bot, the Hubs or Voice Call), its icon shows on the rail under a
@@ -1139,8 +1139,8 @@ and Remove. A link also pins to the rail like any rail item from the pin button
 on its row in the rail's ⋯ menu, and then leaves that menu until you unpin it. A pinned link shows its chosen icon or the
 site's icon (the globe until the page has been opened) with its name as the
 tooltip, opens its page on a click, drags into any order among the other pins,
-and its right-click menu has Edit…, Change icon…, Move up, Move down, Move to
-bottom (or Move to top), Add separator and Unpin from rail. You can add a
+and its right-click menu has Edit…, Change icon…, Add separator and Unpin from
+rail. You can add a
 separator from the rail's ⋯ menu (under Layout: **Add separator** / **Add
 separator at bottom**), by right-clicking empty space on the rail (or ⋯), or by
 right-clicking any pinned rail icon or separator. Separators are thin
