@@ -1033,7 +1033,9 @@ const PAGE_STYLE: &str = r#"
   .never .gx-row[aria-checked=true] .gx-row-label{text-decoration:line-through;text-decoration-color:var(--gx-muted)}
   .never .gx-row[aria-checked=true] .gx-row-label::after{content:"Won't use";display:inline-block;margin-left:8px;padding:1px 8px;border-radius:99px;font-size:11px;font-weight:600;text-decoration:none;vertical-align:1px;color:var(--gx-fg);border:1px solid var(--gx-pick)}
   .pcs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:8px}
-  .pc{min-width:0;padding:10px 12px;border-radius:12px;background:var(--gx-surface);border:1px solid var(--gx-line)}
+  .pc{min-width:0;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:var(--gx-surface);border:1px solid var(--gx-line)}
+  .pc>div{min-width:0}
+  .pc-icon{flex:none;width:22px;height:22px;background:var(--gx-text);-webkit-mask:center/contain no-repeat;mask:center/contain no-repeat}
   .pc b{display:block;color:var(--gx-fg);font-size:13.5px}
   .pc small{color:var(--gx-muted);font-size:11.5px}
   details.change{margin-top:8px}
@@ -1334,7 +1336,8 @@ fn computers_section(computers: &[(String, bool)], picked: Option<&[String]>) ->
         .iter()
         .map(|(name, local)| {
             format!(
-                "\n    <div class=\"pc\"><b>{}</b><small>{}</small></div>",
+                "\n    <div class=\"pc\"><i class=\"pc-icon pc-{}\"></i><div><b>{}</b><small>{}</small></div></div>",
+                computer_icon(name, *local),
                 esc(name),
                 if *local { "This computer" } else { "Connected" }
             )
@@ -1354,6 +1357,9 @@ fn computers_section(computers: &[(String, bool)], picked: Option<&[String]>) ->
     format!(
         r#"
   <h2>Computers</h2>
+  <style>
+  {icons}
+  </style>
   <div class="pcs">{cards}
   </div>
   <p class="muted">Threads may run on all of them unless you change it; I spread work by what each has free.</p>
@@ -1363,8 +1369,74 @@ fn computers_section(computers: &[(String, bool)], picked: Option<&[String]>) ->
     </div>
     <gx-question name="Computers" multiple title="Which computers may threads run on?"></gx-question>
   </details>
-"#
+"#,
+        icons = computer_icon_css()
     )
+}
+
+/// A computer card's icon, the titlebar's device glyphs (apps/desktop/assets/titlebar) as a mask in
+/// the page's ink.
+///
+/// CDXC:Coordinators 2026-11-26 DECISION:
+/// The user asked for the device icons back on the setup page's computer cards "as in the mockup"
+/// (a laptop, a desktop, Linux). gxserver reports no operating system for a connected computer, so
+/// this computer's icon follows the OS this runs on and a connected one's follows its name (a name
+/// that says Linux or a distribution, Windows, or a laptop); any other gets the desktop.
+fn computer_icon(name: &str, local: bool) -> &'static str {
+    let lower = name.to_lowercase();
+    let says = |words: &[&str]| words.iter().any(|word| lower.contains(word));
+    let laptop_name = says(&["book", "laptop", "notebook", "thinkpad", "xps"]);
+    if local {
+        if cfg!(target_os = "linux") {
+            "linux"
+        } else if cfg!(target_os = "windows") {
+            "windows"
+        } else if laptop_name {
+            "laptop"
+        } else {
+            "desktop"
+        }
+    } else if says(&[
+        "linux", "arch", "ubuntu", "debian", "fedora", "omarchy", "nixos", "mint", "pop-os",
+        "manjaro",
+    ]) {
+        "linux"
+    } else if says(&["windows"]) || lower.starts_with("win") {
+        "windows"
+    } else if laptop_name {
+        "laptop"
+    } else {
+        "desktop"
+    }
+}
+
+/// The four computer icons' classes for [`computer_icon`], the titlebar's glyphs as masks.
+fn computer_icon_css() -> String {
+    [
+        (
+            "laptop",
+            include_str!("../../../../apps/desktop/assets/titlebar/device-laptop.svg"),
+        ),
+        (
+            "desktop",
+            include_str!("../../../../apps/desktop/assets/titlebar/device-desktop.svg"),
+        ),
+        (
+            "linux",
+            include_str!("../../../../apps/desktop/assets/titlebar/brand-linux.svg"),
+        ),
+        (
+            "windows",
+            include_str!("../../../../apps/desktop/assets/titlebar/brand-windows.svg"),
+        ),
+    ]
+    .iter()
+    .map(|(kind, svg)| {
+        let uri = data_uri(svg);
+        format!(".pc-{kind}{{-webkit-mask-image:url(\"{uri}\");mask-image:url(\"{uri}\")}}")
+    })
+    .collect::<Vec<_>>()
+    .join("\n  ")
 }
 
 /// This computer's name and the connected ones agents may use.
