@@ -39,7 +39,8 @@ pub fn screen_command(args: &[String]) -> CliResult<()> {
 fn open_command(args: &[String]) -> CliResult<()> {
     let parsed = parse_args(args);
     let mut payload = Map::new();
-    for (flag, key) in [("machine", "machineId"), ("viewer-url", "viewerUrl")] {
+    // parse_args stores flag names camelCased (`--viewer-url` is `viewerUrl`).
+    for (flag, key) in [("machine", "machineId"), ("viewerUrl", "viewerUrl")] {
         if let Some(value) = parsed.flags.text(flag) {
             let value = value.trim();
             if !value.is_empty() {
