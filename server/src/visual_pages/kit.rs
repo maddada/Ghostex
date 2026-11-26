@@ -30,6 +30,12 @@
 //! matches nothing or is ambiguous stays untouched, and a question under mockups that gets no Pick is
 //! listed in `window.__ghostexKit.untied` for `ghostex show` / `ghostex visual check` to warn about.
 //!
+//! A question that lists no `<gx-choice>` but has cards tied to it gets its choices made from those
+//! cards (`addCardChoices`), so the reader can always pick; the kit reports it in
+//! `window.__ghostexKit.made`, with the questions left with only "Other" (`empty`), the tied cards
+//! whose question or choice does not exist (`orphans`) and the option cards that look pickable but
+//! carry no Pick button (`loose`), all of which `ghostex visual check` refuses.
+//!
 //! A list of items asked about carries its picks on its rows (`bindRows`): a `<gx-pick value>` (its
 //! Markdown already rendered by prepare.rs) or any element with `data-pick`, tied to the question
 //! named by its own `question` / `data-question` or the nearest `data-question` around it. Each row
@@ -800,14 +806,17 @@ function attachPick(node,heading,c,q){
 }
 /* A mockup tied to a choice (`data-question` + `data-choice`): a Pick button by its title that
    clicks that choice. It has no note box (User 2026-10-30). */
-function bindOptions(questions){
+function bindOptions(questions,orphans){
   var found=[];
-  Array.prototype.forEach.call(document.querySelectorAll("[data-question][data-choice]"),function(node){
-    if(node.closest("gx-question"))return;
+  cardNodes().forEach(function(node){
     var asked=(node.getAttribute("data-question")||"").trim(),wanted=(node.getAttribute("data-choice")||"").trim();
-    var q=questions.filter(function(x){return x.key===asked||(x.tag&&x.tag===asked);})[0];
-    var c=q&&q.choices.filter(function(x){return x.value===wanted||x.label===wanted||x.letter===wanted.toLowerCase();})[0];
-    if(!c){if(window.console)console.warn("ghostex: no choice \""+wanted+"\" in question \""+asked+"\"");return;}
+    var q=questions.filter(function(x){return asksFor(asked,x)&&x.choices.length;})[0];
+    var c=q&&q.choices.filter(function(x){return !x.button.classList.contains("gx-other")&&(x.value===wanted||x.label===wanted||x.letter===wanted.toLowerCase());})[0];
+    if(!c){
+      if(window.console)console.warn("ghostex: no choice \""+wanted+"\" in question \""+asked+"\"");
+      orphans.push({question:asked,choice:wanted,label:cardLabel(node),found:!!q,tag:q?q.tag:"",title:q?q.title:"",choices:q?q.choices.filter(function(x){return !x.button.classList.contains("gx-other");}).map(function(x){return x.value;}):[]});
+      return;
+    }
     var heading=/^H[1-6]$/.test(node.tagName)?node:node.querySelector("h1,h2,h3,h4,h5,h6");
     var option=attachPick(node,heading,c,q);found.push(option);
   });
@@ -877,6 +886,47 @@ function addRowChoices(root){
       var c=document.createElement("gx-choice");c.setAttribute("value",v);if(rowRecommended(n))c.setAttribute("recommended","");if(n.hasAttribute("picked")||n.hasAttribute("data-picked"))c.setAttribute("picked","");c.textContent=l;qe.append(c);have.push(c);
     });
   });
+}
+/* CDXC:SessionChat 2026-11-26 DECISION:
+   User, on a page whose two option cards (tied with `data-question` / `data-choice`, one marked Recommended) sat above a `<gx-question>` that listed no `<gx-choice>`, so the reader saw the cards with no Pick button and a question offering only "Other / none of these": "You sent me this question with 2 choices but without the ability to pick :( please fix this so it never happens again". So a question with no choices of its own takes them from the cards tied to it (value `data-choice`, label the card's heading, Recommended when the card has a `.gx-ribbon` or `recommended`), the same way rows become choices, and every card then gets its Pick button. `ghostex visual check` (server/src/ghostex_cli/visual_page_check.rs `card_findings`) still refuses such a page, as it refuses a question left with only "Other", a tied card naming a question or choice that does not exist, and an option card (a `.gx-options` child or a card with a `.gx-ribbon`) with no Pick, each with the markup that fixes it: older Ghostex versions make no choices from cards, and a card that looks pickable must be. */
+var CARD_SEL="[data-question][data-choice]";
+function cardNodes(){return Array.prototype.filter.call(document.querySelectorAll(CARD_SEL),function(n){return !n.closest("gx-question")&&!n.matches(ROW_SEL);});}
+function cardHeading(n){return /^H[1-6]$/.test(n.tagName)?n:n.querySelector("h1,h2,h3,h4,h5,h6");}
+function cardLabel(n){var h=cardHeading(n),t="";if(h){var c=h.cloneNode(true);c.querySelectorAll("small,.gx-ribbon,.gx-pick").forEach(function(s){s.remove();});t=c.textContent.replace(/\s+/g," ").trim();}return t||(n.getAttribute("data-choice")||"").trim();}
+function cardRecommended(n){return n.hasAttribute("recommended")||n.hasAttribute("data-recommended")||!!n.querySelector(".gx-ribbon");}
+/* Before the questions are built: a choice question that lists no choice and no row takes one choice per card tied to it, in the cards' order. */
+function addCardChoices(root){
+  var made=[],cards=cardNodes();if(!cards.length)return made;
+  Array.prototype.forEach.call(root.querySelectorAll("gx-question"),function(qe){
+    var kind=(qe.getAttribute("type")||"").toLowerCase();if(kind==="text"||kind==="menus")return;
+    if(Array.prototype.some.call(qe.children,function(c){return c.nodeName==="GX-CHOICE";}))return;
+    var title=(qe.getAttribute("title")||"").trim(),q={key:(qe.getAttribute("name")||"").trim()||title,title:title,tag:(qe.getAttribute("tag")||"").trim()};
+    var seen={},list=[];
+    cards.forEach(function(n){
+      if(!asksFor((n.getAttribute("data-question")||"").trim(),q))return;
+      var v=(n.getAttribute("data-choice")||"").trim();if(!v||seen[v])return;seen[v]=true;
+      var c=document.createElement("gx-choice"),label=cardLabel(n),rec=cardRecommended(n);
+      c.setAttribute("value",v);if(rec)c.setAttribute("recommended","");if(n.hasAttribute("picked")||n.hasAttribute("data-picked"))c.setAttribute("picked","");
+      c.textContent=label;qe.append(c);list.push({value:v,label:label,recommended:rec});
+    });
+    if(list.length)made.push({question:q.key,tag:q.tag,title:q.title,choices:list});
+  });
+  return made;
+}
+/* After the Picks are attached: option cards that look pickable with no Pick button and no tie (a tied card that found no choice is an orphan, reported on its own). A card looks pickable when it holds a `.gx-ribbon` (a ribbon inside a heading marks the heading's card), and so does every card of a `.gx-options` row that has a ribbon or a heading lettered like a choice ("A. Tabs"); a row comparing Today with a proposal is not a choice and is left alone. */
+function looseCards(root){
+  var cands=[];
+  function add(n){if(n&&cands.indexOf(n)<0)cands.push(n);}
+  function lettered(n){var h=cardHeading(n);return !!h&&LETTERED.test(labelText(h));}
+  Array.prototype.forEach.call(root.querySelectorAll(".gx-options"),function(row){
+    var kids=Array.prototype.slice.call(row.children);
+    if(row.querySelector(".gx-ribbon")||kids.some(lettered))kids.forEach(add);
+  });
+  Array.prototype.forEach.call(root.querySelectorAll(".gx-ribbon"),function(r){var p=r.parentElement;add(p&&/^H[1-6]$/.test(p.tagName)&&p.parentElement?p.parentElement:p);});
+  return cands.filter(function(n){
+    if(n.closest("gx-question")||n.matches(CARD_SEL+","+ROW_SEL+",.gx-row,.gx-has-pick,.gx-options")||n.querySelector(".gx-pick,.gx-row,"+CARD_SEL+","+ROW_SEL))return false;
+    return true;
+  }).map(function(n){var t=cardLabel(n)||n.textContent.replace(/\s+/g," ").replace(/^Recommended\s*/,"").trim();return{label:t.length>60?t.slice(0,59)+"…":t,ribbon:!!n.querySelector(".gx-ribbon")};});
 }
 function idToken(text){var m=(text||"").match(/^\s*(#\d+|[A-Za-z][A-Za-z0-9]*-\d+)\b/);return m?m[1]:"";}
 /* What Show more hides, in words: "a list, a quote and 2 paragraphs". */
@@ -1051,8 +1101,9 @@ function setup(root){
   /* The reader's picks so far are kept on the host (PAGE_API's draft), so closing and reopening the page loses nothing. */
   function changed(){syncOptions();syncSeenButton();if(window.ghostex&&ghostex.__saveDraft)ghostex.__saveDraft("kit",collect());}
   addRowChoices(root);
+  var made=addCardChoices(root),orphans=[];
   questions=Array.prototype.map.call(root.querySelectorAll("gx-question"),function(qe,index){return question(qe,index,used,changed);});
-  var explicit=bindOptions(questions),rowTies=bindRows(questions,changed),auto=autoTie(questions,explicit.concat(rowTies));
+  var explicit=bindOptions(questions,orphans),rowTies=bindRows(questions,changed),auto=autoTie(questions,explicit.concat(rowTies));
   var repeated=repeatedLists(questions,explicit.concat(rowTies,auto.options).map(function(o){return o.q;})),allRows=rowTies,lists=[];
   allRows.forEach(function(o){if(!lists.some(function(L){return L.q===o.q;}))lists.push(rowList(o.q,allRows.filter(function(x){return x.q===o.q;}),changed));});
   /* A row's note goes with its question's answer as "<key> · <value> (note)", the key the answers card already folds into the question's row (packages/gx-chat-core/src/transcript/page_answers.rs). */
@@ -1063,7 +1114,9 @@ function setup(root){
     q.lockPreview=function(){lp0();o.note.readOnly=true;};
     q.unlock=function(){u0();o.note.readOnly=false;};});
   var cards=tidyCards(questions,explicit.concat(auto.options,rowTies));
-  options=explicit.concat(auto.options,allRows,lists,cards);window.__ghostexKit={tied:explicit.length,auto:auto.report.auto,untied:auto.report.untied,rows:rowTies.length,repeated:repeated};syncOptions();
+  options=explicit.concat(auto.options,allRows,lists,cards);
+  var empty=questions.filter(function(q){return q.choices.length&&q.choices.every(function(c){return c.button.classList.contains("gx-other");});}).map(function(q){return{question:q.key,tag:q.tag,title:q.title};});
+  window.__ghostexKit={tied:explicit.length,auto:auto.report.auto,untied:auto.report.untied,rows:rowTies.length,repeated:repeated,made:made,empty:empty,orphans:orphans,loose:looseCards(root)};syncOptions();
   function refoldAll(){allRows.forEach(function(o){o.refold();});lists.forEach(function(L){L.sync();});}
   if(allRows.length){
     refoldAll();addEventListener("load",refoldAll);if(document.fonts&&document.fonts.ready)document.fonts.ready.then(refoldAll);
