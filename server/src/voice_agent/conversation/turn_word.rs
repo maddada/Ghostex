@@ -44,7 +44,12 @@ pub(super) fn strip_turn_word(
     let heard = words_of(transcript, turkish);
     let mut wanted: Vec<Vec<String>> = words
         .iter()
-        .map(|word| words_of(word, turkish).into_iter().map(|(_, word)| word).collect())
+        .map(|word| {
+            words_of(word, turkish)
+                .into_iter()
+                .map(|(_, word)| word)
+                .collect()
+        })
         .filter(|word: &Vec<String>| !word.is_empty())
         .collect();
     // The longest first, so a phrase is taken off whole before a shorter word it ends with.
@@ -53,7 +58,11 @@ pub(super) fn strip_turn_word(
         let Some(first) = heard.len().checked_sub(word.len()) else {
             continue;
         };
-        if heard[first..].iter().map(|(_, heard)| heard).eq(word.iter()) {
+        if heard[first..]
+            .iter()
+            .map(|(_, heard)| heard)
+            .eq(word.iter())
+        {
             let kept = transcript[..heard[first].0].trim_end_matches(is_pause);
             return Some(kept.to_string());
         }

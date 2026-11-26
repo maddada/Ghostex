@@ -92,7 +92,9 @@ pub(crate) async fn handle_read_voice_agent_http(
     // `languages`, `turnWords` and `turnWordDefaults`. A client that finds none of them talks to a
     // gxserver without the setting and keeps its "Answer when I say "reply"" text.
     if let Value::Object(fields) = &mut result {
-        fields.extend(super::call_language::client_view(&keys::read_settings(paths)));
+        fields.extend(super::call_language::client_view(&keys::read_settings(
+            paths,
+        )));
     }
     respond(endpoint_path, request_id, Ok(result))
 }

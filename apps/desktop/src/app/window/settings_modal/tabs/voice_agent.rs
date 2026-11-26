@@ -227,9 +227,8 @@ impl VoiceAgentTab {
             language: None,
             languages: Vec::new(),
             turn_words: serde_json::Value::Null,
-            turn_words_input: cx.new(|cx| {
-                InputState::new(window, cx).placeholder("reply, go ahead")
-            }),
+            turn_words_input: cx
+                .new(|cx| InputState::new(window, cx).placeholder("reply, go ahead")),
             turn_words_shown: None,
             language_busy: false,
             language_note: None,
@@ -970,7 +969,11 @@ impl VoiceAgentTab {
         let system = self.system_language.clone();
         Some(
             system
-                .filter(|code| self.languages.iter().any(|language| language.value == *code))
+                .filter(|code| {
+                    self.languages
+                        .iter()
+                        .any(|language| language.value == *code)
+                })
                 .unwrap_or_else(|| "en".to_string()),
         )
     }
@@ -1066,7 +1069,9 @@ impl VoiceAgentTab {
         }
         let label = self.language_label(&code);
         let which = if self.language.as_deref() == Some(DEVICE_LANGUAGE) {
-            format!("Words for {label}, this computer's language; a phone in another language uses that language's words.")
+            format!(
+                "Words for {label}, this computer's language; a phone in another language uses that language's words."
+            )
         } else {
             format!("Words for {label}.")
         };

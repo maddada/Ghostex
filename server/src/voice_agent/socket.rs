@@ -531,7 +531,8 @@ async fn start_conversation(
     let keyterms = keyterms(state).await;
     // The call's language and turn words (`call_language.rs`): the model speaks it, the provider's
     // recognizer is told it, and a turn ends on its words.
-    let call_language = call_language::for_call(&keys::read_settings(&state.paths), language.as_deref());
+    let call_language =
+        call_language::for_call(&keys::read_settings(&state.paths), language.as_deref());
     // "Answer when I say "reply"" (keys.rs): the model is told about the turn words, and a Regular
     // call's turn detection stops answering by itself (`Provider::waiting_for_turn_word`).
     let wait_for_reply = keys::wait_for_reply(&state.paths);
