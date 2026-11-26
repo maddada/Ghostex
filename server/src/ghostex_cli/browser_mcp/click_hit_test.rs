@@ -3,6 +3,7 @@
 //!
 //! CDXC:Browser 2026-11-26 DECISION:
 //! Coordinator, on the user's behalf (re-check of #762, N2): the checks that decide whether a real press may go to an element ran in the page's own script world, so a hostile page could answer them falsely (patching `elementFromPoint`, replacing `HTMLIFrameElement`, hiding a frame in a closed shadow root) or time a swap to the moment between the check and the press, and land one trusted click in a framed site (a like, follow, sign-in or pay button). The press is now decided here instead: the element is found with `DOM.querySelector`, its centre comes from `DOM.getContentQuads`, and the node really at that point comes from `DOM.getNodeForLocation`, which hit-tests the page's layout through every shadow root, open or closed. The press goes only when that node is in the page itself (the main frame), is not a frame, object or embed, and is the element or inside it (its whole subtree, shadow roots included, from `DOM.describeNode`). After the mouse moves there the same check runs again, after a short random wait, as one DevTools call, and the press follows at once; no page function runs between the move and the press, so the page cannot tell when to swap. The check runs once more while the button is down: a frame slid in during that last gap took the press, so the button is released at the far corner of the view, and no click comes of it there (a click needs the release on what took the press). A page could still win by sliding a frame in for the press and out again before that check; that takes two swaps each timed to within a DevTools round trip. Anything else gets the script click, as before. The page script still scrolls the element into view, names a file field and reports which element took the press, but none of that decides the press.
+//! Coordinator, on the user's behalf (re-check 4 of #762, S1): the press point is in the view's coordinates and `DOM.getNodeForLocation` takes the document's, so on a scrolled page the checks looked above where the press landed (a frame there got a trusted click, and buttons below the fold lost their real press). Each check now reads the view's scroll offset fresh (`Page.getLayoutMetrics`' `cssVisualViewport`) and adds it to the point; the press is refused when the page scrolled since the point was worked out, or is pinch-zoomed.
 //! SEE-ALSO: server/src/server/cef_devtools_scope.rs (the DOM commands a session's tools may send), server/src/ghostex_cli/browser_mcp/page_scripts.rs (`GHOSTEX_CLICK_POINT_SCRIPT`).
 
 use super::*;
@@ -35,6 +36,53 @@ pub(super) struct ClickTarget {
     pub(super) point: Option<(i64, i64)>,
     /// The view's size in CSS pixels.
     view: (f64, f64),
+    /// Where the view stood in the page when `point` was worked out.
+    offset: Option<ViewOffset>,
+}
+
+/// Where the view stands in the page: how far it is scrolled, in CSS pixels, and its pinch-zoom
+/// scale (`Page.getLayoutMetrics`' `cssVisualViewport`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct ViewOffset {
+    page_x: f64,
+    page_y: f64,
+    scale: f64,
+}
+
+/// The view's offset in a `Page.getLayoutMetrics` answer.
+fn view_offset(metrics: &Value) -> Option<ViewOffset> {
+    let viewport = metrics
+        .get("cssVisualViewport")
+        .or_else(|| metrics.get("visualViewport"))?;
+    Some(ViewOffset {
+        page_x: viewport.get("pageX")?.as_f64()?,
+        page_y: viewport.get("pageY")?.as_f64()?,
+        scale: viewport.get("scale").and_then(Value::as_f64).unwrap_or(1.0),
+    })
+}
+
+/// The point of the page's document that `point` of the view shows now, which is what
+/// `DOM.getNodeForLocation` takes (the mouse events take the view's point): `point` plus how far
+/// the view is scrolled. Refused when the view scrolled since the point was worked out (`then`),
+/// so the press would land somewhere else, or is pinch-zoomed, or either is unknown.
+pub(super) fn document_point(
+    point: (i64, i64),
+    then: Option<ViewOffset>,
+    now: Option<ViewOffset>,
+) -> Result<(i64, i64), &'static str> {
+    let (Some(then), Some(now)) = (then, now) else {
+        return Err("The page's scroll position is unknown");
+    };
+    if (then.scale - 1.0).abs() > 0.001 || (now.scale - 1.0).abs() > 0.001 {
+        return Err("The page is zoomed in");
+    }
+    if (now.page_x - then.page_x).abs() > 0.5 || (now.page_y - then.page_y).abs() > 0.5 {
+        return Err("The page scrolled");
+    }
+    Ok((
+        (point.0 as f64 + now.page_x).round() as i64,
+        (point.1 as f64 + now.page_y).round() as i64,
+    ))
 }
 
 impl ClickTarget {
@@ -115,7 +163,7 @@ pub(super) fn click_target(
     if let Some(node) = described.get("node") {
         collect_subtree(node, &mut found);
     }
-    let (point, view) = element_point(state, page_id, node_id)?;
+    let (point, view, offset) = element_point(state, page_id, node_id)?;
     Ok(Some(ClickTarget {
         main_frame,
         subtree: found.nodes,
@@ -123,6 +171,7 @@ pub(super) fn click_target(
         file_field: found.file_field,
         point,
         view,
+        offset,
     }))
 }
 
@@ -174,11 +223,11 @@ fn attribute<'a>(node: &'a Value, name: &str) -> Option<&'a str> {
         .and_then(Value::as_str)
 }
 
-/// A press point (see `ClickTarget::point`) and the view's size.
-type PointAndView = (Option<(i64, i64)>, (f64, f64));
+/// A press point (see `ClickTarget::point`), the view's size and where it stood in the page.
+type PointAndView = (Option<(i64, i64)>, (f64, f64), Option<ViewOffset>);
 
-/// The centre of the element's first box with an area, inside the view, in whole CSS pixels, and
-/// the view's size.
+/// The centre of the element's first box with an area, inside the view, in whole CSS pixels, the
+/// view's size, and where the view stood in the page.
 fn element_point(state: &mut McpState, page_id: &str, node_id: i64) -> CliResult<PointAndView> {
     let quads = client_call(
         state,
@@ -212,7 +261,11 @@ fn element_point(state: &mut McpState, page_id: &str, node_id: i64) -> CliResult
         })
         .unwrap_or_default();
     let view = (size("clientWidth"), size("clientHeight"));
-    Ok((quad_centre(&quads, view.0, view.1), view))
+    Ok((
+        quad_centre(&quads, view.0, view.1),
+        view,
+        view_offset(&metrics),
+    ))
 }
 
 /// The centre of the first quad with an area of at least one pixel, when it lies in a view of
@@ -239,21 +292,30 @@ pub(super) fn quad_centre(quads: &[Vec<f64>], width: f64, height: f64) -> Option
     })
 }
 
-/// Why a press at `point` would not reach `target` now, or `None` when it would: one DevTools call,
-/// so the press can follow it closely.
+/// Why a press at `point` (in the view) would not reach `target` now, or `None` when it would. The
+/// view's scroll offset is read fresh each time (the page can scroll between checks), then the
+/// node at that point of the document; the hit test is the last call, so the press can follow it
+/// closely.
 pub(super) fn press_refusal(
     state: &mut McpState,
     page_id: &str,
     target: &ClickTarget,
     point: (i64, i64),
 ) -> CliResult<Option<&'static str>> {
+    let now = client_call(state, page_id, "Page.getLayoutMetrics", json!({}))
+        .ok()
+        .and_then(|metrics| view_offset(&metrics));
+    let (x, y) = match document_point(point, target.offset, now) {
+        Ok(at) => at,
+        Err(why) => return Ok(Some(why)),
+    };
     let Ok(hit) = client_call(
         state,
         page_id,
         "DOM.getNodeForLocation",
         json!({
-            "x": point.0,
-            "y": point.1,
+            "x": x,
+            "y": y,
             "includeUserAgentShadowDOM": false,
             "ignorePointerEventsNone": false,
         }),
@@ -286,6 +348,7 @@ mod tests {
             file_field: false,
             point: Some((10, 10)),
             view: (800.0, 600.0),
+            offset: None,
         }
     }
 
@@ -302,6 +365,39 @@ mod tests {
         // Another element on top (a frame outside the element too).
         assert!(hit_refusal(&button, Some(9), Some("MAIN")).is_some());
         assert!(hit_refusal(&button, None, None).is_some());
+    }
+
+    #[test]
+    fn the_hit_test_looks_where_the_press_lands_on_a_scrolled_page() {
+        let at = |page_x, page_y, scale| {
+            Some(ViewOffset {
+                page_x,
+                page_y,
+                scale,
+            })
+        };
+        // Not scrolled: the same point.
+        assert_eq!(
+            document_point((100, 100), at(0.0, 0.0, 1.0), at(0.0, 0.0, 1.0)),
+            Ok((100, 100))
+        );
+        // Scrolled 200 down (re-check 4, S1): the press at y 100 of the view hits y 300 of the page.
+        assert_eq!(
+            document_point((100, 100), at(0.0, 200.0, 1.0), at(0.0, 200.0, 1.0)),
+            Ok((100, 300))
+        );
+        assert_eq!(
+            document_point((60, 480), at(30.0, 2700.5, 1.0), at(30.0, 2700.5, 1.0)),
+            Ok((90, 3181))
+        );
+        // Scrolled since the point was worked out, pinch-zoomed, or unknown: no press.
+        assert!(document_point((100, 100), at(0.0, 200.0, 1.0), at(0.0, 260.0, 1.0)).is_err());
+        assert!(document_point((100, 100), at(0.0, 0.0, 1.5), at(0.0, 0.0, 1.5)).is_err());
+        assert!(document_point((100, 100), None, at(0.0, 0.0, 1.0)).is_err());
+        assert!(document_point((100, 100), at(0.0, 0.0, 1.0), None).is_err());
+        // The offset comes from the visual viewport, in CSS pixels.
+        let metrics = json!({ "cssVisualViewport": { "pageX": 0, "pageY": 700, "scale": 1 } });
+        assert_eq!(view_offset(&metrics), at(0.0, 700.0, 1.0));
     }
 
     #[test]
