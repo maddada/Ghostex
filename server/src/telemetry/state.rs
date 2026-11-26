@@ -547,7 +547,7 @@ pub fn read_cached_accounts(db: &Connection) -> Option<super::settings_snapshot:
     let cached = value.get(CACHED_ACCOUNTS_KEY)?.as_object()?;
     let mut report = super::settings_snapshot::AccountsReport::default();
     if let Some(counts) = cached.get("counts").and_then(Value::as_object) {
-        for provider in ["claude", "codex", "cursor", "gemini", "copilot"] {
+        for provider in ["claude", "codex", "cursor", "antigravity", "copilot"] {
             if let Some(count) = counts.get(provider).and_then(Value::as_u64) {
                 report.counts.insert(provider, count as usize);
             }

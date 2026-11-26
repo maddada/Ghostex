@@ -65,30 +65,23 @@ impl Progress {
             view["userCode"] = json!(code);
         });
     }
-    pub(crate) fn note(&self, text: &str) {
-        self.change(|view| view["note"] = json!(text));
-    }
     pub(crate) fn saving(&self) {
         self.change(|view| {
             view["status"] = json!("saving");
             view["note"] = Value::Null;
         });
     }
-    /// Waits up to `for_how_long`, waking early for a cancel or a pasted code; `true` once cancelled.
+    /// Waits up to `for_how_long`, waking early for a cancel; `true` once cancelled.
     pub(crate) fn wait(&self, for_how_long: Duration) -> bool {
         let (job, wake) = &*self.job;
         let job = job.lock().unwrap_or_else(|e| e.into_inner());
-        if job.cancelled || job.input.is_some() {
-            return job.cancelled;
+        if job.cancelled {
+            return true;
         }
         let (job, _) = wake
             .wait_timeout(job, for_how_long)
             .unwrap_or_else(|e| e.into_inner());
         job.cancelled
-    }
-    pub(crate) fn take_input(&self) -> Option<String> {
-        let (job, _) = &*self.job;
-        job.lock().unwrap_or_else(|e| e.into_inner()).input.take()
     }
 }
 
@@ -133,8 +126,11 @@ pub(crate) fn start(
         let progress = Progress { job: job.clone() };
         let result = match provider {
             UsageProvider::Cursor => super::cursor::sign_in(&progress),
-            UsageProvider::Gemini => super::gemini::sign_in(&progress),
             UsageProvider::Copilot => super::copilot::sign_in(&progress),
+            UsageProvider::Antigravity => super::antigravity::sign_in(&progress),
+            UsageProvider::Gemini => Err(Failure::Unavailable(
+                super::retire_gemini::RETIRED.to_string(),
+            )),
         }
         .and_then(|signed_in| save(&paths, provider, account_id, signed_in));
         progress.change(|view| match result {

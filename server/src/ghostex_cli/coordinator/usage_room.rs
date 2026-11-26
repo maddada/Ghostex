@@ -50,11 +50,11 @@ const SHORT_PERCENT: f64 = 95.0;
 const SHORT_RESET_HOURS: i64 = 1;
 
 /// The agents whose accounts report usage, in the order status lists them. The key is the
-/// roster's `provider`; Antigravity's quota is its Google account's Gemini reading.
+/// roster's `provider`; Antigravity's is what agy's own /usage reports on this computer.
 const AGENTS: [(&str, &str); 5] = [
     ("claude", "Claude"),
     ("codex", "Codex"),
-    ("gemini", "Antigravity (Gemini)"),
+    ("antigravity", "Antigravity"),
     ("cursor", "Cursor"),
     ("copilot", "Copilot"),
 ];
@@ -66,8 +66,8 @@ pub(super) fn provider_of(agent_id: &str) -> Option<&'static str> {
     [
         ("claude", "claude"),
         ("codex", "codex"),
-        ("antigravity", "gemini"),
-        ("agy", "gemini"),
+        ("antigravity", "antigravity"),
+        ("agy", "antigravity"),
         ("cursor", "cursor"),
         ("copilot", "copilot"),
     ]

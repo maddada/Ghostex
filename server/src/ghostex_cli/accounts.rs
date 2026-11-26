@@ -24,8 +24,9 @@ With --json, each account includes structured `windows` (with `resetsAt`) and `l
 (`count` and `resets` with `expiresAt`). Limit resets are read-only here and are the user's to
 use: no CLI command spends them.
 
-Then the accounts Ghostex reads only for their usage (Settings > Accounts): Gemini, whose
-quota is what Antigravity runs on, Cursor and Copilot, with their state (ready, needsSignIn,
+Then the accounts Ghostex reads only for their usage (Settings > Accounts): Antigravity (the
+Antigravity CLI signed in on this computer, read from agy's own /usage), Cursor and Copilot, with
+their state (ready, needsSignIn,
 unavailable, disabled, loading in --json as status) and usage per window with reset times.
 --json lists them under usageAccounts.
 
@@ -118,10 +119,10 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
     }
     // CDXC:Coordinators 2026-11-22 DECISION:
     // A coordinator asked to move work off a Claude pool that is out needs to see which other
-    // agents have room. Antigravity's quota is its Google account's Gemini reading, so its
-    // heading says so; these accounts have no number (they never run or switch a session).
+    // agents have room. Antigravity's is what agy's own /usage reports on this computer; these
+    // accounts have no number (they never run or switch a session).
     for (provider, heading) in [
-        ("gemini", "GEMINI (Antigravity quota)"),
+        ("antigravity", "ANTIGRAVITY (from agy /usage)"),
         ("cursor", "CURSOR"),
         ("copilot", "COPILOT"),
     ] {
@@ -141,7 +142,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
     Ok(())
 }
 
-/// A Gemini, Cursor or Copilot account (`usageAccounts`, server/src/accounts/usage_only/).
+/// An Antigravity, Cursor or Copilot account (`usageAccounts`, server/src/accounts/usage_only/).
 fn print_usage_account(row: &Value) {
     let text = |key: &str| row[key].as_str().unwrap_or_default();
     let label = if text("email").is_empty() {
@@ -522,7 +523,7 @@ fn print_status(roster: &Value, json_output: bool) -> CliResult<()> {
         }
     }
     for (provider, heading) in [
-        ("gemini", "Antigravity (Gemini)"),
+        ("antigravity", "Antigravity"),
         ("cursor", "Cursor"),
         ("copilot", "Copilot"),
     ] {
