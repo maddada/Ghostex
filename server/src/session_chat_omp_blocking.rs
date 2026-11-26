@@ -690,12 +690,13 @@ pub fn omp_card_answer_key(text: &str, tool: &str, summary: &str, allow: bool) -
 }
 
 /// What a pick of one of OMP's own rows on the chat's screen card was made on: the dialog's tool,
-/// its request lines and its rows, as the answer's admission read them.
+/// its request lines, its rows and the highlighted row, as the answer's admission read them.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OmpRowPick {
     pub tool: String,
     pub request: Vec<String>,
     pub rows: Vec<String>,
+    pub selected: usize,
     pub choice_index: usize,
 }
 
@@ -707,8 +708,8 @@ pub fn omp_row_pick(text: &str, choice_index: usize) -> Option<OmpRowPick> {
 }
 
 /// The keys for `pick` on `text`, read from that same screen: `None` unless the dialog is still
-/// the one the pick was made on (its tool, its whole request and its rows), so a row picked for
-/// one request is never typed into another's dialog.
+/// the one the pick was made on (its tool, its whole request, its rows and its highlight), so a
+/// row picked for one request is never typed into another's dialog.
 pub fn omp_row_answer_key(text: &str, pick: &OmpRowPick) -> Option<String> {
     let (picker, now) = read_omp_row_pick(text, pick.choice_index)?;
     if now != *pick {
@@ -728,6 +729,7 @@ fn read_omp_row_pick(
         tool: dialog.tool,
         request: dialog.request,
         rows: picker.rows.iter().map(|row| row.label.clone()).collect(),
+        selected: picker.selected_index,
         choice_index,
     };
     Some((picker, pick))

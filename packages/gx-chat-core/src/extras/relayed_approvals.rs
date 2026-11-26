@@ -199,7 +199,7 @@ pub(crate) fn choices(card: &Value) -> Vec<Choice> {
                 label: "Deny".to_string(),
                 tone: "deny",
                 tooltip: String::new(),
-                answer: json!({ "kind": "approval", "approvalSend": "" }),
+                answer: deny,
             },
         ];
     }

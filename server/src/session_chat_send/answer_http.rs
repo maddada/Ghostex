@@ -48,11 +48,13 @@ CDXC:SessionChat 2026-11-05 DECISION:
 User (security audit, Q16 "check those four, and fix the ones that are real"): an answer is applied only to the prompt its card showed. A picker row (`terminalChoice`) and a notice's key action used to go to whatever the screen showed when gxserver got them, as long as that screen had a row with the same number, and the hook approval card's Allow typed its key into whatever dialog was up. So an answer picked on prompt A, or retried after a reconnect, could confirm prompt B, including B's "don't ask again" row. Clients now say which card they answered: a notice by its `detectedAt` (the instance id, kept while the screen keeps saying the same thing and new for a different prompt), the hook approval card by its tool and summary. gxserver compares that with what it would show now (a fresh capture, merged with the watchdog card as the chats see it) and refuses a mismatch, so the card comes back with the current prompt. Answers from an older client that names no card keep working as before. Deny and Escape stay unbound: they only stop whatever is asking.
 SEE-ALSO: packages/gx-chat-core/src/questions/terminal_prompts.rs and actions.rs (what the chat core sends).
 */
+/// Checks that the answer targets the prompt its card showed; returns the notice it was checked
+/// against when the answer names one (`noticeDetectedAt`).
 async fn verify_answer_targets_shown_prompt(
     state: &AppState,
     target: &SessionChatSendTarget,
     params: &serde_json::Map<String, Value>,
-) -> Result<(), DomainStateError> {
+) -> Result<Option<crate::session_chat_notice::SessionChatTerminalNotice>, DomainStateError> {
     let changed = prompt_changed;
     if let Some(shown) = params
         .get("noticeDetectedAt")
@@ -76,7 +78,7 @@ async fn verify_answer_targets_shown_prompt(
             detected.notice,
         );
         return match current {
-            Some(notice) if notice.detected_at == shown => Ok(()),
+            Some(notice) if notice.detected_at == shown => Ok(Some(notice)),
             _ => Err(changed()),
         };
     }
@@ -106,117 +108,7 @@ async fn verify_answer_targets_shown_prompt(
             return Err(changed());
         }
     }
-    Ok(())
-}
-
-fn prompt_changed() -> DomainStateError {
-    DomainStateError {
-        code: "invalidState",
-        message: "The prompt changed before your answer arrived. Answer the one showing now."
-            .to_string(),
-    }
-}
-
-/*
-CDXC:SessionChat 2026-11-25 DECISION:
-User: a stale card never answers another request; an approval Ghostex cannot tie to its request
-is answered in the terminal, with neither Allow nor Deny from the card (also from a card that was
-already open); two requests whose text is exactly identical may answer each other.
-
-CDXC:SessionChat 2026-11-25 WHY:
-OMP's approval dialog shows its request only when the tool draws one (bash's `Command:`, an MCP
-tool's `Arguments:`); for every other tool it shows just "Allow tool: <name>", the same for any two
-calls of that tool, and OMP's keys answer whichever dialog is up. So the hook card's Allow and Deny
-reach OMP only through a dialog that shows the card's tool and exactly its request
-(`omp_permission_request_match`). A dialog that shows no unique request is answered in the
-terminal, a dialog for another tool or request refuses the answer as changed, and a card that
-names neither its tool nor (by its call id) the stored card cannot be told apart from another,
-whether it comes from the thread's own chat or relayed from its coordinator: the coordinator
-checks only that its card is still the one it published, while the thread's stored card can
-already be the next request's. A card that names its call is refused once the stored card is
-another call's. With no dialog on screen the card's prompt is gone (changed), and a screen
-Ghostex could not read is answered in the terminal: either way no key is typed, since Deny's
-Escape would land in whatever OMP shows (a dialog the capture missed, or its running turn).
-Since 2026-11-07 this held for Allow only; Deny went to whatever dialog was up.
-SEE-ALSO: server/src/session_chat_omp_blocking.rs (`omp_shown_request`), packages/gx-chat-core/src/questions/actions.rs (`with_shown_approval`), packages/gx-chat-core/src/extras/relayed_approvals.rs (`choices`).
-*/
-/// The card's tool and summary once the dialog on `screen` shows exactly its request.
-fn verify_omp_hook_answer_targets_dialog(
-    session: &Value,
-    params: &serde_json::Map<String, Value>,
-    screen: Option<&str>,
-) -> Result<(String, String), DomainStateError> {
-    let answer_in_terminal = |message: &str| DomainStateError {
-        code: crate::session_chat_send::ANSWER_IN_TERMINAL,
-        message: message.to_string(),
-    };
-    let Some(screen) = screen else {
-        return Err(answer_in_terminal(
-            crate::session_chat_send::OMP_APPROVAL_UNREAD,
-        ));
-    };
-    let Some(dialog) = crate::session_chat_omp_blocking::read_omp_permission_dialog(screen) else {
-        return Err(prompt_changed());
-    };
-    let not_shown = || {
-        answer_in_terminal(
-            "OMP's approval doesn't show what it asks for, so Ghostex can't tell it's this card's. Answer it in the terminal.",
-        )
-    };
-    let stored = crate::agents::session_chat_prompt_setting(session)
-        .as_deref()
-        .and_then(crate::session_chat::parse_stored_session_chat_prompt)
-        .and_then(|stored| match stored {
-            crate::session_chat::SessionChatInteractivePrompt::Approval {
-                tool,
-                summary,
-                tool_use_id,
-                ..
-            } => Some((tool, summary, tool_use_id)),
-            _ => None,
-        });
-    let shown_call = params.get("toolUseId").and_then(Value::as_str);
-    let card = match params.get("promptTool").and_then(Value::as_str) {
-        Some(tool) => Some((
-            tool.to_string(),
-            params
-                .get("promptSummary")
-                .and_then(Value::as_str)
-                .map(str::to_string),
-        )),
-        // A card that names no tool (a Deny from an older chat) is the stored card only when it
-        // names that card's call.
-        None => stored.as_ref().and_then(|(tool, summary, tool_use_id)| {
-            (tool_use_id.is_some() && shown_call == tool_use_id.as_deref())
-                .then(|| (tool.clone(), summary.clone()))
-        }),
-    };
-    if dialog.shown.is_none() {
-        return Err(not_shown());
-    }
-    if let (Some(shown_call), Some((_, _, Some(stored_call)))) = (shown_call, stored.as_ref()) {
-        if shown_call != stored_call {
-            return Err(prompt_changed());
-        }
-    }
-    let Some((tool, summary)) = card else {
-        return Err(not_shown());
-    };
-    if crate::session_chat::normalize_session_chat_tool_name(&dialog.tool)
-        != crate::session_chat::normalize_session_chat_tool_name(&tool)
-    {
-        return Err(prompt_changed());
-    }
-    // The dialog's whole request must be the card's (CDXC:SessionChat 2026-11-25 DECISION in
-    // session_chat_omp_blocking.rs `omp_permission_request_match`).
-    let Some(summary) = summary else {
-        return Err(not_shown());
-    };
-    match crate::session_chat_omp_blocking::omp_permission_request_match(&dialog, &summary) {
-        crate::session_chat_omp_blocking::OmpRequestMatch::Same => Ok((tool, summary)),
-        crate::session_chat_omp_blocking::OmpRequestMatch::Other => Err(prompt_changed()),
-        crate::session_chat_omp_blocking::OmpRequestMatch::NotUnique => Err(not_shown()),
-    }
+    Ok(None)
 }
 
 /*
@@ -293,12 +185,14 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
         _ => None,
     };
     // A relayed answer goes to the thread it was picked for, not to the coordinator's chat the
-    // host stamped on the call (coordinators/relay.rs `relayed_thread`).
+    // host stamped on the call (coordinators/relay.rs `relayed_thread`), naming the card it was
+    // clicked on when it names none (`name_clicked_approval`).
     let rerouted = relayed.as_ref().map(|relayed| {
         let mut body = body.clone();
         if let Some(params) = body.get_mut("params").and_then(Value::as_object_mut) {
             params.insert("projectId".into(), Value::String(relayed.thread.0.clone()));
             params.insert("sessionId".into(), Value::String(relayed.thread.1.clone()));
+            relayed.name_clicked_approval(params);
         }
         body
     });
@@ -1785,9 +1679,10 @@ async fn answer_session_chat_prompt(
                     },
                 );
             };
-            if let Err(error) = verify_answer_targets_shown_prompt(state, &target, &params).await {
-                return domain_error_response(endpoint_path, request_id, error);
-            }
+            let verified = match verify_answer_targets_shown_prompt(state, &target, &params).await {
+                Ok(verified) => verified,
+                Err(error) => return domain_error_response(endpoint_path, request_id, error),
+            };
             let agent = session_chat_agent_for_session(&target.session).map(|agent| {
                 crate::session_chat_follower::omp_agent_for_pi_transcript(&target.session, agent)
             });
@@ -1876,17 +1771,23 @@ async fn answer_session_chat_prompt(
             denied_permission_row = screen.as_deref().is_some_and(|text| {
                 crate::session_chat_resume_prompt::permission_prompt_row_denies(text, choice_index)
             });
-            // OMP's own rows go through the same guard as its hook card: the pick is typed only
-            // while the dialog is still the one it was made on, the keys read at that time.
+            // OMP's own rows go through the same guard as its hook card, bound to the dialog the
+            // answer was verified against (`omp_row_pick_on_verified_notice`).
             let omp_row =
                 (crate::session_chat_options::session_chat_option_agent(agent.as_deref())
                     == Some(crate::session_chat_options::SessionChatOptionAgent::Omp))
                 .then(|| {
-                    screen.as_deref().and_then(|text| {
-                        crate::session_chat_omp_blocking::omp_row_pick(text, choice_index)
-                    })
+                    omp_row_pick_on_verified_notice(
+                        screen.as_deref(),
+                        choice_index,
+                        verified.as_ref(),
+                    )
                 })
-                .flatten();
+                .transpose();
+            let omp_row = match omp_row {
+                Ok(pick) => pick.flatten(),
+                Err(error) => return domain_error_response(endpoint_path, request_id, error),
+            };
             if skips_outright {
                 vec![
                     crate::session_chat_send::SessionChatSendStep::Write("\u{1b}".to_string()),
@@ -1912,46 +1813,9 @@ async fn answer_session_chat_prompt(
         }
     };
     let queued = !steps.is_empty();
-    let omp_guarded = steps.iter().any(|step| {
-        matches!(
-            step,
-            crate::session_chat_send::SessionChatSendStep::GuardOmpApprovalRequest { .. }
-                | crate::session_chat_send::SessionChatSendStep::GuardOmpApprovalRow(_)
-        )
-    });
-    /*
-    CDXC:SessionChat 2026-11-25 WHY:
-    An OMP approval's answer is settled only by its guard at the front of the send queue, which
-    can still type nothing (the dialog changed, or the screen could not be read). So this answer
-    waits for the guard's outcome: a refusal goes back to the card that sent it (it stays open,
-    and a relayed one is not recorded as applied), and the stored card is retired, and a relayed
-    answer recorded as applied, only once the keys were typed.
-    */
-    if omp_guarded {
-        if let Err(error) = crate::session_chat_send::execute_session_chat_send(
-            &target.project_id,
-            &target.session_id,
-            &target.zmx_name,
-            "session-chat-answer",
-            steps,
-        )
-        .await
-        {
-            let code = if error.message == crate::session_chat_send::OMP_APPROVAL_UNREAD {
-                crate::session_chat_send::ANSWER_IN_TERMINAL
-            } else if error.failure == crate::session_chat_send::SessionChatSendFailure::Write {
-                "internalError"
-            } else {
-                "invalidState"
-            };
-            return domain_error_response(
-                endpoint_path,
-                request_id,
-                DomainStateError {
-                    code,
-                    message: error.message,
-                },
-            );
+    if is_omp_approval_guard(&steps) {
+        if let Err(error) = answer_through_omp_guard(&target, steps).await {
+            return domain_error_response(endpoint_path, request_id, error);
         }
     } else if queued {
         crate::session_chat_send::enqueue_session_chat_send(
