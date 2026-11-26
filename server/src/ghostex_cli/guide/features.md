@@ -740,7 +740,8 @@ sidebar. It stays when you hide the sidebar. By default it holds Search,
 Main Hub, Agents Hub, All Automations, Hermes, Claude and Grok Bot (each only
 while its feature is on), then ⋯. The rail is for agents, hubs and your own links:
 its ⋯ menu, which opens right beside ⋯, lists those, Commands, Settings, Voice Call,
-Links, Layout (Add separator / Add separator at bottom) and, last, Appearance
+Links, Layout (Add separator / Add separator at bottom, and Remove separators while
+the rail has any) and, last, Appearance
 with Theme. Theme opens the compact Theme editor right beside ⋯ (beside its own
 icon when you pin Theme to the rail); drag it anywhere from there. The side panel views (Files, Changes, Browser, Project
 Board, Dev servers, Resources, Extensions) are not on the rail, not even while
@@ -1145,7 +1146,8 @@ separator at bottom**), by right-clicking empty space on the rail (or ⋯), or b
 right-clicking any pinned rail icon or separator. Separators are thin
 non-clickable divider lines that can live at the top or bottom of the rail, drag
 to reorder like icons, have their own right-click menu (Move up, Move down, Move
-to top / Move to bottom, Add separator and Remove), and are saved in the rail
+to top / Move to bottom, Add separator and Remove; **Remove separators** under
+Layout in ⋯ takes them all off at once), and are saved in the rail
 order (`sep:<id>` in `sidebarRailPins`, with `slot:bottom` marking bottom-group
 entries when any are present). Removing a link removes its pin. Links belong to no project,
 and they and their pins stay on this computer: they are in no Sync category,

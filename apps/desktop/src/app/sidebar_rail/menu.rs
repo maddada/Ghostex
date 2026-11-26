@@ -164,6 +164,20 @@ impl GhostexGpuiApp {
                 "Add separator at bottom",
                 RailSection::Bottom,
             ));
+            // CDXC:Sidebar 2026-11-26 DECISION:
+            // User (#775, "fix both"): separators could only be removed from their own right-click
+            // menu, so a rail whose right-click failed kept them for good. Layout also offers
+            // Remove separators, which takes every separator off the rail at once; it shows only
+            // while the rail has one.
+            if layout.all().iter().any(|key| is_rail_separator_key(key)) {
+                rows.push(json!({
+                    "label": "Remove separators",
+                    "icon": "trash",
+                    "command": { "type": SIDEBAR_RAIL_COMMAND_TYPE, "op": "removeSeparators" },
+                    "checked": false,
+                    "disabled": false,
+                }));
+            }
         }
         for group in last {
             self.push_sidebar_rail_menu_group(&mut rows, group, &layout, cx);
@@ -468,6 +482,19 @@ impl GhostexGpuiApp {
                 _ => layout.push_in(section_from_command(command), &sep_key),
             };
             self.save_sidebar_rail_layout(&next, cx);
+            self.dismiss_native_sidebar_menu(cx);
+            return true;
+        }
+        if op == Some("removeSeparators") {
+            let layout = sidebar_rail_layout_now();
+            let next = layout
+                .all()
+                .iter()
+                .filter(|key| is_rail_separator_key(key))
+                .fold(layout.clone(), |next, key| next.without(key));
+            if next != layout {
+                self.save_sidebar_rail_layout(&next, cx);
+            }
             self.dismiss_native_sidebar_menu(cx);
             return true;
         }
