@@ -11662,7 +11662,7 @@
     {
       "key": "managedTools",
       "title": "Tools",
-      "subtitle": "Install, update, reinstall or uninstall the tools Ghostex sets up for you: Node.js and npm, uv, Homebrew, Linux system tools, Beads, and the GitHub and GitLab CLIs. Each Install button says how it installs; your own copies are used when you have them.",
+      "subtitle": "Install, update, reinstall or uninstall the tools Ghostex sets up for you: Node.js and npm, uv, Homebrew, Linux system tools, Beads, the GitHub and GitLab CLIs, and Google's Gemini API CLI. Each Install button says how it installs; your own copies are used when you have them.",
       "tab": "integrations",
       "tabTitle": "Integrations",
       "section": "integrations",
@@ -11696,6 +11696,10 @@
         {
           "label": "GitLab CLI (glab)",
           "value": "glab"
+        },
+        {
+          "label": "Gemini API CLI (gemini-api)",
+          "value": "geminiApi"
         }
       ],
       "agentWritable": false

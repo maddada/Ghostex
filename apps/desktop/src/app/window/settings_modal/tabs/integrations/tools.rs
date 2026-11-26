@@ -27,7 +27,7 @@ const POLL_INTERVAL: Duration = Duration::from_millis(1500);
 /// A list reads versions and, once every six hours, the latest releases.
 const TIMEOUT: Duration = Duration::from_secs(60);
 /// `MANAGED_TOOL_ORDER`.
-const ORDER: [&str; 8] = [
+const ORDER: [&str; 9] = [
     "node",
     "uv",
     "homebrew",
@@ -35,6 +35,7 @@ const ORDER: [&str; 8] = [
     "beads",
     "gh",
     "glab",
+    "geminiApi",
     "hex",
 ];
 const SPINNER: &str = "modals/settings/loader-2.svg";
@@ -42,7 +43,7 @@ const SKY_400: u32 = 0x38bdf8;
 
 #[derive(Default)]
 pub(super) struct ManagedToolsState {
-    tools: Option<Vec<Value>>,
+    pub(super) tools: Option<Vec<Value>>,
     error: Option<String>,
     /// The tool whose "check again" read is in flight.
     checking: Option<String>,
@@ -54,6 +55,8 @@ pub(super) struct ManagedToolsState {
     primed: bool,
     poll: Option<Task<()>>,
     confirm_uninstall: Option<String>,
+    /// The Gemini API CLI explainer is open (gemini_api.rs), with the focus Escape closes it from.
+    pub(super) explainer: Option<gpui::FocusHandle>,
 }
 
 impl ManagedToolsState {
@@ -78,6 +81,7 @@ fn icon(tool: &str) -> &'static str {
         "trycua" => "modals/settings/device-desktop.svg",
         "spaceo" => "modals/settings/device-laptop.svg",
         "hex" => "modals/settings/microphone.svg",
+        "geminiApi" => "agent-icons/gemini.svg",
         _ => "modals/settings/tools.svg",
     }
 }
@@ -92,13 +96,13 @@ fn words(operation: &str) -> (&'static str, &'static str, &'static str) {
     }
 }
 
-fn text<'a>(tool: &'a Value, key: &str) -> Option<&'a str> {
+pub(super) fn text<'a>(tool: &'a Value, key: &str) -> Option<&'a str> {
     tool.get(key)
         .and_then(Value::as_str)
         .filter(|value| !value.is_empty())
 }
 
-fn id(tool: &Value) -> String {
+pub(super) fn id(tool: &Value) -> String {
     text(tool, "id").unwrap_or_default().to_string()
 }
 
@@ -923,11 +927,23 @@ impl IntegrationsTab {
                 cx,
             ));
         }
-        settings_list_item(
+        let explained = key == super::gemini_api::TOOL;
+        let group = SharedString::from(format!("tool-{key}-row"));
+        let title = if explained {
+            h_flex()
+                .items_center()
+                .gap(px(6.0))
+                .child(name.clone())
+                .child(self.gemini_api_info_button(p, &group, cx))
+                .into_any_element()
+        } else {
+            div().child(name.clone()).into_any_element()
+        };
+        let row = settings_list_item(
             p,
             Some(status),
             Some(settings_icon(icon(&key), 17.0, p.muted).into_any_element()),
-            name,
+            title,
             Some(div().child(row_detail(tool)).into_any_element()),
             (!controls.is_empty()).then(|| {
                 h_flex()
@@ -936,7 +952,16 @@ impl IntegrationsTab {
                     .children(controls)
                     .into_any_element()
             }),
-        )
-        .into_any_element()
+        );
+        if explained {
+            div()
+                .id(ElementId::Name(group.clone()))
+                .group(group)
+                .w_full()
+                .child(row)
+                .into_any_element()
+        } else {
+            row.into_any_element()
+        }
     }
 }

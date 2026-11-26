@@ -22,10 +22,12 @@ pub(crate) enum ToolId {
     Spaceo,
     /// Hex 3, the local dictation app Dictate's Hex engine uses (hex.rs).
     Hex,
+    /// Google's `gemini-api` command (binaries.rs): Gemini from the shell on the user's API key.
+    GeminiApi,
 }
 
 impl ToolId {
-    pub(crate) const ALL: [ToolId; 11] = [
+    pub(crate) const ALL: [ToolId; 12] = [
         ToolId::Node,
         ToolId::Uv,
         ToolId::Homebrew,
@@ -37,6 +39,7 @@ impl ToolId {
         ToolId::Trycua,
         ToolId::Spaceo,
         ToolId::Hex,
+        ToolId::GeminiApi,
     ];
 
     pub(crate) fn id(self) -> &'static str {
@@ -52,6 +55,7 @@ impl ToolId {
             ToolId::Trycua => "trycua",
             ToolId::Spaceo => "spaceo",
             ToolId::Hex => "hex",
+            ToolId::GeminiApi => "geminiApi",
         }
     }
 
@@ -72,6 +76,7 @@ impl ToolId {
             ToolId::Trycua => "Fast Computer & Browser Use",
             ToolId::Spaceo => "SpaceO",
             ToolId::Hex => "Hex",
+            ToolId::GeminiApi => "Gemini API CLI",
         }
     }
 
@@ -102,6 +107,7 @@ impl ToolId {
             ToolId::Hex => {
                 "Local dictation app. Dictate can transcribe with Hex's models while Hex runs on this computer."
             }
+            ToolId::GeminiApi => "Gemini from the shell for any agent, on your own API key.",
         }
     }
 }
@@ -287,6 +293,33 @@ pub(crate) fn newer(latest: &str, current: &str) -> bool {
     parts(latest) > parts(current)
 }
 
+/// Whether `latest` is an update Ghostex lists for `tool` (the row's arrow, Settings > Updates,
+/// Update all). Every tool lists any newer release, except the Gemini API CLI, which lists only a
+/// newer major or minor version; its patch releases are [`patch_only`].
+///
+/// CDXC:ManagedTools 2026-11-26 DECISION:
+/// User, adding Google's gemini-api to the managed tools: "dont pin it. make it update like others. but we only show update notification on minor bump at least not on smaller bumps." Asked what should happen to a patch release, they chose that it installs quietly when the tool's Update automatically switch is on (updates/auto.rs reads `patchAvailable`) and is never listed. Only this tool has the rule; every other tool keeps `newer`.
+pub(crate) fn update_listed(tool: ToolId, latest: &str, current: &str) -> bool {
+    match tool {
+        ToolId::GeminiApi => minor_line(latest) > minor_line(current),
+        _ => newer(latest, current),
+    }
+}
+
+/// A newer release of `tool` that [`update_listed`] keeps quiet: the same major and minor, a
+/// higher patch.
+pub(crate) fn patch_only(tool: ToolId, latest: &str, current: &str) -> bool {
+    newer(latest, current) && !update_listed(tool, latest, current)
+}
+
+/// The (major, minor) of a dotted version; a missing part counts as 0.
+fn minor_line(version: &str) -> (u64, u64) {
+    let mut parts = version
+        .split(['.', '-', '+'])
+        .map_while(|part| part.parse::<u64>().ok());
+    (parts.next().unwrap_or(0), parts.next().unwrap_or(0))
+}
+
 const LATEST_TTL: Duration = Duration::from_secs(6 * 60 * 60);
 static LATEST: LazyLock<Mutex<HashMap<ToolId, (Instant, Result<String, String>)>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -303,7 +336,9 @@ pub(crate) fn latest_version(tool: ToolId, fresh: bool) -> Option<Result<String,
     let answer = match tool {
         ToolId::Node => super::node::latest_lts().map(|(version, _)| version),
         ToolId::Uv => super::uv::latest_version(),
-        ToolId::Beads | ToolId::Gh | ToolId::Glab => super::binaries::latest_version(tool),
+        ToolId::Beads | ToolId::Gh | ToolId::Glab | ToolId::GeminiApi => {
+            super::binaries::latest_version(tool)
+        }
         ToolId::Homebrew => super::homebrew::latest_homebrew_version(),
         ToolId::Hex => super::hex::latest_version(),
         ToolId::SystemTools | ToolId::PowerShell => return None,
@@ -322,5 +357,38 @@ pub(crate) fn latest_version(tool: ToolId, fresh: bool) -> Option<Result<String,
 pub(crate) fn forget_latest(tool: ToolId) {
     if let Ok(mut cache) = LATEST.lock() {
         cache.remove(&tool);
+    }
+}
+
+#[cfg(test)]
+mod update_rule_tests {
+    use super::*;
+
+    #[test]
+    fn gemini_api_lists_only_minor_and_major_bumps() {
+        let tool = ToolId::GeminiApi;
+        assert!(!update_listed(tool, "0.5.1", "0.5.0"));
+        assert!(patch_only(tool, "0.5.1", "0.5.0"));
+        assert!(update_listed(tool, "0.6.0", "0.5.3"));
+        assert!(!patch_only(tool, "0.6.0", "0.5.3"));
+        assert!(update_listed(tool, "1.0.0", "0.9.9"));
+        assert!(!update_listed(tool, "0.5.0", "0.5.0"));
+        assert!(!patch_only(tool, "0.5.0", "0.5.0"));
+        assert!(!patch_only(tool, "0.4.9", "0.5.0"));
+    }
+
+    #[test]
+    fn other_tools_still_list_every_release() {
+        assert!(update_listed(ToolId::Gh, "2.83.1", "2.83.0"));
+        assert!(!patch_only(ToolId::Gh, "2.83.1", "2.83.0"));
+        assert!(update_listed(ToolId::Beads, "0.48.0", "0.47.1"));
+    }
+
+    #[test]
+    fn reads_the_gemini_api_version_line() {
+        assert_eq!(
+            version_in("gemini-api 0.5.0\nBuilt: 2026-11-20T00:48:16Z\n").as_deref(),
+            Some("0.5.0")
+        );
     }
 }

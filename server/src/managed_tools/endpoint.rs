@@ -149,7 +149,9 @@ fn status_and_grants(tool: ToolId, home: &Path) -> (Status, Option<desktop_contr
         ToolId::Homebrew => homebrew::homebrew_status(home),
         ToolId::SystemTools => system_tools::status(home),
         ToolId::PowerShell => powershell::status(),
-        ToolId::Beads | ToolId::Gh | ToolId::Glab => binaries::status(tool, home),
+        ToolId::Beads | ToolId::Gh | ToolId::Glab | ToolId::GeminiApi => {
+            binaries::status(tool, home)
+        }
         ToolId::Hex => hex::status(home),
     };
     (status, None)
@@ -201,6 +203,13 @@ pub(crate) fn state(tool: ToolId, home: &Path, fresh: bool) -> Value {
             value["runInTerminal"] = json!(crate::shown_commands::SYSTEM_TOOLS_INSTALL);
         }
     }
+    // The explainer's key step (Settings > Integrations > Tools > Gemini API CLI's (i)).
+    if tool == ToolId::GeminiApi {
+        value["configure"] = json!({
+            "command": super::GEMINI_API_CONFIGURE_COMMAND,
+            "runInTerminal": crate::shown_commands::GEMINI_API_CONFIGURE,
+        });
+    }
     if let Some(note) = grants.as_ref().and_then(desktop_control::permission_note) {
         value["permissionNote"] = json!(note);
     }
@@ -218,7 +227,12 @@ pub(crate) fn state(tool: ToolId, home: &Path, fresh: bool) -> Value {
         match tools::latest_version(tool, fresh) {
             Some(Ok(latest)) => {
                 if let Some(current) = &status.version {
-                    value["updateAvailable"] = json!(tools::newer(&latest, current));
+                    value["updateAvailable"] = json!(tools::update_listed(tool, &latest, current));
+                    // A release `update_listed` keeps quiet still installs when the tool's Update
+                    // automatically switch is on (updates/auto.rs).
+                    if tools::patch_only(tool, &latest, current) {
+                        value["patchAvailable"] = json!(true);
+                    }
                 }
                 value["latestVersion"] = json!(latest);
             }
@@ -279,13 +293,15 @@ fn run_operation(tool: ToolId, operation: &str, home: &Path, log: &Log) -> Resul
             add_to_path(&paths::uv_dir(), home, log);
         }
         (ToolId::Uv, false) => uv::uninstall(log)?,
-        (ToolId::Beads | ToolId::Gh | ToolId::Glab, true) => {
+        (ToolId::Beads | ToolId::Gh | ToolId::Glab | ToolId::GeminiApi, true) => {
             binaries::install(tool, log)?;
             if let Some(message) = binaries::expose(tool, home) {
                 log.line(&message);
             }
         }
-        (ToolId::Beads | ToolId::Gh | ToolId::Glab, false) => binaries::uninstall(tool, home, log)?,
+        (ToolId::Beads | ToolId::Gh | ToolId::Glab | ToolId::GeminiApi, false) => {
+            binaries::uninstall(tool, home, log)?
+        }
         (ToolId::Homebrew, true) if operation == "update" => homebrew::update_homebrew(home, log)?,
         (ToolId::Homebrew, true) => {
             homebrew::install_homebrew(home, log)?;

@@ -1,5 +1,5 @@
 //! Single-binary command-line tools downloaded from their official releases: Beads (`bd`), the
-//! GitHub CLI (`gh`) and the GitLab CLI (`glab`).
+//! GitHub CLI (`gh`), the GitLab CLI (`glab`) and Google's Gemini API CLI (`gemini-api`).
 
 use std::path::Path;
 
@@ -73,6 +73,32 @@ fn spec(tool: ToolId) -> Spec {
             },
             checksums: |_| "checksums.txt".into(),
             source_name: "GitLab's official releases",
+        },
+        // CDXC:ManagedTools 2026-11-26 WHY: Google's install script is `curl | bash`; Ghostex takes the
+        // release archive and checks it against the release's checksums.txt like the other tools.
+        // The archive names carry no version and use x86_64 for Intel. Its Mac binary is only
+        // ad-hoc signed, which runs because Ghostex's download sets no quarantine flag.
+        ToolId::GeminiApi => Spec {
+            tool,
+            binary: "gemini-api",
+            latest: "https://github.com/google-gemini/gemini-api-cli/releases/latest",
+            downloads: |tag| {
+                format!("https://github.com/google-gemini/gemini-api-cli/releases/download/{tag}")
+            },
+            asset: |_, os, arch| {
+                let (os, extension) = match os {
+                    Os::Mac => ("Darwin", "tar.gz"),
+                    Os::Linux => ("Linux", "tar.gz"),
+                    Os::Windows => ("Windows", "zip"),
+                };
+                let arch = match arch {
+                    Arch::X64 => "x86_64",
+                    Arch::Arm64 => "arm64",
+                };
+                format!("gemini-api_{os}_{arch}.{extension}")
+            },
+            checksums: |_| "checksums.txt".into(),
+            source_name: "Google's GitHub releases",
         },
         _ => unreachable!("not a downloaded binary"),
     }
@@ -247,4 +273,35 @@ pub(crate) fn uninstall(tool: ToolId, home: &Path, log: &Log) -> Result<(), Stri
     }
     log.line(&format!("Removed Ghostex's {}.", tool.label()));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gemini_api_asset_names_match_googles_releases() {
+        let spec = spec(ToolId::GeminiApi);
+        let name = |os, arch| (spec.asset)("0.5.0", os, arch);
+        assert_eq!(name(Os::Mac, Arch::Arm64), "gemini-api_Darwin_arm64.tar.gz");
+        assert_eq!(name(Os::Mac, Arch::X64), "gemini-api_Darwin_x86_64.tar.gz");
+        assert_eq!(
+            name(Os::Linux, Arch::Arm64),
+            "gemini-api_Linux_arm64.tar.gz"
+        );
+        assert_eq!(name(Os::Linux, Arch::X64), "gemini-api_Linux_x86_64.tar.gz");
+        assert_eq!(
+            name(Os::Windows, Arch::X64),
+            "gemini-api_Windows_x86_64.zip"
+        );
+        assert_eq!(
+            name(Os::Windows, Arch::Arm64),
+            "gemini-api_Windows_arm64.zip"
+        );
+        assert_eq!((spec.checksums)("0.5.0"), "checksums.txt");
+        assert_eq!(
+            (spec.downloads)("v0.5.0"),
+            "https://github.com/google-gemini/gemini-api-cli/releases/download/v0.5.0"
+        );
+    }
 }

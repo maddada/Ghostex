@@ -68,6 +68,21 @@ async fn keep_mise_versions(state: &AppState) {
     }
 }
 
+/// An item this pass installs when its switch is on: a listed update, or a patch release its
+/// tool keeps quiet (`patchAvailable`, the Gemini API CLI in managed_tools/tools.rs).
+pub(super) fn auto_due(item: &serde_json::Value) -> bool {
+    item["state"] == "available" || (item["state"] == "upToDate" && item["patchAvailable"] == true)
+}
+
+/// The version [`auto_due`] would install: the quiet patch's, or the listed update's.
+pub(super) fn auto_version(item: &serde_json::Value) -> &serde_json::Value {
+    if item["state"] == "upToDate" && item["patchAvailable"] == true {
+        &item["patchLatest"]
+    } else {
+        &item["latest"]
+    }
+}
+
 async fn run_pass(state: &AppState) {
     let switched_on = store::auto_ids(&state.paths);
     if switched_on.is_empty() {
@@ -78,13 +93,13 @@ async fn run_pass(state: &AppState) {
         let id = item["id"].as_str().unwrap_or_default().to_string();
         if id == "app"
             || !switched_on.contains(&id)
-            || item["state"] != "available"
+            || !auto_due(&item)
             || item["canUpdate"] != true
             || item["inUse"] == true
         {
             continue;
         }
-        let version = item["latest"]
+        let version = auto_version(&item)
             .as_str()
             .or(item["summary"].as_str())
             .unwrap_or_default()

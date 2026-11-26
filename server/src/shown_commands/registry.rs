@@ -19,6 +19,8 @@ pub(crate) const GLAB_AUTH_LOGIN: &str = "glabAuthLogin";
 pub(crate) const GH_PROJECTS_SCOPE: &str = "ghProjectsScope";
 /// `gws auth setup`: Google Workspace's OAuth client (connectors/cli/client.rs).
 pub(crate) const GWS_AUTH_SETUP: &str = "gwsAuthSetup";
+/// `gemini-api configure`: the Gemini API CLI explainer's key step (Settings > Integrations > Tools).
+pub(crate) const GEMINI_API_CONFIGURE: &str = "geminiApiConfigure";
 /// `ghostex team deploy --workspace <name>`; `workspaceId`.
 pub(crate) const TEAM_DEPLOY: &str = "teamDeploy";
 /// `ghostex team slack-connect --workspace <name>`; `workspaceId`.
@@ -108,6 +110,10 @@ pub(crate) async fn resolve(
         GWS_AUTH_SETUP => Ok(ShownCommand::new(
             "Set up Google Workspace",
             "gws auth setup",
+        )),
+        GEMINI_API_CONFIGURE => Ok(ShownCommand::new(
+            "Add your Gemini API key",
+            crate::managed_tools::GEMINI_API_CONFIGURE_COMMAND,
         )),
         TEAM_DEPLOY | TEAM_SLACK_CONNECT | TEAM_LINEAR_CONNECT => {
             let (verb, title) = match id {

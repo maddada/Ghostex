@@ -8348,6 +8348,24 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   phone), Run in terminal opens a terminal in Main Hub with its install command
   typed in, so you can run it yourself and answer what it asks (macOS and
   Linux).
+  The Gemini API CLI row installs Google's `gemini-api` (from its GitHub
+  release archive, checked against the published checksum, linked into
+  `~/.local/bin` like `gh`) only when you click Install. It lets any agent call
+  Gemini from the shell on your own Gemini API key, which Google bills
+  separately from a Gemini subscription. The (i) beside its name (shown when
+  the pointer is on the row) opens a short explainer: a table of what
+  Antigravity CLI already does on your Gemini plan with no key (questions about
+  local PDFs, images, audio and video, transcripts and SRT captions, making and
+  editing images, background research while the session is open) and what
+  `gemini-api` adds with a key (questions about a YouTube video by its link,
+  Gemini voiceovers including two speakers, music, short video, and Deep
+  Research jobs fetched later by id), then how to start: run
+  `gemini-api configure` once to add your key (it stores the key itself; Run in
+  terminal types it into a Main Hub terminal), after which any agent can use it.
+  Ghostex lists a Gemini API CLI update only when its minor or major version
+  goes up; patch releases are never listed, and install quietly when its Update
+  automatically switch is on in Settings > Updates. Command:
+  `ghostex shown-command open geminiApiConfigure`.
 - Connectors link a workspace to your apps (Gmail, Google Calendar, Slack,
   Notion, GitHub, Linear, Outlook and many more) through Composio. Connectors
   is experimental and off by default: switch it on in Settings > Extensions >

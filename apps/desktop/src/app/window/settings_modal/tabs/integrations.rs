@@ -32,6 +32,7 @@ use gpui_component::{h_flex, v_flex};
 use serde_json::{Value, json};
 use std::time::Duration;
 
+mod gemini_api;
 mod permissions;
 mod remote_machine;
 mod spaceo;
@@ -1569,6 +1570,10 @@ impl Render for IntegrationsTab {
                         .map(|element| PageBlock::section("managedTools", element)),
                 );
             }
+        }
+        // The Gemini API CLI explainer its row's (i) opens, over the whole Settings window.
+        if let Some(explainer) = self.gemini_api_explainer(&p, window, cx) {
+            blocks.push(PageBlock::plain(explainer));
         }
         settings_page(&self.store, SettingsTabId::Integrations, &p, blocks, cx)
     }

@@ -243,15 +243,16 @@ pub(super) async fn list(state: &AppState, fresh: bool) -> Vec<Value> {
                         groups.get(&kind).is_some_and(|previous| {
                             previous.items.iter().any(|item| {
                                 item["id"] == id
-                                    && item["state"] == "available"
-                                    && item["latest"] == *latest
+                                    && super::auto::auto_due(item)
+                                    && super::auto::auto_version(item) == latest
                             })
                         })
                     };
                     found_auto_update |= items.iter().any(|item| {
-                        item["state"] == "available"
+                        super::auto::auto_due(item)
                             && item["id"].as_str().is_some_and(|id| {
-                                auto.iter().any(|on| on == id) && !known(id, &item["latest"])
+                                auto.iter().any(|on| on == id)
+                                    && !known(id, super::auto::auto_version(item))
                             })
                     });
                     let stale = !unchanged || items.iter().any(|item| item["state"] == "updating");
@@ -1138,6 +1139,15 @@ pub(super) fn tool_item(tool: &Value, usage: &Usage, hex_wanted: bool) -> Option
         tool["version"].as_str().map(str::to_string),
         tool["latestVersion"].as_str().map(str::to_string),
     );
+    // A patch the tool does not list (the Gemini API CLI, managed_tools/tools.rs `update_listed`)
+    // shows as up to date, at the installed version, and is installed only by Update automatically.
+    let patch = tool["patchAvailable"] == true && tool["updateAvailable"] != true && can_update;
+    if patch {
+        item.insert("latest".into(), tool["version"].clone());
+        item.insert("major".into(), json!(false));
+        item.insert("patchAvailable".into(), json!(true));
+        item.insert("patchLatest".into(), tool["latestVersion"].clone());
+    }
     let job = &tool["job"];
     let failed = job["status"] == "failed" && job["operation"] == "update";
     let settled = if tool["updateAvailable"] == true {
@@ -1352,6 +1362,32 @@ mod hex_tests {
             tool_item(&hex(false, &["install"], json!({})), &usage, true).is_none(),
             "GitHub #644: Update all must never install Hex"
         );
+    }
+
+    #[test]
+    fn a_gemini_api_patch_is_up_to_date_but_due_for_auto_update() {
+        let usage = Usage::default();
+        let tool = serde_json::json!({
+            "id": "geminiApi", "label": "Gemini API CLI", "supported": true, "installed": true,
+            "source": "ghostex", "version": "0.5.0", "latestVersion": "0.5.1",
+            "actions": ["update", "reinstall", "uninstall"],
+            "updateAvailable": false, "patchAvailable": true,
+        });
+        let item = tool_item(&tool, &usage, false).expect("listed");
+        assert_eq!(item["state"], "upToDate");
+        assert_eq!(item["latest"], "0.5.0", "shown at the installed version");
+        assert_eq!(item["patchLatest"], "0.5.1");
+        assert!(super::super::auto::auto_due(&item));
+        assert_eq!(super::super::auto::auto_version(&item), "0.5.1");
+        let minor = serde_json::json!({
+            "id": "geminiApi", "label": "Gemini API CLI", "supported": true, "installed": true,
+            "source": "ghostex", "version": "0.5.1", "latestVersion": "0.6.0",
+            "actions": ["update", "reinstall", "uninstall"], "updateAvailable": true,
+        });
+        let item = tool_item(&minor, &usage, false).expect("listed");
+        assert_eq!(item["state"], "available");
+        assert_eq!(item["latest"], "0.6.0");
+        assert_eq!(super::super::auto::auto_version(&item), "0.6.0");
     }
 
     #[test]

@@ -37,6 +37,7 @@ Ids:
   glabAuthLogin        glab auth login
   ghProjectsScope      gh auth refresh -s read:project (GitHub Projects)
   gwsAuthSetup         gws auth setup (Google Workspace)
+  geminiApiConfigure   gemini-api configure (add a Gemini API key)
   teamDeploy           ghostex team deploy (--workspace-id)
   teamSlackConnect     ghostex team slack-connect (--workspace-id)
   teamLinearConnect    ghostex team linear-connect (--workspace-id)

@@ -56,6 +56,7 @@ pub(super) fn item_icon(p: &SettingsPalette, item: &Value, size: f32) -> AnyElem
         "gh" => "modals/settings/brand-github.svg",
         "glab" => "modals/settings/brand-gitlab.svg",
         "hex" => "modals/settings/microphone.svg",
+        "geminiApi" => "agent-icons/gemini.svg",
         _ => "modals/settings/tools.svg",
     };
     settings_icon(glyph, size, p.foreground)
