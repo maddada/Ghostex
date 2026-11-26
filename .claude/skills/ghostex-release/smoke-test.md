@@ -94,9 +94,12 @@ only by its own pid and window ids. What 12.2.0's run learned:
   check its environment. Never set it on the user's own app. Once the home
   has `owner-keys/`, a start without the variable fails ("can't use its
   keys" warning) instead of asking the Keychain. The copy's keys are
-  labelled "test copy" and only a gxserver started with the variable (the
-  test server) takes them, so pointing a test copy at the user's real
-  server can't make it an owner there.
+  labelled "<computer> test copy (Ghostex app)" and only a gxserver running
+  with the variable and its own absolute `GHOSTEX_HOME` (the test server)
+  takes them, so pointing a test copy at the user's real server can't make
+  it an owner there. A key file with ACL entries is refused; if `chmod -N`
+  doesn't keep them off, a folder above the home hands them down: use a
+  scratch folder without one.
 - **Run `smoke.sh` from a shell that sourced the test server's `env.sh`**, and
   after a `test-server` restart run `hash -r` and check `which ghostex` is
   the test server's `gxserver/bin/ghostex`: a runner shell that survived the

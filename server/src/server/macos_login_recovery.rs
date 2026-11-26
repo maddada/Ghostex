@@ -45,14 +45,6 @@ pub(super) fn install(port: u16) -> Result<()> {
             variables.push((key.to_string(), value));
         }
     }
-    // A test copy's key store opt-in goes with its GHOSTEX_HOME (CDXC:Security 2026-11-26 in
-    // packages/owner-keys/src/store.rs).
-    if let Some(value) = env::var(ghostex_owner_keys::STORE_VARIABLE)
-        .ok()
-        .filter(|value| !value.is_empty())
-    {
-        variables.push((ghostex_owner_keys::STORE_VARIABLE.to_string(), value));
-    }
     if let Ok(path) = env::var("PATH") {
         variables.push(("PATH".to_string(), path));
     }

@@ -26,11 +26,14 @@ fn a_test_copy_keeps_its_keys_in_its_own_home() {
     assert!(matches!(confirm_presence("x"), Err(KeyError::KeyStore(_))));
     std::env::set_var(STORE_VARIABLE, "file");
     std::env::remove_var("GHOSTEX_HOME");
+    // The variable alone never makes this a test server (review round 2, R2-1).
+    assert!(!opted_in_to_file_store());
     assert!(matches!(
         load_or_create_owner_key(),
         Err(KeyError::KeyStore(_))
     ));
     std::env::set_var("GHOSTEX_HOME", "relative/home");
+    assert!(!opted_in_to_file_store());
     assert!(matches!(local_salt(), Err(KeyError::KeyStore(_))));
 
     std::env::set_var("GHOSTEX_HOME", &home);

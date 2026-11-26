@@ -424,7 +424,10 @@ fn approves_here_names(status: &Value, transport: &Transport) -> Option<Vec<Stri
                 .flatten()
                 .filter(|key| text(key, "keyId").is_some_and(|id| own.contains(&id)))
                 .filter_map(|key| text(key, "label"))
-                .map(|label| same_computer_name(label.trim_end_matches("(Ghostex app)"))),
+                .map(|label| {
+                    let label = label.trim_end_matches("(Ghostex app)").trim_end();
+                    same_computer_name(label.strip_suffix(TEST_COPY_LABEL).unwrap_or(label))
+                }),
         );
     }
     let there = match transport {
@@ -878,6 +881,24 @@ fn this_computer_name() -> String {
     crate::host_name::local_computer_name()
 }
 
+/// The marker a test copy with its keys in a file puts after the computer's name in its keys'
+/// labels, before the role: "Mac test copy (Ghostex app)".
+const TEST_COPY_LABEL: &str = "test copy";
+
+/*
+CDXC:Security 2026-11-26 FIX:
+Re-review of 424b7ca71 (R2-3): the "test copy" label went only with the key at enrollment; opening the owner session sent "<computer> (Ghostex app)" again and gxserver relabels the key to what the session says (`current_key_label` in server/src/security/owner.rs), so the key list lost it. Every label this app gives its own keys now comes from here. The words keep the usual "(Ghostex app)" / "(approvals)" ending that gxserver and the cards strip (packages/gx-protocol/src/plain_ask.rs), so a card reads "Let Mac test copy manage …".
+*/
+/// What this app calls one of its own keys there (`role`: "Ghostex app" or "approvals"):
+/// "<computer> (<role>)", or "<computer> test copy (<role>)" when its keys are in a file.
+fn own_key_label(role: &str) -> String {
+    if ghostex_owner_keys::uses_file_store() {
+        format!("{} {TEST_COPY_LABEL} ({role})", this_computer_name())
+    } else {
+        format!("{} ({role})", this_computer_name())
+    }
+}
+
 /// The wire form of one of this computer's keys; `device_public_key` (the owner key's) names the
 /// computer, so its owner and approver keys share one device id.
 fn key_json(public_key: &str, device_public_key: &str, role: &str) -> Value {
@@ -888,14 +909,10 @@ fn key_json(public_key: &str, device_public_key: &str, role: &str) -> Value {
         .collect();
     /*
     CDXC:Security 2026-11-26 FIX:
-    Review of d8ef5c609 (M1, L4): a test copy with its keys in a file (`GHOSTEX_OWNER_KEYS_STORE=file`) sent the same label and presence claim as a real app ("<computer> (Ghostex app)", `touchId`), so nothing told a gxserver or the person approving that any program of the user can read that key. It now says "test copy" in the label and claims no presence (`none`), and gxserver takes such a key only when it was started with the variable itself (`enroll_key` in server/src/server/security_http.rs).
+    Review of d8ef5c609 (M1, L4): a test copy with its keys in a file (`GHOSTEX_OWNER_KEYS_STORE=file`) sent the same label and presence claim as a real app ("<computer> (Ghostex app)", `touchId`), so nothing told a gxserver or the person approving that any program of the user can read that key. It now says "test copy" in the label (`own_key_label`) and claims no presence (`none`), and gxserver takes such a key only when it was started with the variable itself (`enroll_key` in server/src/server/security_http.rs).
     */
     let file_store = ghostex_owner_keys::uses_file_store();
-    let label = if file_store {
-        format!("{} (test copy, {role})", this_computer_name())
-    } else {
-        format!("{} ({role})", this_computer_name())
-    };
+    let label = own_key_label(role);
     let presence = if file_store {
         ghostex_gx_protocol::approval::ApproverPresence::NoPrompt
             .as_str()
@@ -994,7 +1011,7 @@ fn open_owner_session(transport: &Transport, may_ask: bool) -> Result<String, St
                 "scope": ghostex_gx_protocol::approval::OWNER_SCOPE_DOOR,
                 // The key's label there follows this computer's name now (CDXC:Security
                 // 2026-11-20 at `current_key_label` in server/src/security/owner.rs).
-                "label": format!("{} (Ghostex app)", this_computer_name()),
+                "label": own_key_label("Ghostex app"),
             }),
         )
         .map_err(|(_, message)| message)?;

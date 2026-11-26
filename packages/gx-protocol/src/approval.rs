@@ -221,7 +221,7 @@ open_string_enum! {
         DevicePin => "devicePin",
         /// Nothing: a test copy's key kept in a file (`GHOSTEX_OWNER_KEYS_STORE=file`,
         /// packages/owner-keys/src/store.rs). gxserver takes such a key only when it was started
-        /// with that variable itself (a test server).
+        /// with that variable and its own absolute GHOSTEX_HOME (a test server).
         NoPrompt => "none",
     }
 }

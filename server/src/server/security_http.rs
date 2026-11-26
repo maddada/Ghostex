@@ -616,10 +616,11 @@ fn enroll_key(
 
 /*
 CDXC:Security 2026-11-26 FIX:
-Review of d8ef5c609 (M1): the production app honours `GHOSTEX_OWNER_KEYS_STORE=file` for any GHOSTEX_HOME, so a program running as the user could start the genuine app in file mode against the real gxserver with a key file it wrote, and the app vouched for that key like a Keychain one. An app in file mode now declares it (presence `none`, "test copy" in the label, `key_json` in apps/desktop/src/app/owner_security/mod.rs), and gxserver takes such an owner or approver key only when gxserver itself was started with the variable: a test server is (`cargo xtask test-server`), a real install never is.
+Review of d8ef5c609 (M1): the production app honours `GHOSTEX_OWNER_KEYS_STORE=file` for any GHOSTEX_HOME, so a program running as the user could start the genuine app in file mode against the real gxserver with a key file it wrote, and the app vouched for that key like a Keychain one. An app in file mode now declares it (presence `none`, "test copy" in the label, `key_json` in apps/desktop/src/app/owner_security/mod.rs), and gxserver takes such an owner or approver key only when gxserver itself was started with the variable: a test server is (`cargo xtask test-server`), a real install never is. Re-review of 424b7ca71 (R2-1): "started with the variable" means the variable together with a valid absolute GHOSTEX_HOME (`ghostex_owner_keys::opted_in_to_file_store`), since a wrong launch could leave the variable alone in a real install's environment; a real install's gxserver has no GHOSTEX_HOME.
 */
 /// Why `key` (or the approver key sent with it) is refused here: it is a test copy's file-store
-/// key (presence `none`) and this gxserver wasn't started with `GHOSTEX_OWNER_KEYS_STORE=file`.
+/// key (presence `none`) and this gxserver wasn't started as a test server's
+/// (`GHOSTEX_OWNER_KEYS_STORE=file` with its own absolute `GHOSTEX_HOME`).
 fn file_store_key_refusal(
     key: &ghostex_gx_protocol::approval::ApproverKey,
     approver_key: Option<&ghostex_gx_protocol::approval::ApproverKey>,

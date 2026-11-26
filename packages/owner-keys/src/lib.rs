@@ -139,10 +139,20 @@ pub fn uses_file_store() -> bool {
     matches!(Store::current(), Ok(Store::File(_)))
 }
 
-/// Whether this process was started with `GHOSTEX_OWNER_KEYS_STORE=file`: gxserver takes a key
-/// that declares the file store only then (a test server), never on a real install.
+/// Whether this process was started as a test copy's or test server's: `GHOSTEX_OWNER_KEYS_STORE=file`
+/// together with a valid absolute `GHOSTEX_HOME`, the same test [`uses_file_store`] makes (without
+/// looking at the disk). gxserver takes a key that declares the file store only then; a real
+/// install's gxserver has no `GHOSTEX_HOME`, so the variable alone never qualifies it (review
+/// round 2, R2-1).
 pub fn opted_in_to_file_store() -> bool {
-    std::env::var_os(STORE_VARIABLE).is_some_and(|value| value == FILE_STORE)
+    matches!(
+        Store::from_environment(
+            std::env::var_os(STORE_VARIABLE),
+            std::env::var_os("GHOSTEX_HOME"),
+            |_| false,
+        ),
+        Ok(Store::File(_))
+    )
 }
 
 /// Why no key can be used at all in this process (a bad `GHOSTEX_OWNER_KEYS_STORE`, or a test

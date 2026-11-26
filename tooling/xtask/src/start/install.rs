@@ -620,10 +620,13 @@ impl Start {
             Command::new(&executable)
         };
         launch.env_clear().envs(desktop.env);
-        // The profile, and a test copy's key store opt-in with it (packages/owner-keys/src/store.rs).
-        for key in ["GHOSTEX_HOME", "GHOSTEX_OWNER_KEYS_STORE"] {
-            if let Some(value) = util::env_trimmed(key) {
-                launch.env(key, value);
+        // The profile, and a test copy's key store opt-in only together with it (CDXC:Security
+        // 2026-11-26 in packages/owner-keys/src/store.rs): never the user's own app's.
+        launch.env_remove("GHOSTEX_OWNER_KEYS_STORE");
+        if let Some(home) = util::env_trimmed("GHOSTEX_HOME") {
+            launch.env("GHOSTEX_HOME", home);
+            if let Some(store) = util::env_trimmed("GHOSTEX_OWNER_KEYS_STORE") {
+                launch.env("GHOSTEX_OWNER_KEYS_STORE", store);
             }
         }
         if let Some(config) = &self.isolated {

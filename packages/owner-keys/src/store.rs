@@ -11,6 +11,8 @@ The presence prompt (Touch ID or the Mac password, Windows Hello, polkit) is not
 
 CDXC:Security 2026-11-26 FIX:
 Review of d8ef5c609 (M2, L1, L3, L5). A file-store home started again without the variable (a relaunch that kept GHOSTEX_HOME and dropped the opt-in) went back to the OS key store with no word, so the "never touches the Keychain" promise held only for the first start. A home whose `owner-keys/` folder exists is now a file-store home: without the variable every key call is an error, never the OS store, and the relaunch paths carry the variable next to GHOSTEX_HOME. Reads check what writes check (a linked, foreign or group/other-writable folder is refused, the key is opened without following a link and checked on the open handle: a plain file of this user, 0600, one link, and on macOS no ACL entries), an empty key file is BadKey instead of being replaced by a new key, leftover temporary files from a crashed write are deleted, and a GHOSTEX_HOME with spaces around it or a `..` in it is refused.
+
+Re-review of 424b7ca71 (R2-4): only an absolute GHOSTEX_HOME makes a home sticky; the paths crate treats a relative one as no home, so a normal install with one stays on the OS key store.
 */
 
 use std::{
@@ -56,8 +58,12 @@ impl Store {
     ) -> Result<Self, KeyError> {
         let ghostex_home = ghostex_home.filter(|value| !value.is_empty());
         let Some(store) = store.filter(|value| !value.is_empty()) else {
-            // A home a test copy made keys in stays a file-store home.
-            if let Some(home) = &ghostex_home {
+            // A home a test copy made keys in stays a file-store home. Only an absolute
+            // GHOSTEX_HOME is a home at all: the paths crate treats a relative one as none.
+            if let Some(home) = ghostex_home
+                .as_ref()
+                .filter(|home| Path::new(home).is_absolute())
+            {
                 if file_store_exists(&Path::new(home).join(FILE_STORE_FOLDER)) {
                     return Err(KeyError::KeyStore(format!(
                         "{} keeps a test copy's keys; start it with {STORE_VARIABLE}={FILE_STORE}",
@@ -132,9 +138,15 @@ mod file {
     /// A temporary file older than this is a crashed write's, never one still being written.
     const STALE_TEMPORARY: Duration = Duration::from_secs(60);
 
-    /// The file for `account`. Accounts are Ghostex's own names (`owner-key`, `owner-key-<scope>`
-    /// with letters, digits and `-`), so anything else is refused rather than made into a path.
-    fn key_path(folder: &Path, account: &str) -> Result<PathBuf, KeyError> {
+    /// What to do about an ACL entry on the folder or a key (macOS refuses any, inherited ones
+    /// too, since mode bits say nothing about them).
+    #[cfg(target_os = "macos")]
+    const ACL_FIX: &str = "has ACL entries that may let others in: remove them with `chmod -N` on it; if they come back, a folder above GHOSTEX_HOME hands them down, so put GHOSTEX_HOME in a folder without one";
+
+    /// The file name for `account`. Accounts are Ghostex's own names (`owner-key`,
+    /// `owner-key-<scope>` with letters, digits and `-`), so anything else is refused rather than
+    /// made into a path.
+    fn key_name(account: &str) -> Result<String, KeyError> {
         if account.is_empty()
             || account.starts_with('-')
             || !account
@@ -143,7 +155,7 @@ mod file {
         {
             return Err(KeyError::KeyStore("invalid key name".to_string()));
         }
-        Ok(folder.join(format!("{account}.key")))
+        Ok(format!("{account}.key"))
     }
 
     fn store_error(what: &str, path: &Path, error: std::io::Error) -> KeyError {
@@ -155,12 +167,13 @@ mod file {
     }
 
     pub(super) fn read_secret(folder: &Path, account: &str) -> Result<Option<Vec<u8>>, KeyError> {
-        let path = key_path(folder, account)?;
-        if !check_folder(folder)? {
+        let name = key_name(account)?;
+        let Some(folder) = Folder::open(folder)? else {
             return Ok(None);
-        }
-        sweep_once(folder);
-        let mut file = match open_key(&path) {
+        };
+        folder.sweep_once();
+        let path = folder.path.join(&name);
+        let mut file = match folder.open_key(&name) {
             Ok(file) => file,
             Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
             Err(error) => return Err(store_error("can't read", &path, error)),
@@ -181,132 +194,321 @@ mod file {
         account: &str,
         secret: &[u8],
     ) -> Result<(), KeyError> {
-        let path = key_path(folder, account)?;
-        prepare_folder(folder)?;
-        sweep_once(folder);
+        let name = key_name(account)?;
+        let folder = Folder::prepare(folder)?;
+        folder.sweep_once();
+        let path = folder.path.join(&name);
         // Written beside it and renamed over it, so a crash never leaves half a key; the name is
         // this process's and this write's, so two threads writing at once never share it.
         static WRITES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let write = WRITES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let temporary = folder.join(format!(".{account}.key.{}-{write}.tmp", std::process::id()));
-        let _ = fs::remove_file(&temporary);
+        let temporary = format!(".{name}.{}-{write}.tmp", std::process::id());
+        let _ = folder.remove(&temporary);
         let written = (|| {
-            let mut options = fs::OpenOptions::new();
-            options.write(true).create_new(true);
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::OpenOptionsExt;
-                options.mode(0o600);
-            }
-            let mut file = options.open(&temporary)?;
+            let mut file = folder.create_new(&temporary)?;
             file.write_all(secret)?;
             file.sync_all()?;
-            fs::rename(&temporary, &path)?;
+            folder.rename(&temporary, &name)?;
             // The rename itself is kept too.
-            #[cfg(unix)]
-            fs::File::open(folder)?.sync_all()?;
-            Ok::<(), std::io::Error>(())
+            folder.sync()
         })();
         if let Err(error) = written {
-            let _ = fs::remove_file(&temporary);
+            let _ = folder.remove(&temporary);
             return Err(store_error("can't write", &path, error));
         }
         Ok(())
     }
 
-    /// Makes the folder (0700 on macOS and Linux) and checks it as reads do.
-    fn prepare_folder(folder: &Path) -> Result<(), KeyError> {
-        if let Some(home) = folder.parent() {
-            fs::create_dir_all(home).map_err(|error| store_error("can't make", home, error))?;
-        }
-        #[cfg_attr(not(unix), allow(unused_mut))]
-        let mut builder = fs::DirBuilder::new();
+    /*
+    CDXC:Security 2026-11-26 FIX:
+    Re-review of 424b7ca71 (R2-5): the folder was checked by path and each key then opened by path, so a folder swapped in between (by someone who can write in GHOSTEX_HOME) was used unchecked. On macOS and Linux the folder is now opened once without following a link, checked on that handle (a folder of this user, not group or other writable, no ACL entries on macOS), and every key is read, written, renamed and removed relative to that handle (`openat`, `renameat`, `unlinkat`). Windows keeps path checks (links refused): its test copies live in a private folder the smoke launcher makes owner-only.
+    */
+    /// The `owner-keys` folder, checked; on macOS and Linux held open, and every key inside is
+    /// reached through that handle.
+    struct Folder {
+        path: PathBuf,
         #[cfg(unix)]
-        {
-            use std::os::unix::fs::DirBuilderExt;
-            builder.mode(0o700);
-        }
-        match builder.create(folder) {
-            Ok(()) => {}
-            Err(error) if error.kind() == ErrorKind::AlreadyExists => {}
-            Err(error) => return Err(store_error("can't make", folder, error)),
-        }
-        if !check_folder(folder)? {
-            return Err(refuse(folder, "went away while it was made"));
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(folder, fs::Permissions::from_mode(0o700))
-                .map_err(|error| store_error("can't protect", folder, error))?;
-        }
-        Ok(())
+        handle: fs::File,
     }
 
-    /// `false` when there is no folder yet; an error for one that is a link, not this user's, or
-    /// one that others can write in (or, on macOS, has ACL entries).
-    fn check_folder(folder: &Path) -> Result<bool, KeyError> {
-        let metadata = match fs::symlink_metadata(folder) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == ErrorKind::NotFound => return Ok(false),
-            Err(error) => return Err(store_error("can't read", folder, error)),
-        };
-        if metadata.file_type().is_symlink() || !metadata.is_dir() {
-            return Err(refuse(folder, "is not a plain folder"));
-        }
-        #[cfg(windows)]
-        {
-            use std::os::windows::fs::MetadataExt;
-            const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
-            if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-                return Err(refuse(folder, "is a link, not a plain folder"));
+    impl Folder {
+        /// The checked folder; `None` when there is none yet.
+        fn open(path: &Path) -> Result<Option<Self>, KeyError> {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+                let handle = match fs::OpenOptions::new()
+                    .read(true)
+                    .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+                    .open(path)
+                {
+                    Ok(handle) => handle,
+                    Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+                    Err(error)
+                        if matches!(error.raw_os_error(), Some(libc::ELOOP | libc::ENOTDIR)) =>
+                    {
+                        return Err(refuse(path, "is not a plain folder"));
+                    }
+                    Err(error) => return Err(store_error("can't open", path, error)),
+                };
+                let metadata = handle
+                    .metadata()
+                    .map_err(|error| store_error("can't read", path, error))?;
+                if !metadata.is_dir() {
+                    return Err(refuse(path, "is not a plain folder"));
+                }
+                if metadata.uid() != unsafe { libc::geteuid() } {
+                    return Err(refuse(path, "belongs to another user"));
+                }
+                if metadata.mode() & 0o022 != 0 {
+                    return Err(refuse(path, "can be written by other users"));
+                }
+                #[cfg(target_os = "macos")]
+                {
+                    use std::os::fd::AsRawFd;
+                    if acl::fd_has_entries(handle.as_raw_fd())
+                        .map_err(|error| store_error("can't read", path, error))?
+                    {
+                        return Err(refuse(path, ACL_FIX));
+                    }
+                }
+                Ok(Some(Self {
+                    path: path.to_path_buf(),
+                    handle,
+                }))
+            }
+            #[cfg(not(unix))]
+            {
+                let metadata = match fs::symlink_metadata(path) {
+                    Ok(metadata) => metadata,
+                    Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+                    Err(error) => return Err(store_error("can't read", path, error)),
+                };
+                if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                    return Err(refuse(path, "is not a plain folder"));
+                }
+                #[cfg(windows)]
+                {
+                    use std::os::windows::fs::MetadataExt;
+                    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+                    if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+                        return Err(refuse(path, "is a link, not a plain folder"));
+                    }
+                }
+                Ok(Some(Self {
+                    path: path.to_path_buf(),
+                }))
             }
         }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::MetadataExt;
-            if metadata.uid() != unsafe { libc::geteuid() } {
-                return Err(refuse(folder, "belongs to another user"));
-            }
-            if metadata.mode() & 0o022 != 0 {
-                return Err(refuse(folder, "can be written by other users"));
-            }
-        }
-        #[cfg(target_os = "macos")]
-        if acl::path_has_entries(folder)
-            .map_err(|error| store_error("can't read", folder, error))?
-        {
-            return Err(refuse(
-                folder,
-                "has ACL entries that may let others in (chmod -N it)",
-            ));
-        }
-        Ok(true)
-    }
 
-    /// Opens the key without following a link at its path (and, for a FIFO, without waiting).
-    fn open_key(path: &Path) -> std::io::Result<fs::File> {
-        let mut options = fs::OpenOptions::new();
-        options.read(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
-        }
-        #[cfg(windows)]
-        {
-            use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
-            const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
-            const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
-            options.custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
-            let file = options.open(path)?;
-            if file.metadata()?.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-                return Err(std::io::Error::other("the key is a link"));
+        /// Makes the folder (0700 on macOS and Linux) and opens it as reads do.
+        fn prepare(path: &Path) -> Result<Self, KeyError> {
+            if let Some(home) = path.parent() {
+                fs::create_dir_all(home).map_err(|error| store_error("can't make", home, error))?;
             }
-            return Ok(file);
+            #[cfg_attr(not(unix), allow(unused_mut))]
+            let mut builder = fs::DirBuilder::new();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::DirBuilderExt;
+                builder.mode(0o700);
+            }
+            match builder.create(path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == ErrorKind::AlreadyExists => {}
+                Err(error) => return Err(store_error("can't make", path, error)),
+            }
+            let folder =
+                Self::open(path)?.ok_or_else(|| refuse(path, "went away while it was made"))?;
+            #[cfg(unix)]
+            {
+                use std::os::fd::AsRawFd;
+                if unsafe { libc::fchmod(folder.handle.as_raw_fd(), 0o700) } != 0 {
+                    return Err(store_error(
+                        "can't protect",
+                        path,
+                        std::io::Error::last_os_error(),
+                    ));
+                }
+            }
+            Ok(folder)
         }
-        #[allow(unreachable_code)]
-        options.open(path)
+
+        #[cfg(unix)]
+        fn c_name(name: &str) -> std::io::Result<std::ffi::CString> {
+            std::ffi::CString::new(name).map_err(|_| std::io::Error::other("a NUL in the name"))
+        }
+
+        #[cfg(unix)]
+        fn openat(&self, name: &str, flags: libc::c_int) -> std::io::Result<fs::File> {
+            use std::os::fd::{AsRawFd, FromRawFd};
+            let name = Self::c_name(name)?;
+            let fd = unsafe {
+                libc::openat(
+                    self.handle.as_raw_fd(),
+                    name.as_ptr(),
+                    flags | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                    0o600 as libc::c_uint,
+                )
+            };
+            if fd < 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(unsafe { fs::File::from_raw_fd(fd) })
+        }
+
+        /// Opens a key without following a link at its name (and, for a FIFO, without waiting).
+        fn open_key(&self, name: &str) -> std::io::Result<fs::File> {
+            #[cfg(unix)]
+            {
+                self.openat(name, libc::O_RDONLY | libc::O_NONBLOCK)
+            }
+            #[cfg(not(unix))]
+            {
+                let mut options = fs::OpenOptions::new();
+                options.read(true);
+                #[cfg(windows)]
+                {
+                    use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+                    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+                    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+                    options.custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+                    let file = options.open(self.path.join(name))?;
+                    if file.metadata()?.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+                        return Err(std::io::Error::other("the key is a link"));
+                    }
+                    return Ok(file);
+                }
+                #[allow(unreachable_code)]
+                options.open(self.path.join(name))
+            }
+        }
+
+        /// A new file only this user can read.
+        fn create_new(&self, name: &str) -> std::io::Result<fs::File> {
+            #[cfg(unix)]
+            {
+                self.openat(name, libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL)
+            }
+            #[cfg(not(unix))]
+            {
+                fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(self.path.join(name))
+            }
+        }
+
+        fn rename(&self, from: &str, to: &str) -> std::io::Result<()> {
+            #[cfg(unix)]
+            {
+                use std::os::fd::AsRawFd;
+                let (from, to) = (Self::c_name(from)?, Self::c_name(to)?);
+                let fd = self.handle.as_raw_fd();
+                if unsafe { libc::renameat(fd, from.as_ptr(), fd, to.as_ptr()) } != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            }
+            #[cfg(not(unix))]
+            {
+                fs::rename(self.path.join(from), self.path.join(to))
+            }
+        }
+
+        fn remove(&self, name: &str) -> std::io::Result<()> {
+            #[cfg(unix)]
+            {
+                use std::os::fd::AsRawFd;
+                let name = Self::c_name(name)?;
+                if unsafe { libc::unlinkat(self.handle.as_raw_fd(), name.as_ptr(), 0) } != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            }
+            #[cfg(not(unix))]
+            {
+                fs::remove_file(self.path.join(name))
+            }
+        }
+
+        fn sync(&self) -> std::io::Result<()> {
+            #[cfg(unix)]
+            {
+                self.handle.sync_all()
+            }
+            #[cfg(not(unix))]
+            {
+                Ok(())
+            }
+        }
+
+        /// When `name` was last changed, without following a link.
+        fn modified(&self, name: &str) -> Option<SystemTime> {
+            #[cfg(unix)]
+            {
+                use std::os::fd::AsRawFd;
+                let name = Self::c_name(name).ok()?;
+                let mut stat: libc::stat = unsafe { std::mem::zeroed() };
+                let done = unsafe {
+                    libc::fstatat(
+                        self.handle.as_raw_fd(),
+                        name.as_ptr(),
+                        &mut stat,
+                        libc::AT_SYMLINK_NOFOLLOW,
+                    )
+                };
+                if done != 0 || (stat.st_mode & libc::S_IFMT) != libc::S_IFREG {
+                    return None;
+                }
+                let seconds = u64::try_from(stat.st_mtime).ok()?;
+                Some(SystemTime::UNIX_EPOCH + Duration::from_secs(seconds))
+            }
+            #[cfg(not(unix))]
+            {
+                let metadata = fs::symlink_metadata(self.path.join(name)).ok()?;
+                metadata
+                    .is_file()
+                    .then(|| metadata.modified().ok())
+                    .flatten()
+            }
+        }
+
+        /// Deletes what a crashed write left here (`.<name>.key.<pid>-<n>.tmp` older than a
+        /// minute), once per process.
+        fn sweep_once(&self) {
+            {
+                let mut swept = SWEPT
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                if !swept
+                    .get_or_insert_with(HashSet::new)
+                    .insert(self.path.clone())
+                {
+                    return;
+                }
+            }
+            let Ok(entries) = fs::read_dir(&self.path) else {
+                return;
+            };
+            let now = SystemTime::now();
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let Some(name) = name.to_str() else {
+                    continue;
+                };
+                if !(name.starts_with('.') && name.ends_with(".tmp") && name.contains(".key.")) {
+                    continue;
+                }
+                let stale = self
+                    .modified(name)
+                    .and_then(|modified| now.duration_since(modified).ok())
+                    .is_some_and(|age| age >= STALE_TEMPORARY);
+                if stale {
+                    let _ = self.remove(name);
+                }
+            }
+        }
     }
 
     /// The open key is a plain file of this user that nobody else can read.
@@ -336,51 +538,10 @@ mod file {
             if acl::fd_has_entries(file.as_raw_fd())
                 .map_err(|error| store_error("can't read", path, error))?
             {
-                return Err(refuse(
-                    path,
-                    "has ACL entries that may let others read it (chmod -N it)",
-                ));
+                return Err(refuse(path, ACL_FIX));
             }
         }
         Ok(())
-    }
-
-    /// Deletes what a crashed write left in `folder` (`.<name>.key.<pid>-<n>.tmp` older than a
-    /// minute), once per process.
-    fn sweep_once(folder: &Path) {
-        {
-            let mut swept = SWEPT
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            if !swept
-                .get_or_insert_with(HashSet::new)
-                .insert(folder.to_path_buf())
-            {
-                return;
-            }
-        }
-        let Ok(entries) = fs::read_dir(folder) else {
-            return;
-        };
-        let now = SystemTime::now();
-        for entry in entries.flatten() {
-            let name = entry.file_name();
-            let name = name.to_string_lossy();
-            if !(name.starts_with('.') && name.ends_with(".tmp") && name.contains(".key.")) {
-                continue;
-            }
-            let Ok(metadata) = entry.path().symlink_metadata() else {
-                continue;
-            };
-            let stale = metadata
-                .modified()
-                .ok()
-                .and_then(|modified| now.duration_since(modified).ok())
-                .is_some_and(|age| age >= STALE_TEMPORARY);
-            if stale && !metadata.is_dir() {
-                let _ = fs::remove_file(entry.path());
-            }
-        }
     }
 }
 
@@ -388,18 +549,13 @@ mod file {
 /// "everyone allow read" entry is readable by everyone.
 #[cfg(target_os = "macos")]
 mod acl {
-    use std::{
-        ffi::CString,
-        os::raw::{c_char, c_int, c_void},
-        path::Path,
-    };
+    use std::os::raw::{c_int, c_void};
 
     const ACL_TYPE_EXTENDED: c_int = 0x0000_0100;
     const ACL_FIRST_ENTRY: c_int = 0;
 
     extern "C" {
         fn acl_get_fd_np(fd: c_int, kind: c_int) -> *mut c_void;
-        fn acl_get_link_np(path: *const c_char, kind: c_int) -> *mut c_void;
         fn acl_get_entry(acl: *mut c_void, entry_id: c_int, entry: *mut *mut c_void) -> c_int;
         fn acl_free(object: *mut c_void) -> c_int;
     }
@@ -421,13 +577,6 @@ mod acl {
 
     pub(super) fn fd_has_entries(fd: c_int) -> std::io::Result<bool> {
         has_entries(unsafe { acl_get_fd_np(fd, ACL_TYPE_EXTENDED) })
-    }
-
-    pub(super) fn path_has_entries(path: &Path) -> std::io::Result<bool> {
-        use std::os::unix::ffi::OsStrExt;
-        let path = CString::new(path.as_os_str().as_bytes())
-            .map_err(|_| std::io::Error::other("a NUL in the path"))?;
-        has_entries(unsafe { acl_get_link_np(path.as_ptr(), ACL_TYPE_EXTENDED) })
     }
 }
 
@@ -477,6 +626,11 @@ mod tests {
         );
         assert_eq!(
             Store::from_environment(None, Some("/tmp/other".into()), has_store),
+            Ok(Store::Platform)
+        );
+        // A relative GHOSTEX_HOME is no home (the paths crate ignores it), so nothing sticks.
+        assert_eq!(
+            Store::from_environment(None, Some("rel".into()), |_| panic!("looked")),
             Ok(Store::Platform)
         );
     }
@@ -671,10 +825,10 @@ mod tests {
                 .success());
         };
         chmod(&["+a", "everyone allow read"], &path);
-        assert!(matches!(
-            store.read_secret("owner-key"),
-            Err(KeyError::KeyStore(_))
-        ));
+        match store.read_secret("owner-key") {
+            Err(KeyError::KeyStore(message)) => assert!(message.contains("chmod -N"), "{message}"),
+            other => panic!("{other:?}"),
+        }
         chmod(&["-N"], &path);
         assert_eq!(store.read_secret("owner-key"), Ok(Some(b"secret".to_vec())));
         chmod(&["+a", "everyone allow add_file"], &folder);

@@ -566,16 +566,18 @@ impl Start {
             root().display()
         );
         // The task starts from the user's own environment; carry over only what decides where the app installs and keeps its state.
-        // GHOSTEX_OWNER_KEYS_STORE: a test copy's key store goes with its home (packages/owner-keys/src/store.rs).
-        for key in [
-            "GHOSTEX_INSTALL_DIR",
-            "GHOSTEX_HOME",
-            "GHOSTEX_OWNER_KEYS_STORE",
-        ] {
+        for key in ["GHOSTEX_INSTALL_DIR", "GHOSTEX_HOME"] {
             if let Some(value) = env_trimmed(key) {
                 script += &format!("set \"{key}={value}\"\r\n");
             }
         }
+        // A test copy's key store opt-in goes only together with its GHOSTEX_HOME (CDXC:Security
+        // 2026-11-26 in packages/owner-keys/src/store.rs): never to the user's own app.
+        let store = env_trimmed("GHOSTEX_HOME")
+            .and(env_trimmed("GHOSTEX_OWNER_KEYS_STORE"))
+            .unwrap_or_default();
+        // An empty value unsets one the user's own environment might hold.
+        script += &format!("set \"GHOSTEX_OWNER_KEYS_STORE={store}\"\r\n");
         script += &format!(
             "\"{}\" {} > \"{}\" 2>&1\r\n> \"{}\" echo %ERRORLEVEL%\r\n",
             std::env::current_exe()?.display(),

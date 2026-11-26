@@ -52,10 +52,10 @@ pub fn find() -> Result<Desktop, String> {
 }
 
 /// Variables a shell inside a Ghostex session or an agent carries that must not reach the app.
-/// `GHOSTEX_HOME` and a test copy's key store opt-in stay: they decide which profile and which
-/// key store the app uses (CDXC:Security 2026-11-26 in packages/owner-keys/src/store.rs).
+/// A test copy's key store opt-in is added back by the start only together with GHOSTEX_HOME
+/// (`start/install.rs`).
 fn is_shell_session_variable(key: &str) -> bool {
-    (key.starts_with("GHOSTEX_") && key != "GHOSTEX_HOME" && key != "GHOSTEX_OWNER_KEYS_STORE")
+    (key.starts_with("GHOSTEX_") && key != "GHOSTEX_HOME")
         || key.starts_with("ZMX_")
         || key == "CLAUDECODE"
         || key.starts_with("CLAUDE_CODE_")
