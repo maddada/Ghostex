@@ -78,6 +78,8 @@ fn the_open_approval_is_a_permission_card_with_omps_rows() {
             .collect();
         assert_eq!(rows, [("Approve", true), ("Deny", false)]);
         assert!(notice.blocks_input());
+        // A send meets the chat's "Answer it in chat before sending" refusal (send.rs).
+        assert!(notice.is_answerable());
         assert!(!notice.passes_keys_through());
         let readiness = detect_session_chat_composer_readiness(Some("omp"), &screen, Some(&notice));
         assert_ne!(readiness.state, SessionChatComposerState::Ready);
