@@ -570,9 +570,11 @@ pub(super) async fn resolve_session(
             let reference = scope.reference();
             let focused = all.iter().find(|session| session.reference() == reference);
             if query.is_empty() || query == reference || query.eq_ignore_ascii_case(&scope.title) {
+                // A fact, not an offer: the call's instructions forbid unasked offers, and the
+                // user heard that it closed (`focus::closed_message`).
                 focused.cloned().ok_or_else(|| {
                     format!(
-                        "\"{}\" was closed, so it can't be reached anymore. Offer to talk about all sessions.",
+                        "\"{}\" was closed, so it can't be reached anymore.",
                         scope.title
                     )
                 })?
