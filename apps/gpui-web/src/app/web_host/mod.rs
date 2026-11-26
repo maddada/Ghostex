@@ -16,6 +16,7 @@ mod merged_pr_popup;
 mod modals;
 mod new_thread_picker;
 mod path_links;
+mod privacy;
 mod project_path_actions;
 mod session_links;
 mod side_chat;
@@ -43,4 +44,6 @@ pub(crate) struct WebHostState {
     /// press outside last closed it (`session_links.rs`).
     pub(crate) links_card_anchor: Option<gpui::Point<gpui::Pixels>>,
     pub(crate) links_card_closed_at: Option<web_time::Instant>,
+    /// The header's Privacy & Analytics dialog (`privacy.rs`).
+    pub(crate) privacy: privacy::WebPrivacyState,
 }

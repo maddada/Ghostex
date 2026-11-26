@@ -156,6 +156,7 @@ impl GhostexGpuiApp {
             ))
             .child(self.render_web_beads_button(cx))
             .child(self.render_web_changes_button(cx))
+            .child(self.render_web_privacy_button(cx))
             .into_any_element()
     }
 
@@ -648,6 +649,7 @@ impl Render for GhostexGpuiApp {
                     .children(terminal_bar),
             )
             .children(self.render_web_git_menu(cx))
+            .children(self.render_web_privacy_dialog(cx))
             .children(self.render_web_toasts())
             .into_any_element()
     }
