@@ -41,6 +41,11 @@ pub(super) const BOOST_MENU: &str = "boostMenu";
 pub(super) const BOOST_PREVIEW: &str = "boostPreview";
 pub(super) const BOOST_MENU_WIDTH: f32 = 460.0;
 pub(super) const BOOST_PREVIEW_WIDTH: f32 = 236.0;
+/// The command type of the chat box right-click menu's Cut, Copy, Paste and Select All rows.
+pub(super) const COMPOSER_EDIT_COMMAND: &str = "composerEdit";
+/// Toggle key in `menu_toggle.rs`: a second right press while the chat box's menu is up only
+/// closes it.
+const COMPOSER_MENU_TRIGGER: &str = "chat-composer-menu";
 /// The preview card's content height: its title, the picture, the description (up to
 /// three lines) and what a click does.
 const PREVIEW_HEIGHT: f32 = 228.0;
@@ -933,6 +938,14 @@ impl NativeChatView {
     /// Save as Boost belongs "in the chat box's right-click menu properly". The field's menu is the
     /// one menu now, built here so it carries Save as Boost; the row runs the chat's own
     /// `saveAsBoost` command, as the transcript's row and the selection bar (selection_bar.rs) do.
+    ///
+    /// CDXC:SessionChat 2026-11-26 DECISION: User, of the chat box's right-click menu drawn as the
+    /// system menu: "in chat box this conext menu is bad pls gpui one like the one we use in the
+    /// transcript". The field's own menu stays empty, so no system menu opens on any platform;
+    /// the chat's drawn menu (`show_chat_menu_at`, the transcript's) opens at the pointer instead,
+    /// with the same rows and rules: Cut and Copy only with a selection, Paste always, Select All,
+    /// then Save as Boost while words are selected. Its rows run the field's own Cut, Copy, Paste
+    /// and Select All actions (`composer_edit_command`), as the system menu's did.
     pub(super) fn composer_context_menu(
         chat: gpui::WeakEntity<Self>,
     ) -> impl Fn(
@@ -942,41 +955,79 @@ impl NativeChatView {
     ) -> gpui_component::native_menu::NativeMenu
     + 'static {
         move |menu, window, cx| {
-            let Some(chat) = chat.upgrade() else {
-                return menu;
-            };
-            let chat = chat.read(cx);
-            // A right click on a Boost pill opens the pill's own menu (Expand, Edit Boost,
-            // Remove; reference_menu.rs) instead: an empty menu here leaves the field's closed.
-            if chat.boost_pill_at(window.mouse_position(), cx) {
-                return menu;
+            if let Some(chat) = chat.upgrade() {
+                chat.update(cx, |chat, cx| chat.show_composer_menu(window, cx));
             }
-            let has_selection = chat
-                .input
-                .as_ref()
-                .is_some_and(|input| !input.read(cx).selected_range().is_empty());
-            let boost = chat.composer_selection_for_boost(cx);
-            // Paste is offered without peeking at the clipboard, as GPUI Kit's own edit menu does.
-            let menu = menu
-                .menu_with_disabled("Cut", !has_selection, Box::new(gpui_component::input::Cut))
-                .menu_with_disabled(
-                    "Copy",
-                    !has_selection,
-                    Box::new(gpui_component::input::Copy),
-                )
-                .menu("Paste", Box::new(gpui_component::input::Paste))
-                .separator()
-                .menu("Select All", Box::new(gpui_component::input::SelectAll));
-            match boost {
-                Some(text) => menu.separator().menu(
-                    "Save as Boost",
-                    Box::new(super::actions::NativeChatAction {
-                        command: json!({"type": "saveAsBoost", "text": text}),
-                    }),
-                ),
-                None => menu,
-            }
+            menu
         }
+    }
+
+    /// Open the chat box's drawn right-click menu at the pointer (`composer_context_menu`).
+    fn show_composer_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let at = window.mouse_position();
+        // A right click on a Boost pill opens the pill's own menu (Expand, Edit Boost, Remove;
+        // reference_menu.rs) instead.
+        if self.boost_pill_at(at, cx) {
+            return;
+        }
+        let has_selection = self
+            .input
+            .as_ref()
+            .is_some_and(|input| !input.read(cx).selected_range().is_empty());
+        let row = |label: &str, icon: &str, action: &str, disabled: bool| {
+            json!({
+                "label": label,
+                "iconPath": icon,
+                "disabled": disabled,
+                "command": {"type": COMPOSER_EDIT_COMMAND, "action": action},
+            })
+        };
+        // Paste is offered without peeking at the clipboard, as GPUI Kit's own edit menu does.
+        let mut rows = vec![
+            row("Cut", "titlebar/scissors.svg", "cut", !has_selection),
+            row("Copy", "titlebar/copy.svg", "copy", !has_selection),
+            row("Paste", "titlebar/clipboard.svg", "paste", false),
+            json!({"separator": true}),
+            row("Select All", "titlebar/select-all.svg", "selectAll", false),
+        ];
+        if let Some(text) = self.composer_selection_for_boost(cx) {
+            rows.push(json!({"separator": true}));
+            rows.push(json!({
+                "label": "Save as Boost",
+                "iconPath": "titlebar/sparkles.svg",
+                "command": {"type": "saveAsBoost", "text": text},
+            }));
+        }
+        if !self.chat_menu_toggled_shut(COMPOSER_MENU_TRIGGER, cx) {
+            self.show_chat_menu_at(rows, at, 240.0, window, cx);
+        }
+    }
+
+    /// A pick of Cut, Copy, Paste or Select All in the chat box's right-click menu: the field's
+    /// own action, dispatched from the field as a key binding or the system menu would.
+    pub(super) fn composer_edit_command(
+        &mut self,
+        command: &Value,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(input) = self.input.clone() else {
+            return;
+        };
+        let focus = gpui::Focusable::focus_handle(input.read(cx), cx);
+        focus.focus(window, cx);
+        let action: Box<dyn gpui::Action> = match command["action"].as_str() {
+            Some("cut") => Box::new(gpui_component::input::Cut),
+            Some("copy") => Box::new(gpui_component::input::Copy),
+            Some("paste") => Box::new(gpui_component::input::Paste),
+            Some("selectAll") => Box::new(gpui_component::input::SelectAll),
+            _ => return,
+        };
+        // Deferred: this runs while the chat is being updated, and the chat's own Cut and Copy
+        // handlers (edit_shortcuts.rs) and paste hook update it again on the way up.
+        window.defer(cx, move |window, cx| {
+            focus.dispatch_action(action.as_ref(), window, cx);
+        });
     }
 }
 
