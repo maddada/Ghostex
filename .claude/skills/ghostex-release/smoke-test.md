@@ -102,6 +102,39 @@ only by its own pid and window ids. What 12.2.0's run learned:
   button below a tall spacer, each logging `event.isTrusted`. Kill the server
   by its pid at clean-up.
 
+What 12.3.0's run added:
+
+- **`$!` after `cd dir && nohup python3 -m http.server … &` is the shell's
+  pid, not the server's.** Find the listener with
+  `lsof -nP -iTCP:<port> -sTCP:LISTEN` and stop that pid. Before sending
+  anything to a port, check its owner the same way: 12.3.0 curled a port that
+  belonged to an old extension server in the user's real home.
+- **Click a fresh background page, not only the one on screen.** Open the
+  fixture with `ghostex_open_page` (`reuse: none`; it opens hidden) and click
+  at once: every click came back `method: script` because the hidden page was
+  still laid out at 1x1 (`innerWidth` 1), fixed in 519e741ef. A
+  `ghostex_screenshot` sizes the page, so take none before the clicks. A
+  `<select>` opens its list only on a page on screen: check "list opened,
+  script click; next click real" on the visible tab (`ghostex_navigate` it to
+  the fixture), since in a hidden tab the select press is an ordinary real
+  click.
+- **cua-driver reports wrong bounds for the app's child windows** (Settings,
+  the Theme panel, menus). Press by `element_token`; for pixels, measure on
+  `screencapture -x -o -l <main window id>` (the main window with its child
+  windows) and convert to the reported bounds. Never use `screencapture -R`:
+  a region takes whatever app is on top. cua-driver drags never reach the
+  app, so dragging and swiping Spaces stay untested.
+- **Settings opened from the app menu can show an empty accessibility tree.**
+  Open it from the rail's gear instead.
+- **`ghostex extensions install-local` grants no permissions,** and the
+  folder name must equal the manifest's `name`. Grant what the test needs
+  with `ghostex extensions state <id> --set grantedPermissions='[…]'`; an
+  extension's own `openView` answers 403 until then. Turn an extension off in
+  Settings > Extensions: off through `extensions state` the rail pin stayed.
+- **Inbox Snoozed and Recent rows** come from `ghostex needs-you add` run as
+  the test agent: `needs-you done Q<n>` puts one under Recent, and the row's
+  ⋯ > Snooze > 1 hour puts one under Snoozed.
+
 ## Before the first step
 
 1. `git rev-parse HEAD` is the release point. Write it in the report.
