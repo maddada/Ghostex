@@ -22,12 +22,18 @@ const CHAT_MIRROR_MAX_AGE: Duration = Duration::from_secs(30 * DAY.as_secs());
 /// Transient command-action `.state` and `.command.tmp` files written by desktop command panes.
 const COMMAND_ACTION_MAX_AGE: Duration = Duration::from_secs(7 * DAY.as_secs());
 
+/// Only derived transcript mirrors that (1) rebuild unconditionally from the agent's own on-disk
+/// store on open and (2) hold no Ghostex-only data.
+///
+/// Deliberately excluded:
+/// - `antigravity-chat-mirror`: `agy` prunes `~/.gemini/antigravity-cli/brain/` after ~10-14 days,
+///   so older mirrors can be the only plaintext copy left.
+/// - `hermes-chat-mirror`: holds Ghostex-only `<id>.local.jsonl` / `local-*.jsonl` files.
+/// - `empryo-chat-mirror`: holds Ghostex-only terminal-scraped `<id>.events.json` sidecars.
+/// - `opencode-chat-mirror`: `session_chat_opencode::resolve_transcript` falls back to the mirror
+///   when OpenCode's live HTTP service is stopped.
 const DERIVED_CHAT_MIRROR_DIRS: &[&str] = &[
-    "antigravity-chat-mirror",
     "cursor-chat-mirror",
-    "opencode-chat-mirror",
-    "hermes-chat-mirror",
-    "empryo-chat-mirror",
     "freebuff-chat-mirror",
     "zcode-chat-mirror",
     "dsh-session-mirror",
