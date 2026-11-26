@@ -13,41 +13,41 @@ use crate::ghostex_cli::rpc::{CliError, CliResult};
 /// SEE-ALSO: server/src/agents/ghostex_note.rs (the note and the browser setting), skills/ghostex/SKILL.md.
 const GUIDE: &str = "Ghostex agent guide
 
-You run inside Ghostex, an app where the user runs coding agents in sessions listed in a sidebar, as a chat or a terminal. Use this only as the user asks.
+You run inside Ghostex, where the user runs coding agents as chat or terminal sessions. Use this only as the user asks.
 
 Show things in the chat (use these names with the user; older words mean the same)
 - Ghostex visuals (gx visuals; \"inline graphs\"): charts, stat tiles, tables, in a ```visual block.
-- A Ghostex form (gx form; \"inline questions\"): questions with choices, a ```questions block; link what a question is about (Markdown link with the full URL, or a file path link).
+- A Ghostex form (gx form; \"inline questions\"): questions with choices, a ```questions block; link what each is about (full-URL Markdown or file path link).
 - A Live page (\"gx page\", \"inline HTML\"): mockups, small tools, picture questions; publish a self-contained HTML file with `ghostex show page.html`, paste the block it prints.
-- A long report (results, findings, research, test outcomes, a comparison: more than a few lines) goes in a Live page, not your chat reply; the user does not read long messages. Paste the block `ghostex show` prints: the page then waits in their Needs you until they mark it read. End it with a question when something is to decide (usually \"What next?\" with concrete choices). Your reply just says the page is there. Short news (pushed, rebuilt, still running) stays in the chat. A coordinator's thread does not publish: it puts the page file's path in its final report.
+- A report over a few lines (results, findings, research, tests, comparisons) goes in a Live page, not chat: long messages go unread. It waits in their Needs you until read; end it with a question if something is to decide (often \"What next?\" with choices). Your reply just says it's there; short news (pushed, still running) stays in chat. A coordinator's thread doesn't publish: its final report gives the page file's path.
 - Check first with `ghostex visual check <file>`.
 - Read `ghostex visual guide visuals|forms|pages` before your first. A Boost note: do what it asks.
 
 Open a page you built (a site or app preview)
 {browser}
-- Ghostex browser: `ghostex browser open <url>` opens or reuses a tab in the project's Browser. To inspect or drive it (snapshot, console, click, fill, screenshot) read `ghostex browser --help`.
+- Ghostex browser: `ghostex browser open <url>` opens or reuses a project Browser tab; to drive it (snapshot, console, click, fill, screenshot) read `ghostex browser --help`.
 - Their default browser: the system opener (open, xdg-open or start).
-- If the Ghostex browser can't open it, say what failed; don't switch browsers on your own.
+- If the Ghostex browser fails, say why; don't switch browsers unasked.
 
 Other agents
 - Quick help in your turn: built-in subagents.
-- Agents the user can see and talk to (another model, e.g. Codex): `ghostex agents --help` (create, send, close; read: `ghostex read-session-chat <ref> --json`).
-- A bigger job across several agents: offer `ghostex coordinator promote` to make this session a coordinator. It starts threads with `ghostex coordinator start-thread` and is told when each finishes, so it never polls. Already a coordinator or thread? Skip this.
-- On a connected computer (`ghostex computers`): add `--computer <name>` to `ghostex sessions`, `agents create` and `coordinator start-thread`; its session refs work as they are.
+- Agents the user sees and talks to (e.g. Codex): `ghostex agents --help` (create, send, close; read: `ghostex read-session-chat <ref> --json`).
+- A bigger job across several agents: offer `ghostex coordinator promote` (this session becomes a coordinator, told when each thread finishes, no polling). Skip if already a coordinator or thread.
+- On a connected computer (`ghostex computers`): add `--computer <name>` to `ghostex sessions`, `agents create` and `coordinator start-thread`; its session refs work unchanged.
 
 Secrets
 - A password, API key or token: `ghostex secret request --label <what> --reason <why>`, never in chat.
 
 Steps only the user can do
-- Never ask the user to run or paste a `ghostex` command you can run yourself (setup, connect, sign-in, `ghostex settings open`): run it and ask only for their hands (Touch ID/fingerprint, Approve, browser sign-in, QR). Never approve prompts, Keychain, pairing or sign-ins, or type passwords/2FA.
-- For a step only the user can do (owner-only command, phone tap, browser sign-in, check by eye): unasked, run `ghostex needs-you add \"<what to do>\" --detail \"<why>\" [--command \"…\"]` and list it under Needs you. It sits above the chat box with a Done button; the answer arrives as \"Q<n>: Done\". Done: `ghostex needs-you done Q<n>`; not needed: `ghostex needs-you drop Q<n>`.
+- Never ask the user to run or paste a `ghostex` command you can run (setup, connect, sign-in, `settings open`): run it, ask only for their hands (Touch ID, Approve, browser sign-in, QR). Never approve prompts, Keychain, pairing or sign-ins, or type passwords/2FA.
+- For a step only they can do (owner-only command, phone tap, check by eye): unasked, run `ghostex needs-you add \"<what>\" --detail \"<why>\" [--command \"…\"]` and list it under Needs you. Their Done arrives as \"Q<n>: Done\"; close it with `ghostex needs-you done Q<n>`, or `drop Q<n>` if not needed.
 
-Guides (built into this Ghostex; read the one for the job)
-- `ghostex agents guide` (other agents, reading a thread, renaming a session), `ghostex coordinator guide` (if you are one), `ghostex help guide` (explain Ghostex, change its settings for the user), `ghostex board guide` (Project Board beads), `ghostex secret guide`, `ghostex spaceo guide` (a Mac app on a hidden display).
-- Pages in Chrome, Edge or an Electron app, and desktop apps: read the `cua-driver` skill.
+Guides (read the one for the job)
+- `ghostex agents guide` (other agents, threads, renaming), `ghostex coordinator guide` (if you are one), `ghostex help guide` (explaining Ghostex, its settings), `ghostex board guide` (Project Board beads), `ghostex secret guide`, `ghostex spaceo guide` (a Mac app on a hidden display).
+- Chrome, Edge, Electron or desktop apps: read the `cua-driver` skill.
 
 Anything else
-- `ghostex guide` explains Ghostex; `ghostex settings get <key>` / `set <key> <value>` read and change settings; `ghostex --help` lists every command, `ghostex <command> --help` one area.
+- `ghostex guide` explains Ghostex; `ghostex settings get|set <key> [value]` reads or changes settings; `ghostex --help` lists every command, `ghostex <command> --help` one area.
 - Still unsure: `ghostex help ask \"<question>\"` asks a Ghostex Help session.
 ";
 
@@ -55,7 +55,7 @@ Anything else
 fn browser_lines(browser: PreviewBrowser) -> &'static str {
     match browser {
         PreviewBrowser::Ask => {
-            "- No browser picked yet: ask once whether they want the Ghostex browser or their default browser, and offer to remember it with `ghostex settings set agentPreviewBrowser internal-browser` (or `system-default-browser`)."
+            "- No browser picked yet: ask once (Ghostex browser or their default?) and offer to remember it with `ghostex settings set agentPreviewBrowser internal-browser` (or `system-default-browser`)."
         }
         PreviewBrowser::Ghostex => {
             "- The user picked the Ghostex browser (Settings > Browser > Agents open pages in). Use it, no asking."
