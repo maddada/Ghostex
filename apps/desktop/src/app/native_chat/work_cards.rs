@@ -1261,13 +1261,20 @@ impl NativeChatView {
             })
             .sum::<f32>()
             + 6.0 * counts.len().saturating_sub(1) as f32;
+        // CDXC:Coordinators 2026-11-26 DECISION:
+        // User, of the Inbox bar above the chat box: "keep inbox on the right side of the bar and
+        // on the left side we should always have some text there with the spinner or an icon like
+        // a circle when done or not started yet, so inbox and pings and in progress dont move to
+        // the left in that bar and then to the right". The left side always has the status: the
+        // spark and its words while working, the check and "Worked for 26s" when done, a circle
+        // and "Idle" otherwise (`idle_line_in_bar`). The Inbox label and its counts stay at the
+        // right end, and whether they show their words is decided from the bar's width with room
+        // kept for a long "Worked for" line, never from the status's own words, so nothing on the
+        // right moves or changes as the status changes; a longer status is cut with an ellipsis.
+        // Supersedes the status-less bar starting with the Inbox label at its left end.
         let status_card = self.dock_status_card();
-        let status_width = status_card.as_ref().map_or(0.0, |card| {
-            24.0 + dock_text_width(card["label"].as_str().unwrap_or_default(), bar_font, p, cx)
-                + 12.0
-        });
-        let show_inbox_text =
-            status_card.is_none() || (inbox_label_width + named_width + status_width <= room);
+        let status_width = 24.0 + dock_text_width("Worked for 59m 59s", bar_font, p, cx) + 12.0;
+        let show_inbox_text = inbox_label_width + named_width + status_width <= room;
         let named = (if show_inbox_text {
             inbox_label_width
         } else {
@@ -1380,9 +1387,7 @@ impl NativeChatView {
             .flex()
             .items_center()
             .gap(px(5.0 * s))
-            .when(!quiet || (!collapsible && status_card.is_none()), |badge| {
-                badge.mr(px(6.0 * s))
-            })
+            .when(!quiet, |badge| badge.mr(px(6.0 * s)))
             .flex_shrink_0()
             .tooltip(|window, cx| {
                 gpui_component::tooltip::Tooltip::new(INBOX_FULL_NAME)
@@ -1441,35 +1446,28 @@ impl NativeChatView {
                     head.h(px(34.0 * s)).rounded(px(11.0 * s))
                 }
             })
-            .when_some(status_card.as_ref(), |head, card| {
-                head.child(
-                    div()
-                        .flex_shrink(1.0)
-                        .min_w_0()
-                        .overflow_hidden()
-                        .child(self.working_line_in_bar(card, p, cx)),
-                )
-            })
-            .when(status_card.is_some(), |head| {
-                head.child(div().flex_1().min_w(px(8.0 * s)))
-            })
             .child(
                 div()
-                    .min_w_0()
-                    .when(status_card.is_some(), |summary| summary.flex_shrink_0())
+                    .flex_1()
+                    .min_w(px(8.0 * s))
+                    .overflow_hidden()
+                    .map(|status| match status_card.as_ref() {
+                        Some(card) => status.child(self.working_line_in_bar(card, p, cx)),
+                        // "Status line in the chat" draws a working agent's line as the
+                        // transcript's last row; the bar never says Idle over it.
+                        None if self.snapshot["workingCard"]["working"] == true => status,
+                        None => status.child(super::working_card::idle_line_in_bar(p)),
+                    }),
+            )
+            .child(
+                div()
+                    .flex_shrink_0()
                     .flex()
                     .items_center()
                     .gap(px(4.0 * s))
-                    .overflow_hidden()
                     .child(inbox_badge)
-                    .children(marks)
-                    .when(quiet && !collapsible && status_card.is_none(), |summary| {
-                        summary.child(div().text_color(p.muted).child("Nothing in progress"))
-                    }),
+                    .children(marks),
             )
-            .when(status_card.is_none(), |head| {
-                head.child(div().flex_1().min_w(px(8.0 * s)))
-            })
             .children(self.work_dock_header_menu(p, cx));
         if collapsible {
             head = head

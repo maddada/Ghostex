@@ -295,14 +295,9 @@ impl NativeChatView {
             .as_array()
             .filter(|parts| !parts.is_empty())
             .cloned();
-        // A worked turn summary in segments, so item titles truncate before wait reasons.
-        let segments = card["labelSegments"]
-            .as_array()
-            .filter(|segments| !segments.is_empty())
-            .cloned();
-        let label = card["label"].as_str().map(|label| {
-            self.working_card_label(label.to_owned(), kind, chat, parts, segments, look, p)
-        });
+        let label = card["label"]
+            .as_str()
+            .map(|label| self.working_card_label(label.to_owned(), kind, chat, parts, look, p));
         let mut trailing = Vec::new();
         if kind == "activity" {
             if let Some(hint) = activity["hint"].as_str() {
@@ -405,7 +400,6 @@ impl NativeChatView {
         kind: &str,
         chat: gpui::EntityId,
         parts: Option<Vec<Value>>,
-        segments: Option<Vec<Value>>,
         look: WorkingLineLook,
         p: &ChatAppearance,
     ) -> AnyElement {
@@ -425,63 +419,6 @@ impl NativeChatView {
             WorkingLineLook::Capsule => relative(1.5),
             WorkingLineLook::Quiet => px(quiet_work::LINE_HEIGHT * s).into(),
         };
-        if let Some(segments) = segments {
-            let mut row = div()
-                .id("chat-working-card-label")
-                .relative()
-                .min_w_0()
-                .flex_shrink(1.0)
-                .flex()
-                .items_center()
-                .overflow_hidden()
-                .text_size(px(size * s))
-                .line_height(line_height)
-                .text_color(color)
-                .when(cut, |this| {
-                    this.tooltip(move |window, cx| {
-                        gpui_component::tooltip::Tooltip::new(full.clone()).build(window, cx)
-                    })
-                });
-            for segment in segments {
-                let run = segment["text"].as_str().unwrap_or_default().to_owned();
-                if run.is_empty() {
-                    continue;
-                }
-                if segment["truncate"] == true {
-                    row = row.child(
-                        div()
-                            .min_w(px(24.0 * s))
-                            .flex_shrink(1.0)
-                            .truncate()
-                            .child(run),
-                    );
-                } else {
-                    row = row.child(div().flex_shrink_0().whitespace_nowrap().child(run));
-                }
-            }
-            return row
-                .child(
-                    canvas(
-                        move |bounds, window, cx| {
-                            let style = window.text_style();
-                            let font_size = style.font_size.to_pixels(window.rem_size());
-                            let run = style.to_run(measured.len());
-                            let width = window
-                                .text_system()
-                                .shape_line(measured.clone().into(), font_size, &[run], None)
-                                .width;
-                            let cut = width > bounds.size.width + px(0.5);
-                            if truncated.replace(cut) != cut {
-                                cx.notify(chat);
-                            }
-                        },
-                        |_, _, _, _| {},
-                    )
-                    .absolute()
-                    .inset_0(),
-                )
-                .into_any_element();
-        }
         div()
             .id("chat-working-card-label")
             .relative()
@@ -641,6 +578,43 @@ pub(super) fn working_line_lead(
         }
         _ => None,
     }
+}
+
+/// The dock header bar's status while the agent has not started or its "Worked for" minute is up:
+/// the worked line's look with a plain circle and "Idle", so the bar's left side is never empty.
+pub(super) fn idle_line_in_bar(p: &ChatAppearance) -> AnyElement {
+    let s = p.scale;
+    div()
+        .id("chat-working-card-header")
+        .w_full()
+        .min_w_0()
+        .flex()
+        .items_center()
+        .gap(px(VISUAL.gap * s))
+        .child(
+            div()
+                .size(px(VISUAL.spark_box * s))
+                .flex_shrink_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(
+                    svg()
+                        .path("titlebar/circle.svg")
+                        .size(px(VISUAL.spark_size * s))
+                        .text_color(p.muted),
+                ),
+        )
+        .child(
+            div()
+                .min_w_0()
+                .text_size(px(VISUAL.font_size * s))
+                .line_height(relative(1.5))
+                .text_color(p.muted)
+                .truncate()
+                .child("Idle"),
+        )
+        .into_any_element()
 }
 
 /// A live activity's lead: the loader while shells run, else the pulsing dot.

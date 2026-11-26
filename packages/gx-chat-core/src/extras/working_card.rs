@@ -61,14 +61,13 @@ pub fn working_card(state: &ChatState, strip: &WorkingStrip, pills: &[ChatPill])
         .worked_line
         .clone()
         .filter(|_| !working && !state.transcript_view.chat_look.status_in_transcript);
-    let (label, label_kind, mut label_segments) = if let Some(activity) = &activity {
+    let (label, label_kind) = if let Some(activity) = &activity {
         (
             activity
                 .get("label")
                 .and_then(Value::as_str)
                 .map(str::to_string),
             "activity",
-            Vec::new(),
         )
     } else if let Some(tool) = &tool {
         (
@@ -76,51 +75,27 @@ pub fn working_card(state: &ChatState, strip: &WorkingStrip, pills: &[ChatPill])
                 .and_then(Value::as_str)
                 .map(str::to_string),
             "tool",
-            Vec::new(),
         )
     } else if let Some(label) = running {
-        (Some(label), "tool", Vec::new())
+        (Some(label), "tool")
     } else if working && reads_subagent_report(state) {
         (
             Some("Reading the subagent's report".to_string()),
             "word",
-            Vec::new(),
         )
     } else if let Some(word) = &strip.label {
-        (Some(word.clone()), "word", Vec::new())
+        (Some(word.clone()), "word")
     } else if working {
-        (Some("Working".to_string()), "word", Vec::new())
+        (Some("Working".to_string()), "word")
     } else {
-        // A coordinator's finished turn says what it changed after its time, as one line
-        // ("Worked for 15s · Pairing page started · 1 ask"; extras/work_cards.rs `turn_summary`).
-        let mut segments = Vec::new();
-        let worked = worked.clone().map(|worked| {
-            let worked = worked.split_whitespace().collect::<Vec<_>>().join(" ");
-            match crate::extras::work_cards::turn_summary_parts(state) {
-                Some((summary, mut summary_segments)) => {
-                    if !summary_segments.is_empty() {
-                        segments.push(
-                            crate::extras::working_card_label::WorkingCardSegment {
-                                text: format!("{worked} \u{b7} "),
-                                truncate: false,
-                            },
-                        );
-                        segments.append(&mut summary_segments);
-                    }
-                    format!("{worked} \u{b7} {summary}")
-                }
-                None => worked,
-            }
-        });
-        (worked, "worked", segments)
+        // A finished turn says only how long it worked ("Worked for 26s"), never what it changed
+        // (CDXC:Coordinators 2026-11-26 in extras/work_cards.rs `merged_turn`).
+        (worked.clone(), "worked")
     };
     // One line: the renderers cut it with an ellipsis and show the whole text on hover.
     let label = label
         .map(|label| label.split_whitespace().collect::<Vec<_>>().join(" "))
         .filter(|label| !label.is_empty());
-    if label.is_none() {
-        label_segments.clear();
-    }
     let label_kind = label.as_ref().map(|_| label_kind.to_string());
     let pill_ids: Vec<String> = pills.iter().map(|pill| pill.id.clone()).collect();
     let phase = if working {
@@ -155,7 +130,6 @@ pub fn working_card(state: &ChatState, strip: &WorkingStrip, pills: &[ChatPill])
         pills: pill_ids,
         aria_label,
         label_parts,
-        label_segments,
         in_transcript: state.transcript_view.chat_look.status_in_transcript
             && !state.transcript_view.items.is_empty(),
         worked_at_ms: (phase == "worked")
