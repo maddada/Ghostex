@@ -138,24 +138,40 @@ impl Provider {
         tools: &Value,
         keyterms: &[String],
         push_to_talk: bool,
+        language: &str,
     ) -> Value {
         let pcm = json!({"type": "audio/pcm", "rate": SAMPLE_RATE});
         match self {
-            Self::Xai => json!({
-                "type": "session.update",
-                "session": {
-                    "instructions": instructions,
-                    "voice": voice,
-                    "turn_detection": if push_to_talk { json!({"type": null}) } else { json!({"type": "server_vad"}) },
-                    "audio": {
-                        "input": {"format": pcm, "transcription": {"keyterms": xai_keyterms(keyterms)}},
-                        "output": {"format": pcm},
+            Self::Xai => {
+                let mut transcription = json!({"keyterms": xai_keyterms(keyterms)});
+                if let Some(hint) = xai_language_hint(language) {
+                    transcription["language_hint"] = json!(hint);
+                }
+                json!({
+                    "type": "session.update",
+                    "session": {
+                        "instructions": instructions,
+                        "voice": voice,
+                        "turn_detection": if push_to_talk { json!({"type": null}) } else { json!({"type": "server_vad"}) },
+                        "audio": {
+                            "input": {"format": pcm, "transcription": transcription},
+                            "output": {"format": pcm},
+                        },
+                        "tools": tools,
                     },
-                    "tools": tools,
-                },
-            }),
+                })
+            }
             Self::OpenAi => {
+                // CDXC:VoiceMode 2026-11-25 WHY: OpenAI's Realtime reference
+                // (https://developers.openai.com/api/reference/resources/realtime/client-events, session.update,
+                // `session.audio.input.transcription.language`, read 2026-11-25): "Supplying the input language in
+                // ISO-639-1 (e.g. `en`) format will improve accuracy and latency". Every code of
+                // `call_language::LANGUAGES` is ISO 639-1. An English call sends none, as every call did
+                // before the setting, so its captions still follow whatever the user speaks.
                 let mut transcription = json!({"model": "gpt-4o-transcribe"});
+                if language != "en" {
+                    transcription["language"] = json!(language);
+                }
                 let prompt = openai_transcription_prompt(keyterms);
                 if !prompt.is_empty() {
                     transcription["prompt"] = json!(prompt);
@@ -275,6 +291,21 @@ pub(super) fn xai_keyterms(keyterms: &[String]) -> Vec<&str> {
         .filter(|term| term.chars().count() <= XAI_KEYTERM_MAX_CHARS)
         .take(XAI_KEYTERMS_MAX_COUNT)
         .collect()
+}
+
+/// The `audio.input.transcription.language_hint` xAI takes for a call in `language`, if any.
+///
+/// CDXC:VoiceMode 2026-11-25 WHY: xAI's https://docs.x.ai/developers/model-capabilities/audio/speech-to-speech
+/// ("Language Hint", read 2026-11-25) takes a BCP-47 code from its "Supported Languages" table, says "bare "es" and
+/// "pt" are not accepted" (a regional variant is required) and lists Arabic only by region, so Spanish, Portuguese
+/// and Arabic calls send no hint and rely on the instructions' language section, as xAI says the model "automatically
+/// detects the input language". Picking a region for them would be a choice the user never made. An English call
+/// sends none, as every call did before the setting.
+pub(super) fn xai_language_hint(language: &str) -> Option<&str> {
+    match language {
+        "en" | "es" | "pt" | "ar" => None,
+        _ => Some(language),
+    }
 }
 
 /// The recognizer hint OpenAI takes: "Names you may hear: A, B, C." within

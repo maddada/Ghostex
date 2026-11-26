@@ -420,6 +420,12 @@ impl GhostexGpuiApp {
         if !self.voice_agent.machine.is_local() {
             query.push(("clientRemote", "1"));
         }
+        // The call speaks this computer's language while Settings > Voice Agent > Language is "Same
+        // as the calling device" (gxserver's call_language.rs).
+        let language = crate::app::window::settings_modal::tabs::voice_agent::system_language();
+        if let Some(language) = language.as_deref() {
+            query.push(("language", language));
+        }
         let socket = Arc::new(VoiceSocket::open(
             &endpoint,
             &query,

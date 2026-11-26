@@ -5930,14 +5930,23 @@ typing anywhere (the panel shows a Space key when it works), or hold the
 while you hold Space, what you said so far is sent. On Grok push-to-talk
 calls you pay only for the audio you send and the agent's replies. GPT
 Realtime bills only audio in both modes. A change applies to your next call;
-Regular stays the default. The agent answers: When I say "reply" (Settings > Voice Agent,
+Regular stays the default. The agent answers: When I say a turn word (Settings > Voice Agent,
 right under Call mode, the default, shown only while the call mode is Regular; When I pause
 answers as soon as you stop) makes a Regular call wait for you: the agent answers only once what you said ends
-with "reply", "over" or "go ahead", and that word is taken off the caption. Anything
-it would have started to say by itself is dropped. Each call opens with a short spoken
-introduction that also asks you to say "reply" while the setting is on. Push-to-talk,
-typed turns and recorded turns are unchanged. Turn it off to have the agent answer
-as soon as you stop talking. Mute turns your microphone off; in a push-to-talk
+with one of the turn words of the call's language, and that word is taken off the caption. English
+defaults to "reply" and "go ahead", German to "fertig" and "antworte", and every other language
+uses the English ones until you set your own under Turn words (right under The agent answers,
+shown only while the call mode is Regular and When I say a turn word is picked, so pick both to
+find it; "over" is no longer a default, add it there if you want it). Anything it would have
+started to say by itself is dropped. The
+language a call speaks is Language (Settings > Voice Agent): Same as the calling device by
+default, which is the language of the phone or computer that places the call (English when
+that device sends no language or one the agent does not offer), or one fixed
+language. Each call opens with a short spoken
+introduction; only in a Regular call with When I say a turn word picked does it also name the
+turn words. Push-to-talk, typed turns and recorded turns are unchanged: each is answered
+without a turn word. Pick When I pause (on the phone, turn the switch off) to have the agent
+answer as soon as you stop talking. Mute turns your microphone off; in a push-to-talk
 call it also locks the talk button ("Unmute to talk"), and in a muted Regular
 call holding the talk button, Space or the hotkey unmutes you for as long as
 you hold. It hangs up by itself after 5 minutes with nobody talking.
@@ -6042,9 +6051,19 @@ speeds, the same gear for the call mode, and the same talk button between
 Mute and Hang up: press and hold it to talk and let go to send, or slide your
 finger off it ("Release to cancel") and let go to send nothing; slide back on
 to keep talking. Stop talking is a pill above the buttons while the agent
-speaks. The call mode is also in the phone's Settings > Voice, with the same Answer when I
-say "reply" switch under it while Regular is picked (a computer too old to have it
-shows no switch). They save the computer's settings, so the desktop and the phone talk
+speaks. The call mode is also in the phone's Settings > Voice. With an updated phone app and a
+computer that reports the language settings, the page also has a Language row, in every call
+mode, for the language the voice agent speaks in calls from the phone. While Regular is picked,
+an Answer when I say … switch under the call mode names that language's turn words, and while
+the switch is on, the turn words to edit follow it. An older phone app, or a computer without
+the language settings, shows the earlier Answer when I say "reply" switch while Regular is
+picked, and no Language row or turn words; a computer too old for the switch shows none of
+them. On an updated computer, the older phone app's switch still names "reply", "over" and
+"go ahead", although "over" is no longer a default and the words in effect can differ (in a
+Regular call with the switch on, the call's spoken introduction names them); the updated phone
+app shows that earlier switch only for a computer without the language settings, which still
+ends a turn on those three words only in a Regular call with that switch on.
+They save the computer's settings, so the desktop and the phone talk
 with the same voice at the same speed and in the same mode. It shows
 the same "Last conversation" card with Continue, Start fresh and Forget.
 
@@ -6059,7 +6078,7 @@ Voice Agent leaves the sidebar. Dictate keeps working: Settings > Dictation
 still shows the key its engine needs and Past recordings. Turn it back on and everything returns, with your voice
 settings as you left them.
 
-Settings: `voiceAgentHidden` (off by default, which keeps the voice agent on), `voiceAgentProvider`, `voiceAgentXaiVoice`, `voiceAgentOpenaiVoice`, `voiceAgentSpeed`, `voiceAgentCallMode`, `voiceAgentWaitForReply`; the Memory row (`voiceAgentMemory`) forgets the remembered conversation. Hotkeys: Toggle Voice Agent, Session: Voice Call, Hold to Talk (`holdToTalk`).
+Settings: `voiceAgentHidden` (off by default, which keeps the voice agent on), `voiceAgentProvider`, `voiceAgentXaiVoice`, `voiceAgentOpenaiVoice`, `voiceAgentSpeed`, `voiceAgentCallMode`, `voiceAgentWaitForReply`, `voiceAgentLanguage`, `voiceAgentTurnWords`; the Memory row (`voiceAgentMemory`) forgets the remembered conversation. Hotkeys: Toggle Voice Agent, Session: Voice Call, Hold to Talk (`holdToTalk`).
 
 ## Remote machines, web, and mobile
 

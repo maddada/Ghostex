@@ -54,7 +54,7 @@ pub(crate) async fn handle_read_voice_agent_http(
             "chatgptSignIn": keys::uses_chatgpt_signin(paths, provider),
         })
     };
-    let result = json!({
+    let mut result = json!({
         "provider": provider.id(),
         "voices": {
             "xai": keys::selected_voice(paths, Provider::Xai),
@@ -88,6 +88,12 @@ pub(crate) async fn handle_read_voice_agent_http(
         "memory": memory::client_view(paths),
         "memorySummaryPending": memory::summary_pending(paths),
     });
+    // The call's language and the turn words per language (`call_language.rs`): `language`,
+    // `languages`, `turnWords` and `turnWordDefaults`. A client that finds none of them talks to a
+    // gxserver without the setting and keeps its "Answer when I say "reply"" text.
+    if let Value::Object(fields) = &mut result {
+        fields.extend(super::call_language::client_view(&keys::read_settings(paths)));
+    }
     respond(endpoint_path, request_id, Ok(result))
 }
 
