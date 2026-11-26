@@ -5905,9 +5905,21 @@ question cards and approvals, stop them, show them and start agents and
 coordinators in that computer's projects. Drafting into a chat on another
 computer and answering Ghostex forms there are not available; it says so. A
 computer whose Agent access is off (in Settings > Remote > Computers this machine connects to, on
-either computer) stays out of reach, and the agent tells you why. While the
+either computer) stays out of reach, and the agent tells you why. A call
+starts knowing your open sessions (up to 25, waiting ones first, a
+coordinator's threads counted under it; it looks up the rest when you ask),
+so you can give it an instruction right away, and it keeps that list current
+during the call without saying anything about it. It answers the point
+without preamble or filler and doesn't end with offers like "Want the
+details?". Its short opening line says it can approve or deny what a session
+waits on. While the
 conversation is open it tells you when a session finishes its turn or starts
-waiting on a question or an approval. The conversation keeps going while you
+waiting on a question or an approval, but not about a coordinator's threads
+(their approvals included; a call about the coordinator still hears those). A
+session that finished its turn counts as waiting on a question only for the
+questions that turn asked: open questions from earlier turns, after you
+moved the session on, leave it idle (the sidebar's pink dot still shows them,
+and the agent mentions them when you ask about open questions). The conversation keeps going while you
 switch projects and chats. A small panel under the header shows what it is
 doing, live captions of both sides and the tools it runs, with a microphone
 button (mutes you), a speaker button (mutes the agent's voice for this call: its
@@ -6057,6 +6069,16 @@ through the phone's speaker, or a Bluetooth headset or car hands-free link
 (CarPlay on an iPhone) when one is connected, and pauses while a call or a
 navigation prompt plays; on an iPhone a phone call coming in offers to hold
 the conversation (it goes on when the call ends) or end it.
+In a call about all sessions, an updated phone app shows a line above the captions: "All sessions"
+with how many sessions wait on you and work, and its Sessions button lists the
+call's sessions (up to 40, waiting ones first, a coordinator with its number
+of threads): each row has its status dot, its title, and its project and
+state. Tap one of the computer's sessions and the call is about that session
+from then on, as if you had started it there (the line becomes "Only about
+<title>" with All sessions to go back). Sessions of another connected computer
+are listed dimmed and can't be tapped, because a call about one session runs
+on that session's computer. A computer with an older Ghostex sends no list, so
+the line and the button don't show.
 The phone's voice screen has the same voice picker (tap the voice name under
 the computer's name) and a small speed button beside it that opens the list of
 speeds, the same gear for the call mode, and the same talk button between
