@@ -119,33 +119,52 @@ pub(crate) async fn submit(
         .unwrap_or("Live page")
         .to_string();
     let message = tagged_answers_message(&state_dir, &id, &title, &answers);
-    let (error, wait_for_idle) = deliver(
-        &state,
-        project_id.clone(),
-        session_id.clone(),
-        message,
-        format!("visual-page-{id}"),
-    )
-    .await;
-    let state_dir = state.paths.root_dir.clone();
-    let noted = error.clone();
-    let refresh_state = state.clone();
-    let _ = tokio::task::spawn_blocking(move || {
-        note_delivery(&state_dir, &id, noted.as_deref());
-        crate::session_chat_open_questions::refresh(&refresh_state, &project_id, &session_id, None);
-    })
-    .await;
-    match error {
-        None => reply(
-            StatusCode::OK,
-            json!({"ok": true, "answeredAt": answered_at, "queued": wait_for_idle, "delivered": true}),
-        ),
-        Some(error) => reply(
-            StatusCode::OK,
-            json!({"ok": true, "answeredAt": answered_at, "queued": false,
-                   "error": format!("Saved, but the agent was not told: {error}")}),
-        ),
+    // The stored answers already settle the page (`page_answered`): every client drops it from its
+    // lists now, and the page's window closes on this reply, while the answers are still being
+    // typed into the agent below.
+    //
+    // CDXC:SessionStatus 2026-11-26 DECISION:
+    // User: "I wanted it to be gone as soon as I answer", on the phone and the computer. The reply
+    // no longer waits for the agent to be told (typing into a terminal can take many seconds), so
+    // the page window and the phone's page sheet close at once. A failure to tell the agent is kept
+    // with the page (`note_delivery`), as before, when the window also closed. Supersedes the
+    // 2026-10-11 timing in apps/desktop/src/app/window/visual_page_modal.rs only in when gxserver
+    // answers: the window still stays open when gxserver cannot take the answers.
+    {
+        let (refresh_state, project_id, session_id) =
+            (state.clone(), project_id.clone(), session_id.clone());
+        let _ = tokio::task::spawn_blocking(move || {
+            crate::session_chat_open_questions::refresh(
+                &refresh_state,
+                &project_id,
+                &session_id,
+                None,
+            );
+        })
+        .await;
     }
+    let wait_for_idle =
+        crate::session_chat_catch_up::chat_setting_enabled(&state.paths, "chatAnswersWaitForIdle");
+    tokio::spawn(async move {
+        let (error, _) = deliver(
+            &state,
+            project_id.clone(),
+            session_id.clone(),
+            message,
+            format!("visual-page-{id}"),
+        )
+        .await;
+        let state_dir = state.paths.root_dir.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            note_delivery(&state_dir, &id, error.as_deref());
+            crate::session_chat_open_questions::refresh(&state, &project_id, &session_id, None);
+        })
+        .await;
+    });
+    reply(
+        StatusCode::OK,
+        json!({"ok": true, "answeredAt": answered_at, "queued": wait_for_idle, "delivered": true}),
+    )
 }
 
 /// Whether a page's record was published from the coordinator flow page's file (`ghostex
