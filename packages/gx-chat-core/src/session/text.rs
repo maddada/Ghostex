@@ -240,6 +240,35 @@ pub fn normalize_pending_text(text: &str) -> String {
     collapse_whitespace(&strip_skill_chip_lines(&unmarked))
 }
 
+/// What a sent text and a recorded turn must agree on to be the same message: its letters and
+/// digits, in any script, after a leading `!` or `/` (so a shell or slash command stays apart from
+/// the same words sent as text). A text with no letter or digit at all ("?", "👍") keeps all its
+/// non-space characters instead, so such texts stay apart from each other.
+///
+/// CDXC:SessionChat 2026-11-26 WHY:
+/// GitHub #711: on Windows a Terminal-based chat's em dashes, arrows and curly quotes reach the
+/// agent changed (dropped, or turned into "?" or a plain "-" or quote), so the recorded turn
+/// never matched what the composer sent. A second copy of the message stayed under the answer, and
+/// about 10 s later Ghostex asked "Did your message arrive?" about a message that had been
+/// answered. Spaces were already ignored for the same reason (#509); punctuation and symbols say
+/// no more about which message arrived than spaces do. Shared by the chat's echo matching
+/// (`session/pending.rs` `content_key`) and gxserver's delivery check
+/// (`server/src/session_chat_watchdog/delivery_match.rs` `normalize_watchdog_text`), so the two
+/// never disagree about one send.
+pub fn comparable_text(text: &str) -> String {
+    let text = text.trim_start_matches(is_js_space);
+    let mut out = String::with_capacity(text.len());
+    if let Some(marker @ ('!' | '/')) = text.chars().next() {
+        out.push(marker);
+    }
+    let marker_len = out.len();
+    out.extend(text.chars().filter(|value| value.is_alphanumeric()));
+    if out.len() > marker_len {
+        return out;
+    }
+    text.chars().filter(|value| !is_js_space(*value)).collect()
+}
+
 /// `/^(?:(?:~|\.{1,2})?\/(?:[^\s\\]|\\.)*\s?)+$/`.
 ///
 /// A file dragged onto the terminal pane types its shell-escaped path into the agent's input line.

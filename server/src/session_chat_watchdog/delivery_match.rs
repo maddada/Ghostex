@@ -216,9 +216,13 @@ fn message_plain_text(message: &SessionChatMessage) -> String {
 /// breaks gone ("(lines 9–10)Comment on:" for "(lines 9–10)\nComment on:", #509), so the text
 /// folded to single spaces no longer contained the send and the check could call a delivered
 /// message missing. Where the spaces and line breaks fall says nothing about which message arrived.
-/// SEE-ALSO: packages/gx-chat-core/src/session/pending.rs `content_key`, the chat's same rule.
+/// CDXC:SessionChat 2026-11-26 WHY: punctuation and symbols are ignored too (#711): a Windows
+/// terminal changes em dashes, arrows and curly quotes on their way to the agent, and an answered
+/// message got "Did your message arrive?". The rule is the chat's own, shared, so the chat and
+/// this check never disagree about one send.
+/// SEE-ALSO: packages/gx-chat-core/src/session/text.rs `comparable_text`.
 pub(super) fn normalize_watchdog_text(text: &str) -> String {
-    text.split_whitespace().collect()
+    ghostex_gx_chat_core::session::text::comparable_text(text)
 }
 
 // ---------------------------------------------------------------------------

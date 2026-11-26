@@ -15,7 +15,7 @@ use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole, ChatSource, StartupD
 use crate::session::appended_notes::without_notes;
 use crate::session::constants::{DELIVERY_UNCONFIRMED, PENDING_ID_PREFIX};
 use crate::session::text::{
-    is_js_space, is_staged_path_input, normalize_pending_text, parse_command_envelope,
+    comparable_text, is_staged_path_input, normalize_pending_text, parse_command_envelope,
 };
 use crate::state::PendingSend;
 use crate::transcript::local_command::{shell_command_message, shell_command_prompt_text};
@@ -28,10 +28,11 @@ use crate::transcript::local_command::{shell_command_message, shell_command_prom
 /// chat sent "(lines 9–10)\nComment on:"), so the folded texts differed by one space and the queue
 /// card stayed under the finished turn saying the conversation didn't show it. Two prompts that
 /// differ only in where their spaces and line breaks fall are the same prompt.
+/// CDXC:SessionChat 2026-11-26 WHY: punctuation and symbols are ignored too, because a Windows
+/// terminal changes dashes, arrows and curly quotes on their way to the agent (#711,
+/// `comparable_text`).
 pub fn content_key(text: &str, image_paths: &[String]) -> String {
-    let normalized: String = shell_command_key(normalize_pending_text(text))
-        .split(is_js_space)
-        .collect();
+    let normalized = comparable_text(&shell_command_key(normalize_pending_text(text)));
     if !normalized.is_empty() {
         return format!("text:{normalized}");
     }
