@@ -5942,13 +5942,13 @@ Regular stays the default. The agent answers: When I say a turn word (Settings >
 right under Call mode, the default, shown only while the call mode is Regular; When I pause
 answers as soon as you stop) makes a Regular call wait for you: the agent answers only once what you said ends
 with one of the turn words of the call's language, and that word is taken off the caption. English
-defaults to "reply" and "go ahead", German to "fertig" and "antworte", and every other language
+defaults to "reply", "over" and "go ahead", German to "fertig" and "antworte", and every other language
 uses the English ones until you set your own under Turn words (right under The agent answers,
 shown only while the call mode is Regular and When I say a turn word is picked, so pick both to
-find it; "over" is no longer a default, add it there if you want it). Anything it would have
+find it). Anything it would have
 started to say by itself is dropped. The
-language a call speaks is Language (Settings > Voice Agent): Same as the calling device by
-default, which is the language of the phone or computer that places the call (English when
+language a call speaks is Language (Settings > Voice Agent): English by default, Same as the
+calling device, which is the language of the phone or computer that places the call (English when
 that device sends no language or one the agent does not offer), or one fixed
 language. Each call opens with a short spoken
 introduction; only in a Regular call with When I say a turn word picked does it also name the
@@ -6067,7 +6067,7 @@ the switch is on, the turn words to edit follow it. An older phone app, or a com
 the language settings, shows the earlier Answer when I say "reply" switch while Regular is
 picked, and no Language row or turn words; a computer too old for the switch shows none of
 them. On an updated computer, the older phone app's switch still names "reply", "over" and
-"go ahead", although "over" is no longer a default and the words in effect can differ (in a
+"go ahead", although the words in effect can differ (in a
 Regular call with the switch on, the call's spoken introduction names them); the updated phone
 app shows that earlier switch only for a computer without the language settings, which still
 ends a turn on those three words only in a Regular call with that switch on.

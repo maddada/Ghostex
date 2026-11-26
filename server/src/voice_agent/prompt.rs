@@ -47,7 +47,7 @@ pub(super) fn instructions(focus: Option<&FocusScope>, language: &str) -> String
 
 /// The call's language section.
 ///
-/// CDXC:VoiceMode 2026-11-25 DECISION: User: the language the agent speaks is a setting, by default the language of the device that places the call (`call_language.rs`).
+/// CDXC:VoiceMode 2026-11-25 DECISION: User: the language the agent speaks is a setting, English by default (2026-11-26) with the calling device's language as a choice (`call_language.rs`).
 /// CDXC:VoiceMode 2026-11-25 WHY: Ghostex's own messages, tool results and session messages stay as they are (mostly English), so the model is told to answer in the call's language whatever they are in, and to keep code, paths and names as written.
 fn language_instructions(language: &str) -> String {
     format!(

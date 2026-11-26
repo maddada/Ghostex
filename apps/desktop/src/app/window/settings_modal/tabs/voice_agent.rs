@@ -228,7 +228,7 @@ impl VoiceAgentTab {
             languages: Vec::new(),
             turn_words: serde_json::Value::Null,
             turn_words_input: cx
-                .new(|cx| InputState::new(window, cx).placeholder("reply, go ahead")),
+                .new(|cx| InputState::new(window, cx).placeholder("reply, over, go ahead")),
             turn_words_shown: None,
             language_busy: false,
             language_note: None,
@@ -955,8 +955,8 @@ impl VoiceAgentTab {
 
 /// Settings › Voice Agent's Language row and the turn words of a language.
 ///
-/// CDXC:VoiceMode 2026-11-25 DECISION: User: the language the agent speaks is a setting, by default the
-/// calling device's, and each language has several turn words of its own. Both save through
+/// CDXC:VoiceMode 2026-11-25 DECISION: User: the language the agent speaks is a setting, English by default
+/// (or the calling device's), and each language has several turn words of its own. Both save through
 /// `/api/setVoiceAgentSettings`, which checks them as it does for the phone (server/src/voice_agent/call_language.rs).
 impl VoiceAgentTab {
     /// The language whose turn words the editor shows: the saved language, or with "Same as the

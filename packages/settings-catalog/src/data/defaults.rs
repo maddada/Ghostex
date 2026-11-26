@@ -731,9 +731,9 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("voiceAgentCallMode", J::Str("regular")),
     // On: a Regular call answers once the user says one of the call language's turn words (server/src/voice_agent/keys.rs).
     ("voiceAgentWaitForReply", J::Bool(true)),
-    // "device": a call speaks the calling device's language; no saved turn words: each language's
-    // built-in ones (server/src/voice_agent/call_language.rs).
-    ("voiceAgentLanguage", J::Str("device")),
+    // "en": a call speaks English until the user picks a language or "device" (the calling device's
+    // language); no saved turn words: each language's built-in ones (server/src/voice_agent/call_language.rs).
+    ("voiceAgentLanguage", J::Str("en")),
     ("voiceAgentTurnWords", J::Obj(&[])),
     // CDXC:VoiceMode 2026-11-05 DECISION: User (Q1261): the Dictate hotkey is Auto, a tap toggles and a hold of 300 ms or more records until release. These three are this app's own Dictate settings (the engine, model and clean-up are gxserver's, per computer); an empty microphone is the system default input.
     ("dictateHotkeyMode", J::Str("auto")),

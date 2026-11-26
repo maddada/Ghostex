@@ -4,6 +4,7 @@
 //!
 //! CDXC:VoiceMode 2026-11-25 DECISION:
 //! User: the language the agent speaks is a setting whose default follows the language of the device that places the call, with "nicht nur deutsch und englisch. die sprachen, die die modelle auch unterstützen. beispielsweise spanisch, italienisch, französisch etc. alles gängige." Turn words are set per language ("mehrere Wörter festlegen können pro Sprache"): English defaults to "reply" and "go ahead", German to "fertig" and "antworte", and a language without its own words uses the English defaults until the user sets some.
+//! CDXC:VoiceMode 2026-11-26 DECISION: User (triage of PR #780): both defaults stay as they were before the setting. The language defaults to English, with "Same as the calling device" (`device`) as a choice, so nobody's next call switches language on its own; and "over" stays an English turn word ("reply", "over" and "go ahead", as Q2750 chose), since people already say it and would not know to add it back.
 
 use serde_json::{json, Map, Value};
 
@@ -13,6 +14,8 @@ pub(super) const LANGUAGE_SETTING: &str = "voiceAgentLanguage";
 pub(super) const TURN_WORDS_SETTING: &str = "voiceAgentTurnWords";
 /// `voiceAgentLanguage` when the call speaks the language of the device that places it.
 pub(super) const DEVICE: &str = "device";
+/// `voiceAgentLanguage` until the user picks one: English, what every call spoke before the setting.
+pub(super) const DEFAULT_LANGUAGE: &str = "en";
 
 /// The languages a call can speak, in the order the pickers list them, as ISO 639-1 codes: xAI's
 /// documented list for its realtime voice model, kept where OpenAI's speech-output list has them too.
@@ -27,7 +30,7 @@ pub(super) const LANGUAGES: [&str; 15] = [
 ];
 
 /// The turn words a language has until the user sets their own.
-const ENGLISH_TURN_WORDS: &[&str] = &["reply", "go ahead"];
+const ENGLISH_TURN_WORDS: &[&str] = &["reply", "over", "go ahead"];
 const GERMAN_TURN_WORDS: &[&str] = &["fertig", "antworte"];
 
 /// How many turn words a language can have, and how long each can be (in characters).
@@ -56,13 +59,12 @@ pub(super) fn default_turn_words(code: &str) -> &'static [&'static str] {
     }
 }
 
-/// The saved `voiceAgentLanguage`: `device` or a supported code (`device` when unset or unknown).
+/// The saved `voiceAgentLanguage`: `device` or a supported code (English when unset or unknown).
 pub(super) fn saved_language(settings: &Value) -> &'static str {
-    settings
-        .get(LANGUAGE_SETTING)
-        .and_then(Value::as_str)
-        .and_then(supported)
-        .unwrap_or(DEVICE)
+    match settings.get(LANGUAGE_SETTING).and_then(Value::as_str) {
+        Some(DEVICE) => DEVICE,
+        saved => saved.and_then(supported).unwrap_or(DEFAULT_LANGUAGE),
+    }
 }
 
 /// `words` as turn words to save: 1 to 8 entries, each trimmed to 1 to 40 characters.
@@ -156,4 +158,28 @@ pub(super) fn client_view(settings: &Value) -> Map<String, Value> {
 /// The accepted values of `setVoiceAgentSettings`' `language`, for its error message.
 pub(super) fn accepted_languages() -> String {
     format!("{DEVICE}, {}", LANGUAGES.join(", "))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unset_settings_speak_english_with_reply_over_and_go_ahead() {
+        let settings = json!({});
+        assert_eq!(saved_language(&settings), "en");
+        // A German phone calling with nothing saved still gets English, as before the setting.
+        let call = for_call(&settings, Some("de"));
+        assert_eq!(call.code, "en");
+        assert_eq!(call.turn_words, ["reply", "over", "go ahead"]);
+    }
+
+    #[test]
+    fn device_follows_the_calling_device_only_when_picked() {
+        let settings = json!({ LANGUAGE_SETTING: DEVICE });
+        assert_eq!(saved_language(&settings), DEVICE);
+        assert_eq!(for_call(&settings, Some("de")).code, "de");
+        assert_eq!(for_call(&settings, None).code, "en");
+        assert_eq!(saved_language(&json!({ LANGUAGE_SETTING: "xx" })), "en");
+    }
 }

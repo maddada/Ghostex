@@ -15115,13 +15115,13 @@
     {
       "key": "voiceAgentLanguage",
       "title": "Language",
-      "subtitle": "The language the voice agent speaks and listens for. Same as the calling device follows the language of the phone or computer that starts the call, and English when that language isn't one the agent speaks. A change applies to your next call.",
+      "subtitle": "The language the voice agent speaks and listens for, English by default. Same as the calling device follows the language of the phone or computer that starts the call, and English when that language isn't one the agent speaks. A change applies to your next call.",
       "tab": "voiceAgent",
       "tabTitle": "Voice Agent",
       "section": "provider",
       "sectionTitle": "Provider and voice",
       "type": "string",
-      "default": "device",
+      "default": "en",
       "agentWritable": true
     },
     {
@@ -15149,7 +15149,7 @@
     {
       "key": "voiceAgentWaitForReply",
       "title": "The agent answers",
-      "subtitle": "When I pause: the voice agent answers when you stop speaking. When I say a turn word: it keeps listening until you end with one of the call language's turn words (English \"reply\" or \"go ahead\", German \"fertig\" or \"antworte\", and the English ones for any other language until you set some), then answers, and each Regular call starts with it asking you to say one of them when you finish speaking. Shown while the call mode is Regular: a push-to-talk turn ends when you let go of the talk button. A change applies to your next call.",
+      "subtitle": "When I pause: the voice agent answers when you stop speaking. When I say a turn word: it keeps listening until you end with one of the call language's turn words (English \"reply\", \"over\" or \"go ahead\", German \"fertig\" or \"antworte\", and the English ones for any other language until you set some), then answers, and each Regular call starts with it asking you to say one of them when you finish speaking. Shown while the call mode is Regular: a push-to-talk turn ends when you let go of the talk button. A change applies to your next call.",
       "tab": "voiceAgent",
       "tabTitle": "Voice Agent",
       "section": "provider",
@@ -15161,7 +15161,7 @@
     {
       "key": "voiceAgentTurnWords",
       "title": "Turn words",
-      "subtitle": "The words that end your turn, separated by commas, for one language at a time: English \"reply\" and \"go ahead\", German \"fertig\" and \"antworte\", and the English ones for any other language until you set some. Up to 8, each up to 40 characters. Reset to defaults puts that language's own words back.",
+      "subtitle": "The words that end your turn, separated by commas, for one language at a time: English \"reply\", \"over\" and \"go ahead\", German \"fertig\" and \"antworte\", and the English ones for any other language until you set some. Up to 8, each up to 40 characters. Reset to defaults puts that language's own words back.",
       "tab": "voiceAgent",
       "tabTitle": "Voice Agent",
       "section": "provider",
