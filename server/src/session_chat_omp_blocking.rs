@@ -541,11 +541,6 @@ pub fn detect_omp_permission_picker_with_command(
         };
         let line = line.strip_prefix(' ').unwrap_or(line).trim_end();
         if found {
-            // OMP appends the grant's folder and provider safety checks after tool details.
-            // Expanded commands keep their own newlines, without continuation indentation.
-            if line.starts_with("Folder:") || line == "Provider safety checks:" {
-                break;
-            }
             command.push('\n');
             command.push_str(line);
         } else if let Some(value) = line.strip_prefix("Command:") {
@@ -640,6 +635,18 @@ whitespace or invisible character at the end (a tab, a non-breaking or other Uni
 zero-width character) is not padding and could be part of an argument, and a command ending in a
 backslash makes the space after it meaningful (an escaped space): such a command shows no unique
 request, on either side, and is answered in the terminal.
+
+CDXC:SessionChat 2026-11-26 WHY:
+OMP 18.21 draws a tool's approval details, then the grant's folder line (`Folder: …`) and its
+provider safety checks (`Provider safety checks:` and their lines). Bash's details are
+`Command: ${command}` with the command's own line breaks kept, so a line below `Command:` that
+starts with `Folder:` or reads `Provider safety checks:` can be the command's next line as well
+as OMP's appendix, and the screen cannot tell which. A bash request is therefore decided on every
+line below `Command:`: with any line there, the dialog shows no unique request and is answered in
+the terminal, appendix or not. Cutting at those markers first left `echo a` as the request of a
+dialog for `echo a` plus a line `Folder: …`, so a card or a row for `echo a` answered the longer
+command. An MCP tool's arguments are one whole JSON value, which ends where its JSON ends, so the
+appendix below it is told apart and cut off.
 */
 /// The request `request` (a dialog's lines below its title) shows, when it shows exactly one.
 pub fn omp_shown_request(request: &[String]) -> Option<OmpShownRequest> {
@@ -651,6 +658,13 @@ pub fn omp_shown_request(request: &[String]) -> Option<OmpShownRequest> {
     if markers.next().is_some() {
         return None;
     }
+    if let Some(command) = request[start].strip_prefix("Command:") {
+        let command = command.strip_prefix(' ').unwrap_or(command);
+        return (start + 1 == request.len())
+            .then(|| omp_bash_request(command))
+            .flatten()
+            .map(|command| OmpShownRequest::Command(command.to_string()));
+    }
     // OMP appends the grant's folder and provider safety checks after the tool's details.
     let end = request[start..]
         .iter()
@@ -659,13 +673,6 @@ pub fn omp_shown_request(request: &[String]) -> Option<OmpShownRequest> {
     let shown = &request[start..end];
     if shown.iter().any(|line| line.contains('\u{2026}')) {
         return None;
-    }
-    if let Some(command) = shown[0].strip_prefix("Command:") {
-        let command = command.strip_prefix(' ').unwrap_or(command);
-        return (shown.len() == 1)
-            .then(|| omp_bash_request(command))
-            .flatten()
-            .map(|command| OmpShownRequest::Command(command.to_string()));
     }
     let arguments = shown
         .join("\n")
