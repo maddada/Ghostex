@@ -11784,6 +11784,32 @@
       "agentWritable": false
     },
     {
+      "key": "grokBotSends",
+      "title": "Send to Grok Bot",
+      "subtitle": "Which of your agents' notes reach Grok Bot: Asks only (questions and approvals), Asks and blockers (also a blocker only you can clear; the default) or Everything (finished-work notes too). The rest stay in Ghostex: the agent's chat, Needs you and the Work panel. Notes sent within a minute of each other arrive as one summary.",
+      "tab": "grokBot",
+      "tabTitle": "Grok Bot",
+      "section": "notes",
+      "sectionTitle": "Notes",
+      "type": "enum",
+      "default": "asksAndBlockers",
+      "options": [
+        {
+          "label": "Asks only",
+          "value": "asks"
+        },
+        {
+          "label": "Asks and blockers",
+          "value": "asksAndBlockers"
+        },
+        {
+          "label": "Everything",
+          "value": "everything"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
       "key": "cloudBoxesInstabox",
       "title": "Instabox",
       "subtitle": "Connect your Instabox.sh account in the browser, or paste an API key. Boxes run on your account and bill to it.",

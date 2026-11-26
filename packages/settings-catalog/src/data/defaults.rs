@@ -187,6 +187,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("grokWebHidden", J::Bool(true)),
     // CDXC:GrokBot 2026-11-19 DECISION: Grok Bot Integration is a built-in extension, on by default (official_extensions.rs).
     ("grokBotHidden", J::Bool(false)),
+    // CDXC:GrokBot 2026-11-26 DECISION: Grok Bot gets asks and blockers by default, never done reports (server/src/grokbot/filter.rs).
+    ("grokBotSends", J::Str("asksAndBlockers")),
     // CDXC:AgentProviders 2026-11-18 DECISION: CLIProxyAPI is off by default (official_extensions.rs).
     ("cliProxyApiEnabled", J::Bool(false)),
     // CDXC:Extensions 2026-10-19 DECISION: Connectors, OS Integration and Debugging are on by default; their old gates still apply (official_extensions.rs).

@@ -1,5 +1,6 @@
 //! `/api/grokbot` `{op, …}`: `status`, `connect` `{url, key}`, `disconnect`, `test` and
-//! `notify` `{text, kind?, from?}`, and for Settings > Grok Bot's checklist `setup` (status, the
+//! `notify` `{text, kind?, from?}` (a kind `grokBotSends` leaves out is answered `sent: false` and
+//! stays in Ghostex, filter.rs), and for Settings > Grok Bot's checklist `setup` (status, the
 //! switch, the desktop app and the checklist's marks), `instructions` (the text to paste into the
 //! bot), `briefSeen` (sent by `ghostex grokbot brief`), `confirmApp`, `confirmTest` `{arrived}`
 //! and `openApp` (opens the Grok Bot desktop app). No answer ever carries the key.
@@ -243,6 +244,18 @@ fn notify(
             KINDS.join(", ")
         )));
     }
+    // A kind the user's `grokBotSends` leaves out stays in Ghostex: answered, not queued, so the
+    // agent learns from the reply and doesn't retry (filter.rs).
+    let sends = super::filter::sends(paths);
+    if !sends.sends(&kind) {
+        return Ok(json!({
+            "queued": store::read_queue(paths).len(),
+            "sent": false,
+            "keptInGhostex": true,
+            "sends": sends.label(),
+            "message": super::filter::kept_message(&kind, sends),
+        }));
+    }
     let from = params.get("from").and_then(Value::as_object);
     let field = |key: &str| {
         from.and_then(|from| text(from, key))
@@ -279,11 +292,12 @@ fn notify(
         queue.len()
     };
     delivery::kick(paths);
-    Ok(json!({ "queued": queued }))
+    Ok(json!({ "queued": queued, "sent": true }))
 }
 
 /// Enqueues a note from gxserver itself (for example when a coordinator hits its Antigravity
-/// quota limit). Silent no-op when Grok Bot is not connected or turned off.
+/// quota limit). Silent no-op when Grok Bot is not connected, turned off, or the user's
+/// `grokBotSends` leaves out its kind.
 pub(crate) fn notify_internal(
     paths: &GxserverPaths,
     kind: &str,
@@ -303,6 +317,9 @@ pub(crate) fn notify_internal(
         return false;
     }
     let kind = if KINDS.contains(&kind) { kind } else { "info" };
+    if !super::filter::sends(paths).sends(kind) {
+        return false;
+    }
     let note = QueuedNote {
         at: now_ms(),
         kind: kind.to_string(),

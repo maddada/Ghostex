@@ -546,6 +546,9 @@ How to use this file:
 ### Connection
 
 - **Connected** `grokBotConnection` (Settings UI row without a settings key; use `ghostex settings open`): How many notes your agents sent to Grok Bot and when the last one went, with Send a test note, Change (a new webhook address and key), Copy instructions and Disconnect.
+### Notes
+
+- **Send to Grok Bot** `grokBotSends` (one of asks | asksAndBlockers | everything; default asksAndBlockers): Which of your agents' notes reach Grok Bot: Asks only (questions and approvals), Asks and blockers (also a blocker only you can clear; the default) or Everything (finished-work notes too). The rest stay in Ghostex: the agent's chat, Needs you and the Work panel. Notes sent within a minute of each other arrive as one summary. Option labels: asks = Asks only, asksAndBlockers = Asks and blockers, everything = Everything.
 ## Cloud Boxes (tab `cloudBoxes`)
 
 ### Providers

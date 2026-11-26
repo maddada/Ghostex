@@ -61,7 +61,11 @@ const AGENT_DEFAULT_KEYS: &[&str] = &[
 ///
 /// CDXC:MemoryGuard 2026-11-14 DECISION:
 /// User (Q3122, "always sync"): the memory guard's two switches sync to all the user's computers even while Settings > Sync > Agent defaults is off, and each computer still guards itself (server/src/memory_guard/mod.rs). Supersedes the same day's choice to sync them with Agent defaults.
-pub const ALWAYS_SYNCED_KEYS: &[&str] = &["memoryGuardEnabled", "memoryGuardNotify"];
+///
+/// CDXC:GrokBot 2026-11-26 DECISION: what goes to Grok Bot (`grokBotSends`) syncs the same way:
+/// one bot follows all of the user's computers, so a choice made on one holds on all.
+pub const ALWAYS_SYNCED_KEYS: &[&str] =
+    &["memoryGuardEnabled", "memoryGuardNotify", "grokBotSends"];
 
 /// Sidebar organization: the settings that change how the sidebar is organized, synced with the
 /// Spaces themselves (the `spaces` category, its switch `syncSpaces`).

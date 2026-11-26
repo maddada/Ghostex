@@ -26,9 +26,13 @@ pub(crate) fn usage() -> String {
                                              POST to address; the key is asked without showing it (or read
                                              from stdin with --key-stdin; inside an agent session, on a
                                              private card in its chat). Ghostex keeps both and sends a test
-  ghostex grokbot notify [--kind ask|blocked|done|report|info] "<text>" [--json]
-                                             Send the user a note through Grok Bot (queued and retried;
-                                             at most one call every 20 seconds, notes waiting go together)
+  ghostex grokbot notify --kind ask|blocked "<text>" [--json]
+                                             Tell the user through Grok Bot that they must decide, approve
+                                             or clear a blocker only they can. Notes sent within a minute
+                                             go out together as one summary (queued and retried, at most
+                                             one call every 20 seconds). --kind done, report and info (the
+                                             default) stay in Ghostex unless Settings > Grok Bot > Send to
+                                             Grok Bot is Everything; blocked stays too with Asks only
   ghostex grokbot test [--json]              Send a test note now
   ghostex grokbot disconnect [--json]        Forget the address and key, and drop notes not sent yet
   ghostex grokbot brief                      The Grok Bot bot's current commands and rules (it runs this)
@@ -363,8 +367,12 @@ fn notify_command(parsed: &ParsedArgs) -> CliResult<()> {
     let answer = call_gxserver_rpc(ENDPOINT, &Value::Object(params), &parsed.flags)?;
     if parsed.flags.contains("json") {
         print_json(&answer);
+    } else if answer["sent"] == false {
+        // CDXC:GrokBot 2026-11-26 WHY: a kind the user's setting leaves out isn't an error (the
+        // agent's work is fine, and an error invites a retry); the words teach it when to notify.
+        println!("{}", text(&answer, "message"));
     } else {
-        println!("Sent to Grok Bot (it goes out within a minute).");
+        println!("Queued for Grok Bot: notes sent within a minute go out together as one summary.");
     }
     Ok(())
 }

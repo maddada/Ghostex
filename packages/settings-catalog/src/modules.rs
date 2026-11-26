@@ -239,6 +239,7 @@ pub fn exports(module: &str, platform: Platform) -> Vec<(&'static str, Json)> {
                 "GHOSTTY_THEME_SETTING_OPTIONS",
                 GHOSTTY_THEME_SETTING_OPTIONS.to_json(),
             ),
+            ("GROK_BOT_SENDS_OPTIONS", GROK_BOT_SENDS_OPTIONS.to_json()),
             (
                 "KEEP_AWAKE_DURATION_OPTIONS",
                 KEEP_AWAKE_DURATION_OPTIONS.to_json(),

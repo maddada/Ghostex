@@ -65,6 +65,14 @@ pub const GHOSTTY_COPY_ON_SELECT_OPTIONS: &[Opt] = &[
 
 pub const GHOSTTY_SCROLLBAR_OPTIONS: &[Opt] = &[opt("System", "system"), opt("Never", "never")];
 
+/// Which agents' notes go to Grok Bot (`grokBotSends`, CDXC:GrokBot 2026-11-26 in
+/// server/src/grokbot/filter.rs).
+pub const GROK_BOT_SENDS_OPTIONS: &[Opt] = &[
+    opt("Asks only", "asks"),
+    opt("Asks and blockers", "asksAndBlockers"),
+    opt("Everything", "everything"),
+];
+
 pub const GHOSTTY_THEME_SETTING_OPTIONS: &[Opt] = &[
     opt(
         "Use terminal config file",

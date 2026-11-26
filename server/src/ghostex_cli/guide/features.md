@@ -5818,10 +5818,22 @@ grokbot notify` and Ghostex does the sending. (Agents run as you, so one could
 still read that file, as it can any of your files.) The key can only start
 that one routine. Connect, test and disconnect are meant for the computer
 itself: Ghostex refuses them from a paired phone and from another computer's
-agents. Notes are sent together, at most one call every 20 seconds, and
-retried when Grok Bot doesn't answer; each call uses some of your Grok Bot
-usage. While Grok Bot is connected, agents Ghostex starts are told about
-`ghostex grokbot notify`.
+agents.
+
+Which notes reach Grok Bot: only what needs you. While Grok Bot is connected,
+agents Ghostex starts are told to run `ghostex grokbot notify` only when you
+must make a decision, give an approval or clear a blocker only you can, and
+never for finished work, status or progress: those stay in Ghostex (the
+agent's chat, Needs you and the Work panel). A coordinator's threads ask their
+coordinator, which tells you. Send to Grok Bot, on Settings > Grok Bot (or
+`ghostex settings set grokBotSends <value>`), picks the kinds that go out:
+Asks only (`asks`), Asks and blockers (`asksAndBlockers`, the default) or
+Everything (`everything`, finished-work notes too, one per task). A note of a
+kind it leaves out is not sent, and `notify` tells the agent so. Notes sent
+within a minute of each other go out together as one summary message, so a
+burst of questions wakes the bot once; a note waits at most that minute.
+Calls are at most one every 20 seconds and retried when Grok Bot doesn't
+answer; each call uses some of your Grok Bot usage.
 
 To stop: in Grok Bot, set Execution on this computer to Never allow; click
 Disconnect in Settings > Grok Bot or run `ghostex grokbot disconnect`
@@ -5831,7 +5843,8 @@ Grok Bot (the bot can still run commands until Execution on this computer is
 Never allow).
 
 CLI: `ghostex grokbot` (status), `connect [<url>] [--key-stdin]`,
-`notify [--kind ask|blocked|done|report|info] "<text>"`, `test`,
+`notify --kind ask|blocked "<text>"` (done, report and info only with
+Everything), `test`,
 `disconnect`, `brief`, `instructions`.
 
 ## Voice agent

@@ -1,5 +1,15 @@
 //! Sends queued notes to the Grok Bot routine's webhook: one POST carries every note waiting (up to
-//! [`BATCH`]), at most one POST every [`MIN_GAP`], and a failed POST is tried again later.
+//! [`BATCH`]), at most one POST every [`MIN_GAP`], and a failed POST is tried again later. A new
+//! note waits [`GATHER`] for others, so notes sent close together go out as one POST with one
+//! summary (one routine run, one message in the bot's chat).
+//!
+//! CDXC:GrokBot 2026-11-26 DECISION:
+//! User: "Ideally batch what's left into one summary instead of one ping each". A fixed window from
+//! the first waiting note, not a wait for quiet: a question waits at most a minute (plus the 20
+//! seconds between POSTs), however busy the agents are. Every note joining the window rides the
+//! same POST, and the body's `summary` is that POST's whole message, a line a note, so the routine
+//! can say it at once (instructions.md). A retried note is already older than the window and goes
+//! straight out.
 //!
 //! CDXC:GrokBot 2026-11-19 WHY:
 //! A Grok Bot routine runs at most 200 times an hour (300 for all of a user's routines), every run
@@ -19,6 +29,8 @@ use crate::paths::GxserverPaths;
 
 /// The fewest seconds between two POSTs.
 const MIN_GAP: Duration = Duration::from_secs(20);
+/// How long the first waiting note waits for others to join its POST.
+const GATHER: Duration = Duration::from_secs(60);
 /// The most notes one POST carries.
 const BATCH: usize = 20;
 /// The most notes kept waiting; the oldest go first.
@@ -82,13 +94,58 @@ pub(crate) fn now_ms() -> i64 {
         .unwrap_or_default()
 }
 
-/// The webhook's JSON body for `notes`.
+/// The webhook's JSON body for `notes`: each note, and `summary`, all of them as one message.
 pub(crate) fn body(notes: &[QueuedNote]) -> Value {
     json!({
         "source": "ghostex",
         "computer": crate::connected_computers::this_computer_name(),
+        "count": notes.len(),
+        "summary": summary(notes),
         "notes": notes,
     })
+}
+
+/// One line a note, with who sent it and the `ref` the bot answers it with.
+fn summary(notes: &[QueuedNote]) -> String {
+    let lines = notes.iter().map(|note| {
+        let kind = match note.kind.as_str() {
+            "ask" => "Needs you",
+            "blocked" => "Blocked",
+            "done" => "Done",
+            "report" => "Report",
+            "test" => "Test",
+            _ => "Note",
+        };
+        let from = match (note.agent.as_deref(), note.project.as_deref()) {
+            (Some(agent), Some(project)) => format!(" from {agent} ({project})"),
+            (Some(agent), None) => format!(" from {agent}"),
+            (None, Some(project)) => format!(" from {project}"),
+            (None, None) => String::new(),
+        };
+        let reply = note
+            .reply_to
+            .as_deref()
+            .map(|reference| format!(" [ref {reference}]"))
+            .unwrap_or_default();
+        format!("- {kind}{from}: {}{reply}", note.text.trim())
+    });
+    let heading = match notes.len() {
+        1 => "1 note from Ghostex:".to_string(),
+        count => format!("{count} notes from Ghostex, in one summary:"),
+    };
+    std::iter::once(heading)
+        .chain(lines)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// How much longer the oldest of `notes` waits for others to join it, if it still does.
+fn gather_wait(notes: &[QueuedNote], now: i64) -> Option<Duration> {
+    let oldest = notes.iter().map(|note| note.at).min()?;
+    let waited = u64::try_from(now.saturating_sub(oldest)).unwrap_or_default();
+    GATHER
+        .checked_sub(Duration::from_millis(waited))
+        .filter(|wait| !wait.is_zero())
 }
 
 /// Why a POST to Grok Bot didn't start the routine: `kind` is one of `keyRefused` (401, 403),
@@ -201,6 +258,12 @@ fn run(paths: &GxserverPaths) {
                 }
             }
         };
+        // Notes sent close together go as one POST: wait out the window, then read the queue
+        // again, so every note that joined it rides along.
+        if let Some(wait) = gather_wait(&batch, now_ms()) {
+            pause(wait);
+            continue;
+        }
         if let Some(wait) = wait_before_next_post() {
             std::thread::sleep(wait);
         }
@@ -241,5 +304,51 @@ fn run(paths: &GxserverPaths) {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn note(at: i64, kind: &str, text: &str) -> QueuedNote {
+        QueuedNote {
+            at,
+            kind: kind.to_string(),
+            text: text.to_string(),
+            project: Some("Ghostex".to_string()),
+            agent: Some("Fix login".to_string()),
+            reply_to: Some("S90:P3lv0:G9jt7".to_string()),
+        }
+    }
+
+    #[test]
+    fn a_new_note_waits_for_others_and_an_old_one_goes() {
+        let now = 1_000_000;
+        assert_eq!(gather_wait(&[], now), None);
+        assert_eq!(
+            gather_wait(&[note(now - 15_000, "ask", "a")], now),
+            Some(Duration::from_secs(45))
+        );
+        // The window runs from the oldest note: a later one doesn't push it back.
+        assert_eq!(
+            gather_wait(
+                &[note(now - 50_000, "ask", "a"), note(now, "ask", "b")],
+                now
+            ),
+            Some(Duration::from_secs(10))
+        );
+        assert_eq!(gather_wait(&[note(now - 60_000, "ask", "a")], now), None);
+    }
+
+    #[test]
+    fn the_summary_is_a_line_a_note() {
+        assert_eq!(
+            summary(&[
+                note(1, "ask", "Merge PR 12?"),
+                note(2, "blocked", " Needs the API key "),
+            ]),
+            "2 notes from Ghostex, in one summary:\n- Needs you from Fix login (Ghostex): Merge PR 12? [ref S90:P3lv0:G9jt7]\n- Blocked from Fix login (Ghostex): Needs the API key [ref S90:P3lv0:G9jt7]"
+        );
     }
 }

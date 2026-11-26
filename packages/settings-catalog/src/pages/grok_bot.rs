@@ -1,3 +1,4 @@
+use crate::data::GROK_BOT_SENDS_OPTIONS;
 use crate::rows::{row, section, Page, Section};
 
 /// Settings › Grok Bot: the Grok Bot Integration built-in extension's own page, right below
@@ -11,7 +12,7 @@ pub(crate) fn page() -> Page {
     Page {
         id: "grokBot",
         title: "Grok Bot",
-        sections: vec![switch(), setup(), connection()],
+        sections: vec![switch(), setup(), connection(), notes()],
     }
 }
 
@@ -42,6 +43,19 @@ pub(crate) fn connection() -> Section {
         "Connection",
         vec![
             row("grokBotConnection", "Connected", "How many notes your agents sent to Grok Bot and when the last one went, with Send a test note, Change (a new webhook address and key), Copy instructions and Disconnect."),
+        ],
+    )
+}
+
+/// CDXC:GrokBot 2026-11-26 DECISION: the one stored choice besides the switch: which agents'
+/// notes go to Grok Bot (server/src/grokbot/filter.rs). Synced to every computer of the user's
+/// (`ALWAYS_SYNCED_KEYS`), since the bot follows all of them.
+pub(crate) fn notes() -> Section {
+    section(
+        "notes",
+        "Notes",
+        vec![
+            row("grokBotSends", "Send to Grok Bot", "Which of your agents' notes reach Grok Bot: Asks only (questions and approvals), Asks and blockers (also a blocker only you can clear; the default) or Everything (finished-work notes too). The rest stay in Ghostex: the agent's chat, Needs you and the Work panel. Notes sent within a minute of each other arrive as one summary.").options(GROK_BOT_SENDS_OPTIONS),
         ],
     )
 }

@@ -4,7 +4,7 @@
 //! each ticked off as Ghostex sees it happen (the desktop app found, the bot's first
 //! `ghostex grokbot brief`, the webhook connected, the user's yes to "Did the test note show up?"),
 //! every one with its fix in plain words. Once connected: notes sent, Send a test note, Change,
-//! Copy instructions and Disconnect.
+//! Copy instructions and Disconnect. Under it, Send to Grok Bot (`grokBotSends`): which notes go.
 //!
 //! Everything goes through `/api/grokbot` (server/src/grokbot/api.rs), the same calls
 //! `ghostex grokbot` makes: the key typed or pasted here goes to gxserver once, which keeps it in
@@ -14,10 +14,11 @@
 //! User, after setting it up from the terminal: "the instructions here are good and worked but please add a user experience for this that helps the user go through it without even opening terminal should hold the users hand fully. also we should tell the agent to create the web hook right away from 1st message." Q4206 = A (a checklist that keeps every step in view and ticks each off by itself, so the user can switch to Grok Bot and back), with: "don't put this under integrations put this as a new page in settings below integrations make it an enabled by default extension but allow people to disable this extension with a button at the top of the settings page". The webhook form shows at once rather than after step 2, so someone whose bot already exists isn't held until it runs `brief` again; the test question shows only right after connecting here (or after a No), so a connection made from the terminal opens on the Connected view.
 //! SEE-ALSO: packages/settings-catalog/src/pages/grok_bot.rs (the rows Settings search finds), packages/settings-catalog/src/data/official_extensions.rs (the extension), server/src/grokbot/instructions.md (the bot makes the "Ghostex reports" routine in its first reply).
 use super::super::super::native_modal_kit::*;
+use super::super::catalog::{module, settings_catalog};
 use super::super::fields::{
-    ButtonVariant, FieldStates, ListItemStatus, RowSpec, SettingsPage, card_inset, setting_row,
-    settings_button, settings_list_item, settings_note_row, settings_section, settings_text_input,
-    switch_control,
+    ButtonVariant, FieldStates, ListItemStatus, RowSpec, SettingsPage, card_inset, reset_key,
+    segmented_field, setting_row, settings_button, settings_list_item, settings_note_row,
+    settings_section, settings_text_input, switch_control,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -45,6 +46,8 @@ const SEND_TIMEOUT: Duration = Duration::from_secs(45);
 /// How often the checklist looks again while it waits for something to happen in Grok Bot.
 const REFRESH_EVERY: Duration = Duration::from_secs(3);
 const SWITCH_KEY: &str = "grokBotHidden";
+/// Which notes go to Grok Bot (CDXC:GrokBot 2026-11-26 in server/src/grokbot/filter.rs).
+const SENDS_KEY: &str = "grokBotSends";
 const DOWNLOAD_URL: &str = "https://x.ai/bot";
 /// The published Ghostex bot, ready to add to Grok Bot.
 const TEMPLATE_URL: &str = "https://grok-bot.directory/bots/ghostex";
@@ -552,6 +555,47 @@ impl GrokBotTab {
             RowSpec::new(title).description(subtitle),
             None,
             control,
+            cx,
+        )
+    }
+
+    /// Send to Grok Bot: Asks only, Asks and blockers (the default) or Everything, with what the
+    /// chosen one sends in its description, as Settings > Collab's choices say theirs.
+    fn sends_row(&mut self, p: &SettingsPalette, cx: &mut Context<Self>) -> AnyElement {
+        let values = self.store.read(cx).values();
+        let options = settings_catalog().options(module::SETTINGS, "GROK_BOT_SENDS_OPTIONS");
+        let allowed: Vec<String> = options.iter().map(|option| option.value.clone()).collect();
+        let value = values.choice(SENDS_KEY, &allowed);
+        let what = match value.as_str() {
+            "asks" => {
+                "Only questions and approvals that need your answer. Blockers and finished work stay in Ghostex: the agent's chat, Needs you and the Work panel."
+            }
+            "everything" => {
+                "Every note, finished work included: one line when an agent finishes a task."
+            }
+            _ => {
+                "Questions, approvals and blockers only you can clear. Finished work stays in Ghostex: the agent's chat, Needs you and the Work panel."
+            }
+        };
+        let spec = RowSpec::new("Send to Grok Bot")
+            .description(format!(
+                "{what} Notes sent within a minute of each other arrive as one summary."
+            ))
+            .keyed(&values, SENDS_KEY)
+            .marker_after_label();
+        segmented_field(
+            p,
+            SENDS_KEY,
+            spec,
+            Some(reset_key::<Self>(SENDS_KEY)),
+            &options,
+            Some(value.as_str()),
+            None,
+            |page: &mut Self, next, _window, cx| {
+                page.store.update(cx, |store, cx| {
+                    store.update_setting(SENDS_KEY, json!(next), cx)
+                });
+            },
             cx,
         )
     }
@@ -1143,6 +1187,12 @@ impl Render for GrokBotTab {
                 .any(|key| search.row_visible("setup", key));
             if shown && let Some(section) = settings_section(&p, title, description, None, rows) {
                 blocks.push(PageBlock::section(section_id, section));
+            }
+            if search.row_visible("notes", SENDS_KEY) {
+                let rows = vec![self.sends_row(&p, cx)];
+                if let Some(section) = settings_section(&p, "Notes", None, None, rows) {
+                    blocks.push(PageBlock::section("notes", section));
+                }
             }
         }
         if search.tab.is_searching && !search.tab.has_visible() {
