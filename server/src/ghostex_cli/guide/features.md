@@ -1975,10 +1975,10 @@ An OMP approval that Ghostex cannot firmly tie to its request (one that shows
 only "Allow tool: <name>", such as a commit approval, and a bash command over
 several lines, one OMP or the card cut short, or one that ends in a backslash,
 a tab or another kind of space) shows "OMP is waiting for tool approval" with
-only Open terminal ("Terminal view" on iPhone): answer it in the terminal. That
-card has no keys and no live view of the terminal; the terminal's last lines
-are behind Show terminal output. App versions from before this change still
-show the terminal's lines with arrow, Enter and Esc buttons there; those type
+only its Terminal view button: answer it in the terminal. That card has no keys
+and no live view of the terminal; in a wide chat the terminal's last lines are
+behind Show terminal output. App versions from before this change still show
+the terminal's lines with arrow, Enter and Esc buttons there; those type
 nothing. Keys typed on that card are not passed to OMP, also after you started
 a message in OMP's dialog ("Deny and send message"); Ghostex says to answer it
 in the terminal. A key from another OMP card is checked against the screen
