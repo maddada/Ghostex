@@ -5906,16 +5906,24 @@ coordinators in that computer's projects. Drafting into a chat on another
 computer and answering Ghostex forms there are not available; it says so. A
 computer whose Agent access is off (in Settings > Remote > Computers this machine connects to, on
 either computer) stays out of reach, and the agent tells you why. A call
-starts knowing your open sessions (up to 25, waiting ones first, a
+about all your sessions knows them before it says its opening line (up to 25,
+waiting ones first, each with its title, project, computer and state, a
 coordinator's threads counted under it; it looks up the rest when you ask),
 so you can give it an instruction right away, and it keeps that list current
-during the call without saying anything about it. It answers the point
+during the call (sessions that open, close or are renamed, and changed
+states) without saying anything about it. What a waiting session asks isn't
+in that list; the agent reads it when you ask. A connected computer that
+can't be read is named in the list as out of reach, and its sessions are not
+taken for closed. It answers the point
 without preamble or filler and doesn't end with offers like "Want the
 details?". Its short opening line says it can approve or deny what a session
 waits on. While the
 conversation is open it tells you when a session finishes its turn or starts
 waiting on a question or an approval, but not about a coordinator's threads
-(their approvals included; a call about the coordinator still hears those). A
+(their approvals included; a call about the coordinator still hears those).
+That goes for a coordinator on a connected computer too; when that computer
+doesn't say which of its sessions are threads, they count as sessions of
+their own. A
 session that finished its turn counts as waiting on a question only for the
 questions that turn asked: open questions from earlier turns, after you
 moved the session on, leave it idle (the sidebar's pink dot still shows them,
@@ -6070,12 +6078,15 @@ through the phone's speaker, or a Bluetooth headset or car hands-free link
 navigation prompt plays; on an iPhone a phone call coming in offers to hold
 the conversation (it goes on when the call ends) or end it.
 In a call about all sessions, an updated phone app shows a line above the captions: "All sessions"
-with how many sessions wait on you and work, and its Sessions button lists the
+with how many of the listed sessions wait on you and work, and its Sessions button lists the
 call's sessions (up to 40, waiting ones first, a coordinator with its number
 of threads): each row has its status dot, its title, and its project and
-state. Tap one of the computer's sessions and the call is about that session
+state. When the list is cut at 40, or a connected computer can't be reached,
+the line says so ("40 of 41 listed", "1 computer unreachable") and the list
+names that computer. Tap one of the computer's sessions and the call is about that session
 from then on, as if you had started it there (the line becomes "Only about
-<title>" with All sessions to go back). Sessions of another connected computer
+<title>" with All sessions to go back); the list closes and can't be opened
+while the call moves. Sessions of another connected computer
 are listed dimmed and can't be tapped, because a call about one session runs
 on that session's computer. A computer with an older Ghostex sends no list, so
 the line and the button don't show.
