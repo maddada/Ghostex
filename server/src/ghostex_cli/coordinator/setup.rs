@@ -1204,7 +1204,7 @@ fn page_html(data: &PageData) -> String {
   <gx-wide>
     <div class="gx-options" style="--gx-option-min:250px">
       <section data-question="Low usage" data-choice="Stay">
-        <h3>A. Stay on <span class="main-name">{main_html}</span></h3>
+        <h3><span>A. Stay on <span class="main-name">{main_html}</span></span></h3>
         <p class="how">Threads <b>wait for the reset</b>; I never switch agent.</p>
         {lane_stay}
       </section>
