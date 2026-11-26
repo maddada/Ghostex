@@ -30,6 +30,7 @@ use crate::server::AppState;
 
 mod announcement;
 mod card;
+mod sessions_context;
 mod turn_word;
 
 pub(super) use announcement::Announcement;
@@ -280,6 +281,8 @@ pub(super) struct Conversation {
     dropped_items: HashSet<String>,
     /// When the user last said something that did not end with the turn word.
     words_waiting_since: Option<Instant>,
+    /// The call's own session list, for the model and the client (`sessions_context.rs`).
+    sessions_context: sessions_context::SessionsContext,
 }
 
 /// How long after a reply ends gxserver waits for the provider to answer a turn spoken during it
@@ -397,6 +400,7 @@ impl Conversation {
             dropped_responses: HashSet::new(),
             dropped_items: HashSet::new(),
             words_waiting_since: None,
+            sessions_context: Default::default(),
             diagnostics: CallDiagnostics {
                 client: "unknown".to_string(),
                 client_remote,
@@ -581,6 +585,9 @@ impl Conversation {
                 let _ = out.send(ClientFrame::Json(
                     json!({"type": "state", "state": self.client_state}),
                 ));
+                if let Some(frame) = self.sessions_context.last_frame() {
+                    let _ = out.send(ClientFrame::Json(frame));
+                }
                 self.client = Some((attach_id, out));
                 self.detached_since = None;
                 self.talk.attached();
@@ -592,6 +599,9 @@ impl Conversation {
                 }
                 if std::mem::take(&mut self.briefing_pending) {
                     self.read_briefing();
+                }
+                if self.diagnostics.attaches == 1 {
+                    self.read_sessions();
                 }
                 // Each client reports its own playback rate after `ready`.
                 self.playback_rate = 1.0;
@@ -760,7 +770,10 @@ impl Conversation {
                 }
                 self.announcements.push(announcement);
             }
-            Input::Sessions(sessions) => self.follow_focus(&sessions),
+            Input::Sessions(sessions) => {
+                self.follow_focus(&sessions);
+                self.follow_sessions(&sessions);
+            }
             // A call with a GBot stays with it (gbot_call/): no widening, no moving.
             Input::Focus(_)
                 if self
@@ -912,6 +925,8 @@ impl Conversation {
     }
 
     async fn create_response_now(&mut self) -> Result<(), Ended> {
+        // The session list goes in ahead of the reply, so the reply already knows it.
+        self.give_sessions_context().await?;
         self.responses_requested += 1;
         self.create_at = None;
         self.turn_unanswered = false;
@@ -1032,6 +1047,7 @@ impl Conversation {
     async fn on_tick(&mut self) -> Result<(), Ended> {
         let now = Instant::now();
         self.watch_client_audio(now);
+        self.give_sessions_context().await?;
         if self.talk.wants_silence(now) {
             // A muted Regular call's hold ended: the provider hears the quiet it needs to end the turn.
             let silence = vec![0u8; TICK.as_millis() as usize * BYTES_PER_MS];
@@ -1585,6 +1601,13 @@ impl Conversation {
         let view = focus::client_view(self.focus.as_ref());
         registry::set_focus(&self.id, view.clone());
         self.scope_changes += 1;
+        // A call about all sessions again gets the whole session list; one about a session hears
+        // no more of it.
+        if self.focus.is_none() {
+            self.sessions_context.model_restart(Instant::now());
+        } else {
+            self.sessions_context.model_stop();
+        }
         let mut update = self.session_update.clone();
         // The new scope's instructions keep the call's language and, while the call waits for the
         // turn words, what the model is told about them (as the call started, socket.rs).

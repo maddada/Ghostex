@@ -466,6 +466,13 @@ fn handle_frame(message: Message, start: Instant, watch: &mut TurnWatch, audio: 
                     }
                 }
                 "announcement" => println!("{at}  [announcement] {}", field("text")),
+                // The call's session list (voice_agent/conversation/sessions_context.rs): a count,
+                // not the whole list each time it changes.
+                "sessions" => println!(
+                    "{at}  [sessions] {} listed, {} more",
+                    frame["sessions"].as_array().map_or(0, Vec::len),
+                    frame["more"].as_u64().unwrap_or(0)
+                ),
                 "interrupted" => {
                     // A real-time player (at `--rate`) has played the reply's audio since it started,
                     // up to what arrived.
