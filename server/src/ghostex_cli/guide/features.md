@@ -1970,6 +1970,11 @@ An OMP approval that Ghostex cannot firmly tie to its request (one that shows
 only "Allow tool: <name>", and every bash command, whose trailing spaces the
 terminal cannot show) shows "OMP is waiting for tool approval" with Open
 terminal instead of answer buttons: answer it in the terminal.
+Right after an earlier OMP approval with answer rows, a bash approval can show
+those rows for a moment until Ghostex reads the screen again; tapping one is
+refused. If two devices answer the same OMP approval card in a coordinator at
+the same moment, the coordinator can show the other device's choice as the
+answer; OMP only ever gets keys for a dialog that still shows the card's request.
 **Quote or reply to part of the chat**: select any text in the chat (a reply,
 your own message, tool output or code) and a small bar of buttons shows by
 where you let go: Copy, Add to Chat (puts the text in the chat box as a quote)

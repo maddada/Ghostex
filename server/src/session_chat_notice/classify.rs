@@ -440,15 +440,15 @@ fn notice_from_omp_blocking_screen(
 
 /*
 CDXC:SessionChat 2026-11-26 WHY:
-W4 Q104 a: OMP's bash approvals are answered in the terminal, on the phone and in a coordinator,
-because the screen cannot show whether a command ends in spaces. Until gxserver had read the
-screen, the stored hook card reached the chat alone, and with no notice beside it the chat core
-drew Allow and Deny, which gxserver then refused (`answerInTerminal`). So the card the screen
-reading gives such an approval (`OMP_TOOL_APPROVAL`, Open terminal) is derived from the stored
-bash hook card while the session shows no notice: a notice the session shows comes first, and
-the derived one ends with the stored card. Its `detectedAt` names the stored card (a time taken
-from the card's hash), so every producer of a frame restates the same instance, and the next card
-is a new one.
+The owner decided that OMP's bash approvals are answered in the terminal, on the phone and in a
+coordinator, because the screen cannot show whether a command ends in spaces. Until gxserver had
+read the screen, the stored hook card reached the chat alone, and with no notice beside it the
+chat core drew Allow and Deny, which gxserver then refused (`answerInTerminal`). So the card the
+screen reading gives such an approval (`OMP_TOOL_APPROVAL`, Open terminal) is derived from the
+stored bash hook card while the session shows no notice: a notice the session shows comes first,
+and the derived one ends with the stored card. Its `detectedAt` names the stored card (a time
+taken from the card's hash), so every producer of a frame restates the same instance, and the
+next card is a new one.
 SEE-ALSO: server/src/session_chat_omp_blocking.rs (`omp_hook_card_answered_in_terminal`).
 */
 /// `notice`, or OMP's terminal card for the stored hook card `stored` of an OMP session (`agent`)

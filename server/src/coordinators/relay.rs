@@ -117,11 +117,13 @@ pub fn relay_card(session: &Value) -> Option<Value> {
     /*
     CDXC:Coordinators 2026-11-26 WHY:
     The stored prompt goes as its chat frame carries it (`prompt`); a trust question has none, and
-    neither has OMP's terminal-only card. Owner decision D-255 b: such a card (bash, a tool-only
-    dialog such as annotation_open, an eval cell) has no Allow and no Deny in a coordinator. The
-    chat core in released clients (packages/gx-chat-core at upstream 56b2016cd) draws a hook card's
-    Allow and Deny beside any notice without rows, so the card carries the notice alone, as an eval
-    cell's card always did; its key still names the stored prompt.
+    neither has OMP's terminal-only card. By the owner's decision (CDXC:SessionChat 2026-11-25
+    DECISION in session_chat_send/omp_approval_answer.rs) such a card (bash, a tool-only dialog
+    such as annotation_open, an eval cell) has no Allow and no Deny in a coordinator. The chat core
+    at upstream 56b2016cd (the closest core that can be checked; which core a released client
+    carries is not known) draws a hook card's Allow and Deny beside any notice without rows, so the
+    card carries the notice alone, as an eval cell's card always did; its key still names the
+    stored prompt.
     */
     if kind != "trust" && !terminal_only_omp {
         if let Some(prompt) = stored_text
