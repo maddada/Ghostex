@@ -948,12 +948,17 @@ async fn omp_tool_approval_probe_after_http_action(action: OmpApprovalAction) {
     let session_id = session["sessionId"].as_str().unwrap();
     let zmx_name = session["zmxName"].as_str().expect("terminal name");
     drop(db);
-    let first = include_str!("../../session_chat_tests/fixtures/omp-tool-approval-pi.txt");
+    // A dialog that shows its request (an MCP tool's arguments): bash's `Command:` is answered in
+    // the terminal (CDXC:SessionChat 2026-11-26 in session_chat_omp_blocking.rs).
+    let first = crate::session_chat_tests::omp_tool_approval::as_mcp(
+        include_str!("../../session_chat_tests/fixtures/omp-tool-approval-pi.txt"),
+        crate::session_chat_tests::omp_tool_approval::CAPTURED,
+    );
     let next = first.replace("echo ghostex-approval-test", "echo next-command");
     test_terminal::open(
         &zmx_name,
         TestTerminal {
-            screen: Some(Some(first.to_string())),
+            screen: Some(Some(first.clone())),
             ..TestTerminal::default()
         },
     );
@@ -994,7 +999,7 @@ async fn omp_tool_approval_probe_after_http_action(action: OmpApprovalAction) {
                     assert_eq!(request[16], 6, "Info barrier");
                     served += 1;
                     let screen = if served <= shown_captures {
-                        first
+                        first.as_str()
                     } else {
                         let held = std::time::Instant::now();
                         while !releasing.load(Ordering::SeqCst)
@@ -1053,10 +1058,10 @@ async fn omp_tool_approval_probe_after_http_action(action: OmpApprovalAction) {
             notice.kind,
             crate::session_chat_notice::SESSION_CHAT_NOTICE_PERMISSION_PROMPT
         );
-        assert_eq!(
-            notice.approval_command.as_deref(),
-            Some("echo ghostex-approval-test")
-        );
+        assert!(notice
+            .detail
+            .as_deref()
+            .is_some_and(|detail| detail.contains("echo ghostex-approval-test")));
         Some(notice.detected_at)
     } else {
         None
@@ -1116,19 +1121,22 @@ async fn omp_tool_approval_probe_after_http_action(action: OmpApprovalAction) {
     if let Some(shown) = shown {
         let after_check = after_check.expect("the answer's check keeps the shown OMP approval");
         assert_eq!(after_check.detected_at, shown);
-        assert_eq!(
-            after_check.approval_command.as_deref(),
-            Some("echo ghostex-approval-test")
-        );
+        assert!(after_check
+            .detail
+            .as_deref()
+            .is_some_and(|detail| detail.contains("echo ghostex-approval-test")));
     }
     let published = published.expect("the HTTP action must publish the next OMP approval");
     assert_eq!(
         published["terminalNotice"]["kind"],
         crate::session_chat_notice::SESSION_CHAT_NOTICE_PERMISSION_PROMPT
     );
-    assert_eq!(
-        published["terminalNotice"]["approvalCommand"],
-        "echo next-command"
+    assert!(
+        published["terminalNotice"]["detail"]
+            .as_str()
+            .is_some_and(|detail| detail.contains("echo next-command")),
+        "{:?}",
+        published["terminalNotice"]
     );
     assert!(!test_terminal::terminal(&zmx_name).writes.is_empty());
 }

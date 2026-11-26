@@ -2103,15 +2103,21 @@ mod tests {
 
     #[test]
     fn a_message_sent_during_an_omp_tool_approval_waits_for_the_answer() {
-        // The open approval is a permission card with rows: a send meets the chat's "Answer it in
-        // chat before sending" refusal, as during Claude Code's (`is_answerable`, send.rs).
+        // An open approval that shows its request (an MCP tool's arguments; bash's is the terminal
+        // card, session_chat_tests/omp_tool_approval.rs) is a permission card with rows: a send
+        // meets the chat's "Answer it in chat before sending" refusal, as during Claude Code's
+        // (`is_answerable`, send.rs).
         for screen in [
             include_str!("../session_chat_tests/fixtures/omp-tool-approval-pi.txt"),
             include_str!("../session_chat_tests/fixtures/omp-tool-approval-box.txt"),
         ] {
+            let screen = crate::session_chat_tests::omp_tool_approval::as_mcp(
+                screen,
+                crate::session_chat_tests::omp_tool_approval::CAPTURED,
+            );
             let notice = crate::session_chat_notice::classify_session_chat_terminal_notice(
                 Some("omp"),
-                screen,
+                &screen,
             )
             .expect("the open approval is a notice");
             assert!(notice.is_answerable());

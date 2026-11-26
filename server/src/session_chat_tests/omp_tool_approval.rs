@@ -48,26 +48,29 @@ fn an_approval_right_above_the_composer_is_live() {
     }
 }
 
-/// The open approval is a permission card with OMP's own rows, as Claude Code's, Antigravity's,
-/// Copilot's and Grok's are, and it holds the chat's sends.
+/// `screen`'s approval redrawn as an MCP tool's, whose dialog shows its whole request as JSON under
+/// `Arguments:`. A bash dialog's `Command:` shows no unique request (OMP pads the frame, so a
+/// command's trailing spaces never show), so OMP's rows and the chat's answers are an MCP tool's.
+pub(crate) fn as_mcp(screen: &str, command: &str) -> String {
+    screen
+        .replace("Allow tool: bash", "Allow tool: mcp__files__read")
+        .replace(
+            &format!("Command: {command}"),
+            &format!("Origin: MCP server tool │\n│ Arguments: │\n│ {{\"path\": \"{command}\"}}"),
+        )
+}
+
+/// The command the live `pi` and `box` captures ask approval for.
+pub(crate) const CAPTURED: &str = "echo ghostex-approval-test";
+
+/// An open approval that shows its request is a permission card with OMP's own rows, as Claude
+/// Code's, Antigravity's, Copilot's and Grok's are, and it holds the chat's sends.
 #[test]
 fn the_open_approval_is_a_permission_card_with_omps_rows() {
-    for screen in [PI, BOX] {
-        let notice = classify_session_chat_terminal_notice(Some("omp"), screen).expect("notice");
+    for screen in [as_mcp(PI, CAPTURED), as_mcp(BOX, CAPTURED)] {
+        let notice = classify_session_chat_terminal_notice(Some("omp"), &screen).expect("notice");
         assert_eq!(notice.kind, SESSION_CHAT_NOTICE_PERMISSION_PROMPT);
         assert_eq!(notice.title, "Allow this?");
-        assert_eq!(
-            notice.detail.as_deref(),
-            Some("Allow tool: bash Command: echo ghostex-approval-test")
-        );
-        assert_eq!(
-            notice.approval_command.as_deref(),
-            Some("echo ghostex-approval-test")
-        );
-        assert_eq!(
-            notice.to_value()["approvalCommand"],
-            "echo ghostex-approval-test"
-        );
         let rows: Vec<(&str, bool)> = notice
             .choices
             .iter()
@@ -76,24 +79,43 @@ fn the_open_approval_is_a_permission_card_with_omps_rows() {
         assert_eq!(rows, [("Approve", true), ("Deny", false)]);
         assert!(notice.blocks_input());
         assert!(!notice.passes_keys_through());
+        let readiness =
+            detect_session_chat_composer_readiness(Some("omp"), &screen, Some(&notice));
+        assert_ne!(readiness.state, SessionChatComposerState::Ready);
+    }
+}
+
+/// A bash approval, as captured live, is the terminal card: no rows and no answers from the chat,
+/// because the frame cannot show whether its command ends in spaces (CDXC:SessionChat 2026-11-26
+/// in session_chat_omp_blocking.rs). It still holds the chat's sends.
+#[test]
+fn a_bash_approval_is_the_terminal_card_and_holds_sends() {
+    for screen in [PI, BOX, OMP_APPROVAL] {
+        let notice = classify_session_chat_terminal_notice(Some("omp"), screen).expect("notice");
+        assert_eq!(notice.kind, SESSION_CHAT_NOTICE_OMP_INPUT_BLOCKED);
+        assert_eq!(notice.title, APPROVAL);
+        assert!(notice.choices.is_empty());
+        assert!(!notice.is_answerable());
+        assert!(notice.blocks_input());
+        assert!(detect_omp_permission_picker(screen).is_none());
         let readiness = detect_session_chat_composer_readiness(Some("omp"), screen, Some(&notice));
         assert_ne!(readiness.state, SessionChatComposerState::Ready);
     }
 }
 
 #[test]
-fn omp_approvals_for_different_commands_are_different_notices() {
-    for (screen, command) in [
-        (PI, "echo ghostex-approval-test"),
-        (BOX, "echo ghostex-approval-test"),
-        (OMP_APPROVAL, "echo cap-b"),
+fn omp_approvals_for_different_requests_are_different_notices() {
+    for screen in [
+        as_mcp(PI, CAPTURED),
+        as_mcp(BOX, CAPTURED),
+        as_mcp(OMP_APPROVAL, "echo cap-b"),
     ] {
-        let mut first = classify_session_chat_terminal_notice(Some("omp"), screen).expect("notice");
+        let mut first =
+            classify_session_chat_terminal_notice(Some("omp"), &screen).expect("notice");
         first.detected_at = "first".to_string();
-        let next_screen = screen.replace(
-            &format!("Command: {command}"),
-            "Command: echo another-command",
-        );
+        let next_screen = screen
+            .replace(CAPTURED, "echo another-command")
+            .replace("echo cap-b", "echo another-command");
         let mut next =
             classify_session_chat_terminal_notice(Some("omp"), &next_screen).expect("next notice");
         assert!(!next.same_notice(Some(&first)));
@@ -104,16 +126,12 @@ fn omp_approvals_for_different_commands_are_different_notices() {
 }
 
 #[test]
-fn omp_approval_names_only_the_command_the_dialog_shows() {
-    let notice = classify_session_chat_terminal_notice(Some("omp"), OMP_APPROVAL).expect("notice");
-    assert_eq!(notice.approval_command.as_deref(), Some("echo cap-b"));
-    assert_eq!(notice.to_value()["approvalCommand"], "echo cap-b");
-
-    // OMP 18.15.0 cuts a long command at the box edge instead of wrapping it. A cut command can
-    // stand for several requests, so the dialog has no rows on the chat's card: it is the terminal
-    // card (CDXC:SessionChat 2026-11-25 in session_chat_omp_blocking.rs `omp_shown_request`).
-    let shown = "echo dies-ist-ein-sehr-langer-befehl-der-im-dialog-umbrechen-soll-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa…";
-    let truncated = OMP_APPROVAL.replace("echo cap-b", shown);
+fn omp_approval_with_cut_arguments_is_a_terminal_card() {
+    // OMP 18.15.0 cuts a long line at the box edge instead of wrapping it. Cut arguments can stand
+    // for several requests, so the dialog has no rows on the chat's card: it is the terminal card
+    // (CDXC:SessionChat 2026-11-25 in session_chat_omp_blocking.rs `omp_shown_request`).
+    let shown = "dies-ist-ein-sehr-langer-pfad-der-im-dialog-umbrechen-soll-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa…";
+    let truncated = as_mcp(OMP_APPROVAL, "echo cap-b").replace("echo cap-b", shown);
     let notice =
         classify_session_chat_terminal_notice(Some("omp"), &truncated).expect("truncated notice");
     assert_eq!(notice.kind, SESSION_CHAT_NOTICE_OMP_INPUT_BLOCKED);
@@ -131,23 +149,30 @@ fn omp_approval_with_a_command_over_several_lines_is_a_terminal_card() {
             "\n│   printf 'three' │\n│ │               │\n│ ❯ Approve",
         );
     let notice = classify_session_chat_terminal_notice(Some("omp"), &screen).expect("notice");
-    assert_eq!(
-        notice.approval_command.as_deref(),
-        Some("printf 'one  two'\n  printf 'three'\n│")
-    );
+    assert_eq!(notice.kind, SESSION_CHAT_NOTICE_OMP_INPUT_BLOCKED);
+    assert!(notice.choices.is_empty());
 }
 
+/// The grant's folder and OMP's provider safety checks below the arguments are not part of the
+/// request: the dialog still shows its request and keeps its rows.
 #[test]
-fn omp_approval_excludes_sections_after_the_command() {
+fn omp_approval_excludes_sections_after_the_arguments() {
     for appendix in [
         "Provider safety checks: │\n│ Network destination needs review",
         "Folder: workspace — 2 entries │\n│   - example.txt",
     ] {
-        let screen =
-            OMP_APPROVAL.replace("\n│ ❯ Approve", &format!("\n│ {appendix} │\n│ ❯ Approve"));
+        let screen = as_mcp(OMP_APPROVAL, "echo cap-b")
+            .replace("\n│ ❯ Approve", &format!("\n│ {appendix} │\n│ ❯ Approve"));
         let notice = classify_session_chat_terminal_notice(Some("omp"), &screen).expect("notice");
-        assert_eq!(notice.approval_command.as_deref(), Some("echo cap-b"));
-        assert_eq!(notice.to_value()["approvalCommand"], "echo cap-b");
+        assert_eq!(notice.kind, SESSION_CHAT_NOTICE_PERMISSION_PROMPT);
+        let dialog = crate::session_chat_omp_blocking::read_omp_permission_dialog(&screen)
+            .expect("dialog");
+        assert_eq!(
+            dialog.shown,
+            Some(crate::session_chat_omp_blocking::OmpShownRequest::Arguments(
+                json!({ "path": "echo cap-b" })
+            ))
+        );
     }
 }
 
@@ -162,29 +187,29 @@ fn omp_approval_without_a_command_does_not_invent_one() {
 
 #[test]
 fn the_post_answer_agent_reads_omps_next_approval_not_its_transcript_format() {
+    let next_approval = as_mcp(OMP_APPROVAL, "echo cap-b");
     let session = json!({ "agentId": "omp" });
     let transcript = session_chat_agent_for_session(&session).expect("transcript agent");
     assert_eq!(transcript, "pi");
-    assert!(classify_session_chat_terminal_notice(Some(&transcript), OMP_APPROVAL).is_none());
+    assert!(classify_session_chat_terminal_notice(Some(&transcript), &next_approval).is_none());
     let terminal = session_chat_display_agent_for_session(&session).expect("terminal agent");
     assert_eq!(terminal, "omp");
-    let notice = classify_session_chat_terminal_notice(Some(&terminal), OMP_APPROVAL)
+    let notice = classify_session_chat_terminal_notice(Some(&terminal), &next_approval)
         .expect("next approval");
     assert_eq!(notice.kind, SESSION_CHAT_NOTICE_PERMISSION_PROMPT);
-    assert_eq!(notice.approval_command.as_deref(), Some("echo cap-b"));
 }
 
 /// A row is picked by walking OMP's highlight to it and pressing Enter (its rows have no numbers);
 /// the chat's Allow on the stored approval card picks the Approve row the same way.
 #[test]
 fn a_row_is_answered_by_walking_omps_highlight() {
-    for screen in [PI, BOX] {
-        let picker = detect_omp_permission_picker(screen).expect("picker");
+    for screen in [as_mcp(PI, CAPTURED), as_mcp(BOX, CAPTURED)] {
+        let picker = detect_omp_permission_picker(&screen).expect("picker");
         assert_eq!(picker.answer_key(0).as_deref(), Some("\r"));
         assert_eq!(picker.answer_key(1).as_deref(), Some("\u{1b}[1;1B\r"));
         assert_eq!(picker.answer_key(2), None);
     }
-    assert!(detect_omp_permission_picker(&retired_approval()).is_none());
+    assert!(detect_omp_permission_picker(&as_mcp(&retired_approval(), CAPTURED)).is_none());
 }
 
 /// The live `pi` capture with one line between the approval frame and the composer, the way a

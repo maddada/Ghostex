@@ -20,7 +20,7 @@ mod claude_plan_dialog;
 mod codex_hooks_review;
 mod decoders;
 mod omp_input_rows;
-mod omp_tool_approval;
+pub(crate) mod omp_tool_approval;
 mod prompt_state;
 mod question_rows;
 mod readers;
