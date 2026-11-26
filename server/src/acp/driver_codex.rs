@@ -894,10 +894,7 @@ fn spawn_and_init_codex(
     if let Err(err) = transport.call(
         "initialize",
         json!({
-            "clientInfo": {
-                "name": "ghostex",
-                "version": env!("CARGO_PKG_VERSION"),
-            },
+            "clientInfo": crate::acp::client_info(),
             "capabilities": { "experimentalApi": true },
         }),
         CODEX_RPC_TIMEOUT,

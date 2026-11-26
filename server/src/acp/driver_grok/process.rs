@@ -151,10 +151,7 @@ pub(super) fn spawn_and_initialize_grok(
             "terminal": false,
             "session": { "notices": {}, "compaction": {} },
         },
-        "clientInfo": {
-            "name": "ghostex",
-            "version": env!("CARGO_PKG_VERSION"),
-        },
+        "clientInfo": crate::acp::client_info(),
         "_meta": {
             "clientType": "extension",
         },

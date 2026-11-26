@@ -2426,10 +2426,7 @@ pub fn run(args: &[String]) -> i32 {
             "terminal": false,
             "elicitation": { "form": {} },
         },
-        "clientInfo": {
-            "name": "ghostex",
-            "version": env!("CARGO_PKG_VERSION"),
-        },
+        "clientInfo": crate::acp::client_info(),
     });
     let init_result = match transport.call("initialize", init_params, ACP_RPC_TIMEOUT) {
         Ok(res) => res,
@@ -2445,6 +2442,14 @@ pub fn run(args: &[String]) -> i32 {
             return 1;
         }
     };
+    if spec.family == "antigravity" {
+        if let Some(refusal) = super::startup_error::antigravity_too_old(&init_result) {
+            eprintln!("Native host refused agy: {refusal}");
+            report_driver_startup_error(endpoint.as_ref(), spec.family, &refusal, false);
+            stop_child_gracefully(&transport, &mut child, &mut child_lifetime, &child_pid);
+            return 1;
+        }
+    }
     let supports_steering = init_result
         .pointer("/_meta/steering/supported")
         .and_then(Value::as_bool)
