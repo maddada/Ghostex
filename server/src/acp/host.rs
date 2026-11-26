@@ -35,8 +35,11 @@ use super::spec::{
 const ACP_LOAD_TIMEOUT: Duration = Duration::from_secs(90);
 const ACP_RPC_TIMEOUT: Duration = Duration::from_secs(30);
 pub(super) const POLL_RETRY_DELAY: Duration = Duration::from_millis(300);
-const SPOOL_MAX_BYTES: u64 = 16 * 1024 * 1024;
-const SPOOL_RETENTION: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+const SPOOL_MAX_BYTES: u64 = 2 * 1024 * 1024;
+const SPOOL_RETENTION: Duration = Duration::from_secs(24 * 60 * 60);
+const SPOOL_MAX_TOTAL_BYTES: u64 = 64 * 1024 * 1024;
+const SPOOL_ACTIVE_GRACE: Duration = Duration::from_secs(60);
+const SPOOL_MAX_LINE_BYTES: usize = 16 * 1024;
 
 #[cfg(unix)]
 static SIGNAL_TERMINATE: AtomicBool = AtomicBool::new(false);
@@ -559,6 +562,69 @@ pub(super) struct SpoolWriter {
     seq: u64,
 }
 
+/// Deletes ACP spool files past [`SPOOL_RETENTION`], then trims the oldest inactive files so the
+/// whole `acp-spool` folder stays within [`SPOOL_MAX_TOTAL_BYTES`].
+pub(crate) fn prune_acp_spool(
+    gxserver_state_dir: &Path,
+    now: SystemTime,
+) -> crate::storage_cleanup::Tally {
+    prune_acp_spool_dir(&gxserver_state_dir.join("acp-spool"), now)
+}
+
+fn prune_acp_spool_dir(dir: &Path, now: SystemTime) -> crate::storage_cleanup::Tally {
+    use crate::storage_cleanup::{remove_file, Tally};
+
+    let mut tally = Tally::default();
+    let Ok(entries) = fs::read_dir(dir) else {
+        return tally;
+    };
+    let mut kept: Vec<(PathBuf, fs::Metadata, SystemTime)> = Vec::new();
+    let mut total_bytes: u64 = 0;
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if !(name.ends_with(".jsonl") || name.ends_with(".jsonl.1")) {
+            continue;
+        }
+        let Ok(meta) = fs::symlink_metadata(&path) else {
+            continue;
+        };
+        if !meta.is_file() {
+            continue;
+        }
+        let modified = meta.modified().unwrap_or(UNIX_EPOCH);
+        if now.duration_since(modified).unwrap_or_default() > SPOOL_RETENTION {
+            remove_file(&path, &meta, &mut tally);
+        } else {
+            total_bytes = total_bytes.saturating_add(meta.len());
+            kept.push((path, meta, modified));
+        }
+    }
+
+    if total_bytes > SPOOL_MAX_TOTAL_BYTES {
+        kept.sort_by_key(|(_, _, modified)| *modified);
+        for (path, meta, modified) in kept {
+            if total_bytes <= SPOOL_MAX_TOTAL_BYTES {
+                break;
+            }
+            if now.duration_since(modified).unwrap_or_default() < SPOOL_ACTIVE_GRACE {
+                continue;
+            }
+            let len = meta.len();
+            let before = tally.files;
+            remove_file(&path, &meta, &mut tally);
+            if tally.files > before {
+                total_bytes = total_bytes.saturating_sub(len);
+            }
+        }
+    }
+
+    tally
+}
+
 impl SpoolWriter {
     fn open_private_file(path: &PathBuf, truncate: bool) -> Option<File> {
         let mut options = OpenOptions::new();
@@ -582,27 +648,8 @@ impl SpoolWriter {
         Some(file)
     }
 
-    fn sweep_stale_spools(dir: &PathBuf) {
-        let Ok(entries) = fs::read_dir(dir) else {
-            return;
-        };
-        let now = SystemTime::now();
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
-                continue;
-            };
-            if !(name.ends_with(".jsonl") || name.ends_with(".jsonl.1")) {
-                continue;
-            }
-            if let Ok(meta) = entry.metadata() {
-                if let Ok(modified) = meta.modified() {
-                    if now.duration_since(modified).unwrap_or_default() > SPOOL_RETENTION {
-                        let _ = fs::remove_file(&path);
-                    }
-                }
-            }
-        }
+    fn sweep_stale_spools(dir: &Path) {
+        let _ = prune_acp_spool_dir(dir, SystemTime::now());
     }
 
     pub(super) fn open(session_id: &str) -> Self {
@@ -656,25 +703,37 @@ impl SpoolWriter {
 
     pub(super) fn append(&mut self, event: &Value) {
         self.seq += 1;
+        let ts_ms = now_ms();
         let line = json!({
             "seq": self.seq,
-            "tsMs": now_ms(),
+            "tsMs": ts_ms,
             "event": event,
         });
-        let Ok(encoded) = serde_json::to_string(&line) else {
+        let Ok(mut encoded) = serde_json::to_string(&line) else {
             return;
         };
-        let write_len = (encoded.len() + 1) as u64;
+        if encoded.len() > SPOOL_MAX_LINE_BYTES {
+            let preview_end = encoded.floor_char_boundary(512.min(encoded.len()));
+            let summary = json!({
+                "seq": self.seq,
+                "tsMs": ts_ms,
+                "truncatedBytes": encoded.len(),
+                "preview": &encoded[..preview_end],
+            });
+            let Ok(compact) = serde_json::to_string(&summary) else {
+                return;
+            };
+            encoded = compact;
+        }
+        encoded.push('\n');
+        let write_len = encoded.len() as u64;
         if self.bytes_written.saturating_add(write_len) > SPOOL_MAX_BYTES {
             self.rotate();
         }
         let Some(file) = self.file.as_mut() else {
             return;
         };
-        if file.write_all(encoded.as_bytes()).is_ok()
-            && file.write_all(b"\n").is_ok()
-            && file.flush().is_ok()
-        {
+        if file.write_all(encoded.as_bytes()).is_ok() {
             self.bytes_written = self.bytes_written.saturating_add(write_len);
         }
     }

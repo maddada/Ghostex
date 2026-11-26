@@ -60,6 +60,10 @@ fn run_sweep(state: &AppState) {
             "backups",
             crate::storage_cleanup::prune_backups(&paths.root_dir, &paths.app_state_dir, now),
         ),
+        (
+            "acpSpool",
+            crate::acp::host::prune_acp_spool(&paths.root_dir, now),
+        ),
     ];
     let sessions = remove_expired_closed_sessions(state);
     let mut total = Tally::default();
