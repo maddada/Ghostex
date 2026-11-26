@@ -1062,6 +1062,11 @@ enum PendingPrompt {
         detail: Option<String>,
         options: Vec<PromptOption>,
     },
+    /// OMP's tool approval the chat leaves to the terminal: nothing here answers it.
+    InTerminal {
+        title: String,
+        detail: Option<String>,
+    },
 }
 
 fn pending_prompt(chat: &Value) -> PendingPrompt {
@@ -1089,6 +1094,21 @@ fn pending_prompt(chat: &Value) -> PendingPrompt {
             .or_else(|| notice.get("detail"))
             .and_then(Value::as_str)
             .map(str::to_string);
+        /*
+        CDXC:VoiceMode 2026-11-26 WHY:
+        OMP's tool approval the chat leaves to the terminal ("OMP is waiting for tool approval") is
+        answered there, with neither Allow nor Deny from the card (the owner's decision above
+        `omp_shown_request` in session_chat_omp_blocking.rs). The stored hook card still rides the
+        read beside it, so falling through to it below offered its Allow and Deny, which gxserver
+        then refused: the user was asked to choose where nothing can be answered. Such a notice is
+        read out as answered in the terminal instead, whatever the hook card says.
+        */
+        if notice.get("kind").and_then(Value::as_str)
+            == Some(crate::session_chat_notice::SESSION_CHAT_NOTICE_OMP_INPUT_BLOCKED)
+            && title == crate::session_chat_omp_blocking::OMP_TOOL_APPROVAL_TITLE
+        {
+            return PendingPrompt::InTerminal { title, detail };
+        }
         let dialog_id = notice.pointer("/dialog/id").and_then(Value::as_str);
         let choice_answer = |index: usize| match dialog_id {
             Some(id) => json!({"kind": "terminalDialog", "choiceIndex": index, "dialogId": id}),
@@ -1265,6 +1285,17 @@ async fn pending_view(state: &Arc<AppState>, session: &SessionInfo, chat: &Value
             "detail": detail.map(|detail| short(&detail, 400)),
             "options": options.iter().enumerate().map(|(n, option)| json!({"number": n + 1, "label": short(&option.label, 200)})).collect::<Vec<_>>(),
         }),
+        PendingPrompt::InTerminal { title, detail } => json!({
+            "ok": true,
+            "session": session.to_tool_value(),
+            "kind": "answerInTerminal",
+            "title": short(&title, 300),
+            "detail": detail.map(|detail| short(&detail, 400)),
+            "note": format!(
+                "This approval in \"{}\" can only be answered in its terminal, not from here. Tell the user to answer it in the session's terminal; there is nothing to choose.",
+                session.title
+            ),
+        }),
     };
     if !forms.is_empty() {
         result["questionForms"] = json!(forms);
@@ -1392,6 +1423,12 @@ async fn answer_prompt(
     let free_text = arg_text(args, "text");
     let (answer, said) = match pending_prompt(&chat) {
         PendingPrompt::None => return question_forms::answer(state, &session, args).await,
+        PendingPrompt::InTerminal { .. } => {
+            return Err(format!(
+                "Nothing was answered: the approval \"{}\" waits on can only be answered in its terminal. Tell the user to answer it there.",
+                session.title
+            ))
+        }
         PendingPrompt::Questions(questions) => {
             let mut selections: Vec<Value> = Vec::new();
             let mut said: Vec<String> = Vec::new();
