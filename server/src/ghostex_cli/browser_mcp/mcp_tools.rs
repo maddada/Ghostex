@@ -162,12 +162,14 @@ pub(super) fn browser_mcp_console_logs(args: &Value, state: &mut McpState) -> Cl
 /// is in a 1px view) and the snapshot listed nothing in view. The desktop gives the hidden page the
 /// Browser panel's frame (`size_background_browser_page`), but Chromium applies a hidden view's new
 /// size only when something captures it, which is why `ghostex_screenshot` "fixed" it. A hidden page
-/// still at 1×1 gets a one-pixel capture first, which makes Chromium take that frame.
+/// still at 1×1 gets a one-pixel capture first, which makes Chromium take that frame. At 125% a
+/// 1×1 view can read as 2 by 2, so up to 2 counts as unsized (no real Browser panel is 2px; #762
+/// re-check 11, N6).
 fn give_hidden_page_its_size(state: &mut McpState, page_id: &str) -> CliResult<()> {
     let still_one_pixel = evaluate_function(
         state,
         page_id,
-        "function ghostexUnsizedHiddenPage() { return document.visibilityState === \"hidden\" && window.innerWidth <= 1 && window.innerHeight <= 1; }",
+        "function ghostexUnsizedHiddenPage() { return document.visibilityState === \"hidden\" && window.innerWidth <= 2 && window.innerHeight <= 2; }",
         json!([]),
     )?;
     if still_one_pixel == Some(Value::Bool(true)) {
