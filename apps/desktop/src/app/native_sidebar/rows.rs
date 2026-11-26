@@ -33,14 +33,14 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// Main Hub's quiet "New chat" row at the end of Chats (with one muted line underneath:
-    /// "Anything, no project needed"). Clicking it starts a new chat in Main Hub through the
-    /// shared `start_new_agent_session_in_group` entry point.
+    /// Main Hub's quiet "New chat" row at the end of Chats. Clicking it starts a new chat in
+    /// Main Hub through the shared `start_new_agent_session_in_group` entry point.
     ///
-    /// CDXC:Chief 2026-11-24 DECISION:
-    /// User picked Part 2 option A: rename Main Hub's "Sessions" section to "Chats" and end it
-    /// with a quiet "New chat" row (chat-bubble outline icon, muted text) plus "Anything, no
-    /// project needed" underneath.
+    /// CDXC:Chief 2026-11-26 DECISION:
+    /// User picked Part 2 option A (2026-11-24): rename Main Hub's "Sessions" section to "Chats"
+    /// and end it with a quiet "New chat" row (chat-bubble outline icon, muted text). User
+    /// (2026-11-26): remove the "Anything, no project needed" line that sat under it, so the row
+    /// is one line.
     fn render_native_home_new_chat_row(
         &self,
         group: &NativeSidebarGroup,
@@ -49,11 +49,12 @@ impl GhostexGpuiApp {
     ) -> AnyElement {
         let scale = appearance.scale;
         let group_id = group.group_id.clone();
-        let row = h_flex()
+        h_flex()
             .id(format!("native-home-new-chat-{}", group.group_id))
             .role(gpui::Role::Button)
             .aria_label("New chat in Main Hub")
             .h(px(super::session_list::SESSION_HEIGHT * scale))
+            .flex_shrink_0()
             .mx(px(super::session_list::SESSION_INSET_X * scale))
             .pl(px(5.0 * scale))
             .pr(px(6.0 * scale))
@@ -94,22 +95,7 @@ impl GhostexGpuiApp {
                     appearance,
                     cx,
                 )
-            });
-        v_flex()
-            .w_full()
-            .flex_shrink_0()
-            .child(row)
-            .child(
-                div()
-                    .mx(px(super::session_list::SESSION_INSET_X * scale))
-                    .pl(px((5.0 + 15.0 + 6.0) * scale))
-                    .pr(px(6.0 * scale))
-                    .pt(px(2.0 * scale))
-                    .pb(px(4.0 * scale))
-                    .text_size(px(11.5 * scale))
-                    .text_color(appearance.muted.opacity(0.75))
-                    .child("Anything, no project needed"),
-            )
+            })
             .into_any_element()
     }
 
