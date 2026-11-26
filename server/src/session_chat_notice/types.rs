@@ -433,6 +433,8 @@ impl SessionChatTerminalNotice {
     }
 
     /// CDXC:SessionChat 2026-10-11 WHY: the chat cannot read these screens row by row (other agents' pickers and dialogs, and Codex's own screens its dialog reader does not know), so while one owns the input the chat passes keys through to the terminal and shows the screen region (`screenTail`) live; see the DECISION in session_chat_resume_picker.rs.
+    /// OMP's tool approval is marked so too, which hides a hook card's Allow and Deny beside it in
+    /// every chat core, but its keys are refused (`is_omp_tool_approval`).
     pub fn passes_keys_through(&self) -> bool {
         self.dialog.is_none()
             && self.choices.is_empty()
@@ -523,9 +525,17 @@ impl SessionChatTerminalNotice {
     /// (CDXC:SessionChat 2026-11-25 in session_chat_omp_blocking.rs), which is a request of its own
     /// in every rule a permission prompt has.
     pub fn is_permission_request(&self) -> bool {
-        self.kind == SESSION_CHAT_NOTICE_PERMISSION_PROMPT
-            || self.kind == SESSION_CHAT_NOTICE_OMP_INPUT_BLOCKED
-                && self.title == crate::session_chat_omp_blocking::OMP_TOOL_APPROVAL_TITLE
+        self.kind == SESSION_CHAT_NOTICE_PERMISSION_PROMPT || self.is_omp_tool_approval()
+    }
+
+    /// OMP's tool approval that the chat leaves to the terminal (`OMP_TOOL_APPROVAL_TITLE`), read
+    /// off the screen or derived from a stored bash hook card (`with_omp_hook_terminal_notice`).
+    /// Its card passes no keys (CDXC:SessionChat 2026-11-26 above `answer_terminal_key` in
+    /// session_chat_resume_picker.rs), though it is marked `passthrough` like the other screens
+    /// whose keys the chat passes on.
+    pub fn is_omp_tool_approval(&self) -> bool {
+        self.kind == SESSION_CHAT_NOTICE_OMP_INPUT_BLOCKED
+            && self.title == crate::session_chat_omp_blocking::OMP_TOOL_APPROVAL_TITLE
     }
 
     /*

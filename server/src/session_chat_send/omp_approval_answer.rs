@@ -177,6 +177,35 @@ pub(crate) fn is_omp_approval_guard(steps: &[SessionChatSendStep]) -> bool {
     })
 }
 
+/// Refuses (`answerInTerminal`) a key passed on to an OMP session (`terminalKey`) while the
+/// session's notice is OMP's tool approval card, as a fresh read of the screen gives it or as it is
+/// derived from the stored bash hook card before the screen shows one (CDXC:SessionChat 2026-11-26
+/// DECISION above `answer_terminal_key` in session_chat_resume_picker.rs).
+pub(crate) async fn refuse_key_on_omp_tool_approval(
+    state: &AppState,
+    target: &SessionChatSendTarget,
+) -> Result<(), DomainStateError> {
+    let detected = crate::session_chat_options::SessionChatOptionDetector::new(state)
+        .detect(&target.project_id, &target.session_id, Some("omp"), true)
+        .await;
+    let notice = crate::session_chat_notice::with_omp_hook_terminal_notice(
+        Some("omp"),
+        crate::agents::session_chat_prompt_setting(&target.session).as_deref(),
+        crate::session_chat_notice::resolve_session_chat_terminal_notice(
+            &target.project_id,
+            &target.session_id,
+            detected.notice,
+        ),
+    );
+    if notice.is_some_and(|notice| notice.is_omp_tool_approval()) {
+        return Err(DomainStateError {
+            code: ANSWER_IN_TERMINAL,
+            message: OMP_APPROVAL_TAKES_NO_KEYS.to_string(),
+        });
+    }
+    Ok(())
+}
+
 /*
 CDXC:SessionChat 2026-11-25 WHY:
 An OMP approval's answer is settled only by its guard at the front of the send queue, which

@@ -751,6 +751,7 @@ pub(super) async fn run_session_chat_send_worker(
                             crate::session_chat_omp_blocking::omp_card_answer_key(
                                 screen, &tool, &summary, allow,
                             )
+                            .ok_or_else(|| OMP_APPROVAL_CHANGED.to_string())
                         },
                     )
                     .await
@@ -767,6 +768,32 @@ pub(super) async fn run_session_chat_send_worker(
                         &source,
                         |screen| {
                             crate::session_chat_omp_blocking::omp_row_answer_key(screen, &pick)
+                                .ok_or_else(|| OMP_APPROVAL_CHANGED.to_string())
+                        },
+                    )
+                    .await
+                    {
+                        outcome = Err(error);
+                        break;
+                    }
+                }
+                SessionChatSendStep::GuardOmpTerminalKey(key) => {
+                    if let Err(error) = write_omp_approval_keys(
+                        &project_id,
+                        &session_id,
+                        &zmx_name,
+                        &source,
+                        |screen| {
+                            if crate::session_chat_omp_blocking::omp_shows_tool_approval(screen) {
+                                Err(OMP_APPROVAL_TAKES_NO_KEYS.to_string())
+                            } else if crate::session_chat_resume_picker::screen_takes_picker_keys(
+                                "omp", screen,
+                            ) {
+                                Ok(key)
+                            } else {
+                                Err("The agent's list closed before the key could be sent."
+                                    .to_string())
+                            }
                         },
                     )
                     .await
@@ -1544,25 +1571,21 @@ pub(super) async fn run_session_chat_send_worker(
 }
 
 /// Reads the screen and types the keys `keys` reads off that same capture; types nothing when the
-/// screen cannot be read (`OMP_APPROVAL_UNREAD`) or the keys find no dialog they belong to
-/// (`OMP_APPROVAL_CHANGED`).
+/// screen cannot be read (`OMP_APPROVAL_UNREAD`) or `keys` gives a reason instead
+/// (`OMP_APPROVAL_CHANGED` when they find no dialog they belong to).
 async fn write_omp_approval_keys(
     project_id: &str,
     session_id: &str,
     zmx_name: &str,
     source: &str,
-    keys: impl FnOnce(&str) -> Option<String>,
+    keys: impl FnOnce(&str) -> Result<String, String>,
 ) -> Result<(), SessionChatSendError> {
     let Some(screen) = capture_session_terminal_text(zmx_name).await else {
         return Err(SessionChatSendError::not_attempted(
             OMP_APPROVAL_UNREAD.to_string(),
         ));
     };
-    let Some(key) = keys(&screen) else {
-        return Err(SessionChatSendError::not_attempted(
-            OMP_APPROVAL_CHANGED.to_string(),
-        ));
-    };
+    let key = keys(&screen).map_err(SessionChatSendError::not_attempted)?;
     write_session_chat_payload(project_id, session_id, zmx_name, source, &key)
         .await
         .map_err(|error| SessionChatSendError::new(SessionChatSendFailure::Write, error))

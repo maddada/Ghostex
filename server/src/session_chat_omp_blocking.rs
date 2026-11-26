@@ -65,6 +65,14 @@ pub fn omp_hook_card_answered_in_terminal(tool: &str) -> bool {
     crate::session_chat_interactive::normalize_session_chat_tool_name(tool) == "bash"
 }
 
+/// Whether `text` shows OMP's live tool approval, with or without a message typed into it ("Deny
+/// and send message"), and whether or not its dialog shows a unique request: a screen a passed-on
+/// key must never reach (CDXC:SessionChat 2026-11-26 above `answer_terminal_key` in
+/// session_chat_resume_picker.rs).
+pub fn omp_shows_tool_approval(text: &str) -> bool {
+    detect_omp_blocking_screen(text) == Some(OMP_TOOL_APPROVAL)
+}
+
 fn collapse_spaces(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }

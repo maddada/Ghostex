@@ -1969,7 +1969,12 @@ is maximized, or a question card is open, the approval shows as its own card.
 An OMP approval that Ghostex cannot firmly tie to its request (one that shows
 only "Allow tool: <name>", and every bash command, whose trailing spaces the
 terminal cannot show) shows "OMP is waiting for tool approval" with Open
-terminal instead of answer buttons: answer it in the terminal.
+terminal instead of answer buttons: answer it in the terminal. Keys typed on
+that card, and its arrow, Enter and Esc buttons where the app still shows them,
+are not passed to OMP, also after you started a message in OMP's dialog ("Deny
+and send message"); Ghostex says to answer it in the terminal. A key from
+another OMP card is checked against the screen right before it is typed, and
+is not typed once an approval is up.
 Right after an earlier OMP approval with answer rows, a bash approval can show
 those rows for a moment until Ghostex reads the screen again; tapping one is
 refused. If two devices answer the same OMP approval card in a coordinator at

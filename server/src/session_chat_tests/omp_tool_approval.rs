@@ -1,7 +1,7 @@
 //! OMP 18.13.3's inline tool approval, captured live with the Unicode symbol preset and the `pi` and
 //! `box` composer shapes. OMP keeps its composer on screen right below the approval frame and removes
-//! the frame once the call is approved or denied. The card's keys must reach OMP as OMP, though its
-//! transcript reads as Pi's, and only while a screen that takes them is up.
+//! the frame once the call is approved or denied. A card's keys must reach OMP as OMP, though its
+//! transcript reads as Pi's, only while a screen that takes them is up, and never its tool approval.
 
 use serde_json::{json, Value};
 
@@ -260,7 +260,9 @@ const DRAFT_PI: &str = include_str!("fixtures/omp-tool-approval-draft-pi.txt");
 const DRAFT_BOX: &str = include_str!("fixtures/omp-tool-approval-draft-box.txt");
 
 /// After a key typed in OMP's terminal the dialog is "Deny and send message", whose Enter sends that
-/// message: the chat shows it as the terminal card that passes keys to OMP, not as rows.
+/// message: the chat shows it as the terminal card, not as rows. The card is still marked as one
+/// that passes keys on, so chat cores that hide a hook card's Allow and Deny only beside such a card
+/// keep hiding them; its keys are refused (`no_card_key_reaches_omps_tool_approval`).
 #[test]
 fn an_approval_with_a_typed_message_becomes_the_terminal_card() {
     for drafting in [DRAFT_PI, DRAFT_BOX] {
@@ -321,30 +323,51 @@ fn key(key: &str) -> Value {
     json!({ "kind": "terminalKey", "key": key })
 }
 
+/// OMP's tool approval is answered in the terminal, with or without a message typed into it, so no
+/// key from its card reaches OMP: Enter would approve, or deny and send the message, and a letter
+/// would start or continue that message (CDXC:SessionChat 2026-11-26 DECISION above
+/// `answer_terminal_key`). Every key is refused as answered in the terminal, after the screen was
+/// read once, and nothing is written. An OMP session whose transcript agent is Pi's answers here as
+/// OMP too (`the_card_keys_of_an_omp_session_go_to_omp`).
 #[tokio::test]
-async fn a_message_typed_on_the_card_reaches_omp_and_enter_denies_and_sends() {
-    let message = "Use the staging folder instead, then run it again.";
-    // The open approval is answered from its rows; its terminal card exists once a key typed in
-    // OMP's terminal started the message, so the keys here continue that message.
-    for (shape, drafting) in [("pi", DRAFT_PI), ("box", DRAFT_BOX)] {
-        let session = CardSession::new(&format!("message-{shape}"), "omp", Some(drafting));
-        for (index, letter) in message.chars().enumerate() {
-            session
-                .answer(typed(&letter.to_string()))
+async fn no_card_key_reaches_omps_tool_approval() {
+    let answers: Vec<Value> = [
+        "up", "down", "left", "right", "enter", "escape", "tab", "pageUp", "pageDown",
+    ]
+    .into_iter()
+    .map(key)
+    .chain([typed("N")])
+    .collect();
+    for (shape, screen) in [
+        ("pi", PI),
+        ("box", BOX),
+        ("draft-pi", DRAFT_PI),
+        ("draft-box", DRAFT_BOX),
+    ] {
+        let session = CardSession::new(&format!("approval-{shape}"), "omp", Some(screen));
+        for answer in &answers {
+            let refused = session
+                .answer(answer.clone())
                 .await
-                .unwrap_or_else(|error| panic!("{shape}: letter {index} refused: {error:?}"));
+                .expect_err(&format!("{shape}: {answer} was accepted"));
+            assert_eq!(refused.code, "answerInTerminal", "{shape}: {answer}");
         }
-        // Enter on a draft is OMP's "deny and send"; it has to reach OMP as Enter.
-        session
-            .answer(key("enter"))
-            .await
-            .unwrap_or_else(|error| panic!("{shape}: Enter refused: {error:?}"));
         let terminal = test_terminal::terminal(&session.target.zmx_name);
-        assert_eq!(terminal.writes.concat(), format!("{message}\r"));
-        // Every key was checked against the screen before it was written.
-        assert_eq!(terminal.captures, message.chars().count() + 1);
+        assert_eq!(terminal.writes, Vec::<String>::new(), "{shape}");
+        assert_eq!(terminal.captures, answers.len(), "{shape}");
     }
 }
+
+/// A select dialog OMP draws in place of its composer, which the chat cannot read row by row: its
+/// card passes keys on.
+const SELECTOR: &str = "╭─ Deploy target ──────────────────────╮\n\
+│ Where should the build go?           │\n\
+├──────────────────────────────────────┤\n\
+│ ❯ staging                            │\n\
+│   production                         │\n\
+├──────────────────────────────────────┤\n\
+│ ⏎ select · ⎋ cancel                  │\n\
+╰──────────────────────────────────────╯\n";
 
 #[tokio::test]
 async fn every_card_key_reaches_omp_as_that_key() {
@@ -361,7 +384,8 @@ async fn every_card_key_reaches_omp_as_that_key() {
         ("pageUp", "\x1b[5~"),
         ("pageDown", "\x1b[6~"),
     ];
-    for (shape, screen) in [("drafting", DRAFT_BOX)] {
+    // Any of OMP's screens whose card passes keys on, but its tool approval (above).
+    for (shape, screen) in [("selector", SELECTOR)] {
         let session = CardSession::new(&format!("keys-{shape}"), "omp", Some(screen));
         for (name, _) in keys {
             session.answer(key(name)).await.expect("a key on the card");

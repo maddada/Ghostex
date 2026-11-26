@@ -796,6 +796,13 @@ async fn answer_session_chat_prompt(
         };
         let agent =
             crate::session_chat_follower::omp_agent_for_pi_transcript(&target.session, agent);
+        // OMP's tool approval card passes no keys (CDXC:SessionChat 2026-11-26 DECISION above
+        // `answer_terminal_key` in session_chat_resume_picker.rs).
+        if agent == "omp" {
+            if let Err(error) = refuse_key_on_omp_tool_approval(state, &target).await {
+                return domain_error_response(endpoint_path, request_id, error);
+            }
+        }
         let result =
             crate::session_chat_resume_picker::answer_terminal_key(&target, &agent, &params).await;
         // The card draws the screen the key changed; republish it now, not on the next probe.
