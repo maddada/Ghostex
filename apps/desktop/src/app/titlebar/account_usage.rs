@@ -180,7 +180,7 @@ fn provider_label(provider: &str) -> &'static str {
     match provider {
         "codex" => "Codex",
         "cursor" => "Cursor",
-        "gemini" => "Gemini",
+        "antigravity" => "Antigravity",
         "copilot" => "Copilot",
         _ => "Claude",
     }
@@ -379,9 +379,9 @@ pub(crate) fn account_logo_svg(codex: bool) -> &'static str {
     }
 }
 
-/// The Cursor, Gemini and Copilot accounts only show usage (server/src/accounts/usage_only/).
+/// The Cursor, Antigravity and Copilot accounts only show usage (server/src/accounts/usage_only/).
 fn usage_only_provider(provider: &str) -> bool {
-    matches!(provider, "cursor" | "gemini" | "copilot")
+    matches!(provider, "cursor" | "antigravity" | "copilot")
 }
 
 /// A usage-only provider's agent logo, in the chrome's ink where the artwork is plain white.
@@ -397,12 +397,17 @@ pub(crate) fn usage_only_icon(provider: &str) -> Arc<gpui::Image> {
     icons
         .entry((provider.to_string(), light))
         .or_insert_with(|| {
-            let key = if provider == "cursor" {
-                "cursor-cli"
-            } else {
-                provider
+            let key = match provider {
+                "cursor" => "cursor-cli",
+                "antigravity" => "antigravity-cli",
+                other => other,
             };
-            let ink = if light { "#333333" } else { "#edecec" };
+            // Antigravity's logo keeps its brand blue, as in Settings > Accounts.
+            let ink = match (key, light) {
+                ("antigravity-cli", _) => "#749bff",
+                (_, true) => "#333333",
+                _ => "#edecec",
+            };
             let svg = ghostex_gx_core::agent_logo_svg(key)
                 .unwrap_or_default()
                 .replace("currentColor", ink)
@@ -507,7 +512,7 @@ fn badge_lines(account: &Value) -> Vec<String> {
         // CDXC:AgentProviders 2026-11-07 DECISION:
         // User, with a screenshot of the sidebar's usage meters (Claude and Codex stacked "74%" over "0%", Gemini packed as "0/0%"): "pls make the gemini one 2 lines like the others". A usage-only provider draws one stacked "N%" line per window, in the order gxserver lists them (Gemini's 5h then 7d); Cursor's and Copilot's single Mo window stays one line. The tile has no tooltip (2026-09-21), so the window labels stay in the usage popup.
         // CDXC:AgentProviders 2026-11-08 DECISION:
-        // Gemini now also lists Antigravity's Claude/GPT group as model-scoped 5h and 7d windows (server/src/accounts/usage_only/gemini.rs). The tile keeps one line per main window, and each line shows the most used window of that length across every group, so the limit agy hits first is the one on the tile; the settings pane and the chat's accounts panel list each group.
+        // Gemini now also lists Antigravity's Claude/GPT group as model-scoped 5h and 7d windows; since 2026-11-26 the same windows come from the Antigravity entry, read from agy's own /usage (server/src/accounts/usage_only/antigravity.rs). The tile keeps one line per main window, and each line shows the most used window of that length across every group, so the limit agy hits first is the one on the tile; the settings pane and the chat's accounts panel list each group.
         return windows
             .iter()
             .filter(|w| w["model"].is_null())
@@ -783,7 +788,7 @@ impl GhostexGpuiApp {
         }
         if !matches!(
             text(account, "provider"),
-            "claude" | "codex" | "cursor" | "gemini" | "copilot"
+            "claude" | "codex" | "cursor" | "antigravity" | "copilot"
         ) || account["registered"] != true
         {
             return;
@@ -1460,7 +1465,7 @@ mod tests {
     #[test]
     fn a_computer_that_did_not_answer_fades_and_explains() {
         let stale = with(
-            account("local", "gemini", "gemini-1", "G"),
+            account("local", "antigravity", "antigravity-1", "G"),
             "machineUnreachable",
             json!(true),
         );
@@ -1470,7 +1475,7 @@ mod tests {
         assert_eq!(
             tooltip,
             Some(format!(
-                "ST · Gemini\n{}: can't reach it, showing its last reading",
+                "ST · Antigravity\n{}: can't reach it, showing its last reading",
                 crate::host_name::local_computer_name()
             ))
         );

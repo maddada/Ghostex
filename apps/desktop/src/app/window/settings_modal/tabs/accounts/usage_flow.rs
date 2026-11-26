@@ -1,5 +1,6 @@
-//! Cursor, Gemini and Copilot in Settings > Accounts: their sign-in (gxserver's `usageSignIn*`
-//! job: the page it opens, a code to type for Copilot, a box for a pasted code for Gemini) and the
+//! Cursor, Antigravity and Copilot in Settings > Accounts: their sign-in (gxserver's `usageSignIn*`
+//! job: the page it opens, a code to type for Copilot; Antigravity opens nothing and only asks the
+//! Antigravity CLI on this computer for its usage) and the
 //! pane of a saved one (its usage, plan, name, sidebar switch and ⋯ menu).
 //!
 //! CDXC:Settings 2026-11-05 DECISION:
@@ -309,7 +310,12 @@ impl AccountsTab {
                     .into_any_element(),
             );
         } else {
-            let (title, detail) = if starting || status == "starting" {
+            let (title, detail) = if provider == "antigravity" {
+                (
+                    "Reading Antigravity usage…".to_string(),
+                    "Ghostex is asking the Antigravity CLI on this computer.".to_string(),
+                )
+            } else if starting || status == "starting" {
                 (
                     "Opening your browser…".to_string(),
                     format!("Ghostex is starting the {label} sign-in."),
@@ -529,7 +535,7 @@ impl AccountsTab {
             .into_any_element()
     }
 
-    /// Add a Cursor, Gemini or Copilot account: its sign-in, started by the picker.
+    /// Add a Cursor, Antigravity or Copilot account: its sign-in, started by the picker.
     pub(crate) fn render_add_usage_pane(
         &mut self,
         p: &SettingsPalette,
@@ -554,7 +560,11 @@ impl AccountsTab {
                             .line_height(px(22.0))
                             .font_weight(FontWeight::MEDIUM)
                             .text_color(hsla(p.foreground))
-                            .child(format!("Sign in to {label}")),
+                            .child(if provider == "antigravity" {
+                                format!("Add {label}")
+                            } else {
+                                format!("Sign in to {label}")
+                            }),
                     ),
             )
             .child(
@@ -562,15 +572,19 @@ impl AccountsTab {
                     .text_size(px(12.5))
                     .line_height(px(17.0))
                     .text_color(hsla(p.muted))
-                    .child(format!(
-                        "Ghostex shows this account's {label} usage in the sidebar and here. It doesn't run sessions on it."
-                    )),
+                    .child(if provider == "antigravity" {
+                        "Ghostex shows the usage of the Antigravity CLI signed in on this computer, read from agy itself, in the sidebar and here.".to_string()
+                    } else {
+                        format!(
+                            "Ghostex shows this account's {label} usage in the sidebar and here. It doesn't run sessions on it."
+                        )
+                    }),
             )
             .child(flow)
             .into_any_element()
     }
 
-    /// A saved Cursor, Gemini or Copilot account.
+    /// A saved Cursor, Antigravity or Copilot account.
     pub(crate) fn render_usage_account_detail(
         &mut self,
         p: &SettingsPalette,

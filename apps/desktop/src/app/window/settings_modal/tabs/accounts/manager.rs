@@ -262,7 +262,7 @@ impl AccountsTab {
     }
 
     /// Picking a provider in Add account: Claude and Codex start their sign-in at once (once their
-    /// helper is there), Cursor, Gemini and Copilot theirs.
+    /// helper is there), Cursor, Antigravity and Copilot theirs.
     pub(crate) fn pick_provider(
         &mut self,
         provider: &'static str,
@@ -337,7 +337,7 @@ impl AccountsTab {
                 .child(trailing)
         };
         let mut body: Vec<AnyElement> = vec![muted(p, "Choose a provider to sign in to.".into())];
-        // Cursor, Gemini and Copilot sign in through this computer's browser profiles, so another
+        // Cursor and Copilot sign in through this computer's browser profiles (Antigravity reads its agy), so another
         // computer offers only Claude and Codex.
         let machine_name = self.shown_machine_name(cx);
         let usage_providers: &[&'static str] = if machine_name.is_some() {
@@ -465,7 +465,7 @@ impl AccountsTab {
             p,
             match &machine_name {
                 Some(name) => format!("Claude and Codex accounts share their conversations, so a conversation carries on with another account when one hits its limit. The sign-in runs on {name}, and its page opens here."),
-                None => "Claude and Codex accounts share their conversations, so a conversation carries on with another account when one hits its limit. Cursor, Gemini and Copilot accounts only show their usage.".to_string(),
+                None => "Claude and Codex accounts share their conversations, so a conversation carries on with another account when one hits its limit. Antigravity, Cursor and Copilot accounts only show their usage.".to_string(),
             },
         ));
         v_flex()
