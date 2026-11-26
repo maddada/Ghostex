@@ -190,6 +190,7 @@ impl GhostexGpuiApp {
             "confirmDelete" => self.native_docs_delete(&path, cx),
             "close" => self.native_docs_request_close(&path, window, cx),
             "closeAll" => self.native_docs_request_close_all(window, cx),
+            "closeOthers" => self.native_docs_request_close_others(&path, window, cx),
             "openExternally" => {
                 let app = command["app"].as_str().map(std::path::PathBuf::from);
                 self.native_docs_open_externally(&path, app, cx);
@@ -741,8 +742,29 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.native_docs_defer_to_main_window(window, cx, |this, window, cx| {
-            this.native_docs_request_close_all(window, cx)
+        self.native_docs_request_close_except(None, window, cx);
+    }
+
+    /// A tab's Close Others: closes every open file but `keep`, asking once about the unsaved
+    /// ones, as Close All does.
+    pub(crate) fn native_docs_request_close_others(
+        &mut self,
+        keep: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.native_docs_request_close_except(Some(keep.to_string()), window, cx);
+    }
+
+    fn native_docs_request_close_except(
+        &mut self,
+        keep: Option<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let deferred_keep = keep.clone();
+        if self.native_docs_defer_to_main_window(window, cx, move |this, window, cx| {
+            this.native_docs_request_close_except(deferred_keep, window, cx)
         }) {
             return;
         }
@@ -750,6 +772,7 @@ impl GhostexGpuiApp {
             .native_docs
             .documents
             .iter()
+            .filter(|document| keep.as_deref() != Some(document.path.as_ref()))
             .map(|document| (document.path.clone(), document.dirty))
             .partition(|(_, dirty)| *dirty);
         let close_clean = move |this: &mut Self, cx: &mut Context<Self>| {

@@ -93,8 +93,8 @@ impl GhostexGpuiApp {
         self.native_docs_select(path, cx);
     }
 
-    /// A file tab's right-click menu: Close, and Close All, which the hidden Open Files list
-    /// otherwise offers.
+    /// A file tab's right-click menu: Close, Close Others (every tab but this one, #710), and
+    /// Close All, which the hidden Open Files list otherwise offers.
     pub(crate) fn show_native_docs_tab_menu(
         &mut self,
         path: &str,
@@ -102,8 +102,18 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let no_others = self
+            .native_docs
+            .documents
+            .iter()
+            .all(|document| document.path.as_ref() == path);
         GpuiContextMenu::new()
             .menu("Close", action(json!({ "type": "close", "path": path })))
+            .menu_with_disabled(
+                "Close Others",
+                no_others,
+                action(json!({ "type": "closeOthers", "path": path })),
+            )
             .menu("Close All", action(json!({ "type": "closeAll" })))
             .show(position, window, cx);
     }
