@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="ghostex-page" content="v2">
+<title>How working with a coordinator goes</title>
+<style>
+  .steps { list-style: none; padding: 0; margin: 8px 0 0; counter-reset: step; display: grid; gap: 10px; }
+  .steps li { counter-increment: step; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; align-items: start; }
+  .steps li::before { content: counter(step); display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%;
+    background: var(--gx-surface); border: 1px solid var(--gx-line-strong); color: var(--gx-fg); font-size: 13px; font-weight: 650; }
+  .steps b { color: var(--gx-fg); }
+  .steps q { color: var(--gx-text); font-style: italic; }
+  .gx-card h3 { margin-top: 0; }
+  .gx-card p { margin-bottom: 0; }
+  /* Screenshots load from the repo's README images; offline, each keeps its shape as a quiet frame naming what it shows. */
+  .shot { position: relative; aspect-ratio: 2548 / 1831; border-radius: 12px; overflow: hidden; background: var(--gx-surface); border: 1px solid var(--gx-line); }
+  .shot img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .shot.failed img { display: none; }
+  .shot.failed::after { content: attr(data-alt); position: absolute; inset: 0; display: grid; place-items: center; padding: 18px; text-align: center; font-size: 14px; line-height: 1.5; color: var(--gx-muted); }
+</style>
+</head>
+<body>
+<gx-page>
+  <header>
+    <span class="gx-eyebrow">Ghostex coordinator · how it works</span>
+    <h1>How working with a coordinator goes</h1>
+    <p class="gx-lede">One coordinator per project. You ask and pick; it plans, starts the threads, follows them and brings back what needs you.</p>
+    <div class="gx-chips">
+      <span class="gx-chip">You prompt and pick</span>
+      <span class="gx-chip">It runs the threads</span>
+      <span class="gx-chip">Far fewer threads to watch</span>
+    </div>
+  </header>
+
+  <figure class="gx-figure">
+    <div class="shot" data-alt="A coordinator's chat with two Live page cards, and the Work panel on the right"><img src="https://raw.githubusercontent.com/maddada/Ghostex/main/media/readme/coordinator/coordinator.webp" alt="A coordinator's chat with two Live page cards, and the Work panel on the right"></div>
+    <figcaption>A coordinator mid-release: pages to decide on in the chat, every line of work on the right.</figcaption>
+  </figure>
+
+  <h2>The flow</h2>
+  <ol class="steps">
+    <li><span><b>Ask for what you want, in plain words.</b> <q>I want to add feature X, show me UX options in a Live page.</q> or <q>Triage all my issues in a Live page.</q></span></li>
+    <li><span><b>A page lands in your Inbox,</b> right above the chat box: designs or choices, drawn so you can see them.</span></li>
+    <li><span><b>Pick and comment</b> on the page, then send it to the coordinator from the end of the page.</span></li>
+    <li><span><b>It starts the threads</b> that do the work, with the agents you said to use for each kind of work (kept in its memory).</span></li>
+    <li><span><b>It comes back only when it needs you:</b> a Needs you in the sidebar and the Inbox, nothing else to watch.</span></li>
+  </ol>
+
+  <gx-tabs>
+    <section data-tab="Ask">
+      <figure class="gx-figure">
+        <div class="shot" data-alt="The user asks for a release; the coordinator kicks off a thread per piece"><img src="https://raw.githubusercontent.com/maddada/Ghostex/main/media/readme/coordinator/delegate.webp" alt="The user asks for a release; the coordinator kicks off a thread per piece"></div>
+        <figcaption>One message; the coordinator starts a thread per piece and says what it kicked off.</figcaption>
+      </figure>
+    </section>
+    <section data-tab="Inbox">
+      <figure class="gx-figure">
+        <div class="shot" data-alt="The Inbox above the chat box with pages and questions"><img src="https://raw.githubusercontent.com/maddada/Ghostex/main/media/readme/coordinator/inbox.webp" alt="The Inbox above the chat box with pages and questions"></div>
+        <figcaption>Pages and questions wait in the Inbox above the chat box: answer, snooze or leave them.</figcaption>
+      </figure>
+    </section>
+    <section data-tab="Pick">
+      <figure class="gx-figure">
+        <div class="shot" data-alt="A Live page with three plans side by side and a Pick button on each"><img src="https://raw.githubusercontent.com/maddada/Ghostex/main/media/readme/coordinator/page-offline.webp" alt="A Live page with three plans side by side and a Pick button on each"></div>
+        <figcaption>Pick on the page and send it from the end; the coordinator takes it from there.</figcaption>
+      </figure>
+    </section>
+  </gx-tabs>
+
+  <h2>Why it beats managing threads by hand</h2>
+  <div class="gx-grid">
+    <div class="gx-card"><h3>No more babysitting threads</h3><p>No looking for, snoozing or settling threads. It happens by itself, so the sidebar stays nearly empty and your head stays clear.</p></div>
+    <div class="gx-card"><h3>You prompt and pick</h3><p>The coordinator manages all the work. You decide where it matters and skip the rest.</p></div>
+    <div class="gx-card"><h3>You in the loop, not buried</h3><p>A Needs you in the sidebar when it matters. Jump in when you want, pick or snooze, tell it to cut a release once you are done testing, or go play a game.</p></div>
+    <div class="gx-card"><h3>Uses what you have</h3><p>It spreads work over your computers by the resources they have free, and over your agents by the usage they have left.</p></div>
+    <div class="gx-card"><h3>Gets better with time</h3><p>It saves how you like to work in this project. New coordinators can copy memories from others. Better than AGENTS.md, since its memory does not change how worker threads behave.</p></div>
+    <div class="gx-card"><h3>Better prompts than yours</h3><p>Once it knows the product it rewords every ask into a full brief for the thread, with the files, the limits and the proof to bring back.</p></div>
+    <div class="gx-card"><h3>Always free to take more</h3><p>It stays idle after handing out the work, so you can send it more asks at any time, however unrelated.</p></div>
+  </div>
+
+  <h2>Pages it makes for you</h2>
+  <p>Designs to choose from, plans to compare, lists to triage. Each one reads well on a phone too.</p>
+  <gx-tabs>
+    <section data-tab="Designs">
+      <figure class="gx-figure"><div class="shot" data-alt="Three invite designs on a Live page"><img src="https://raw.githubusercontent.com/maddada/Ghostex/main/media/readme/coordinator/page-invite.webp" alt="Three invite designs on a Live page"></div><figcaption>Three designs for one screen, each drawn at its real size.</figcaption></figure>
+    </section>
+    <section data-tab="Options">
+      <figure class="gx-figure"><div class="shot" data-alt="Three ways to link a bank, side by side"><img src="https://raw.githubusercontent.com/maddada/Ghostex/main/media/readme/coordinator/page-bank.webp" alt="Three ways to link a bank, side by side"></div><figcaption>Options side by side, with what each costs.</figcaption></figure>
+    </section>
+    <section data-tab="Phone">
+      <figure class="gx-figure"><div class="shot" data-alt="The same pages on two phones"><img src="https://raw.githubusercontent.com/maddada/Ghostex/main/media/readme/coordinator/phones-2.webp" alt="The same pages on two phones"></div><figcaption>The same pages on the phone.</figcaption></figure>
+    </section>
+  </gx-tabs>
+
+  <h2>From your phone</h2>
+  <gx-tabs>
+    <section data-tab="Chat and Work">
+      <figure class="gx-figure"><div class="shot" data-alt="The coordinator's chat with its Inbox, and the Work list on a phone"><img src="https://raw.githubusercontent.com/maddada/Ghostex/main/media/readme/coordinator/phones-1.webp" alt="The coordinator's chat with its Inbox, and the Work list on a phone"></div></figure>
+    </section>
+    <section data-tab="Answer">
+      <figure class="gx-figure"><div class="shot" data-alt="Answering a question from the Work list on a phone"><img src="https://raw.githubusercontent.com/maddada/Ghostex/main/media/readme/coordinator/phones-3.webp" alt="Answering a question from the Work list on a phone"></div></figure>
+    </section>
+    <section data-tab="Threads">
+      <figure class="gx-figure"><div class="shot" data-alt="Threads under their coordinator in the phone's session list"><img src="https://raw.githubusercontent.com/maddada/Ghostex/main/media/readme/coordinator/phones-4.webp" alt="Threads under their coordinator in the phone's session list"></div></figure>
+    </section>
+    <section data-tab="Settings">
+      <figure class="gx-figure"><div class="shot" data-alt="Theme and Experience settings on a phone"><img src="https://raw.githubusercontent.com/maddada/Ghostex/main/media/readme/coordinator/phones-5.webp" alt="Theme and Experience settings on a phone"></div></figure>
+    </section>
+  </gx-tabs>
+
+  <div class="gx-callout" data-tone="good">
+    <b>Ask for Live pages.</b> Use them to get information back and to make decisions. Reading a long chat reply is a much worse experience.
+  </div>
+
+</gx-page>
+<script>
+  // A screenshot that cannot load (offline) shows its frame and words, never a broken picture.
+  document.querySelectorAll('.shot img').forEach(function (img) {
+    function failed() { img.parentElement.classList.add('failed'); }
+    if (img.complete && img.naturalWidth === 0) failed();
+    img.addEventListener('error', failed);
+  });
+</script>
+</body>
+</html>

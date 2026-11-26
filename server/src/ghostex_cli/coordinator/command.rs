@@ -8,8 +8,8 @@ use ghostex_gx_chat_core::protocol::{
 use serde_json::{json, Value};
 
 use super::{
-    acknowledge_threads, board, item, playbook, sleep_threads, status as status_parts, threads,
-    usage_room,
+    acknowledge_threads, board, item, playbook, setup, sleep_threads, status as status_parts,
+    threads, usage_room,
 };
 use crate::coordinators::{
     coordinator_launcher_family as agent_family,
@@ -59,7 +59,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             }
             println!("\nFull reference: ghostex coordinator --help --all.");
         } else {
-            println!("ghostex coordinator: manage a coordinator and its threads.\n  create | promote | make-main | options | list | status | start-thread\n  link | unlink | rename | rename-self | note | resolve | reopen\n  item | board | remember | forget | set-goal | set-instructions\n  guide | playbook | set-playbook | next-tag\n  <verb> --help shows its usage; --help --all shows the full reference.");
+            println!("ghostex coordinator: manage a coordinator and its threads.\n  create | promote | make-main | options | list | status | start-thread\n  link | unlink | rename | rename-self | note | resolve | reopen\n  item | board | remember | forget | set-goal | set-instructions\n  guide | playbook | set-playbook | next-tag | setup\n  <verb> --help shows its usage; --help --all shows the full reference.");
         }
         return Ok(());
     }
@@ -90,6 +90,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         "edit" => edit(&parsed),
         "playbook" => playbook::show(&parsed),
         "set-playbook" => playbook::set(&parsed),
+        "setup" => setup::setup(&args[1..]),
         other => Err(CliError::Other(format!(
             "Unknown coordinator command: {other}. See ghostex coordinator --help."
         ))),
@@ -451,7 +452,34 @@ fn make_main(parsed: &ParsedArgs) -> CliResult<()> {
 /// The phone's New Coordinator form reads its choices here instead of parsing the model catalog itself, so its lineup is the one gxserver serves and its defaults are the ones `create` applies (Opus 5.5 for Claude, High effort, the orchestrator levels only, and the locked skill line each agent's first message starts with).
 /// SEE-ALSO: apps/desktop/src/app/gx_store/create/coordinator.rs (the desktop dialog's lineup), apps/mobile/app/src/screens/sessions-screen/NewCoordinatorSheet.tsx (the phone's form).
 fn options(parsed: &ParsedArgs) -> CliResult<()> {
-    let flags = server_flags(&parsed.flags);
+    let result = options_view(&server_flags(&parsed.flags))?;
+    let agents = result["agents"].as_array().cloned().unwrap_or_default();
+    if parsed.flags.truthy("json") {
+        print_json(&result);
+    } else {
+        for agent in &agents {
+            let models: Vec<&str> = agent["models"]
+                .as_array()
+                .map(Vec::as_slice)
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|model| model["value"].as_str())
+                .collect();
+            println!(
+                "{} ({}): {}",
+                agents::text(agent, "name"),
+                agents::text(agent, "agentId"),
+                models.join(", ")
+            );
+        }
+    }
+    Ok(())
+}
+
+/// What `options --json` prints: each agent a coordinator can run on, its models and their
+/// efforts (the setup page offers the same lineup, setup.rs).
+pub(super) fn options_view(flags: &Flags) -> CliResult<Value> {
+    let flags = flags.clone();
     let hud = call_gxserver_rpc("/api/readSidebarHud", &json!({}), &flags)?;
     let paths = crate::paths::get_gxserver_paths(None);
     crate::agent_model_catalog::adopt_cached_copy(&paths);
@@ -569,6 +597,7 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
                     "agentId": agents::text(row, "agentId"),
                     "name": row.get("name").and_then(Value::as_str).unwrap_or(agent_id),
                     "family": family,
+                    "icon": row.get("icon").and_then(Value::as_str).unwrap_or_default(),
                     "models": models,
                     "defaultModel": default_model,
                     "skillLine": crate::coordinators::coordinator_skill_line(family),
@@ -578,31 +607,11 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
         .collect();
     agents.sort_by_key(|(family, _)| *family != "claude");
     let agents: Vec<Value> = agents.into_iter().map(|(_, agent)| agent).collect();
-    let result = json!({
+    Ok(json!({
         "agents": agents,
         // CDXC:Coordinators 2026-10-17 SEE-ALSO: packages/gx-chat-core/src/menus/orchestrator_effort.rs (the user's Low/Medium/High/XHigh decision, 2026-10-31); each model's own `defaultEffort` is High (or its highest level at or below High), and this is the level where the model has it.
         "defaultEffort": "high",
-    });
-    if parsed.flags.truthy("json") {
-        print_json(&result);
-    } else {
-        for agent in &agents {
-            let models: Vec<&str> = agent["models"]
-                .as_array()
-                .map(Vec::as_slice)
-                .unwrap_or_default()
-                .iter()
-                .filter_map(|model| model["value"].as_str())
-                .collect();
-            println!(
-                "{} ({}): {}",
-                agents::text(agent, "name"),
-                agents::text(agent, "agentId"),
-                models.join(", ")
-            );
-        }
-    }
-    Ok(())
+    }))
 }
 
 /// `{ icon }` of a launcher from `/api/readSidebarHud` for `start-thread`.

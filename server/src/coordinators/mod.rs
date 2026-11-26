@@ -36,6 +36,7 @@ mod restore;
 mod role;
 mod seen_threads;
 mod session_work;
+mod setup;
 mod sleep_threads;
 mod stale_report;
 mod stall;
@@ -87,6 +88,7 @@ pub use session_work::{
     session_work_summary, take_summary_changes, work_items_extension_on, write_topic,
     WORK_ITEMS_EXTENSION, WORK_ITEMS_OFF,
 };
+pub use setup::*;
 pub use sleep_threads::*;
 pub use stale_report::*;
 pub use stall::*;

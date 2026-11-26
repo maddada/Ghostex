@@ -99,6 +99,9 @@ pub fn handle_with_ids(
         ActionKind::HideCoordinatorIntro => {
             crate::extras::coordinator_intro::hide(state, next_request_id())
         }
+        ActionKind::OpenCoordinatorFlowPage => {
+            crate::extras::coordinator_intro::open_flow_page(state, next_request_id())
+        }
         ActionKind::ToggleAutopilot => crate::extras::autopilot::toggle(state, next_request_id()),
         ActionKind::DismissCoordinatorQuality => crate::extras::coordinator_quality::dismiss(state),
         ActionKind::SetCollabGuest => crate::extras::collab::set_guest(state, action),

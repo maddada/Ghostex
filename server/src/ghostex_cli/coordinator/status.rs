@@ -231,6 +231,15 @@ pub(super) fn print_compact(view: &Value, flags: &Flags) {
             lines => format!("{lines} lines of standing instructions (status memory)"),
         }
     );
+    // The setup interview (setup.rs, the playbook's First turn: setup): a new coordinator runs it
+    // before any work; one that already has threads is only reminded it has none saved.
+    if !crate::coordinators::has_setup_notes(&coordinator["memory"]) {
+        if view["threads"].as_array().is_none_or(Vec::is_empty) {
+            println!("Setup: not done. Before other work, run `ghostex coordinator setup page`, show the page it writes with `ghostex show <path>` and end the turn.");
+        } else {
+            println!("Setup: none saved (the user's default applies; `ghostex coordinator setup show`). Offer the interview, `ghostex coordinator setup page`, when the user asks or at a quiet moment.");
+        }
+    }
     let work = read_work(view, flags);
     let look = needs_look(view, work.as_ref());
     if look.is_empty() {

@@ -62,6 +62,10 @@ const PLAYBOOK_PROJECT_PREFIX: &str = "coordinator/playbook/project/";
 /// (`unified_sidebar::project_repo_key`), as Spaces are.
 const PLAYBOOK_FOLDER_PREFIX: &str = "coordinator/playbook/folder/";
 const PLAYBOOK_OVERRIDES: &str = "coordinator/playbook/overrides";
+/// The user's default coordinator setup (coordinators/setup.rs): which agents do which work, the
+/// low-usage rule, accounts never used and computers. It shapes what coordinators tell threads, so
+/// it is logged with the playbooks.
+const SETUP_DEFAULTS: &str = "coordinator/setup/defaults";
 
 /// The prefix project playbooks sync under, and project id → key under it.
 type PlaybookKeys = (&'static str, Vec<(String, String)>);
@@ -70,6 +74,7 @@ type PlaybookKeys = (&'static str, Vec<(String, String)>);
 /// the agents' commands.
 fn carries_agent_instructions(key: &str) -> bool {
     key.starts_with("coordinator/playbook/")
+        || key == SETUP_DEFAULTS
         || key.starts_with(ghostex_gx_core::settings_sync::OWN_SKILL_KEY_PREFIX)
         || key.starts_with(ghostex_gx_core::settings_sync::AGENT_KEY_PREFIX)
 }
@@ -82,6 +87,8 @@ fn log_incoming_instructions(wanted: &[(String, Option<Value>, String)]) {
         }
         let what = if key.starts_with("coordinator/playbook/") {
             "A coordinator playbook"
+        } else if key == SETUP_DEFAULTS {
+            "The coordinator setup"
         } else if key.starts_with(ghostex_gx_core::settings_sync::OWN_SKILL_KEY_PREFIX) {
             "A skill"
         } else {
@@ -120,6 +127,9 @@ impl Engine<'_> {
                 let (all, projects) = crate::coordinators::synced_playbooks(self.db)?;
                 if let Some(overrides) = crate::coordinators::synced_playbook_overrides(self.db)? {
                     values.insert(PLAYBOOK_OVERRIDES.to_string(), overrides);
+                }
+                if let Some(setup) = crate::coordinators::synced_setup_default(self.db)? {
+                    values.insert(SETUP_DEFAULTS.to_string(), setup);
                 }
                 if let Some(all) = all {
                     values.insert(PLAYBOOK_ALL.to_string(), all);
@@ -344,6 +354,8 @@ impl Engine<'_> {
                     crate::agent_model_pins::set_synced_default(family, value.as_ref());
                 } else if key == PLAYBOOK_OVERRIDES {
                     crate::coordinators::write_synced_playbook_overrides(self.db, value.as_ref())?;
+                } else if key == SETUP_DEFAULTS {
+                    crate::coordinators::write_synced_setup_default(self.db, value.as_ref())?;
                 } else if key == PLAYBOOK_ALL {
                     playbook_all = Some(value.as_ref());
                 } else if let Some(repo) = key.strip_prefix(playbook_prefix) {

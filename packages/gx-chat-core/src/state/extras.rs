@@ -155,6 +155,8 @@ pub struct PanelsState {
     pub intro_hidden: bool,
     /// That call to gxserver while it is in flight.
     pub intro_hide_request: Option<u64>,
+    /// The How to use pill's ask for the coordinator flow page (extras/coordinator_intro.rs).
+    pub flow_page_request: Option<u64>,
     /// The Autopilot pill's save in flight, and what it showed before it flipped
     /// (`extras::autopilot`).
     pub autopilot_request: Option<(u64, Option<serde_json::Value>)>,
@@ -205,6 +207,7 @@ impl Default for PanelsState {
             last_mark_all_read: None,
             intro_hidden: false,
             intro_hide_request: None,
+            flow_page_request: None,
             autopilot_request: None,
             collab_requests: Vec::new(),
             collab_typing_at: 0.0,

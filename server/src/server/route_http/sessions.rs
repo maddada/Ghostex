@@ -638,6 +638,35 @@ pub(super) async fn route_sessions_http(
                     .map(|snapshot| json!({ "snapshot": snapshot }))
             },
         ),
+        // The How to use pill of a coordinator's chat opens the coordinator flow page
+        // (coordinators/setup.rs; gx-chat-core extras/coordinator_intro.rs).
+        "/api/coordinatorBoard"
+            if body_json
+                .get("params")
+                .and_then(|params| params.get("op"))
+                .and_then(Value::as_str)
+                == Some("flowPage") =>
+        {
+            let root = state.paths.root_dir.clone();
+            let port = state.config.listeners.local.port;
+            handle_domain_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+                move |_, _, _, _| {
+                    let (id, title) = crate::coordinators::coordinator_flow_page(&root)
+                        .map_err(DomainStateError::bad_request)?;
+                    Ok(json!({
+                        "url": format!(
+                            "http://127.0.0.1:{port}{}{id}",
+                            crate::visual_pages::VISUAL_PAGE_ROUTE_PREFIX
+                        ),
+                        "title": title,
+                    }))
+                },
+            )
+        }
         // A board card's Mark done on a thread here resolves it as Mark Thread Done does (the chat's
         // own calls carry the coordinator's ids, so the thread's ride as `thread*`).
         "/api/coordinatorBoard" if board_card_resolves_thread(&body_json).is_some() => {
@@ -881,6 +910,18 @@ pub(super) async fn route_sessions_http(
                         )?;
                     }
                     Ok(output.result)
+                },
+            )
+        }
+        "/api/readCoordinatorSetup" | "/api/setCoordinatorSetup" => {
+            let path = endpoint.path.clone();
+            handle_domain_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+                |_, db, params, _| {
+                    crate::coordinators::handle_coordinator_setup_endpoint(&path, db, params)
                 },
             )
         }

@@ -97,6 +97,7 @@ action_kinds! {
     ShowWorkDock => "showWorkDock",
     InsertBoardReference => "insertBoardReference",
     HideCoordinatorIntro => "hideCoordinatorIntro",
+    OpenCoordinatorFlowPage => "openCoordinatorFlowPage",
     ToggleAutopilot => "toggleAutopilot",
     ToggleBoost => "toggleBoost",
     SetBoostTab => "setBoostTab",

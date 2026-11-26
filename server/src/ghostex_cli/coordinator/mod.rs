@@ -4,6 +4,7 @@ mod command;
 mod delivery;
 mod item;
 mod playbook;
+mod setup;
 mod sleep_threads;
 mod status;
 mod threads;

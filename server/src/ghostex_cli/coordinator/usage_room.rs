@@ -61,7 +61,7 @@ const AGENTS: [(&str, &str); 5] = [
 
 /// The roster provider an agent id runs on: a built-in id, or a custom launcher named after its
 /// family (`custom-claude-70-…`).
-fn provider_of(agent_id: &str) -> Option<&'static str> {
+pub(super) fn provider_of(agent_id: &str) -> Option<&'static str> {
     let id = agent_id.strip_prefix("custom-").unwrap_or(agent_id);
     [
         ("claude", "claude"),

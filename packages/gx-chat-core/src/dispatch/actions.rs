@@ -230,6 +230,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::ShowWorkDock
         | ActionKind::InsertBoardReference
         | ActionKind::HideCoordinatorIntro
+        | ActionKind::OpenCoordinatorFlowPage
         | ActionKind::ToggleAutopilot
         | ActionKind::ToggleBoost
         | ActionKind::SetBoostTab
@@ -428,6 +429,7 @@ fn clears_error(kind: &ActionKind) -> bool {
         | ActionKind::ShowWorkDock
             | ActionKind::InsertBoardReference
             | ActionKind::HideCoordinatorIntro
+            | ActionKind::OpenCoordinatorFlowPage
         | ActionKind::ToggleAutopilot
         | ActionKind::ToggleBoost
         | ActionKind::SetBoostTab
@@ -513,6 +515,7 @@ fn publishes_at_once(kind: &ActionKind) -> bool {
             | ActionKind::ShowWorkDock
             | ActionKind::InsertBoardReference
             | ActionKind::HideCoordinatorIntro
+            | ActionKind::OpenCoordinatorFlowPage
             | ActionKind::ToggleAutopilot
             | ActionKind::ToggleBoost
             | ActionKind::SetBoostTab

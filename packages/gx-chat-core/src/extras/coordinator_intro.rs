@@ -134,6 +134,9 @@ pub fn project(state: &ChatState) -> Value {
     }
     json!({
         "title": TITLE,
+        // The pill opens the coordinator flow page (`open_flow_page`) on a renderer that knows it;
+        // an older one still opens these tips.
+        "opensFlowPage": true,
         "lede": LEDE,
         "exampleHint": EXAMPLE_HINT,
         "dontShowAgain": DONT_SHOW_AGAIN,
@@ -184,6 +187,61 @@ pub fn hide(state: &mut ChatState, request_id: u64) -> Vec<Effect> {
             "op": "hideIntro",
         })),
     }]
+}
+
+/// `openCoordinatorFlowPage`: the How to use pill's press in a coordinator's chat. gxserver
+/// publishes the coordinator flow page it ships (or reuses it) and answers its address
+/// (`/api/coordinatorBoard` op `flowPage`, server/src/coordinators/setup.rs).
+///
+/// CDXC:Coordinators 2026-11-26 DECISION:
+/// The user, of the coordinator's How to use pill and its tips panel: "make the tips just open this page directly", this page being the coordinator flow page Ghostex ships (how working with a coordinator goes and why it beats managing threads by hand). In a coordinator's chat the pill opens that page where the reader's Open Live pages in setting says; the tips panel stays for renderers that do not know `opensFlowPage` and for any chat that is not a coordinator's. Don't show again stays in the page's place: it still removes the pill from every coordinator.
+pub fn open_flow_page(state: &mut ChatState, request_id: u64) -> Vec<Effect> {
+    if state.extras.panels.flow_page_request.is_some() {
+        return Vec::new();
+    }
+    state.extras.panels.flow_page_request = Some(request_id);
+    vec![Effect::SendRpc {
+        request_id,
+        method: crate::wire::ChatRpcMethod::CoordinatorBoard,
+        params: Box::new(json!({
+            "projectId": state.identity.project_id,
+            "sessionId": state.identity.session_id,
+            "op": "flowPage",
+        })),
+    }]
+}
+
+/// Takes gxserver's answer to [`open_flow_page`]: opens the page, or says why it could not.
+/// `None` when `request_id` is not that call.
+pub fn settle_flow_page(
+    panels: &mut crate::state::PanelsState,
+    request_id: u64,
+    answer: Result<&Value, String>,
+) -> Option<Vec<Effect>> {
+    if panels.flow_page_request != Some(request_id) {
+        return None;
+    }
+    panels.flow_page_request = None;
+    let url = answer
+        .as_ref()
+        .ok()
+        .and_then(|answer| answer.get("url"))
+        .and_then(Value::as_str)
+        .filter(|url| !url.is_empty())
+        .map(str::to_string);
+    Some(match url {
+        Some(url) => vec![Effect::Open(crate::effect::OpenTarget::Url {
+            url,
+            external: false,
+        })],
+        None => vec![Effect::Toast {
+            level: "error".to_string(),
+            message: match answer {
+                Err(message) if !message.is_empty() => message,
+                _ => "Couldn't open the coordinator page. Update Ghostex on the computer that runs this coordinator.".to_string(),
+            },
+        }],
+    })
 }
 
 /// Takes gxserver's answer to [`hide`]: nothing more once it is saved; refused, the pill comes back

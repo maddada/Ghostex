@@ -225,6 +225,12 @@ pub fn describe_setting_key(conflict: &SyncConflict) -> Option<String> {
             lost.origin_name,
         ));
     }
+    if key == "coordinator/setup/defaults" {
+        return Some(format!(
+            "The coordinator setup is the one from {}, replacing the one from {}.",
+            kept.origin_name, lost.origin_name,
+        ));
+    }
     if key == "coordinator/playbook/overrides" {
         return Some(format!(
             "The coordinator playbook overrides are the edit from {}, replacing the edit from {}.",

@@ -502,6 +502,14 @@ impl NativeChatView {
             );
             return;
         }
+        // A coordinator's How to use pill opens the coordinator flow page instead of its tips
+        // (CDXC:Coordinators 2026-11-26 in gx-chat-core extras/coordinator_intro.rs).
+        if id == super::coordinator_intro::INTRO_MENU
+            && self.snapshot["coordinatorIntro"]["opensFlowPage"] == true
+        {
+            self.invoke(json!({"type": "openCoordinatorFlowPage"}), cx);
+            return;
+        }
         self.toggle_pill_menu(id, bounds, window, cx);
         if id == super::questions_list::QUESTIONS_MENU && self.chat_menu_is_open(trigger) {
             self.keep_question_ages_current(cx);

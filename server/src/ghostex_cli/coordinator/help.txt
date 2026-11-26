@@ -72,6 +72,11 @@ USAGE
   ghostex coordinator playbook --remove-override <n>
   ghostex coordinator set-playbook (--use-ghostex | --reset | --off | --on)
                               [--project-id <id> | --this-project] [--json]
+  ghostex coordinator setup page [--out <file>] [--setup-file <json>] [--coordinator <ref>]
+  ghostex coordinator setup save --body-file <file|-> [--json] [--coordinator <ref>]
+  ghostex coordinator setup copy <coordinator ref> [--coordinator <ref>]
+  ghostex coordinator setup show [--json] [--coordinator <ref>]
+  ghostex coordinator setup explain [--json] [--browser]
 
 WHAT A COORDINATOR IS
   A coordinator is an agent session with a standing role: it
@@ -426,6 +431,29 @@ MEMORY AND INSTRUCTIONS
   instructions and the whole note list (--notes-json takes a JSON array of
   strings) in one call, the way the Goal & Instructions and Memory editors on
   a coordinator's sidebar menu save.
+
+SETUP
+  The setup interview tells a coordinator which agent, model and effort each
+  kind of work gets (large and complex, hard and focused, simple), what to do
+  when usage runs low, which accounts threads never use and which computers
+  they may run on. A new coordinator runs it on its first turn (status says so
+  while it has none), and again whenever the user asks.
+  setup page writes the interview as a Live page and prints its path; show it
+  with ghostex show <path>. It offers every agent turned on here that can run
+  a coordinator's threads, with only current models (no Flash, Lite, Mini or
+  Composer tiers), prefilled from this coordinator's setup, else the user's
+  default, else the playbook's picks. --setup-file prefills it from a setup
+  JSON instead, to preview one.
+  setup save takes the page's answers (the JSON in the answers message, or
+  the whole message) and saves them as this coordinator's "Setup:" memory
+  notes, replacing the old ones, and as the user's default for every new
+  coordinator, synced to their other computers. Accounts picked to never use
+  need "Only when I pick it" in Settings > Accounts; only the user can set
+  that, so the coordinator asks them to.
+  setup copy copies another coordinator's "Setup:" notes to this one.
+  setup show prints the setup in effect and where it came from.
+  setup explain shows the coordinator flow page Ghostex ships (what working
+  with a coordinator looks like) in this chat, like ghostex show.
 
 COORDINATOR PLAYBOOK
   The coordinator playbook is how every coordinator works. It ships inside
