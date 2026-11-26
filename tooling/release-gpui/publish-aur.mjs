@@ -11,7 +11,16 @@
  */
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -299,61 +308,65 @@ function publish({ dryRun = false, outputDirectory, version }) {
     );
   }
   const checkout = mkdtempSync(path.join(os.tmpdir(), `ghostex-${version}-aur-`));
-  const clone = runGit(['clone', '--depth', '1', aurRemote, checkout], { allowFailure: true });
-  if (clone.status !== 0) {
-    throw new Error(
-      `Could not clone ${aurRemote}: ${(clone.stderr || clone.stdout || 'unknown error').trim()}\n` +
-        'The ghostex-bin AUR repository must already exist and the SSH key in use must be registered on the AUR ' +
-        'account that owns it. See tooling/packaging/aur/ghostex-bin/README.md for the one-time setup.'
+  try {
+    const clone = runGit(['clone', '--depth', '1', aurRemote, checkout], { allowFailure: true });
+    if (clone.status !== 0) {
+      throw new Error(
+        `Could not clone ${aurRemote}: ${(clone.stderr || clone.stdout || 'unknown error').trim()}\n` +
+          'The ghostex-bin AUR repository must already exist and the SSH key in use must be registered on the AUR ' +
+          'account that owns it. See tooling/packaging/aur/ghostex-bin/README.md for the one-time setup.'
+      );
+    }
+    /*
+     * The AUR holds one version. Leave a version that is already there (a co-maintainer may have
+     * pushed it first, perhaps with a newer pkgrel) and never replace a newer one: either would
+     * rebuild or downgrade every Arch user's Ghostex for nothing.
+     */
+    const published = publishedPkgver(checkout);
+    if (dryRun) {
+      dryRunReport({ checkout, outputDirectory, published, version });
+      return;
+    }
+    if (published && compareVersions(published, version) >= 0) {
+      process.stdout.write(
+        published === version
+          ? `AUR ghostex-bin is already at ${version}; leaving it as it is.\n`
+          : `AUR ghostex-bin is at ${published}, newer than ${version}; not downgrading it.\n`
+      );
+      return;
+    }
+    for (const name of aurRepositoryFiles) {
+      copyFileSync(path.join(outputDirectory, name), path.join(checkout, name));
+    }
+    runGit(['add', ...aurRepositoryFiles], { cwd: checkout });
+    if (!runGit(['status', '--porcelain'], { cwd: checkout }).stdout.trim()) {
+      process.stdout.write(`AUR ghostex-bin is already at ${version} with this checksum; nothing to push.\n`);
+      return;
+    }
+    runGit(
+      [
+        '-c',
+        'user.name=Ghostex Release Bot',
+        '-c',
+        'user.email=support@ghostex.app',
+        'commit',
+        '-m',
+        `Update ghostex-bin to ${version}-1`,
+      ],
+      { cwd: checkout }
     );
+    const push = runGit(['push', 'origin', 'HEAD:master'], { cwd: checkout, allowFailure: true });
+    if (push.status !== 0) {
+      throw new Error(
+        `The AUR refused the ghostex-bin ${version} push: ${(push.stderr || push.stdout || 'unknown error').trim()}\n` +
+          'Usually the key is not on an AUR account that maintains or co-maintains ghostex-bin. ' +
+          'See tooling/packaging/aur/ghostex-bin/README.md.'
+      );
+    }
+    process.stdout.write(`Pushed ghostex-bin ${version} to the AUR.\n`);
+  } finally {
+    rmSync(checkout, { force: true, recursive: true });
   }
-  /*
-   * The AUR holds one version. Leave a version that is already there (a co-maintainer may have
-   * pushed it first, perhaps with a newer pkgrel) and never replace a newer one: either would
-   * rebuild or downgrade every Arch user's Ghostex for nothing.
-   */
-  const published = publishedPkgver(checkout);
-  if (dryRun) {
-    dryRunReport({ checkout, outputDirectory, published, version });
-    return;
-  }
-  if (published && compareVersions(published, version) >= 0) {
-    process.stdout.write(
-      published === version
-        ? `AUR ghostex-bin is already at ${version}; leaving it as it is.\n`
-        : `AUR ghostex-bin is at ${published}, newer than ${version}; not downgrading it.\n`
-    );
-    return;
-  }
-  for (const name of aurRepositoryFiles) {
-    copyFileSync(path.join(outputDirectory, name), path.join(checkout, name));
-  }
-  runGit(['add', ...aurRepositoryFiles], { cwd: checkout });
-  if (!runGit(['status', '--porcelain'], { cwd: checkout }).stdout.trim()) {
-    process.stdout.write(`AUR ghostex-bin is already at ${version} with this checksum; nothing to push.\n`);
-    return;
-  }
-  runGit(
-    [
-      '-c',
-      'user.name=Ghostex Release Bot',
-      '-c',
-      'user.email=support@ghostex.app',
-      'commit',
-      '-m',
-      `Update ghostex-bin to ${version}-1`,
-    ],
-    { cwd: checkout }
-  );
-  const push = runGit(['push', 'origin', 'HEAD:master'], { cwd: checkout, allowFailure: true });
-  if (push.status !== 0) {
-    throw new Error(
-      `The AUR refused the ghostex-bin ${version} push: ${(push.stderr || push.stdout || 'unknown error').trim()}\n` +
-        'Usually the key is not on an AUR account that maintains or co-maintains ghostex-bin. ' +
-        'See tooling/packaging/aur/ghostex-bin/README.md.'
-    );
-  }
-  process.stdout.write(`Pushed ghostex-bin ${version} to the AUR.\n`);
 }
 
 function dryRunReport({ checkout, outputDirectory, published, version }) {
