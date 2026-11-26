@@ -187,7 +187,10 @@ fn tokens(value: &str) -> Vec<String> {
 fn family_and_version(value: &str) -> (String, Vec<u64>) {
     let (route, id) = value.split_once('/').unwrap_or(("", value));
     let id = id.split('[').next().unwrap_or(id);
-    let id = id.strip_prefix("cursor-").unwrap_or(id).to_ascii_lowercase();
+    let id = id
+        .strip_prefix("cursor-")
+        .unwrap_or(id)
+        .to_ascii_lowercase();
     let words: Vec<String> = id
         .split(|c: char| !c.is_ascii_alphabetic())
         .filter(|word| !word.is_empty())
@@ -308,7 +311,8 @@ fn find_agent<'a>(agents: &'a [Agent], wanted: &str) -> Option<&'a Agent> {
         .find(|agent| agent.id == wanted)
         .or_else(|| {
             agents.iter().find(|agent| {
-                agent.name.eq_ignore_ascii_case(wanted) || agent.short().eq_ignore_ascii_case(wanted)
+                agent.name.eq_ignore_ascii_case(wanted)
+                    || agent.short().eq_ignore_ascii_case(wanted)
             })
         })
         .or_else(|| agents.iter().find(|agent| agent.family == wanted))
@@ -605,7 +609,12 @@ fn playbook_setup(agents: &[Agent]) -> Setup {
         never_use: Vec::new(),
         computers: None,
     };
-    setup.rule = rule_for(&setup.low, &setup.main_label(), setup.other.as_ref(), &setup.other_work);
+    setup.rule = rule_for(
+        &setup.low,
+        &setup.main_label(),
+        setup.other.as_ref(),
+        &setup.other_work,
+    );
     setup
 }
 
@@ -618,7 +627,13 @@ fn setup_from_json(value: &Value, agents: &[Agent], base: &Setup) -> Setup {
             setup.work[index] = match find_agent(agents, &pick.agent) {
                 Some(agent) => {
                     let model = agent.model(&pick.model).or_else(|| agent.main_model());
-                    Pick::of(agent, model, Some(&pick.effort).filter(|e| !e.is_empty()).map(String::as_str))
+                    Pick::of(
+                        agent,
+                        model,
+                        Some(&pick.effort)
+                            .filter(|e| !e.is_empty())
+                            .map(String::as_str),
+                    )
                 }
                 None => pick,
             };
@@ -637,7 +652,12 @@ fn setup_from_json(value: &Value, agents: &[Agent], base: &Setup) -> Setup {
     }
     setup.rule = match low["rule"].as_str() {
         Some(rule) if setup.low == "own" && !rule.trim().is_empty() => rule.trim().to_string(),
-        _ => rule_for(&setup.low, &setup.main_label(), setup.other.as_ref(), &setup.other_work),
+        _ => rule_for(
+            &setup.low,
+            &setup.main_label(),
+            setup.other.as_ref(),
+            &setup.other_work,
+        ),
     };
     if let Some(never) = value["neverUse"].as_array() {
         setup.never_use = never
@@ -770,7 +790,11 @@ fn esc(text: &str) -> String {
 fn logo(icon: &str) -> Option<(&'static str, &'static str)> {
     macro_rules! asset {
         ($name:literal) => {
-            include_str!(concat!("../../../../packages/core-ui/assets/", $name, ".svg"))
+            include_str!(concat!(
+                "../../../../packages/core-ui/assets/",
+                $name,
+                ".svg"
+            ))
         };
     }
     Some(match icon {
@@ -808,8 +832,21 @@ fn data_uri(svg: &str) -> String {
     let mut out = String::from("data:image/svg+xml,");
     for byte in svg.trim().bytes() {
         match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b' ' | b'=' | b':'
-            | b'/' | b',' | b'\'' | b'(' | b')' | b';' => out.push(byte as char),
+            b'A'..=b'Z'
+            | b'a'..=b'z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'.'
+            | b'_'
+            | b' '
+            | b'='
+            | b':'
+            | b'/'
+            | b','
+            | b'\''
+            | b'('
+            | b')'
+            | b';' => out.push(byte as char),
             _ => out.push_str(&format!("%{byte:02X}")),
         }
     }
@@ -823,7 +860,11 @@ fn logo_class(agents: &[Agent]) -> (Vec<Option<String>>, String) {
         .iter()
         .enumerate()
         .map(|(index, agent)| {
-            let icon = if agent.icon.is_empty() { &agent.family } else { &agent.icon };
+            let icon = if agent.icon.is_empty() {
+                &agent.family
+            } else {
+                &agent.icon
+            };
             let (svg, color) = logo(icon).or_else(|| logo(&agent.family))?;
             let class = format!("l-{index}");
             let color = if color.is_empty() {
@@ -1027,7 +1068,11 @@ fn page_html(data: &PageData) -> String {
         .iter()
         .zip(&classes)
         .map(|(agent, class)| {
-            let icon = if agent.icon.is_empty() { &agent.family } else { &agent.icon };
+            let icon = if agent.icon.is_empty() {
+                &agent.family
+            } else {
+                &agent.icon
+            };
             let color = logo(icon)
                 .or_else(|| logo(&agent.family))
                 .map(|(_, color)| color)
@@ -1040,10 +1085,18 @@ fn page_html(data: &PageData) -> String {
         .collect();
     let mut cards = String::new();
     for (index, kind) in KINDS.iter().enumerate() {
-        cards.push_str(&kind_card(*kind, DRAWINGS[index], agents, &classes, &setup.work[index]));
+        cards.push_str(&kind_card(
+            *kind,
+            DRAWINGS[index],
+            agents,
+            &classes,
+            &setup.work[index],
+        ));
     }
     let lede = match *source {
-        "this coordinator" => "Filled in from this coordinator's setup. Change anything, or just send it.",
+        "this coordinator" => {
+            "Filled in from this coordinator's setup. Change anything, or just send it."
+        }
         "your default" => "Filled in from your saved setup. Change anything, or just send it.",
         _ => "Filled in with the recommended setup. Change anything, or just send it.",
     };
@@ -1062,7 +1115,11 @@ fn page_html(data: &PageData) -> String {
             "ask" => value == "Ask me",
             _ => false,
         };
-        if on { " picked" } else { "" }
+        if on {
+            " picked"
+        } else {
+            ""
+        }
     };
     let own_rule = if setup.low == "own" && !setup.rule.is_empty() {
         format!(
@@ -1187,7 +1244,11 @@ fn page_html(data: &PageData) -> String {
 "#,
         agent_count = agents.len(),
         computer_count = computers.len().max(1),
-        computer_word = if computers.len() > 1 { "computers" } else { "computer" },
+        computer_word = if computers.len() > 1 {
+            "computers"
+        } else {
+            "computer"
+        },
         main_html = esc(&main),
         other_html = esc(&other),
         p_stay = picked("Stay"),
@@ -1202,7 +1263,10 @@ fn page_html(data: &PageData) -> String {
 fn never_use_section(room: &Value, never_use: &[String]) -> String {
     let mut groups = String::new();
     for agent in room["agents"].as_array().into_iter().flatten() {
-        let details = agent["accountDetails"].as_array().cloned().unwrap_or_default();
+        let details = agent["accountDetails"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
         if details.len() < 2 {
             continue;
         }
@@ -1368,8 +1432,9 @@ fn page(parsed: &ParsedArgs) -> CliResult<()> {
         )),
     };
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|error| CliError::Other(format!("Could not make {}: {error}", parent.display())))?;
+        std::fs::create_dir_all(parent).map_err(|error| {
+            CliError::Other(format!("Could not make {}: {error}", parent.display()))
+        })?;
     }
     std::fs::write(&path, html)
         .map_err(|error| CliError::Other(format!("Could not write {}: {error}", path.display())))?;
@@ -1412,7 +1477,9 @@ fn setup_from_answers(answers: &Value, agents: &[Agent], base: &Setup, all: &[St
                 continue;
             };
             let model = agent.model(text("model")).or_else(|| {
-                (text("model") != NO_MODEL).then(|| agent.main_model()).flatten()
+                (text("model") != NO_MODEL)
+                    .then(|| agent.main_model())
+                    .flatten()
             });
             let effort = Some(text("effort")).filter(|e| !e.is_empty() && *e != NO_EFFORT);
             setup.work[index] = Pick::of(agent, model, effort);
@@ -1441,30 +1508,50 @@ fn setup_from_answers(answers: &Value, agents: &[Agent], base: &Setup, all: &[St
     if let Some(low) = low {
         setup.low = low.to_string();
         setup.rule = if low == "own" {
-            if !note.is_empty() && (choice.is_empty() || choice == KIT_OTHER || choice == KIT_SKIPPED) {
+            if !note.is_empty()
+                && (choice.is_empty() || choice == KIT_OTHER || choice == KIT_SKIPPED)
+            {
                 note.to_string()
             } else {
                 choice.to_string()
             }
         } else {
-            let mut rule = rule_for(low, &setup.main_label(), setup.other.as_ref(), &setup.other_work);
+            let mut rule = rule_for(
+                low,
+                &setup.main_label(),
+                setup.other.as_ref(),
+                &setup.other_work,
+            );
             if !note.is_empty() {
                 rule.push_str(&format!(" The user added: {note}"));
             }
             rule
         };
     } else if setup.low != "own" {
-        setup.rule = rule_for(&setup.low, &setup.main_label(), setup.other.as_ref(), &setup.other_work);
+        setup.rule = rule_for(
+            &setup.low,
+            &setup.main_label(),
+            setup.other.as_ref(),
+            &setup.other_work,
+        );
     }
     match answers.get("Never use") {
         Some(Value::Array(list)) => {
-            setup.never_use = list.iter().filter_map(Value::as_str).map(str::to_string).collect();
+            setup.never_use = list
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect();
         }
         Some(Value::String(skipped)) if skipped == KIT_SKIPPED => setup.never_use.clear(),
         _ => {}
     }
     if let Some(Value::Array(list)) = answers.get("Computers") {
-        let picked: Vec<String> = list.iter().filter_map(Value::as_str).map(str::to_string).collect();
+        let picked: Vec<String> = list
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect();
         setup.computers = (!all.iter().all(|name| picked.contains(name))).then_some(picked);
     }
     setup
@@ -1621,15 +1708,19 @@ fn show(parsed: &ParsedArgs) -> CliResult<()> {
 fn explain(args: &[String]) -> CliResult<()> {
     let path = setup_dir().join("coordinator-flow.html");
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|error| CliError::Other(format!("Could not make {}: {error}", parent.display())))?;
+        std::fs::create_dir_all(parent).map_err(|error| {
+            CliError::Other(format!("Could not make {}: {error}", parent.display()))
+        })?;
     }
     if std::fs::read_to_string(&path).ok().as_deref() != Some(COORDINATOR_FLOW_PAGE_HTML) {
         std::fs::write(&path, COORDINATOR_FLOW_PAGE_HTML).map_err(|error| {
             CliError::Other(format!("Could not write {}: {error}", path.display()))
         })?;
     }
-    let mut show_args = vec![path.to_string_lossy().into_owned(), "--no-check".to_string()];
+    let mut show_args = vec![
+        path.to_string_lossy().into_owned(),
+        "--no-check".to_string(),
+    ];
     show_args.extend(args.iter().cloned());
     crate::ghostex_cli::show::show_command(&show_args)
 }
@@ -1733,18 +1824,27 @@ mod tests {
         let setup = setup_from_answers(&answers, &agents, &base, &all);
         let notes = setup.notes();
         assert_eq!(notes[0], "Setup: large, complex work: Claude · Opus 5.5 · High (start-thread --agent claude --model opus[1m] --effort high)");
-        assert_eq!(notes[2], "Setup: simple, contained work: Pi Agent · its own model (start-thread --agent pi)");
+        assert_eq!(
+            notes[2],
+            "Setup: simple, contained work: Pi Agent · its own model (start-thread --agent pi)"
+        );
         assert_eq!(notes[3], "Setup: when usage runs low: Claude until every Claude account is low, then every new thread on Antigravity (large work Gemini 4 Neon High, hard work Gemini 4 Neon Medium, simple work Gemini 4 Neon Low). (start-thread --agent antigravity --model gemini-4-neon --effort high|medium|low, by kind of work)");
         assert!(notes[4].starts_with("Setup: accounts threads never use: Claude #2 ("));
         assert_eq!(notes[5], "Setup: computers threads may run on: all");
         // The lines read back to the same setup (a redo prefills from them).
-        assert_eq!(setup_from_notes(&notes, &agents, &base).notes()[..3], notes[..3]);
+        assert_eq!(
+            setup_from_notes(&notes, &agents, &base).notes()[..3],
+            notes[..3]
+        );
 
         // The user's own words are kept as they wrote them.
         let own = json!({ "Low usage": KIT_OTHER, "Low usage (note)": "split usage between Opus 5.5 and Antigravity sessions" });
         let setup = setup_from_answers(&own, &agents, &base, &all);
         assert_eq!(setup.low, "own");
-        assert_eq!(setup.rule, "split usage between Opus 5.5 and Antigravity sessions");
+        assert_eq!(
+            setup.rule,
+            "split usage between Opus 5.5 and Antigravity sessions"
+        );
     }
 
     #[test]

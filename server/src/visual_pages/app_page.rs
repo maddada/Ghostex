@@ -22,13 +22,19 @@ pub(crate) fn app_page(gxserver_state_dir: &Path, key: &str, html: &str) -> Resu
         .filter(serde_json::Value::is_object)
         .unwrap_or_else(|| json!({}));
     let hash = format!("{:x}", fingerprint(html));
-    if let Some(id) = index[key]["id"].as_str().filter(|_| index[key]["hash"] == hash.as_str()) {
+    if let Some(id) = index[key]["id"]
+        .as_str()
+        .filter(|_| index[key]["hash"] == hash.as_str())
+    {
         if read_record(gxserver_state_dir, id).is_some() {
             return Ok(id.to_string());
         }
     }
     let prepared = prepare_page(html, Path::new("/"))?;
-    let title = prepared.title.clone().unwrap_or_else(|| "Live page".to_string());
+    let title = prepared
+        .title
+        .clone()
+        .unwrap_or_else(|| "Live page".to_string());
     let id = write_page(gxserver_state_dir, &title, &prepared.html, None, None)
         .map_err(|error| format!("Could not save the page: {error}"))?;
     index[key] = json!({ "id": id, "hash": hash });
