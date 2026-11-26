@@ -81,6 +81,9 @@ fn refuse_error(error: ExtensionError) -> RoutedResponse {
         "notFound" => StatusCode::NOT_FOUND,
         "conflict" => StatusCode::CONFLICT,
         "forbidden" => StatusCode::FORBIDDEN,
+        // openView: the app isn't open, or the extension asked again too soon (open_view.rs).
+        "unavailable" => StatusCode::SERVICE_UNAVAILABLE,
+        "rateLimited" => StatusCode::TOO_MANY_REQUESTS,
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     };
     refuse(status, error.code, error.message)

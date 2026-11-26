@@ -896,7 +896,16 @@ impl GpuiAppToastWindow {
         // (CDXC:Extensions 2026-11-26 in server/src/extensions/open_view.rs, #772). Neutral; Open stays the one strong
         // button. Not on a remote computer's toast: the setting is read by the
         // gxserver the agent runs on, and this one only saves this computer's settings.
+        // An extension's own ask has no Always: it would turn on opens without asking for
+        // every agent (CDXC:Extensions 2026-11-26 WHY in server/src/extensions/open_view.rs).
+        let extension_asks = sr
+            .request
+            .payload
+            .get("requester")
+            .and_then(|value| value.as_str())
+            == Some("extension");
         let always_button = (sr.machine_id.is_none()
+            && !extension_asks
             && matches!(
                 sr.request.action.as_str(),
                 "openBrowser" | "openBrowserPane" | "openExtensionView"

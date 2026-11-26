@@ -5,6 +5,13 @@
 //! CDXC:Extensions 2026-11-26 DECISION:
 //! User (#772, Mobile Pane): an agent, or the extension's server, opens or focuses an installed extension's view in the side panel of the calling session's project, so a phone mirror appears beside the agent that starts testing on it. An extension may open only its own view, only while it is on, and only with `views.open`, which the user grants on the install card like every other permission. An agent never yanks what the user is looking at: the open follows `ghostex browser open`'s rules (CDXC:SwitchRequests 2026-11-23 and 2026-11-26 in server/src/switch_requests.rs): `--background` adds the tab to the agent's own project without showing it, "Let agents open and switch pages without asking" (or the toast's Always) opens it on screen, and otherwise the user gets the same switch toast with Open and Always. A view already in front of that project needs neither: the app answers that it is showing. The user's own terminal opens it straight away.
 //! SEE-ALSO: packages/gx-core/src/renderer_commands/verbs.rs (`OpenExtensionView`), apps/desktop/src/app/extensions/open_view.rs (the app's side), apps/desktop/src/app/window/toast.rs (Always on this toast).
+//!
+//! CDXC:Extensions 2026-11-26 WHY:
+//! #772 review: nothing limited how often an open could come. An extension's server runs on its own, unwatched, so a loop of `openView` calls either pulled its view back in front every time the user left it (with agents allowed to open pages without asking) or kept replacing the one switch toast, so a click meant for an agent's toast could land on the extension's. An agent or an extension now gets one on-screen open or toast per `OPEN_VIEW_MIN_INTERVAL`; a background open and a view already showing don't count, and the user's own opens are never limited. The extension's toast says it is the extension asking and has no Always: Always turns on opens without asking for every agent, which an extension's request must not be the way to grant.
+
+use std::collections::HashMap;
+use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
 
@@ -20,6 +27,64 @@ use crate::server::AppState;
 pub(crate) const OPEN_EXTENSION_VIEW_ACTION: &str = "openExtensionView";
 
 const OPEN_VIEW_TIMEOUT_MS: u64 = 15_000;
+
+/// One on-screen open or toast per agent or extension per this long (CDXC:Extensions 2026-11-26
+/// WHY above).
+const OPEN_VIEW_MIN_INTERVAL: Duration = Duration::from_secs(10);
+
+/// When each agent or extension last opened a view on screen or asked with the toast.
+static LAST_VISIBLE_OPEN: LazyLock<Mutex<HashMap<String, Instant>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Who an open is limited for: an agent session or an extension; the user is never limited.
+fn rate_key(requester: &OpenViewRequester) -> Option<String> {
+    match requester {
+        OpenViewRequester::User => None,
+        OpenViewRequester::Agent {
+            project_id,
+            session_id,
+        } => Some(format!("agent:{project_id}:{session_id}")),
+        OpenViewRequester::Extension { id } => Some(format!("extension:{id}")),
+    }
+}
+
+/// How long `key` must still wait at `now` after its last visible open at `last`, if at all.
+fn open_wait(last: Option<Instant>, now: Instant) -> Option<Duration> {
+    let elapsed = now.saturating_duration_since(last?);
+    (elapsed < OPEN_VIEW_MIN_INTERVAL).then(|| OPEN_VIEW_MIN_INTERVAL - elapsed)
+}
+
+/// Refuses a visible open that comes too soon after the last one of the same requester.
+fn check_open_rate(requester: &OpenViewRequester, title: &str) -> ExtensionResult<()> {
+    let Some(key) = rate_key(requester) else {
+        return Ok(());
+    };
+    let last = LAST_VISIBLE_OPEN
+        .lock()
+        .ok()
+        .and_then(|opens| opens.get(&key).copied());
+    match open_wait(last, Instant::now()) {
+        None => Ok(()),
+        Some(wait) => Err(ExtensionError {
+            code: "rateLimited",
+            message: format!(
+                "{title} was opened or asked for a moment ago. Try again in {} s, or use --background to add its tab without showing it.",
+                wait.as_secs().max(1)
+            ),
+        }),
+    }
+}
+
+fn note_visible_open(requester: &OpenViewRequester) {
+    let Some(key) = rate_key(requester) else {
+        return;
+    };
+    if let Ok(mut opens) = LAST_VISIBLE_OPEN.lock() {
+        let now = Instant::now();
+        opens.retain(|_, at| now.saturating_duration_since(*at) < OPEN_VIEW_MIN_INTERVAL);
+        opens.insert(key, now);
+    }
+}
 
 /// Who asked.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -215,6 +280,9 @@ pub(crate) async fn open_extension_view(
     let opens_allowed =
         crate::switch_requests::agent_page_opens_allowed(state, OPEN_EXTENSION_VIEW_ACTION);
     let mode = open_view_mode(&requester, background, opens_allowed);
+    if mode == OpenViewMode::Show {
+        check_open_rate(&requester, &manifest.title)?;
+    }
     let mut payload = Map::new();
     payload.insert("extensionId".to_string(), json!(extension_id));
     payload.insert("projectId".to_string(), json!(project_id));
@@ -249,11 +317,20 @@ pub(crate) async fn open_extension_view(
         return Err(ExtensionError::bad_request(message));
     }
     if answer.get("needsAsk") != Some(&Value::Bool(true)) {
+        if mode == OpenViewMode::Show && answer.get("alreadyShowing") != Some(&Value::Bool(true)) {
+            note_visible_open(&requester);
+        }
         return Ok(answer);
     }
+    check_open_rate(&requester, &manifest.title)?;
+    note_visible_open(&requester);
     payload.insert("mode".to_string(), json!(OpenViewMode::Show.as_str()));
     // Open on the toast lands the user on that project, as Switch does.
     payload.insert("switchProject".to_string(), Value::Bool(true));
+    // The app leaves Always off an extension's toast (CDXC:Extensions 2026-11-26 WHY above).
+    if matches!(requester, OpenViewRequester::Extension { .. }) {
+        payload.insert("requester".to_string(), json!("extension"));
+    }
     let request = crate::switch_requests::emit_extension_view_toast(
         state,
         &requester,
@@ -360,6 +437,7 @@ pub(crate) async fn handle_open_extension_view_http(
                 "notFound" => StatusCode::NOT_FOUND,
                 "forbidden" => StatusCode::FORBIDDEN,
                 "unavailable" => StatusCode::SERVICE_UNAVAILABLE,
+                "rateLimited" => StatusCode::TOO_MANY_REQUESTS,
                 _ => StatusCode::INTERNAL_SERVER_ERROR,
             };
             crate::server::routed_json(
@@ -484,6 +562,30 @@ mod tests {
                 .unwrap()
                 .contains("no side panel view")
         );
+    }
+
+    #[test]
+    fn visible_opens_are_limited_per_agent_or_extension_never_for_the_user() {
+        let now = Instant::now();
+        assert_eq!(open_wait(None, now), None);
+        assert!(open_wait(Some(now), now).is_some());
+        assert_eq!(open_wait(Some(now), now + OPEN_VIEW_MIN_INTERVAL), None);
+        assert_eq!(rate_key(&OpenViewRequester::User), None);
+        assert!(check_open_rate(&OpenViewRequester::User, "Mobile Pane").is_ok());
+        let extension = OpenViewRequester::Extension {
+            id: "rate-test-extension".to_string(),
+        };
+        assert!(check_open_rate(&extension, "Mobile Pane").is_ok());
+        note_visible_open(&extension);
+        let refusal = check_open_rate(&extension, "Mobile Pane").expect_err("too soon");
+        assert_eq!(refusal.code, "rateLimited");
+        assert!(refusal.message.contains("--background"));
+        // Another requester is not held back by this one.
+        let agent = OpenViewRequester::Agent {
+            project_id: "P-rate".to_string(),
+            session_id: "S-rate".to_string(),
+        };
+        assert!(check_open_rate(&agent, "Mobile Pane").is_ok());
     }
 
     #[test]

@@ -431,7 +431,8 @@ pub(crate) fn emit_renderer_command_toast(
 
 /// Broadcasts the switch toast for an agent's or an extension's open of an extension's view in
 /// a project's side panel (extensions/open_view.rs): "<agent> wants to open <view>", the project
-/// under it, Open (and Always on the desktop, as for a page).
+/// under it, Open (and Always on the desktop, as for a page, but not on an extension's own ask:
+/// "<extension> wants to open its view", CDXC:Extensions 2026-11-26 WHY in open_view.rs).
 pub(crate) fn emit_extension_view_toast(
     state: &AppState,
     requester: &crate::extensions::open_view::OpenViewRequester,
@@ -447,9 +448,10 @@ pub(crate) fn emit_extension_view_toast(
         } => lookup_requester(state, project_id, session_id),
         OpenViewRequester::Extension { .. } | OpenViewRequester::User => (None, None),
     };
-    let title = match requester_title.as_deref() {
-        Some(requester) => format!("{requester} wants to open {view_title}"),
-        None => format!("Open {view_title}"),
+    let title = match (requester, requester_title.as_deref()) {
+        (OpenViewRequester::Extension { .. }, _) => format!("{view_title} wants to open its view"),
+        (_, Some(requester)) => format!("{requester} wants to open {view_title}"),
+        (_, None) => format!("Open {view_title}"),
     };
     let request = SwitchRequest {
         id: Uuid::new_v4().to_string(),
