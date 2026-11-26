@@ -5,6 +5,14 @@ compatibility_date = "2026-10-01"
 workers_dev = false
 routes = [{ pattern = "ota.ghostex.dev", custom_domain = true }]
 
+[observability]
+enabled = false
+
+[observability.logs]
+enabled = false
+invocation_logs = false
+persist = false
+
 [[r2_buckets]]
 binding = "OTA"
 bucket_name = "ghostex-ota"
