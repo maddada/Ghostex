@@ -109,27 +109,34 @@ pub(super) fn answers_divider(p: &ChatAppearance) -> AnyElement {
         .into_any_element()
 }
 
-/// The hairline across the Inbox drawer above a Snoozed or Recent group header (Q4969 C), in
-/// the open header's divider colour and reaching the drawer's sides past the rows' inset. Clear
-/// (same space) while the group is closed.
-fn dock_group_divider(open: bool, p: &ChatAppearance) -> AnyElement {
+/// The hairline across the Inbox drawer along an open Snoozed or Recent group header's top edge
+/// (Q4969 C), in the open header's divider colour and reaching the drawer's sides past the rows'
+/// inset. Drawn over the header, it takes no room: the headers sit as close as any two rows, and
+/// opening or closing a group never moves its header.
+fn dock_group_line(p: &ChatAppearance) -> AnyElement {
     let s = p.scale;
     div()
-        .flex_shrink_0()
+        .absolute()
+        .top_0()
+        .left(px(-DOCK_LIST_PAD * s))
+        .right(px(-DOCK_LIST_PAD * s))
         .h(px(1.0))
-        .mx(px(-DOCK_LIST_PAD * s))
-        .mt(px(4.0 * s))
-        .mb(px(2.0 * s))
-        .when(open, |line| line.bg(p.composer_border))
+        .bg(p.composer_border)
         .into_any_element()
 }
 
-/// A Snoozed or Recent group header's label (Q4969 C): small and medium weight, in the header's
-/// muted colour, written as is ("Snoozed", "Recent"): the user doesn't want all caps (26 Nov).
+/// A Snoozed or Recent group header's label: the size and weight of a Needs you row's title, in
+/// the header's muted colour, written as is ("Snoozed", "Recent"): the user doesn't want all caps
+/// (26 Nov).
+///
+/// CDXC:Coordinators 2026-11-26 DECISION: User, of the Snoozed and Recent headers and their rows:
+/// "please make the font size for snoozed and recnt same as font size for regualr needs you items
+/// ... same for the ones under them (only change the dimming of the text color please". Supersedes
+/// Q4969 C's small label and D's smaller row titles: only the colour sets them apart.
 fn dock_group_label(label: &str, p: &ChatAppearance) -> gpui::Div {
     div()
-        .text_size(px(PROSE_SIZE * GROUP_LABEL_SCALE * p.scale))
-        .font_weight(FontWeight::MEDIUM)
+        .text_size(px(PROSE_SIZE * p.scale))
+        .font_weight(FontWeight::NORMAL)
         .child(label.to_string())
 }
 
@@ -407,18 +414,14 @@ pub(super) struct DockRowLook {
     pub reference: String,
     /// Keyboard-focused row in Session Inbox triage mode (Q4687).
     pub focused: bool,
-    /// A row under a Snoozed or Recent group header: its title one step smaller and dimmer
-    /// (`GROUP_ROW_TITLE_SCALE`), in the same columns as the pings above (Q4969 D).
+    /// A row under a Snoozed or Recent group header: the size, padding and columns of a ping
+    /// above, with a dimmer title (`GROUP_ROW_TITLE_ALPHA`).
     pub quiet: bool,
 }
 
-/// A Snoozed or Recent group row's title size against a ping's (Q4969 D: one step quieter).
-const GROUP_ROW_TITLE_SCALE: f32 = 0.93;
-/// A Snoozed or Recent group row's title alpha over the row's own dimming (works in light and
-/// dark, where the muted colours differ).
-const GROUP_ROW_TITLE_ALPHA: f32 = 0.82;
-/// A group header's label size against a ping's title (Q4969 C: a small label).
-const GROUP_LABEL_SCALE: f32 = 0.80;
+/// A Snoozed or Recent group row's title alpha over the muted colour (works in light and dark,
+/// where the muted colours differ). The only thing that sets these rows apart from a ping's.
+const GROUP_ROW_TITLE_ALPHA: f32 = 0.6;
 
 /// How wide `label` is in the chat's font at `size` (both unscaled).
 pub(super) fn dock_text_width(label: &str, size: f32, p: &ChatAppearance, cx: &gpui::App) -> f32 {
@@ -879,24 +882,24 @@ impl NativeChatView {
             // above it) with the header as a small label, and the group's rows a step
             // quieter (`DockRowLook::quiet`). Icons and titles keep the pings' columns.
             // Then, of the lines: "let's please not show the lines when it's collapsed, show only
-            // when expanded". A group's line shows only while that group is open; a closed group
-            // keeps the line's space with a clear line, so opening or closing never moves a header.
+            // when expanded". A group's line shows only while that group is open.
+            // CDXC:Coordinators 2026-11-26 DECISION: User, of the space between the Snoozed and
+            // Recent headers: "the gap here between snoozed recent is too big pls fix make it like
+            // the gap between other items". The line takes no room (drawn over the header's top
+            // edge, `dock_group_line`), and a header is as tall as a row, so the headers and rows
+            // sit as close as the pings do and opening a group still never moves a header.
             let shown_above = rows.len().min(if all { rows.len() } else { limit }) > 0;
             let snoozed_open = self.expanded.contains(DOCK_SNOOZED_ROWS);
             let recent_open = self.expanded.contains(DOCK_RECENT_ROWS)
                 || self.expanded.contains(DOCK_LEGACY_DONE_ROWS)
                 || self.expanded.contains(DOCK_LEGACY_ANSWERED_ROWS);
             if !snoozed.is_empty() {
-                if shown_above {
-                    list = list.child(dock_group_divider(snoozed_open, p));
-                }
-                list = list.children(self.work_dock_snoozed(&snoozed, p, cx));
+                let line = shown_above && snoozed_open;
+                list = list.children(self.work_dock_snoozed(&snoozed, line, p, cx));
             }
             if !recent.is_empty() {
-                if shown_above || !snoozed.is_empty() {
-                    list = list.child(dock_group_divider(recent_open, p));
-                }
-                list = list.children(self.work_dock_recent(&recent, p, cx));
+                let line = recent_open && (shown_above || !snoozed.is_empty());
+                list = list.children(self.work_dock_recent(&recent, line, p, cx));
             }
             surface = surface.child(self.disclosure_body_motion(
                 DOCK_MOTION_KEY,
@@ -939,10 +942,11 @@ impl NativeChatView {
 
     /// The dock's Snoozed row under the others (Q4686 A): "Snoozed" and its count badge with a
     /// moon icon and chevron, folded until clicked; open, snoozed asks, forms, pages and to-dos
-    /// follow dimmed.
+    /// follow with dimmer titles. `line_above` draws the group's hairline along its top edge.
     fn work_dock_snoozed(
         &self,
         snoozed: &[Value],
+        line_above: bool,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
@@ -953,13 +957,14 @@ impl NativeChatView {
             .role(gpui::Role::Button)
             .aria_label(format!("Snoozed, {}", snoozed.len()))
             .aria_expanded(open)
+            .relative()
             .w_full()
             .min_w_0()
             .flex()
             .items_center()
             .gap(px(DOCK_GAP * s))
             .px(px(DOCK_ROW_PAD_X * s))
-            .py(px(5.0 * s))
+            .py(px(6.0 * s))
             .rounded(px(8.0 * s))
             .text_color(p.muted)
             .chat_cursor_pointer()
@@ -1001,6 +1006,7 @@ impl NativeChatView {
                         )))
                     }),
             )
+            .when(line_above, |header| header.child(dock_group_line(p)))
             .on_click(cx.listener(|this, _, _, cx| {
                 if !this.expanded.remove(DOCK_SNOOZED_ROWS) {
                     this.expanded.insert(DOCK_SNOOZED_ROWS.to_string());
@@ -1009,13 +1015,7 @@ impl NativeChatView {
             }));
         let mut out = vec![line.into_any_element()];
         if open {
-            out.extend(snoozed.iter().map(|row| {
-                div()
-                    .w_full()
-                    .opacity(0.72)
-                    .child(self.dock_group_row(row, p, cx))
-                    .into_any_element()
-            }));
+            out.extend(snoozed.iter().map(|row| self.dock_group_row(row, p, cx)));
         }
         out
     }
@@ -1023,10 +1023,11 @@ impl NativeChatView {
     /// The collapsible Recent drawer below Snoozed: combines recently handled asks/approvals/to-dos
     /// and work finished in the latest turn, newest first, with the Done check icon, "Recent",
     /// count badge and chevron. Collapsed by default; migrates legacy Done/Handled open state on
-    /// read and toggle.
+    /// read and toggle. `line_above` draws the group's hairline along its top edge.
     fn work_dock_recent(
         &self,
         recent: &[Value],
+        line_above: bool,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
@@ -1042,13 +1043,14 @@ impl NativeChatView {
             .role(gpui::Role::Button)
             .aria_label(format!("Recent, {}", recent.len()))
             .aria_expanded(open)
+            .relative()
             .w_full()
             .min_w_0()
             .flex()
             .items_center()
             .gap(px(DOCK_GAP * s))
             .px(px(DOCK_ROW_PAD_X * s))
-            .py(px(5.0 * s))
+            .py(px(6.0 * s))
             .rounded(px(8.0 * s))
             .text_color(p.muted)
             .chat_cursor_pointer()
@@ -1090,6 +1092,7 @@ impl NativeChatView {
                         )))
                     }),
             )
+            .when(line_above, |header| header.child(dock_group_line(p)))
             .on_click(cx.listener(|this, _, _, cx| {
                 let was_open = this.expanded.remove(DOCK_RECENT_ROWS)
                     | this.expanded.remove(DOCK_LEGACY_DONE_ROWS)
@@ -1103,13 +1106,7 @@ impl NativeChatView {
         if open {
             for (idx, row) in recent.iter().enumerate() {
                 if text(row, "kind") == "finished" {
-                    out.push(
-                        div()
-                            .w_full()
-                            .opacity(0.72)
-                            .child(self.dock_group_row(row, p, cx))
-                            .into_any_element(),
-                    );
+                    out.push(self.dock_group_row(row, p, cx));
                     continue;
                 }
                 let key = text(row, "key");
@@ -1128,9 +1125,8 @@ impl NativeChatView {
                         .id(gpui::SharedString::from(format!("dock-recent:{key}:{idx}")))
                         .w_full()
                         .min_w_0()
-                        .opacity(0.72)
                         .px(px(DOCK_ROW_PAD_X * s))
-                        .py(px(5.0 * s))
+                        .py(px(6.0 * s))
                         .rounded(px(8.0 * s))
                         .flex()
                         .items_center()
@@ -1155,7 +1151,6 @@ impl NativeChatView {
                                 .flex_1()
                                 .min_w_0()
                                 .truncate()
-                                .text_size(px(PROSE_SIZE * GROUP_ROW_TITLE_SCALE * s))
                                 .text_color(p.card_muted.opacity(GROUP_ROW_TITLE_ALPHA))
                                 .child(title),
                         )
@@ -1619,7 +1614,8 @@ impl NativeChatView {
     /// row card (2026-11-11 and 2026-11-12 decisions, now on the modal in dock_ask_modal.rs) and
     /// its scrolling into view past the dock's height cap.
     ///
-    /// A row under the Snoozed or Recent header: drawn quiet (`DockRowLook::quiet`, Q4969 D).
+    /// A row under the Snoozed or Recent header: a ping's row with a dimmer title
+    /// (`DockRowLook::quiet`).
     fn dock_group_row(
         &self,
         row: &Value,
@@ -2177,11 +2173,7 @@ impl NativeChatView {
                 !wrap,
                 FontWeight::NORMAL,
                 title_color,
-                if look.quiet {
-                    PROSE_SIZE * GROUP_ROW_TITLE_SCALE
-                } else {
-                    PROSE_SIZE
-                },
+                PROSE_SIZE,
                 PROSE_LINE_HEIGHT,
                 p,
                 cx,
