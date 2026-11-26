@@ -150,18 +150,24 @@ fn said_words(words: &[String]) -> String {
 
 /// The line the agent opens the call with: that it is connected, what it can do in this call, and
 /// with `wait_for_reply` (a Regular call with the setting on), to say one of `words` when finished.
+/// `tools` are the tools the call gave the provider (its `session.update`).
 ///
 /// CDXC:VoiceMode 2026-11-26 WHY: the user did not know the voice agent can approve or deny what a
-/// session waits on. The opening line now says so once, and only when the call has
-/// `answer_prompt` (`tools::definitions` for its scope), so it never claims more than the call can
-/// do; a call with a GBot keeps its own opening without this line. "Read you their replies" left
-/// the line to keep it short.
+/// session waits on. The opening line now says so once, and only when `tools` hold `answer_prompt`,
+/// so it never claims more than the call can do. "Read you their replies" left the line to keep it
+/// short.
+///
+/// CDXC:VoiceMode 2026-11-26 WHY: a call with a GBot has `answer_prompt` too, but keeps its own
+/// opening without the line, whatever its tools: the GBot answers its chat's permission prompts only
+/// after asking the user aloud, and a Ghostex approval (Touch ID) can't be given by voice at all
+/// (gbot_call/prompt.rs), so "approve or deny what it waits on" would promise more than it does.
 pub(super) fn intro_line(
     focus: Option<&FocusScope>,
+    tools: &serde_json::Value,
     wait_for_reply: bool,
     words: &[String],
 ) -> String {
-    let answers = offers_answers(focus);
+    let answers = offers_answers(tools);
     let can_do = match focus {
         None if answers => "I can tell you what your sessions are doing, send them prompts, answer their questions, and approve or deny what they wait on.".to_string(),
         None => "I can tell you what your sessions are doing and send them prompts.".to_string(),
@@ -189,15 +195,13 @@ pub(super) fn intro_line(
     line
 }
 
-/// Whether the call's tools can answer questions and approvals (`answer_prompt`).
-fn offers_answers(focus: Option<&FocusScope>) -> bool {
-    super::tools::definitions(focus)
-        .as_array()
-        .is_some_and(|tools| {
-            tools
-                .iter()
-                .any(|tool| tool.get("name").and_then(serde_json::Value::as_str) == Some("answer_prompt"))
-        })
+/// Whether `tools` can answer questions and approvals (`answer_prompt`).
+fn offers_answers(tools: &serde_json::Value) -> bool {
+    tools.as_array().is_some_and(|tools| {
+        tools
+            .iter()
+            .any(|tool| tool.get("name").and_then(serde_json::Value::as_str) == Some("answer_prompt"))
+    })
 }
 
 /// The message that asks the model to open the call with `line`: word for word in English, and
@@ -310,6 +314,7 @@ impl Conversation {
     pub(super) async fn say_intro(&mut self) -> Result<(), Ended> {
         let line = intro_line(
             self.focus.as_ref(),
+            &self.session_update["session"]["tools"],
             self.waits_for_word(),
             &self.call_language.turn_words,
         );
