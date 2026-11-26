@@ -445,6 +445,13 @@ fn enroll_key(
             .collect(),
     )
     .map_err(|(code, message)| EnrollRefusal::Reply(code, message))?;
+    if let Some(message) = file_store_key_refusal(
+        &key,
+        approver_key.as_ref(),
+        ghostex_owner_keys::opted_in_to_file_store(),
+    ) {
+        return Err(EnrollRefusal::Reply("forbidden", message));
+    }
     /*
     CDXC:Security 2026-11-10 WHY:
     An owner key opens an owner session, which is one of your devices (it approves pairings and answers secret requests). Only the token file or an owner session may add one, as since 8 Nov: an agent's session token must not make itself yours. With approvals plain (security/policy.rs) nothing else is asked: a key from your own app goes in at once, on this computer and on another computer through its SSH tunnel, so the "act as the owner" card (#532) is gone; apps from before 11.2.3 still enroll and open their owner sessions as they always did. Narrowed on 2026-11-16 for the token file once this computer has an owner device (below).
@@ -605,6 +612,27 @@ fn enroll_key(
         .get(&key_id)
         .map(|known| json!({ "key": known }))
         .ok_or_else(|| EnrollRefusal::Reply("badRequest", "The key could not be kept.".to_string()))
+}
+
+/*
+CDXC:Security 2026-11-26 FIX:
+Review of d8ef5c609 (M1): the production app honours `GHOSTEX_OWNER_KEYS_STORE=file` for any GHOSTEX_HOME, so a program running as the user could start the genuine app in file mode against the real gxserver with a key file it wrote, and the app vouched for that key like a Keychain one. An app in file mode now declares it (presence `none`, "test copy" in the label, `key_json` in apps/desktop/src/app/owner_security/mod.rs), and gxserver takes such an owner or approver key only when gxserver itself was started with the variable: a test server is (`cargo xtask test-server`), a real install never is.
+*/
+/// Why `key` (or the approver key sent with it) is refused here: it is a test copy's file-store
+/// key (presence `none`) and this gxserver wasn't started with `GHOSTEX_OWNER_KEYS_STORE=file`.
+fn file_store_key_refusal(
+    key: &ghostex_gx_protocol::approval::ApproverKey,
+    approver_key: Option<&ghostex_gx_protocol::approval::ApproverKey>,
+    this_server_takes_file_keys: bool,
+) -> Option<String> {
+    use ghostex_gx_protocol::approval::ApproverPresence;
+    let from_file = std::iter::once(key)
+        .chain(approver_key)
+        .any(|key| key.presence == ApproverPresence::NoPrompt);
+    (from_file && !this_server_takes_file_keys).then(|| {
+        "This is a test copy of Ghostex with its keys in a file. Only a test server takes its keys."
+            .to_string()
+    })
 }
 
 /// Adds an owner or approver key the owner approved (or that comes with the first owner key),
@@ -1507,4 +1535,40 @@ fn live_sessions(
         })
         .ok()?;
     rows.collect::<Result<_, _>>().ok()
+}
+
+#[cfg(test)]
+mod file_store_key_tests {
+    use ghostex_gx_protocol::approval::{ApproverKey, ApproverKeyAlgorithm, ApproverPresence};
+
+    use super::file_store_key_refusal;
+
+    fn key(presence: ApproverPresence) -> ApproverKey {
+        ApproverKey {
+            key_id: String::new(),
+            device_id: "desktop-0".into(),
+            label: "Mac (Ghostex app)".into(),
+            platform: "macos".into(),
+            algorithm: ApproverKeyAlgorithm::EcdsaP256Sha256,
+            public_key: String::new(),
+            presence,
+            added_at_ms: 0,
+        }
+    }
+
+    #[test]
+    fn a_real_server_refuses_file_store_keys() {
+        let file = key(ApproverPresence::NoPrompt);
+        let keychain = key(ApproverPresence::TouchId);
+        assert!(file_store_key_refusal(&file, None, false).is_some());
+        assert!(file_store_key_refusal(&keychain, Some(&file), false).is_some());
+        assert!(file_store_key_refusal(&keychain, Some(&keychain), false).is_none());
+        assert!(file_store_key_refusal(&keychain, None, false).is_none());
+    }
+
+    #[test]
+    fn a_test_server_takes_them() {
+        let file = key(ApproverPresence::NoPrompt);
+        assert!(file_store_key_refusal(&file, Some(&file), true).is_none());
+    }
 }

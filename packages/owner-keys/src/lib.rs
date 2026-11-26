@@ -132,6 +132,25 @@ impl DeviceKey {
     }
 }
 
+/// Whether this process keeps its keys in the file store (a test copy started with
+/// `GHOSTEX_OWNER_KEYS_STORE=file` and its own `GHOSTEX_HOME`). Such keys have no presence prompt
+/// and any program of the user can read them, so the app says so when it hands them to gxserver.
+pub fn uses_file_store() -> bool {
+    matches!(Store::current(), Ok(Store::File(_)))
+}
+
+/// Whether this process was started with `GHOSTEX_OWNER_KEYS_STORE=file`: gxserver takes a key
+/// that declares the file store only then (a test server), never on a real install.
+pub fn opted_in_to_file_store() -> bool {
+    std::env::var_os(STORE_VARIABLE).is_some_and(|value| value == FILE_STORE)
+}
+
+/// Why no key can be used at all in this process (a bad `GHOSTEX_OWNER_KEYS_STORE`, or a test
+/// copy's home started without it), in words for a warning; `None` when the store is usable.
+pub fn store_problem() -> Option<String> {
+    Store::current().err().map(|error| error.to_string())
+}
+
 /// The owner key, made and saved the first time.
 pub fn load_or_create_owner_key() -> Result<DeviceKey, KeyError> {
     load_or_create(KeyRole::Owner)

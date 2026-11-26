@@ -620,8 +620,11 @@ impl Start {
             Command::new(&executable)
         };
         launch.env_clear().envs(desktop.env);
-        if let Some(home) = util::env_trimmed("GHOSTEX_HOME") {
-            launch.env("GHOSTEX_HOME", home);
+        // The profile, and a test copy's key store opt-in with it (packages/owner-keys/src/store.rs).
+        for key in ["GHOSTEX_HOME", "GHOSTEX_OWNER_KEYS_STORE"] {
+            if let Some(value) = util::env_trimmed(key) {
+                launch.env(key, value);
+            }
         }
         if let Some(config) = &self.isolated {
             launch.envs(config.environment.iter().map(|(k, v)| (*k, v.as_str())));

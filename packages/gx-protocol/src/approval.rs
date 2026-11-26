@@ -219,6 +219,10 @@ open_string_enum! {
         FaceId => "faceId",
         Biometric => "biometric",
         DevicePin => "devicePin",
+        /// Nothing: a test copy's key kept in a file (`GHOSTEX_OWNER_KEYS_STORE=file`,
+        /// packages/owner-keys/src/store.rs). gxserver takes such a key only when it was started
+        /// with that variable itself (a test server).
+        NoPrompt => "none",
     }
 }
 

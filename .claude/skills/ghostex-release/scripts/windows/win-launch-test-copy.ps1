@@ -9,6 +9,9 @@
 # skills the copy's gxserver installs never touch the user's own ~/.claude, ~/.codex etc.
 # GHOSTEX_OWNER_KEYS_STORE=file keeps the copy's owner keys in <Root>\home\owner-keys, so it never
 # reads or writes the user's Credential Manager entries (packages/owner-keys/src/store.rs).
+# <Root> must be a private folder of this user (under %USERPROFILE% or %LOCALAPPDATA%, never a
+# new folder on C:\ or a shared drive): the keys are plain files. owner-keys\ is made owner-only
+# (inheritance off, full control for this user alone) before the copy starts.
 # The process starts with SW_SHOWNOACTIVATE (no Start-Process); GPUI still activates its window, so
 # the script hands the foreground back to its previous owner. Prints the app pid.
 param([Parameter(Mandatory)][string]$Root, [string]$From = "$env:LOCALAPPDATA\Ghostex\current", [switch]$Fresh)
@@ -18,7 +21,10 @@ if ($Fresh -or -not (Test-Path "$Root\current\Ghostex.exe")) {
   if ($LASTEXITCODE -ge 8) { throw "copy failed ($LASTEXITCODE)" }
 }
 New-Item -ItemType File -Force "$Root\.portable" | Out-Null
-New-Item -ItemType Directory -Force "$Root\home\.codex", "$Root\unixhome" | Out-Null
+New-Item -ItemType Directory -Force "$Root\home\.codex", "$Root\unixhome", "$Root\home\owner-keys" | Out-Null
+$me = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+icacls "$Root\home\owner-keys" /inheritance:r /grant:r "*${me}:(OI)(CI)F" | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "could not make owner-keys owner-only (icacls $LASTEXITCODE)" }
 $vars = @{}
 foreach ($e in [Environment]::GetEnvironmentVariables().GetEnumerator()) {
   if ($e.Key -match '^(GHOSTEX_|WMX_|ZMX_|CLAUDE|CODEX_|COPILOT_|FACTORY_)' -or $e.Key -eq 'CLAUDECODE') { continue }

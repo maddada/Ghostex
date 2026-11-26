@@ -300,9 +300,14 @@ mod linux {
                 }
             }
         }
-        env.retain(|(name, _)| name != "GHOSTEX_HOME");
-        if let Some(home) = get(&app_env, "GHOSTEX_HOME") {
-            env.push(("GHOSTEX_HOME".to_string(), home.to_string()));
+        // The app's own home, and with it a test copy's key store opt-in (CDXC:Security
+        // 2026-11-26 in packages/owner-keys/src/store.rs): a test copy restarted without it would
+        // find its home's keys refused.
+        for key in ["GHOSTEX_HOME", ghostex_owner_keys::STORE_VARIABLE] {
+            env.retain(|(name, _)| name != key);
+            if let Some(value) = get(&app_env, key) {
+                env.push((key.to_string(), value.to_string()));
+            }
         }
         let display = live_display(&env).ok_or_else(|| {
             "there is no desktop session to open it in (no WAYLAND_DISPLAY or DISPLAY whose socket exists)".to_string()

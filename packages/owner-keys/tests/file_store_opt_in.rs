@@ -5,8 +5,9 @@
 
 use ghostex_owner_keys::{
     approver_public_key, approver_public_key_or_create, confirm_presence, load_or_create_owner_key,
-    load_or_create_scoped_owner_key, load_scoped_owner_key, local_salt, unlock_approver_key,
-    KeyError, FILE_STORE_FOLDER, STORE_VARIABLE,
+    load_or_create_scoped_owner_key, load_scoped_owner_key, local_salt, opted_in_to_file_store,
+    store_problem, unlock_approver_key, uses_file_store, KeyError, FILE_STORE_FOLDER,
+    STORE_VARIABLE,
 };
 
 #[test]
@@ -69,6 +70,24 @@ fn a_test_copy_keeps_its_keys_in_its_own_home() {
         unlock_approver_key("x"),
         Err(KeyError::PresenceUnavailable(_))
     ));
+
+    assert!(uses_file_store());
+    assert!(opted_in_to_file_store());
+    assert_eq!(store_problem(), None);
+
+    // The same home started again without the opt-in never falls back to the OS key store.
+    std::env::remove_var(STORE_VARIABLE);
+    assert!(!uses_file_store());
+    assert!(!opted_in_to_file_store());
+    assert!(store_problem().is_some());
+    assert!(matches!(
+        load_or_create_owner_key(),
+        Err(KeyError::KeyStore(_))
+    ));
+    assert!(matches!(local_salt(), Err(KeyError::KeyStore(_))));
+    assert!(matches!(approver_public_key(), Err(KeyError::KeyStore(_))));
+    assert!(matches!(confirm_presence("x"), Err(KeyError::KeyStore(_))));
+    std::env::set_var(STORE_VARIABLE, "file");
 
     let mut files: Vec<String> = std::fs::read_dir(home.join(FILE_STORE_FOLDER))
         .unwrap()

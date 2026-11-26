@@ -566,7 +566,12 @@ impl Start {
             root().display()
         );
         // The task starts from the user's own environment; carry over only what decides where the app installs and keeps its state.
-        for key in ["GHOSTEX_INSTALL_DIR", "GHOSTEX_HOME"] {
+        // GHOSTEX_OWNER_KEYS_STORE: a test copy's key store goes with its home (packages/owner-keys/src/store.rs).
+        for key in [
+            "GHOSTEX_INSTALL_DIR",
+            "GHOSTEX_HOME",
+            "GHOSTEX_OWNER_KEYS_STORE",
+        ] {
             if let Some(value) = env_trimmed(key) {
                 script += &format!("set \"{key}={value}\"\r\n");
             }

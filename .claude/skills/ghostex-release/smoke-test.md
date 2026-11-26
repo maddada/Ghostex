@@ -91,7 +91,12 @@ only by its own pid and window ids. What 12.2.0's run learned:
   require presence" on, off in a fresh home). Without the variable the copy asks the login
   Keychain for `dev.ghostex.keys` as it starts and the prompt stalls the run
   (#772): if one ever appears, answer nothing, stop the copy by its pid and
-  check its environment. Never set it on the user's own app.
+  check its environment. Never set it on the user's own app. Once the home
+  has `owner-keys/`, a start without the variable fails ("can't use its
+  keys" warning) instead of asking the Keychain. The copy's keys are
+  labelled "test copy" and only a gxserver started with the variable (the
+  test server) takes them, so pointing a test copy at the user's real
+  server can't make it an owner there.
 - **Run `smoke.sh` from a shell that sourced the test server's `env.sh`**, and
   after a `test-server` restart run `hash -r` and check `which ghostex` is
   the test server's `gxserver/bin/ghostex`: a runner shell that survived the
@@ -828,9 +833,11 @@ names below are those files).
   `.portable`; points GHOSTEX_HOME, USERPROFILE, HOME and CODEX_HOME inside the
   run folder, so its gxserver's skill/hook installs never touch the user's
   `~\.claude` or `~\.codex`; sets `GHOSTEX_OWNER_KEYS_STORE=file`, so its
-  owner keys stay in `<run>\gx\home\owner-keys` and it never reads or writes
-  the user's Credential Manager, and no Windows Hello prompt is shown). It
-  prints the app pid. Find the main window with
+  owner keys stay in `<run>\gx\home\owner-keys`, made owner-only with
+  icacls, and it never reads or writes the user's Credential Manager, and no
+  Windows Hello prompt is shown). `<run>` must be a private folder of this
+  user (under `%USERPROFILE%` or `%LOCALAPPDATA%`): the keys are plain files.
+  It prints the app pid. Find the main window with
   `list_windows({pid})` (the one wider than 600).
 - Run its CLI only through `win-gx.ps1 -Root <run>\gx <args>`; it strips this
   session's GHOSTEX_*/WMX_* variables, so nothing reaches the real server.

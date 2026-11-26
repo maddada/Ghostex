@@ -14,6 +14,9 @@ path = "src/lib.rs"
 base64 = "0.22"
 ring = "0.17"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "3"
 objc2 = "0.6"

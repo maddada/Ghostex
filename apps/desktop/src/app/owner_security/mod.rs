@@ -886,14 +886,33 @@ fn key_json(public_key: &str, device_public_key: &str, role: &str) -> Value {
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect();
+    /*
+    CDXC:Security 2026-11-26 FIX:
+    Review of d8ef5c609 (M1, L4): a test copy with its keys in a file (`GHOSTEX_OWNER_KEYS_STORE=file`) sent the same label and presence claim as a real app ("<computer> (Ghostex app)", `touchId`), so nothing told a gxserver or the person approving that any program of the user can read that key. It now says "test copy" in the label and claims no presence (`none`), and gxserver takes such a key only when it was started with the variable itself (`enroll_key` in server/src/server/security_http.rs).
+    */
+    let file_store = ghostex_owner_keys::uses_file_store();
+    let label = if file_store {
+        format!("{} (test copy, {role})", this_computer_name())
+    } else {
+        format!("{} ({role})", this_computer_name())
+    };
+    let presence = if file_store {
+        ghostex_gx_protocol::approval::ApproverPresence::NoPrompt
+            .as_str()
+            .to_string()
+    } else {
+        ghostex_owner_keys::default_presence()
+            .wire_name()
+            .to_string()
+    };
     json!({
         "keyId": "",
         "deviceId": format!("desktop-{short}"),
-        "label": format!("{} ({role})", this_computer_name()),
+        "label": label,
         "platform": ghostex_owner_keys::platform_name(),
         "algorithm": "ecdsaP256Sha256",
         "publicKey": public_key,
-        "presence": ghostex_owner_keys::default_presence().wire_name(),
+        "presence": presence,
         "addedAtMs": 0,
     })
 }

@@ -929,6 +929,15 @@ fn gpui_spawn_local_gxserver_launchd_job(
             environment_entries.push((variable.to_string(), value));
         }
     }
+    // A test copy's key store opt-in goes with its GHOSTEX_HOME: its gxserver takes the copy's
+    // file-store keys only when it was started with it (CDXC:Security 2026-11-26 in
+    // packages/owner-keys/src/store.rs and server/src/server/security_http.rs).
+    if let Some(value) = env::var(ghostex_owner_keys::STORE_VARIABLE)
+        .ok()
+        .filter(|value| !value.is_empty())
+    {
+        environment_entries.push((ghostex_owner_keys::STORE_VARIABLE.to_string(), value));
+    }
     // The analytics launch option (server/src/telemetry/gate.rs): launchd starts gxserver with only
     // the variables listed here, so a desktop started with analytics off passes that on.
     for variable in ["GHOSTEX_TELEMETRY_DISABLED", "DO_NOT_TRACK"] {

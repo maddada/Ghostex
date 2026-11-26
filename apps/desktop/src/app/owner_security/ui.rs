@@ -186,6 +186,39 @@ impl GhostexGpuiApp {
         }
     }
 
+    /*
+    CDXC:Security 2026-11-26 FIX:
+    Review of d8ef5c609 (L6): a bad `GHOSTEX_OWNER_KEYS_STORE` (an unknown value, `file` without a usable GHOSTEX_HOME) or a test copy's home started without it makes every key call fail, and the start only wrote an info log, so nobody learned why the app couldn't act as the owner. The first time this computer's stream goes live, such a problem shows once as a warning toast.
+    */
+    /// Once per run: a warning when no key can be used at all (`ghostex_owner_keys::store_problem`).
+    fn owner_security_warn_unusable_key_store(&mut self, cx: &mut gpui::Context<Self>) {
+        static WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if WARNED.swap(true, std::sync::atomic::Ordering::AcqRel) {
+            return;
+        }
+        let Some(problem) = ghostex_owner_keys::store_problem() else {
+            return;
+        };
+        log::warn!("owner keys unusable: {problem}");
+        self.upsert_gpui_app_toast(
+            GpuiAppToast {
+                id: "security-key-store-unusable".to_string(),
+                level: GpuiAppToastLevel::Warning,
+                title: "Ghostex can't use its keys".to_string(),
+                description: Some(format!(
+                    "{problem}. Pairing and approvals on this computer won't work until it is started again without this problem."
+                )),
+                copy_text: None,
+                action: None,
+                loading: false,
+                persistent: true,
+                duration_ms: 0,
+                epoch: 0,
+            },
+            cx,
+        );
+    }
+
     /// This computer's pairing requests still waiting show as notices: the Connect a phone window,
     /// which showed them, went away.
     pub(crate) fn owner_security_show_pending_pairing_requests(
@@ -218,6 +251,9 @@ impl GhostexGpuiApp {
         machine_id: Option<String>,
         cx: &mut gpui::Context<Self>,
     ) {
+        if machine_id.is_none() {
+            self.owner_security_warn_unusable_key_store(cx);
+        }
         let transport = match machine_id.as_deref() {
             None => Transport::Local,
             Some(machine) => match self.gpui_remote_gxserver_request_target(machine) {
