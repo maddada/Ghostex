@@ -2,6 +2,8 @@
 //! OpenCode's working and idle reach Ghostex only from its TUI plugin (server/src/agent_hooks/install/opencode_tui.js), which polls the conversation the TUI shows. OpenCode 2 runs the conversation in its background service, so a turn ends whether or not the TUI is still on it: once the TUI moves to another conversation, closes, or its `Stop` post fails, the last `SessionBusy` stands, and the sidebar, the chat's Stop square and its "Cogitating…" card stay working after the reply and every subagent finished (GitHub #403, Windows, OpenCode with subagents). The service is the record: this observer watches OpenCode sessions that still show working and sends the plugin's own `Stop` once the service says the lead conversation went idle after that working began, with no running shell, no question or approval open and no child conversation running, on two passes in a row so a turn that just began is never cut short.
 //! CDXC:SessionStatus 2026-11-10 WHY:
 //! The same gap runs the other way: the plugin reports `SessionBusy` only while the TUI shows that conversation and its notifier runs (on Windows it spawns gxserver for each report), so a long turn the TUI is not showing, or a report that failed, left the session idle while OpenCode's service ran it, and the chat showed Send with no working word until something made the plugin report again (GitHub #529, Windows, OpenCode). The observer now also sends the plugin's own `SessionBusy` when the service says the lead conversation runs, with no question or approval open, on two passes in a row while Ghostex shows it not working; the `Stop` above settles that stint once the service goes idle, so a turn the service ended never stays working (#403).
+//! CDXC:SessionStatus 2026-11-26 WHY:
+//! GitHub #721: a shell left running after the turn counted as the lead running, so the `SessionBusy` above re-stamped finished sessions (two weeks old ones too) as working a few seconds after anything set them idle, and the `Stop` never came. Shells no longer count (session_chat_opencode/mirror.rs). A session the old rule already re-stamped has a working start later than the conversation's idle stamp, which the `Stop` rule above never ends; so a stint that has gone `STALE_STINT_MS` without the service ever running the lead is ended too, after an uncached read.
 //! SEE-ALSO: server/src/zcode_turn_activity.rs (the same observer shape), server/src/session_chat_opencode/mirror.rs (the cached conversation read and its active check), server/src/session_chat_opencode/status.rs (`fleet`, the children's working state).
 
 use std::collections::{HashMap, HashSet};
@@ -23,7 +25,8 @@ const IDLE_STAMP_SLACK_MS: i64 = 2_000;
 /// What OpenCode's service says about the lead conversation.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct LeadState {
-    /// In the service's active set, or running a shell command.
+    /// In the service's active set. A shell left running after the turn is not counted
+    /// (CDXC:SessionStatus 2026-11-26 in session_chat_opencode/mirror.rs).
     pub(crate) active: bool,
     /// A question or an approval is waiting for the user.
     pub(crate) waiting_on_user: bool,
@@ -42,18 +45,27 @@ pub(crate) enum Seen {
     Running,
 }
 
+/// How long a working stint may go while the service does not run the lead before it is taken as
+/// stale: a turn that just began is in the service's active set well within this.
+const STALE_STINT_MS: i64 = 30_000;
+
 /// The idle stamp of the run that ended the working stint begun at `working_since`, when the
-/// lead and all its children are done.
+/// lead and all its children are done. A stint `STALE_STINT_MS` old that the service never ran
+/// is ended too, keyed by its own start (it may have begun after the last run ended, or with no
+/// run at all), so each such stint is ended once.
 pub(crate) fn ended_turn(
     working_since: i64,
+    now: i64,
     lead: &LeadState,
     children_working: bool,
 ) -> Option<i64> {
     if lead.active || lead.waiting_on_user || children_working {
         return None;
     }
-    lead.idle_at
-        .filter(|idle_at| idle_at + IDLE_STAMP_SLACK_MS >= working_since)
+    let ended = lead
+        .idle_at
+        .filter(|idle_at| idle_at + IDLE_STAMP_SLACK_MS >= working_since);
+    ended.or_else(|| (now - working_since >= STALE_STINT_MS).then_some(working_since))
 }
 
 /// Whether to send `Stop` now, and what to remember for the next pass.
@@ -174,11 +186,13 @@ fn refresh(state: &AppState, seen: &mut HashMap<String, Seen>) {
             continue;
         };
         // Children are asked only once the lead itself is done; an unreadable roster proves nothing.
-        let ended = match ended_turn(working_since, &lead, false) {
+        let now = chrono::Utc::now().timestamp_millis();
+        let ended = match ended_turn(working_since, now, &lead, false) {
             Some(_) => match crate::session_chat_opencode::fleet(&conversation, &snapshot.messages)
             {
                 Ok(fleet) => ended_turn(
                     working_since,
+                    now,
                     &lead,
                     fleet.is_some_and(|fleet| fleet.is_working()),
                 ),
@@ -191,7 +205,19 @@ fn refresh(state: &AppState, seen: &mut HashMap<String, Seen>) {
             Some(next) => seen.insert(key.clone(), next),
             None => seen.remove(&key),
         };
-        if send {
+        // The read may be cached (mirror.rs `freshness`); a turn that began since must not be ended.
+        let still_done = send && {
+            crate::session_chat_opencode::invalidate(&conversation);
+            crate::session_chat_opencode::snapshot(&conversation).is_ok_and(|fresh| {
+                let fresh = lead_state(&fresh);
+                !fresh.active && !fresh.waiting_on_user
+            })
+        };
+        if send && !still_done {
+            // Not sent, so the next passes count again.
+            seen.remove(&key);
+        }
+        if still_done {
             report(
                 state,
                 &db,
@@ -262,7 +288,9 @@ mod tests {
         let mut seen = None;
         let mut sent = Vec::new();
         for (index, (lead, children_working)) in steps.iter().enumerate() {
-            let (send, next) = next_step(seen, ended_turn(BUSY_AT, lead, *children_working));
+            // One pass every two seconds.
+            let now = BUSY_AT + 2_000 * index as i64;
+            let (send, next) = next_step(seen, ended_turn(BUSY_AT, now, lead, *children_working));
             seen = next;
             if send {
                 sent.push(index);

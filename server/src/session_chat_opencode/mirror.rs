@@ -16,9 +16,8 @@ pub(crate) struct Snapshot {
     pub(crate) messages: Vec<Value>,
     pub(crate) permissions: Vec<Value>,
     pub(crate) forms: Vec<Value>,
-    /// Whether the lead conversation itself is active in `/api/session/active` (excluding leftover
-    /// shells after the turn ended).
-    pub(crate) lead_active: bool,
+    /// Whether the lead conversation itself runs: it is in `/api/session/active`. A shell still
+    /// running in it is not counted (CDXC:SessionStatus 2026-11-26 at `snapshot`).
     pub(crate) working: bool,
 }
 
@@ -104,18 +103,15 @@ pub(crate) fn snapshot(id: &str) -> Result<Snapshot, DomainStateError> {
         .as_array()
         .cloned()
         .ok_or_else(|| error("Invalid OpenCode forms response."))?;
+    // CDXC:SessionStatus 2026-11-26 WHY:
+    // GitHub #721: finished OpenCode sessions read as working everywhere (the sidebar, `ghostex sessions`, the close prompt's "in the middle of a turn"), and sessions two weeks old kept getting a fresh `workingStartedAt`. A shell left running after the turn (a `shell` message with status `running`, which OpenCode 2.3.2 marks `metadata.background` and leaves out of `/api/session/active`) counted as working here. So the turn observer (opencode_turn_activity.rs) sent `SessionBusy` a few seconds after anything set the session idle, and never sent the `Stop` that ends it. A background shell after the turn is not working (CDXC:SessionStatus 2026-09-22 in presentation/session_attributes.rs), so only the conversation's own run counts. Interrupt and resolve still stop those shells (prompts.rs `stop_session_shells`).
     let active = client.request("GET", "/api/session/active", None)?;
-    let lead_active = active["data"].get(id).is_some();
-    let working = lead_active
-        || messages
-            .iter()
-            .any(|m| m["type"] == "shell" && m["status"] == "running");
+    let working = active["data"].get(id).is_some();
     let snapshot = Snapshot {
         info,
         messages,
         permissions,
         forms,
-        lead_active,
         working,
     };
     let (live, _) = super::events::live(id, Some(&snapshot.messages));
@@ -208,7 +204,7 @@ pub(crate) fn lead_turn_finished(session: &Value) -> Option<bool> {
     let id = super::session_id(session).ok()?;
     invalidate(&id);
     let current = snapshot(&id).ok()?;
-    if current.lead_active || !current.permissions.is_empty() || !current.forms.is_empty() {
+    if current.working || !current.permissions.is_empty() || !current.forms.is_empty() {
         return Some(false);
     }
     match super::fleet(&id, &current.messages) {

@@ -30,7 +30,6 @@ fn form(fields: Value) -> Snapshot {
         info: json!({}),
         messages: vec![],
         permissions: vec![],
-        lead_active: false,
         working: false,
         forms: vec![json!({"id":"frm_test","title":"Choose","fields":fields})],
     }
