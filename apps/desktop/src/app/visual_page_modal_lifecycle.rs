@@ -395,6 +395,14 @@ impl GhostexGpuiApp {
             );
             return;
         }
+        // A page put aside while its answers were on their way closes itself once they are sent,
+        // which takes its pill away too (CDXC:SessionChat 2026-11-11 in visual_page_hidden.rs).
+        if matches!(command, VisualPageModalCommand::Close)
+            && self.shown_visual_page_key(cx) != Some(key)
+        {
+            self.close_hidden_visual_page(key, cx);
+            return;
+        }
         if self.shown_visual_page_key(cx) != Some(key) {
             return;
         }

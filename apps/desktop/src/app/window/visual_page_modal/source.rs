@@ -18,9 +18,11 @@ use std::time::Duration;
 /// How often the open window asks whether the page's file changed.
 const SOURCE_CHECK_EVERY: Duration = Duration::from_secs(2);
 
-/// The page saves its draft synchronously (the page API's `__flush`), then reloads.
-const RELOAD_AFTER_FLUSH: &str =
-    "try{window.ghostex&&ghostex.__flush&&ghostex.__flush();}finally{location.reload();}";
+/// The page saves its draft synchronously (the page API's `__flush`), then reloads. The page
+/// dropped the `gx-floating=1` it was opened with from its address (the page bootstrap in
+/// server/src/visual_pages/theme.rs), so it is put back first: without it the reloaded page would
+/// not close this window once its answers are sent.
+const RELOAD_AFTER_FLUSH: &str = "try{window.ghostex&&ghostex.__flush&&ghostex.__flush();}finally{if(document.documentElement.hasAttribute(\"data-gx-floating\"))try{history.replaceState(history.state,\"\",location.pathname+location.search+\"#gx-floating=1\");}catch(e){}location.reload();}";
 
 /// The project and session that published the page (a gxserver from 2026-11-13 on says), for
 /// the ⋯ menu's Snooze (`more_menu.rs`).
