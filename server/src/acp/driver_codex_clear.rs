@@ -58,13 +58,20 @@ pub(super) fn start_new_thread(
         }
         return Err(err);
     }
-    let thread_id = state
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .thread_id
-        .clone()
-        .ok_or_else(|| "Codex did not open a new thread.".to_string())?;
+    let (thread_id, thread_path, child_pid) = {
+        let s = state.lock().unwrap_or_else(|p| p.into_inner());
+        (s.thread_id.clone(), s.thread_path.clone(), s.child_pid)
+    };
+    let thread_id = thread_id.ok_or_else(|| "Codex did not open a new thread.".to_string())?;
     println!("\r\n[Codex Native] Started a new conversation.");
     let _ = std::io::stdout().flush();
-    Ok(json!({ "accepted": true, "cleared": true, "sessionId": thread_id }))
+    // The new thread's file and process let gxserver move the session onto it at once
+    // (server/session_clear_http.rs `adopt_cleared_thread`).
+    Ok(json!({
+        "accepted": true,
+        "cleared": true,
+        "sessionId": thread_id,
+        "transcriptPath": thread_path,
+        "childPid": child_pid,
+    }))
 }

@@ -30,8 +30,50 @@ pub(super) struct WatchdogCursor {
     pub(super) agent_answered_mismatch: bool,
 }
 
+/// Points the watch at the conversation the session names now (`conversation`, read from its row)
+/// when that is another one than the send was sampled on; whether it moved.
+///
+/// CDXC:AgentScreenDetection 2026-11-26 FIX:
+/// GitHub #713: a message sent right after a clear went to the new conversation, but Ghostex learns
+/// the new conversation id a few seconds later (Codex shows it only after the next message), so the
+/// watch read the old conversation's file, never found the message, and put up "Did your message
+/// arrive?" about 10 s after the send. The notice stayed until another message was delivered and
+/// made the next `clear-command` refuse ("A dialog or notice is open"). The watch now follows the
+/// session into its new conversation and finds the message there, which also takes down a notice
+/// already up. A file found only now was never sampled at the send, so it is read whole and its
+/// other user rows are not read as proof against delivery (`baseline_trusted`).
+fn follow_conversation(
+    probe: &mut Arc<SessionChatSendProbe>,
+    cursor: &mut WatchdogCursor,
+    conversation: Option<(Option<String>, Option<String>)>,
+) -> bool {
+    let Some((agent_session_id, agent_session_path)) = conversation else {
+        return false;
+    };
+    if agent_session_id.is_none() && agent_session_path.is_none() {
+        return false;
+    }
+    if agent_session_id == probe.agent_session_id && agent_session_path == probe.agent_session_path
+    {
+        return false;
+    }
+    let mut moved = (**probe).clone();
+    moved.agent_session_id = agent_session_id;
+    moved.agent_session_path = agent_session_path;
+    moved.transcript_path = None;
+    moved.transcript_offset = 0;
+    *probe = Arc::new(moved);
+    cursor.path = None;
+    cursor.base_offset = 0;
+    cursor.state.rebase(0);
+    cursor.baseline_trusted = false;
+    cursor.mismatched_input = None;
+    cursor.agent_answered_mismatch = false;
+    true
+}
+
 pub(super) async fn run_session_chat_send_watchdog(
-    probe: Arc<SessionChatSendProbe>,
+    mut probe: Arc<SessionChatSendProbe>,
     publish: SessionChatWatchdogPublisher,
     read_state: SessionChatWatchdogStateReader,
     returned_prompt: SessionChatReturnedPromptTrigger,
@@ -95,8 +137,11 @@ pub(super) async fn run_session_chat_send_watchdog(
         let poll_probe = probe.clone();
         let poll_needle = needle.clone();
         let poll_raw_needles = raw_needles.clone();
-        let Ok((delivered, returned)) = tokio::task::spawn_blocking(move || {
+        let poll_reader = read_state.clone();
+        let Ok((delivered, returned, poll_probe)) = tokio::task::spawn_blocking(move || {
             let mut cursor = cursor;
+            let mut poll_probe = poll_probe;
+            follow_conversation(&mut poll_probe, &mut cursor, poll_reader().conversation);
             let delivered = poll_transcript_for_send(
                 &poll_probe,
                 &mut cursor,
@@ -104,13 +149,14 @@ pub(super) async fn run_session_chat_send_watchdog(
                 &poll_needle,
                 &poll_raw_needles,
             );
-            (delivered, cursor)
+            (delivered, cursor, poll_probe)
         })
         .await
         else {
             return;
         };
         cursor = returned;
+        probe = poll_probe;
         if delivered {
             if superseded() {
                 return;

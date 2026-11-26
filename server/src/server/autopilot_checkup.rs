@@ -26,7 +26,7 @@ const HOUR_MS: i64 = 60 * 60 * 1000;
 pub(super) struct Look<'a> {
     pub session: &'a Value,
     pub gate: &'a mut SessionChatTranscriptGate,
-    pub idle_path: &'a mut Option<std::path::PathBuf>,
+    pub idle_path: &'a mut crate::coordinators::ThreadTranscriptPath,
     /// The rules left it for the user after an interrupt and a reload.
     pub parked_quiet: bool,
     /// A rule reached its hourly cap on it (its words).

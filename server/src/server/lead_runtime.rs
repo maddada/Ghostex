@@ -49,7 +49,7 @@ const TURN_MAX_PAGES: usize = 25;
 /// A linked session's transcript rows from the lead's turn on, kept while the file is unchanged.
 #[derive(Default)]
 struct TurnCache {
-    path: Option<std::path::PathBuf>,
+    path: crate::coordinators::ThreadTranscriptPath,
     /// The file's length and modification time, and the `owedSince` the rows were read for.
     read_for: Option<((u64, Option<std::time::SystemTime>), i64)>,
     rows: Vec<TurnRow>,
@@ -70,7 +70,7 @@ fn lead_turn_rows(cache: &mut TurnCache, session: &Value, owed_ms: i64) -> Vec<T
     else {
         return Vec::new();
     };
-    let Some(path) = cache.path.clone() else {
+    let Some(path) = cache.path.file().map(std::path::Path::to_path_buf) else {
         return Vec::new();
     };
     let Some(stamp) = std::fs::metadata(&path)

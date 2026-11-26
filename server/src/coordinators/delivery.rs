@@ -59,29 +59,57 @@ pub fn pending_message_excerpt(body: &str) -> String {
         .collect()
 }
 
-/// BLOCKING (transcript path resolution). The thread's transcript agent, with `path` set to its
-/// transcript file when one is on disk; `path` caches the resolved file between calls.
+/// A thread's transcript file as `resolve_thread_transcript` found it, kept between calls with the
+/// conversation (`agentSessionId`, `agentSessionPath`) it was found for.
+///
+/// CDXC:LeadLinks 2026-11-26 FIX:
+/// GitHub #755 and #713: after a clear, a linked worker never reported to its lead again. The
+/// cached file was looked up again only once it was gone, and a cleared conversation's file stays
+/// on disk, so the lead's watcher kept reading the old conversation and never found its message
+/// in it (`reportOwed` stayed on). The file is now looked up again whenever the session names
+/// another conversation, so a link made before the new conversation shows up, or one kept across
+/// a clear, follows the session into it.
+#[derive(Debug, Clone, Default)]
+pub struct ThreadTranscriptPath {
+    file: Option<PathBuf>,
+    conversation: Option<(Option<String>, Option<String>)>,
+}
+
+impl ThreadTranscriptPath {
+    /// The transcript file found by the last `resolve_thread_transcript`, when there is one.
+    pub fn file(&self) -> Option<&std::path::Path> {
+        self.file.as_deref()
+    }
+}
+
+/// BLOCKING (transcript path resolution). The thread's transcript agent, with `cache` holding its
+/// transcript file when one is on disk; the file is looked up again when it is gone or the session
+/// names another conversation.
 pub fn resolve_thread_transcript(
     session: &Value,
-    path: &mut Option<PathBuf>,
+    cache: &mut ThreadTranscriptPath,
 ) -> Option<crate::session_chat::SessionChatTranscriptAgent> {
     let agent = crate::session_chat_follower::session_chat_agent_for_session(session)?;
     let transcript_agent =
         crate::session_chat::resolve_session_chat_transcript_agent(Some(agent.as_str()))?;
-    if !path.as_ref().is_some_and(|path| path.is_file()) {
-        let runtime = |key: &str| {
-            session
-                .pointer(&format!("/runtimeSettings/{key}"))
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(str::to_string)
-        };
-        *path = crate::session_chat_paths::resolve_session_chat_transcript_path(
+    let runtime = |key: &str| {
+        session
+            .pointer(&format!("/runtimeSettings/{key}"))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    };
+    let conversation = (runtime("agentSessionId"), runtime("agentSessionPath"));
+    let current = cache.conversation.as_ref() == Some(&conversation)
+        && cache.file.as_ref().is_some_and(|path| path.is_file());
+    if !current {
+        cache.file = crate::session_chat_paths::resolve_session_chat_transcript_path(
             transcript_agent,
-            runtime("agentSessionId").as_deref(),
-            runtime("agentSessionPath").as_deref(),
+            conversation.0.as_deref(),
+            conversation.1.as_deref(),
         );
+        cache.conversation = Some(conversation);
     }
     Some(transcript_agent)
 }
@@ -95,7 +123,7 @@ pub fn transcript_records_message(
     session: &Value,
     needles: &[String],
     since_ms: i64,
-    path: &mut Option<PathBuf>,
+    path: &mut ThreadTranscriptPath,
 ) -> Option<bool> {
     if needles.is_empty() {
         return None;
@@ -113,7 +141,7 @@ pub fn transcript_records_message(
 pub fn transcript_records_images_only_message(
     session: &Value,
     since_ms: i64,
-    path: &mut Option<PathBuf>,
+    path: &mut ThreadTranscriptPath,
 ) -> Option<bool> {
     let earliest = since_ms - DELIVERY_CLOCK_SLACK_MS;
     transcript_has_row(session, since_ms, path, |message| {
@@ -145,11 +173,11 @@ pub fn transcript_records_images_only_message(
 fn transcript_has_row(
     session: &Value,
     since_ms: i64,
-    path: &mut Option<PathBuf>,
+    path: &mut ThreadTranscriptPath,
     matches: impl Fn(&crate::session_chat::SessionChatMessage) -> bool,
 ) -> Option<bool> {
     let transcript_agent = resolve_thread_transcript(session, path)?;
-    let path = path.as_ref()?;
+    let path = path.file()?;
     let earliest = since_ms - DELIVERY_CLOCK_SLACK_MS;
     let mut before_offset = None;
     // CDXC:Coordinators 2026-10-04 WHY: a thread that took a follow-up and then worked a long turn has dozens of rows after it; reading only the newest rows reported a delivered message as lost, so the check pages back until it reaches rows older than the send.

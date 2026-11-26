@@ -241,6 +241,14 @@ pub(crate) fn adopt_local_gxserver_address() {
 /// and the walk gives up, as for any other program.
 const ANCESTOR_AGENTS: &[&str] = &["empryo", "em", "codex"];
 
+/// CDXC:AgentSandbox 2026-11-26 WHY:
+/// GitHub #755: a Native Codex runs under Ghostex's own `ghostex acp-host`, not straight under
+/// the pane's shell, so the walk met `ghostex` above `codex`, took it for another program and gave
+/// up: inside its sandbox `ghostex agents whoami` answered "Cannot identify the caller". The Native
+/// host is let through above a Codex (and above the `node` that starts an npm Codex), as the pane's
+/// own program; a `ghostex` anywhere else still ends the walk.
+const NATIVE_HOST: &str = "ghostex";
+
 /// The session name of the closest `zmx run <name>` above this process, when that pane runs
 /// Empryo or Codex itself: above the agent's process only shells may stand before the daemon. An
 /// agent another agent started from its tool (Claude's Bash tool, say) belongs to that agent's
@@ -255,6 +263,8 @@ fn ancestor_zmx_session() -> Option<(String, u32)> {
     let mut current = std::process::id();
     let mut agent = None;
     let mut right_above_codex = false;
+    // The `node` just passed started a Codex (an npm install), so the Native host may stand above it.
+    let mut launched_codex = false;
     for _ in 0..64 {
         let parent = table.parent(current)?;
         let stem = table
@@ -265,10 +275,16 @@ fn ancestor_zmx_session() -> Option<(String, u32)> {
             return zmx_run_session_name(parent).zip(agent);
         }
         let launcher_of_codex = right_above_codex && stem == "node";
+        let host_of_codex = (right_above_codex || launched_codex) && stem == NATIVE_HOST;
         right_above_codex = stem == "codex";
+        launched_codex = launcher_of_codex;
         if ANCESTOR_AGENTS.contains(&stem.as_str()) {
             agent = agent.or(Some(parent));
-        } else if agent.is_some() && !launcher_of_codex && !SHELLS.contains(&stem.as_str()) {
+        } else if agent.is_some()
+            && !launcher_of_codex
+            && !host_of_codex
+            && !SHELLS.contains(&stem.as_str())
+        {
             return None;
         }
         current = parent;

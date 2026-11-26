@@ -878,7 +878,12 @@ async fn transcript_recorded_row(
         let session = DomainRepository::new(&db, check_state.metadata.server_id.as_str())
             .get_session(&project_id, &session_id)
             .ok()??;
-        crate::coordinators::transcript_records_message(&session, &needles, since, &mut None)
+        crate::coordinators::transcript_records_message(
+            &session,
+            &needles,
+            since,
+            &mut Default::default(),
+        )
     })
     .await
     .ok()

@@ -32,10 +32,13 @@ pub(super) const CLAUDE_REGISTRY_SCAN_LIMIT: usize = 256;
 // ---------------------------------------------------------------------------
 
 /// Session facts the escalation needs, read fresh at the deadline.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct SessionChatWatchdogLiveState {
     pub running: bool,
     pub working: bool,
+    /// The conversation the session names now (`agentSessionId`, `agentSessionPath`), `None`
+    /// when its row could not be read.
+    pub conversation: Option<(Option<String>, Option<String>)>,
 }
 
 /// Pushes whatever notice the session should be showing right now to live
@@ -70,6 +73,7 @@ Sampled BEFORE the send is enqueued: everything appended to the transcript from
 here on is a candidate for "the message arrived". Sampling afterwards would race
 the agent's own write.
 */
+#[derive(Clone)]
 pub struct SessionChatSendProbe {
     pub(super) project_id: String,
     pub(super) session_id: String,

@@ -13,7 +13,6 @@
 //! User, of a board that showed three threads as "parked" while one was put to sleep mid-command and another had stopped after "Now opening the fold.": "why is board not up to date?? what can we do to avoid this please?". Two more things leave a thread owing work after its turn: (c) its last message, which carries no handover marker, ends saying what it does next ("Now opening the fold."), so the agent stopped mid-task; (d) its transcript's newest turn never ended (the agent was put to sleep or died mid-turn, or a restart cut it off). Both get the same rounds as (a) and (b), with their own nudge, and while one holds, Auto Sleep leaves the thread awake and the board shows it under In progress with what it owes instead of as parked (board.rs, panel.rs).
 
 use std::io::{Read, Seek, SeekFrom};
-use std::path::PathBuf;
 
 use serde_json::Value;
 
@@ -101,7 +100,7 @@ pub struct IdleWatch {
     /// The last moment the clock was held while offline: rounds count from here when it is later
     /// than `since` (CDXC:OfflineHold in network_status).
     held_at: i64,
-    path: Option<PathBuf>,
+    path: super::delivery::ThreadTranscriptPath,
     checked_at: Option<i64>,
     reason: Option<IdleWaitReason>,
     reported_rounds: u32,
@@ -117,7 +116,7 @@ impl IdleWatch {
         Self {
             since,
             held_at: 0,
-            path: None,
+            path: Default::default(),
             checked_at: None,
             reason: None,
             reported_rounds: 0,
@@ -239,7 +238,7 @@ pub fn idle_wait_reason(
     session: &Value,
     thread: &ThreadRecord,
     turn_open: bool,
-    path: &mut Option<PathBuf>,
+    path: &mut super::delivery::ThreadTranscriptPath,
 ) -> Option<IdleWaitReason> {
     session_idle_reason(session, thread.last_report.as_deref(), turn_open, path)
 }
@@ -250,7 +249,7 @@ pub fn session_idle_reason(
     session: &Value,
     last: Option<&str>,
     turn_open: bool,
-    path: &mut Option<PathBuf>,
+    path: &mut super::delivery::ThreadTranscriptPath,
 ) -> Option<IdleWaitReason> {
     let queued = queued_harness_rows(session, path);
     if queued > 0 {
@@ -439,14 +438,14 @@ fn says_it_waits_unmarked(message: &str) -> bool {
 /// BLOCKING. Task notifications (and other harness rows) a Claude thread queued after its last
 /// turn and never took: `queue-operation` `enqueue` rows that no user or assistant row follows.
 /// Other agents keep no such queue in their transcript, so they read as none.
-fn queued_harness_rows(session: &Value, path: &mut Option<PathBuf>) -> usize {
+fn queued_harness_rows(session: &Value, path: &mut super::delivery::ThreadTranscriptPath) -> usize {
     let Some(agent) = super::delivery::resolve_thread_transcript(session, path) else {
         return 0;
     };
     if agent != crate::session_chat::SessionChatTranscriptAgent::Claude {
         return 0;
     }
-    let Some(path) = path.as_ref() else {
+    let Some(path) = path.file() else {
         return 0;
     };
     let Ok(mut file) = std::fs::File::open(path) else {

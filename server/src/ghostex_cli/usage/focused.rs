@@ -960,6 +960,7 @@ pub fn needs_you_usage() -> String {
   ghostex needs-you done Q<n> [--session <alias|id|title>]
   ghostex needs-you drop Q<n> [--session <alias|id|title>]
 
+A session holds at most 100 open to-dos; add is refused at the limit until done or drop clears some.
 add: when a step can only be done by the user (an owner-only command, a phone tap, a browser
 sign-in, a check by eye), put it above this session's chat box as a to-do with a Done button,
 without being asked. Never ask the user to run or paste a `ghostex` command you can run yourself:

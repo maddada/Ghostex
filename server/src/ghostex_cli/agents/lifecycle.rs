@@ -73,6 +73,11 @@ pub(super) fn create(args: &Arguments) -> CliResult<Value> {
     }
     if let Some(title) = &args.title {
         payload["title"] = json!(title);
+        // CDXC:SessionTitles 2026-11-26 FIX: GitHub #755: Native Antigravity names its conversation
+        // itself and replaced a `--title` name within 3 s of the first message; a Native agent's
+        // own name gives way only to one the user chose (agents/title_reconcile.rs), so the name
+        // given here is recorded as theirs, as a rename is.
+        payload["runtimeSettings"] = json!({"titleSource": "user"});
     }
     // gxserver checks them against the agent as it does for `create-agent --model/--effort`.
     if let Some(model) = &args.model {

@@ -641,6 +641,20 @@ fn timeout_error(target: &Target, pathname: &str, body: &Value, timeout_ms: f64)
     CliError::Other(message)
 }
 
+/// Whether this command runs inside a Codex sandbox that has the network off: Codex marks the
+/// commands it sandboxes with these variables.
+///
+/// CDXC:AgentSandbox 2026-11-26 WHY:
+/// GitHub #755: in a Native Codex's `workspace-write` sandbox, `ghostex needs-you add` failed with
+/// "Could not connect to local gxserver … Start it with gx server start", while gxserver was up.
+/// Codex's Ghostex rule (agent_folder_trust/codex_ghostex_rule.rs) runs only a command that starts
+/// with `ghostex` outside the sandbox, so `cd <folder> && ghostex …` stayed inside it (reproduced
+/// on a test copy, 26 Nov). The error now says what cut it off and the shape that gets through,
+/// instead of sending the agent to start a server that is running.
+fn in_codex_sandbox_without_network() -> bool {
+    std::env::var("CODEX_SANDBOX_NETWORK_DISABLED").is_ok_and(|value| value.trim() == "1")
+}
+
 fn connection_error_for_target(target: &Target, _detail: &str) -> CliError {
     let message = if target.kind == "tailcat" {
         format!(
@@ -657,6 +671,11 @@ fn connection_error_for_target(target: &Target, _detail: &str) -> CliError {
         format!(
             "Could not connect to SSH gxserver profile{} at {}. Check SSH access, remote gxserver status, and the local tunnel, then retry.",
             target.profile_suffix(),
+            target.base_url
+        )
+    } else if is_local_gxserver_target(target) && in_codex_sandbox_without_network() {
+        format!(
+            "Could not connect to local gxserver at {}: Codex's sandbox cuts this command off from Ghostex. Run the ghostex command as a command of its own that starts with `ghostex` (not after `cd … &&`, in a pipe or `$(…)`, or by its full path), so Codex runs it outside the sandbox.",
             target.base_url
         )
     } else if is_local_gxserver_target(target) {

@@ -148,7 +148,12 @@ pub(super) async fn paste_already_recorded(session: &Value, text: &str, since_ms
     let needles = crate::coordinators::delivery_needles(text);
     let session = session.clone();
     tokio::task::spawn_blocking(move || {
-        crate::coordinators::transcript_records_message(&session, &needles, since_ms, &mut None)
+        crate::coordinators::transcript_records_message(
+            &session,
+            &needles,
+            since_ms,
+            &mut Default::default(),
+        )
     })
     .await
     .ok()

@@ -27,12 +27,12 @@ fn answers() -> &'static Mutex<HashMap<PathBuf, (Stamp, bool)>> {
 /// Whether a Claude session's transcript ends with a finished turn followed only by a compaction
 /// Claude ran while it sat idle.
 pub fn idle_compacted_after_turn_end(session: &Value) -> bool {
-    let mut path = None;
+    let mut path = super::delivery::ThreadTranscriptPath::default();
     let agent = super::delivery::resolve_thread_transcript(session, &mut path);
     if agent != Some(crate::session_chat::SessionChatTranscriptAgent::Claude) {
         return false;
     }
-    let Some(path) = path else {
+    let Some(path) = path.file().map(Path::to_path_buf) else {
         return false;
     };
     let Ok(metadata) = std::fs::metadata(&path) else {

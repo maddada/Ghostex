@@ -413,7 +413,12 @@ pub(crate) async fn interrupted_send_arrived(
         let session = DomainRepository::new(&db, server_id.as_str())
             .get_session(&key.project_id, &key.session_id)
             .ok()??;
-        crate::coordinators::transcript_records_message(&session, &needles, since_ms, &mut None)
+        crate::coordinators::transcript_records_message(
+            &session,
+            &needles,
+            since_ms,
+            &mut Default::default(),
+        )
     })
     .await
     .ok()

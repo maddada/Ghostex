@@ -33,7 +33,7 @@ struct WatchMemory {
     /// Since when the recipient has been idle without the message.
     idle_since: HashMap<(SessionKey, String), i64>,
     /// Each recipient's transcript file, resolved once.
-    transcript_paths: HashMap<SessionKey, std::path::PathBuf>,
+    transcript_paths: HashMap<SessionKey, coordinators::ThreadTranscriptPath>,
 }
 
 pub(crate) fn start_agent_message_delivery_runtime(state: Arc<AppState>) {
@@ -164,16 +164,17 @@ fn verdict(
         memory.idle_since.remove(&key);
         return None;
     }
-    let mut path = memory.transcript_paths.remove(&send.recipient);
+    let mut path = memory
+        .transcript_paths
+        .remove(&send.recipient)
+        .unwrap_or_default();
     let recorded = coordinators::transcript_records_message(
         &session,
         &send.needles,
         send.sent_at_ms,
         &mut path,
     );
-    if let Some(path) = path {
-        memory.transcript_paths.insert(send.recipient.clone(), path);
-    }
+    memory.transcript_paths.insert(send.recipient.clone(), path);
     match recorded {
         Some(true) => return Some((DELIVERY_DELIVERED, None)),
         // No transcript to judge by yet: a missing message cannot be told from a slow agent.

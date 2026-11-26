@@ -49,7 +49,7 @@ struct SupervisorMemory {
     retry: HashMap<SessionKey, FailureStreak>,
     transcript_gates: HashMap<SessionKey, SessionChatTranscriptGate>,
     /// Each thread's transcript file, resolved once for the pending-message check.
-    transcript_paths: HashMap<SessionKey, std::path::PathBuf>,
+    transcript_paths: HashMap<SessionKey, coordinators::ThreadTranscriptPath>,
     /// When each thread's pending message was last looked for in its transcript.
     delivery_checked_at: HashMap<SessionKey, i64>,
     /// Since when a thread has been idle without its pending message (sent at, since).
@@ -1883,16 +1883,14 @@ fn pending_delivery(
     memory.delivery_checked_at.insert(key.clone(), now);
     let sent_ms = parse_iso_ms_opt(sent_at).unwrap_or(now);
     let needles = coordinators::pending_message_needles(excerpt);
-    let mut path = memory.transcript_paths.remove(&key);
+    let mut path = memory.transcript_paths.remove(&key).unwrap_or_default();
     // A message of only images is found by time, not text (delivery.rs `IMAGES_ONLY_PENDING_MESSAGE`).
     let recorded = if excerpt == coordinators::IMAGES_ONLY_PENDING_MESSAGE {
         coordinators::transcript_records_images_only_message(session, sent_ms, &mut path)
     } else {
         coordinators::transcript_records_message(session, &needles, sent_ms, &mut path)
     };
-    if let Some(path) = path {
-        memory.transcript_paths.insert(key.clone(), path);
-    }
+    memory.transcript_paths.insert(key.clone(), path);
     match recorded {
         Some(true) => {
             memory.undelivered_idle_since.remove(&key);

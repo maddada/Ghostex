@@ -236,6 +236,10 @@ pub(crate) fn session_chat_watchdog_state_reader(
             Some(crate::session_chat_watchdog::SessionChatWatchdogLiveState {
                 running: is_session_chat_followable_session(&session),
                 working: session_chat_hook_working(&session),
+                conversation: Some((
+                    crate::presentation::read_runtime_text(&session, "agentSessionId"),
+                    crate::presentation::read_runtime_text(&session, "agentSessionPath"),
+                )),
             })
         };
         read().unwrap_or_default()

@@ -136,13 +136,26 @@ fn busy_refusal(
     if crate::session_chat_options::cached_session_chat_terminal_notice(
         state, project_id, session_id,
     )
-    .is_some_and(|notice| notice.blocks_queued_delivery())
+    .is_some_and(|notice| notice.blocks_queued_delivery() && !is_delivery_verdict(&notice))
     {
         return Some(
             "A dialog or notice is open in its terminal. Answer or close it first.".into(),
         );
     }
     None
+}
+
+/// Whether a notice is the send watchdog's "Did your message arrive?" verdict: a doubt about the
+/// last message, not something on the screen, so it never stops a clear.
+///
+/// CDXC:LeadLinks 2026-11-26 FIX:
+/// GitHub #713: a clear right after a message the watchdog could not confirm was refused with "A
+/// dialog or notice is open in its terminal" while nothing was open, so every Codex clear that
+/// returned `sentNotConfirmed` made the next one fail. The send queue already sends past this
+/// notice (session_chat_queue_runtime/scheduler.rs `notice_fails_a_row`); the clear does the same,
+/// and the screen it reads still has to show a ready, empty input box.
+fn is_delivery_verdict(notice: &crate::session_chat_notice::SessionChatTerminalNotice) -> bool {
+    notice.kind == crate::session_chat_notice::SESSION_CHAT_NOTICE_DELIVERY_FAILED
 }
 
 /// Why the session's screen, read now, can't take the command: its input box is not drawn and
@@ -170,7 +183,8 @@ fn screen_refusal(
         };
     let notice = crate::session_chat_options::cached_session_chat_terminal_notice(
         state, project_id, session_id,
-    );
+    )
+    .filter(|notice| !is_delivery_verdict(notice));
     let composer = crate::session_chat_composer::detect_session_chat_composer_readiness(
         Some(agent),
         &capture.text,
@@ -465,7 +479,7 @@ async fn clear_native(
     .await;
     use crate::pi_chat_channel::ChannelError;
     match sent {
-        Ok(_) => {}
+        Ok(answer) => adopt_cleared_thread(state, &result, &answer),
         Err(ChannelError::Failed(message)) if message == "ACP_AGENT_BUSY" => {
             return Err(refused(
                 "agentBusy",
@@ -493,6 +507,56 @@ async fn clear_native(
     );
     record_clear(state, caller, project_id, session_id, command);
     Ok(result)
+}
+
+/// Moves a Native Codex session onto the thread its host opened for the clear, as soon as the host
+/// names it.
+///
+/// CDXC:LeadLinks 2026-11-26 FIX:
+/// GitHub #755 and #713: after a Native Codex clear, gxserver kept the old conversation id until a
+/// live process scan found the new one seconds later (the old id "for about 10 s", and
+/// `clear-command` answered `sentNotConfirmed`). Until then the host's activity from the new
+/// thread was refused as another conversation's (`sessionIdentity.passiveEventRejected`), so the
+/// first turn after the clear never read as working: a lead's report of that turn went out before
+/// it ended, with only its first line (seen on a test copy, 26 Nov). The host's answer names the
+/// new thread, its file and its process, so the session takes it here through the same verified
+/// path a Native rewind uses, compared against the id it had before the clear.
+fn adopt_cleared_thread(state: &AppState, result: &Value, answer: &Value) {
+    let text = |value: &Value| {
+        value
+            .as_str()
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(str::to_string)
+    };
+    let (Some(previous), Some(next)) = (
+        text(&result["previousAgentSessionId"]),
+        text(&answer["sessionId"]),
+    ) else {
+        return;
+    };
+    if answer["cleared"] != json!(true) || previous == next {
+        return;
+    }
+    let path = text(&answer["transcriptPath"]).unwrap_or_default();
+    let adopted = crate::storage::open_gxserver_database(&state.paths)
+        .ok()
+        .and_then(|db| {
+            let repository = DomainRepository::new(&db, &state.metadata.server_id);
+            crate::agents::apply_verified_rewind_session_identity(
+                &repository,
+                result["projectId"].as_str().unwrap_or_default(),
+                result["sessionId"].as_str().unwrap_or_default(),
+                &previous,
+                &next,
+                &path,
+                answer["childPid"].as_i64().unwrap_or_default(),
+            )
+            .ok()
+        });
+    if adopted == Some(true) {
+        crate::zmx::invalidate_zmx_process_identity_cache();
+    }
 }
 
 /// `/api/clearSessionConversation`. The checks run off the async workers; the command is then

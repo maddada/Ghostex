@@ -7,7 +7,8 @@ USAGE
   ghostex agents types [--json]
   ghostex agents create <agent-id> [--title <name>] [--project-id <id> | --path <folder>]
                        [--task <text> | --body-file <path|->] [--model <m>] [--effort <e>]
-                       [--role <line>] [--allow-hidden] [--standalone] [--computer <name>]
+                       [--role <line>] [--lead <session-ref|self>] [--allow-hidden]
+                       [--standalone] [--computer <name>]
   ghostex agents list [--all] [--json]  Running agents in this project; --all lists every project
   ghostex agents send <session-ref> <text> [--interrupt | --queue | --with-next]
                      [--request-id <id>] [--as-user]

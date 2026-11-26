@@ -367,6 +367,21 @@ pub(super) fn create_gxserver_agent_session(payload: &Value, flags: &Flags) -> C
         .get("title")
         .map(FlagValue::as_json)
         .or_else(|| payload.get("title").cloned());
+    // A name given here is the user's, so a Native agent's own name never replaces it (GitHub
+    // #755, the same stamp `agents create --title` makes in agents/lifecycle.rs).
+    if title
+        .as_ref()
+        .and_then(Value::as_str)
+        .is_some_and(|title| !title.trim().is_empty())
+    {
+        let mut runtime = params
+            .get("runtimeSettings")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        runtime.insert("titleSource".to_string(), json!("user"));
+        params.insert("runtimeSettings".to_string(), Value::Object(runtime));
+    }
     set_or_remove(&mut params, "title", title);
     let mut created =
         rpc::call_gxserver_rpc("/api/createAgentSession", &Value::Object(params), flags)?;

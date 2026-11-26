@@ -23,7 +23,6 @@
 
 use super::*;
 
-use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use crate::autopilot::{self, AutopilotConfig, LogEntry, Outcome};
@@ -87,7 +86,7 @@ impl Kind {
 #[derive(Default)]
 struct Pilot {
     gate: SessionChatTranscriptGate,
-    idle_path: Option<PathBuf>,
+    idle_path: coordinators::ThreadTranscriptPath,
     /// Every action taken, for the hourly caps.
     acted: Vec<(Kind, i64)>,
     /// The idle stretch (its last turn's end) already carried on.

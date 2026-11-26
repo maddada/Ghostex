@@ -94,7 +94,7 @@ pub struct StallWatch {
     run: Option<String>,
     /// When this working stint started being watched: nothing before it is known.
     watched_since: i64,
-    path: Option<PathBuf>,
+    path: super::delivery::ThreadTranscriptPath,
     /// The newest transcript write seen (file time or newest row, whichever is later).
     transcript_seen: Option<i64>,
     screen: Option<u64>,
@@ -125,7 +125,7 @@ impl StallWatch {
         Self {
             run: None,
             watched_since: now,
-            path: None,
+            path: Default::default(),
             transcript_seen: None,
             screen: None,
             last_output_at: None,
@@ -153,7 +153,7 @@ impl StallWatch {
         // A lead that waited on its subagents through the restart: their newest write is its
         // output too (subagent_output.rs), read beside the transcript resolved above.
         let output_at =
-            super::subagent_output::newest_subagent_write(session, watch.path.as_deref(), written)
+            super::subagent_output::newest_subagent_write(session, watch.path.file(), written)
                 .unwrap_or(written);
         // Never before the session turned working (its stored activity's last change): a turn
         // that just began, its prompt not in the transcript yet, is no old stretch of quiet.
@@ -251,11 +251,9 @@ impl StallWatch {
         // A lead waiting on its subagents writes nothing itself; their transcript writes are its
         // output (subagent_output.rs), read beside the transcript this look resolved.
         let quiet_since = self.quiet_since();
-        if let Some(written) = super::subagent_output::newest_subagent_write(
-            session,
-            self.path.as_deref(),
-            quiet_since,
-        ) {
+        if let Some(written) =
+            super::subagent_output::newest_subagent_write(session, self.path.file(), quiet_since)
+        {
             self.count_output(Some(written));
         }
         // Non-CLI (ACP / SDK) sessions have a static host log in their zmx PTY; read the host's
@@ -467,17 +465,23 @@ fn agent_launched_at(session: &Value) -> Option<i64> {
 
 /// BLOCKING. The newest transcript write: the file's modification time or its newest row's time,
 /// whichever is later (a derived transcript such as OpenCode's is refreshed by the tail read).
-fn transcript_activity_at(session: &Value, path: &mut Option<PathBuf>) -> Option<i64> {
+fn transcript_activity_at(
+    session: &Value,
+    path: &mut super::delivery::ThreadTranscriptPath,
+) -> Option<i64> {
     transcript_activity(session, path).0
 }
 
 /// BLOCKING. `transcript_activity_at`, and the newest row the agent wrote itself (not Ghostex's
 /// nudge).
-fn transcript_activity(session: &Value, path: &mut Option<PathBuf>) -> (Option<i64>, Option<i64>) {
+fn transcript_activity(
+    session: &Value,
+    path: &mut super::delivery::ThreadTranscriptPath,
+) -> (Option<i64>, Option<i64>) {
     let Some(agent) = super::delivery::resolve_thread_transcript(session, path) else {
         return (None, None);
     };
-    let Some(path) = path.as_ref() else {
+    let Some(path) = path.file() else {
         return (None, None);
     };
     let messages = match crate::session_chat_tail::read_session_chat_tail_page(
@@ -628,13 +632,13 @@ pub fn stall_last_row(
     if agent_launched_at(session).is_some_and(|launched| launched > quiet_since) {
         return None;
     }
-    let mut path = None;
+    let mut path = super::delivery::ThreadTranscriptPath::default();
     if transcript_activity_at(session, &mut path) > transcript_seen {
         return None;
     }
     let messages = transcript_tail(session, &mut path);
     if moved_after(&messages, quiet_since)
-        || super::subagent_output::newest_subagent_write(session, path.as_deref(), quiet_since)
+        || super::subagent_output::newest_subagent_write(session, path.file(), quiet_since)
             .is_some()
     {
         return None;
@@ -652,11 +656,10 @@ pub(super) fn moved_since(session: &Value, kind: super::QuietReportKind, since: 
     if agent_launched_at(session).is_some_and(|launched| launched > since) {
         return true;
     }
-    let mut path = None;
+    let mut path = super::delivery::ThreadTranscriptPath::default();
     moved_after(&transcript_tail(session, &mut path), since)
         || (kind == super::QuietReportKind::Stalled
-            && super::subagent_output::newest_subagent_write(session, path.as_deref(), since)
-                .is_some())
+            && super::subagent_output::newest_subagent_write(session, path.file(), since).is_some())
 }
 
 fn moved_after(messages: &[SessionChatMessage], since: i64) -> bool {
@@ -668,10 +671,13 @@ fn moved_after(messages: &[SessionChatMessage], since: i64) -> bool {
 }
 
 /// BLOCKING. The newest rows of the thread's transcript, empty when it cannot be read.
-fn transcript_tail(session: &Value, path: &mut Option<PathBuf>) -> Vec<SessionChatMessage> {
+fn transcript_tail(
+    session: &Value,
+    path: &mut super::delivery::ThreadTranscriptPath,
+) -> Vec<SessionChatMessage> {
     let agent = super::delivery::resolve_thread_transcript(session, path);
     agent
-        .zip(path.as_ref())
+        .zip(path.file())
         .and_then(|(agent, path)| {
             crate::session_chat_tail::read_session_chat_tail_page(
                 agent,
