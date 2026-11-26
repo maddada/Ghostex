@@ -65,6 +65,43 @@ commands; each step below says which one to run.
   "Windows pass" and "8. Linux GUI pass" below), and the phone gets its own
   step (7), on the Android emulator on m7-arch.
 
+### When the brief says "on your own test copy" (12.2.0)
+
+Then nothing runs in the user's Ghostex: a test server (`cargo xtask
+test-server start --name smoke-<ver>`, as in step 7; `cargo xtask test-server
+remove` at clean-up) and an app bundle built from the release worktree, driven
+only by its own pid and window ids. What 12.2.0's run learned:
+
+- **Launch the app with `env -i`** and only the test server's variables
+  (`GHOSTEX_HOME`, `GHOSTEX_GXSERVER_DEV_PORT`, `GHOSTEX_GXSERVER_BIN`/`_CLI`,
+  `ZMX_DIR`, a free `GHOSTEX_GPUI_CEF_REMOTE_DEBUGGING_PORT` and
+  `GHOSTEX_CODE_SERVER_PORT`) plus `HOME`, `USER`, `PATH`, `LANG`, `TMPDIR`.
+  Started from an agent's shell, it otherwise inherits that agent's
+  `GHOSTEX_*` variables and talks to the user's real server (12.2.0 run 1 made
+  a launchd job for the real server's port that had to be removed). Write its
+  pid to a file and stop only that pid, and the `GhostexEditor --daemon` it
+  leaves (parent 1, path inside the test bundle).
+- **Run `smoke.sh` from a shell that sourced the test server's `env.sh`**, and
+  after a `test-server` restart run `hash -r` and check `which ghostex` is
+  the test server's `gxserver/bin/ghostex`: a runner shell that survived the
+  restart lost that `PATH` and run 2 quietly used the Homebrew CLI.
+- **Agent-only behaviour needs the agent's token, not its session id.** The
+  server tells an agent from the owner by the auth token
+  (`GHOSTEX_SESSION_TOKEN`), so `GHOSTEX_SESSION_ID` alone acts as the owner:
+  `ghostex browser open` switches the view at once, with no page toast. To act
+  as a test agent, copy `GHOSTEX_SESSION_ID`, `GHOSTEX_GLOBAL_SESSION_REF`,
+  `GHOSTEX_SESSION_TOKEN`, `GHOSTEX_GXSERVER_AUTH_TOKEN_FILE` and
+  `GHOSTEX_GXSERVER_BASE_URL` from that agent's process (`ps eww`, matched by
+  its ref) into the command's environment, printing none of them. Test
+  servers only.
+- **Without a working Claude login on the test server**, 2.1, 3.1 and 6.1's
+  reply are Warn, and 5.3 runs on the 2.2 Codex chat (`$S page 2.2`).
+- **Agent browser tools** (`ghostex browser mcp`) are checked against a local
+  fixture page served by `python3 -m http.server` from the scratch folder: a
+  button, a link, a text field, a file input, a button under an overlay and a
+  button below a tall spacer, each logging `event.isTrusted`. Kill the server
+  by its pid at clean-up.
+
 ## Before the first step
 
 1. `git rev-parse HEAD` is the release point. Write it in the report.
