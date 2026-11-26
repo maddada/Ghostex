@@ -60,7 +60,7 @@
 ### 🩹 Fixes and polish
 
 - **Native Claude and Codex chats have their workspace's connector tools again,** coordinators and their threads included.
-- **Agent browser clicks are hardened further:** they stay real mouse clicks at 125% and 150% display scale, on dropdowns and on pages an agent opened in the background, and fall back to a script click whenever the press might land on something else.
+- **Agent browser clicks are hardened further:** they stay real mouse clicks at 125% and 150% display scale and on pages an agent opened in the background, and fall back to a script click whenever the press might land on something else.
 
 ## 12.2.0 - 2026-11-26
 
