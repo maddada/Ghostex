@@ -17,7 +17,7 @@
 
 use crate::session_chat_send::{
     build_agent_tui_clear_input_for_text, normalize_session_chat_screen_text,
-    session_chat_paste_needles, write_session_chat_payload,
+    session_chat_needle_text, session_chat_paste_needles, write_session_chat_payload,
 };
 
 /// The line Claude Code prints above its input box for a prompt a hook blocked.
@@ -57,15 +57,17 @@ pub(crate) fn claude_screen_shows_hook_block(agent: &str, screen: &str, text: &s
         .map(String::as_str)
         .collect::<Vec<_>>()
         .join("\n");
-    let echoed = normalize_session_chat_screen_text(
-        echoed
-            .trim_start()
-            .trim_start_matches(CLAUDE_ORIGINAL_PROMPT_LEAD),
-    );
+    let echoed = echoed
+        .trim_start()
+        .trim_start_matches(CLAUDE_ORIGINAL_PROMPT_LEAD);
+    // The needle's own form (`session_chat_needle_text`, #711).
+    let echoed_letters = session_chat_needle_text(echoed);
     session_chat_paste_needles(text)
         .first()
-        .is_some_and(|head| echoed.contains(head.as_str()))
-        || echoed.to_lowercase().contains(CLAUDE_PASTED_PLACEHOLDER)
+        .is_some_and(|head| echoed_letters.contains(head.as_str()))
+        || normalize_session_chat_screen_text(echoed)
+            .to_lowercase()
+            .contains(CLAUDE_PASTED_PLACEHOLDER)
 }
 
 /// Ends a send whose prompt the hook blocked: a chat-box send's text goes back to the chat box,

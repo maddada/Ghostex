@@ -189,7 +189,7 @@ fn box_holds_only(reads_box: Option<&str>, screen: &str, text: &str) -> bool {
             }
         }
         None => {
-            let shown = normalize_session_chat_screen_text(screen);
+            let shown = session_chat_needle_text(screen);
             let needles = session_chat_paste_needles(text);
             !needles.is_empty() && needles.iter().all(|needle| shown.contains(needle.as_str()))
         }

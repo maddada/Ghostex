@@ -199,10 +199,11 @@ pub(crate) fn paste_shown_in(
     needles: &[String],
 ) -> bool {
     let normalized = normalize_session_chat_screen_text(shown);
+    let letters = session_chat_needle_text(shown);
     normalized
         .to_lowercase()
         .contains(SESSION_CHAT_PASTED_PLACEHOLDER_NEEDLE)
-        || needles.iter().any(|needle| normalized.contains(needle))
+        || needles.iter().any(|needle| letters.contains(needle))
         || (agent.is_some() && input_box_shows_scrolled_message(shown, text))
         || omp_paste_chip_landed(agent, shown)
 }

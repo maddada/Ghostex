@@ -473,9 +473,27 @@ pub(crate) fn normalize_session_chat_screen_text(text: &str) -> String {
         .collect()
 }
 
-/// Normalized fragments of the message to look for on screen. Both ends are
-/// sampled because a long composer shows only part of what it holds — the head
-/// while it is still being filled, the tail once it scrolled.
+/// The form a needle and the screen text it is looked for in are both compared in: letters and
+/// digits only.
+///
+/// CDXC:SessionChat 2026-11-26 WHY:
+/// GitHub #711: on Windows a Terminal-based chat's em dashes, arrows and curly quotes reach the
+/// agent's input box changed (a plain "-", "?", straight quotes), so a message with one in its
+/// first 40 characters never matched its needle: the send said "The terminal did not accept the
+/// pasted message", typed it again, restarted the agent, and gave up, although the box held it.
+/// Punctuation and symbols say no more about which message is on screen than spaces do; this is the
+/// rule the chat and the delivery check match a sent message by (gx-chat-core
+/// `session/text.rs` `comparable_letters`). A message with no letter or digit at all has no
+/// needle, so its paste is not checked, like an images-only send. Every needle comparison folds the
+/// screen through here; checks that the box holds the message and nothing else keep their exact
+/// comparison, so a clear never takes someone's typing for the message.
+pub(crate) fn session_chat_needle_text(text: &str) -> String {
+    ghostex_gx_chat_core::session::text::comparable_letters(text)
+}
+
+/// Fragments of the message to look for on screen, in `session_chat_needle_text` form. Both ends
+/// are sampled because a long composer shows only part of what it holds — the head while it is
+/// still being filled, the tail once it scrolled.
 pub(crate) fn session_chat_paste_needles(text: &str) -> Vec<String> {
     let mut needles: Vec<String> = Vec::new();
     let lines: Vec<&str> = text
@@ -484,7 +502,7 @@ pub(crate) fn session_chat_paste_needles(text: &str) -> Vec<String> {
         .filter(|line| !line.is_empty())
         .collect();
     for line in [lines.first(), lines.last()].into_iter().flatten() {
-        let normalized: String = normalize_session_chat_screen_text(line)
+        let normalized: String = session_chat_needle_text(line)
             .chars()
             .take(SESSION_CHAT_VERIFY_NEEDLE_CHARS)
             .collect();
@@ -495,10 +513,10 @@ pub(crate) fn session_chat_paste_needles(text: &str) -> Vec<String> {
     needles
 }
 
-/// The last characters of the message, normalized: what an input box that scrolled down to its
-/// cursor still shows after its start went above the box's top row.
+/// The last characters of the message, in `session_chat_needle_text` form: what an input box that
+/// scrolled down to its cursor still shows after its start went above the box's top row.
 pub(crate) fn session_chat_paste_tail_needle(text: &str) -> Option<String> {
-    let normalized: Vec<char> = normalize_session_chat_screen_text(text).chars().collect();
+    let normalized: Vec<char> = session_chat_needle_text(text).chars().collect();
     let start = normalized
         .len()
         .saturating_sub(SESSION_CHAT_VERIFY_NEEDLE_CHARS);
@@ -521,8 +539,9 @@ pub(crate) fn session_chat_paste_tail_needle(text: &str) -> Option<String> {
 /// `box_text` is an input box's rows, one line each (`session_chat_input_box_text`).
 pub(crate) fn input_box_shows_scrolled_message(box_text: &str, text: &str) -> bool {
     use unicode_width::UnicodeWidthStr;
-    let shown = normalize_session_chat_screen_text(box_text);
-    let message = normalize_session_chat_screen_text(text);
+    // Compared as the needles are (`session_chat_needle_text`, #711).
+    let shown = session_chat_needle_text(box_text);
+    let message = session_chat_needle_text(text);
     if shown.chars().count() < SESSION_CHAT_VERIFY_NEEDLE_CHARS
         || shown.len() >= message.len()
         || !message.ends_with(&shown)

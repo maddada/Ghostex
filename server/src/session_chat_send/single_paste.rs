@@ -14,17 +14,20 @@ pub(crate) fn keeps_single_paste(agent: &str) -> bool {
 /// fragment of it is on screen more often than it occurs in the text, or the agent drew more
 /// collapsed-paste placeholders than the text contains.
 pub(crate) fn session_chat_paste_repeated(input: &str, text: &str) -> bool {
-    let input = normalize_session_chat_screen_text(input);
-    let message = normalize_session_chat_screen_text(text);
     let placeholders = |value: &str| {
-        value
+        normalize_session_chat_screen_text(value)
             .to_lowercase()
             .matches(SESSION_CHAT_PASTED_PLACEHOLDER_NEEDLE)
             .count()
     };
-    placeholders(&input) > placeholders(&message).max(1)
+    // Needles are counted in their own form (`session_chat_needle_text`, #711).
+    let (shown, message) = (
+        session_chat_needle_text(input),
+        session_chat_needle_text(text),
+    );
+    placeholders(input) > placeholders(text).max(1)
         || session_chat_paste_needles(text).iter().any(|needle| {
-            input.matches(needle.as_str()).count() > message.matches(needle.as_str()).count()
+            shown.matches(needle.as_str()).count() > message.matches(needle.as_str()).count()
         })
 }
 

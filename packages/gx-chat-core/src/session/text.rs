@@ -262,11 +262,19 @@ pub fn comparable_text(text: &str) -> String {
         out.push(marker);
     }
     let marker_len = out.len();
-    out.extend(text.chars().filter(|value| value.is_alphanumeric()));
+    out.push_str(&comparable_letters(text));
     if out.len() > marker_len {
         return out;
     }
     text.chars().filter(|value| !is_js_space(*value)).collect()
+}
+
+/// The letters and digits of `text`, in any script, and nothing else: the core of
+/// `comparable_text`, for a search of one text inside another (gxserver's check that a pasted
+/// message is on the agent's screen, `server/src/session_chat_send/steps.rs`), where the whole-text
+/// rules (the leading command marker, the fallback for a text with no letters) do not apply.
+pub fn comparable_letters(text: &str) -> String {
+    text.chars().filter(|value| value.is_alphanumeric()).collect()
 }
 
 /// `/^(?:(?:~|\.{1,2})?\/(?:[^\s\\]|\\.)*\s?)+$/`.

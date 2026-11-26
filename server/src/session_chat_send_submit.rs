@@ -4,10 +4,10 @@ use std::time::{Duration, Instant};
 
 use crate::session_chat_send::{
     build_agent_tui_clear_input_for_text, capture_session_terminal_text_vt,
-    normalize_session_chat_screen_text, record_busy_agent_wait, session_chat_paste_needles,
-    session_chat_paste_tail_needle, wait_out_busy_agent, write_session_chat_payload_guarded,
-    AgentMidTurnProbe, BusyAgentWait, InputGuard, SessionChatSendError, SessionChatSendFailure,
-    SESSION_CHAT_EMPRYO_SUBMIT,
+    normalize_session_chat_screen_text, record_busy_agent_wait, session_chat_needle_text,
+    session_chat_paste_needles, session_chat_paste_tail_needle, wait_out_busy_agent,
+    write_session_chat_payload_guarded, AgentMidTurnProbe, BusyAgentWait, InputGuard,
+    SessionChatSendError, SessionChatSendFailure, SESSION_CHAT_EMPRYO_SUBMIT,
 };
 
 /// Codex and Claude Code clear their input box within a frame of taking a submission; the window
@@ -322,7 +322,11 @@ fn input_holds_message(agent: &str, screen: &str, needles: &[String]) -> bool {
     crate::session_chat_composer::session_chat_composer_input(agent, screen).is_some_and(|input| {
         !input.is_empty() && {
             let typed = normalize_session_chat_screen_text(&input.text);
-            needles.iter().any(|needle| typed.contains(needle.as_str()))
+            // The needle's own form (`session_chat_needle_text`, #711).
+            let letters = session_chat_needle_text(&input.text);
+            needles
+                .iter()
+                .any(|needle| letters.contains(needle.as_str()))
                 || (agent != "codex" && typed.to_lowercase().contains(CLAUDE_PASTED_PLACEHOLDER))
         }
     })
