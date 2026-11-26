@@ -11,8 +11,10 @@ use super::{
 
 mod backend;
 mod packaged_install;
+mod settings_mirror;
 mod wsl;
 
 pub(super) use backend::*;
 use packaged_install::*;
+pub(super) use settings_mirror::*;
 pub(super) use wsl::*;

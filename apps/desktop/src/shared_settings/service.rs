@@ -232,19 +232,46 @@ pub fn shared_sidebar_settings_snapshot() -> SharedSidebarSettingsSnapshot {
 pub fn write_shared_sidebar_settings_payload(
     payload: &str,
 ) -> Result<SharedSidebarSettingsWriteResult, SharedSidebarSettingsWriteError> {
-    let mut service = shared_sidebar_settings_service()
+    let result = shared_sidebar_settings_service()
         .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    service.write_json_object_payload(payload)
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .write_json_object_payload(payload);
+    notify_settings_saved(&result);
+    result
 }
 
 pub fn write_shared_sidebar_settings_object(
     object: Map<String, Value>,
 ) -> Result<SharedSidebarSettingsWriteResult, SharedSidebarSettingsWriteError> {
-    let mut service = shared_sidebar_settings_service()
+    let result = shared_sidebar_settings_service()
         .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    service.write_json_object(object)
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .write_json_object(object);
+    notify_settings_saved(&result);
+    result
+}
+
+/// Called after each save that changed the file, with the service unlocked: the Windows app
+/// copies the file into WSL from here (windows_terminal_backend/platform/settings_mirror.rs).
+static SETTINGS_SAVED_OBSERVER: OnceLock<fn()> = OnceLock::new();
+
+/// Sets the one hook [`SETTINGS_SAVED_OBSERVER`] holds; a second call is ignored.
+#[allow(dead_code)]
+pub fn observe_settings_saved(observer: fn()) {
+    let _ = SETTINGS_SAVED_OBSERVER.set(observer);
+}
+
+fn notify_settings_saved(
+    result: &Result<SharedSidebarSettingsWriteResult, SharedSidebarSettingsWriteError>,
+) {
+    if let Ok(SharedSidebarSettingsWriteResult {
+        status: SharedSidebarSettingsWriteStatus::Changed,
+        ..
+    }) = result
+        && let Some(observer) = SETTINGS_SAVED_OBSERVER.get()
+    {
+        observer();
+    }
 }
 
 fn shared_sidebar_settings_service() -> &'static Mutex<SharedSidebarSettingsService> {

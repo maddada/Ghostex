@@ -330,6 +330,9 @@ fn main() {
     support_logs::install_panic_hook();
     support_logs::install_uncaught_exception_handler();
     support_logs::install_log_records_sink();
+    // A WSL gxserver reads its own copy of the settings file (settings_mirror.rs, GitHub #732).
+    #[cfg(target_os = "windows")]
+    shared_settings::observe_settings_saved(windows_terminal_backend::settings_file_saved);
     app::gx_store::initialize_client_storage_at_start();
     // Before anything reads or writes terminal settings, so the first config Ghostex
     // terminals load is the copied one.

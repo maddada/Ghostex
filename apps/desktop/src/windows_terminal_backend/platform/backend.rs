@@ -272,6 +272,11 @@ pub(in crate::windows_terminal_backend) fn prepare_gxserver(
     }
 
     progress(WindowsWslSetupPhase::Starting);
+    // gxserver reads its settings from the start (the GBots switch, telemetry, auto sleep), so the
+    // copy goes in first. A failed copy leaves gxserver on the copy it had (settings_mirror.rs).
+    if let Err(error) = mirror_settings_into(distribution) {
+        log::warn!("WSL settings copy before gxserver start failed: {error}");
+    }
     let start_script = format!(
         "set -eu; gxserver={}; test -x \"$gxserver\"; \"$gxserver\" start --json >/dev/null",
         posix_single_quote(&gxserver_path),

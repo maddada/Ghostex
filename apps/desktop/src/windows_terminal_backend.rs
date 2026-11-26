@@ -102,6 +102,12 @@ pub(crate) fn reset() {
     platform::reset();
 }
 
+/// Copies the settings file the app just saved into the WSL distribution (settings_mirror.rs).
+#[cfg(target_os = "windows")]
+pub(crate) fn settings_file_saved() {
+    platform::settings_file_saved();
+}
+
 #[cfg(target_os = "windows")]
 pub(crate) fn auth_token() -> Option<String> {
     if current_preference() == WindowsTerminalBackendPreference::PowerShell {
