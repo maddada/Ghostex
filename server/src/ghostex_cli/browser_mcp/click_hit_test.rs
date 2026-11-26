@@ -7,6 +7,7 @@
 //! Coordinator, on the user's behalf (re-check 5 of #762, S2): the hit test takes whole pixels while the press lands at the exact point, so on a 2x screen a view scrolled by half a pixel let a frame just below the tested point take the press. A view scrolled by part of a pixel is refused, and the point script rounds the scroll after `scrollIntoView` so honest pages keep their real click. After a press on a page is refused because the page scrolled or something came under the pointer, that page gets the script click for a minute (`SCRIPT_CLICKS_AFTER_REFUSAL`, mcp_tools.rs), since such an attack needs many tries and an honest page almost never trips it.
 //! Coordinator, on the user's behalf (re-check 6 of #762, R1 to R3): Chromium keeps scroll offsets on whole device pixels, so at 125% and 150% a whole CSS offset is not always reachable; the point script rounds to an offset whole in both (a multiple of the smallest step that is), and steps back towards the start when the page's end clamps it. Only a refusal that may be a race (a frame, nothing, or a scroll under the pointer, `may_be_a_race`) starts the minute of script clicks; another element of the page itself (a menu's backdrop, a button drawn again on hover) does not, and a frame outside the element is told from another element by its node name.
 //! Coordinator, on the user's behalf (re-check 7 of #762, S3 and S4): a frame with a namespace prefix read as `X:IFRAME` and was not seen as a frame, so frames are now told by local name (or by holding a document). And Chromium's hit test and its routing of a real press round a frame's box differently, so at a frame's edge the check could say "the element" while the press went to the frame: while the button is down the element must now match `:active` in the page's own document (asked through DevTools' selector engine), or the press is released at the far corner and counts as a race. The geometry checks stay; `:active` is the last word.
+//! Coordinator, on the user's behalf (re-check 8 of #762, S5, R4 and R5): the `:active` and `:disabled` checks spliced the agent's selector into `:is(<selector>):active`, so a selector with an unclosed parenthesis (which CSS closes at the end) moved `:active` onto one branch and let the page answer the other; the checks now list the document's `:active` (or `:disabled`) elements with `DOM.querySelectorAll` and look for the element's node id. An open `<select>` counts as pressed, since its popup clears `:active` on an honest press. And a press whose element is not `:active` keeps the hit test's "another element" answer (a button drawn again on mousedown), which does not start the minute; only otherwise is it "another site's frame took it".
 //! SEE-ALSO: server/src/server/cef_devtools_scope.rs (the DOM commands a session's tools may send), server/src/ghostex_cli/browser_mcp/page_scripts.rs (`GHOSTEX_CLICK_POINT_SCRIPT`).
 
 use super::*;
@@ -44,8 +45,6 @@ pub(super) struct ClickTarget {
     /// The document's root node id and the element's, for `being_pressed`.
     root: i64,
     node: i64,
-    /// The selector that named the element.
-    selector: String,
 }
 
 /// Where the view stands in the page: how far it is scrolled, in CSS pixels, and its pinch-zoom
@@ -66,7 +65,7 @@ const FRAME_COVERS: &str = "A frame covers the element's centre";
 /// The refusal for nothing of the page at the point.
 const NOTHING_THERE: &str = "Nothing in the page is at the element's centre";
 /// The refusal for another element of the page itself at the point.
-const ANOTHER_ELEMENT: &str = "Another element covers the element's centre";
+pub(super) const ANOTHER_ELEMENT: &str = "Another element covers the element's centre";
 
 /// Whether a refusal may be a page racing the checks, which starts the minute of script clicks
 /// (mcp_tools.rs): a frame, nothing, or a scroll came under the pointer. Another element of the page
@@ -89,39 +88,53 @@ pub(super) const PRESS_WENT_ELSEWHERE: &str =
 /// The refusal for an element that was already being pressed before the press.
 pub(super) const ALREADY_PRESSED: &str = "The element was already being pressed";
 
-/// Whether the page's own document has `target` (or something inside it) pressed now: it matches
-/// `:active`, asked through DevTools' selector engine, which the page cannot answer for. A press
-/// that went to another site's frame leaves nothing `:active` in the page. Chromium's hit test
-/// and its routing of a real press round a frame's box differently, so this, not geometry, is the
-/// last word (re-check 7 of #762, S4). An invalid selector or a failed call counts as not pressed.
-pub(super) fn being_pressed(state: &mut McpState, page_id: &str, target: &ClickTarget) -> bool {
+/// Whether `target` is among the elements matching `state_selector` in the page's own document,
+/// asked through DevTools' selector engine, which the page cannot answer for. The agent's selector
+/// is never spliced into another one: an unclosed parenthesis in it would move the state onto one
+/// branch and leave the other to the page (re-check 8 of #762, S5). A failed call, or a selector
+/// this Chromium does not know, counts as not in the state.
+fn in_state(
+    state: &mut McpState,
+    page_id: &str,
+    target: &ClickTarget,
+    state_selector: &str,
+) -> bool {
     client_call(
         state,
         page_id,
-        "DOM.querySelector",
-        json!({ "nodeId": target.root, "selector": format!(":is({}):active", target.selector) }),
+        "DOM.querySelectorAll",
+        json!({ "nodeId": target.root, "selector": state_selector }),
     )
     .ok()
-    .and_then(|found| found.get("nodeId").and_then(Value::as_i64))
-        == Some(target.node)
+    .is_some_and(|found| holds_node(&found, target.node))
+}
+
+/// Whether a `DOM.querySelectorAll` answer lists `node`.
+fn holds_node(found: &Value, node: i64) -> bool {
+    found
+        .get("nodeIds")
+        .and_then(Value::as_array)
+        .is_some_and(|ids| ids.iter().any(|id| id.as_i64() == Some(node)))
+}
+
+/// Whether the page's own document has `target` (or something inside it) pressed now: it matches
+/// `:active`. A press that went to another site's frame leaves nothing `:active` in the page.
+/// Chromium's hit test and its routing of a real press round a frame's box differently, so this,
+/// not geometry, is the last word (re-check 7 of #762, S4). A `<select>` opens its popup on the
+/// press, which takes the mouse and clears `:active`, so an open select counts as pressed too: only
+/// a press the page's own document got can open it (re-check 8, R4).
+pub(super) fn being_pressed(state: &mut McpState, page_id: &str, target: &ClickTarget) -> bool {
+    in_state(state, page_id, target, ":active") || in_state(state, page_id, target, "select:open")
 }
 
 /// The refusal for a disabled element: it cannot be pressed (`:active`), and a real press on it
 /// does nothing anyway.
 pub(super) const DISABLED: &str = "The element is disabled";
 
-/// Whether `target` matches `:disabled` (asked through DevTools' selector engine): such an
-/// element never becomes `:active`, so a press on it would read as one another site's frame took.
+/// Whether `target` matches `:disabled`: such an element never becomes `:active`, so a press on it
+/// would read as one another site's frame took.
 pub(super) fn is_disabled(state: &mut McpState, page_id: &str, target: &ClickTarget) -> bool {
-    client_call(
-        state,
-        page_id,
-        "DOM.querySelector",
-        json!({ "nodeId": target.root, "selector": format!(":is({}):disabled", target.selector) }),
-    )
-    .ok()
-    .and_then(|found| found.get("nodeId").and_then(Value::as_i64))
-        == Some(target.node)
+    in_state(state, page_id, target, ":disabled")
 }
 
 /// Whether a described node shows another document: by local name (`nodeName` carries a namespace
@@ -281,7 +294,6 @@ pub(super) fn click_target(
         offset,
         root,
         node: node_id,
-        selector: selector.to_string(),
     }))
 }
 
@@ -475,7 +487,6 @@ mod tests {
             offset: None,
             root: 1,
             node: 2,
-            selector: "#ok".to_string(),
         }
     }
 
@@ -608,6 +619,15 @@ mod tests {
         let button = target(&[5]);
         assert_eq!(button.far_corner((10, 10)), (799, 599));
         assert_eq!(button.far_corner((700, 500)), (0, 0));
+    }
+
+    #[test]
+    fn a_state_answer_names_the_element_only_by_its_node_id() {
+        assert!(holds_node(&json!({ "nodeIds": [1, 4, 2] }), 2));
+        assert!(!holds_node(&json!({ "nodeIds": [1, 4] }), 2));
+        assert!(!holds_node(&json!({ "nodeIds": [] }), 2));
+        assert!(!holds_node(&json!({ "nodeId": 2 }), 2));
+        assert!(!holds_node(&json!({ "nodeIds": ["2"] }), 2));
     }
 
     #[test]

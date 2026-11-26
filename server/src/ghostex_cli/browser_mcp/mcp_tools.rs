@@ -234,7 +234,7 @@ pub(super) fn browser_mcp_click(args: &Value, state: &mut McpState) -> CliResult
     let pressed = match (&target, target.as_ref().and_then(|target| target.point)) {
         (Some(_), Some(_)) if wary => {
             refusal = Some(
-                "A recent press on this page was refused (it scrolled or something came under the pointer), so it gets the script click for a minute",
+                "A recent press on this page was refused (it scrolled, something came under the pointer, or the press did not reach the element), so it gets the script click for a minute",
             );
             Pressed::NotTried
         }
@@ -387,11 +387,11 @@ enum Pressed {
 /// the element (click_hit_test.rs) and that it is not already pressed, then presses the left button
 /// there at once. While it is down, the element must be the one the page's own document has
 /// pressed (`:active`) and the point must still reach it; it is then released there, else at the
-/// far corner of the view. Released there, a frame that took the press gets no click (only its mousedown), but a
-/// press that landed on the page's own element gives the page a trusted click on the parent the
-/// two points share (often `body` or `html`): the page's own handlers run, nothing else's. Only a
-/// press that passed every check counts as the mouse click, so the caller's script click on the
-/// element follows; `refusal` says why.
+/// far corner of the view. Released there, a frame that took the press gets no click (only its
+/// mousedown), but a press that landed on the page's own element gives the page a trusted click
+/// on the parent the two points share (often `body` or `html`): the page's own handlers run,
+/// nothing else's. Only a press that passed every check counts as the mouse click; otherwise the
+/// caller's script click on the element follows, and `refusal` says why.
 fn press_mouse_at(
     state: &mut McpState,
     page_id: &str,
@@ -439,11 +439,16 @@ fn press_mouse_at(
         event("mousePressed", "left", 1, 1),
     )?;
     // The page's own document must have the element pressed: a press Chromium routed to another
-    // site's frame at the frame's edge leaves nothing `:active` in the page.
-    *refusal = if being_pressed(state, page_id, target) {
-        press_refusal(state, page_id, target, at)?
-    } else {
-        Some(PRESS_WENT_ELSEWHERE)
+    // site's frame at the frame's edge leaves nothing `:active` in the page. Not pressed, the hit
+    // test's "another element" still stands (a button drawn again on mousedown), which is not a
+    // race (re-check 8, R5); anything else is another site's frame. A failed check releases far
+    // away too, so the button is never left down on an unchecked point.
+    let pressed_here = being_pressed(state, page_id, target);
+    let hit = press_refusal(state, page_id, target, at).unwrap_or(Some(PRESS_WENT_ELSEWHERE));
+    *refusal = match (pressed_here, hit) {
+        (true, hit) => hit,
+        (false, Some(why)) if why == ANOTHER_ELEMENT => Some(ANOTHER_ELEMENT),
+        (false, _) => Some(PRESS_WENT_ELSEWHERE),
     };
     if refusal.is_some() {
         let (far_x, far_y) = target.far_corner(at);
