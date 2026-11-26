@@ -188,43 +188,6 @@ impl NativeChatView {
         Some(card)
     }
 
-    /// Scroll-to-bottom on its own over the transcript's bottom edge, while the reader is away from
-    /// the bottom and the chat box has no pill strip to carry it (pills_strip.rs): a strip opened
-    /// only for the ↓ would resize the box every time the reader scrolled up.
-    pub(super) fn render_lone_scroll_bottom(
-        &self,
-        p: &ChatAppearance,
-        cx: &mut Context<Self>,
-    ) -> Option<AnyElement> {
-        if self.list.item_count() == 0 || self.pills_strip_shown() {
-            return None;
-        }
-        let pill = self.scroll_bottom_icon_pill(p, cx)?;
-        let s = p.scale;
-        // The column the transcript's rows use (transcript.rs), the pill at its right end.
-        let column = self
-            .with_transcript_width(div().w_full().max_w(px(768.0 * s)).px(px(16.0 * s)), p)
-            .child(
-                div()
-                    .flex()
-                    .justify_end()
-                    .px(px(VISUAL.padding_x * s))
-                    .block_mouse_except_scroll()
-                    .child(pill),
-            );
-        Some(
-            div()
-                .absolute()
-                .bottom(px(super::transcript_layout::LAYOUT.end_padding * s))
-                .left_0()
-                .right_0()
-                .flex()
-                .justify_center()
-                .child(column)
-                .into_any_element(),
-        )
-    }
-
     /// The card's line: the lead glyph and the label, cut with an ellipsis at its end, then a live
     /// activity's numbers.
     pub(super) fn working_card_header(

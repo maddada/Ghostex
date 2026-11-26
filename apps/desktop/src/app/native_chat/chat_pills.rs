@@ -421,44 +421,6 @@ impl NativeChatView {
         )
     }
 
-    /// "Scroll to bottom" as a down-arrow pill, while the reader is away from the bottom; its tooltip
-    /// names it and its shortcut (scroll_bottom.rs).
-    ///
-    /// CDXC:SessionChat 2026-10-17 DECISION:
-    /// User: "make the scroll to bottom pill always appear on the leftmost so it doesn't push other pills when it appears". On the working card it takes the leftmost place among the card's pills and timers, which are laid out from the card's right edge, so appearing moves none of them; the label gives up the room. With no card to carry it, it stands alone over the transcript's bottom edge at the rows' right end (working_card.rs, `render_lone_scroll_bottom`).
-    pub(super) fn scroll_bottom_icon_pill(
-        &self,
-        p: &ChatAppearance,
-        cx: &Context<Self>,
-    ) -> Option<AnyElement> {
-        if !super::scroll_bottom::transcript_left_bottom(&self.list, p.scale) {
-            return None;
-        }
-        let label = super::scroll_bottom::label().to_string();
-        let tooltip = label.clone();
-        let shortcut = super::scroll_bottom::shortcut_label().unwrap_or_default();
-        Some(
-            icon_pill(
-                "chat-scroll-bottom",
-                pill_glyph("titlebar/arrow-down.svg", p.primary, p.scale),
-                p,
-            )
-            .aria_label(label)
-            .border_color(p.foreground.opacity(0.1))
-            .hover(|style| style.bg(p.foreground.opacity(0.06)))
-            .tooltip(move |window, cx| {
-                gpui_component::tooltip::Tooltip::new(tooltip.clone())
-                    .keys(shortcut.clone())
-                    .build(window, cx)
-            })
-            .on_click(cx.listener(|chat, _, _, cx| {
-                cx.stop_propagation();
-                chat.jump_to_bottom(cx)
-            }))
-            .into_any_element(),
-        )
-    }
-
     /// What a click on the panel pill `id` does, painted at `bounds`; the "+N" pill's list runs the
     /// same for a pill that does not fit the row.
     pub(super) fn activate_chat_pill(

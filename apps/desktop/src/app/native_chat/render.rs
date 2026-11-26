@@ -246,9 +246,9 @@ impl Render for NativeChatView {
             None
         } else {
             let content = transcript;
-            let lone_scroll_bottom = self.render_lone_scroll_bottom(&p, cx);
-            // The lone scroll-down pill is drawn over the rows, so the pane must not draw above it.
-            let lift_rows = lifted && lone_scroll_bottom.is_none();
+            let (jump_down, jump_down_in_pane) = self.render_jump_down(&p, glass, cx);
+            // The ↓ drawn in the pane sits over the rows, so the pane must not draw above it.
+            let lift_rows = lifted && !jump_down_in_pane;
             // The rows draw their moving parts themselves (`sync_motion_in_place`): no layer.
             let in_place = |key: &'static str, layer: Option<indicator_overlay::Layer>| {
                 let layer = layer.filter(|_| !rows_in_place);
@@ -277,7 +277,7 @@ impl Render for NativeChatView {
                     .children(status_tail_lead)
                     // The running tool calls' shimmer and spinner, over their rows (row_motion.rs).
                     .children(row_motion)
-                    .children(lone_scroll_bottom)
+                    .children(jump_down)
                     .into_any_element(),
             )
         };
@@ -322,6 +322,7 @@ impl Render for NativeChatView {
                 super::frosted_overlay_window::FrostedOverlay::ScrollBottom,
                 cx,
             );
+            self.hide_frosted_overlay(super::frosted_overlay_window::FrostedOverlay::JumpDown, cx);
         }
         let subagent_viewer = self.render_subagent_viewer(&p, window, cx);
         let edit_menu = self.edit_menu(window, cx);

@@ -84,10 +84,6 @@ pub(super) fn shortcut_label() -> Option<String> {
     gpui_configured_hotkey_label("scrollChatToBottom").filter(|label| !label.is_empty())
 }
 
-pub(super) fn shortcut_tooltip(key: String, window: &mut Window, cx: &mut App) -> gpui::AnyView {
-    gpui_component::tooltip::Tooltip::new(key).build(window, cx)
-}
-
 #[derive(Clone, Debug, PartialEq, gpui::Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(super) struct ScrollChatToBottom {
@@ -389,6 +385,134 @@ impl NativeChatView {
         )
         .into_any_element()
     }
+
+    /// The ↓ "Scroll to bottom" button, while the reader is away from the bottom: a round button
+    /// floating over the transcript's bottom edge at the right, right above the Inbox dock (or the
+    /// chat box when there is no dock), its right edge on theirs. The second value says whether it
+    /// is drawn in the pane over the rows, so the pane must not lift the rows' indicators above it
+    /// (render.rs); under window glass it is drawn in a blurred window of its own instead.
+    ///
+    /// CDXC:SessionChat 2026-11-26 DECISION:
+    /// User: "pls move the scroll to bottom button, place it on the right side above the inbox as a button pointing down so it doesn't keep pushing my other pills when it appears, which is annoying. make sure it has same bg style as the header of the inbox pls and should have outline like pills do". The ↓ leaves the chat box's pill strip for good and always floats here, so it coming and going never moves a pill. Its face is the open Inbox header's (the chat box's fill under the pills bar's tint, `STRIP_TINT`) and its edge the pills' 1px outline. Supersedes the 2026-10-17 ↓ at the leftmost of the pills (chat_pills.rs) and the lone pill that stepped aside for the strip. The phone does the same (`LoneScrollBottom` in WorkingCard.tsx).
+    pub(super) fn render_jump_down(
+        &self,
+        p: &ChatAppearance,
+        glass: bool,
+        cx: &mut Context<Self>,
+    ) -> (Option<AnyElement>, bool) {
+        let overlay = super::frosted_overlay_window::FrostedOverlay::JumpDown;
+        let shown = self.list.item_count() > 0 && transcript_left_bottom(&self.list, p.scale);
+        let s = p.scale;
+        let button = if glass {
+            let shown = shown && !self.frosted_overlay_covered(overlay, cx);
+            let report = self.frosted_overlay_reporter(overlay, shown, cx);
+            if !shown {
+                // Still painted, so its window closes when the button hides.
+                return (
+                    Some(div().absolute().size_0().child(report).into_any_element()),
+                    false,
+                );
+            }
+            div()
+                .relative()
+                .size(px(JUMP_DOWN_SIZE * s))
+                .child(report)
+                .into_any_element()
+        } else if shown {
+            self.jump_down_button(p, cx)
+        } else {
+            return (None, false);
+        };
+        // The chat box's column (composer.rs footer), so the button's right edge is the dock's.
+        let column = div()
+            .w_full()
+            .max_w(px(768.0 * s))
+            .px(px(16.0 * s))
+            .when(p.composer_matches_transcript, |column| {
+                self.with_transcript_width(column, p)
+            })
+            .flex()
+            .justify_end()
+            .child(button);
+        // The toasts' height over the transcript's bottom edge, so with the stack's own gap it
+        // sits just above the dock or the box.
+        let element = div()
+            .absolute()
+            .bottom(px(SPEC.bottom * s))
+            .left_0()
+            .right_0()
+            .flex()
+            .justify_center()
+            .child(column)
+            .into_any_element();
+        (Some(element), !glass)
+    }
+
+    fn jump_down_button(&self, p: &ChatAppearance, cx: &Context<Self>) -> AnyElement {
+        use super::cursor::ChatCursor as _;
+        let label = label().to_string();
+        let tooltip = label.clone();
+        let shortcut = shortcut_label().unwrap_or_default();
+        jump_down_face(div().id("chat-scroll-bottom"), p)
+            .tab_index(0)
+            .role(gpui::Role::Button)
+            .aria_label(label)
+            .chat_cursor_pointer()
+            .focus_visible(|style| style.border_color(p.ring))
+            .block_mouse_except_scroll()
+            .tooltip(move |window, cx| {
+                gpui_component::tooltip::Tooltip::new(tooltip.clone())
+                    .keys(shortcut.clone())
+                    .build(window, cx)
+            })
+            .on_click(cx.listener(|chat, _, _, cx| {
+                cx.stop_propagation();
+                chat.jump_to_bottom(cx)
+            }))
+            .into_any_element()
+    }
+}
+
+/// The ↓ button's diameter, unscaled: the pills' 16px glyph with room around it.
+const JUMP_DOWN_SIZE: f32 = 28.0;
+
+/// The ↓ button's look, in the pane and in its glass window: the open Inbox header's face (the
+/// chat box's fill under the pills bar's tint, work_cards.rs `work_dock_header`), the pills' 1px
+/// outline and hover (chat_pills.rs), and the down arrow. The tint is its own layer so it shows
+/// over the glass's see-through wash too.
+pub(super) fn jump_down_face(
+    button: gpui::Stateful<gpui::Div>,
+    p: &ChatAppearance,
+) -> gpui::Stateful<gpui::Div> {
+    let s = p.scale;
+    let tint = p.foreground.opacity(super::pills_strip::STRIP_TINT);
+    let hover = p.foreground.opacity(super::pills_strip::STRIP_TINT + 0.06);
+    button
+        .group("chat-jump-down")
+        .relative()
+        .flex_shrink_0()
+        .size(px(JUMP_DOWN_SIZE * s))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded_full()
+        .overflow_hidden()
+        .border(px(s))
+        .border_color(p.foreground.opacity(0.1))
+        .bg(p.composer_background)
+        .child(
+            div()
+                .absolute()
+                .inset_0()
+                .rounded_full()
+                .bg(tint)
+                .group_hover("chat-jump-down", move |style| style.bg(hover)),
+        )
+        .child(super::chat_pills::pill_glyph(
+            "titlebar/arrow-down.svg",
+            p.primary,
+            s,
+        ))
 }
 
 /// The centred row the toasts sit in, at the transcript's bottom edge, just above the working card

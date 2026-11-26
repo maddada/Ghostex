@@ -1,5 +1,6 @@
-//! The small blurred window that carries the chat's floating control (the Escape and "Agent was
-//! interrupted" toasts) while the main window is glass. The Previous question pill moved to the working row on 2026-10-15 (chat_pills.rs).
+//! The small blurred windows that carry the chat's floating controls (the Escape and "Agent was
+//! interrupted" toasts, and the ↓ Scroll to bottom button above the Inbox dock, scroll_bottom.rs
+//! `render_jump_down`) while the main window is glass. The Previous question pill moved to the working row on 2026-10-15 (chat_pills.rs).
 //!
 //! CDXC:SessionChat 2026-09-23 WHY:
 //! GPUI cannot blur behind an element inside a window, only behind a whole window, so each of these
@@ -9,7 +10,6 @@
 
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use crate::app::native_chat::cursor::ChatCursor as _;
-use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, AppContext as _, Bounds, Context, FontWeight, InteractiveElement as _, IntoElement,
     ParentElement as _, Pixels, Render, StatefulInteractiveElement as _, Styled as _, Subscription,
@@ -46,23 +46,28 @@ pub(crate) fn set_app_modal_over_chat(open: bool, cx: &mut gpui::App) {
 /// Which floating control a window carries.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::app::native_chat) enum FrostedOverlay {
+    /// The toasts' slot at the transcript's bottom edge, centred.
     ScrollBottom,
+    /// The ↓ Scroll to bottom button at the right, above the Inbox dock.
+    JumpDown,
 }
 
 impl FrostedOverlay {
-    const ALL: [FrostedOverlay; 1] = [FrostedOverlay::ScrollBottom];
+    const ALL: [FrostedOverlay; 2] = [FrostedOverlay::ScrollBottom, FrostedOverlay::JumpDown];
 }
 
 /// The windows of every floating control, one each.
 #[derive(Default)]
 pub(in crate::app::native_chat) struct FrostedOverlayWindows {
     scroll_bottom: FrostedOverlayWindowState,
+    jump_down: FrostedOverlayWindowState,
 }
 
 impl FrostedOverlayWindows {
     fn state(&mut self, overlay: FrostedOverlay) -> &mut FrostedOverlayWindowState {
         match overlay {
             FrostedOverlay::ScrollBottom => &mut self.scroll_bottom,
+            FrostedOverlay::JumpDown => &mut self.jump_down,
         }
     }
 
@@ -73,6 +78,7 @@ impl FrostedOverlayWindows {
     ) -> Rc<Cell<Option<Bounds<Pixels>>>> {
         match overlay {
             FrostedOverlay::ScrollBottom => self.scroll_bottom.measured.clone(),
+            FrostedOverlay::JumpDown => self.jump_down.measured.clone(),
         }
     }
 }
@@ -238,7 +244,7 @@ fn apply_frosted_overlay(
         return;
     };
     let radius = match overlay {
-        FrostedOverlay::ScrollBottom => frame.size.height / 2.0,
+        FrostedOverlay::ScrollBottom | FrostedOverlay::JumpDown => frame.size.height / 2.0,
     };
     let display_id = owner.display_for(Bounds::new(origin + frame.origin, frame.size), cx);
     let blurred = glass && !cfg!(ghostex_web);
@@ -327,18 +333,16 @@ impl Render for FrostedOverlayView {
         };
         let glass = crate::app::helpers::window_glass_active_for(chat.read(cx).main_window);
         let p = ChatAppearance::current(&chat.read(cx).snapshot).on_window_glass(glass);
-        let hover = if p.light {
-            gpui::black().opacity(0.08)
-        } else {
-            gpui::white().opacity(0.11)
-        };
         match self.overlay {
+            // The slot shows only while a toast does; between a toast leaving and its window
+            // closing it draws nothing.
             FrostedOverlay::ScrollBottom => match chat.read(cx).pill_toast() {
                 Some(toast) => pill_toast(toast, &p),
-                None => {
-                    scroll_bottom_pill(self.chat.clone(), &p, hover, self.tooltip_epoch.clone())
-                }
+                None => div().into_any_element(),
             },
+            FrostedOverlay::JumpDown => {
+                jump_down_button(self.chat.clone(), &p, self.tooltip_epoch.clone())
+            }
         }
     }
 }
@@ -371,56 +375,42 @@ fn pill_toast(toast: super::scroll_bottom::PillToast, p: &ChatAppearance) -> Any
         .into_any_element()
 }
 
+/// The ↓ button in its window: the pane's look (scroll_bottom.rs `jump_down_face`) over the blur.
+///
 /// CDXC:SessionChat 2026-09-24 WHY:
 /// The control's handlers hold the chat weakly. A strong handle kept in the window's drawn frame kept
 /// a chat view alive after the app dropped it (a session's chat removed, evicted or rebuilt), so the
 /// release hook that closes the control never ran and a stale "Scroll to bottom" pill stayed over the
 /// pane, where a click scrolled the dropped view and did nothing visible.
-fn scroll_bottom_pill(
+fn jump_down_button(
     chat: WeakEntity<NativeChatView>,
     p: &ChatAppearance,
-    hover: gpui::Hsla,
     tooltip_epoch: Rc<Cell<u64>>,
 ) -> AnyElement {
     let label = super::scroll_bottom::label().to_string();
-    let shortcut = super::scroll_bottom::shortcut_label();
+    let shortcut = super::scroll_bottom::shortcut_label().unwrap_or_default();
     let hover_chat = chat.clone();
-    div()
-        .id("chat-scroll-bottom-window")
+    let tooltip = label.clone();
+    super::scroll_bottom::jump_down_face(div().id("chat-scroll-bottom-window"), p)
         .role(gpui::Role::Button)
-        .aria_label(label.clone())
+        .aria_label(label)
         .chat_cursor_pointer()
-        .size_full()
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded_full()
-        .border_1()
-        .border_color(p.composer_border)
-        .bg(p.composer_background)
-        .hover(move |style| style.bg(hover))
-        .font_family(p.font.clone())
-        .text_color(p.primary)
-        .text_size(px(super::scroll_bottom::font_size() * p.scale))
-        .font_weight(FontWeight::MEDIUM)
-        .whitespace_nowrap()
-        .child(label)
-        .when_some(shortcut, move |pill, key| {
-            pill.on_hover(move |hovered, window, cx| {
-                let key = key.clone();
-                overlay_hover_tooltip(
-                    hover_chat.clone(),
-                    FrostedOverlay::ScrollBottom,
-                    *hovered,
-                    &tooltip_epoch,
-                    super::scroll_bottom::TOOLTIP_PLACEMENT,
-                    Rc::new(move |window, cx| {
-                        super::scroll_bottom::shortcut_tooltip(key.clone(), window, cx)
-                    }),
-                    window,
-                    cx,
-                );
-            })
+        .on_hover(move |hovered, window, cx| {
+            let (tooltip, shortcut) = (tooltip.clone(), shortcut.clone());
+            overlay_hover_tooltip(
+                hover_chat.clone(),
+                FrostedOverlay::JumpDown,
+                *hovered,
+                &tooltip_epoch,
+                super::scroll_bottom::TOOLTIP_PLACEMENT,
+                Rc::new(move |window, cx| {
+                    gpui_component::tooltip::Tooltip::new(tooltip.clone())
+                        .keys(shortcut.clone())
+                        .build(window, cx)
+                }),
+                window,
+                cx,
+            );
         })
         .on_click(move |_, _, cx| {
             let chat = chat.clone();
