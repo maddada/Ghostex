@@ -16,10 +16,12 @@
 
 use super::super::super::super::native_modal_kit::hsla;
 use super::super::super::fields::{
-    CONTROL_LANE_WIDTH, ColorSaver, FieldStates, PageAction, RowSpec, SliderBinding, SliderSaver,
-    open_tint_picker, set_color_saver, setting_row, step_slider, tooltip_text, trigger_tint_picker,
+    CONTROL_LANE_WIDTH, ColorSaver, FieldStates, PageAction, RowSpec, SettingsPage, SliderBinding,
+    SliderSaver, open_tint_picker, set_color_saver, setting_row, step_slider, tooltip_text,
+    trigger_tint_picker,
 };
 use super::super::super::palette::SettingsPalette;
+use super::super::super::store::SettingsStore;
 use super::controls::more_options_button;
 use super::role_defaults::role_default;
 use super::{MoreGroup, ThemeCx, ThemeTab};
@@ -117,7 +119,7 @@ pub(crate) fn with_role(current: &Value, light: bool, role: &str, value: Option<
 /// Saves role `role` of one appearance as `next(current)`, through the store `store`: now when
 /// `commit`, else after the debounce (a slider or the picker still moving).
 fn save_role_in(
-    store: &gpui::Entity<super::super::super::store::SettingsStore>,
+    store: &gpui::Entity<SettingsStore>,
     light: bool,
     role: &'static str,
     commit: bool,
@@ -125,25 +127,121 @@ fn save_role_in(
     cx: &mut gpui::App,
 ) {
     store.update(cx, |store, cx| {
-        let current = store.values().value(THEME_ROLES_SETTING);
-        let Some(value) = next(saved_role(&current, light, role)) else {
-            return;
-        };
-        let updated = with_role(&current, light, role, Some(format_role_value(value)));
-        if updated == current {
-            return;
-        }
-        if commit {
-            store.update_setting(THEME_ROLES_SETTING, updated, cx);
-        } else {
-            store.update_setting_debounced(THEME_ROLES_SETTING, updated, cx);
-        }
+        save_role_with(store, light, role, commit, next, cx)
     });
+}
+
+/// [`save_role_in`] inside the store's own update.
+fn save_role_with(
+    store: &mut SettingsStore,
+    light: bool,
+    role: &'static str,
+    commit: bool,
+    next: impl FnOnce(Option<RoleValue>) -> Option<RoleValue>,
+    cx: &mut Context<SettingsStore>,
+) {
+    let current = store.values().value(THEME_ROLES_SETTING);
+    let Some(value) = next(saved_role(&current, light, role)) else {
+        return;
+    };
+    let updated = with_role(&current, light, role, Some(format_role_value(value)));
+    if updated == current {
+        return;
+    }
+    if commit {
+        store.update_setting(THEME_ROLES_SETTING, updated, cx);
+    } else {
+        store.update_setting_debounced(THEME_ROLES_SETTING, updated, cx);
+    }
+}
+
+/// Saves the opacity slider's `percent` as role `role`'s opacity in one appearance, keeping its
+/// kind (an opacity stays an opacity, a colour keeps its colour, a base step its step); a role not
+/// set starts from `default`, what it paints now.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn save_role_opacity(
+    store: &mut SettingsStore,
+    light: bool,
+    role: &'static str,
+    reads: SliderReads,
+    default: Option<RoleValue>,
+    percent: f64,
+    commit: bool,
+    cx: &mut Context<SettingsStore>,
+) {
+    let shown = (percent / 100.0).clamp(0.0, 1.0) as f32;
+    let alpha = match reads {
+        SliderReads::Opacity => shown,
+        SliderReads::SeeThrough => 1.0 - shown,
+    };
+    save_role_with(
+        store,
+        light,
+        role,
+        commit,
+        |current| {
+            current.or(default).map(|current| match current {
+                RoleValue::Ink(_) => RoleValue::Ink(alpha),
+                RoleValue::Colour { rgb, .. } => RoleValue::Colour { rgb, alpha },
+                RoleValue::Base { step, .. } => RoleValue::Base { step, alpha },
+            })
+        },
+        cx,
+    );
+}
+
+/// A role's opacity slider and its % readout at `shown` (the role's value, or its default's while
+/// not set), saving through `saver`: Settings > Themes beside each role's text box, and the Theme
+/// Editor's Pick Color dialog. The readout shows for a colour or base step; an opacity (8%) already
+/// reads in Settings' text box, so it shows there only when `always_readout`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn role_opacity_slider<V: SettingsPage>(
+    page: &mut V,
+    p: &SettingsPalette,
+    key: &'static str,
+    shown: RoleValue,
+    reads: SliderReads,
+    always_readout: bool,
+    saver: SliderSaver,
+    window: &mut Window,
+    cx: &mut Context<V>,
+) -> gpui::Div {
+    let alpha = alpha_of(shown);
+    let reading = match reads {
+        SliderReads::Opacity => alpha,
+        SliderReads::SeeThrough => 1.0 - alpha,
+    };
+    let percent = (reading * 100.0).round();
+    let binding = SliderBinding {
+        key,
+        min: 0.0,
+        max: 100.0,
+        step: 1.0,
+    };
+    let track = step_slider(page, p, binding, f64::from(percent), saver, window, cx);
+    let readout = (always_readout
+        || matches!(shown, RoleValue::Colour { .. } | RoleValue::Base { .. }))
+    .then(|| {
+        div()
+            .flex_shrink_0()
+            .w(px(READOUT))
+            .text_right()
+            .text_size(px(13.0))
+            .text_color(hsla(p.muted))
+            .child(format!("{percent}%"))
+    });
+    h_flex()
+        .flex_1()
+        .min_w_0()
+        .gap(px(8.0))
+        .items_center()
+        .child(div().flex_1().min_w_0().child(track))
+        .children(readout)
 }
 
 /// A field key that lives for the app's run: the Pick Color dialog and slider states are keyed by
 /// `&'static str`, and there are at most two per role and appearance.
-fn field_key(kind: &str, role: &str, light: bool) -> &'static str {
+pub(crate) fn field_key(kind: &str, role: &str, light: bool) -> &'static str {
     thread_local! {
         static KEYS: RefCell<HashMap<String, &'static str>> = RefCell::new(HashMap::new());
     }
@@ -175,7 +273,7 @@ pub(crate) fn hex_of(value: RoleValue, light: bool, base_rgb: u32) -> String {
 /// How a role editor's slider reads: the role's opacity, or how see-through it is (Your messages
 /// in the Chat colours group).
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum SliderReads {
+pub(crate) enum SliderReads {
     Opacity,
     SeeThrough,
 }
@@ -341,59 +439,23 @@ impl ThemeTab {
             cx,
         );
         // The opacity slider, at the role's opacity or its default's.
-        let slider = shown.map(|value| {
-            let alpha = alpha_of(value);
-            let shown = match reads {
-                SliderReads::Opacity => alpha,
-                SliderReads::SeeThrough => 1.0 - alpha,
-            };
-            let percent = (shown * 100.0).round();
-            let binding = SliderBinding {
-                key: field_key("alpha", role, light),
-                min: 0.0,
-                max: 100.0,
-                step: 1.0,
-            };
+        let slider = shown.map(|shown| {
             let saver: SliderSaver = Rc::new(move |store, percent, commit, cx| {
-                let shown = (percent / 100.0).clamp(0.0, 1.0) as f32;
-                let alpha = match reads {
-                    SliderReads::Opacity => shown,
-                    SliderReads::SeeThrough => 1.0 - shown,
-                };
-                save_role_in(
-                    store,
-                    light,
-                    role,
-                    commit,
-                    |current| {
-                        current.or(default).map(|current| match current {
-                            RoleValue::Ink(_) => RoleValue::Ink(alpha),
-                            RoleValue::Colour { rgb, .. } => RoleValue::Colour { rgb, alpha },
-                            RoleValue::Base { step, .. } => RoleValue::Base { step, alpha },
-                        })
-                    },
-                    cx,
-                );
-            });
-            let track = step_slider(self, p, binding, f64::from(percent), saver, window, cx);
-            // An opacity (8%) already reads in the text box; a colour's or base step's opacity does not.
-            let readout =
-                matches!(value, RoleValue::Colour { .. } | RoleValue::Base { .. }).then(|| {
-                    div()
-                        .flex_shrink_0()
-                        .w(px(READOUT))
-                        .text_right()
-                        .text_size(px(13.0))
-                        .text_color(hsla(p.muted))
-                        .child(format!("{percent}%"))
+                store.update(cx, |store, cx| {
+                    save_role_opacity(store, light, role, reads, default, percent, commit, cx)
                 });
-            h_flex()
-                .flex_1()
-                .min_w_0()
-                .gap(px(8.0))
-                .items_center()
-                .child(div().flex_1().min_w_0().child(track))
-                .children(readout)
+            });
+            role_opacity_slider(
+                self,
+                p,
+                field_key("alpha", role, light),
+                shown,
+                reads,
+                false,
+                saver,
+                window,
+                cx,
+            )
         });
         h_flex()
             .w(px(CONTROL_LANE_WIDTH))

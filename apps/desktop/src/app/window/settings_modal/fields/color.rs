@@ -596,7 +596,8 @@ enum PickerPlacement {
     ParentCenter,
 }
 
-/// The dialog: title, the saturation square and hue bar, HEX/R/G/B, and Done. Adapts its width
+/// The dialog: title, the saturation square and hue bar, HEX/R/G/B, the caller's `extra` line (the
+/// Theme Editor's role opacity slider) and Done. Adapts its width
 /// cleanly when `max_width` or the window viewport is narrower than `DIALOG_WIDTH + 16px`.
 #[allow(clippy::too_many_arguments)]
 fn pick_color_dialog<V: SettingsPage>(
@@ -607,6 +608,7 @@ fn pick_color_dialog<V: SettingsPage>(
     fallback: &'static str,
     placement: PickerPlacement,
     max_width: Option<f32>,
+    extra: Option<AnyElement>,
     window: &mut Window,
     cx: &mut Context<V>,
 ) -> Option<AnyElement> {
@@ -855,6 +857,9 @@ fn pick_color_dialog<V: SettingsPage>(
                         .child(inputs),
                 ),
         )
+        .when_some(extra, |dialog, extra| {
+            dialog.child(div().w(px(picker_size)).mx_auto().child(extra))
+        })
         .child(h_flex().w_full().justify_end().child(done));
     match placement {
         PickerPlacement::ParentCenter => Some(
@@ -926,19 +931,23 @@ pub(crate) fn trigger_tint_picker<V: SettingsPage>(
         DEFAULT_TINT_COLOR,
         PickerPlacement::BesideTrigger,
         None,
+        None,
         window,
         cx,
     )
 }
 
 /// The Pick Color dialog rendered as a centered overlay inside a compact floating panel of
-/// `max_width` (such as the 320px Theme Editor), sized to fit with zero horizontal clipping.
+/// `max_width` (such as the 320px Theme Editor), sized to fit with zero horizontal clipping, with
+/// `extra` (a role's opacity slider) above Done.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn centered_tint_picker_overlay<V: SettingsPage>(
     page: &mut V,
     p: &SettingsPalette,
     key: &'static str,
     value: &str,
     max_width: f32,
+    extra: Option<AnyElement>,
     window: &mut Window,
     cx: &mut Context<V>,
 ) -> Option<AnyElement> {
@@ -952,6 +961,7 @@ pub(crate) fn centered_tint_picker_overlay<V: SettingsPage>(
         DEFAULT_TINT_COLOR,
         PickerPlacement::ParentCenter,
         Some(max_width),
+        extra,
         window,
         cx,
     )
@@ -1085,6 +1095,7 @@ pub(crate) fn color_field<V: SettingsPage>(
         "#121212",
         PickerPlacement::WindowCenter,
         None,
+        None,
         window,
         cx,
     );
@@ -1170,6 +1181,7 @@ pub(crate) fn toggle_color_field<V: SettingsPage>(
             ColorFieldKind::Plain,
             "#95d7f6",
             PickerPlacement::WindowCenter,
+            None,
             None,
             window,
             cx,
@@ -1275,6 +1287,7 @@ pub(crate) fn web_color_picker_field<V: SettingsPage>(
         ColorFieldKind::Tint,
         DEFAULT_TINT_COLOR,
         PickerPlacement::WindowCenter,
+        None,
         None,
         window,
         cx,

@@ -802,6 +802,7 @@ pub(super) fn open_theme_editor(demo: &super::DemoEnv, cx: &mut App) {
         .unwrap_or(962.0);
     let light = demo.palette.light;
     let open_picker = state == "picker" || state == "theme-editor-picker";
+    let open_role_picker = state == "theme-editor-role-picker";
     let _ = super::open_modal_window(
         width,
         height,
@@ -810,6 +811,16 @@ pub(super) fn open_theme_editor(demo: &super::DemoEnv, cx: &mut App) {
                 let mut view = GpuiThemeEditorWindow::new(config, host, window, cx);
                 if open_picker {
                     view.open_custom_color_picker_for_demo(!light, window, cx);
+                }
+                if open_role_picker {
+                    let role = std::env::var("GHOSTEX_NATIVE_MODAL_DEMO_ROLE")
+                        .ok()
+                        .filter(|role| !role.is_empty())
+                        .map_or("danger", |role| &*Box::leak(role.into_boxed_str()));
+                    view.open_role_picker_for_demo(role, !light, window, cx);
+                    if let Ok(y) = super::env("GHOSTEX_NATIVE_MODAL_DEMO_SCROLL").parse::<f32>() {
+                        view.scroll_for_demo(y);
+                    }
                 }
                 view
             });

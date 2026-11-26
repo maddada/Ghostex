@@ -8,6 +8,9 @@
 //! contrast, Accent & Fine-tune colour roles, the slim Window transparency section (paused while an
 //! artwork is active, with Fully transparent / Wallpaper tiles), Chat & Terminal appearance, Undo,
 //! Reset, and "All theme settings" back to Settings.
+//!
+//! CDXC:Theming 2026-11-26 DECISION:
+//! User: "in this thing i can't set transparency for the colors like i can in settings > themes pls fix", then picked the mockup with the opacity slider inside the Pick Color dialog (not a slider under each row). Each colour role's (and the custom accent's) Pick Color dialog shows Settings > Themes' own role opacity slider and % readout above Done (roles.rs `role_opacity_slider`), saving the same value Settings does (`#e6707a99`, `8%`); Your messages reads See-through as in Settings.
 use super::super::native_modal_kit::*;
 use super::catalog::{module, settings_catalog};
 use super::fields::{
@@ -38,7 +41,9 @@ use super::tabs::theme::prompt_gallery::{
     GalleryTheme, applied_theme, artwork_thumbnail_bytes, gallery_themes, preview_bytes,
 };
 use super::tabs::theme::role_defaults::role_default;
-use super::tabs::theme::roles::{alpha_of, hex_of, saved_role, with_role};
+use super::tabs::theme::roles::{
+    SliderReads, alpha_of, hex_of, role_opacity_slider, save_role_opacity, saved_role, with_role,
+};
 use super::tabs::theme::swatches::swatch_colour;
 use super::tabs::theme::transparency::{
     SHOW_BEHIND, same_for_light_and_dark, transparency_choices,
@@ -267,6 +272,38 @@ impl GpuiThemeEditorWindow {
         cx: &mut Context<Self>,
     ) {
         self.pick_custom_colour(dark, window, cx);
+    }
+
+    /// Scrolls the editor's column `y` points down (the preview binary, to show the role rows).
+    #[allow(dead_code)]
+    pub(crate) fn scroll_for_demo(&mut self, y: f32) {
+        self.scroll.set_offset(point(px(0.0), px(-y)));
+    }
+
+    /// Opens Fine-tune colour roles and role `role`'s Pick Color dialog (the preview binary's
+    /// `theme-editor-role-picker` state).
+    #[allow(dead_code)]
+    pub(crate) fn open_role_picker_for_demo(
+        &mut self,
+        role: &'static str,
+        dark: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let light = !dark;
+        self.more_roles = true;
+        let values = self.store.read(cx).values();
+        let saved_roles = values.value(THEME_ROLES_SETTING);
+        let base_rgb = ghostex_settings_catalog::theme_colours::work_area_background_for_variant(
+            values.map(),
+            light,
+        );
+        let default = role_default(&saved_roles, role, light);
+        let hex = saved_role(&saved_roles, light, role)
+            .or(default)
+            .map(|val| hex_of(val, light, base_rgb))
+            .unwrap_or_else(|| "#808080".to_string());
+        self.open_role_picker(role, light, &hex, default, window, cx);
     }
 
     fn close_window(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -2311,6 +2348,53 @@ impl GpuiThemeEditorWindow {
         Self::section_box(p, content)
     }
 
+    /// The opacity line of role `role`'s Pick Color dialog: Settings > Themes' own role opacity
+    /// slider and % readout (roles.rs), saving the same value (`#e6707a99`, or `8%` for an
+    /// opacity) with one Undo step per drag. Your messages reads See-through, as in Settings.
+    /// `None` while the role has neither a value nor a known default.
+    fn role_opacity_line(
+        &mut self,
+        p: &SettingsPalette,
+        saved_roles: &Value,
+        role: &'static str,
+        light: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let default = role_default(saved_roles, role, light);
+        let shown = saved_role(saved_roles, light, role).or(default)?;
+        let (reads, label) = if role == "userMessage" {
+            (SliderReads::SeeThrough, "See-through")
+        } else {
+            (SliderReads::Opacity, "Opacity")
+        };
+        let key = role_picker_key(&format!("{role}-alpha"), light);
+        let saver = self.tracked_slider_saver(
+            key,
+            &[THEME_ROLES_SETTING],
+            move |store, percent, commit, cx| {
+                save_role_opacity(store, light, role, reads, default, percent, commit, cx);
+            },
+            cx,
+        );
+        let slider = role_opacity_slider(self, p, key, shown, reads, true, saver, window, cx);
+        Some(
+            h_flex()
+                .w_full()
+                .gap(px(8.0))
+                .items_center()
+                .child(
+                    div()
+                        .flex_shrink_0()
+                        .text_size(px(12.0))
+                        .text_color(hsla(p.muted))
+                        .child(label),
+                )
+                .child(slider)
+                .into_any_element(),
+        )
+    }
+
     /// Renders whichever Pick Color dialog is currently open (custom tint, accent, or fine-tune
     /// role) centered inside the floating Theme Editor window with zero clipping.
     fn active_color_picker_overlay(
@@ -2336,6 +2420,7 @@ impl GpuiThemeEditorWindow {
                 tint_key,
                 &tint,
                 THEME_EDITOR_WIDTH,
+                None,
                 window,
                 cx,
             );
@@ -2356,12 +2441,14 @@ impl GpuiThemeEditorWindow {
                 .or_else(|| role_default(&saved_roles, "accent", light))
                 .map(|val| hex_of(val, light, base_rgb))
                 .unwrap_or_else(|| "#86d3f8".to_string());
+            let opacity = self.role_opacity_line(p, &saved_roles, "accent", light, window, cx);
             return centered_tint_picker_overlay(
                 self,
                 p,
                 accent_key,
                 &hex,
                 THEME_EDITOR_WIDTH,
+                opacity,
                 window,
                 cx,
             );
@@ -2378,12 +2465,14 @@ impl GpuiThemeEditorWindow {
                     .or_else(|| role_default(&saved_roles, role_id, light))
                     .map(|val| hex_of(val, light, base_rgb))
                     .unwrap_or_else(|| "#808080".to_string());
+                let opacity = self.role_opacity_line(p, &saved_roles, role_id, light, window, cx);
                 return centered_tint_picker_overlay(
                     self,
                     p,
                     key,
                     &hex,
                     THEME_EDITOR_WIDTH,
+                    opacity,
                     window,
                     cx,
                 );
