@@ -875,19 +875,15 @@ async fn export_session_transcript_counts_turns_and_keeps_the_last_ones() {
 
 #[cfg(unix)]
 #[tokio::test]
-async fn omp_tool_approval_post_answer_probe_publishes_the_next_command() {
-    omp_tool_approval_probe_after_http_action(OmpApprovalAction::Row).await;
-}
-
-#[cfg(unix)]
-#[tokio::test]
 async fn omp_tool_approval_post_key_probe_publishes_the_next_command() {
     omp_tool_approval_probe_after_http_action(OmpApprovalAction::Key).await;
 }
 
 /// The row answer names the approval its card showed (`noticeDetectedAt`), as the chat core sends
 /// it: the check that the answer targets that approval reads OMP's screen as OMP, so the answer is
-/// applied and the check leaves the shown approval in place.
+/// applied, the check leaves the shown approval in place, and the post-answer probe publishes the
+/// next command. A row answer that names no notice is answered in the terminal (CDXC:SessionChat
+/// 2026-11-26 in session_chat_send/omp_approval_answer.rs), so it has no post-answer probe.
 #[cfg(unix)]
 #[tokio::test]
 async fn omp_tool_approval_row_answer_to_the_shown_approval_is_applied() {
@@ -899,8 +895,6 @@ async fn omp_tool_approval_row_answer_to_the_shown_approval_is_applied() {
 enum OmpApprovalAction {
     /// A key through `sendSessionChatMessage`.
     Key,
-    /// A picker row through `answerSessionChatPrompt` without the shown notice's identity.
-    Row,
     /// A picker row with the `noticeDetectedAt` of the approval the card showed.
     ShownRow,
 }
