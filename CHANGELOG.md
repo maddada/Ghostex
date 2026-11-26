@@ -2,6 +2,64 @@
 
 ## Unreleased
 
+## 12.4.0 - 2026-11-27
+
+**Ghostex 12.4.0 is out.** Live pages and question forms close the moment you press Send, the Live page window can stay open, the voice agent speaks the language you pick with its own turn words, Executor runs on your own Executor CLI, every text box gets Ghostex's own right-click menu, Antigravity takes Gemini's place in Accounts, and Ghostex keeps far less on your disk.
+
+### 📄 Live pages and questions
+
+- **Send closes a Live page or a questions form at once,** and the question leaves Needs you, the Inbox and the pink dot on every computer and phone right away, instead of waiting until the agent reads your answers.
+- **Answers the agent couldn't be told are kept as a failed message card** with the reason and Retry, so nothing you answered is lost.
+- **The Live page window has a Keep open pin,** remembered for every page, so a click elsewhere in Ghostex no longer hides it.
+- **Export page in the page window's ⋯ menu saves the page again.**
+
+### 💬 Chat
+
+- **A chat you scrolled up in stays where you are while the agent works,** and your own message still takes you to the bottom (#781).
+- **The chat box and every other text box open Ghostex's own right-click menu** with Cut, Copy, Paste and Select All, plus Save as Boost while words are selected in the chat box and the Reply popover.
+
+### 🎙️ Voice agent
+
+- **The voice agent's language is a setting,** English by default or the language of the device that starts the call, and its turn words are set per language, on the computer and the phone. English keeps "reply", "over" and "go ahead". Thanks to @cagatay-io for both the computer (#780) and the phone (ghostex-mobile #68).
+
+### 🔌 Connectors
+
+- **Executor now uses your own Executor CLI with one sign-in for the whole computer,** and Settings > Connectors can install it and start its sign-in for you. Every Executor call follows your Ask, Allow and Never rules, and agents get no Executor tools until you sign in. Apps you added to the old built-in Executor need to be added again in Executor: Settings lists them once by name.
+
+### 👤 Accounts
+
+- **Antigravity takes Gemini's place in Settings > Accounts, the sidebar meter and its popup,** with usage read from the Antigravity CLI on your computer. Native Antigravity needs agy 1.5.1 or newer.
+
+### 🌐 Browser
+
+- **Open Externally takes the DevTools button's place in the Browser toolbar,** and Toggle DevTools moves into its ⋯ menu.
+
+### 🧭 Sidebar and rail
+
+- **The rail's ⋯ menu can remove every separator at once,** and right-click menus on the rail open again on macOS (#775).
+- **Quieter dots:** the rail's Ask Ghostex AI button shows none, and the Autopilot supervisor's row shows only red and pink ones.
+- **Pinned sessions linked under their lead can be dragged into a new order** (#725).
+
+### 📂 Files
+
+- **Close Others in a file tab's right-click menu** closes every open file but that one (#710).
+
+### 💾 Disk space
+
+- **Ghostex keeps far less on your disk:** the built-in browser's cache, agent event logs, visual check screenshots and old chat copies now have limits and a daily clean-up, and visual checks no longer leave Chrome running or temp folders behind.
+
+### 📱 On the phone
+
+- **Dictate sends your recording while you speak,** so the words come back about a second after Stop.
+- **A computer's SSH key can be removed or replaced from Advanced,** saving a computer no longer rewrites its stored key, and the iPhone signs in with the saved password when the computer refuses the key.
+- **The project header drops its computer icons,** which move into its ⋯ menu, and Back from a section of a computer's settings returns to that computer.
+
+### 🩹 Fixes and polish
+
+- **Windows: Terminal-based chats no longer ask "Did your message arrive?"** when a message has dashes, arrows or curly quotes (#711), and a WSL gxserver sees the app's settings (#732).
+- **A plain mouse wheel scrolls the Themes and Artwork rows in Settings sideways** (#776).
+- **Finished OpenCode sessions with a leftover shell read idle** (#721), and cleared linked workers keep reporting to their lead (#755).
+
 ## 12.3.0 - 2026-11-26
 
 **Ghostex 12.3.0 is out.** New coordinators greet you and set themselves up with you, Live pages can come with answers already picked, the Gemini API CLI is a one-click tool, extensions can open their views and pin them to the rail, another workspace's Spaces mix right in with yours, Grok Bot pings you only when it matters, and Native chats get their connector tools back.
