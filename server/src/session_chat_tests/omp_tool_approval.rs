@@ -79,8 +79,7 @@ fn the_open_approval_is_a_permission_card_with_omps_rows() {
         assert_eq!(rows, [("Approve", true), ("Deny", false)]);
         assert!(notice.blocks_input());
         assert!(!notice.passes_keys_through());
-        let readiness =
-            detect_session_chat_composer_readiness(Some("omp"), &screen, Some(&notice));
+        let readiness = detect_session_chat_composer_readiness(Some("omp"), &screen, Some(&notice));
         assert_ne!(readiness.state, SessionChatComposerState::Ready);
     }
 }
@@ -165,13 +164,15 @@ fn omp_approval_excludes_sections_after_the_arguments() {
             .replace("\n│ ❯ Approve", &format!("\n│ {appendix} │\n│ ❯ Approve"));
         let notice = classify_session_chat_terminal_notice(Some("omp"), &screen).expect("notice");
         assert_eq!(notice.kind, SESSION_CHAT_NOTICE_PERMISSION_PROMPT);
-        let dialog = crate::session_chat_omp_blocking::read_omp_permission_dialog(&screen)
-            .expect("dialog");
+        let dialog =
+            crate::session_chat_omp_blocking::read_omp_permission_dialog(&screen).expect("dialog");
         assert_eq!(
             dialog.shown,
-            Some(crate::session_chat_omp_blocking::OmpShownRequest::Arguments(
-                json!({ "path": "echo cap-b" })
-            ))
+            Some(
+                crate::session_chat_omp_blocking::OmpShownRequest::Arguments(
+                    json!({ "path": "echo cap-b" })
+                )
+            )
         );
     }
 }
