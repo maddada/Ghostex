@@ -45,7 +45,11 @@ use crate::session_chat_follower::session_chat_agent_for_session;
 use crate::session_status::TURN_COMPLETE_ATTENTION_SOURCE;
 use crate::storage::open_gxserver_database;
 
+mod answers_sent;
 mod tag_question;
+pub(crate) use answers_sent::{
+    mark as mark_answers_sent, refresh_soon, take_back as take_back_answers_sent,
+};
 pub(crate) use tag_question::chat_question;
 
 /// Where a session's open questions are kept.
@@ -1430,13 +1434,16 @@ fn forget_unused_saved_ledgers(dir: &Path) {
     }
 }
 
-/// The forms and pages whose answers wait in the session's queue (failed ones left out).
+/// The forms and pages whose answers are on their way to the agent: waiting in the session's queue
+/// (failed ones left out), or taken by gxserver for a send that is being typed or was typed before
+/// the transcript holds it (`answers_sent.rs`).
 fn queued_answers(db: &rusqlite::Connection, project_id: &str, session_id: &str) -> Vec<String> {
     crate::session_chat_queue::read_session_chat_queue_snapshot_with(db, project_id, session_id)
         .queue
         .iter()
         .filter(|prompt| prompt.state != "failed")
         .flat_map(|prompt| answers_page_ids(&prompt.text))
+        .chain(answers_sent::sent_ids(db, project_id, session_id))
         .collect()
 }
 
