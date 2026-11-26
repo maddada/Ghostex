@@ -931,6 +931,15 @@ impl NativeChatView {
             .map(str::to_string)
     }
 
+    /// What Save as Boost would save from words selected in another of the chat's prompt boxes
+    /// (the Reply popover): the same rule as the chat box's.
+    pub(super) fn selection_for_boost(&self, selected: &str) -> Option<String> {
+        self.boosts()?;
+        Some(selected.trim())
+            .filter(|selected| !selected.is_empty())
+            .map(str::to_string)
+    }
+
     /// The chat box's right-click menu: the text field's own Cut, Copy, Paste and Select All, and
     /// Save as Boost under them while words are selected.
     /// CDXC:Boosts 2026-11-20 DECISION: User: right-click on a chat-box selection showed "the
