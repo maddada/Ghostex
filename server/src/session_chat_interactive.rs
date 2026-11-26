@@ -1047,7 +1047,14 @@ pub(crate) fn emit_session_chat_prompt_state_frame(state: &AppState, session: &V
     session is currently showing or the card would blink away on every hook
     event. Cached read only — this runs on the hook-ingest thread.
     */
-    let screen = cached_session_chat_screen_state(state, &project_id, &session_id);
+    let mut screen = cached_session_chat_screen_state(state, &project_id, &session_id);
+    // OMP's terminal card for a bash hook card no screen reading has shown yet
+    // (CDXC:SessionChat 2026-11-26 in session_chat_notice/classify.rs).
+    screen.notice = crate::session_chat_notice::with_omp_hook_terminal_notice(
+        crate::session_chat_composer::session_chat_composer_agent_id(session).as_deref(),
+        crate::agents::session_chat_prompt_setting(session).as_deref(),
+        screen.notice.take(),
+    );
     /*
     CDXC:SessionChat 2026-08-21: a state frame REPLACES the
     client's queue, so every producer of one restates the current rows rather

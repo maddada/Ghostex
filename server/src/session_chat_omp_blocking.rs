@@ -52,6 +52,19 @@ const LIVE_MODE: OmpBlockingScreen = OmpBlockingScreen {
     detail: "End the realtime voice session in the terminal before sending a normal text message.",
 };
 
+/// OMP's live tool approval when the chat does not answer it itself.
+pub const OMP_TOOL_APPROVAL: OmpBlockingScreen = OmpBlockingScreen {
+    title: OMP_TOOL_APPROVAL_TITLE,
+    detail: "Approve or deny the pending tool call in the terminal before sending a message.",
+};
+
+/// Whether OMP's hook card for `tool` is answered in the terminal whatever its dialog shows:
+/// bash, whose `Command:` line never shows trailing whitespace (CDXC:SessionChat 2026-11-26
+/// DECISION above `omp_shown_request`).
+pub fn omp_hook_card_answered_in_terminal(tool: &str) -> bool {
+    crate::session_chat_interactive::normalize_session_chat_tool_name(tool) == "bash"
+}
+
 fn collapse_spaces(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
@@ -407,11 +420,7 @@ fn classify_rounded_frame(
 
     let composer_on_frame = on_composer == Some(end);
     if is_live_approval(&text, composer, on_composer, end) {
-        return Some(OmpBlockingScreen {
-            title: OMP_TOOL_APPROVAL_TITLE,
-            detail:
-                "Approve or deny the pending tool call in the terminal before sending a message.",
-        });
+        return Some(OMP_TOOL_APPROVAL);
     }
 
     if (title == "ask" || title.starts_with("ask ("))

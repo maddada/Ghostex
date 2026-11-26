@@ -439,6 +439,54 @@ fn notice_from_omp_blocking_screen(
 }
 
 /*
+CDXC:SessionChat 2026-11-26 WHY:
+W4 Q104 a: OMP's bash approvals are answered in the terminal, on the phone and in a coordinator,
+because the screen cannot show whether a command ends in spaces. Until gxserver had read the
+screen, the stored hook card reached the chat alone, and with no notice beside it the chat core
+drew Allow and Deny, which gxserver then refused (`answerInTerminal`). So the card the screen
+reading gives such an approval (`OMP_TOOL_APPROVAL`, Open terminal) is derived from the stored
+bash hook card while the session shows no notice: a notice the session shows comes first, and
+the derived one ends with the stored card. Its `detectedAt` names the stored card (a time taken
+from the card's hash), so every producer of a frame restates the same instance, and the next card
+is a new one.
+SEE-ALSO: server/src/session_chat_omp_blocking.rs (`omp_hook_card_answered_in_terminal`).
+*/
+/// `notice`, or OMP's terminal card for the stored hook card `stored` of an OMP session (`agent`)
+/// that is answered in the terminal, while there is no `notice`.
+pub fn with_omp_hook_terminal_notice(
+    agent: Option<&str>,
+    stored: Option<&str>,
+    notice: Option<SessionChatTerminalNotice>,
+) -> Option<SessionChatTerminalNotice> {
+    if notice.is_some() || session_chat_option_agent(agent) != Some(SessionChatOptionAgent::Omp) {
+        return notice;
+    }
+    let stored = stored?;
+    let Some(crate::session_chat_interactive::SessionChatInteractivePrompt::Approval {
+        tool, ..
+    }) = crate::session_chat::parse_stored_session_chat_prompt(stored)
+    else {
+        return None;
+    };
+    if !crate::session_chat_omp_blocking::omp_hook_card_answered_in_terminal(&tool) {
+        return None;
+    }
+    let mut derived = notice_from_omp_blocking_screen(
+        &NoticeScreen::new(""),
+        crate::session_chat_omp_blocking::OMP_TOOL_APPROVAL,
+    );
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(stored.as_bytes());
+    let millis = digest[..5]
+        .iter()
+        .fold(0i64, |millis, byte| millis << 8 | i64::from(*byte));
+    derived.detected_at = chrono::DateTime::from_timestamp_millis(millis)
+        .unwrap_or_default()
+        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    Some(derived)
+}
+
+/*
 CDXC:AgentScreenDetection 2026-08-19:
 Pure classifier over ONE terminal capture. Rules are evaluated in the catalog's
 precedence order (login > trust > permissions > exited > usage > stream >
