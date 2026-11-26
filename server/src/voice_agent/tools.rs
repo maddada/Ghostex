@@ -38,7 +38,7 @@ fn all_definitions() -> Value {
         {
             "type": "function",
             "name": "list_sessions",
-            "description": "List the user's open agent sessions with title, project, agent and state (working, waiting on a question, waiting on an approval, idle, sleeping). Waiting sessions come first. A coordinator (orchestrator true) is followed by its sub-threads, the sessions it runs for the user: each has subThreadOf (its coordinator's title) and is not a top-level session. A session on another computer the user connected has computer (that computer's name); unavailableComputers names connected computers whose sessions could not be read, and why.",
+            "description": "List the user's open agent sessions with title, project, agent and state (working, waiting on a question, waiting on an approval, idle, sleeping). Waiting sessions come first. A coordinator (orchestrator true) is followed by its sub-threads, the sessions it runs for the user: each has subThreadOf (its coordinator's title) and is not a top-level session. A session on another computer the user connected has computer (that computer's name); unavailableComputers names connected computers whose sessions could not be read, and why. An idle session with olderOpenQuestions still has that many open questions from earlier turns in its chat; it is not waiting on the user, so mention them only when the user asks about open questions.",
             "parameters": {
                 "type": "object",
                 "properties": {

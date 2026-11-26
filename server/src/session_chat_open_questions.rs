@@ -198,15 +198,38 @@ fn ledgers() -> &'static Mutex<HashMap<String, Arc<Mutex<Ledger>>>> {
 /// excluded even if the stored `sessionChatOpenQuestions` record has not been refreshed from the
 /// transcript yet, so snoozed asks never feed the pink dot until their snooze ends.
 pub(crate) fn open_question_count(session: &Value) -> usize {
+    recorded_count(session, "ids", "count")
+}
+
+/// How many of [`open_question_count`] were asked after the user's latest message in the chat
+/// (`OpenAsker::latest_turn`), as last recorded and filtered the same way; `None` when the record
+/// predates `latestIds` (written by an older gxserver, here or on a connected computer).
+///
+/// CDXC:VoiceMode 2026-11-26 WHY: the voice agent called an idle session "waiting on a question"
+/// for questions from earlier turns, after the user had moved the session on. It now counts a
+/// finished session as waiting only for the questions of the turn that just finished, the rule
+/// the notifications already follow ("Questions from earlier turns never notify again", the
+/// Notifications DECISION at the top of this file). The pink dot still counts every open question.
+pub(crate) fn latest_open_question_count(session: &Value) -> Option<usize> {
+    let Some(record) = session.pointer(&format!("/runtimeSettings/{RUNTIME_KEY}")) else {
+        return Some(0);
+    };
+    record.get("latestIds")?;
+    Some(recorded_count(session, "latestIds", "latestCount"))
+}
+
+/// The record's `count_key`, less the ids of `ids_key` put off For later (with an unexpired
+/// snooze or no end), removed or opened.
+fn recorded_count(session: &Value, ids_key: &str, count_key: &str) -> usize {
     let count = session
-        .pointer(&format!("/runtimeSettings/{RUNTIME_KEY}/count"))
+        .pointer(&format!("/runtimeSettings/{RUNTIME_KEY}/{count_key}"))
         .and_then(Value::as_u64)
         .unwrap_or(0) as usize;
     if count == 0 {
         return 0;
     }
     let Some(ids) = session
-        .pointer(&format!("/runtimeSettings/{RUNTIME_KEY}/ids"))
+        .pointer(&format!("/runtimeSettings/{RUNTIME_KEY}/{ids_key}"))
         .and_then(Value::as_array)
     else {
         return count;
@@ -1767,10 +1790,9 @@ pub(crate) fn refresh(
             let _ = write_later(state, &db, project_id, session_id, &still);
         }
     }
-    let ids: Vec<&str> = open.iter().map(|asker| asker.id.as_str()).collect();
-    let count: usize = open.iter().map(OpenAsker::count).sum();
+    let record = open_questions_record(&open);
     let recorded = session.pointer(&format!("/runtimeSettings/{RUNTIME_KEY}"));
-    let next = (!open.is_empty()).then(|| json!({ "ids": ids, "count": count }));
+    let next = (!open.is_empty()).then_some(record);
     if recorded != next.as_ref()
         && write_record(state, &db, project_id, session_id, next.as_ref()).is_err()
     {
@@ -1942,6 +1964,19 @@ fn sweep(state: &AppState) {
     if let Ok(mut ledgers) = ledgers().lock() {
         ledgers.retain(|key, _| active.contains(key));
     }
+}
+
+/// The `sessionChatOpenQuestions` record for `open`: every open form and page (`ids`, `count`),
+/// and those asked after the user's latest message (`latestIds`, `latestCount`, read by
+/// [`latest_open_question_count`]).
+fn open_questions_record(open: &[OpenAsker]) -> Value {
+    let latest = || open.iter().filter(|asker| asker.latest_turn);
+    json!({
+        "ids": open.iter().map(|asker| asker.id.as_str()).collect::<Vec<_>>(),
+        "count": open.iter().map(OpenAsker::count).sum::<usize>(),
+        "latestIds": latest().map(|asker| asker.id.as_str()).collect::<Vec<_>>(),
+        "latestCount": latest().map(OpenAsker::count).sum::<usize>(),
+    })
 }
 
 /// Records (or, with `None`, clears) the session's open questions and tells every client.

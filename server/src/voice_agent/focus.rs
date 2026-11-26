@@ -330,6 +330,7 @@ mod tests {
             thread_of: None,
             threads: None,
             computer: None,
+            older_open_questions: 0,
         }
     }
 

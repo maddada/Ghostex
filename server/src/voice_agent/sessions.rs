@@ -70,6 +70,9 @@ pub(super) struct SessionInfo {
     pub(super) threads: Option<usize>,
     /// The connected computer it runs on, when that is not this one (`computers.rs`).
     pub(super) computer: Option<Computer>,
+    /// Open questions in its chat from earlier turns, when it is idle (turn finished) because
+    /// none is from the turn that just finished (`session_info`).
+    pub(super) older_open_questions: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -126,6 +129,9 @@ impl SessionInfo {
         }
         if let Some(waiting) = &self.waiting {
             value["waitingOn"] = json!(waiting);
+        }
+        if self.older_open_questions > 0 {
+            value["olderOpenQuestions"] = json!(self.older_open_questions);
         }
         if let Some(parent) = &self.thread_of {
             value["subThreadOf"] = json!(parent.title);
@@ -265,23 +271,28 @@ pub(super) fn session_info(
         now,
         false,
     );
+    let open_questions = crate::session_chat_open_questions::open_question_count(session);
+    let latest_questions =
+        crate::session_chat_open_questions::latest_open_question_count(session)
+            .unwrap_or(open_questions);
+    let mut older_open_questions = 0;
     let (state, waiting) = match thread {
         ThreadState::Working => (VoiceState::Working, None),
         // A finished turn that left questions in its chat waits on the user too
-        // (server/src/session_chat_open_questions.rs).
-        ThreadState::Finished
-            if crate::session_chat_open_questions::open_question_count(session) > 0 =>
-        {
-            let count = crate::session_chat_open_questions::open_question_count(session);
-            (
-                VoiceState::WaitingOnQuestion,
-                Some(match count {
-                    1 => "It has 1 open question in its chat.".to_string(),
-                    count => format!("It has {count} open questions in its chat."),
-                }),
-            )
+        // (server/src/session_chat_open_questions.rs), but only for the questions of that turn:
+        // questions from earlier turns are old, the user moved the session on after them. A record
+        // from an older gxserver has no turn and counts them all, as before.
+        ThreadState::Finished if latest_questions > 0 => (
+            VoiceState::WaitingOnQuestion,
+            Some(match latest_questions {
+                1 => "It has 1 open question in its chat.".to_string(),
+                count => format!("It has {count} open questions in its chat."),
+            }),
+        ),
+        ThreadState::Finished => {
+            older_open_questions = open_questions;
+            (VoiceState::Finished, None)
         }
-        ThreadState::Finished => (VoiceState::Finished, None),
         ThreadState::Sleeping => (VoiceState::Sleeping, None),
         ThreadState::Waiting => {
             let summary = thread_prompt(session).map(|prompt| prompt.summary);
@@ -315,6 +326,7 @@ pub(super) fn session_info(
         thread_of: None,
         threads: None,
         computer: None,
+        older_open_questions,
     })
 }
 

@@ -28,6 +28,7 @@ fn session(project: &str, id: &str, title: &str) -> SessionInfo {
         thread_of: None,
         threads: None,
         computer: None,
+        older_open_questions: 0,
     }
 }
 
