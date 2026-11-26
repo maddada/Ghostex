@@ -10,6 +10,9 @@
 //! On Windows and Linux any program running as the user can read these key stores, which Help
 //! says plainly (user decision 1A of #495). The approver key can only be loaded through
 //! [`unlock_approver_key`], which runs the presence prompt first.
+//!
+//! A test copy launched with `GHOSTEX_OWNER_KEYS_STORE=file` keeps them in files inside its own
+//! `GHOSTEX_HOME` instead and never calls the OS key store or the presence prompt (`store.rs`).
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use ring::{
@@ -18,6 +21,10 @@ use ring::{
 };
 
 mod platform;
+mod store;
+
+use store::Store;
+pub use store::{FILE_STORE, FILE_STORE_FOLDER, STORE_VARIABLE};
 
 /// Which of the desktop's two keys.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -139,14 +146,15 @@ Review B1 of the owner-only door: with one owner key for every computer, whateve
 /// can't be worked out or lined up from outside.
 pub fn local_salt() -> Result<Vec<u8>, KeyError> {
     const ACCOUNT: &str = "owner-key-salt";
-    if let Some(salt) = platform::read_secret(ACCOUNT)? {
+    let store = Store::current()?;
+    if let Some(salt) = store.read_secret(ACCOUNT)? {
         return Ok(salt);
     }
     let mut salt = vec![0_u8; 32];
     ring::rand::SecureRandom::fill(&SystemRandom::new(), &mut salt)
         .map_err(|_| KeyError::KeyStore("no random numbers".to_string()))?;
-    platform::write_secret(ACCOUNT, &salt)?;
-    match platform::read_secret(ACCOUNT)? {
+    store.write_secret(ACCOUNT, &salt)?;
+    match store.read_secret(ACCOUNT)? {
         Some(saved) => Ok(saved),
         None => Err(KeyError::KeyStore("the salt wasn't saved".to_string())),
     }
@@ -167,7 +175,8 @@ pub fn load_scoped_owner_key(scope: &str) -> Result<Option<DeviceKey>, KeyError>
     if scope.is_empty() || !scope.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
         return Err(KeyError::KeyStore("invalid key name".to_string()));
     }
-    platform::read_secret(&format!("{}-{scope}", KeyRole::Owner.account()))?
+    Store::current()?
+        .read_secret(&format!("{}-{scope}", KeyRole::Owner.account()))?
         .map(|pkcs8| DeviceKey::from_pkcs8(&pkcs8))
         .transpose()
 }
@@ -175,20 +184,21 @@ pub fn load_scoped_owner_key(scope: &str) -> Result<Option<DeviceKey>, KeyError>
 /// The approver key, made and saved the first time, after the presence prompt shows `reason`
 /// (the approval card's summary). Returns what proved the user was there.
 pub fn unlock_approver_key(reason: &str) -> Result<(DeviceKey, Presence), KeyError> {
-    let presence = platform::confirm_presence(reason)?;
+    let presence = Store::current()?.confirm_presence(reason)?;
     Ok((load_or_create(KeyRole::Approver)?, presence))
 }
 
 /// The system's presence prompt alone, showing `reason`: for a change the app makes itself that
 /// needs the owner there (a security-relaxing setting saved in the Settings window).
 pub fn confirm_presence(reason: &str) -> Result<Presence, KeyError> {
-    platform::confirm_presence(reason)
+    Store::current()?.confirm_presence(reason)
 }
 
 /// The approver key's public half without a prompt (for showing which key is enrolled); `None`
 /// when it was never made.
 pub fn approver_public_key() -> Result<Option<String>, KeyError> {
-    platform::read_secret(KeyRole::Approver.account())?
+    Store::current()?
+        .read_secret(KeyRole::Approver.account())?
         .map(|pkcs8| DeviceKey::from_pkcs8(&pkcs8).map(|key| key.public_key_b64()))
         .transpose()
 }
@@ -229,13 +239,14 @@ fn load_or_create(role: KeyRole) -> Result<DeviceKey, KeyError> {
 }
 
 fn load_or_create_account(account: &str) -> Result<DeviceKey, KeyError> {
-    if let Some(pkcs8) = platform::read_secret(account)? {
+    let store = Store::current()?;
+    if let Some(pkcs8) = store.read_secret(account)? {
         return DeviceKey::from_pkcs8(&pkcs8);
     }
     let (key, pkcs8) = DeviceKey::generate()?;
-    platform::write_secret(account, &pkcs8)?;
+    store.write_secret(account, &pkcs8)?;
     // Read it back, so a key store that dropped the write never leaves two keys in play.
-    match platform::read_secret(account)? {
+    match store.read_secret(account)? {
         Some(saved) if saved == pkcs8 => Ok(key),
         _ => Err(KeyError::KeyStore("the new key wasn't saved".to_string())),
     }

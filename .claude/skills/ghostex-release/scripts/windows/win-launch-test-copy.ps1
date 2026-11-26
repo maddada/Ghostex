@@ -7,6 +7,8 @@
 # A `.portable` marker beside current\ gives the copy its own ports and data, and
 # GHOSTEX_HOME / USERPROFILE / HOME / CODEX_HOME point into <Root>, so the agent configs and
 # skills the copy's gxserver installs never touch the user's own ~/.claude, ~/.codex etc.
+# GHOSTEX_OWNER_KEYS_STORE=file keeps the copy's owner keys in <Root>\home\owner-keys, so it never
+# reads or writes the user's Credential Manager entries (packages/owner-keys/src/store.rs).
 # The process starts with SW_SHOWNOACTIVATE (no Start-Process); GPUI still activates its window, so
 # the script hands the foreground back to its previous owner. Prints the app pid.
 param([Parameter(Mandatory)][string]$Root, [string]$From = "$env:LOCALAPPDATA\Ghostex\current", [switch]$Fresh)
@@ -25,6 +27,7 @@ foreach ($e in [Environment]::GetEnvironmentVariables().GetEnumerator()) {
 $vars['Path'] = (($vars['Path'] -split ';') | Where-Object { $_ -and $_ -notmatch '\\AppData\\Local\\Ghostex(ThemeLab)?\\' }) -join ';'
 $vars['GHOSTEX_HOME'] = "$Root\home"; $vars['USERPROFILE'] = "$Root\home"
 $vars['HOME'] = "$Root\unixhome"; $vars['CODEX_HOME'] = "$Root\home\.codex"
+$vars['GHOSTEX_OWNER_KEYS_STORE'] = 'file'
 $block = (($vars.GetEnumerator() | Sort-Object Key | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join "`0") + "`0`0"
 if (-not ('SmokeLaunch.P' -as [type])) {
   Add-Type -Namespace SmokeLaunch -Name P -MemberDefinition @'

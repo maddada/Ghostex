@@ -278,6 +278,10 @@ impl Server {
             ("ZMX_DIR", self.zmx_dir().display().to_string()),
             // Skill installs would fetch GitHub main into this throwaway profile on every start.
             ("GHOSTEX_AGENT_SKILLS_REMOTE", "off".into()),
+            // A test copy started from this env keeps its owner keys in GHOSTEX_HOME/owner-keys
+            // and never asks the login Keychain, Credential Manager or the Secret Service
+            // (CDXC:Security 2026-11-26 in packages/owner-keys/src/store.rs).
+            ("GHOSTEX_OWNER_KEYS_STORE", "file".into()),
         ]
         .into_iter()
         .chain(self.isolated_home_environment())

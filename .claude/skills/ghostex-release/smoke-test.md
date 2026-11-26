@@ -74,13 +74,24 @@ only by its own pid and window ids. What 12.2.0's run learned:
 
 - **Launch the app with `env -i`** and only the test server's variables
   (`GHOSTEX_HOME`, `GHOSTEX_GXSERVER_DEV_PORT`, `GHOSTEX_GXSERVER_BIN`/`_CLI`,
-  `ZMX_DIR`, a free `GHOSTEX_GPUI_CEF_REMOTE_DEBUGGING_PORT` and
-  `GHOSTEX_CODE_SERVER_PORT`) plus `HOME`, `USER`, `PATH`, `LANG`, `TMPDIR`.
+  `ZMX_DIR`, `GHOSTEX_OWNER_KEYS_STORE=file`, a free
+  `GHOSTEX_GPUI_CEF_REMOTE_DEBUGGING_PORT` and `GHOSTEX_CODE_SERVER_PORT`)
+  plus `HOME`, `USER`, `PATH`, `LANG`, `TMPDIR`.
   Started from an agent's shell, it otherwise inherits that agent's
   `GHOSTEX_*` variables and talks to the user's real server (12.2.0 run 1 made
   a launchd job for the real server's port that had to be removed). Write its
   pid to a file and stop only that pid, and the `GhostexEditor --daemon` it
   leaves (parent 1, path inside the test bundle).
+- **A test copy never touches the login Keychain.** `GHOSTEX_OWNER_KEYS_STORE=file`
+  (in the test server's `env.sh` since 2026-11-26, so copy it from there) keeps
+  its owner, approver and salt keys as 0600 files in `$GHOSTEX_HOME/owner-keys/`
+  and never calls the Keychain or Touch ID; a presence prompt it would show
+  fails closed ("can't confirm it's you"), so a test copy can't approve
+  anything that needs Touch ID (approvals need it only with "Approvals
+  require presence" on, off in a fresh home). Without the variable the copy asks the login
+  Keychain for `dev.ghostex.keys` as it starts and the prompt stalls the run
+  (#772): if one ever appears, answer nothing, stop the copy by its pid and
+  check its environment. Never set it on the user's own app.
 - **Run `smoke.sh` from a shell that sourced the test server's `env.sh`**, and
   after a `test-server` restart run `hash -r` and check `which ghostex` is
   the test server's `gxserver/bin/ghostex`: a runner shell that survived the
@@ -697,6 +708,13 @@ Written 2026-11-20 from the code; not run yet. Fix what the first run finds.
    to the user's running app: a new pid that stays up, and a sidebar with only
    the scratch project. If it hands off (the user's own window comes up),
    touch nothing in that window; the step is NOT RUN.
+   That `env.sh` carries `GHOSTEX_OWNER_KEYS_STORE=file`, so the isolated app
+   keeps its owner keys in the test server's `GHOSTEX_HOME/owner-keys/` and
+   never opens the user's Secret Service keyring; check `tr '\0' '\n' <
+   /proc/<pid>/environ | grep OWNER_KEYS` names it before step 4. It shows no
+   polkit prompt either: approvals ask for one only when "Approvals require
+   presence" is on (off in a fresh home), and then the Approve fails with
+   "can't confirm it's you" (NOT RUN; never type a password).
 4. **The code.** In the isolated window, open Connect a Phone (sidebar More
    Options > Connect a Phone; press each control by its `query` token). It
    turns Easy Connect on; if it asks for an admin password (SSH access off),
@@ -809,7 +827,10 @@ names below are those files).
   `%LOCALAPPDATA%\Ghostex\current`, or `-From <staged release build>`; adds
   `.portable`; points GHOSTEX_HOME, USERPROFILE, HOME and CODEX_HOME inside the
   run folder, so its gxserver's skill/hook installs never touch the user's
-  `~\.claude` or `~\.codex`). It prints the app pid. Find the main window with
+  `~\.claude` or `~\.codex`; sets `GHOSTEX_OWNER_KEYS_STORE=file`, so its
+  owner keys stay in `<run>\gx\home\owner-keys` and it never reads or writes
+  the user's Credential Manager, and no Windows Hello prompt is shown). It
+  prints the app pid. Find the main window with
   `list_windows({pid})` (the one wider than 600).
 - Run its CLI only through `win-gx.ps1 -Root <run>\gx <args>`; it strips this
   session's GHOSTEX_*/WMX_* variables, so nothing reaches the real server.
