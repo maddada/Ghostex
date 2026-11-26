@@ -1,7 +1,7 @@
 {
   "_readme": "Do not edit blind. docs/important/agent-model-catalog.md explains the schema, how every Ghostex client loads this file from GitHub (with the bundled copy as the offline source), how to publish a change, and how to re-collect models, efforts and fast mode from the agent CLIs' own /model pickers.",
   "schemaVersion": 1,
-  "updatedAt": "2026-11-13T08:43:46Z",
+  "updatedAt": "2026-11-26T02:55:58Z",
   "effortLabels": {
     "none": "None",
     "off": "Off",
@@ -153,12 +153,20 @@
       ],
       "models": [
         {
-          "value": "gpt-6.1-sol",
-          "label": "GPT 6.1 Sol",
-          "description": "Latest workhorse model for coding and everyday work.",
+          "value": "gpt-6.2-sol",
+          "label": "GPT 6.2 Sol",
+          "description": "Fast, go-to model for coding and everyday work.",
           "default": true,
           "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"],
           "defaultEffort": "medium",
+          "fastMode": true
+        },
+        {
+          "value": "gpt-6.2-astra",
+          "label": "GPT 6.2 Astra",
+          "description": "Most capable model for complex coding and professional work.",
+          "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"],
+          "defaultEffort": "low",
           "fastMode": true
         },
         {
@@ -170,20 +178,30 @@
           "fastMode": true
         },
         {
-          "value": "gpt-6-astra",
-          "label": "GPT 6 Astra",
-          "description": "Frontier intelligence for the most demanding work.",
-          "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"],
-          "defaultEffort": "low",
-          "fastMode": true
-        },
-        {
           "value": "gpt-6-luna",
           "label": "GPT 6 Luna",
           "description": "Fast and affordable model for easier tasks.",
           "efforts": ["low", "medium", "high", "xhigh", "max"],
           "defaultEffort": "medium",
           "fastMode": true
+        },
+        {
+          "value": "gpt-6.1-sol",
+          "label": "GPT 6.1 Sol",
+          "description": "Latest workhorse model for coding and everyday work.",
+          "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"],
+          "defaultEffort": "medium",
+          "fastMode": true,
+          "group": "legacy"
+        },
+        {
+          "value": "gpt-6-astra",
+          "label": "GPT 6 Astra",
+          "description": "Frontier intelligence for the most demanding work.",
+          "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"],
+          "defaultEffort": "low",
+          "fastMode": true,
+          "group": "legacy"
         },
         {
           "value": "gpt-6-sol",
@@ -274,6 +292,14 @@
           "efforts": ["low", "medium", "high", "xhigh", "max"],
           "defaultEffort": "medium",
           "fastMode": true
+        },
+        {
+          "value": "gemini-4-neon",
+          "label": "Gemini 4 Neon",
+          "pickerLabel": "Gemini 4 Neon",
+          "efforts": ["low", "medium", "high", "xhigh"],
+          "defaultEffort": "medium",
+          "fastMode": false
         },
         {
           "value": "gemini-4-carbon",
@@ -736,6 +762,20 @@
       "notes": "gxserver reads this lineup from `agy models` since 2026-10-17; these rows serve released apps and a computer whose Antigravity never answered. Re-read on 1.4.0 (2026-10-17) from `agy models` and the /model picker. The /model picker is a list with an Effort slider (low, medium, high; medium preselected) under every model but GPT-OSS 120B. `agy models` flattens model and effort into one id (gemini-4-argon-medium); Ghostex keys rows by the model part and appends the effort when it types the command. A model without a slider is its full id and prints its pickerLabel in the footer. 1.4.0 dropped Gemini 3.7 Flash, 3.6 Flash, 3.1 Pro and the Claude 4.6 rows and refuses them with Invalid model.",
       "models": [
         {
+          "value": "gemini-4-neon",
+          "label": "Gemini 4 Neon",
+          "pickerLabel": "Gemini 4 Neon",
+          "efforts": ["low", "medium", "high", "xhigh"],
+          "defaultEffort": "medium",
+          "fastMode": false
+        },
+        {
+          "value": "gemini-4-carbon",
+          "label": "Gemini 4 Carbon",
+          "pickerLabel": "Gemini 4 Carbon",
+          "efforts": ["low", "medium", "high"]
+        },
+        {
           "value": "gemini-4-argon",
           "label": "Gemini 4 Argon",
           "pickerLabel": "Gemini 4 Argon",
@@ -750,7 +790,19 @@
           "efforts": ["low", "medium", "high", "xhigh"]
         },
         {
-          "value": "gemini-pro-orchestrator-g1-pro",
+          "value": "gemini-pro-orchestrator-neon",
+          "label": "Orchestrator (Neon)",
+          "pickerLabel": "Orchestrator (Neon)",
+          "efforts": []
+        },
+        {
+          "value": "gemini-pro-orchestrator",
+          "label": "Orchestrator (Carbon)",
+          "pickerLabel": "Orchestrator (Carbon)",
+          "efforts": []
+        },
+        {
+          "value": "gemini-pro-orchestrator-argon",
           "label": "Orchestrator (Argon)",
           "pickerLabel": "Orchestrator (Argon)",
           "efforts": []
@@ -786,12 +838,6 @@
           "description": "Medium reasoning",
           "efforts": [],
           "fastMode": false
-        },
-        {
-          "value": "gemini-4-carbon",
-          "label": "Gemini 4 Carbon",
-          "pickerLabel": "Gemini 4 Carbon",
-          "efforts": ["low", "medium", "high"]
         }
       ]
     },

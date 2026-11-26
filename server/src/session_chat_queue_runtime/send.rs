@@ -347,10 +347,22 @@ fn open_questions_note(
         .into_iter()
         .chain(crate::session_chat_open_questions::removed_ids(session))
         .collect();
+    // The forms and pages this message answers (`<ghostex-page-answers page="…">`): the
+    // transcript does not hold the message yet, so the ledger still reads them as open.
+    let answered_pages: Vec<String> = if from_agent {
+        Vec::new()
+    } else {
+        ghostex_gx_chat_core::transcript::page_answers::split_all_page_answers(text)
+            .0
+            .into_iter()
+            .map(|answers| answers.page_id)
+            .collect()
+    };
     let oldest = chrono::Utc::now().timestamp_millis() - OPEN_QUESTIONS_MAX_AGE_MS;
     for asker in crate::session_chat_open_questions::open_askers(state, &key.0, &key.1) {
         let tags = asker.waiting_tags();
         if tags.is_empty()
+            || answered_pages.contains(&asker.id)
             || put_off.contains(&asker.id)
             || asker.asked_at().is_some_and(|at| at < oldest)
         {

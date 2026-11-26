@@ -231,13 +231,21 @@ pub(super) fn print_compact(view: &Value, flags: &Flags) {
             lines => format!("{lines} lines of standing instructions (status memory)"),
         }
     );
-    // The setup interview (setup.rs, the playbook's First turn: setup): a new coordinator runs it
-    // before any work; one that already has threads is only reminded it has none saved.
+    // The setup (setup.rs, the playbook's First turn): a new coordinator first sends the welcome,
+    // which offers the interview; until a setup is saved, its threads use its own agent and model.
     if !crate::coordinators::has_setup_notes(&coordinator["memory"]) {
-        if view["threads"].as_array().is_none_or(Vec::is_empty) {
-            println!("Setup: not done. Before other work, run `ghostex coordinator setup page`, show the page it writes with `ghostex show <path>` and end the turn.");
+        let offered = coordinator["memory"].as_array().is_some_and(|notes| {
+            notes.iter().any(|note| {
+                note.get("text")
+                    .and_then(Value::as_str)
+                    .or_else(|| note.as_str())
+                    .is_some_and(|text| text.trim_start().starts_with("Setup offered:"))
+            })
+        });
+        if offered || !view["threads"].as_array().is_none_or(Vec::is_empty) {
+            println!("Setup: none saved; threads use your own agent and model (`ghostex coordinator setup show`). Run the interview, `ghostex coordinator setup page`, when the user asks.");
         } else {
-            println!("Setup: none saved (the user's default applies; `ghostex coordinator setup show`). Offer the interview, `ghostex coordinator setup page`, when the user asks or at a quiet moment.");
+            println!("Setup: not done. On this first turn, run `ghostex coordinator setup welcome` and send what it prints, before anything else.");
         }
     }
     let work = read_work(view, flags);

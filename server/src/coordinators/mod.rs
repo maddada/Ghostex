@@ -15,7 +15,6 @@ mod guide_changes;
 mod idle_compaction;
 mod idle_progress;
 mod idle_wait;
-mod intro;
 mod launch_env;
 mod live;
 mod main_coordinator;

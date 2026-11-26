@@ -98,9 +98,9 @@ pub fn handle_coordinator_endpoint(
                     changed_sessions: Vec::new(),
                 });
             }
-            // "Don't show again" on the coordinator tips, for every coordinator (intro.rs).
+            // "Don't show again" on the old How to use pill: the pill is gone, and every client is
+            // told so (`introHidden` in panel.rs), so a window from before only gets that answer.
             if params.get("op").and_then(Value::as_str) == Some("hideIntro") {
-                super::intro::hide_intro(db)?;
                 return Ok(CoordinatorEndpointOutput {
                     result: json!({ "introHidden": true }),
                     changed_sessions: Vec::new(),

@@ -101,11 +101,6 @@ pub fn document_with_board(
         .extend(crate::extras::autopilot::pill(state));
     // The phone's Share pill (the desktop has the header's Share button).
     into.chat_pills.extend(crate::extras::collab::pill(state));
-    // The coordinator tips' pill closes the core's pills (before Stashed), on a coordinator only.
-    let intro = crate::extras::coordinator_intro::project(state);
-    into.chat_pills
-        .extend(crate::extras::coordinator_intro::pill(&intro));
-    into.coordinator_intro = Tri::Value(intro);
     let side_chats_panel = side_chats::project(state.session.side_chats.as_ref());
     if let Some(pill) = side_chats::pill(&side_chats_panel) {
         into.chat_pills.insert(0, pill);

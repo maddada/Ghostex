@@ -39,11 +39,8 @@ pub const COORDINATOR_SETUP_ENDPOINTS: &[&str] =
 /// keeps its frame and its words.
 ///
 /// CDXC:Coordinators 2026-11-26 DECISION:
-/// The user asked for a page "about the philosophy of coordinators and why it beats managing threads by hand. Focus on the benefits", recommended shipped "as a ready-made page bundled with Ghostex ... so every coordinator shows the same polished page instantly and spends no tokens building it", with its screenshots loading "over https from the repo's README images on GitHub ... NOT bundled", alt text on every image and a quiet frame instead of a broken picture offline, all three screenshot sets kept. `ghostex coordinator setup explain` publishes it in a coordinator's chat; the How to use pill opens it (gx-chat-core extras/coordinator_intro.rs).
+/// The user asked for a page "about the philosophy of coordinators and why it beats managing threads by hand. Focus on the benefits", recommended shipped "as a ready-made page bundled with Ghostex ... so every coordinator shows the same polished page instantly and spends no tokens building it", with its screenshots loading "over https from the repo's README images on GitHub ... NOT bundled", alt text on every image and a quiet frame instead of a broken picture offline, all three screenshot sets kept. `ghostex coordinator setup explain` publishes it in a coordinator's chat, sent once after the setup is saved until the user marks it seen (`flow_page_seen`). The user later removed the How to use pill that also opened it: "no need for this pill now that we have this ux, just remove it".
 pub const COORDINATOR_FLOW_PAGE_HTML: &str = include_str!("coordinator_flow.html");
-
-/// The flow page's key among the pages Ghostex ships (visual_pages/app_page.rs).
-const FLOW_PAGE_KEY: &str = "coordinatorFlow";
 
 /// The user's default setup, `None` before they first answer the interview.
 pub fn setup_default(db: &Connection) -> Result<Option<Value>, DomainStateError> {
@@ -107,8 +104,63 @@ pub fn write_synced_setup_default(
     set_setup_default(db, value.filter(|value| value.is_object()))
 }
 
-/// `/api/readCoordinatorSetup` `{}` answers `{ default }` (`null` before the first interview);
-/// `/api/setCoordinatorSetup` `{ default }` saves it (`null` removes it) and answers the same.
+/// Where gxserver keeps when the user marked the coordinator flow page seen.
+const FLOW_SEEN_KEY: &str = "coordinatorFlowPageSeenAt";
+
+/// When the user marked the coordinator flow page seen (an RFC 3339 time), `None` before.
+///
+/// CDXC:Coordinators 2026-11-26 DECISION:
+/// The user, of the flow page a coordinator sends after its setup is saved: "Once the user marks it seen, no future coordinator sends it again (remember that globally, synced, like the setup default)". Set when a page published from the flow page's file comes back seen (visual_pages/answers.rs), synced as `coordinator/setup/flowSeen`.
+pub fn flow_page_seen(db: &Connection) -> Result<Option<String>, DomainStateError> {
+    db.query_row(
+        "SELECT value FROM metadata WHERE key = ?1",
+        [FLOW_SEEN_KEY],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+    .map_err(sql_error)
+}
+
+/// Records that the user marked the flow page seen (kept at its first time), or forgets it.
+pub fn set_flow_page_seen(db: &Connection, at: Option<&str>) -> Result<(), DomainStateError> {
+    match at {
+        Some(at) => {
+            db.execute(
+                r#"
+                INSERT INTO metadata (key, value, updatedAt) VALUES (?1, ?2, ?3)
+                ON CONFLICT(key) DO NOTHING
+                "#,
+                rusqlite::params![FLOW_SEEN_KEY, at, now_iso()],
+            )
+            .map_err(sql_error)?;
+        }
+        None => {
+            db.execute("DELETE FROM metadata WHERE key = ?1", [FLOW_SEEN_KEY])
+                .map_err(sql_error)?;
+        }
+    }
+    Ok(())
+}
+
+/// The flag as settings sync carries it: `{ "seenAt": "<time>" }`.
+pub fn synced_flow_page_seen(db: &Connection) -> Result<Option<Value>, DomainStateError> {
+    Ok(flow_page_seen(db)?.map(|at| json!({ "seenAt": at })))
+}
+
+/// The flag settings sync brought from another computer. Seen stays seen: a removal is ignored.
+pub fn write_synced_flow_page_seen(
+    db: &Connection,
+    value: Option<&Value>,
+) -> Result<(), DomainStateError> {
+    match value.and_then(|value| value["seenAt"].as_str()) {
+        Some(at) => set_flow_page_seen(db, Some(at)),
+        None => Ok(()),
+    }
+}
+
+/// `/api/readCoordinatorSetup` `{}` answers `{ default, flowPageSeen }` (`default` is `null`
+/// before the first interview); `/api/setCoordinatorSetup` `{ default }` saves it (`null` removes
+/// it) and answers the same.
 pub fn handle_coordinator_setup_endpoint(
     endpoint_path: &str,
     db: &Connection,
@@ -118,18 +170,18 @@ pub fn handle_coordinator_setup_endpoint(
         let value = params.get("default").filter(|value| !value.is_null());
         set_setup_default(db, value)?;
     }
-    Ok(json!({ "default": setup_default(db)? }))
+    Ok(json!({
+        "default": setup_default(db)?,
+        "flowPageSeen": flow_page_seen(db)?.is_some(),
+    }))
 }
 
-/// The coordinator flow page's id and title, publishing it the first time (and again after an
-/// update changes it).
-pub fn coordinator_flow_page(gxserver_state_dir: &Path) -> Result<(String, String), String> {
-    let id = crate::visual_pages::app_page(
-        gxserver_state_dir,
-        FLOW_PAGE_KEY,
-        COORDINATOR_FLOW_PAGE_HTML,
-    )?;
-    Ok((id, flow_page_title()))
+/// The file `ghostex coordinator setup explain` writes the flow page to and shows from, under
+/// gxserver's state folder; a page published from it coming back seen sets `flow_page_seen`.
+pub fn coordinator_flow_page_file(gxserver_state_dir: &Path) -> std::path::PathBuf {
+    gxserver_state_dir
+        .join("coordinator-setup")
+        .join("coordinator-flow.html")
 }
 
 /// The page's own `<title>`.
@@ -138,7 +190,7 @@ pub fn flow_page_title() -> String {
         .split_once("<title>")
         .and_then(|(_, rest)| rest.split_once("</title>"))
         .map(|(title, _)| title.trim().to_string())
-        .unwrap_or_else(|| "How working with a coordinator goes".to_string())
+        .unwrap_or_else(|| "How coordinators work".to_string())
 }
 
 /// Whether a coordinator's memory holds its setup.

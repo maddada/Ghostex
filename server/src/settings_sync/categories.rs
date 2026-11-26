@@ -66,6 +66,9 @@ const PLAYBOOK_OVERRIDES: &str = "coordinator/playbook/overrides";
 /// low-usage rule, accounts never used and computers. It shapes what coordinators tell threads, so
 /// it is logged with the playbooks.
 const SETUP_DEFAULTS: &str = "coordinator/setup/defaults";
+/// The user marked the coordinator flow page seen, so no coordinator sends it again
+/// (coordinators/setup.rs `flow_page_seen`).
+const FLOW_SEEN: &str = "coordinator/setup/flowSeen";
 
 /// The prefix project playbooks sync under, and project id → key under it.
 type PlaybookKeys = (&'static str, Vec<(String, String)>);
@@ -130,6 +133,9 @@ impl Engine<'_> {
                 }
                 if let Some(setup) = crate::coordinators::synced_setup_default(self.db)? {
                     values.insert(SETUP_DEFAULTS.to_string(), setup);
+                }
+                if let Some(seen) = crate::coordinators::synced_flow_page_seen(self.db)? {
+                    values.insert(FLOW_SEEN.to_string(), seen);
                 }
                 if let Some(all) = all {
                     values.insert(PLAYBOOK_ALL.to_string(), all);
@@ -356,6 +362,8 @@ impl Engine<'_> {
                     crate::coordinators::write_synced_playbook_overrides(self.db, value.as_ref())?;
                 } else if key == SETUP_DEFAULTS {
                     crate::coordinators::write_synced_setup_default(self.db, value.as_ref())?;
+                } else if key == FLOW_SEEN {
+                    crate::coordinators::write_synced_flow_page_seen(self.db, value.as_ref())?;
                 } else if key == PLAYBOOK_ALL {
                     playbook_all = Some(value.as_ref());
                 } else if let Some(repo) = key.strip_prefix(playbook_prefix) {

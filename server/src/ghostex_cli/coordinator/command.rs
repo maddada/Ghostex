@@ -554,6 +554,8 @@ pub(super) fn options_view(flags: &Flags) -> CliResult<Value> {
                             model["label"].as_str().unwrap_or_default(),
                         ),
                         "default": model.get("default").and_then(Value::as_bool) == Some(true),
+                        // Under the picker's Legacy models: the setup page never offers it.
+                        "legacy": model.get("group").and_then(Value::as_str) == Some("legacy"),
                         "efforts": efforts,
                         "defaultEffort": default_orchestrator_effort(&levels),
                     })

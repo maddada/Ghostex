@@ -72,11 +72,13 @@ USAGE
   ghostex coordinator playbook --remove-override <n>
   ghostex coordinator set-playbook (--use-ghostex | --reset | --off | --on)
                               [--project-id <id> | --this-project] [--json]
+  ghostex coordinator setup welcome [--coordinator <ref>]
   ghostex coordinator setup page [--out <file>] [--setup-file <json>] [--coordinator <ref>]
   ghostex coordinator setup save --body-file <file|-> [--json] [--coordinator <ref>]
   ghostex coordinator setup copy <coordinator ref> [--coordinator <ref>]
   ghostex coordinator setup show [--json] [--coordinator <ref>]
   ghostex coordinator setup explain [--json] [--browser]
+  ghostex coordinator setup suggest [--coordinator <ref>]
 
 WHAT A COORDINATOR IS
   A coordinator is an agent session with a standing role: it
@@ -436,24 +438,35 @@ SETUP
   The setup interview tells a coordinator which agent, model and effort each
   kind of work gets (large and complex, hard and focused, simple), what to do
   when usage runs low, which accounts threads never use and which computers
-  they may run on. A new coordinator runs it on its first turn (status says so
-  while it has none), and again whenever the user asks.
+  they may run on. Until one is saved, a coordinator's threads run on its own
+  agent and model, at High, Medium and Low effort by kind of work.
+  setup welcome prints a new coordinator's first message: a welcome with one
+  question (go through the setup?), how to copy another coordinator's setup
+  (+ in the chat box) and the defaults it uses otherwise. Status asks for it
+  on a new coordinator's first turn.
   setup page writes the interview as a Live page and prints its path; show it
   with ghostex show <path>. It offers every agent turned on here that can run
   a coordinator's threads, with only current models (no Flash, Lite, Mini or
-  Composer tiers), prefilled from this coordinator's setup, else the user's
-  default, else the playbook's picks. --setup-file prefills it from a setup
-  JSON instead, to preview one.
+  Composer tiers, nothing under Legacy models), prefilled from this
+  coordinator's setup, else the user's default, else its own agent and model.
+  --setup-file prefills it from a setup JSON instead, to preview one.
   setup save takes the page's answers (the JSON in the answers message, or
   the whole message) and saves them as this coordinator's "Setup:" memory
   notes, replacing the old ones, and as the user's default for every new
   coordinator, synced to their other computers. Accounts picked to never use
   need "Only when I pick it" in Settings > Accounts; only the user can set
-  that, so the coordinator asks them to.
-  setup copy copies another coordinator's "Setup:" notes to this one.
+  that, so the coordinator asks them to. It then prints the next step:
+  setup explain, or setup suggest once the user has seen that page.
+  setup copy copies another coordinator's "Setup:" notes to this one and
+  prints the same next step.
   setup show prints the setup in effect and where it came from.
-  setup explain shows the coordinator flow page Ghostex ships (what working
-  with a coordinator looks like) in this chat, like ghostex show.
+  setup explain shows "How coordinators work", the page Ghostex ships, in
+  this chat like ghostex show; it waits under Needs you until the user marks
+  it seen. Once they have, on any of their computers, no coordinator offers
+  it again.
+  setup suggest prints the last question after the setup: which of three
+  features the coordinator found for this app should get a short Live page of
+  5 questions, for the coordinator to fill in and send.
 
 COORDINATOR PLAYBOOK
   The coordinator playbook is how every coordinator works. It ships inside

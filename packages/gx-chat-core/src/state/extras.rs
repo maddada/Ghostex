@@ -150,13 +150,6 @@ pub struct PanelsState {
     /// What the last Seen, Not needed or Clear Inbox press cleared, kept for its Undo toast so Undo
     /// brings back exactly those (`extras::actions`, `MarkAllInboxRead`).
     pub last_mark_all_read: Option<MarkAllReadUndo>,
-    /// "Don't show again" was clicked on the coordinator tips here: the pill goes before gxserver
-    /// confirms (`extras::coordinator_intro`), and comes back if it refuses.
-    pub intro_hidden: bool,
-    /// That call to gxserver while it is in flight.
-    pub intro_hide_request: Option<u64>,
-    /// The How to use pill's ask for the coordinator flow page (extras/coordinator_intro.rs).
-    pub flow_page_request: Option<u64>,
     /// The Autopilot pill's save in flight, and what it showed before it flipped
     /// (`extras::autopilot`).
     pub autopilot_request: Option<(u64, Option<serde_json::Value>)>,
@@ -205,9 +198,6 @@ impl Default for PanelsState {
             board_focus: None,
             board_focus_group: None,
             last_mark_all_read: None,
-            intro_hidden: false,
-            intro_hide_request: None,
-            flow_page_request: None,
             autopilot_request: None,
             collab_requests: Vec::new(),
             collab_typing_at: 0.0,

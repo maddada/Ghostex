@@ -1125,9 +1125,22 @@ fn read_open(
     );
     let queued = queued_answers(db, project_id, session_id);
     let forked_at = read_forked_at(db, project_id, session_id);
-    let open = ledger.open(&queued, forked_at, |id| {
+    let mut open = ledger.open(&queued, forked_at, |id| {
         crate::visual_pages::page_answered(&state.paths.root_dir, id)
     });
+    // A page counts the questions it still asks, as its Inbox row does ("0/3",
+    // `page_question_counts`), not one for a page whose questions carry no tags: the bell said
+    // "1 question is waiting" beside an Inbox row of 0/3.
+    for asker in open
+        .iter_mut()
+        .filter(|asker| asker.kind == AskerKind::Page)
+    {
+        if let Some((answered, total)) =
+            crate::visual_pages::page_question_counts(&state.paths.root_dir, &asker.id)
+        {
+            asker.waiting = total.saturating_sub(answered).max(1);
+        }
+    }
     // A coordinator's question that a work item asks waits on the item's card, not here: it is
     // counted once, as the ask (coordinators/work.rs `ask_tags`, gx-chat-core `card_tags`).
     let card_tags =

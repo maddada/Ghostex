@@ -96,20 +96,11 @@ pub fn handle_with_ids(
         ActionKind::InsertBoardReference => {
             crate::extras::coordinator_board::insert_reference(&action.params)
         }
-        ActionKind::HideCoordinatorIntro => {
-            crate::extras::coordinator_intro::hide(state, next_request_id())
-        }
-        ActionKind::OpenCoordinatorFlowPage => {
-            crate::extras::coordinator_intro::open_flow_page(state, next_request_id())
-        }
         ActionKind::ToggleAutopilot => crate::extras::autopilot::toggle(state, next_request_id()),
         ActionKind::DismissCoordinatorQuality => crate::extras::coordinator_quality::dismiss(state),
         ActionKind::SetCollabGuest => crate::extras::collab::set_guest(state, action),
         ActionKind::ResolveCollabMessage => {
             crate::extras::collab::resolve(state, action, next_request_id())
-        }
-        ActionKind::UseCoordinatorIntroExample => {
-            crate::extras::coordinator_intro::use_example(&action.params)
         }
         // A row of the In progress list shows its line of work in the Work panel, the chat staying
         // where it is (`open_questions::show`).

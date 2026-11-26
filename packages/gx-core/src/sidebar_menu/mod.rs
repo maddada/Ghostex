@@ -47,7 +47,7 @@ pub use agent_choice::{
     AgentChoicePlace, AgentChoiceScope, AgentChoices, AGENT_CHOICES_STORAGE_KEY,
     AGENT_CHOICE_SCOPE_SETTING_KEY,
 };
-pub use agent_logos::{agent_logo_icons, agent_logo_svg, colored_agent_logo};
+pub use agent_logos::{agent_logo_color, agent_logo_icons, agent_logo_svg, colored_agent_logo};
 pub use clone_on::CLONE_PROJECT_ON_MACHINE;
 pub use commands::MenuCommand;
 pub use group::MenuGroup;

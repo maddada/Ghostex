@@ -504,6 +504,16 @@ async fn answer_session_chat_prompt(
             .map(str::trim)
             .filter(|name| (remove || restore) && !name.is_empty())
             .map(str::to_string);
+        // Seen on a coordinator flow page tells the coordinator now, as the page's own Archive
+        // does, instead of quietly (visual_pages/answers.rs `mark_flow_page_seen`).
+        let dismissed = if remove
+            && dismissed.is_some()
+            && crate::visual_pages::mark_flow_page_seen(state, &question_id).await
+        {
+            None
+        } else {
+            dismissed
+        };
         let worker_state = state.clone();
         let (project_id, session_id) = (target.project_id.clone(), target.session_id.clone());
         let result = tokio::task::spawn_blocking(move || {

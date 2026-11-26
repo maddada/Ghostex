@@ -118,18 +118,6 @@ fn settle_with_ids(
                 },
             ) {
                 effects.extend(more);
-            } else if let Some(more) = crate::extras::coordinator_intro::settle_hide(
-                &mut state.extras.panels,
-                *request_id,
-                answer.clone(),
-            ) {
-                effects.extend(more);
-            } else if let Some(more) = crate::extras::coordinator_intro::settle_flow_page(
-                &mut state.extras.panels,
-                *request_id,
-                answer.clone(),
-            ) {
-                effects.extend(more);
             } else if let Some(more) = crate::extras::coordinator_board::settle_change(
                 &mut state.extras.panels,
                 *request_id,

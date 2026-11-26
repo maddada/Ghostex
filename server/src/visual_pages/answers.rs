@@ -96,6 +96,11 @@ pub(crate) async fn submit(
         }
     };
     let answered_at = record["answeredAt"].clone();
+    {
+        let (state, record, answers) = (state.clone(), record.clone(), answers.clone());
+        let _ = tokio::task::spawn_blocking(move || note_flow_page_seen(&state, &record, &answers))
+            .await;
+    }
     let session = record
         .get("sessionRef")
         .and_then(Value::as_str)
@@ -141,6 +146,65 @@ pub(crate) async fn submit(
                    "error": format!("Saved, but the agent was not told: {error}")}),
         ),
     }
+}
+
+/// Whether a page's record was published from the coordinator flow page's file (`ghostex
+/// coordinator setup explain`).
+fn is_flow_page(state: &AppState, record: &Value) -> bool {
+    let flow_file = crate::coordinators::coordinator_flow_page_file(&state.paths.root_dir);
+    record
+        .get("sourcePath")
+        .and_then(Value::as_str)
+        .is_some_and(|source| {
+            std::path::Path::new(source) == flow_file
+                || std::fs::canonicalize(source).ok() == std::fs::canonicalize(&flow_file).ok()
+        })
+}
+
+/// A coordinator flow page marked seen: no coordinator sends it again (coordinators/setup.rs
+/// `flow_page_seen`).
+fn note_flow_page_seen(state: &AppState, record: &Value, answers: &Value) {
+    if answers["seen"] != Value::Bool(true) || !is_flow_page(state, record) {
+        return;
+    }
+    let at = record["answeredAt"]
+        .as_str()
+        .map(str::to_string)
+        .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+    if let Ok(db) = crate::storage::open_gxserver_database(&state.paths) {
+        let _ = crate::coordinators::set_flow_page_seen(&db, Some(&at));
+    }
+}
+
+/// The Inbox's Seen on a coordinator flow page: sent as the page's own Archive sends it (`{"seen":
+/// true}` through its answers route), so the coordinator hears at once and no coordinator sends
+/// the page again. `false` for any other page, or one already answered, which Seen dismisses
+/// quietly as before (session_chat_dismissed.rs).
+///
+/// CDXC:Coordinators 2026-11-26 DECISION:
+/// The user, of the flow page a coordinator sends after its setup is saved: "Only when the user marks it seen, send the last question (the Live page suggestions offer)". Seen in the Inbox is silent for every other page (CDXC:SessionChat 2026-11-17 in session_chat_dismissed.rs), which would leave that question waiting for the user's next message, so on this one page Seen does what the page's Archive does.
+pub(crate) async fn mark_flow_page_seen(state: &AppState, id: &str) -> bool {
+    let record = {
+        let state_dir = state.paths.root_dir.clone();
+        let id = id.to_string();
+        tokio::task::spawn_blocking(move || super::store::read_record(&state_dir, &id))
+            .await
+            .ok()
+            .flatten()
+    };
+    let Some(record) = record else {
+        return false;
+    };
+    if record.get("answeredAt").is_some_and(|at| !at.is_null()) || !is_flow_page(state, &record) {
+        return false;
+    }
+    let routed = submit(
+        Arc::new(state.clone()),
+        format!("{VISUAL_PAGE_ROUTE_PREFIX}{id}{VISUAL_PAGE_ANSWERS_SUFFIX}"),
+        Body::from(json!({"answers": {"seen": true}}).to_string()),
+    )
+    .await;
+    routed.response.status().is_success()
 }
 
 /// Sends a `<ghostex-page-answers>` message to the session, the way the page's own Send does:

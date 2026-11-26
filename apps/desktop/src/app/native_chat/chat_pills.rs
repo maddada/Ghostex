@@ -66,8 +66,6 @@ pub(super) struct ChatPillBounds {
     pub(super) saved_draft: Rc<Cell<Bounds<Pixels>>>,
     /// The Approvals pill (relayed_approval.rs), which its menu of thread cards opens against.
     approvals: Rc<Cell<Bounds<Pixels>>>,
-    /// The coordinator tips' pill (coordinator_intro.rs).
-    intro: Rc<Cell<Bounds<Pixels>>>,
     /// The where pill at the strip's left (where_pill.rs).
     where_pill: Rc<Cell<Bounds<Pixels>>>,
 }
@@ -84,7 +82,6 @@ impl ChatPillBounds {
             super::strip_overflow::OVERFLOW_MENU => self.overflow.clone(),
             super::saved_draft_pill::SAVED_DRAFT_MENU => self.saved_draft.clone(),
             super::relayed_approval::APPROVALS_MENU => self.approvals.clone(),
-            super::coordinator_intro::INTRO_MENU => self.intro.clone(),
             super::where_pill::WHERE_MENU => self.where_pill.clone(),
             _ => self.subagents.clone(),
         }
@@ -175,7 +172,6 @@ fn trigger_id(id: &str) -> &'static str {
         super::strip_overflow::OVERFLOW_MENU => super::strip_overflow::OVERFLOW_TRIGGER,
         super::saved_draft_pill::SAVED_DRAFT_MENU => super::saved_draft_pill::SAVED_DRAFT_TRIGGER,
         super::relayed_approval::APPROVALS_MENU => super::relayed_approval::APPROVALS_TRIGGER,
-        super::coordinator_intro::INTRO_MENU => super::coordinator_intro::INTRO_TRIGGER,
         super::where_pill::WHERE_MENU => super::where_pill::WHERE_TRIGGER,
         ghostex_gx_chat_core::extras::autopilot::AUTOPILOT_PILL => AUTOPILOT_TRIGGER,
         super::boosts::BOOST_MENU => super::boosts::BOOST_TRIGGER,
@@ -201,7 +197,6 @@ pub(super) fn pill_icon(id: &str) -> &'static str {
         "background" => "titlebar/terminal-2.svg",
         SIDE_CHATS_PILL => "titlebar/messages.svg",
         super::relayed_approval::APPROVALS_MENU => "titlebar/shield-check.svg",
-        super::coordinator_intro::INTRO_MENU => "titlebar/bulb.svg",
         ghostex_gx_chat_core::extras::autopilot::AUTOPILOT_PILL => "titlebar/plane.svg",
         QUALITY_PILL => "titlebar/alert-triangle.svg",
         _ => "titlebar/users.svg",
@@ -219,7 +214,6 @@ fn menu_width(id: &str) -> f32 {
             super::saved_draft_pill::SAVED_DRAFT_MENU_WIDTH
         }
         super::relayed_approval::APPROVALS_MENU => super::relayed_approval::APPROVALS_MENU_WIDTH,
-        super::coordinator_intro::INTRO_MENU => super::coordinator_intro::INTRO_MENU_WIDTH,
         super::where_pill::WHERE_MENU => super::where_pill::WHERE_MENU_WIDTH,
         super::boosts::BOOST_MENU => super::boosts::BOOST_MENU_WIDTH,
         super::sent_history::SENT_MENU => super::sent_history::SENT_MENU_WIDTH,
@@ -462,14 +456,6 @@ impl NativeChatView {
                 json!({"type": "showCoordinatorBoardGroup", "group": "blocked"}),
                 cx,
             );
-            return;
-        }
-        // A coordinator's How to use pill opens the coordinator flow page instead of its tips
-        // (CDXC:Coordinators 2026-11-26 in gx-chat-core extras/coordinator_intro.rs).
-        if id == super::coordinator_intro::INTRO_MENU
-            && self.snapshot["coordinatorIntro"]["opensFlowPage"] == true
-        {
-            self.invoke(json!({"type": "openCoordinatorFlowPage"}), cx);
             return;
         }
         self.toggle_pill_menu(id, bounds, window, cx);
@@ -743,9 +729,6 @@ impl NativeChatView {
         if id == super::relayed_approval::APPROVALS_MENU {
             return self.approvals_menu_height();
         }
-        if id == super::coordinator_intro::INTRO_MENU {
-            return self.coordinator_intro_menu_height();
-        }
         if id == super::where_pill::WHERE_MENU {
             return self.where_menu_height();
         }
@@ -790,7 +773,6 @@ impl NativeChatView {
             super::strip_overflow::OVERFLOW_MENU => self.strip_overflow_body(p, cx),
             super::saved_draft_pill::SAVED_DRAFT_MENU => self.saved_draft_menu_body(p, cx),
             super::relayed_approval::APPROVALS_MENU => self.approvals_menu_body(p, cx),
-            super::coordinator_intro::INTRO_MENU => self.coordinator_intro_menu_body(p, cx),
             super::where_pill::WHERE_MENU => self.where_menu_body(p, cx),
             super::boosts::BOOST_MENU => self.boost_menu_body(p, window, cx),
             super::boosts::BOOST_PREVIEW => self.boost_preview_body(p),
@@ -832,9 +814,6 @@ impl NativeChatView {
         }
         if trigger == super::resource_modal::RESOURCE_MODAL_TRIGGER {
             self.resource_modal_closed(cx);
-        }
-        if trigger == super::coordinator_intro::INTRO_TRIGGER {
-            self.coordinator_intro_menu_closed(cx);
         }
         if trigger == super::boosts::BOOST_TRIGGER {
             self.boost_preview = None;

@@ -90,8 +90,10 @@ pub(super) fn setup(args: &[String]) -> CliResult<()> {
         "copy" => copy(&parsed),
         "show" => show(&parsed),
         "explain" => explain(rest),
+        "welcome" => welcome(&parsed),
+        "suggest" => suggest(&parsed),
         other => Err(CliError::Other(format!(
-            "Unknown setup command: {other}. Use page, save, copy, show or explain (ghostex coordinator setup --help)."
+            "Unknown setup command: {other}. Use welcome, page, save, copy, show, explain or suggest (ghostex coordinator setup --help)."
         ))),
     }
 }
@@ -105,6 +107,8 @@ struct Model {
     label: String,
     efforts: Vec<(String, String)>,
     default_effort: Option<String>,
+    /// Listed under the picker's Legacy models.
+    legacy: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -130,11 +134,23 @@ impl Agent {
             .to_string()
     }
 
-    /// Its main model among the offered ones.
+    /// Its main model among the offered ones: its own default, else (when the interview never
+    /// offers that default, as Cursor's Composer) its newest Claude Opus, else its first row. Cursor
+    /// had read "Grok 4.7", the first row of its picker, on every tile.
     fn main_model(&self) -> Option<&Model> {
         self.default_model
             .as_deref()
             .and_then(|value| self.models.iter().find(|model| model.value == value))
+            .or_else(|| {
+                self.models
+                    .iter()
+                    .filter_map(|model| {
+                        let (family, version) = family_and_version(&model.value);
+                        family.ends_with("|claude opus").then_some((version, model))
+                    })
+                    .max_by(|a, b| a.0.cmp(&b.0))
+                    .map(|(_, model)| model)
+            })
             .or_else(|| self.models.first())
     }
 
@@ -167,6 +183,7 @@ fn model_rows(value: &Value) -> Vec<Model> {
                     })
                     .collect(),
                 default_effort: model["defaultEffort"].as_str().map(str::to_string),
+                legacy: model["legacy"].as_bool() == Some(true),
                 value,
             })
         })
@@ -215,12 +232,14 @@ fn family_and_version(value: &str) -> (String, Vec<u64>) {
 }
 
 /// The models worth offering: no never-offered tier, no catch-all OpenRouter route (hundreds of
-/// models), and of each family only its newest generation. A model without a version (an alias
+/// models), nothing under Legacy models, and of each family only its newest generation. A model without a version (an alias
 /// such as `opus[1m]`) always follows the newest, so it stays.
 fn current_models(models: &[Model]) -> Vec<Model> {
     let offered: Vec<&Model> = models
         .iter()
-        .filter(|model| !model.value.is_empty() && !model.value.starts_with("openrouter/"))
+        .filter(|model| {
+            !model.value.is_empty() && !model.value.starts_with("openrouter/") && !model.legacy
+        })
         .filter(|model| {
             !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(&model.value)
         })
@@ -569,29 +588,71 @@ fn rule_for(low: &str, main: &str, other: Option<&Agent>, other_work: &[Pick]) -
     }
 }
 
-/// The setup before any answer: the playbook's picks on this computer's lineup.
-fn playbook_setup(agents: &[Agent]) -> Setup {
-    let work = DEFAULT_WORK.map(|(family, model, effort)| {
-        let agent = find_agent(agents, family).or_else(|| agents.first());
-        match agent {
-            Some(agent) => {
-                let model = agent
-                    .models
-                    .iter()
-                    .find(|m| m.value == model)
-                    .or_else(|| agent.main_model());
-                Pick::of(agent, model, Some(effort))
-            }
-            None => Pick {
-                agent: family.to_string(),
-                agent_label: "Claude".to_string(),
-                model: model.to_string(),
-                model_label: String::new(),
-                effort: effort.to_string(),
-                effort_label: String::new(),
-            },
-        }
+/// The coordinator's own agent and model (`/api/readSessionChat`'s `selectedOptions`), what its
+/// threads run on before any setup.
+type Own = Option<(String, String)>;
+
+fn own_choice(session: &Value, flags: &Flags) -> Own {
+    let agent = agents::text(session, "agentId").to_string();
+    if agent.is_empty() {
+        return None;
+    }
+    let model = call_gxserver_rpc(
+        "/api/readSessionChat",
+        &json!({
+            "projectId": session["projectId"],
+            "sessionId": session["sessionId"],
+            "limit": 1,
+        }),
+        flags,
+    )
+    .ok()
+    .and_then(|chat| {
+        chat["selectedOptions"]["model"]["value"]
+            .as_str()
+            .map(str::to_string)
+    })
+    .unwrap_or_default();
+    Some((agent, model))
+}
+
+/// The setup before any answer: the coordinator's own agent and model at High, Medium and Low
+/// effort for large, hard and simple work, else (its agent is not in the lineup) the playbook's
+/// picks on this computer's lineup.
+///
+/// CDXC:Coordinators 2026-11-26 DECISION:
+/// The user, of a new coordinator whose user skips the setup: "they can just ask for anything and the coordinator starts working with defaults: High / Medium / Low effort of the same agent and model the coordinator itself runs on, for large / focused / simple work".
+fn playbook_setup(agents: &[Agent], own: &Own) -> Setup {
+    let own_agent = own.as_ref().and_then(|(agent, model)| {
+        let agent = find_agent(agents, agent)?;
+        Some((agent, agent.model(model).or_else(|| agent.main_model())))
     });
+    let work = match own_agent {
+        Some((agent, own_model)) => {
+            KINDS.map(|(_, _, _, effort)| Pick::of(agent, own_model, Some(effort)))
+        }
+        None => DEFAULT_WORK.map(|(family, model, effort)| {
+            let agent = find_agent(agents, family).or_else(|| agents.first());
+            match agent {
+                Some(agent) => {
+                    let model = agent
+                        .models
+                        .iter()
+                        .find(|m| m.value == model)
+                        .or_else(|| agent.main_model());
+                    Pick::of(agent, model, Some(effort))
+                }
+                None => Pick {
+                    agent: family.to_string(),
+                    agent_label: "Claude".to_string(),
+                    model: model.to_string(),
+                    model_label: String::new(),
+                    effort: effort.to_string(),
+                    effort_label: String::new(),
+                },
+            }
+        }),
+    };
     let main = work[0].agent.clone();
     let other = agents
         .iter()
@@ -759,8 +820,13 @@ fn setup_from_notes(notes: &[String], agents: &[Agent], base: &Setup) -> Setup {
 
 /// The setup in effect for a coordinator and where it came from: its own notes (read through the
 /// user's default when they are that default's lines), else the default, else the playbook's.
-fn effective_setup(view: &Value, flags: &Flags, agents: &[Agent]) -> (Setup, &'static str) {
-    let base = playbook_setup(agents);
+fn effective_setup(
+    view: &Value,
+    flags: &Flags,
+    agents: &[Agent],
+    own: &Own,
+) -> (Setup, &'static str) {
+    let base = playbook_setup(agents, own);
     let notes = setup_notes(view);
     let default = read_default(flags).map(|value| setup_from_json(&value, agents, &base));
     if !notes.is_empty() {
@@ -785,47 +851,24 @@ fn esc(text: &str) -> String {
         .replace('"', "&quot;")
 }
 
-/// An agent's logo (packages/core-ui/assets) and brand colour (the desktop's
-/// settings_modal/tabs/agents/logos.rs `brand_color`; white brands take the page's ink).
+/// An agent's logo and brand colour, from gx-core's one table of agent logos (the sidebar's, so an
+/// agent added there shows here too); white and near-white brands take the page's ink (`""`), so
+/// they read on the light theme.
 fn logo(icon: &str) -> Option<(&'static str, &'static str)> {
-    macro_rules! asset {
-        ($name:literal) => {
-            include_str!(concat!(
-                "../../../../packages/core-ui/assets/",
-                $name,
-                ".svg"
-            ))
-        };
-    }
-    Some(match icon {
-        "claude" => (asset!("claude"), "#d97757"),
-        "claude-cloud" => (asset!("claude-cloud"), "#d67556"),
-        "codex" => (asset!("codex"), ""),
-        "opencode" => (asset!("opencode"), "#6d96c0"),
-        "cursor-cli" | "cursor" => (asset!("cursor-cli"), ""),
-        "grok-build" | "grok" => (asset!("grok-build"), ""),
-        "hermes-agent" => (asset!("hermes-agent"), "#f3c46b"),
-        "pi" => (asset!("pi"), "#c8ff62"),
-        "omp" => (asset!("omp"), "#a663ed"),
-        "antigravity-cli" | "antigravity" => (asset!("antigravity-cli"), "#749bff"),
-        "dsh" => (asset!("dsh"), "#4d6bfe"),
-        "gemini" => (asset!("gemini"), ""),
-        "copilot" => (asset!("copilot"), ""),
-        "kimi" => (asset!("kimi"), "#7b6cf6"),
-        "factory-droid" => (asset!("factory-droid"), "#ff7a1a"),
-        "kiro" => (asset!("kiro"), "#a6e3ff"),
-        "qoder" => (asset!("qoder"), "#a991ff"),
-        "amp-cli" | "amp" => (asset!("amp-cli"), ""),
-        "devin" => (asset!("devin"), "#3ea6ff"),
-        "empryo" => (asset!("empryo"), "#1fa31d"),
-        "rovo-dev" => (asset!("rovo-dev"), "#4fc3a1"),
-        "codebuddy" => (asset!("codebuddy"), "#72d6ff"),
-        "command-code" => (asset!("command-code"), "#22d3ee"),
-        "openclaude" => (asset!("openclaude"), "#f0a68a"),
-        "mastra" => (asset!("mastra"), ""),
-        "zcode" => (asset!("zcode"), ""),
-        _ => return None,
-    })
+    let icon = match icon {
+        "cursor" => "cursor-cli",
+        "grok" => "grok-build",
+        "antigravity" => "antigravity-cli",
+        "amp" => "amp-cli",
+        other => other,
+    };
+    let svg = ghostex_gx_core::agent_logo_svg(icon)?;
+    let color = ghostex_gx_core::agent_logo_color(icon).unwrap_or_default();
+    let near_white = color.len() == 7
+        && (1..7)
+            .step_by(2)
+            .all(|at| u8::from_str_radix(&color[at..at + 2], 16).is_ok_and(|c| c >= 0xe0));
+    Some((svg, if near_white { "" } else { color }))
 }
 
 fn data_uri(svg: &str) -> String {
@@ -1457,7 +1500,8 @@ fn setup_dir() -> PathBuf {
 }
 
 /// Everything the page and `save` read: the coordinator, its lineup and usage.
-fn context(parsed: &ParsedArgs) -> CliResult<(Value, Flags, Value, Vec<Agent>, Value)> {
+#[allow(clippy::type_complexity)]
+fn context(parsed: &ParsedArgs) -> CliResult<(Value, Flags, Value, Vec<Agent>, Value, Own)> {
     let (session, flags) = target_coordinator(parsed)?;
     let view = read_view(&session, &flags)?;
     let room = usage_room::read(&view, &flags);
@@ -1469,13 +1513,14 @@ fn context(parsed: &ParsedArgs) -> CliResult<(Value, Flags, Value, Vec<Agent>, V
                 .into(),
         ));
     }
-    Ok((session, flags, view, agents, room))
+    let own = own_choice(&session, &flags);
+    Ok((session, flags, view, agents, room, own))
 }
 
 /// `page [--out <file>] [--setup-file <json>]`: writes the interview and prints its path.
 /// `--setup-file` prefills it from that setup instead (to preview one).
 fn page(parsed: &ParsedArgs) -> CliResult<()> {
-    let (session, flags, view, agents, room) = context(parsed)?;
+    let (session, flags, view, agents, room, own) = context(parsed)?;
     let (setup, source) = match flag_text(&parsed.flags, "setupFile") {
         Some(path) => {
             let text = crate::ghostex_cli::args::read_body_file(&path, "setup")
@@ -1483,11 +1528,11 @@ fn page(parsed: &ParsedArgs) -> CliResult<()> {
             let value: Value = serde_json::from_str(&text)
                 .map_err(|error| CliError::Other(format!("The setup is not JSON: {error}")))?;
             (
-                setup_from_json(&value, &agents, &playbook_setup(&agents)),
+                setup_from_json(&value, &agents, &playbook_setup(&agents, &own)),
                 "your default",
             )
         }
-        None => effective_setup(&view, &flags, &agents),
+        None => effective_setup(&view, &flags, &agents, &own),
     };
     let html = page_html(&PageData {
         agents,
@@ -1639,8 +1684,8 @@ fn save(parsed: &ParsedArgs) -> CliResult<()> {
         )
     })?;
     let answers = answers_json(&text)?;
-    let (session, flags, view, agents, _room) = context(parsed)?;
-    let (base, _) = effective_setup(&view, &flags, &agents);
+    let (session, flags, view, agents, _room, own) = context(parsed)?;
+    let (base, _) = effective_setup(&view, &flags, &agents, &own);
     let setup = if answers.get("work").is_some() && answers.get("version").is_some() {
         setup_from_json(&answers, &agents, &base)
     } else {
@@ -1653,7 +1698,7 @@ fn save(parsed: &ParsedArgs) -> CliResult<()> {
         .into_iter()
         .flatten()
         .filter_map(|note| note["text"].as_str().or_else(|| note.as_str()))
-        .filter(|text| !text.trim_start().starts_with(SETUP_NOTE_PREFIX))
+        .filter(|text| !setup_memory_note(text))
         .map(str::to_string)
         .collect();
     memory.extend(notes.iter().cloned());
@@ -1672,11 +1717,13 @@ fn save(parsed: &ParsedArgs) -> CliResult<()> {
         &json!({ "default": saved }),
         &flags,
     );
+    let next = next_after_setup(&flags);
     if parsed.flags.truthy("json") {
         print_json(&json!({
             "setup": saved,
             "notes": notes,
             "defaultSaved": default_saved.is_ok(),
+            "next": next,
         }));
         return Ok(());
     }
@@ -1696,6 +1743,158 @@ fn save(parsed: &ParsedArgs) -> CliResult<()> {
             setup.never_use.join(", ")
         );
     }
+    println!();
+    println!("{next}");
+    Ok(())
+}
+
+/// A question form with one question, its tag taken from the coordinator's count (`next-tag`),
+/// as the ```questions block the coordinator sends as is.
+fn form_block(session: &Value, flags: &Flags, title: &str, mut question: Value) -> String {
+    let tag = call_gxserver_rpc(
+        "/api/readSessionChatQuestionTags",
+        &json!({
+            "projectId": session["projectId"],
+            "sessionId": session["sessionId"],
+            "reserve": true,
+        }),
+        flags,
+    )
+    .ok()
+    .map(|tags| agents::text(&tags, "next").to_string())
+    .filter(|tag| !tag.is_empty());
+    if let Some(tag) = tag {
+        question["tag"] = json!(tag);
+    }
+    let form = json!({ "title": title, "questions": [question] });
+    format!(
+        "```questions\n{}\n```",
+        serde_json::to_string_pretty(&form).unwrap_or_default()
+    )
+}
+
+/// What the coordinator does once its setup is saved or copied: show the flow page as a page that
+/// waits to be seen and, once it comes back seen, offer the Live page ideas; the flow page only
+/// until the user has marked it seen once, on any computer.
+///
+/// CDXC:Coordinators 2026-11-26 DECISION:
+/// The user, after the walkthrough: after the setup is saved, "send the coordinator flow page as a Needs you page WITHOUT a question (a page that waits to be seen). Only when the user marks it seen, send the last question (the Live page suggestions offer)". The two-offers form is gone. A coordinator that only sent words had sent two questions of one checkbox each, and after `setup copy` none at all, so both verbs print the step.
+fn next_after_setup(flags: &Flags) -> String {
+    let seen = call_gxserver_rpc("/api/readCoordinatorSetup", &json!({}), flags)
+        .ok()
+        .is_some_and(|setup| setup["flowPageSeen"] == true);
+    if seen {
+        "Next: run ghostex coordinator setup suggest and follow what it prints (the user has already seen How coordinators work, so don't show it again). Then do the user's first request, if any.".to_string()
+    } else {
+        "Next: run ghostex coordinator setup explain and put the block it prints in your reply under Needs you, with one line: \"Here's how working with me goes. When you've read it, press Archive at the end of the page.\" Ask nothing else and end your turn. When it comes back seen, run ghostex coordinator setup suggest and follow what it prints. Do the user's first request, if any, in this turn too.".to_string()
+    }
+}
+
+/// The note a coordinator keeps once it has offered the setup, so its status stops asking for the
+/// welcome; `save` and `copy` replace it with the setup's lines.
+const SETUP_OFFERED_PREFIX: &str = "Setup offered:";
+
+/// Whether a memory note is part of the setup (its lines, or the note that it was offered).
+fn setup_memory_note(text: &str) -> bool {
+    let text = text.trim_start();
+    text.starts_with(SETUP_NOTE_PREFIX) || text.starts_with(SETUP_OFFERED_PREFIX)
+}
+
+/// `welcome`: the first message of a new coordinator, with its one question (go through the
+/// setup?), printed for the coordinator to send as is.
+///
+/// CDXC:Coordinators 2026-11-26 DECISION:
+/// The user, after the walkthrough: a new coordinator "no longer sends the setup page straight away. It sends a short welcome message asking whether the user would like to go through the setup (recommended); they can just say yes ... The welcome also explains they can instead copy the models and other choices from another coordinator (type + and pick it, then ask to copy). Otherwise they can just ask for anything and the coordinator starts working with defaults: High / Medium / Low effort of the same agent and model the coordinator itself runs on, for large / focused / simple work."
+fn welcome(parsed: &ParsedArgs) -> CliResult<()> {
+    let (session, flags, view, agents, _room, own) = context(parsed)?;
+    let defaults = playbook_setup(&agents, &own);
+    let main = &defaults.work[0];
+    let runs_on = if main.model_label.is_empty() {
+        main.agent_label.clone()
+    } else {
+        format!("{} · {}", main.agent_label, main.model_label)
+    };
+    let block = form_block(
+        &session,
+        &flags,
+        "Coordinator setup",
+        json!({
+            "title": "Set up which agents and models do which work?",
+            "detail": "A short page, already filled in: which agent, model and effort take large, focused and simple work, and what to do when usage runs low. Send it as is or change anything.",
+            "choices": [
+                { "label": "Yes, set it up", "recommended": true },
+                { "label": "Not now, use the defaults" },
+            ],
+        }),
+    );
+    // Offered once: the status stops asking for the welcome.
+    let mut memory: Vec<String> = view["coordinator"]["memory"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|note| note["text"].as_str().or_else(|| note.as_str()))
+        .filter(|text| !text.trim_start().starts_with(SETUP_OFFERED_PREFIX))
+        .map(str::to_string)
+        .collect();
+    memory.push(format!(
+        "{SETUP_OFFERED_PREFIX} the user was welcomed and offered the setup. Until they save one, threads run on {runs_on}: High effort for large work, Medium for focused work, Low for simple work (setup show prints the start-thread flags)."
+    ));
+    let _ = call_gxserver_rpc(
+        "/api/updateCoordinator",
+        &json!({
+            "projectId": session["projectId"],
+            "sessionId": session["sessionId"],
+            "memory": memory,
+        }),
+        &flags,
+    );
+    println!("Send this as your reply, word for word, the block under your Needs you section, and end your turn:");
+    println!();
+    println!("Hi, I'm the coordinator for this project. Tell me what you want done: I hand the work to agents, follow them and bring back the results and anything that needs you.");
+    println!();
+    println!(
+        "I recommend a one-minute setup first: which agents and models take which kind of work."
+    );
+    println!();
+    println!("- **Copy another coordinator's setup instead:** type + in the chat box, pick that coordinator and ask me to copy its setup.");
+    println!("- **Or just ask me for anything:** until you set it up, I use {runs_on}, the same as me: High effort for large work, Medium for focused work and Low for simple work.");
+    println!();
+    println!("{block}");
+    println!();
+    println!("On \"Yes, set it up\": run ghostex coordinator setup page and show it (the playbook's First turn). On \"Not now\": carry on with the defaults above; don't offer it again unless they ask.");
+    Ok(())
+}
+
+/// `suggest`: the last question after the setup: which of three things to add to the app should
+/// get a short Live page of questions. Prints the form for the coordinator to fill in and send.
+///
+/// CDXC:Coordinators 2026-11-26 DECISION:
+/// The user, of the Live page ideas a coordinator gave after the setup ("the suggested ones u gave suck"): "suggest 3 things they could add to their app (from looking at the project), and for each offer a short Live page of 5 questions with choices so they pick what they want. The question to the user: which of the 3 to make pages for."
+fn suggest(parsed: &ParsedArgs) -> CliResult<()> {
+    let (session, flags) = target_coordinator(parsed)?;
+    let idea = |n: u8| {
+        json!({
+            "label": format!("<feature {n}: what it adds, in a few words>"),
+            "detail": format!("<feature {n}: what users get and why it fits this app, one line>"),
+            "recommended": true,
+        })
+    };
+    let block = form_block(
+        &session,
+        &flags,
+        "Features to add",
+        json!({
+            "title": "Which of these features should I make a Live page for?",
+            "detail": "Three things this app could add. For each one you pick, I make a short Live page of 5 questions with choices, so you decide how it should work before anything is built.",
+            "multiple": true,
+            "choices": [idea(1), idea(2), idea(3)],
+        }),
+    );
+    println!("First look at the project (its README, recent commits, open issues) and pick 3 things its app could add that its users would notice: features of the product, never pages about the project's own process. Fill in the three <...> choices, keep everything else as is, check it with ghostex visual check, then send it under your Needs you section and end your turn:");
+    println!();
+    println!("{block}");
+    println!();
+    println!("For each feature the user picks, have a thread build one Live page of 5 questions, each with 2 to 4 choices and the one you recommend marked, so the user picks how it should work; show each page when it's ready.");
     Ok(())
 }
 
@@ -1722,7 +1921,7 @@ fn copy(parsed: &ParsedArgs) -> CliResult<()> {
         .into_iter()
         .flatten()
         .filter_map(|note| note["text"].as_str().or_else(|| note.as_str()))
-        .filter(|text| !text.trim_start().starts_with(SETUP_NOTE_PREFIX))
+        .filter(|text| !setup_memory_note(text))
         .map(str::to_string)
         .collect();
     memory.extend(notes.iter().cloned());
@@ -1743,14 +1942,22 @@ fn copy(parsed: &ParsedArgs) -> CliResult<()> {
         println!("  {note}");
     }
     println!("The user's default is unchanged; setup save changes it.");
+    println!();
+    println!("{}", next_after_setup(&flags));
     Ok(())
 }
 
 /// `show [--json]`: the setup in effect for this coordinator and where it came from.
 fn show(parsed: &ParsedArgs) -> CliResult<()> {
-    let (_session, flags, view, agents, _room) = context(parsed)?;
-    let (setup, source) = effective_setup(&view, &flags, &agents);
+    let (_session, flags, view, agents, _room, own) = context(parsed)?;
     let notes = setup_notes(&view);
+    // Without its own setup, a coordinator's threads run on its own agent and model; the user's
+    // default only prefills the interview.
+    let (setup, source) = if notes.is_empty() {
+        (playbook_setup(&agents, &own), "its own agent and model")
+    } else {
+        effective_setup(&view, &flags, &agents, &own)
+    };
     if parsed.flags.truthy("json") {
         print_json(&json!({
             "source": source,
@@ -1762,7 +1969,7 @@ fn show(parsed: &ParsedArgs) -> CliResult<()> {
     }
     if notes.is_empty() {
         println!(
-            "This coordinator has no setup yet; {source} would give it the lines below. Run ghostex coordinator setup page and show it to the user."
+            "This coordinator has no setup yet, so its threads use {source}, as below (start-thread flags included). Offer the setup with ghostex coordinator setup welcome, or run the interview when the user asks."
         );
         for note in setup.notes() {
             println!("  {note}");
@@ -1778,7 +1985,7 @@ fn show(parsed: &ParsedArgs) -> CliResult<()> {
 /// `explain [--json] [--browser]`: shows the coordinator flow page Ghostex ships in this chat,
 /// the way `ghostex show` does.
 fn explain(args: &[String]) -> CliResult<()> {
-    let path = setup_dir().join("coordinator-flow.html");
+    let path = crate::coordinators::coordinator_flow_page_file(&gxserver_root());
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|error| {
             CliError::Other(format!("Could not make {}: {error}", parent.display()))
@@ -1811,6 +2018,7 @@ mod tests {
                 ("high".into(), "High".into()),
             ],
             default_effort: Some("high".into()),
+            legacy: false,
         }
     }
 
@@ -1880,7 +2088,7 @@ mod tests {
             ),
             agent("pi", "Pi Agent", Vec::new(), ""),
         ];
-        let base = playbook_setup(&agents);
+        let base = playbook_setup(&agents, &None);
         let answers = json!({
             "Who does which work": {
                 "large agent": "Claude", "large model": "Opus 5.5", "large effort": "High",
@@ -1917,6 +2125,22 @@ mod tests {
             setup.rule,
             "split usage between Opus 5.5 and Antigravity sessions"
         );
+    }
+
+    #[test]
+    fn an_agent_whose_default_is_never_offered_starts_on_opus() {
+        let all = [
+            ("auto", "Auto"),
+            ("grok-4.7", "Grok 4.7"),
+            ("composer-2.5", "Composer 2.5"),
+            ("claude-opus-5", "Opus 5"),
+            ("claude-opus-5-5", "Opus 5.5"),
+        ]
+        .map(|(value, label)| model(value, label))
+        .to_vec();
+        let mut cursor = agent("cursor", "Cursor CLI", current_models(&all), "composer-2.5");
+        cursor.all_models = all;
+        assert_eq!(cursor.main_model().unwrap().label, "Opus 5.5");
     }
 
     #[test]

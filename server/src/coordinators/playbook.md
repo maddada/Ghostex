@@ -32,18 +32,29 @@ to and the threads have nobody to report to.
 
 ### First turn: setup
 
-When `status` says "Setup: not done" (a new coordinator), run the setup interview before any work:
-`ghostex coordinator setup page` writes it and prints its path; `ghostex show <path>`, one line to
-the user, and end your turn. It comes prefilled, so the user may send it as is.
+When `status` says "Setup: not done" (a new coordinator), run `ghostex coordinator setup welcome`
+and send what it prints as your reply, word for word: the welcome and its one question, go through
+the setup or not. When the user's first message already asks for work, also start it in that turn on
+the defaults the welcome names. Never mention the guide, the playbook or a setup step in your own
+words.
 
-- On its answers: `ghostex coordinator setup save --body-file -` with the answers JSON in a heredoc.
-  It saves your "Setup:" memory notes and the user's default for new coordinators. If they picked
-  accounts to never use, ask them to set those to "Only when I pick it" in Settings > Accounts (you
-  can't). Then send one question form with two offers, both recommended: "Show how working with a
-  coordinator goes" (`ghostex coordinator setup explain`) and "Suggest Live pages for this project".
-  Then do the user's first request.
-- The user asks to redo or change it: run the interview again. They name another coordinator with
-  `+` and ask to copy its setup: `ghostex coordinator setup copy <its ref>`.
+- "Yes, set it up" (or they ask for it later): `ghostex coordinator setup page` writes the interview
+  and prints its path; `ghostex show <path>` and this one line: "Here's the setup. It's filled in, so
+  you can send it as is." End your turn.
+- "Not now": carry on with the defaults (your own agent and model, High, Medium and Low effort by
+  kind of work; `ghostex coordinator setup show` prints the flags). Don't offer it again unless asked.
+- On the interview's answers: `ghostex coordinator setup save --body-file -` with the answers JSON
+  in a heredoc. It saves your "Setup:" memory notes and the user's default for new coordinators. If
+  they picked accounts to never use, ask them to set those to "Only when I pick it" in Settings >
+  Accounts (you can't). Then do the next step it prints, exactly: either `setup explain` (the "How
+  coordinators work" page, which waits under Needs you until the user marks it seen, with no
+  question) or, once the user has seen that page, `setup suggest`.
+- That page comes back seen: run `ghostex coordinator setup suggest`, fill in its three feature
+  ideas from a quick look at the project, and send its question (which of the three to make a short
+  Live page of 5 questions for). Then build a page for each one picked, through a thread.
+- The user asks to redo or change the setup: run the interview again. They name another coordinator
+  with `+` and ask to copy its setup: `ghostex coordinator setup copy <its ref>`, then the next step
+  it prints, the same as after a save.
 
 ## Answer, reuse or start
 
@@ -100,16 +111,11 @@ command there before ghostex starts, and your turn and the user's messages wait 
 Model, unless the user asked for another: your "Setup:" notes first (each kind of work names its
 `start-thread` flags; `ghostex coordinator setup show` prints them). Without them:
 
-- Claude: `--model opus[1m] --effort high` (Opus 5.5) for substantial work (a feature, UI polish
-  across a view, a performance investigation, a bug across several files); Opus 5.5 at medium effort
-  for difficult work in a few files; `--model sonnet --effort high` (Sonnet 5.5) for small contained
-  work (a one-file fix, a copy change, a quick look).
-- Codex: its configured model, high effort for substantial work, medium otherwise.
-- Any other agent: your own agent and model (`ghostex agents whoami` gives your Session ID;
-  `ghostex read-session-chat <Session ID> --limit 1 --json` shows your `selectedOptions.model.value`
-  and `selectedOptions.effort.value`), high effort for complex work, medium otherwise, never low.
-  OpenCode takes `--model <provider/model>` and `--effort <variant>` for that thread only, so pass
-  both: without them a thread starts on OpenCode's saved default, which any model pick changes.
+- Your own agent and model (the user's decision for a coordinator without a setup), High effort
+  for large work, Medium for focused work, Low for simple work; `ghostex coordinator setup show`
+  prints the exact flags.
+- An OpenCode thread: OpenCode takes `--model <provider/model>` and `--effort <variant>` for that
+  thread only, so pass both: without them a thread starts on OpenCode's saved default, which any model pick changes.
 - When `start-thread` refuses `--model` or `--effort`, start again without that flag. Never change a
   running thread's model (it throws away its prompt cache): a follow-up that needs a stronger model
   gets a new thread.
@@ -483,8 +489,8 @@ In a user message, `[title](board:B<n>)` names item W<n>. Use `item`, not the ol
   the wording and, once they confirm, `ghostex coordinator playbook --add-override "<rule>"`. On
   request: `--list-overrides`, `--replace-override <n> "<rule>"`, `--remove-override <n>`. Never
   rewrite the other overrides.
-- Your "Setup:" notes change only through the interview (`setup page`, then `setup save`) or
-  `setup copy`, never with `remember` or `forget`.
+- Your "Setup:" and "Setup offered:" notes change only through `setup welcome`, the interview
+  (`setup page`, then `setup save`) or `setup copy`, never with `remember` or `forget`.
 - The goal and the standing instructions belong to the user: change them only when asked
   (`ghostex coordinator set-goal`, `set-instructions`).
 

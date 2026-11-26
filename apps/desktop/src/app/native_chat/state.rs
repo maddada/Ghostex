@@ -207,9 +207,6 @@ pub(crate) struct NativeChatView {
     /// Each one-line card's title width as last painted, the time stepped aside (unscaled), by
     /// card, which its name and time fit in (cards.rs `title_fit`).
     pub(super) title_room: std::rc::Rc<std::cell::RefCell<std::collections::HashMap<String, f32>>>,
-    /// "Don't show again" is ticked in the open coordinator tips; it applies when they close
-    /// (coordinator_intro.rs).
-    pub(super) coordinator_intro_dont_show: bool,
     /// What the working card measured at its last paint (`working_card.rs`).
     pub(super) working_card: super::working_card::WorkingCardCells,
     /// The transcript list holds the status row after its last row (Status line in the chat,
@@ -752,7 +749,6 @@ impl NativeChatView {
             pill_bounds: Default::default(),
             stat_room: Default::default(),
             title_room: Default::default(),
-            coordinator_intro_dont_show: false,
             working_card: Default::default(),
             status_tail: false,
             row_motion: Default::default(),

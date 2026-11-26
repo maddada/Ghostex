@@ -4986,22 +4986,24 @@ version of the Projects features in Cursor and Claude Code.
   can save one too: give it a lasting rule for every coordinator and it proposes
   the wording, then saves it once you confirm. `ghostex coordinator set-playbook
   --use-ghostex` moves off an old copy.
-- **How to use coordinators**: every coordinator's chat has a **How to use** pill
-  (a light bulb) in the pills above its chat box, on new coordinators, older ones
-  and sessions made coordinators alike. Click or tap it for the tips, each in its
-  own card with a line you can type; clicking that line puts it in the chat box
-  (nothing is sent). The tips: keep one coordinator per project and give it
-  everything; ask for a Live page per topic and pick (gx visuals for numbers); ask
-  it to dig deeper on a point before you pick; paste a screenshot instead of
-  describing; let it start threads, on any agent or computer; answer with one
-  click (a gx form or the answer links), or later from the ? pill, or by tag
-  ("Q12: yes"); run several lines of work at once on the Board; say a rule once
-  and it becomes a note it passes on to the threads that need it; read the end of each reply, where
-  Needs you comes last and threads' approvals show; and on a Mac, let threads
-  test in real windows with SpaceO and cua-driver. Tick **Don't show again** in
-  the tips to remove the pill from every coordinator on that computer's Ghostex
-  (the phone and every window follow); Ask Ghostex AI in the sidebar's menu still explains them. Only you see
-  them: the coordinator's own first message is unchanged.
+- **A new coordinator's first message**: a short welcome that offers a
+  one-minute setup (recommended), answered with one click. The setup is a Live
+  page, already filled in, that picks which signed-in agent, model and effort
+  does large, focused and simple work, what to do when usage runs low, which
+  accounts never to use and which computers threads may run on. Your answers
+  become the default for every new coordinator (synced to your other
+  computers), and each coordinator keeps its own copy; ask it to "redo the
+  setup" any time. To reuse another coordinator's choices instead, type **+**
+  in the chat box, pick that coordinator and ask to copy its setup. Or skip it
+  and just ask for something: until there is a setup, threads use the
+  coordinator's own agent and model, at High effort for large work, Medium for
+  focused work and Low for simple work.
+- **How coordinators work**: after the setup is saved, the coordinator sends a
+  page about working with it, waiting in Needs you. Once you've read it, press
+  **Archive** at the end of the page (or **Seen** in its Inbox row) and the
+  coordinator offers three features it could add to your project, each as a
+  short Live page of questions; pick the ones you want. After that, no other
+  coordinator sends the page again, on any of your computers.
 - **Just ask**: "run these three as separate threads", "use worktrees", "give me
   a status of every thread", "use a cheaper model for threads", "don't merge
   anything without asking" all work in plain words.

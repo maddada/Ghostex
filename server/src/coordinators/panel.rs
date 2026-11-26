@@ -100,7 +100,6 @@ fn cached_panel(
     board: Value,
     work: Value,
     approvals: Value,
-    intro_hidden: bool,
     lead: bool,
     previous: Option<&CachedPanel>,
 ) -> CachedPanel {
@@ -121,7 +120,6 @@ fn cached_panel(
             && previous.summary["board"] == board
             && previous.summary["work"] == work
             && previous.summary["approvals"] == approvals
-            && previous.summary["introHidden"] == intro_hidden
             && (previous.summary.get("lead") == Some(&Value::Bool(true))) == lead
     }) {
         return CachedPanel {
@@ -153,8 +151,8 @@ fn cached_panel(
         "work": work,
         // The thread approval cards its chat relays, open and recently ended (relay.rs).
         "approvals": approvals,
-        // "Don't show again" on the coordinator tips, for every coordinator (intro.rs).
-        "introHidden": intro_hidden,
+        // The How to use pill was removed; clients from before it went hide it on this.
+        "introHidden": true,
     });
     if lead {
         // Marks an ordinary session that leads linked sessions (`lead_links`): gx-chat-core shows
@@ -269,7 +267,6 @@ struct PanelInputs {
     /// with the next one is a pointer comparison.
     items: Arc<Vec<super::work::WorkItem>>,
     custom_tags: Value,
-    intro_hidden: bool,
     /// The coordinator's Topic (session_work.rs), shown at the top of its Work panel.
     topic: Value,
     /// The coordinator's idle floor (turns.rs): a new turn moves items in or out of In progress.
@@ -1013,7 +1010,6 @@ pub fn refresh_coordinator_panels(
     let remote_threads = list_remote_threads(db).unwrap_or_default();
     let mut board_items = super::work::list_all_work_items(db);
     super::work::load_deliveries(db);
-    let intro_hidden = super::intro::intro_hidden(db);
     let topics = super::session_work::read_topics(db);
     let generated_at = now_iso();
     let now = chrono::Utc::now();
@@ -1197,7 +1193,6 @@ pub fn refresh_coordinator_panels(
                 && last.topic == topic
                 && last.built_at.elapsed() < PANEL_REBUILD_EVERY
                 && last.next_snooze_expiry.is_none_or(|expiry| now < expiry)
-                && last.intro_hidden == intro_hidden
                 && last.custom_tags == custom_tags
                 && last.items == items
                 && last.idle_floor == idle_floor
@@ -1233,15 +1228,7 @@ pub fn refresh_coordinator_panels(
         super::work::add_work_tag_looks(&mut work, &custom_tags);
         // The line at the top of its Work panel (session_work.rs).
         work["topic"] = topic.clone();
-        let panel = cached_panel(
-            panel_rows,
-            board,
-            work,
-            approvals,
-            intro_hidden,
-            false,
-            panels.get(&key),
-        );
+        let panel = cached_panel(panel_rows, board, work, approvals, false, panels.get(&key));
         next.insert(key.clone(), panel);
         let next_snooze_expiry = next_snooze_expiry(&items, now);
         next_inputs.insert(
@@ -1251,7 +1238,6 @@ pub fn refresh_coordinator_panels(
                 remote_rows,
                 items,
                 custom_tags: custom_tags.clone(),
-                intro_hidden,
                 topic,
                 idle_floor,
                 next_snooze_expiry,
@@ -1297,7 +1283,6 @@ pub fn refresh_coordinator_panels(
             Value::Null,
             json!([]),
             true,
-            true,
             panels.get(&lead_key),
         );
         next.insert(lead_key, panel);
@@ -1323,7 +1308,6 @@ pub fn refresh_coordinator_panels(
                     Value::Null,
                     Value::Null,
                     json!([]),
-                    true,
                     true,
                     Some(previous),
                 ),
@@ -1426,15 +1410,7 @@ mod tests {
         assert_eq!(row["detail"], "Find the CPU churn");
         assert_eq!(row["recent"], true);
         assert_eq!(panel_rank(&row), 0);
-        let panel = cached_panel(
-            vec![row],
-            Value::Null,
-            Value::Null,
-            json!([]),
-            false,
-            false,
-            None,
-        );
+        let panel = cached_panel(vec![row], Value::Null, Value::Null, json!([]), false, None);
         assert_eq!(panel.summary["total"], 1);
         assert_eq!(panel.summary["threads"][0]["serverId"], "S4k");
 

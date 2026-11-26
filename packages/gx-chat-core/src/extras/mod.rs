@@ -16,7 +16,6 @@ pub mod chat_pills;
 pub mod chief_welcome;
 pub mod collab;
 pub mod coordinator_board;
-pub mod coordinator_intro;
 pub mod coordinator_quality;
 pub mod coordinator_threads;
 pub mod dock_approvals;

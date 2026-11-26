@@ -173,6 +173,14 @@ pub fn agent_logo_svg(icon: &str) -> Option<&'static str> {
         .map(|(_, _, svg)| *svg)
 }
 
+/// The brand colour of an icon key (`#d97757`), or `None` for an icon key with no artwork.
+pub fn agent_logo_color(icon: &str) -> Option<&'static str> {
+    LOGOS
+        .iter()
+        .find(|(key, _, _)| *key == icon)
+        .map(|(_, color, _)| *color)
+}
+
 /// `COLORED_AGENT_LOGOS[icon]`: the brand-coloured artwork as a data URL, or `None` for an icon
 /// key with no artwork.
 ///
