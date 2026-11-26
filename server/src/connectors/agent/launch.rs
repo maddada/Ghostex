@@ -98,6 +98,20 @@ pub(crate) fn with_connector_tools(agent_id: &str, icon: Option<&str>, command: 
     }
 }
 
+/// The connector tools' arguments for the `claude` or `codex` (`family`) a Native host starts, or
+/// the CLI it runs on a switch to Terminal-based; empty for any other family or while Connectors
+/// is off. The caller puts them last, after every other flag.
+///
+/// CDXC:Connectors 2026-11-26 FIX:
+/// Native chats (coordinators and their threads among them) lost the connector tools on 2026-11-23, when the Native host stopped forwarding flags from the session's terminal command (where [`with_connector_tools`] puts them) and built its agent's argv from Ghostex's own structured profile only; on 2026-11-24 it stopped receiving that command at all. The host adds the same server-generated flags itself, read when the agent starts, so start, resume, rewind, fork and account switch all get them and turning Connectors on or off reaches a Native session at its next start, as it does a Terminal-based one. Lean workers keep them: Lean Codex workers only turns off Codex's own features (agents/codex_lean.rs), and a coordinator's thread is meant to post when its brief asks.
+pub(crate) fn native_connector_tool_args(family: &str) -> Vec<String> {
+    // Unit tests assert exact argv, which must not depend on the user's settings.
+    if cfg!(test) {
+        return Vec::new();
+    }
+    connector_tool_args(family).unwrap_or_default()
+}
+
 /// The arguments that give a `claude` or `codex` (`family`) the connector tools while Connectors
 /// is on, one argument per item; `None` for any other family, while Connectors is off, or when
 /// Claude's config file can't be written; sessions get them through [`with_connector_tools`].

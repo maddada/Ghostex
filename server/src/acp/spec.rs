@@ -1512,6 +1512,8 @@ pub fn build_cli_switch_argv_with_options(
         inner_args.push("-c".to_string());
         inner_args.push(format!("default_permissions=\"{prof_name}\""));
     }
+    // Last, as on a Terminal-based launch: Claude's `--mcp-config` takes several values.
+    inner_args.extend(crate::connectors::native_connector_tool_args(spec.family));
 
     if let Some(wrapper) = wrapper {
         let mut args = vec!["run".to_string(), wrapper.slot];

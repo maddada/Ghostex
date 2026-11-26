@@ -974,6 +974,8 @@ fn spawn_and_init_claude(
         argv.push("--effort".to_string());
         argv.push(effort.to_string());
     }
+    // Last: `--mcp-config` and `--allowedTools` each take several values.
+    argv.extend(crate::connectors::native_connector_tool_args("claude"));
 
     let mut child = super::child_lifetime::end_with_host(&mut Command::new(&prog))
         .env_remove(super::channel::ACP_CHANNEL_SECRET_ENV)

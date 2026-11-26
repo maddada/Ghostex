@@ -2450,6 +2450,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             argv.push(feat);
         }
     }
+    argv.extend(crate::connectors::native_connector_tool_args("codex"));
 
     let use_cli_default = parsed.approval_level.is_none() && !parsed.read_only;
     let initial_approval_level = if parsed.read_only {
