@@ -144,6 +144,9 @@ pub(crate) struct GpuiVisualPageModalWindow {
     source_session: Option<TerminalSessionId>,
     /// gxserver says a question on the page has no answer yet (`source.rs`).
     questions_left: bool,
+    /// Whether gxserver last said the page was answered (`answered`, from 2026-11-26 on), so a
+    /// hidden page answered on another device closes (`source.rs` `note_answered`).
+    page_answered: Option<bool>,
     /// How many of the page's questions are answered, and how many it asks (`source.rs`).
     question_counts: Option<(u64, u64)>,
     /// The window is put aside (`set_hidden`).
@@ -280,6 +283,7 @@ impl GpuiVisualPageModalWindow {
             key,
             source_session,
             questions_left: false,
+            page_answered: None,
             question_counts: None,
             hidden: false,
             keep_open: keep_open(),
