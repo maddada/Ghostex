@@ -2,6 +2,66 @@
 
 ## Unreleased
 
+## 12.3.0 - 2026-11-26
+
+**Ghostex 12.3.0 is out.** New coordinators greet you and set themselves up with you, Live pages can come with answers already picked, the Gemini API CLI is a one-click tool, extensions can open their views and pin them to the rail, another workspace's Spaces mix right in with yours, Grok Bot pings you only when it matters, and Native chats get their connector tools back.
+
+### 🧭 Coordinators
+
+- **A new coordinator starts with a short welcome that offers its setup as a one-click form,** asking which agents and models it should use for large, focused and simple work. You can copy another coordinator's setup with +, and without one its threads use the coordinator's own agent at High, Medium and Low effort.
+- **The setup is saved and becomes your default for the next coordinator,** synced across your computers.
+- **"How coordinators work" waits once under Needs you after setup,** and once you mark it Seen the coordinator suggests three features for your project, each as a short Live page. Seen is remembered for every coordinator.
+- **The How to use pill is gone from coordinator chats,** and the bell and the Inbox now agree on how many answers a page is waiting for.
+
+### 📄 Live pages
+
+- **Agents can send a Live page with choices already picked,** so you only change what you disagree with.
+- **Menu questions can show their options as tiles or segmented buttons,** and the answers card shows what you picked.
+
+### 🧰 Tools
+
+- **Settings > Integrations > Tools has the Gemini API CLI,** installed only when you click Install, from Google's release checked against its published checksums, and kept up to date like the other tools.
+- **The (i) beside it explains what it adds** over Antigravity CLI on the Gemini plan, and walks you through setting it up with an API key.
+
+### 🧩 Extensions
+
+- **`ghostex extensions open <id>` opens an extension's view in the side panel,** from your terminal or an agent. An agent's open asks first with a toast, unless agents may open pages without asking.
+- **Extensions can open their own view** with the new views.open permission, limited so they can't open it over and over, and their toast never offers Always.
+- **Pin view extensions to the rail** from the rail's pin menu. A turned-off extension's pin hides.
+
+### 🗂️ Workspaces
+
+- **With Show Work's Spaces on, the other workspace's Spaces sit right in your Spaces row,** with no switcher or divider, in one order you can drag to arrange. Swipes and Go to Space walk the whole row.
+
+### 💬 Chat
+
+- **The scroll-to-bottom button floats above the Inbox,** so it no longer pushes the pills around as it comes and goes.
+- **The Inbox bar keeps its counts on the right** and shows just "Worked for 26s" instead of the turn's summary.
+- **Snoozed and Recent rows in the Inbox are the same size as Needs you rows,** with only their titles dimmed.
+
+### 🤖 Grok Bot
+
+- **Grok Bot pings you only for asks and blockers by default,** and notes that arrive together are sent as one message. Settings > Grok Bot > Send to Grok Bot picks Asks only, Asks and blockers, or Everything.
+
+### 🎨 Themes
+
+- **The Theme panel's colour picker has the opacity slider,** so you can make a colour role transparent right there, as in Settings > Themes.
+
+### 🔒 Privacy
+
+- **`ghostex web` has a Privacy & Analytics dialog** (the shield in the header) with the same analytics switch and "what's sent" preview as Settings > About.
+- **A phone you remove from paired devices stops getting notifications,** and telemetry and device access are tightened further.
+
+### 📱 On the phone
+
+- **Settings can hide project names in notifications.**
+- **The phone gets the new Inbox bar and the floating scroll-to-bottom button too.**
+
+### 🩹 Fixes and polish
+
+- **Native Claude and Codex chats have their workspace's connector tools again,** coordinators and their threads included.
+- **Agent browser clicks are hardened further:** they stay real mouse clicks at 125% and 150% display scale, on dropdowns and on pages an agent opened in the background, and fall back to a script click whenever the press might land on something else.
+
 ## 12.2.0 - 2026-11-26
 
 **Ghostex 12.2.0 is out.** Six more agents run Native, the chat gets a History of everything you sent, big chats stop freezing, the Inbox reply arrow can go straight to the chat box, agents' page toasts get External browser and Always, Settings gains a Browser page and clearer two-choice rows, and Clone a repo lists your own GitHub repositories.
