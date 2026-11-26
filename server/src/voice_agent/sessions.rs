@@ -489,6 +489,15 @@ pub(super) fn list_projects(state: &AppState) -> Result<Vec<ProjectInfo>, String
     project_rows(&repository)
 }
 
+/// One read of every open session here and on the connected computers, as the announcement
+/// watcher hands it to every call (`Input::Sessions`).
+#[derive(Clone, Debug, Default)]
+pub(super) struct SessionsRead {
+    pub(super) sessions: Vec<SessionInfo>,
+    /// The connected computers that could not be read: their sessions are missing, not closed.
+    pub(super) unavailable: Vec<Unavailable>,
+}
+
 /// Every open session on this computer and on the connected computers that answered, waiting ones
 /// first.
 pub(super) async fn list_sessions_async(state: &Arc<AppState>) -> Result<Vec<SessionInfo>, String> {

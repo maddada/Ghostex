@@ -11,31 +11,55 @@
 //! clients the list. Sub-threads are left out of both: they are a coordinator's work, which its row
 //! counts (the same rule as the announcements, `Announcement::reaches_all_sessions_call`).
 //!
-//! CDXC:VoiceMode 2026-11-26 WHY: the bounds keep the model's context small (at most
-//! `MODEL_ROWS` rows, roughly 600 to 800 tokens) and the frame small (`CLIENT_ROWS`); a longer
-//! list ends with how many were left out, and the model reads those with `list_sessions`. A state
-//! counts as changed only once two lists in a row agree, as the announcements do, so a turn that
-//! flickers idle between tool calls changes nothing; the model hears changes at most every
-//! `CHANGES_EVERY`.
+//! CDXC:VoiceMode 2026-11-26 WHY: the model gets each session's title, project, computer and state
+//! (with "waiting on a question" or "waiting on an approval") and nothing of what a session asks:
+//! a question's options or an approval's command, path or tool input never go to the provider
+//! unasked, and the read-out rules forbid saying them anyway (`get_pending_prompt` reads them when
+//! the user asks). The bounds keep the model's context small (at most `MODEL_ROWS` rows and
+//! `MODEL_BYTES` bytes, names cut short) and the frame small (`CLIENT_ROWS`); a longer list ends with
+//! how many were left out, and the model reads those with `list_sessions`. A state counts as
+//! changed only once two lists in a row agree, as the announcements do, so a turn that flickers
+//! idle between tool calls changes nothing; the model hears changes at most every `CHANGES_EVERY`.
+//!
+//! CDXC:VoiceMode 2026-11-26 WHY: changes are worked out against what the model actually got, never
+//! against a message still waiting: until the first list reached it, only the whole list goes (the
+//! latest one), and a change at the bound (a listed session moving past it, a counted one moving
+//! into it, a different number left out) or a connected computer that could not be read or answers
+//! again sends the whole list too. A computer that could not be read is named as such and its
+//! sessions are never called closed. The list goes in only while nothing is said, asked for,
+//! spoken or run (`give_sessions_context`), and a call about all sessions says its intro once the
+//! model has it (`open_with_sessions`), so the first answer already knows the sessions.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
-use super::super::sessions::{SessionInfo, VoiceState};
+use super::super::sessions::{SessionInfo, SessionsRead, VoiceState};
 use super::{Conversation, Ended};
 
 /// Rows the model gets at most in a `[Ghostex sessions]` message.
 pub(in crate::voice_agent) const MODEL_ROWS: usize = 25;
+/// Bytes a `[Ghostex sessions]` message holds at most; the rows past it are counted, like those
+/// past `MODEL_ROWS`.
+pub(in crate::voice_agent) const MODEL_BYTES: usize = 8_000;
 /// Rows a `sessions` frame carries at most.
 pub(in crate::voice_agent) const CLIENT_ROWS: usize = 40;
 /// Characters of a title the model gets.
 const TITLE_CHARS: usize = 60;
+/// Characters of a project's or a computer's name the model gets.
+const NAME_CHARS: usize = 40;
+/// Characters of why a computer could not be read.
+const REASON_CHARS: usize = 240;
+/// Room kept in `MODEL_BYTES` for the line that counts the rows left out.
+const LEFT_LINE_BYTES: usize = 100;
 /// How often the model hears changes at most.
 pub(in crate::voice_agent) const CHANGES_EVERY: Duration = Duration::from_secs(15);
 /// More changes than this send the whole list again.
 const MAX_CHANGES: usize = 10;
+/// How long a call about all sessions holds its intro for the first session list; without one by
+/// then it opens anyway and the list follows on its own.
+pub(in crate::voice_agent) const START_LIST_WAIT: Duration = Duration::from_secs(3);
 /// The prefix of the messages that carry the list, beside `[Ghostex update]`.
 pub(in crate::voice_agent) const SESSIONS_PREFIX: &str = "[Ghostex sessions]";
 
@@ -51,9 +75,12 @@ struct Row {
     project: String,
     agent: String,
     state: VoiceState,
-    waiting: Option<String>,
     sub_threads: Option<usize>,
     older_open_questions: usize,
+}
+
+fn cut(text: &str, chars: usize) -> String {
+    text.chars().take(chars).collect()
 }
 
 impl Row {
@@ -68,7 +95,6 @@ impl Row {
             project: session.project.clone(),
             agent: session.agent.clone(),
             state,
-            waiting: session.waiting.clone(),
             sub_threads: session.threads,
             older_open_questions: session.older_open_questions,
         }
@@ -76,13 +102,13 @@ impl Row {
 
     /// `"Title" (project, on Omarchy, a coordinator running 3 sub-threads)`.
     fn named(&self) -> String {
-        let title: String = self.title.chars().take(TITLE_CHARS).collect();
+        let title = cut(&self.title, TITLE_CHARS);
         let mut about = Vec::new();
         if !self.project.is_empty() {
-            about.push(self.project.clone());
+            about.push(cut(&self.project, NAME_CHARS));
         }
         if let Some(computer) = &self.computer {
-            about.push(format!("on {computer}"));
+            about.push(format!("on {}", cut(computer, NAME_CHARS)));
         }
         if let Some(threads) = self.sub_threads {
             about.push(match threads {
@@ -97,12 +123,9 @@ impl Row {
         }
     }
 
-    /// Its state in words, with what it waits on.
+    /// Its state in words.
     fn spoken_state(&self) -> String {
         let mut state = self.state.as_str().to_string();
-        if let Some(waiting) = &self.waiting {
-            state.push_str(&format!(": {waiting}"));
-        }
         if self.older_open_questions > 0 {
             state.push_str(&format!(
                 " ({} older open question{} in its chat)",
@@ -111,6 +134,11 @@ impl Row {
             ));
         }
         state
+    }
+
+    /// Its line in the model's list.
+    fn line(&self) -> String {
+        format!("\n- {}: {}", self.named(), self.spoken_state())
     }
 
     fn client_value(&self) -> Value {
@@ -149,6 +177,29 @@ fn client_state(state: VoiceState) -> &'static str {
     }
 }
 
+/// What a whole list tells the model.
+#[derive(Clone, Debug, Default)]
+struct Told {
+    /// The rows it lists, in order.
+    listed: Vec<Row>,
+    /// The open sessions past the bound, which it only counts, by ref.
+    counted: HashSet<String>,
+    /// How many those are, and how many of them sleep.
+    left: (usize, usize),
+    /// The connected computers that could not be read, with why, by name.
+    unavailable: Vec<(String, String)>,
+    /// The connected computers with sessions in the list, by server id.
+    computers: HashSet<String>,
+}
+
+/// A message for the model that waits for a quiet moment, what the model knows once it got it,
+/// and when it was made.
+struct Pending {
+    text: String,
+    told: Told,
+    at: Instant,
+}
+
 /// The list the call follows, and what the model and the client last got of it.
 #[derive(Default)]
 pub(super) struct SessionsContext {
@@ -157,28 +208,34 @@ pub(super) struct SessionsContext {
     settled: HashMap<String, VoiceState>,
     /// The settled list, in the watcher's order (waiting first); `None` before the first list.
     rows: Option<Vec<Row>>,
-    /// Every session the model was told about (listed or counted), by ref; `None` until it got a
-    /// list.
-    model: Option<HashMap<String, Row>>,
-    /// A message for the model that waits for a moment without a reply in progress.
-    pending: Option<String>,
+    /// The connected computers the last read could not reach, with why, by name.
+    unavailable: Vec<(String, String)>,
+    /// What the model got of the list; `None` until a whole list reached it.
+    model: Option<Told>,
+    /// The model's next message.
+    pending: Option<Pending>,
+    /// When the model's last message was made: the next change waits `CHANGES_EVERY` after it.
     last_changes: Option<Instant>,
     /// The last `sessions` frame sent.
     frame: Option<Value>,
 }
 
 impl SessionsContext {
-    /// Takes in a fresh list. Answers the `sessions` frame to send when it changed. With
-    /// `for_model`, the model's message (the whole list the first time, the changes after) waits
-    /// in `pending`.
+    /// Takes in a fresh read. Answers the `sessions` frame to send when it changed. With
+    /// `for_model`, the model's message (the whole list until one reached it, the changes after)
+    /// waits in `pending`.
     pub(super) fn update(
         &mut self,
-        sessions: &[SessionInfo],
+        read: &SessionsRead,
         now: Instant,
         for_model: bool,
     ) -> Option<Value> {
         let mut rows = Vec::new();
-        for session in sessions.iter().filter(|session| session.thread_of.is_none()) {
+        for session in read
+            .sessions
+            .iter()
+            .filter(|session| session.thread_of.is_none())
+        {
             let reference = session.reference();
             let previous = self.seen.insert(reference.clone(), session.state);
             let settled = match (previous, self.settled.get(&reference)) {
@@ -190,11 +247,17 @@ impl SessionsContext {
             self.settled.insert(reference, settled);
             rows.push(Row::of(session, settled));
         }
-        let present: std::collections::HashSet<String> =
-            rows.iter().map(|row| row.reference.clone()).collect();
+        let present: HashSet<String> = rows.iter().map(|row| row.reference.clone()).collect();
         self.seen.retain(|reference, _| present.contains(reference));
         self.settled.retain(|reference, _| present.contains(reference));
         self.rows = Some(rows);
+        let mut unavailable: Vec<(String, String)> = read
+            .unavailable
+            .iter()
+            .map(|computer| (computer.computer.clone(), computer.reason.clone()))
+            .collect();
+        unavailable.sort();
+        self.unavailable = unavailable;
         if for_model {
             self.model_update(now);
         }
@@ -220,9 +283,17 @@ impl SessionsContext {
         self.pending = None;
     }
 
-    /// The model's message, once it is time for it.
+    /// The model's message, handed to it now: from here on, changes are worked out against it.
     pub(super) fn take_pending(&mut self) -> Option<String> {
-        self.pending.take()
+        let pending = self.pending.take()?;
+        self.model = Some(pending.told);
+        self.last_changes = Some(pending.at);
+        Some(pending.text)
+    }
+
+    /// Whether a whole list reached the model.
+    pub(super) fn model_has_list(&self) -> bool {
+        self.model.is_some()
     }
 
     /// The last `sessions` frame, for a client that attaches.
@@ -232,111 +303,180 @@ impl SessionsContext {
 
     fn model_update(&mut self, now: Instant) {
         let Some(rows) = &self.rows else { return };
+        let (whole, told) = model_list(rows, &self.unavailable);
         let Some(known) = &self.model else {
-            self.pending = Some(model_list(rows));
-            self.model = Some(by_ref(rows));
-            self.last_changes = Some(now);
+            // Nothing reached the model yet: the latest whole list, never changes to a list it
+            // did not get.
+            self.pending = Some(Pending {
+                text: whole,
+                told,
+                at: now,
+            });
             return;
         };
-        let changes = model_changes(known, rows);
-        if changes.is_empty()
-            || self
+        // A message already waiting is kept current; a new one waits for the window.
+        if self.pending.is_none()
+            && self
                 .last_changes
                 .is_some_and(|last| now.duration_since(last) < CHANGES_EVERY)
         {
             return;
         }
-        self.pending = Some(if changes.len() > MAX_CHANGES {
-            model_list(rows)
-        } else {
-            format!("{SESSIONS_PREFIX} Changes: {}", changes.join(" "))
-        });
-        self.model = Some(by_ref(rows));
-        self.last_changes = Some(now);
+        let text = match model_changes(known, &told) {
+            Some(changes) if changes.is_empty() => {
+                self.pending = None;
+                return;
+            }
+            Some(changes) if changes.len() <= MAX_CHANGES => {
+                let text = format!("{SESSIONS_PREFIX} Changes: {}", changes.join(" "));
+                if text.len() <= MODEL_BYTES {
+                    text
+                } else {
+                    whole
+                }
+            }
+            _ => whole,
+        };
+        let at = self.pending.as_ref().map_or(now, |pending| pending.at);
+        self.pending = Some(Pending { text, told, at });
     }
 
     fn client_frame(&self) -> Option<Value> {
         let rows = self.rows.as_ref()?;
-        Some(json!({
+        let mut frame = json!({
             "type": "sessions",
             "sessions": rows.iter().take(CLIENT_ROWS).map(Row::client_value).collect::<Vec<_>>(),
             "more": rows.len().saturating_sub(CLIENT_ROWS),
-        }))
+        });
+        // Optional: a client that doesn't know it shows the rows it got, as before.
+        if !self.unavailable.is_empty() {
+            frame["unavailable"] = json!(self
+                .unavailable
+                .iter()
+                .map(|(computer, _)| computer.as_str())
+                .collect::<Vec<_>>());
+        }
+        Some(frame)
     }
 }
 
-fn by_ref(rows: &[Row]) -> HashMap<String, Row> {
-    rows.iter()
-        .map(|row| (row.reference.clone(), row.clone()))
-        .collect()
-}
-
-/// The whole list for the model, at most `MODEL_ROWS` rows.
-fn model_list(rows: &[Row]) -> String {
+/// The whole list for the model, at most `MODEL_ROWS` rows and `MODEL_BYTES` bytes, and what it
+/// tells.
+fn model_list(rows: &[Row], unavailable: &[(String, String)]) -> (String, Told) {
     let mut text = format!(
         "{SESSIONS_PREFIX} The user's open sessions, waiting ones first ({} in all; sub-threads are counted under their coordinator). This is context, not something to say.",
         rows.len()
     );
+    let unread: String = unavailable
+        .iter()
+        .map(|(computer, reason)| {
+            format!(
+                "\nNot listed: the sessions on {}. {}",
+                cut(computer, NAME_CHARS),
+                cut(reason, REASON_CHARS)
+            )
+        })
+        .collect();
+    let room = MODEL_BYTES.saturating_sub(text.len() + unread.len() + LEFT_LINE_BYTES);
+    let mut listed = Vec::new();
+    let mut used = 0;
     for row in rows.iter().take(MODEL_ROWS) {
-        text.push_str(&format!("\n- {}: {}", row.named(), row.spoken_state()));
+        let line = row.line();
+        if used + line.len() > room {
+            break;
+        }
+        used += line.len();
+        text.push_str(&line);
+        listed.push(row.clone());
     }
-    let left = &rows[rows.len().min(MODEL_ROWS)..];
+    text.push_str(&unread);
+    let left = &rows[listed.len()..];
+    let sleeping = left
+        .iter()
+        .filter(|row| row.state == VoiceState::Sleeping)
+        .count();
     if !left.is_empty() {
-        let sleeping = left
-            .iter()
-            .filter(|row| row.state == VoiceState::Sleeping)
-            .count();
         text.push_str(&format!(
             "\n{} more not listed ({sleeping} of them sleeping); call list_sessions for them.",
             left.len()
         ));
     }
-    text
+    let told = Told {
+        listed,
+        counted: left.iter().map(|row| row.reference.clone()).collect(),
+        left: (left.len(), sleeping),
+        unavailable: unavailable.to_vec(),
+        computers: rows.iter().filter_map(|row| row.server_id.clone()).collect(),
+    };
+    (text, told)
 }
 
-/// What changed for the model since `known`: sessions that opened, were renamed or changed state
-/// among the rows it gets (the first `MODEL_ROWS`), and sessions that closed.
-fn model_changes(known: &HashMap<String, Row>, rows: &[Row]) -> Vec<String> {
-    let listed = &rows[..rows.len().min(MODEL_ROWS)];
+/// What changed for the model between what it was told (`known`) and what a whole list would tell
+/// it now: sessions that opened, were renamed, changed state or closed among the rows it gets.
+/// `None` when only the whole list says it right: the rows at the bound, the number left out or
+/// the computers that could not be read changed, or a connected computer's sessions are all gone
+/// (it was disconnected, which says nothing about its sessions).
+fn model_changes(known: &Told, now: &Told) -> Option<Vec<String>> {
+    if known.left != now.left || known.unavailable != now.unavailable {
+        return None;
+    }
     let mut changes = Vec::new();
-    for row in listed {
-        match known.get(&row.reference) {
+    for row in &now.listed {
+        match known
+            .listed
+            .iter()
+            .find(|before| before.reference == row.reference)
+        {
+            None if known.counted.contains(&row.reference) => return None,
             None => changes.push(format!("{} opened: {}.", row.named(), row.spoken_state())),
             Some(before) => {
                 if before.title != row.title {
                     changes.push(format!(
                         "\"{}\" is now called {}.",
-                        before.title.chars().take(TITLE_CHARS).collect::<String>(),
+                        cut(&before.title, TITLE_CHARS),
                         row.named()
                     ));
                 }
-                if before.state != row.state || before.waiting != row.waiting {
+                if before.state != row.state
+                    || before.older_open_questions != row.older_open_questions
+                {
                     changes.push(format!("{} is now {}.", row.named(), row.spoken_state()));
                 }
             }
         }
     }
-    let all: std::collections::HashSet<&str> =
-        rows.iter().map(|row| row.reference.as_str()).collect();
-    for before in known.values() {
-        if !all.contains(before.reference.as_str()) {
-            changes.push(format!("{} was closed.", before.named()));
+    for before in &known.listed {
+        if now
+            .listed
+            .iter()
+            .any(|row| row.reference == before.reference)
+        {
+            continue;
         }
+        if now.counted.contains(&before.reference)
+            || before
+                .server_id
+                .as_ref()
+                .is_some_and(|server_id| !now.computers.contains(server_id))
+        {
+            return None;
+        }
+        changes.push(format!("{} was closed.", before.named()));
     }
-    changes
+    Some(changes)
 }
 
 impl Conversation {
     /// A fresh session list for the call's own list (`SessionsContext`): a changed list goes to
     /// the client, and in a call about all sessions the model's message waits for a quiet moment.
-    pub(super) fn follow_sessions(&mut self, sessions: &[SessionInfo]) {
+    pub(super) fn follow_sessions(&mut self, read: &SessionsRead) {
         if self.focus.as_ref().is_some_and(|scope| scope.gbot.is_some()) {
             return;
         }
         let for_model = self.focus.is_none();
         if let Some(frame) = self
             .sessions_context
-            .update(sessions, Instant::now(), for_model)
+            .update(read, Instant::now(), for_model)
         {
             self.to_client(frame);
         }
@@ -352,16 +492,23 @@ impl Conversation {
         }
         let (state, tx) = (self.state.clone(), self.tx.clone());
         tokio::spawn(async move {
-            if let Ok(sessions) = super::super::sessions::list_sessions_async(&state).await {
-                let _ = tx.send(super::Input::Sessions(std::sync::Arc::new(sessions)));
+            if let Ok((sessions, unavailable)) =
+                super::super::sessions::list_everywhere_async(&state).await
+            {
+                let read = SessionsRead {
+                    sessions,
+                    unavailable,
+                };
+                let _ = tx.send(super::Input::Sessions(std::sync::Arc::new(read)));
             }
         });
     }
 
-    /// Hands the model the waiting `[Ghostex sessions]` message, without asking for a reply,
-    /// unless a reply or a tool call is in progress (it then waits for the next tick).
+    /// Hands the model the waiting `[Ghostex sessions]` message, without asking for a reply, while
+    /// nothing goes on: no reply asked for, started or playing, the user not speaking, no tool
+    /// running and no tool result waiting for its reply. Otherwise it waits for the next tick.
     pub(super) async fn give_sessions_context(&mut self) -> Result<(), Ended> {
-        if self.response_active || !self.pending_calls.is_empty() {
+        if !self.quiet() || self.responses_requested > 0 || self.outputs_waiting {
             return Ok(());
         }
         let Some(message) = self.sessions_context.take_pending() else {
@@ -372,5 +519,22 @@ impl Conversation {
             "item": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": message}]},
         }))
         .await
+    }
+
+    /// A call about all sessions says its intro once the model has the session list (handed over
+    /// first), or at `intro_waits_until` without it, and only while nothing else goes on.
+    pub(super) async fn open_with_sessions(&mut self, now: Instant) -> Result<(), Ended> {
+        let Some(until) = self.intro_waits_until else {
+            return Ok(());
+        };
+        self.give_sessions_context().await?;
+        if !self.sessions_context.model_has_list() && now < until {
+            return Ok(());
+        }
+        if !self.quiet() || self.responses_requested > 0 {
+            return Ok(());
+        }
+        self.intro_waits_until = None;
+        self.say_intro().await
     }
 }
