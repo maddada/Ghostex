@@ -330,18 +330,29 @@ pub(super) fn session_info(
     })
 }
 
-/// This computer's sessions (each orchestrator followed by its threads) and another computer's,
-/// in one waiting-first list. An orchestrator keeps its threads right after it.
+/// This computer's sessions and the connected computers' (each list with an orchestrator's threads
+/// right after it, `nest`), in one waiting-first list. An orchestrator keeps its threads right
+/// after it.
 pub(super) fn merge(local: Vec<SessionInfo>, remote: Vec<SessionInfo>) -> Vec<SessionInfo> {
     let mut groups: Vec<Vec<SessionInfo>> = Vec::new();
-    for row in local {
-        match groups.last_mut() {
-            Some(group) if row.thread_of.is_some() => group.push(row),
-            _ => groups.push(vec![row]),
-        }
+    // Each row's group, by ref: a thread joins its orchestrator's (refs name the computer too).
+    let mut group_of: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for row in local.into_iter().chain(remote) {
+        let parent = row
+            .thread_of
+            .as_ref()
+            .and_then(|parent| group_of.get(&parent.reference).copied());
+        let group = match parent {
+            Some(group) => group,
+            None => {
+                groups.push(Vec::new());
+                groups.len() - 1
+            }
+        };
+        group_of.insert(row.reference(), group);
+        groups[group].push(row);
     }
-    groups.extend(remote.into_iter().map(|row| vec![row]));
-    // Stable: this computer's rows keep their order among equals.
+    // Stable: each computer's rows keep their order among equals.
     groups.sort_by(|a, b| {
         a[0].state
             .order()
@@ -351,13 +362,41 @@ pub(super) fn merge(local: Vec<SessionInfo>, remote: Vec<SessionInfo>) -> Vec<Se
     groups.into_iter().flatten().collect()
 }
 
-/// Marks each open thread of an open orchestrator and moves it right after that orchestrator,
-/// keeping the waiting-first order among the threads. A thread whose orchestrator is not open
-/// stays a top-level session, as in the sidebar.
+/// Marks each open thread of an open orchestrator of this computer and moves it right after that
+/// orchestrator (`nest`).
 fn nest_threads(
     rows: Vec<SessionInfo>,
     links: &[crate::coordinators::ThreadRecord],
     orchestrators: &std::collections::HashSet<String>,
+) -> Vec<SessionInfo> {
+    nest(
+        rows,
+        |reference| {
+            links
+                .iter()
+                .find(|link| format!("{}:{}", link.project_id, link.session_id) == reference)
+                .map(|link| {
+                    (
+                        format!(
+                            "{}:{}",
+                            link.coordinator_project_id, link.coordinator_session_id
+                        ),
+                        link.is_resolved(),
+                    )
+                })
+        },
+        |reference| orchestrators.contains(reference),
+    )
+}
+
+/// Marks each open thread of an open orchestrator and moves it right after that orchestrator,
+/// keeping the waiting-first order among the threads. A thread whose orchestrator is not open
+/// stays a top-level session, as in the sidebar. `parent` names a session's orchestrator by ref
+/// and whether that orchestrator marked it done; `orchestrator` says whether a session is one.
+pub(super) fn nest(
+    rows: Vec<SessionInfo>,
+    parent: impl Fn(&str) -> Option<(String, bool)>,
+    orchestrator: impl Fn(&str) -> bool,
 ) -> Vec<SessionInfo> {
     let titles: std::collections::HashMap<String, String> = rows
         .iter()
@@ -367,21 +406,14 @@ fn nest_threads(
         .into_iter()
         .map(|mut row| {
             let reference = row.reference();
-            row.thread_of = links
-                .iter()
-                .find(|link| format!("{}:{}", link.project_id, link.session_id) == reference)
-                .and_then(|link| {
-                    let parent = format!(
-                        "{}:{}",
-                        link.coordinator_project_id, link.coordinator_session_id
-                    );
-                    let title = titles.get(&parent)?.clone();
-                    (parent != reference).then(|| ThreadParent {
-                        reference: parent,
-                        title,
-                        resolved: link.is_resolved(),
-                    })
-                });
+            row.thread_of = parent(&reference).and_then(|(parent, resolved)| {
+                let title = titles.get(&parent)?.clone();
+                (parent != reference).then(|| ThreadParent {
+                    reference: parent,
+                    title,
+                    resolved,
+                })
+            });
             row
         })
         .partition(|row| row.thread_of.is_some());
@@ -395,7 +427,7 @@ fn nest_threads(
             threads = rest;
             mine
         };
-        if orchestrators.contains(&reference) {
+        if orchestrator(&reference) {
             row.threads = Some(mine.len());
         }
         nested.push(row);

@@ -97,7 +97,8 @@ pub(super) async fn other_computers(state: &Arc<AppState>) -> Elsewhere {
             }),
         }
     }
-    elsewhere.sessions = sessions::sorted(elsewhere.sessions);
+    // Each computer's rows come waiting first with its threads under their orchestrator
+    // (`read_listing`); `sessions::merge` sorts them in with this computer's.
     elsewhere
 }
 
@@ -140,7 +141,10 @@ async fn listing(state: &Arc<AppState>, computer: &ConnectedComputer) -> Result<
         ),
     );
     let outcome = match (rows, projects) {
-        (Ok(rows), Ok(projects)) => Ok(read_listing(&owner, &rows, &projects)),
+        (Ok(rows), Ok(projects)) => {
+            let hierarchy = hierarchy(state, &owner, &rows).await;
+            Ok(read_listing(&owner, &rows, &projects, hierarchy.as_ref()))
+        }
         // This computer's relay did not answer in time: the tunnel to it hangs.
         (Err(error), _) | (_, Err(error)) if error.starts_with(loopback::NO_ANSWER) => {
             Err(format!("{} didn't answer in time.", computer.name))
@@ -151,10 +155,53 @@ async fn listing(state: &Arc<AppState>, computer: &ConnectedComputer) -> Result<
     outcome
 }
 
+/// Which of another computer's open sessions are coordinators and which are their threads: the
+/// coordinator fields of its presentation snapshot for just those sessions (`onlySessions`).
+/// `None` when it did not answer; its threads then stay top-level.
+///
+/// CDXC:VoiceMode 2026-11-26 WHY: the voice agent left a coordinator's threads out of the call's
+/// session list and its announcements only on this computer, because which sessions are threads
+/// is in each computer's own database, which `/api/listSessions` does not answer. That computer's
+/// presentation snapshot carries it in the fields every client nests threads by
+/// (coordinators/presentation.rs), on an endpoint other computers may already read
+/// (`PEER_ALLOWED_ENDPOINTS`); `onlySessions` keeps the answer to the listed sessions, as the
+/// remote coordinator runtime asks it (server/coordinator_remote_runtime.rs).
+async fn hierarchy(state: &Arc<AppState>, computer: &Computer, rows: &Value) -> Option<Value> {
+    let keys: Vec<Value> = rows
+        .get("sessions")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|row| {
+            Some(json!({
+                "projectId": row.get("projectId")?.as_str()?,
+                "sessionId": row.get("sessionId")?.as_str()?,
+            }))
+        })
+        .collect();
+    if keys.is_empty() {
+        return None;
+    }
+    call(
+        state,
+        Some(computer),
+        "/api/readPresentationSnapshot",
+        json!({ "onlySessions": keys }),
+        LIST_TIMEOUT,
+    )
+    .await
+    .ok()
+}
+
 /// Another computer's `listSessions` and `listProjects` answers as the voice agent's rows, each
-/// marked with `computer`. Its threads stay top-level: which sessions are threads is in that
-/// computer's database, which no endpoint another computer may use reads.
-fn read_listing(computer: &Computer, rows: &Value, projects: &Value) -> Listing {
+/// marked with `computer`, waiting ones first, with each coordinator's threads marked and right
+/// after it as `snapshot` (its `readPresentationSnapshot` answer, `hierarchy`) names them.
+fn read_listing(
+    computer: &Computer,
+    rows: &Value,
+    projects: &Value,
+    snapshot: Option<&Value>,
+) -> Listing {
     let projects: Vec<ProjectInfo> = projects
         .get("projects")
         .and_then(Value::as_array)
@@ -167,7 +214,7 @@ fn read_listing(computer: &Computer, rows: &Value, projects: &Value) -> Listing 
         })
         .collect();
     let now = crate::presentation::now_iso();
-    let sessions = rows
+    let rows = rows
         .get("sessions")
         .and_then(Value::as_array)
         .into_iter()
@@ -178,6 +225,43 @@ fn read_listing(computer: &Computer, rows: &Value, projects: &Value) -> Listing 
             session
         })
         .collect();
+    // Each session's coordinator fields, by its global ref (the one `SessionInfo::reference`
+    // gives a session on another computer).
+    let global = |project_id: &str, session_id: &str| {
+        crate::ids::create_global_session_ref(&computer.server_id, project_id, session_id)
+    };
+    let roles: HashMap<String, &Value> = snapshot
+        .and_then(|snapshot| snapshot.pointer("/snapshot/sessions"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|session| {
+            Some((
+                global(
+                    session.get("projectId")?.as_str()?,
+                    session.get("sessionId")?.as_str()?,
+                ),
+                session,
+            ))
+        })
+        .collect();
+    let field = |reference: &str, key: &str| {
+        roles
+            .get(reference)
+            .and_then(|session| session.get(key))
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    };
+    let sessions = sessions::nest(
+        sessions::sorted(rows),
+        |reference| {
+            let project_id = field(reference, "coordinatorProjectId")?;
+            let session_id = field(reference, "coordinatorSessionId")?;
+            let done = field(reference, "coordinatorThreadState").as_deref() == Some("done");
+            Some((global(&project_id, &session_id), done))
+        },
+        |reference| field(reference, "coordinatorRole").as_deref() == Some("coordinator"),
+    );
     Listing { sessions, projects }
 }
 
@@ -240,6 +324,6 @@ pub(super) fn read_listing_for_tests(
     rows: &Value,
     projects: &Value,
 ) -> (Vec<SessionInfo>, Vec<ProjectInfo>) {
-    let listing = read_listing(computer, rows, projects);
+    let listing = read_listing(computer, rows, projects, None);
     (listing.sessions, listing.projects)
 }
