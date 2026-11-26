@@ -91,9 +91,15 @@ fn read_package(repository: &Path) -> Option<Value> {
     serde_json::from_str(&output.stdout).ok()
 }
 
-/// Every old workspace's app names, without Executor's own app.
-fn read_app_names(paths: &GxserverPaths) -> Vec<String> {
-    let mut names: Vec<String> = workspace_dirs(paths)
+/// The old apps: every old workspace's app names, without Executor's own app, and how many
+/// apps' names couldn't be read (`git` can't run, a repository is damaged).
+struct OldApps {
+    names: Vec<String>,
+    unreadable: usize,
+}
+
+fn read_app_names(paths: &GxserverPaths) -> OldApps {
+    let repositories: Vec<PathBuf> = workspace_dirs(paths)
         .iter()
         .flat_map(|workspace| {
             fs::read_dir(workspace.join("repositories"))
@@ -105,11 +111,18 @@ fn read_app_names(paths: &GxserverPaths) -> Vec<String> {
                 })
                 .unwrap_or_default()
         })
-        .filter_map(|repository| read_package(&repository).as_ref().and_then(app_name))
         .collect();
+    let mut names: Vec<String> = Vec::new();
+    let mut unreadable = 0;
+    for repository in &repositories {
+        match read_package(repository) {
+            Some(package) => names.extend(app_name(&package)),
+            None => unreadable += 1,
+        }
+    }
     names.sort_by_key(|name| name.to_lowercase());
     names.dedup();
-    names
+    OldApps { names, unreadable }
 }
 
 /// Stops an old Executor a previous gxserver left running (its pid file in a workspace's data
@@ -136,20 +149,46 @@ fn stop_leftovers(paths: &GxserverPaths) {
     }
 }
 
+/// The program file process `pid` runs.
+#[cfg(target_os = "macos")]
+fn executable_of(pid: u32) -> Option<PathBuf> {
+    use std::os::unix::ffi::OsStrExt;
+    let mut buffer = vec![0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
+    // SAFETY: the buffer is as long as the length passed.
+    let length = unsafe {
+        libc::proc_pidpath(
+            pid as libc::c_int,
+            buffer.as_mut_ptr().cast(),
+            buffer.len() as u32,
+        )
+    };
+    (length > 0).then(|| PathBuf::from(std::ffi::OsStr::from_bytes(&buffer[..length as usize])))
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn executable_of(pid: u32) -> Option<PathBuf> {
+    fs::read_link(format!("/proc/{pid}/exe")).ok()
+}
+
+/// Whether `pid` runs the old build's program, `<tools>/executor/<version>/executor`, by the
+/// path of the program file the system reports, never by its command line (another program's
+/// arguments can name that folder).
 #[cfg(unix)]
 fn runs_old_build(pid: u32) -> bool {
     // SAFETY: signal 0 only checks that the process exists.
     if unsafe { libc::kill(pid as libc::pid_t, 0) } != 0 {
         return false;
     }
-    let Ok(output) = std::process::Command::new("ps")
-        .args(["-o", "command=", "-p", &pid.to_string()])
-        .stdin(std::process::Stdio::null())
-        .output()
-    else {
+    let Some(program) = executable_of(pid) else {
         return false;
     };
-    String::from_utf8_lossy(&output.stdout).contains(&*build_dir().to_string_lossy())
+    let build = build_dir();
+    let builds = [Some(build.clone()), fs::canonicalize(&build).ok()];
+    program.file_name() == Some(std::ffi::OsStr::new("executor"))
+        && program
+            .parent()
+            .and_then(Path::parent)
+            .is_some_and(|versions| builds.iter().flatten().any(|build| build == versions))
 }
 
 fn remove_data(paths: &GxserverPaths) {
@@ -167,8 +206,9 @@ fn remove_data(paths: &GxserverPaths) {
     let _ = fs::remove_file(marker(paths));
 }
 
-fn write_marker(paths: &GxserverPaths, found_at: u64, apps: &[String]) {
-    let text = json!({ "foundAt": found_at, "apps": apps }).to_string();
+fn write_marker(paths: &GxserverPaths, found_at: u64, apps: &OldApps) {
+    let text = json!({ "foundAt": found_at, "apps": apps.names, "unreadable": apps.unreadable })
+        .to_string();
     let path = marker(paths);
     if fs::write(&path, text).is_ok() {
         #[cfg(unix)]
@@ -181,7 +221,9 @@ fn write_marker(paths: &GxserverPaths, found_at: u64, apps: &[String]) {
 
 /// Checks the old Executor's leftovers once per read: removes the old build, lists the old apps
 /// the first time, and deletes the data once 30 days passed. Returns the apps and when they go,
-/// or `null` when nothing is left.
+/// or `null` when nothing is left. Data whose app names couldn't all be read is kept (and read
+/// again) until then, so the user still sees there was something; only data with no app at all
+/// goes at once.
 pub(super) fn status(paths: &GxserverPaths) -> Value {
     if build_dir().exists() {
         stop_leftovers(paths);
@@ -194,35 +236,46 @@ pub(super) fn status(paths: &GxserverPaths) -> Value {
     let saved: Option<Value> = fs::read_to_string(marker(paths))
         .ok()
         .and_then(|text| serde_json::from_str(&text).ok());
+    let saved = saved.map(|saved| {
+        let found_at = saved
+            .get("foundAt")
+            .and_then(Value::as_u64)
+            .unwrap_or_else(now);
+        let names = saved
+            .get("apps")
+            .and_then(Value::as_array)
+            .map(|apps| {
+                apps.iter()
+                    .filter_map(|app| app.as_str().map(str::to_string))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let unreadable = saved.get("unreadable").and_then(Value::as_u64).unwrap_or(0) as usize;
+        (found_at, OldApps { names, unreadable })
+    });
     let (found_at, apps) = match saved {
-        Some(saved) => (
-            saved
-                .get("foundAt")
-                .and_then(Value::as_u64)
-                .unwrap_or_else(now),
-            saved
-                .get("apps")
-                .and_then(Value::as_array)
-                .map(|apps| {
-                    apps.iter()
-                        .filter_map(|app| app.as_str().map(str::to_string))
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default(),
-        ),
+        // Names that couldn't be read last time (or a record from before it counted them, with
+        // none) are read again.
+        Some((found_at, apps)) if apps.unreadable > 0 || apps.names.is_empty() => {
+            let read = read_app_names(paths);
+            write_marker(paths, found_at, &read);
+            (found_at, read)
+        }
+        Some(saved) => saved,
         None => {
-            let apps = read_app_names(paths);
+            let read = read_app_names(paths);
             let found_at = now();
-            write_marker(paths, found_at, &apps);
-            (found_at, apps)
+            write_marker(paths, found_at, &read);
+            (found_at, read)
         }
     };
     let delete_at = found_at + KEEP_FOR.as_secs();
-    if apps.is_empty() || now() >= delete_at {
+    let nothing = apps.names.is_empty() && apps.unreadable == 0;
+    if nothing || now() >= delete_at {
         remove_data(paths);
         return Value::Null;
     }
-    json!({ "apps": apps, "deleteAt": delete_at })
+    json!({ "apps": apps.names, "unreadable": apps.unreadable, "deleteAt": delete_at })
 }
 
 /// Remove: deletes the old data now.

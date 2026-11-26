@@ -317,13 +317,20 @@ impl ConnectorsTab {
             |page: &mut Self, _window, cx| page.executor_remove_old(cx),
             cx,
         );
+        // Apps whose names couldn't be read (`git` couldn't run) still count, so the row stays.
+        let unreadable = old.get("unreadable").and_then(Value::as_u64).unwrap_or(0);
+        let which = match (names.is_empty(), unreadable) {
+            (true, _) => "Some apps".to_string(),
+            (false, 0) => joined(&names),
+            (false, 1) => format!("{} and 1 app Ghostex couldn't name", joined(&names)),
+            (false, more) => format!("{} and {more} apps Ghostex couldn't name", joined(&names)),
+        };
         settings_list_item_wrapped_with_status(
             p,
             ListItemStatus::Warning,
             "Apps on the old Executor",
             detail(format!(
-                "{} ran on Ghostex's own Executor. Add them again in Executor; their sign-ins can't move.",
-                joined(&names)
+                "{which} ran on Ghostex's own Executor. Add them again in Executor; their sign-ins can't move."
             )),
             Some(remove),
         )
