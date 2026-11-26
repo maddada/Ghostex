@@ -310,22 +310,16 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
                 ..SpaceView::default()
             })
             .collect();
-        // Other closes the window's own Spaces; a joined workspace's Spaces follow it, after the
-        // row's hairline (CDXC:Workspaces 2026-11-26 in gx-protocol side_state.rs).
-        let other_at = rows
-            .iter()
-            .position(|row| row.joined_workspace.is_some())
-            .unwrap_or(rows.len());
-        rows.insert(
-            other_at,
-            SpaceView {
-                id: OTHER_SPACE_ID.to_string(),
-                name: OTHER_SPACE_LABEL.to_string(),
-                icon: OTHER_SPACE_ICON.to_string(),
-                color: String::new(),
-                ..SpaceView::default()
-            },
-        );
+        // Other closes the row, after every Space a joined workspace's included, in the order the
+        // row draws them, so a swipe walks them as shown (CDXC:Workspaces 2026-11-26 in
+        // gx-protocol side_state.rs).
+        rows.push(SpaceView {
+            id: OTHER_SPACE_ID.to_string(),
+            name: OTHER_SPACE_LABEL.to_string(),
+            icon: OTHER_SPACE_ICON.to_string(),
+            color: String::new(),
+            ..SpaceView::default()
+        });
         // The Active projects star leads the row, left of every Space.
         if active_projects_on {
             rows.insert(

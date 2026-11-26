@@ -243,7 +243,7 @@ pub(crate) struct NativeSidebarSpace {
     #[serde(default)]
     pub(crate) hidden: bool,
     /// Another workspace's Space this window shows too: that workspace's id and name (gx-core
-    /// `SpaceView::joined_workspace`). The row draws a hairline before the first one.
+    /// `SpaceView::joined_workspace`). Its hover card names that workspace.
     #[serde(default)]
     pub(crate) joined_workspace: Option<(String, String)>,
 }

@@ -1126,8 +1126,8 @@ pub struct SpaceView {
     /// A hidden Space, in the row only while Show hidden is on, and drawn dimmed there.
     pub hidden: bool,
     /// For a Space of another workspace this window shows too (Settings > Workspaces > Show
-    /// Work's Spaces): that workspace's id and name. The row draws a hairline before the first
-    /// one and its hover card names the workspace; `None` for the window's own Spaces.
+    /// Work's Spaces): that workspace's id and name. Its hover card names the workspace; `None`
+    /// for the window's own Spaces.
     pub joined_workspace: Option<(String, String)>,
 }
 

@@ -167,8 +167,8 @@ pub struct SidebarWorkspace {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tracker: Option<String>,
     /// The other workspaces whose Spaces this workspace's windows (and the phone's list of it)
-    /// show too, after a hairline in the Spaces row (Settings > Workspaces > Show Work's Spaces).
-    /// Empty: only its own Spaces, as before.
+    /// show too, mixed in with its own in the Spaces row in the one stored Spaces order (Settings >
+    /// Workspaces > Show Work's Spaces). Empty: only its own Spaces, as before.
     ///
     /// CDXC:Workspaces 2026-11-26 DECISION:
     /// User: "i want the option to merge the spaces from workspaces to my main workspaces so i dont
@@ -178,6 +178,17 @@ pub struct SidebarWorkspace {
     /// A), no label with the hover card naming the workspace (Q5012 A), the switch on the viewing
     /// workspace's section in Settings > Workspaces, per workspace (Q5013 A), reorder only inside
     /// the other workspace's group and Hide Here for one Space (Q5014 A + B). Off by default.
+    ///
+    /// CDXC:Workspaces 2026-11-26 DECISION:
+    /// User, the same day: "if i pick show work's spaces please hide the toggle between
+    /// workspaces, not needed anymore. also please allow me to swipe to the work space and back to
+    /// personal spaces regularly. also when i show a work workspace in my personal workspace allow
+    /// me to place it anywhere, remove the line between the spaces pls". So, while Spaces are on
+    /// and this list names a workspace: no workspace tile in the Spaces row (desktop
+    /// native_sidebar/workspace_tile.rs), no hairline, the shown Spaces in the stored `order`
+    /// (no grouping by workspace, gx-core `window_spaces`), Other last, a Space of either workspace
+    /// dragged anywhere (gx-core `plan_move_space`), and swipes and Go to Space walk that one row.
+    /// Supersedes the hairline (Q5011 A) and reorder only inside a group (Q5014 A).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub show_spaces_from: Vec<String>,
     /// Spaces of the workspaces in `show_spaces_from` hidden from this workspace's row only (a

@@ -839,7 +839,7 @@ impl WorkspacesTab {
         )
     }
 
-    /// One switch per other workspace: "Show Work's Spaces" adds that workspace's Spaces after
+    /// One switch per other workspace: "Show Work's Spaces" mixes that workspace's Spaces in with
     /// this one's in its windows' Spaces row (gx-protocol `SidebarWorkspace::show_spaces_from`).
     ///
     /// CDXC:Workspaces 2026-11-26 DECISION:
@@ -900,7 +900,7 @@ impl WorkspacesTab {
                 p,
                 format!("workspace-show-spaces-{workspace_id}-{other_id}"),
                 RowSpec::new(title).description(format!(
-                    "Adds {other_name}'s Spaces after yours in the Spaces row, after a line. Their sessions keep {other_name}'s accounts and sign-ins."
+                    "Mixes {other_name}'s Spaces in with yours in the Spaces row: drag them anywhere, swipe to them, and the workspace switch hides. Their sessions keep {other_name}'s accounts and sign-ins."
                 )),
                 None,
                 control,

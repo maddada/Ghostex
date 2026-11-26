@@ -132,6 +132,27 @@ impl GhostexGpuiApp {
         .is_some_and(|workspace| workspace.is_joined_project(project_id))
     }
 
+    /// Whether this window's Spaces row shows another workspace's Spaces too (Settings >
+    /// Workspaces > Show Work's Spaces, while Spaces are on): the workspace tile is hidden then
+    /// (native_sidebar/workspace_tile.rs).
+    pub(crate) fn gx_store_window_shows_joined_spaces(&self) -> bool {
+        let spaces_on = self
+            .native_sidebar
+            .snapshot
+            .as_ref()
+            .is_some_and(|snapshot| snapshot.spaces_enabled);
+        let (Some(state), Some(workspace)) = (
+            self.gx_store_workspaces_state(),
+            self.gx_store_window_workspace(),
+        ) else {
+            return false;
+        };
+        spaces_on
+            && !state
+                .joined_workspace_ids(&workspace.workspace_id)
+                .is_empty()
+    }
+
     /// The workspace this computer's project `project_id` belongs to; `None` while the daemon has
     /// no workspaces, for a project the store does not hold, and for one shown in every workspace.
     pub(crate) fn gx_store_local_project_workspace_id(&self, project_id: &str) -> Option<String> {

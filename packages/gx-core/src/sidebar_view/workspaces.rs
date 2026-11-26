@@ -283,21 +283,9 @@ pub fn window_spaces<'a>(
     if workspace.joined.is_empty() {
         return Some(Cow::Owned(filtered));
     }
-    // The window's own Spaces first, then each joined workspace's in the workspaces' order, each
-    // group keeping its own order; the row draws a hairline before the first joined Space.
-    let group_of = |space_id: &String| {
-        let space_workspace = filtered
-            .spaces
-            .get(space_id)
-            .and_then(|space| space.workspace_id.as_deref());
-        workspace
-            .joined_workspace_of_space(space_workspace)
-            .and_then(|joined| workspace.joined.iter().position(|id| *id == joined))
-            .map_or(0, |position| position + 1)
-    };
-    let mut order = std::mem::take(&mut filtered.order);
-    order.sort_by_key(group_of);
-    filtered.order = order;
+    // The joined workspaces' Spaces keep their place in the one stored order, mixed in with the
+    // window's own wherever the user dragged them (CDXC:Workspaces 2026-11-26 in gx-protocol
+    // side_state.rs; supersedes grouping them after the window's own).
     // A joined Space the window's workspace hid with Hide Here is hidden in this row only, the way
     // Hide Space hides one everywhere (dimmed while Show Hidden is on).
     if let Some(hidden_here) = workspace

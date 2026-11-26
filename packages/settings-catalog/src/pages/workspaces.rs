@@ -70,7 +70,7 @@ pub(crate) fn workspaces() -> Section {
             row(
                 "workspaceShowSpaces",
                 "Show another workspace's Spaces",
-                "Adds another workspace's Spaces after yours in this workspace's Spaces row, after a line, so you open them without switching; their sessions keep that workspace's accounts and sign-ins. Off by default.",
+                "Mixes another workspace's Spaces in with yours in this workspace's Spaces row, so you open and swipe to them without switching: drag them anywhere among yours, and the workspace switch hides while it is on. Their sessions keep that workspace's accounts and sign-ins. Off by default.",
             ),
             row(
                 "workspaceBrowserSignins",

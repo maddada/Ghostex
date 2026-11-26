@@ -192,23 +192,19 @@ impl GhostexGpuiApp {
                 super::machines::machine_icons_room(shown) - shown as f32 * (28.0 - tile_min)
             }
         };
-        // Another workspace's Spaces this window shows too follow Other after a hairline
-        // (CDXC:Workspaces 2026-11-26 in gx-protocol side_state.rs); with none of the window's own,
-        // Create space keeps only its plus in front of Other. With nothing joined both rooms are 0
-        // and the row is laid out as before.
-        let has_joined = user_spaces
-            .iter()
-            .any(|space| space.joined_workspace.is_some());
-        let create_plus = has_joined
+        // Another workspace's Spaces this window shows too sit among its own in one stored order,
+        // with no line between them (CDXC:Workspaces 2026-11-26 in gx-protocol side_state.rs); with
+        // none of the window's own, Create space keeps only its plus in front of them. With nothing
+        // joined the room is 0 and the row is laid out as before.
+        let create_plus = !user_spaces.is_empty()
             && user_spaces
                 .iter()
                 .all(|space| space.joined_workspace.is_some());
-        let separator_room = if has_joined { 1.0 + 4.0 } else { 0.0 };
         let plus_room = if create_plus { 28.0 + 4.0 } else { 0.0 };
         let spaces_need = if user_spaces.is_empty() {
             110.0 + 4.0 + tile_min
         } else {
-            (user_spaces.len() + 1) as f32 * pitch_min - 4.0 + separator_room + plus_room
+            (user_spaces.len() + 1) as f32 * pitch_min - 4.0 + plus_room
         } + if star.is_some() { pitch_min } else { 0.0 };
         let folded = machines > 0
             && row_room - bots_room - computers_room(machines) - workspace_room < spaces_need;
@@ -216,7 +212,6 @@ impl GhostexGpuiApp {
         let capacity = ((row_room + 4.0
             - bots_room
             - leading
-            - separator_room
             - plus_room
             - if star.is_some() { pitch_min } else { 0.0 })
             / pitch_min)
@@ -239,17 +234,9 @@ impl GhostexGpuiApp {
             visible.pop();
             visible.push(selected);
         }
-        // Each group drags among its own tiles only: the window's Spaces (and Other after them),
-        // then the joined workspace's after the hairline (Q5014 A; gx-core refuses a move across).
-        let (visible_own, visible_joined): (Vec<_>, Vec<_>) = visible
-            .iter()
-            .copied()
-            .partition(|space| space.joined_workspace.is_none());
-        let visible_ids: Vec<String> = visible_own.iter().map(|space| space.id.clone()).collect();
-        let joined_ids: Vec<String> = visible_joined
-            .iter()
-            .map(|space| space.id.clone())
-            .collect();
+        // Every shown Space drags among all the others, a joined workspace's too (CDXC:Workspaces
+        // 2026-11-26 in gx-protocol side_state.rs).
+        let visible_ids: Vec<String> = visible.iter().map(|space| space.id.clone()).collect();
         let light = appearance.light;
         let hidden: Vec<_> = user_spaces
             .iter()
@@ -261,10 +248,9 @@ impl GhostexGpuiApp {
         // tiles that stretch (the shown Spaces, Other and the More tile) share what the Create
         // button and the Bots slot leave of the row.
         let stretched = visible.len() + 1 + usize::from(overflow) + usize::from(star.is_some());
-        let shared = row_room - bots_room - leading - separator_room - plus_room + 4.0;
+        let shared = row_room - bots_room - leading - plus_room + 4.0;
         let pitch = (shared / stretched as f32).max(pitch_min);
-        let own_leading = leading + if star.is_some() { pitch } else { 0.0 } + plus_room;
-        let joined_leading = own_leading + (visible_own.len() + 1) as f32 * pitch + separator_room;
+        let spaces_leading = leading + if star.is_some() { pitch } else { 0.0 } + plus_room;
         let computers = if machines > 0 {
             self.render_native_machine_icons(snapshot, appearance, folded, cx)
         } else {
@@ -291,10 +277,7 @@ impl GhostexGpuiApp {
                     .on_click(cx.listener(|app, _, _, cx| { cx.stop_propagation(); app.dispatch_native_sidebar_ui(json!({"type": "editSpace"}), cx); }))
                     .map(|button| self.sidebar_focus_stop(button, "space:create", super::focus_order::SidebarStopPlace::Fixed, appearance, cx))))
                 // A dragged Space finds its place after the star's tile too.
-                .children(visible_own.into_iter().chain(snapshot.spaces.iter().filter(|space| space.id == "other")).map(|space| self.render_native_sidebar_space(space, &visible_ids, (pitch, own_leading, tile_min), appearance, cx)))
-                // The joined workspace's Spaces after the row's hairline (Q5011 A).
-                .when(!visible_joined.is_empty(), |row| row.child(div().flex_shrink_0().w(px(1.0)).h(px(16.0 * scale)).bg(appearance.foreground.opacity(0.12))))
-                .children(visible_joined.into_iter().map(|space| self.render_native_sidebar_space(space, &joined_ids, (pitch, joined_leading, tile_min), appearance, cx)))
+                .children(visible.into_iter().chain(snapshot.spaces.iter().filter(|space| space.id == "other")).map(|space| self.render_native_sidebar_space(space, &visible_ids, (pitch, spaces_leading, tile_min), appearance, cx)))
                 .when(overflow, |row| row.child(div().id("native-sidebar-more-spaces").on_prepaint(super::menus::record_menu_owner(&more_owner)).role(gpui::Role::Button).aria_label("More spaces").h(px(28.0 * scale)).flex_1().min_w(px(tile_min * scale)).flex().items_center().justify_center().rounded(px(radius * scale)).hover(|row| row.bg(appearance.hover))
                     .child(titlebar_svg_icon("titlebar/dots.svg", 16.0 * scale, appearance.chrome_icon))
                     .on_click(cx.listener(move |_, event: &gpui::ClickEvent, window, cx| {

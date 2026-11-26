@@ -571,21 +571,8 @@ fn plan_move_space(spaces: Option<&SpacesDocument>, command: &Value) -> Option<P
     if !visible.contains(&space_id.to_string()) {
         return Some(ProjectMovePlan::refused("spaceNotVisible"));
     }
-    // Another workspace's Spaces shown in this row move only among themselves, never across the
-    // hairline into the window's own (CDXC:Workspaces 2026-11-26, Q5014 A). Spaces of one
-    // workspace, the only ones a row held before, always pass.
-    let workspace_of = |id: &str| {
-        spaces.state.spaces.get(id).map(|space| {
-            // No id and the default workspace's id name the same workspace.
-            space
-                .workspace_id
-                .clone()
-                .filter(|id| !id.is_empty() && id != "personal")
-        })
-    };
-    if workspace_of(space_id) != workspace_of(target_space_id) {
-        return Some(ProjectMovePlan::refused("otherWorkspaceSpace"));
-    }
+    // Another workspace's Spaces shown in this row move anywhere among the window's own: the
+    // row holds one stored order (CDXC:Workspaces 2026-11-26 in gx-protocol side_state.rs).
     let mut order: Vec<String> = visible
         .iter()
         .filter(|id| *id != space_id)

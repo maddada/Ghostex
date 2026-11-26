@@ -18,6 +18,9 @@
 //!
 //! CDXC:Workspaces 2026-11-24 DECISION:
 //! User: draw the Spaces-row workspace toggle as a plain glyph (just the briefcase or person icon, no colored circle or card fill behind it) in the same tone (`appearance.chrome_icon`) and size (`16pt`) as the neighbouring Spaces-row icons, with the row's normal tile hairline and hover/active chrome. Remove the duplicate workspace switch from the bottom of the left rail (`app/sidebar_rail/render.rs`); the Spaces-row tile replaces it. The workspace right-click menu keeps `workspace_badge`.
+//!
+//! CDXC:Workspaces 2026-11-26 DECISION:
+//! User: "if i pick show work's spaces please hide the toggle between workspaces, not needed anymore". While the window's Spaces row shows another workspace's Spaces (Settings > Workspaces > Show Work's Spaces, with Spaces on) the tile and its hairline are not drawn; they come back when that switch is off. The workspace menu and the Go to Workspace hotkeys still switch.
 
 use gpui::prelude::FluentBuilder;
 use gpui::{
@@ -62,9 +65,10 @@ pub(crate) fn workspace_badge(icon: &str, color: gpui::Hsla, size: f32) -> AnyEl
 }
 
 impl GhostexGpuiApp {
-    /// Whether the Spaces row leads with the workspace tile now: this computer's section is shown
-    /// and its daemon has two or more workspaces (gxserver publishes none while the Workspaces
-    /// feature is off). Shown in both Rail and Classic layouts.
+    /// Whether the Spaces row leads with the workspace tile now: this computer's section is shown,
+    /// its daemon has two or more workspaces (gxserver publishes none while the Workspaces
+    /// feature is off), and the row shows no other workspace's Spaces. Shown in both Rail and
+    /// Classic layouts.
     pub(super) fn native_sidebar_workspace_tile_shown(&self) -> bool {
         self.native_sidebar
             .snapshot
@@ -72,6 +76,7 @@ impl GhostexGpuiApp {
             .is_some_and(|snapshot| {
                 snapshot.selected_machine_id == ghostex_gx_core::LOCAL_MACHINE_ID
             })
+            && !self.gx_store_window_shows_joined_spaces()
             && self.gx_store_workspace_tile().is_some()
     }
 
