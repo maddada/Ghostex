@@ -2,9 +2,10 @@
 //! the page's own script cannot see or change.
 //!
 //! CDXC:Browser 2026-11-26 DECISION:
-//! Coordinator, on the user's behalf (re-check of #762, N2): the checks that decide whether a real press may go to an element ran in the page's own script world, so a hostile page could answer them falsely (patching `elementFromPoint`, replacing `HTMLIFrameElement`, hiding a frame in a closed shadow root) or time a swap to the moment between the check and the press, and land one trusted click in a framed site (a like, follow, sign-in or pay button). The press is now decided here instead: the element is found with `DOM.querySelector`, its centre comes from `DOM.getContentQuads`, and the node really at that point comes from `DOM.getNodeForLocation`, which hit-tests the page's layout through every shadow root, open or closed. The press goes only when that node is in the page itself (the main frame), is not a frame, object or embed, and is the element or inside it (its whole subtree, shadow roots included, from `DOM.describeNode`). After the mouse moves there the same check runs again, after a short random wait, as one DevTools call, and the press follows at once; no page function runs between the move and the press, so the page cannot tell when to swap. The check runs once more while the button is down: a frame slid in during that last gap took the press, so the button is released at the far corner of the view, and no click comes of it there (a click needs the release on what took the press). A page could still win by sliding a frame in for the press and out again before that check; that takes two swaps each timed to within a DevTools round trip. Anything else gets the script click, as before. The page script still scrolls the element into view, names a file field and reports which element took the press, but none of that decides the press.
+//! Coordinator, on the user's behalf (re-check of #762, N2): the checks that decide whether a real press may go to an element ran in the page's own script world, so a hostile page could answer them falsely (patching `elementFromPoint`, replacing `HTMLIFrameElement`, hiding a frame in a closed shadow root) or time a swap to the moment between the check and the press, and land one trusted click in a framed site (a like, follow, sign-in or pay button). The press is now decided here instead: the element is found with `DOM.querySelector`, its centre comes from `DOM.getContentQuads`, and the node really at that point comes from `DOM.getNodeForLocation`, which hit-tests the page's layout through every shadow root, open or closed. The press goes only when that node is in the page itself (the main frame), is not a frame, object or embed, and is the element or inside it (its whole subtree, shadow roots included, from `DOM.describeNode`). After the mouse moves there the same check runs again, after a short random wait, as one DevTools call, and the press follows at once; no page function runs between the move and the press, so the page cannot tell when to swap. The check runs once more while the button is down: when something else came under the pointer in that last gap, the button is released at the far corner of the view. A frame that took the press then gets a mousedown but no click (its document never sees the release on what it pressed); a press that landed on the page's own element gives the page a trusted click on the nearest parent the two points share (often `body` or `html`), which is the page's own and runs its own handlers, such as one closing a menu. A page could still win by sliding a frame in for the press and out again before that check; that takes two swaps each timed to within a DevTools round trip. Anything else gets the script click, as before. The page script still scrolls the element into view, names a file field and reports which element took the press, but none of that decides the press.
 //! Coordinator, on the user's behalf (re-check 4 of #762, S1): the press point is in the view's coordinates and `DOM.getNodeForLocation` takes the document's, so on a scrolled page the checks looked above where the press landed (a frame there got a trusted click, and buttons below the fold lost their real press). Each check now reads the view's scroll offset fresh (`Page.getLayoutMetrics`' `cssVisualViewport`) and adds it to the point; the press is refused when the page scrolled since the point was worked out, or is pinch-zoomed.
 //! Coordinator, on the user's behalf (re-check 5 of #762, S2): the hit test takes whole pixels while the press lands at the exact point, so on a 2x screen a view scrolled by half a pixel let a frame just below the tested point take the press. A view scrolled by part of a pixel is refused, and the point script rounds the scroll after `scrollIntoView` so honest pages keep their real click. After a press on a page is refused because the page scrolled or something came under the pointer, that page gets the script click for a minute (`SCRIPT_CLICKS_AFTER_REFUSAL`, mcp_tools.rs), since such an attack needs many tries and an honest page almost never trips it.
+//! Coordinator, on the user's behalf (re-check 6 of #762, R1 to R3): Chromium keeps scroll offsets on whole device pixels, so at 125% and 150% a whole CSS offset is not always reachable; the point script rounds to an offset whole in both (a multiple of the smallest step that is), and steps back towards the start when the page's end clamps it. Only a refusal that may be a race (a frame, nothing, or a scroll under the pointer, `may_be_a_race`) starts the minute of script clicks; another element of the page itself (a menu's backdrop, a button drawn again on hover) does not, and a frame outside the element is told from another element by its node name.
 //! SEE-ALSO: server/src/server/cef_devtools_scope.rs (the DOM commands a session's tools may send), server/src/ghostex_cli/browser_mcp/page_scripts.rs (`GHOSTEX_CLICK_POINT_SCRIPT`).
 
 use super::*;
@@ -52,6 +53,22 @@ pub(super) struct ViewOffset {
 
 /// The refusal for a view that scrolled between the checks.
 pub(super) const PAGE_SCROLLED: &str = "The page scrolled";
+/// The refusal for a view scrolled by part of a pixel.
+const PART_PIXEL: &str = "The page is scrolled by part of a pixel";
+/// The refusal for a frame, object or embed at the point (or a node whose name could not be read).
+const FRAME_COVERS: &str = "A frame covers the element's centre";
+/// The refusal for nothing of the page at the point.
+const NOTHING_THERE: &str = "Nothing in the page is at the element's centre";
+/// The refusal for another element of the page itself at the point.
+const ANOTHER_ELEMENT: &str = "Another element covers the element's centre";
+
+/// Whether a refusal may be a page racing the checks, which starts the minute of script clicks
+/// (mcp_tools.rs): a frame, nothing, or a scroll came under the pointer. Another element of the page
+/// itself does not (a menu's backdrop, a button drawn again on hover): a press on the page's own
+/// element gains an attacker nothing.
+pub(super) fn may_be_a_race(refusal: &str) -> bool {
+    [FRAME_COVERS, NOTHING_THERE, PAGE_SCROLLED, PART_PIXEL].contains(&refusal)
+}
 
 /// The view's offset in a `Page.getLayoutMetrics` answer.
 fn view_offset(metrics: &Value) -> Option<ViewOffset> {
@@ -87,7 +104,7 @@ pub(super) fn document_point(
     // scrolled by part of a pixel (a 2x screen) would test a point beside the press.
     let whole = |offset: f64| (offset - offset.round()).abs() < 0.001;
     if !whole(now.page_x) || !whole(now.page_y) {
-        return Err("The page is scrolled by part of a pixel");
+        return Err(PART_PIXEL);
     }
     Ok((
         (point.0 as f64 + now.page_x).round() as i64,
@@ -119,16 +136,16 @@ pub(super) fn hit_refusal(
     hit_frame: Option<&str>,
 ) -> Option<&'static str> {
     let Some(hit) = hit_backend_node else {
-        return Some("Nothing in the page is at the element's centre");
+        return Some(NOTHING_THERE);
     };
     if target.main_frame.is_empty() || hit_frame != Some(target.main_frame.as_str()) {
-        return Some("A frame covers the element's centre");
+        return Some(FRAME_COVERS);
     }
     if target.frame_owners.contains(&hit) {
-        return Some("A frame covers the element's centre");
+        return Some(FRAME_COVERS);
     }
     if !target.subtree.contains(&hit) {
-        return Some("Another element covers the element's centre");
+        return Some(ANOTHER_ELEMENT);
     }
     None
 }
@@ -330,13 +347,32 @@ pub(super) fn press_refusal(
             "ignorePointerEventsNone": false,
         }),
     ) else {
-        return Ok(Some("Nothing in the page is at the element's centre"));
+        return Ok(Some(NOTHING_THERE));
     };
-    Ok(hit_refusal(
-        target,
-        hit.get("backendNodeId").and_then(Value::as_i64),
-        hit.get("frameId").and_then(Value::as_str),
-    ))
+    let backend = hit.get("backendNodeId").and_then(Value::as_i64);
+    let refusal = hit_refusal(target, backend, hit.get("frameId").and_then(Value::as_str));
+    if refusal != Some(ANOTHER_ELEMENT) {
+        return Ok(refusal);
+    }
+    // Outside the element: a frame there is a frame, not "another element" (only on the refusal
+    // path, so the press is not delayed). A name that cannot be read counts as a frame.
+    let name = client_call(
+        state,
+        page_id,
+        "DOM.describeNode",
+        json!({ "backendNodeId": backend, "depth": 0 }),
+    )
+    .ok()
+    .and_then(|described| {
+        described
+            .pointer("/node/nodeName")
+            .and_then(Value::as_str)
+            .map(str::to_ascii_uppercase)
+    });
+    Ok(Some(match name {
+        Some(name) if !FRAME_OWNERS.contains(&name.as_str()) => ANOTHER_ELEMENT,
+        _ => FRAME_COVERS,
+    }))
 }
 
 /// A short wait of 40 to 160 ms, different each time, between the mouse move and the last check,
@@ -412,6 +448,20 @@ mod tests {
         // The offset comes from the visual viewport, in CSS pixels.
         let metrics = json!({ "cssVisualViewport": { "pageX": 0, "pageY": 700, "scale": 1 } });
         assert_eq!(view_offset(&metrics), at(0.0, 700.0, 1.0));
+    }
+
+    #[test]
+    fn only_a_frame_nothing_or_a_scroll_starts_the_minute() {
+        for race in [FRAME_COVERS, NOTHING_THERE, PAGE_SCROLLED, PART_PIXEL] {
+            assert!(may_be_a_race(race), "{race}");
+        }
+        for honest in [
+            ANOTHER_ELEMENT,
+            "The page is zoomed in",
+            "The page's scroll position is unknown",
+        ] {
+            assert!(!may_be_a_race(honest), "{honest}");
+        }
     }
 
     #[test]

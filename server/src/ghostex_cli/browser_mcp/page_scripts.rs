@@ -107,8 +107,14 @@ pub(super) const GHOSTEX_CLICK_POINT_SCRIPT: &str = r##"function ghostexClickPoi
   const element = document.querySelector(selector);
   if (!element) throw new Error(`Element not found: ${selector}`);
   element.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
-  // A whole-pixel scroll: the press check refuses a view scrolled by part of a pixel (2x screens).
-  window.scrollTo({ left: Math.round(window.scrollX), top: Math.round(window.scrollY), behavior: "instant" });
+  // A whole-pixel scroll: the press check refuses a view scrolled by part of a pixel. Chromium
+  // keeps offsets on whole device pixels (at 125% only every 4th CSS pixel is whole in both), so
+  // round to a multiple of the smallest step whole in both, and step back towards the start when
+  // the end of the page clamps it.
+  const ghostexStep = (() => { const ratio = window.devicePixelRatio || 1; for (let step = 1; step <= 20; step++) if (Math.abs(step * ratio - Math.round(step * ratio)) < 1e-6) return step; return 1; })();
+  const ghostexWhole = (value) => Math.abs(value - Math.round(value)) < 0.001;
+  window.scrollTo({ left: Math.round(window.scrollX / ghostexStep) * ghostexStep, top: Math.round(window.scrollY / ghostexStep) * ghostexStep, behavior: "instant" });
+  if (!ghostexWhole(window.scrollX) || !ghostexWhole(window.scrollY)) window.scrollTo({ left: Math.trunc(window.scrollX / ghostexStep) * ghostexStep, top: Math.trunc(window.scrollY / ghostexStep) * ghostexStep, behavior: "instant" });
   const rect = element.getBoundingClientRect();
   const isFileField = (node) => node instanceof HTMLInputElement && node.type === "file";
   const fileControl = (node) => Boolean(node) && (isFileField(node) || isFileField(node.closest?.("label")?.control));

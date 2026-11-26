@@ -247,7 +247,11 @@ pub(super) fn browser_mcp_click(args: &Value, state: &mut McpState) -> CliResult
         }
         _ => Pressed::NotTried,
     };
-    if matches!(pressed, Pressed::Moved | Pressed::Covered) || refusal == Some(PAGE_SCROLLED) {
+    // A press refused after the move (or a scroll before it) starts the minute only when a frame,
+    // nothing or a scroll came under the pointer, never the page's own element (re-check 6, R2).
+    let raced =
+        matches!(pressed, Pressed::Moved | Pressed::Covered) || refusal == Some(PAGE_SCROLLED);
+    if raced && refusal.is_some_and(may_be_a_race) {
         state.script_clicks_until.insert(
             page_id.clone(),
             std::time::Instant::now() + SCRIPT_CLICKS_AFTER_REFUSAL,
@@ -375,9 +379,12 @@ enum Pressed {
 
 /// Moves the mouse to `at`, waits a moment, checks through DevTools that the point still reaches
 /// the element (click_hit_test.rs), then presses the left button there at once, checks again while
-/// it is down and releases it there, or far away when something else came under it (a click needs
-/// the release on what took the press). Only a press that passed both checks counts, so the
-/// caller's script click cannot click twice; `refusal` says why it did not.
+/// it is down and releases it there, or at the far corner of the view when something else came
+/// under it. Released there, a frame that took the press gets no click (only its mousedown), but a
+/// press that landed on the page's own element gives the page a trusted click on the parent the
+/// two points share (often `body` or `html`): the page's own handlers run, nothing else's. Only a
+/// press that passed both checks counts as the mouse click, so the caller's script click on the
+/// element follows; `refusal` says why.
 fn press_mouse_at(
     state: &mut McpState,
     page_id: &str,
