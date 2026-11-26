@@ -2,6 +2,83 @@
 
 ## Unreleased
 
+## 12.2.0 - 2026-11-26
+
+**Ghostex 12.2.0 is out.** Six more agents run Native, the chat gets a History of everything you sent, big chats stop freezing, the Inbox reply arrow can go straight to the chat box, agents' page toasts get External browser and Always, Settings gains a Browser page and clearer two-choice rows, and Clone a repo lists your own GitHub repositories.
+
+### 🤖 Native chat
+
+- **OpenCode, Pi, OMP, Hermes Agent, Cursor CLI and Grok Build now run Native,** next to Claude Code, Codex and Antigravity, with their own approval settings under Keep default.
+- **A Native Claude chat that hits its weekly limit switches to another account** instead of retrying the full one for hours, and its notice names when the limit resets ([#770](https://github.com/maddada/Ghostex/issues/770)).
+- **Native chats start reliably when the agent runs a helper that touches the terminal** (an MCP headers script, a password prompt), instead of timing out and restarting ([#767](https://github.com/maddada/Ghostex/pull/767)), thanks to @banozz0.
+- **A chat you renamed keeps its name after switching to Terminal-based** ([#763](https://github.com/maddada/Ghostex/issues/763)), and Full permissions and names survive restarts, wakes and account switches ([#750](https://github.com/maddada/Ghostex/issues/750)).
+
+### 💬 Chat
+
+- **A History pill above the chat box shows every message you sent as cards,** with search (or type M3), All / With attachments / Text only, and pictures and files on each card. It opens at once, even on huge chats.
+- **Clicking a History card puts that message in the chat box,** on a new line after what you already typed. Jump to message sits between Copy and ⋯, and ⋯ names every action (Copy reference, Put back, Rewind to here, Fork from here).
+- **Double-click a Boost pill to expand it into its full text** for this message only; Cmd+Z turns it back into the pill, and right-click offers Expand, Edit Boost and Remove.
+- **Copy reference and Reference in chat work for questions, work items and Live pages,** and the agent gets the quoted item with your message.
+- **Queued messages show why they wait as a small chip,** and long ones fold to one line with "+N lines".
+
+### ⚡ Speed
+
+- **Big chats open and scroll without freezes:** Quiet View no longer rechecks every row on each update (a chat with 8,000 messages froze for seconds), and the chat engine does less work per turn, so Enter registers faster.
+- **Saving the window layout runs off the main thread,** and the rail, the coordinator panels and SSH tunnels use far less CPU on large installs.
+
+### 📥 Inbox and Needs you
+
+- **Settings > Chat > Inbox reply arrow: Open the reply form or Reply in the chat.** With Reply in the chat, the arrow on an Inbox row or Work card puts the row's pill in the chat box and focuses it, with no form ([#771](https://github.com/maddada/Ghostex/issues/771)).
+- **Inbox rows have Seen and Not needed in their ⋯ menu, and the Inbox header's ⋯ has Clear Inbox,** each with an Undo toast. Pages you clear show as Seen in Resources.
+- **Sending a message with an answering pill settles that to-do,** so it leaves the Inbox.
+- **Needs you asks can take several answers:** tick the boxes and press Send.
+- **A coordinator's threads always show under it,** with no Park, Pin or Snooze, and a thread shown apart carries a mark naming its coordinator, thanks to @radiumcoders.
+
+### 🌐 Browser
+
+- **An agent's page toast has an External browser switch and Always.** The switch sends the page to your default browser; Always opens it and stops asking for later agent pages.
+- **Settings > Browser gathers every browser setting on one page,** led by "Let agents open and switch pages without asking".
+- **Agents can open a page in the background** (`ghostex browser open --background`) without taking over your screen.
+
+### ⚙️ Settings
+
+- **Thirteen on/off rows are now two-choice controls that name both behaviours,** such as Close buttons: Left / Right, Interrupt with: One Escape / Two Escapes and Browser pages: Beside the views / In their own row.
+- **The Autopilot supervisor can run on any agent, model and effort:** Supervisor model and "When it's at its limit" open the same model picker as a new chat ([#765](https://github.com/maddada/Ghostex/issues/765)).
+- **Settings > Workspaces can show another workspace's Spaces in this one's sidebar** (Show Work's Spaces), and opening their sessions stays in this window.
+
+### 🎨 Look
+
+- **Window art can be drawn as ASCII or Dither, in theme colours or Black and white,** and a Floating sidebar layout is a new choice in Settings > Window & Layout, with frosted glass Settings over that art. Your current look stays the default ([#757](https://github.com/maddada/Ghostex/pull/757)), thanks to @radiumcoders.
+- **The rail has a Settings gear at its bottom and Theme in ⋯,** which opens the Theme editor beside it, and its menus show with the sidebar hidden.
+- **A worktree session shows its branch under its title,** and a merged PR's badge opens Clean up / Keep.
+- **The header's git pill is narrower,** with short numbers (7.3k) and arrows for commits to push or pull.
+
+### 📂 Projects and setup
+
+- **Clone a repo lists your own GitHub repositories,** grouped by owner and newest first, signed in through the computer's `gh`. GitHub is the first source.
+- **Run in terminal appears beside a failed install, a sign-in or the Linux update command,** opening a terminal with the command typed in for you to run.
+- **Settings > Integrations > Repair adds `~/.local/bin` to your shell's PATH itself** when `ghostex` is installed there but not found.
+
+### 📱 On the phone
+
+- **The phone gets History, the new Inbox menus and multi-answer asks too.**
+- **The terminal's command pad stays open where it fits just above the keyboard,** thanks to @cagatay-io.
+- **iPhone voice calls play the agent's replies from the start again,** thanks to @cagatay-io.
+
+### 🩹 Fixes and polish
+
+- **Pi runs the agent starts itself no longer take over the lead's chat** ([#769](https://github.com/maddada/Ghostex/issues/769)).
+- **An OpenCode chat's status follows only its own conversation,** so a finished chat no longer reads as working while a sibling works ([#764](https://github.com/maddada/Ghostex/issues/764)).
+- **/compact goes through when Claude Code's command menu opens,** so Terminal-based Claude threads compact instead of showing "Message not sent" ([#768](https://github.com/maddada/Ghostex/issues/768)).
+- **A session you put to sleep stays asleep through account recovery** ([#750](https://github.com/maddada/Ghostex/issues/750)).
+- **Remote computers over SSH: the Browser waits until ssh is connected before it opens pages,** and computers with OpenSSH older than 8.7 connect.
+- **Typing a dead-key accent no longer crashes the Files view** ([#749](https://github.com/maddada/Ghostex/issues/749)).
+- **The tool line shimmer only sweeps colour,** so the text keeps its size and weight.
+- **Live page and question windows glide when dragged on macOS** ([#761](https://github.com/maddada/Ghostex/pull/761)), thanks to @banozz0.
+- **Windows: the window reopens where you closed it** ([#753](https://github.com/maddada/Ghostex/issues/753)), and Live page windows resize from every edge and stay where you leave them.
+- **Saved Prompts, Export Transcript, Attach and Scroll to Top or Bottom hotkeys work in Native chats** ([#756](https://github.com/maddada/Ghostex/issues/756)).
+- **A session can hold up to 100 open to-dos for you.**
+
 ## 12.1.1 - 2026-11-25
 
 **Ghostex 12.1.1 is out.** This patch fixes saving the Auto permission mode and the approval prompts chats kept showing after switching to Native, and makes switching projects in a new session calmer.
