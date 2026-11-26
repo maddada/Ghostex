@@ -307,8 +307,7 @@ impl GhostexGpuiApp {
     /// - A separator: Move up / Move down, Move to top / Move to bottom, Add separator, Remove.
     /// - A pinned link: Edit…, Change icon…, Move up / Move down, Move to top / Move to bottom,
     ///   Add separator, Unpin from rail.
-    /// - A pinned built-in rail item: Move up / Move down, Move to top / Move to bottom,
-    ///   Add separator, Unpin from rail.
+    /// - A pinned built-in rail item or extension view: Add separator, Unpin from rail.
     /// - A temporary (unpinned) rail item: Pin to rail, Pin to bottom.
     pub(crate) fn sidebar_rail_item_menu(&self, key: &str) -> Value {
         let layout = sidebar_rail_layout_now();
@@ -382,13 +381,20 @@ impl GhostexGpuiApp {
             rows.push(json!({ "separator": true }));
         }
         if let Some((section, index)) = pos {
-            push_position_rows(
-                &mut rows,
-                key,
-                section,
-                index,
-                layout.section(section).len(),
-            );
+            // CDXC:Sidebar 2026-11-26 DECISION:
+            // User (screenshot of a pinned icon's right-click menu): remove Move up, Move down
+            // and Move to bottom, keep Add separator. A pinned item's menu is Add separator and
+            // Unpin from rail; dragging reorders it. A pinned link's and a separator's menus keep
+            // their Move rows (not asked).
+            if rail_link_pin_id(key).is_some() {
+                push_position_rows(
+                    &mut rows,
+                    key,
+                    section,
+                    index,
+                    layout.section(section).len(),
+                );
+            }
             rows.push(json!({
                 "label": "Add separator",
                 "icon": "plus",

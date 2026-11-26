@@ -751,10 +751,10 @@ bar. Views or a bell pinned by an earlier version come off the rail once.
 ⋯, and a heading goes when everything under it is pinned. Point at a row and a
 pin shows at its right: click it to put the item on the rail. Drag any pinned
 icon, link or separator into any order in either the top group or the bottom
-group of the rail (a straight horizontal drop line shows where it will land), or
-right-click one (its menu opens right beside it) to move it up, down, to the top
-or to the bottom, add a separator below it, or unpin it; an unpinned item is
-back in ⋯. Right-clicking empty space on the rail (or ⋯) also lets you add a separator
+group of the rail (a straight horizontal drop line shows where it will land).
+Right-click a pinned icon (its menu opens right beside it) to add a separator
+below it or unpin it; a link's and a separator's menus can also move it up, down,
+to the top or to the bottom. An unpinned item is back in ⋯. Right-clicking empty space on the rail (or ⋯) also lets you add a separator
 to the top or bottom group or add a link. Clicking a
 row you have not pinned opens it at once. When that row opens a page (Hermes,
 Claude, Grok Bot, the Hubs or Voice Call), its icon shows on the rail under a

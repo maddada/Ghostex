@@ -846,9 +846,11 @@ impl GhostexGpuiApp {
             .items_center()
             .justify_center()
             .rounded(px(6.0))
-            .when(!cfg!(ghostex_web), |el| {
-                el.cursor_grab().hover(move |el| el.bg(hover))
-            })
+            .cursor_default()
+            // CDXC:Sidebar 2026-11-26 DECISION:
+            // User: "please lets show regular pointer for the separator and not the grab handle".
+            // A separator shows the arrow, as the rail's icons do, and still drags to reorder.
+            .when(!cfg!(ghostex_web), |el| el.hover(move |el| el.bg(hover)))
             .on_prepaint({
                 let bounds = bounds.clone();
                 move |rect, _, _| bounds.set(Some(rect))
