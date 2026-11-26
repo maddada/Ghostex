@@ -123,41 +123,35 @@ route then reads the screen once more for the keys, and OMP can have moved to an
 between those two reads (the first answered in the terminal, aborted or timed out). So the pick
 is taken from that second read only while it reads as the same notice, with the same rows and
 highlight, as the one the answer was verified against; the send worker then types it only while
-its own read still shows that dialog, rows and highlight (`omp_row_answer_key`). A pick from a
-client that names no notice (one from before 2026-11-05) has no earlier read to bind to: it is
-taken from the answer's own read, as before, and still goes through the send worker's guard.
+its own read still shows that dialog, rows and highlight (`omp_row_answer_key`).
 
 CDXC:SessionChat 2026-11-26 WHY:
 The same notice includes the identity of the exact request its rows answer
 (`omp_request_identity` in session_chat_omp_blocking.rs), so the detector gives a request whose
 words merely read alike a `detectedAt` of its own and a pick made on the earlier one fails the
-admission. A named notice without that identity ties the pick to no one request, so it is
-answered in the terminal (the owner's decision above `verify_omp_hook_answer_targets_dialog`).
+admission. A pick that names no notice (the CLI's, and a client's from before 2026-11-05), or a
+notice without that identity, has nothing that ties it to one request, so it is answered in the
+terminal (the owner's decision above `verify_omp_hook_answer_targets_dialog`); it used to be
+taken from the answer's own read of the screen. Voice mode names the notice it read out
+(voice_agent/tools.rs `answer_prompt`).
 */
-/// The pick of OMP's row `choice_index` on `screen`. When the answer names the notice `verified`
-/// it was checked against, only while `screen` shows that notice's dialog: the same notice
-/// (`same_notice`: its dialog's words, its exact request and its row labels) with the same row
-/// highlighted.
-/// `Ok(None)`: `screen` shows no OMP dialog with that row and the answer names no notice.
+/// The pick of OMP's row `choice_index` on `screen`, only while `screen` shows the dialog of the
+/// notice `verified` the answer was checked against: the same notice (`same_notice`: its dialog's
+/// words, its exact request and its row labels) with the same row highlighted.
 pub(crate) fn omp_row_pick_on_verified_notice(
     screen: Option<&str>,
     choice_index: usize,
     verified: Option<&crate::session_chat_notice::SessionChatTerminalNotice>,
-) -> Result<Option<crate::session_chat_omp_blocking::OmpRowPick>, DomainStateError> {
-    let Some(verified) = verified else {
-        return Ok(screen.and_then(|screen| {
-            crate::session_chat_omp_blocking::omp_row_pick(screen, choice_index)
-        }));
-    };
+) -> Result<crate::session_chat_omp_blocking::OmpRowPick, DomainStateError> {
     let answer_in_terminal = |message: &str| DomainStateError {
         code: crate::session_chat_send::ANSWER_IN_TERMINAL,
         message: message.to_string(),
     };
-    if verified.request_identity().is_none() {
+    let Some(verified) = verified.filter(|verified| verified.request_identity().is_some()) else {
         return Err(answer_in_terminal(
-            "This answer doesn't name an OMP approval Ghostex can tie to one request. Answer it in the terminal.",
+            "This answer doesn't name the OMP approval it was picked on, so Ghostex can't tie it to one request. Answer it in the terminal.",
         ));
-    }
+    };
     let Some(screen) = screen else {
         return Err(answer_in_terminal(
             crate::session_chat_send::OMP_APPROVAL_UNREAD,
@@ -169,7 +163,6 @@ pub(crate) fn omp_row_pick_on_verified_notice(
     crate::session_chat_notice::classify_session_chat_terminal_notice(Some("omp"), screen)
         .filter(|now| now.same_notice(Some(verified)) && highlight(now) == highlight(verified))
         .and_then(|_| crate::session_chat_omp_blocking::omp_row_pick(screen, choice_index))
-        .map(Some)
         .ok_or_else(prompt_changed)
 }
 

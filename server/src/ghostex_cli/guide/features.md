@@ -1975,6 +1975,11 @@ those rows for a moment until Ghostex reads the screen again; tapping one is
 refused. If two devices answer the same OMP approval card in a coordinator at
 the same moment, the coordinator can show the other device's choice as the
 answer; OMP only ever gets keys for a dialog that still shows the card's request.
+Voice mode still answers OMP's own rows, but only the ones it read out to you:
+if OMP shows something else by the time you answer, nothing is answered and it
+has to read the new choices out first. A row picked with
+`ghostex answer-session-chat-prompt`, or from an app version from before
+2026-11-05, is answered in the terminal.
 **Quote or reply to part of the chat**: select any text in the chat (a reply,
 your own message, tool output or code) and a small bar of buttons shows by
 where you let go: Copy, Add to Chat (puts the text in the chat box as a quote)

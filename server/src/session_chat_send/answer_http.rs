@@ -1758,6 +1758,24 @@ async fn answer_session_chat_prompt(
                     })
                         }
                     });
+            // OMP's own rows go through the same guard as its hook card, bound to the exact
+            // request of the notice the answer was verified against; a pick bound to none is
+            // answered in the terminal (`omp_row_pick_on_verified_notice`).
+            let omp_row =
+                (crate::session_chat_options::session_chat_option_agent(agent.as_deref())
+                    == Some(crate::session_chat_options::SessionChatOptionAgent::Omp))
+                .then(|| {
+                    omp_row_pick_on_verified_notice(
+                        screen.as_deref(),
+                        choice_index,
+                        verified.as_ref(),
+                    )
+                })
+                .transpose();
+            let omp_row = match omp_row {
+                Ok(pick) => pick,
+                Err(error) => return domain_error_response(endpoint_path, request_id, error),
+            };
             let Some(answer_key) = answer_key else {
                 return domain_error_response(
                     endpoint_path,
@@ -1771,23 +1789,6 @@ async fn answer_session_chat_prompt(
             denied_permission_row = screen.as_deref().is_some_and(|text| {
                 crate::session_chat_resume_prompt::permission_prompt_row_denies(text, choice_index)
             });
-            // OMP's own rows go through the same guard as its hook card, bound to the dialog the
-            // answer was verified against (`omp_row_pick_on_verified_notice`).
-            let omp_row =
-                (crate::session_chat_options::session_chat_option_agent(agent.as_deref())
-                    == Some(crate::session_chat_options::SessionChatOptionAgent::Omp))
-                .then(|| {
-                    omp_row_pick_on_verified_notice(
-                        screen.as_deref(),
-                        choice_index,
-                        verified.as_ref(),
-                    )
-                })
-                .transpose();
-            let omp_row = match omp_row {
-                Ok(pick) => pick.flatten(),
-                Err(error) => return domain_error_response(endpoint_path, request_id, error),
-            };
             if skips_outright {
                 vec![
                     crate::session_chat_send::SessionChatSendStep::Write("\u{1b}".to_string()),
