@@ -371,12 +371,21 @@ pub(crate) fn release_waiting_card(card_id: &str) {
     with_cards(|cards| cards.retain(|card| card.id != card_id));
 }
 
-/// The agent cancelled an MCP call: its card goes away.
-pub(crate) fn cancel_call(state: &AppState, call_id: &str) -> bool {
+/// The agent cancelled an MCP call of its session: its card goes away.
+pub(crate) fn cancel_call(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    call_id: &str,
+) -> bool {
     let card_id = with_cards(|cards| {
         cards
             .iter()
-            .find(|card| card.call_id.as_deref() == Some(call_id))
+            .find(|card| {
+                card.call_id.as_deref() == Some(call_id)
+                    && card.project_id == project_id
+                    && card.session_id == session_id
+            })
             .map(|card| card.id.clone())
     });
     match card_id {

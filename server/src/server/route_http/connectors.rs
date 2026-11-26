@@ -6,13 +6,13 @@
 use serde_json::{Map, Value};
 
 use crate::connectors::{
-    broadcast_connectors_changed, call_composio_tool, call_connector_agent_tool,
-    cancel_connector_agent_tool_call, cancel_executor_cli_sign_in, connect_composio_app,
-    connectors_enabled, connectors_off_message, install_executor_cli, list_composio_tools,
-    list_connector_agent_tools, read_connector_rules, read_connectors, refresh_composio,
-    remove_old_executor, set_connector_cli_client, set_connector_rule, sign_in_composio,
-    sign_in_connector_cli, sign_in_executor_cli, sign_out_composio, sign_out_connector_cli,
-    sign_out_executor_cli, wait_connector_agent_tools,
+    bind_connector_agent_caller, broadcast_connectors_changed, call_composio_tool,
+    call_connector_agent_tool, cancel_connector_agent_tool_call, cancel_executor_cli_sign_in,
+    connect_composio_app, connectors_enabled, connectors_off_message, install_executor_cli,
+    list_composio_tools, list_connector_agent_tools, read_connector_rules, read_connectors,
+    refresh_composio, remove_old_executor, set_connector_cli_client, set_connector_rule,
+    sign_in_composio, sign_in_connector_cli, sign_in_executor_cli, sign_out_composio,
+    sign_out_connector_cli, sign_out_executor_cli, wait_connector_agent_tools,
 };
 use crate::domain::DomainStateError;
 use crate::protocol::rpc_success;
@@ -54,6 +54,7 @@ pub(super) async fn route_connectors_http(
         endpoint,
         request_id,
         body_json,
+        caller,
         ..
     } = request;
     if !connectors_enabled(&state.paths) {
@@ -63,10 +64,22 @@ pub(super) async fn route_connectors_http(
             DomainStateError::bad_request(connectors_off_message(&state.paths)),
         ));
     }
-    let params = match read_domain_rpc_params(&body_json) {
+    let mut params = match read_domain_rpc_params(&body_json) {
         Ok(params) => params,
         Err(error) => return Ok(domain_error_response(endpoint.path, request_id, error)),
     };
+    // An agent's tools and calls belong to the session its token is (connectors/agent/session.rs).
+    let for_agent_session = matches!(
+        endpoint.path.as_str(),
+        "/api/listConnectorAgentTools"
+            | "/api/callConnectorAgentTool"
+            | "/api/cancelConnectorAgentToolCall"
+    );
+    if for_agent_session {
+        if let Err(error) = bind_connector_agent_caller(&caller, &mut params) {
+            return Ok(domain_error_response(endpoint.path, request_id, error));
+        }
+    }
     let Some(action) = action else {
         let result = if endpoint.path == "/api/waitConnectorAgentTools" {
             wait_connector_agent_tools(&state, params).await
