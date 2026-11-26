@@ -238,6 +238,10 @@ pub(super) fn browser_mcp_click(args: &Value, state: &mut McpState) -> CliResult
             );
             Pressed::NotTried
         }
+        (Some(target), Some(_)) if page_says_reachable && is_disabled(state, &page_id, target) => {
+            refusal = Some(DISABLED);
+            Pressed::NotTried
+        }
         (Some(target), Some(at)) if page_says_reachable => {
             refusal = press_refusal(state, &page_id, target, at)?;
             match refusal {
@@ -356,9 +360,10 @@ fn file_chooser_opened(state: &mut McpState, page_id: &str) -> bool {
     opened
 }
 
-/// How long a page gets only the script click after a press on it was refused because it scrolled
-/// or something came under the pointer (re-check 5 of #762): a page racing the checks needs many
-/// tries, and an honest page almost never trips one.
+/// How long a page gets only the script click after a press on it was refused because a frame,
+/// nothing, or a scroll came under the pointer, or the press went to another site's frame
+/// (`may_be_a_race`, re-checks 5 to 7 of #762): a page racing the checks needs many tries, and an
+/// honest page almost never trips one.
 const SCRIPT_CLICKS_AFTER_REFUSAL: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// How the mouse press went.
@@ -370,20 +375,22 @@ enum Pressed {
     Refused,
     /// After the move the point no longer reached the element; nothing was pressed.
     Moved,
-    /// While the button was down the point no longer reached the element: it was released far
-    /// away, so no click came of it.
+    /// While the button was down the element was not the one pressed, or the point no longer
+    /// reached it: it was released at the far corner (see `press_mouse_at` for what the page then
+    /// gets).
     Covered,
     /// Pressed and released on the element.
     Pressed,
 }
 
 /// Moves the mouse to `at`, waits a moment, checks through DevTools that the point still reaches
-/// the element (click_hit_test.rs), then presses the left button there at once, checks again while
-/// it is down and releases it there, or at the far corner of the view when something else came
-/// under it. Released there, a frame that took the press gets no click (only its mousedown), but a
+/// the element (click_hit_test.rs) and that it is not already pressed, then presses the left button
+/// there at once. While it is down, the element must be the one the page's own document has
+/// pressed (`:active`) and the point must still reach it; it is then released there, else at the
+/// far corner of the view. Released there, a frame that took the press gets no click (only its mousedown), but a
 /// press that landed on the page's own element gives the page a trusted click on the parent the
 /// two points share (often `body` or `html`): the page's own handlers run, nothing else's. Only a
-/// press that passed both checks counts as the mouse click, so the caller's script click on the
+/// press that passed every check counts as the mouse click, so the caller's script click on the
 /// element follows; `refusal` says why.
 fn press_mouse_at(
     state: &mut McpState,
@@ -415,6 +422,12 @@ fn press_mouse_at(
         return Ok(Pressed::Refused);
     }
     settle_after_move();
+    // Not pressed yet, so that being pressed after the press means this press (re-check 7, S4);
+    // asked before the last hit test so the gap to the press does not grow.
+    if being_pressed(state, page_id, target) {
+        *refusal = Some(ALREADY_PRESSED);
+        return Ok(Pressed::Moved);
+    }
     *refusal = press_refusal(state, page_id, target, at)?;
     if refusal.is_some() {
         return Ok(Pressed::Moved);
@@ -425,7 +438,13 @@ fn press_mouse_at(
         "Input.dispatchMouseEvent",
         event("mousePressed", "left", 1, 1),
     )?;
-    *refusal = press_refusal(state, page_id, target, at)?;
+    // The page's own document must have the element pressed: a press Chromium routed to another
+    // site's frame at the frame's edge leaves nothing `:active` in the page.
+    *refusal = if being_pressed(state, page_id, target) {
+        press_refusal(state, page_id, target, at)?
+    } else {
+        Some(PRESS_WENT_ELSEWHERE)
+    };
     if refusal.is_some() {
         let (far_x, far_y) = target.far_corner(at);
         for kind in ["mouseMoved", "mouseReleased"] {

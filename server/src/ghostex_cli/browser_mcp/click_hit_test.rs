@@ -6,6 +6,7 @@
 //! Coordinator, on the user's behalf (re-check 4 of #762, S1): the press point is in the view's coordinates and `DOM.getNodeForLocation` takes the document's, so on a scrolled page the checks looked above where the press landed (a frame there got a trusted click, and buttons below the fold lost their real press). Each check now reads the view's scroll offset fresh (`Page.getLayoutMetrics`' `cssVisualViewport`) and adds it to the point; the press is refused when the page scrolled since the point was worked out, or is pinch-zoomed.
 //! Coordinator, on the user's behalf (re-check 5 of #762, S2): the hit test takes whole pixels while the press lands at the exact point, so on a 2x screen a view scrolled by half a pixel let a frame just below the tested point take the press. A view scrolled by part of a pixel is refused, and the point script rounds the scroll after `scrollIntoView` so honest pages keep their real click. After a press on a page is refused because the page scrolled or something came under the pointer, that page gets the script click for a minute (`SCRIPT_CLICKS_AFTER_REFUSAL`, mcp_tools.rs), since such an attack needs many tries and an honest page almost never trips it.
 //! Coordinator, on the user's behalf (re-check 6 of #762, R1 to R3): Chromium keeps scroll offsets on whole device pixels, so at 125% and 150% a whole CSS offset is not always reachable; the point script rounds to an offset whole in both (a multiple of the smallest step that is), and steps back towards the start when the page's end clamps it. Only a refusal that may be a race (a frame, nothing, or a scroll under the pointer, `may_be_a_race`) starts the minute of script clicks; another element of the page itself (a menu's backdrop, a button drawn again on hover) does not, and a frame outside the element is told from another element by its node name.
+//! Coordinator, on the user's behalf (re-check 7 of #762, S3 and S4): a frame with a namespace prefix read as `X:IFRAME` and was not seen as a frame, so frames are now told by local name (or by holding a document). And Chromium's hit test and its routing of a real press round a frame's box differently, so at a frame's edge the check could say "the element" while the press went to the frame: while the button is down the element must now match `:active` in the page's own document (asked through DevTools' selector engine), or the press is released at the far corner and counts as a race. The geometry checks stay; `:active` is the last word.
 //! SEE-ALSO: server/src/server/cef_devtools_scope.rs (the DOM commands a session's tools may send), server/src/ghostex_cli/browser_mcp/page_scripts.rs (`GHOSTEX_CLICK_POINT_SCRIPT`).
 
 use super::*;
@@ -40,6 +41,11 @@ pub(super) struct ClickTarget {
     view: (f64, f64),
     /// Where the view stood in the page when `point` was worked out.
     offset: Option<ViewOffset>,
+    /// The document's root node id and the element's, for `being_pressed`.
+    root: i64,
+    node: i64,
+    /// The selector that named the element.
+    selector: String,
 }
 
 /// Where the view stands in the page: how far it is scrolled, in CSS pixels, and its pinch-zoom
@@ -67,7 +73,76 @@ const ANOTHER_ELEMENT: &str = "Another element covers the element's centre";
 /// itself does not (a menu's backdrop, a button drawn again on hover): a press on the page's own
 /// element gains an attacker nothing.
 pub(super) fn may_be_a_race(refusal: &str) -> bool {
-    [FRAME_COVERS, NOTHING_THERE, PAGE_SCROLLED, PART_PIXEL].contains(&refusal)
+    [
+        FRAME_COVERS,
+        NOTHING_THERE,
+        PAGE_SCROLLED,
+        PART_PIXEL,
+        PRESS_WENT_ELSEWHERE,
+    ]
+    .contains(&refusal)
+}
+
+/// The refusal for a press the page's own document did not get (another site's frame took it).
+pub(super) const PRESS_WENT_ELSEWHERE: &str =
+    "The press did not reach the element (another site's frame took it)";
+/// The refusal for an element that was already being pressed before the press.
+pub(super) const ALREADY_PRESSED: &str = "The element was already being pressed";
+
+/// Whether the page's own document has `target` (or something inside it) pressed now: it matches
+/// `:active`, asked through DevTools' selector engine, which the page cannot answer for. A press
+/// that went to another site's frame leaves nothing `:active` in the page. Chromium's hit test
+/// and its routing of a real press round a frame's box differently, so this, not geometry, is the
+/// last word (re-check 7 of #762, S4). An invalid selector or a failed call counts as not pressed.
+pub(super) fn being_pressed(state: &mut McpState, page_id: &str, target: &ClickTarget) -> bool {
+    client_call(
+        state,
+        page_id,
+        "DOM.querySelector",
+        json!({ "nodeId": target.root, "selector": format!(":is({}):active", target.selector) }),
+    )
+    .ok()
+    .and_then(|found| found.get("nodeId").and_then(Value::as_i64))
+        == Some(target.node)
+}
+
+/// The refusal for a disabled element: it cannot be pressed (`:active`), and a real press on it
+/// does nothing anyway.
+pub(super) const DISABLED: &str = "The element is disabled";
+
+/// Whether `target` matches `:disabled` (asked through DevTools' selector engine): such an
+/// element never becomes `:active`, so a press on it would read as one another site's frame took.
+pub(super) fn is_disabled(state: &mut McpState, page_id: &str, target: &ClickTarget) -> bool {
+    client_call(
+        state,
+        page_id,
+        "DOM.querySelector",
+        json!({ "nodeId": target.root, "selector": format!(":is({}):disabled", target.selector) }),
+    )
+    .ok()
+    .and_then(|found| found.get("nodeId").and_then(Value::as_i64))
+        == Some(target.node)
+}
+
+/// Whether a described node shows another document: by local name (`nodeName` carries a namespace
+/// prefix, as in `X:IFRAME`), or because it holds a content document. Not by `frameId`, which the
+/// `html` element carries too (re-check 7 of #762, S3).
+fn is_frame_owner(node: &Value) -> bool {
+    let named = |key: &str| {
+        node.get(key)
+            .and_then(Value::as_str)
+            .is_some_and(|name| FRAME_OWNERS.contains(&name.to_ascii_uppercase().as_str()))
+    };
+    named("localName") || named("nodeName") || node.get("contentDocument").is_some()
+}
+
+/// Whether a described node is an `input` element, by local name or node name.
+fn is_input(node: &Value) -> bool {
+    ["localName", "nodeName"].iter().any(|key| {
+        node.get(*key)
+            .and_then(Value::as_str)
+            .is_some_and(|name| name.eq_ignore_ascii_case("input"))
+    })
 }
 
 /// The view's offset in a `Page.getLayoutMetrics` answer.
@@ -102,7 +177,11 @@ pub(super) fn document_point(
     }
     // The hit test takes whole pixels while the press lands at the exact point, so a view
     // scrolled by part of a pixel (a 2x screen) would test a point beside the press.
-    let whole = |offset: f64| (offset - offset.round()).abs() < 0.001;
+    // `Page.getLayoutMetrics` reports the offset in single precision, so far down a page at 175%
+    // a whole offset comes back a little off (re-check 7, N1): the tolerance follows the number's
+    // precision, capped well under a device pixel.
+    let whole =
+        |offset: f64| (offset - offset.round()).abs() < (offset.abs() * 1.3e-7).clamp(0.001, 0.04);
     if !whole(now.page_x) || !whole(now.page_y) {
         return Err(PART_PIXEL);
     }
@@ -129,7 +208,8 @@ impl ClickTarget {
 }
 
 /// Why a press at the target's point would not reach it, or `None` when it would. A frame owner
-/// outside the element is "another element"; one inside it is known from its subtree.
+/// outside the element is "another element" here; `press_refusal` reads its name and reports it as
+/// a frame. One inside it is known from its subtree.
 pub(super) fn hit_refusal(
     target: &ClickTarget,
     hit_backend_node: Option<i64>,
@@ -199,6 +279,9 @@ pub(super) fn click_target(
         point,
         view,
         offset,
+        root,
+        node: node_id,
+        selector: selector.to_string(),
     }))
 }
 
@@ -213,17 +296,13 @@ struct Subtree {
 /// Adds `node` and what it holds (children, shadow roots, pseudo elements) to `found`, but not
 /// the documents of frames inside it, and notes frame owners and a file upload field.
 fn collect_subtree(node: &Value, found: &mut Subtree) {
-    let name = node
-        .get("nodeName")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
     if let Some(id) = node.get("backendNodeId").and_then(Value::as_i64) {
         found.nodes.insert(id);
-        if FRAME_OWNERS.contains(&name.to_ascii_uppercase().as_str()) {
+        if is_frame_owner(node) {
             found.frame_owners.insert(id);
         }
     }
-    if name.eq_ignore_ascii_case("INPUT")
+    if is_input(node)
         && attribute(node, "type").is_some_and(|kind| kind.eq_ignore_ascii_case("file"))
     {
         found.file_field = true;
@@ -356,23 +435,22 @@ pub(super) fn press_refusal(
     }
     // Outside the element: a frame there is a frame, not "another element" (only on the refusal
     // path, so the press is not delayed). A name that cannot be read counts as a frame.
-    let name = client_call(
+    let described = client_call(
         state,
         page_id,
         "DOM.describeNode",
         json!({ "backendNodeId": backend, "depth": 0 }),
     )
-    .ok()
-    .and_then(|described| {
-        described
-            .pointer("/node/nodeName")
-            .and_then(Value::as_str)
-            .map(str::to_ascii_uppercase)
-    });
-    Ok(Some(match name {
-        Some(name) if !FRAME_OWNERS.contains(&name.as_str()) => ANOTHER_ELEMENT,
-        _ => FRAME_COVERS,
-    }))
+    .ok();
+    Ok(Some(
+        match described
+            .as_ref()
+            .and_then(|described| described.get("node"))
+        {
+            Some(node) if !is_frame_owner(node) => ANOTHER_ELEMENT,
+            _ => FRAME_COVERS,
+        },
+    ))
 }
 
 /// A short wait of 40 to 160 ms, different each time, between the mouse move and the last check,
@@ -395,6 +473,9 @@ mod tests {
             point: Some((10, 10)),
             view: (800.0, 600.0),
             offset: None,
+            root: 1,
+            node: 2,
+            selector: "#ok".to_string(),
         }
     }
 
@@ -451,12 +532,70 @@ mod tests {
     }
 
     #[test]
+    fn a_frame_is_known_by_its_local_name_or_its_document() {
+        assert!(is_frame_owner(
+            &json!({ "nodeName": "IFRAME", "localName": "iframe" })
+        ));
+        // A namespace prefix (re-check 7, S3).
+        assert!(is_frame_owner(
+            &json!({ "nodeName": "X:IFRAME", "localName": "iframe" })
+        ));
+        assert!(is_frame_owner(
+            &json!({ "nodeName": "X:EMBED", "localName": "embed" })
+        ));
+        assert!(is_frame_owner(
+            &json!({ "nodeName": "X:THING", "contentDocument": {} })
+        ));
+        // An element with a frame id (`html`) is not a frame.
+        assert!(!is_frame_owner(
+            &json!({ "nodeName": "HTML", "localName": "html", "frameId": "F" })
+        ));
+        assert!(!is_frame_owner(
+            &json!({ "nodeName": "X:DIV", "localName": "div" })
+        ));
+        let mut found = Subtree::default();
+        collect_subtree(
+            &json!({ "backendNodeId": 1, "nodeName": "DIV", "localName": "div", "children": [
+                { "backendNodeId": 2, "nodeName": "X:IFRAME", "localName": "iframe" },
+                { "backendNodeId": 3, "nodeName": "X:INPUT", "localName": "input", "attributes": ["type", "file"] }
+            ] }),
+            &mut found,
+        );
+        assert_eq!(found.frame_owners, [2].into_iter().collect());
+        assert!(found.file_field);
+    }
+
+    #[test]
+    fn a_whole_offset_far_down_a_page_at_175_percent_is_whole() {
+        let at = |page_y| {
+            Some(ViewOffset {
+                page_x: 0.0,
+                page_y,
+                scale: 1.0,
+            })
+        };
+        // Single precision: 29548 comes back as 29548.00195 (re-check 7, N1).
+        assert!(document_point((10, 10), at(29548.00195), at(29548.00195)).is_ok());
+        assert!(document_point((10, 10), at(262144.031), at(262144.031)).is_ok());
+        // Half a pixel is still part of a pixel, however far down.
+        assert!(document_point((10, 10), at(29548.5), at(29548.5)).is_err());
+        assert!(document_point((10, 10), at(200.25), at(200.25)).is_err());
+    }
+
+    #[test]
     fn only_a_frame_nothing_or_a_scroll_starts_the_minute() {
-        for race in [FRAME_COVERS, NOTHING_THERE, PAGE_SCROLLED, PART_PIXEL] {
+        for race in [
+            FRAME_COVERS,
+            NOTHING_THERE,
+            PAGE_SCROLLED,
+            PART_PIXEL,
+            PRESS_WENT_ELSEWHERE,
+        ] {
             assert!(may_be_a_race(race), "{race}");
         }
         for honest in [
             ANOTHER_ELEMENT,
+            ALREADY_PRESSED,
             "The page is zoomed in",
             "The page's scroll position is unknown",
         ] {
