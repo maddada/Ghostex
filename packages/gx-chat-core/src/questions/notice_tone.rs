@@ -50,6 +50,15 @@ pub fn is_error_terminal_notice(notice: &serde_json::Value) -> bool {
     if notice["passthrough"].is_object() {
         return false;
     }
+    // OMP's tool approval left to the terminal has no `passthrough` object any more (CDXC:SessionChat
+    // 2026-11-26 in terminal_picker.rs) but is still the approval that owns the agent's input, so
+    // it keeps the pass-through card's place below the dock.
+    if crate::questions::model::is_omp_tool_approval(
+        notice["kind"].as_str().unwrap_or_default(),
+        notice["title"].as_str().unwrap_or_default(),
+    ) {
+        return false;
+    }
     if notice["dialog"]["presentation"]["picker"].is_object()
         || notice["dialog"]["presentation"]["sideQuestion"].is_object()
     {
