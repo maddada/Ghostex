@@ -955,7 +955,7 @@ How to use this file:
 - **Turn words** `voiceAgentTurnWords` (structured value; change it in Settings, not with `ghostex settings set`): The words that end your turn, separated by commas, for one language at a time: English "reply", "over" and "go ahead", German "fertig" and "antworte", and the English ones for any other language until you set some. Up to 8, each up to 40 characters. Reset to defaults puts that language's own words back.
 ### Memory
 
-- **Last conversation** `voiceAgentMemory` (Settings UI row without a settings key; use `ghostex settings open`): A short summary of your last voice conversation, kept on this computer until the next conversation replaces it. Press Continue in the voice panel, or say "pick up where we left off", to carry on from it. Forget deletes it.
+- **Last conversation** `voiceAgentMemory` (Settings UI row without a settings key; use `ghostex settings open`): A short summary of your last voice conversation, kept on this computer until the next conversation replaces it. Say "pick up where we left off" in a call to carry on from it. Forget deletes it.
 ## Hotkeys (tab `hotkeys`)
 
 ### Projects
