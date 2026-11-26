@@ -183,11 +183,20 @@ pub(crate) fn check_page_command(
     }
     // The Pick buttons do not depend on the width, so they are said once.
     let mut repeated = 0;
+    let mut cards = 0;
     if let Some(result) = results.first() {
         let picks = pick_findings(&result.report);
         if !picks.is_empty() {
             println!("Pick buttons:");
             for finding in picks {
+                println!("  - {finding}");
+            }
+        }
+        let unpickable = card_findings(&result.report);
+        cards = unpickable.len();
+        if !unpickable.is_empty() {
+            println!("Nothing to pick:");
+            for finding in unpickable {
                 println!("  - {finding}");
             }
         }
@@ -208,6 +217,13 @@ pub(crate) fn check_page_command(
         }
     }
     println!("Look at each screenshot before sending the page.");
+    if cards > 0 {
+        return Err(CliError::Other(format!(
+            "{cards} question{} or option card{} on this page cannot be picked; fix what is listed under \"Nothing to pick\" and check again.",
+            if cards == 1 { "" } else { "s" },
+            if cards == 1 { "" } else { "s" },
+        )));
+    }
     if repeated > 0 {
         return Err(CliError::Other(format!(
             "{repeated} question{} {} the items listed above {}; put the picks on the rows and check again.",
@@ -260,7 +276,8 @@ pub(crate) fn findings_for_show(path: &Path) -> ShowFindings {
             picks: results
                 .first()
                 .map(|result| {
-                    let mut picks = pick_findings(&result.report);
+                    let mut picks = card_findings(&result.report);
+                    picks.extend(pick_findings(&result.report));
                     picks.extend(repeated_findings(&result.report));
                     picks
                 })
@@ -849,6 +866,138 @@ pub(crate) fn repeated_findings(report: &Value) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// The questions and option cards a reader could not pick from, from the kit's report
+/// (`window.__ghostexKit`, visual_pages/kit.rs `addCardChoices`, `bindOptions`, `looseCards`): a
+/// question with no `<gx-choice>` (`made` when the kit made its choices from the cards tied to it,
+/// `empty` when it was left with only "Other"), a tied card whose question or choice does not exist
+/// (`orphans`), and an option card with no Pick button (`loose`). Each line says the markup that
+/// fixes it. `ghostex visual check` fails on them; `ghostex show` warns.
+///
+/// CDXC:SessionChat 2026-11-26 DECISION:
+/// User, on a page whose two option cards sat above a question that listed no choice, so the cards had no Pick button and the question offered only "Other / none of these" (and `ghostex visual check` had passed it): "You sent me this question with 2 choices but without the ability to pick :( please fix this so it never happens again". The kit now makes such a question's choices from its cards, and the check refuses the page anyway, since older Ghostex versions make no choices from cards and only the written `<gx-choice>` lines are the documented way.
+pub(crate) fn card_findings(report: &Value) -> Vec<String> {
+    let list = |key: &str| {
+        report
+            .pointer(&format!("/kit/{key}"))
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    };
+    let text = |item: &Value, key: &str| {
+        item.get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(str::to_string)
+    };
+    let name = |item: &Value| match (text(item, "tag"), text(item, "title")) {
+        (Some(tag), Some(title)) => format!("{tag} \"{title}\""),
+        (None, Some(title)) => format!("\"{title}\""),
+        (Some(tag), None) => tag,
+        (None, None) => format!(
+            "\"{}\"",
+            text(item, "question").unwrap_or_else(|| "a question".to_string())
+        ),
+    };
+    let mut findings = Vec::new();
+    for question in list("made") {
+        let choices: Vec<String> = question
+            .get("choices")
+            .and_then(Value::as_array)
+            .map(|choices| {
+                choices
+                    .iter()
+                    .map(|choice| {
+                        let value = text(choice, "value").unwrap_or_default();
+                        let label = text(choice, "label").unwrap_or_else(|| value.clone());
+                        let recommended = if choice
+                            .get("recommended")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(false)
+                        {
+                            " recommended"
+                        } else {
+                            ""
+                        };
+                        format!(
+                            "<gx-choice value=\"{}\"{recommended}>{}<small>its trade-off in one line</small></gx-choice>",
+                            attr(&value),
+                            html(&label)
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        findings.push(format!(
+            "{} lists no <gx-choice>, so older Ghostex versions show its {} cards with no Pick button and the question with only \"Other / none of these\". Write one <gx-choice> per card inside the <gx-question>, in the cards' order, its value exactly the card's data-choice: {}",
+            name(&question),
+            choices.len(),
+            choices.join(" ")
+        ));
+    }
+    for question in list("empty") {
+        let asked = text(&question, "tag")
+            .or_else(|| text(&question, "question"))
+            .unwrap_or_else(|| "Q1".to_string());
+        findings.push(format!(
+            "{} has no choices of its own, so the reader sees only \"Other / none of these\" and cannot pick. Write one <gx-choice value=\"…\">Label<small>one line</small></gx-choice> per option inside the <gx-question>; for option cards above it, also put data-question=\"{asked}\" and data-choice=\"<that choice's value>\" on each card (the element holding its heading). If it asks for words, not a pick, give it type=\"text\".",
+            name(&question)
+        ));
+    }
+    for card in list("orphans") {
+        let asked = text(&card, "question").unwrap_or_default();
+        let wanted = text(&card, "choice").unwrap_or_default();
+        let label = text(&card, "label").unwrap_or_else(|| wanted.clone());
+        let found = card.get("found").and_then(Value::as_bool).unwrap_or(false);
+        if found {
+            let choices: Vec<String> = card
+                .get("choices")
+                .and_then(Value::as_array)
+                .map(|choices| {
+                    choices
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(|value| format!("\"{value}\""))
+                        .collect()
+                })
+                .unwrap_or_default();
+            findings.push(format!(
+                "The card \"{label}\" has data-choice=\"{wanted}\", but {} has no such choice (its choices: {}), so the card got no Pick button. Set data-choice to one of those values, or add <gx-choice value=\"{}\">{}</gx-choice> to the question.",
+                name(&card),
+                if choices.is_empty() { "none".to_string() } else { choices.join(", ") },
+                attr(&wanted),
+                html(&label)
+            ));
+        } else {
+            findings.push(format!(
+                "The card \"{label}\" has data-question=\"{asked}\", but no <gx-question> has that tag, name or title, so the card got no Pick button. Set data-question to the tag of the question it answers (for example data-question=\"Q1\" for <gx-question tag=\"Q1\">), or write that question under the cards."
+            ));
+        }
+    }
+    for card in list("loose") {
+        let label = text(&card, "label").unwrap_or_else(|| "an option card".to_string());
+        let ribbon = card.get("ribbon").and_then(Value::as_bool).unwrap_or(false);
+        findings.push(format!(
+            "The option card \"{label}\"{} looks pickable but has no Pick button, because no question is tied to it. Put data-question=\"<the question's tag>\" and data-choice=\"<its choice's value>\" on the card and list that <gx-choice> in the question under it; if the cards are not options to pick from, use a .gx-grid of .gx-card instead of .gx-options{}.",
+            if ribbon { " (marked Recommended)" } else { "" },
+            if ribbon { " and drop the .gx-ribbon" } else { "" }
+        ));
+    }
+    findings
+}
+
+/// `text` safe inside a double-quoted HTML attribute.
+fn attr(text: &str) -> String {
+    html(text).replace('"', "&quot;")
+}
+
+/// `text` safe as HTML text.
+fn html(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 fn describe(item: &Value) -> String {
@@ -1618,6 +1767,87 @@ mod tests {
             pick_findings(&json!({"page":true,"kit":{"tied":1,"auto":[],"untied":[]}})).is_empty()
         );
         assert!(pick_findings(&json!({"page":true,"kit":null})).is_empty());
+    }
+
+    /// The agy page (Q5147): two tied cards over a question that listed no `<gx-choice>`. The kit
+    /// makes the choices from the cards so each gets its Pick button, and reports the question; a
+    /// question left with only "Other", tied cards naming a missing question or choice, and a
+    /// Recommended card tied to nothing are reported too. A page written the documented way, and
+    /// a Today vs proposal comparison row, report nothing.
+    #[test]
+    fn cards_the_reader_cannot_pick_are_reported_and_tied_cards_always_get_a_pick() {
+        const KIT: &str = r#"JSON.stringify({kit:window.__ghostexKit,picks:Array.prototype.map.call(document.querySelectorAll(".gx-pick"),function(p){return p.closest("[data-question]")?p.closest("[data-question]").getAttribute("data-choice"):"";})})"#;
+        let page = format!(
+            "<gx-questions>{}{}{}{}{}</gx-questions>",
+            "<gx-wide><div class=\"gx-options\"><section data-question=\"Q1\" data-choice=\"agy usage\"><span class=\"gx-ribbon\">Recommended</span><h3>A. From agy's own /usage</h3></section><section data-question=\"Q1\" data-choice=\"notices\"><h3>B. Only the notice</h3></section></div></gx-wide><gx-question tag=\"Q1\" title=\"How should usage show?\"><p>Why.</p></gx-question>",
+            "<gx-question tag=\"Q2\" title=\"Nothing here\"></gx-question>",
+            "<section data-question=\"Q3\" data-choice=\"gamma\"><h3>A. Alpha</h3></section><section data-question=\"Q9\" data-choice=\"x\"><h3>B. Lost</h3></section><gx-question tag=\"Q3\" title=\"Which?\"><gx-choice value=\"alpha\">A. Alpha</gx-choice></gx-question>",
+            "<div class=\"gx-options\"><div class=\"gx-card\"><span class=\"gx-ribbon\">Recommended</span><h3>Fast lane</h3></div><div class=\"gx-card\"><h3>Slow lane</h3></div></div>",
+            "<div class=\"gx-options\"><section><h3>Today</h3></section><section><h3>With the new rules</h3></section></div><gx-question tag=\"Q4\" title=\"Notes?\" type=\"text\"></gx-question>",
+        );
+        let Some(found) = eval_in_page(&page, KIT) else {
+            return;
+        };
+        let kit = &found["kit"];
+        assert_eq!(found["picks"], json!(["agy usage", "notices"]), "{found}");
+        assert_eq!(kit["made"][0]["tag"], "Q1", "{found}");
+        assert_eq!(kit["made"][0]["choices"][0]["recommended"], true, "{found}");
+        assert_eq!(kit["made"][0]["choices"][1]["label"], "B. Only the notice", "{found}");
+        assert_eq!(kit["empty"].as_array().unwrap().len(), 1, "{found}");
+        assert_eq!(kit["empty"][0]["tag"], "Q2", "{found}");
+        let orphans: Vec<(&str, bool)> = kit["orphans"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|o| (o["choice"].as_str().unwrap(), o["found"].as_bool().unwrap()))
+            .collect();
+        assert_eq!(orphans, vec![("gamma", true), ("x", false)], "{found}");
+        let loose: Vec<&str> = kit["loose"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["label"].as_str().unwrap())
+            .collect();
+        assert_eq!(loose, vec!["Fast lane", "Slow lane"], "{found}");
+        let findings = card_findings(&json!({ "kit": kit }));
+        assert_eq!(findings.len(), 6, "{findings:#?}");
+
+        let good = "<gx-questions><gx-wide><div class=\"gx-options\"><section data-question=\"Q1\" data-choice=\"a\"><span class=\"gx-ribbon\">Recommended</span><h3>A. One</h3></section><section data-question=\"Q1\" data-choice=\"b\"><h3>B. Two</h3></section></div></gx-wide><gx-question tag=\"Q1\" title=\"Which?\"><gx-choice value=\"a\" recommended>A. One</gx-choice><gx-choice value=\"b\">B. Two</gx-choice></gx-question></gx-questions>";
+        let Some(found) = eval_in_page(good, KIT) else {
+            return;
+        };
+        assert_eq!(found["picks"], json!(["a", "b"]), "{found}");
+        assert!(
+            card_findings(&json!({ "kit": found["kit"] })).is_empty(),
+            "{found}"
+        );
+    }
+
+    #[test]
+    fn each_unpickable_finding_says_the_markup_that_fixes_it() {
+        let report = json!({"kit":{
+            "made":[{"question":"How?","tag":"Q5147","title":"How?","choices":[
+                {"value":"agy usage","label":"A. From agy's own /usage","recommended":true},
+                {"value":"notices","label":"B. <Only> notices","recommended":false}]}],
+            "empty":[{"question":"Why?","tag":"Q2","title":"Why?"}],
+            "orphans":[{"question":"Colour theme","choice":"Ocean","label":"Ocean","found":false},
+                       {"question":"Q3","choice":"gamma","label":"A. Alpha","found":true,"tag":"Q3","title":"Which?","choices":["alpha"]}],
+            "loose":[{"label":"Fast lane","ribbon":true}]}});
+        let findings = card_findings(&report);
+        assert_eq!(findings.len(), 5, "{findings:#?}");
+        assert!(findings[0].starts_with("Q5147 \"How?\" lists no <gx-choice>"));
+        assert!(findings[0].contains(
+            "<gx-choice value=\"agy usage\" recommended>A. From agy's own /usage<small>"
+        ));
+        assert!(findings[0].contains("<gx-choice value=\"notices\">B. &lt;Only&gt; notices<small>"));
+        assert!(findings[1].starts_with("Q2 \"Why?\" has no choices of its own"));
+        assert!(findings[1].contains("data-question=\"Q2\""));
+        assert!(findings[2].contains("data-question=\"Colour theme\", but no <gx-question>"));
+        assert!(findings[3].contains("its choices: \"alpha\""));
+        assert!(findings[4].contains("(marked Recommended) looks pickable"));
+        assert!(findings[4].contains(".gx-grid of .gx-card"));
+        assert!(card_findings(&json!({"kit":{"tied":1}})).is_empty());
+        assert!(card_findings(&json!({"kit":null})).is_empty());
     }
 
     #[test]
