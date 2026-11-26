@@ -2,9 +2,9 @@
 // Drives the page in headless Chrome over the DevTools protocol (no dependencies): waits in real time so the gxserver WebSocket can deliver, prints the page's console, and saves a screenshot.
 // usage: node shot.mjs <out.png> [--wait ms] [--timeout ms] [--size WxH] [--url url] [--click x,y]... [--wheel x,y,deltaY] [--type text] [--insert text] [--key Enter] [--shot mid.png]
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import { basename, join } from 'node:path';
 
 const args = process.argv.slice(2);
 const out = args.shift();
@@ -22,17 +22,32 @@ const wait = Number(option('--wait', 4000));
 const [width, height] = option('--size', '1280x800').split('x').map(Number);
 const url = option('--url', 'http://localhost:4174/');
 
-import { existsSync, readdirSync } from 'node:fs';
-import { homedir } from 'node:os';
+// Prefer Playwright's chrome-headless-shell (no Dock icon, no macOS MacAppCodeSignClone 2 GB copy,
+// and keeps working under memory pressure), then Chrome for Testing, then system Chrome.
+function sortedPlaywrightBuilds(cache, prefix) {
+  if (!existsSync(cache)) return [];
+  const pattern = new RegExp(`^${prefix}-(\\d+)$`);
+  return readdirSync(cache)
+    .map((name) => {
+      const match = pattern.exec(name);
+      return match ? { name, rev: Number(match[1]) } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.rev - a.rev)
+    .map((entry) => entry.name);
+}
 
-// Playwright's Chrome for Testing when it is installed (the system Chrome stopped exposing DevTools in headless mode after its 153 update), else the system Chrome.
 function chromeBinary() {
-  // An explicit binary wins: Playwright's headless shell keeps working when Chrome for Testing stalls on a loaded machine (its navigations never commit).
   if (process.env.SHOT_CHROME) return process.env.SHOT_CHROME;
   if (process.platform === 'win32') {
     const cache = join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData/Local'), 'ms-playwright');
-    const builds = existsSync(cache) ? readdirSync(cache).filter(name => /^chromium-\d+$/.test(name)).sort().reverse() : [];
-    for (const build of builds) {
+    for (const build of sortedPlaywrightBuilds(cache, 'chromium_headless_shell')) {
+      for (const rel of ['chrome-headless-shell-win64/chrome-headless-shell.exe', 'chrome-win/headless_shell.exe']) {
+        const candidate = join(cache, build, rel);
+        if (existsSync(candidate)) return candidate;
+      }
+    }
+    for (const build of sortedPlaywrightBuilds(cache, 'chromium')) {
       for (const directory of ['chrome-win64', 'chrome-win']) {
         const candidate = join(cache, build, directory, 'chrome.exe');
         if (existsSync(candidate)) return candidate;
@@ -46,8 +61,13 @@ function chromeBinary() {
   }
   if (process.platform === 'linux') {
     const cache = join(process.env.XDG_CACHE_HOME ?? join(homedir(), '.cache'), 'ms-playwright');
-    const builds = existsSync(cache) ? readdirSync(cache).filter((name) => /^chromium-\d+$/.test(name)).sort().reverse() : [];
-    for (const build of builds) {
+    for (const build of sortedPlaywrightBuilds(cache, 'chromium_headless_shell')) {
+      for (const rel of ['chrome-headless-shell-linux64/chrome-headless-shell', 'chrome-linux/headless_shell']) {
+        const candidate = join(cache, build, rel);
+        if (existsSync(candidate)) return candidate;
+      }
+    }
+    for (const build of sortedPlaywrightBuilds(cache, 'chromium')) {
       for (const rel of ['chrome-linux/chrome', 'chrome-linux64/chrome']) {
         const candidate = join(cache, build, rel);
         if (existsSync(candidate)) return candidate;
@@ -59,23 +79,60 @@ function chromeBinary() {
     throw new Error('Install Chromium, Google Chrome, or Playwright Chromium to run GPUI web screenshots.');
   }
   const cache = join(homedir(), 'Library/Caches/ms-playwright');
-  const builds = existsSync(cache) ? readdirSync(cache).filter((name) => /^chromium-\d+$/.test(name)).sort() : [];
-  for (const build of builds.reverse()) {
-    const candidate = join(cache, build, 'chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
-    if (existsSync(candidate)) return candidate;
+  for (const build of sortedPlaywrightBuilds(cache, 'chromium_headless_shell')) {
+    for (const rel of [
+      'chrome-headless-shell-mac-arm64/chrome-headless-shell',
+      'chrome-headless-shell-mac-x64/chrome-headless-shell',
+    ]) {
+      const candidate = join(cache, build, rel);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+  for (const build of sortedPlaywrightBuilds(cache, 'chromium')) {
+    for (const rel of [
+      'chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
+      'chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
+    ]) {
+      const candidate = join(cache, build, rel);
+      if (existsSync(candidate)) return candidate;
+    }
   }
   return '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 }
 
+// Safely remove abandoned gpui-web-shot-* temp profiles older than 24 h from earlier crashed runs.
+function pruneStaleProfiles() {
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  try {
+    const root = tmpdir();
+    for (const name of readdirSync(root)) {
+      if (!name.startsWith('gpui-web-shot-')) continue;
+      const full = join(root, name);
+      try {
+        const stat = lstatSync(full);
+        if (stat.isDirectory() && stat.mtimeMs < cutoff) {
+          rmSync(full, { recursive: true, force: true });
+        }
+      } catch {}
+    }
+  } catch {}
+}
+
+pruneStaleProfiles();
+
 // CDXC:WebGpui 2026-09-24 WHY: A random port in 9300-9799 could land on Ghostex's own CEF DevTools port (9333-9343); Chrome then failed to bind and this script drove the user's live app instead, loading a Storybook story into the Add Project modal. Chrome picks a free port and reports it in its own profile, so only the Chrome we spawned is reachable.
+const binary = chromeBinary();
+const isHeadlessShell = basename(binary).toLowerCase().includes('headless');
 const profileDir = mkdtempSync(join(tmpdir(), 'gpui-web-shot-'));
 const chrome = spawn(
-  chromeBinary(),
+  binary,
   [
-    '--headless=new',
+    ...(isHeadlessShell ? ['--headless'] : ['--headless=new']),
     // Without these Chrome asks the macOS keychain for its "Chrome Safe Storage" key; where a sandbox blocks the keychain macOS shows a "Keychain Not Found" popup.
     '--use-mock-keychain',
     '--password-store=basic',
+    // Prevent macOS Chrome from APFS-cloning its ~2 GB app bundle into /var/folders/.../X.
+    ...(process.platform === 'darwin' && !isHeadlessShell ? ['--disable-features=MacAppCodeSignClone'] : []),
     ...(process.platform === 'linux'
       ? [
           '--disable-webgpu',
@@ -97,12 +154,58 @@ const chrome = spawn(
   { stdio: ['ignore', 'ignore', process.env.SHOT_CHROME_LOG ? 'inherit' : 'ignore'], windowsHide: true },
 );
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const exited = new Promise((resolve) => {
+  if (chrome.exitCode !== null || chrome.signalCode !== null) resolve();
+  else chrome.once('exit', resolve);
+});
 let socket;
+let sendFn;
+let cleanupPromise;
+
+// Close Chrome cleanly so it releases its temp profile and macOS code-sign clone before exit,
+// escalating to SIGTERM then SIGKILL only if it refuses to stop.
+async function closeChrome() {
+  if (cleanupPromise) return cleanupPromise;
+  cleanupPromise = (async () => {
+    try {
+      if (sendFn && socket && socket.readyState === WebSocket.OPEN) {
+        await Promise.race([sendFn('Browser.close').catch(() => {}), sleep(1000)]);
+      }
+    } catch {}
+    try {
+      socket?.close();
+    } catch {}
+    const waitExit = (ms) => Promise.race([exited.then(() => true), sleep(ms).then(() => false)]);
+    if (!(await waitExit(2000))) {
+      try {
+        chrome.kill('SIGTERM');
+      } catch {}
+      if (!(await waitExit(1000))) {
+        try {
+          chrome.kill('SIGKILL');
+        } catch {}
+        await waitExit(1000);
+      }
+    }
+    try {
+      rmSync(profileDir, { recursive: true, force: true });
+    } catch {}
+  })();
+  return cleanupPromise;
+}
+
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.once(sig, async () => {
+    clearTimeout(watchdog);
+    await closeChrome();
+    process.exit(sig === 'SIGINT' ? 130 : 143);
+  });
+}
+
 // A run that stalls (a page that stops answering, a navigation that never commits) would otherwise be killed from outside, skipping the `finally` below and leaving its Chrome and its ~100 MB profile behind. The watchdog ends it from inside.
-const watchdog = setTimeout(() => {
+const watchdog = setTimeout(async () => {
   console.log('[timeout] the run did not finish; Chrome was stopped');
-  chrome.kill('SIGKILL');
-  rmSync(profileDir, { recursive: true, force: true });
+  await closeChrome();
   process.exit(2);
 }, Number(option('--timeout', 90000)));
 
@@ -138,6 +241,7 @@ try {
       pending.set(id, resolve);
       socket.send(JSON.stringify({ id, method, params }));
     });
+  sendFn = send;
   socket.onclose = () => console.log('[devtools socket closed]');
   await send('Inspector.enable');
   await send('Runtime.enable');
@@ -222,11 +326,7 @@ try {
   const { data } = await send('Page.captureScreenshot', { format: 'png' });
   writeFileSync(out, Buffer.from(data, 'base64'));
   console.log(`saved ${out}`);
-  await send('Browser.close');
 } finally {
-  socket?.close();
   clearTimeout(watchdog);
-  chrome.kill('SIGKILL');
-  // The throwaway Chrome profile is ~100 MB; without this every screenshot left one in $TMPDIR.
-  setTimeout(() => rmSync(profileDir, { recursive: true, force: true }), 500);
+  await closeChrome();
 }
