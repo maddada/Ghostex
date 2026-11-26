@@ -4742,7 +4742,7 @@ version of the Projects features in Cursor and Claude Code.
   coordinator itself never answers these cards: only your click does. After an
   answer the card folds to one line that says how it ended: answered here,
   answered in the thread (when you answered it there instead), expired (a
-  Connectors card waits 30 minutes) or moved on (the thread stopped asking).
+  Connectors card waits 30 minutes, an Executor one 14) or moved on (the thread stopped asking).
   A click on a card that changed in the meantime is refused and the card shows
   the current one. Threads on another computer are answered in that thread.
 - **Work items**: a coordinator keeps each line of work as one work item (W7),
@@ -8471,11 +8471,17 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   card in that session's chat: Approve, Always allow (stop asking for that
   tool in this workspace) or Deny, and the session shows waiting on you in
   the sidebar until it is answered; a card nobody answers ends after 30
-  minutes. Every Executor tool call (`executor_call`) counts as one that may
-  change something, since Executor doesn't say beforehand which tools only
-  read, so it asks until you pick Always allow for that tool; a program an
-  agent runs through Executor (`executor_execute`) asks only for the steps
-  whose app asks for approval. `ghostex connectors rules` shows what a
+  minutes (14 for Executor, whose own approval ends at 15). Every Executor
+  tool call (`executor_call`) counts as one that may change something, since
+  Executor doesn't say beforehand which tools only read, so it asks until you
+  pick Always allow for that tool, and the card shows the call's whole input
+  (long values shortened, saying so). A program an agent runs through
+  Executor (`executor_execute`) follows the rules for every app and tool it
+  names: with Ask its card shows the program's code first, with Never it
+  doesn't run. Ghostex refuses a program that uses Executor's own app or
+  reaches apps without naming each one, as `tools.<app>.<tool>(…)`. An
+  Approve answers one step: a later step that asks again shows another card.
+  `ghostex connectors rules` shows what a
   workspace does with such calls, and `ghostex connectors rule <tool|all>
   <ask|allow|never|default>` changes it, for example `rule all never` so
   agents in that workspace can only read, or `rule GMAIL_SEND_EMAIL allow`.

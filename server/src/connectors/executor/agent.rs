@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 
-use super::cli::MANAGEMENT_SLUG;
+use super::paths;
 use super::relay;
 use super::status::{self, Snapshot};
 
@@ -20,7 +20,7 @@ const LIST_TIMEOUT: Duration = Duration::from_secs(60);
 /// A paused program that keeps asking for input Ghostex can't collect is given up on after this.
 const MAX_INPUT_CANCELS: usize = 20;
 const APPROVAL_NOTE: &str = "Ghostex asks the user itself before a step that needs approval, so a call returns only once it finished or the user declined it.";
-const MANAGEMENT_REFUSED: &str = "Agents can't use Executor's own app (its apps, accounts and settings). The user manages Executor in Executor itself.";
+const PROGRAM_NOTE: &str = "Ghostex runs a program only when it names each app where it uses it, as tools.<app>.<tool>(…) or tools[\"<app>\"]…, and follows the workspace's rules for each.";
 const NOT_READY: &str = "Executor isn't ready: sign the Executor CLI in on Settings > Connectors.";
 
 /// Executor's MCP tools as agents get them, for the CLI version they were read from.
@@ -55,9 +55,13 @@ fn agent_description(text: &str) -> String {
     format!("{} {APPROVAL_NOTE}", kept.trim())
 }
 
+/// The Executor tools agents get, and the only ones Ghostex forwards: `resume` stays Ghostex's,
+/// and a tool a later Executor adds reaches agents only once Ghostex knows what it does.
+pub(crate) const KNOWN_TOOLS: [&str; 5] = ["skills", "search", "describe", "call", "execute"];
+
 fn agent_tool(tool: &Value) -> Option<Value> {
     let name = tool.get("name").and_then(Value::as_str)?;
-    if name == "resume" {
+    if !KNOWN_TOOLS.contains(&name) {
         return None;
     }
     let mut tool = tool.clone();
@@ -66,12 +70,17 @@ fn agent_tool(tool: &Value) -> Option<Value> {
             .and_then(Value::as_str)
             .unwrap_or_default(),
     );
+    let description = if name == "execute" {
+        format!("{description} {PROGRAM_NOTE}")
+    } else {
+        description
+    };
     tool["name"] = json!(format!("{TOOL_PREFIX}{name}"));
     tool["description"] = json!(description);
     Some(tool)
 }
 
-/// Executor's tools as agents get them: `executor_<name>`, `resume` left out. Read through the
+/// Executor's tools as agents get them: `executor_<name>`, [`KNOWN_TOOLS`] only. Read through the
 /// relay once per CLI version.
 pub(crate) fn agent_tools() -> Result<Vec<Value>, String> {
     let snapshot = status::snapshot();
@@ -103,80 +112,92 @@ pub(crate) struct PlannedCall {
     pub(crate) input: Value,
 }
 
-/// A tool path's app slug and tool: `tools.linear.issues.list` and `tools["hacker-news"].top`
-/// both work, as Executor accepts either.
-fn split_path(path: &str) -> (String, String) {
-    let path = path.trim();
-    let address = path.strip_prefix("tools").unwrap_or(path);
-    if let Some(rest) = address.strip_prefix('[') {
-        let quote = rest.chars().next().unwrap_or('"');
-        let inner = rest.get(1..).unwrap_or_default();
-        if let Some(end) = inner.find(quote) {
-            let slug = &inner[..end];
-            let tool = inner[end + 1..]
-                .trim_start_matches(']')
-                .trim_start_matches('.');
-            return (slug.to_string(), tool.to_string());
-        }
+/// How a card names a tool: `send_email in Gmail (app app_1)`, with Executor's id for the app,
+/// since rules follow an app's address and two apps can have taken it in turn.
+fn tool_label(snapshot: &Snapshot, slug: &str, tool: Option<&str>) -> String {
+    let app = snapshot.app_by_slug(slug);
+    let name = app.map_or(slug, |app| app.name.as_str());
+    let named = match app.map(|app| app.id.as_str()).filter(|id| !id.is_empty()) {
+        Some(id) => format!("{name} (app {id})"),
+        None => name.to_string(),
+    };
+    match tool {
+        Some(tool) => format!("{tool} in {named}"),
+        None => format!("any tool in {named}"),
     }
-    let address = address.trim_start_matches('.');
-    let (slug, tool) = address.split_once('.').unwrap_or((address, ""));
-    (slug.to_string(), tool.to_string())
 }
 
-/// The calls an `executor_call` would make (`calls`: one `{ path, input }` or an array).
+/// The calls an `executor_call` would make (`calls`: one `{ path, input }` or a non-empty array of
+/// them, as Executor's `CallInput` takes), each read the way Executor reads its path. Anything
+/// else is refused, so a call Ghostex couldn't read never runs.
 ///
 /// CDXC:Connectors 2026-11-27 WHY:
 /// The local Executor Ghostex used to run told it which tools only read; through the CLI's MCP relay nothing says so before a call (an undeclared mutation runs without pausing, tried on 2.0.0-beta.79), so every `executor_call` counts as one that may change something and follows the workspace's rules: a card until the user picks Always allow for that tool.
 pub(crate) fn plan_calls(arguments: &Value) -> Result<Vec<PlannedCall>, String> {
+    let unreadable = || {
+        "Ghostex can't read this call: give `calls` as one { path, input } or a list of them."
+            .to_string()
+    };
     let calls = match arguments.get("calls") {
-        Some(Value::Array(items)) => items.clone(),
+        Some(Value::Array(items)) if !items.is_empty() => items.clone(),
         Some(item @ Value::Object(_)) => vec![item.clone()],
-        _ => Vec::new(),
+        _ => return Err(unreadable()),
     };
     let snapshot = status::snapshot();
     calls
         .iter()
         .map(|call| {
-            let path = call.get("path").and_then(Value::as_str).unwrap_or_default();
-            let (slug, tool) = split_path(path);
-            if slug == MANAGEMENT_SLUG {
-                return Err(MANAGEMENT_REFUSED.to_string());
-            }
-            let name = snapshot
-                .app_by_slug(&slug)
-                .map(|app| app.name.clone())
-                .unwrap_or_else(|| slug.clone());
-            let input = call.get("input").cloned().unwrap_or(Value::Null);
-            // `{ accountId, input }` picks a signed-in account; the card shows what the tool gets.
-            let input = match &input {
-                Value::Object(fields) if fields.len() == 2 && fields.contains_key("accountId") => {
-                    fields.get("input").cloned().unwrap_or(Value::Null)
-                }
-                _ => input,
-            };
+            let path = call
+                .get("path")
+                .and_then(Value::as_str)
+                .ok_or_else(unreadable)?;
+            let input = call.get("input").cloned().ok_or_else(unreadable)?;
+            let (slug, tool) = paths::call_path(path)?;
             Ok(PlannedCall {
                 key: format!("executor:{slug}.{tool}"),
-                label: format!("{tool} in {name}"),
+                label: tool_label(&snapshot, &slug, Some(&tool)),
                 input,
             })
         })
         .collect()
 }
 
-/// Whether a program names Executor's own app, which agents may not use.
-pub(crate) fn program_uses_management(arguments: &Value) -> bool {
+/// An agent's `executor_execute`: its code and what it reaches.
+pub(crate) struct PlannedProgram {
+    pub(crate) code: String,
+    /// `executor:<app>.<tool>` for each tool it calls directly.
+    pub(crate) keys: Vec<String>,
+    /// Apps it may use any tool of.
+    pub(crate) whole_apps: Vec<String>,
+    /// Each tool or app it reaches, for the card.
+    pub(crate) labels: Vec<String>,
+}
+
+/// Reads a program (`code`), or says why Ghostex won't run it: Executor's own app, or `tools`
+/// reached in a way Ghostex can't check (connectors/executor/paths.rs).
+pub(crate) fn plan_program(arguments: &Value) -> Result<PlannedProgram, String> {
     let code = arguments
         .get("code")
         .and_then(Value::as_str)
-        .unwrap_or_default();
-    ["tools.executor", "tools[\"executor\"]", "tools['executor']"]
-        .iter()
-        .any(|needle| code.contains(needle))
-}
-
-pub(crate) fn management_refused() -> &'static str {
-    MANAGEMENT_REFUSED
+        .ok_or("Ghostex can't read this program: give its JavaScript as `code`.")?;
+    let reach = paths::program_reach(code)?;
+    let snapshot = status::snapshot();
+    let mut program = PlannedProgram {
+        code: code.to_string(),
+        keys: Vec::new(),
+        whole_apps: Vec::new(),
+        labels: Vec::new(),
+    };
+    for (slug, tool) in &reach.apps {
+        program
+            .labels
+            .push(tool_label(&snapshot, slug, tool.as_deref()));
+        match tool {
+            Some(tool) => program.keys.push(format!("executor:{slug}.{tool}")),
+            None => program.whole_apps.push(slug.clone()),
+        }
+    }
+    Ok(program)
 }
 
 /// Where an agent's Executor call stands.
@@ -251,6 +272,20 @@ fn settle(snapshot: &Snapshot, mut result: Value) -> Result<Step, String> {
             Some("input-required") if !request_id.is_empty() => {
                 result = resume_rpc(snapshot, &request_id, json!({ "action": "cancel" }))?;
             }
+            // A pause that ended before its answer came: Executor's answer also lists every open
+            // request of the sign-in, which is not the agent's to see.
+            Some("unavailable") => {
+                let reason = outcome
+                    .get("reason")
+                    .and_then(Value::as_str)
+                    .unwrap_or("ended");
+                return Ok(Step::Done(json!({
+                    "content": [{ "type": "text", "text": format!(
+                        "Executor's approval ended before the answer reached it ({reason}), so that step didn't run. Earlier steps may already have made changes: check with a read before trying again, and don't rerun it on your own."
+                    ) }],
+                    "isError": true,
+                })));
+            }
             _ => return Ok(Step::Done(result)),
         }
     }
@@ -262,6 +297,11 @@ fn settle(snapshot: &Snapshot, mut result: Value) -> Result<Step, String> {
 
 /// Calls one of Executor's MCP tools for an agent (`tool` without the `executor_` prefix).
 pub(crate) fn call(tool: &str, arguments: &Value) -> Result<Step, String> {
+    if !KNOWN_TOOLS.contains(&tool) {
+        return Err(format!(
+            "Executor has no tool Ghostex gives agents named {tool}."
+        ));
+    }
     let snapshot = status::snapshot();
     let result = rpc(
         &snapshot,

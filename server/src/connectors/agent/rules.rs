@@ -127,3 +127,41 @@ pub(crate) fn decide(paths: &GxserverPaths, workspace: &str, keys: &[String]) ->
         Rule::Ask
     }
 }
+
+/// What an Executor program does: never under a Never default; else as [`decide`] for the tools
+/// it calls (`keys`) and, for each app it may use any tool of (`apps`), the default and every
+/// rule for that app's tools. A program that reaches no app runs.
+pub(crate) fn decide_program(
+    paths: &GxserverPaths,
+    workspace: &str,
+    keys: &[String],
+    apps: &[String],
+) -> Rule {
+    let rules = load(paths, workspace);
+    let default = rules.default.unwrap_or(Rule::Ask);
+    if default == Rule::Never {
+        return Rule::Never;
+    }
+    let mut found: Vec<Rule> = keys
+        .iter()
+        .map(|key| rules.tools.get(key).copied().unwrap_or(default))
+        .collect();
+    for app in apps {
+        let prefix = format!("executor:{app}.");
+        found.push(default);
+        found.extend(
+            rules
+                .tools
+                .iter()
+                .filter(|(key, _)| key.starts_with(&prefix))
+                .map(|(_, rule)| *rule),
+        );
+    }
+    if found.contains(&Rule::Never) {
+        Rule::Never
+    } else if found.iter().all(|rule| *rule == Rule::Allow) {
+        Rule::Allow
+    } else {
+        Rule::Ask
+    }
+}

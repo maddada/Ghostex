@@ -6,6 +6,7 @@
 pub(super) mod agent;
 mod cli;
 mod legacy;
+mod paths;
 mod relay;
 mod signin;
 mod status;
