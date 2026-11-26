@@ -144,10 +144,11 @@ fn heading_takes_row_into_group(
     group_of_session(core, inputs, session_id).is_some_and(|source| source.group_id != group_id)
 }
 
-/// A `moveSession` of a pinned row onto another pinned row drawn in the same Pinned section:
+/// A `moveSession` of a pinned row onto another pinned row drawn in the same Pinned section, or
+/// onto a pinned row linked to the same lead and drawn under it ([`pinned_lead_siblings`]):
 /// `None` when it is not one (the ordinary rules answer it), `Some(None)` when it is refused
 /// (Pinned order is Most recently updated, or nothing moves), else the pin calls that renumber the
-/// section and where the row lands (CDXC:Sidebar 2026-11-07 WHY in pinned_order.rs).
+/// rows and where the row lands (CDXC:Sidebar 2026-11-07 WHY in pinned_order.rs).
 fn plan_drawn_pinned_move(
     inputs: &SidebarInputs,
     model: &SidebarViewModel,
@@ -175,36 +176,43 @@ fn plan_drawn_pinned_move(
         .groups
         .iter()
         .find(|group| group.core.group_id == group_id)?;
-    let section = group
+    let pinned_section = group
         .core
         .sections
         .iter()
-        .find(|section| section.id == crate::sidebar_view::SectionId::Pinned)?;
-    let drawn = |id: &str| section.session_ids.iter().any(|drawn| drawn == id);
-    if !drawn(session_id) || !drawn(&target) {
-        return None;
-    }
+        .find(|section| section.id == crate::sidebar_view::SectionId::Pinned)
+        .filter(|section| {
+            let drawn = |id: &str| section.session_ids.iter().any(|drawn| drawn == id);
+            drawn(session_id) && drawn(&target)
+        });
+    let (section_id, rows) = match pinned_section {
+        Some(section) => {
+            // A coordinator's open threads are drawn in its section without being pinned
+            // themselves; the pin calls that renumber the section must not pin them.
+            let rows: Vec<(String, Option<i64>)> = section
+                .session_ids
+                .iter()
+                .filter_map(|id| {
+                    let row = &group
+                        .core
+                        .sessions
+                        .iter()
+                        .find(|session| session.row.sidebar_session_id == *id)?
+                        .row;
+                    // Chief is always pinned first by `sort_pinned`, never reordered by
+                    // `sidebarOrder`, and renumbering Pinned must not persist `isPinned: true`
+                    // onto Chief (otherwise retiring it to an earlier chat would leave that old
+                    // dated chat stuck in Pinned).
+                    (row.is_pinned && !row.is_chief).then(|| (id.clone(), row.sidebar_order))
+                })
+                .collect();
+            (section.id, rows)
+        }
+        None => pinned_lead_siblings(&group.core, session_id, &target)?,
+    };
     if inputs.settings.pinned_session_order == crate::sidebar_view::PinnedSessionOrder::Recent {
         return Some(None);
     }
-    // A coordinator's open threads are drawn in its section without being pinned themselves; the
-    // pin calls that renumber the section must not pin them.
-    let rows: Vec<(String, Option<i64>)> = section
-        .session_ids
-        .iter()
-        .filter_map(|id| {
-            let row = &group
-                .core
-                .sessions
-                .iter()
-                .find(|session| session.row.sidebar_session_id == *id)?
-                .row;
-            // Chief is always pinned first by `sort_pinned`, never reordered by `sidebarOrder`,
-            // and renumbering Pinned must not persist `isPinned: true` onto Chief (otherwise
-            // retiring it to an earlier chat would leave that old dated chat stuck in Pinned).
-            (row.is_pinned && !row.is_chief).then(|| (id.clone(), row.sidebar_order))
-        })
-        .collect();
     if !rows.iter().any(|(id, _)| id == session_id) {
         return None;
     }
@@ -227,7 +235,7 @@ fn plan_drawn_pinned_move(
         messages: reorder.messages,
         landing: Some(DropLanding {
             group_id: group_id.to_string(),
-            section: crate::sidebar_view::SectionId::Pinned.as_str().to_string(),
+            section: section_id.as_str().to_string(),
             after_session_id: index
                 .checked_sub(1)
                 .and_then(|before| reorder.order.get(before))
@@ -238,6 +246,65 @@ fn plan_drawn_pinned_move(
         command: planned,
         handoff: None,
     }))
+}
+
+/// The pinned sessions linked to the same lead as `moved` and `target`, as drawn under that lead
+/// (with their saved order), and the section they are drawn in; `None` unless both rows are such
+/// sessions. Pinned rows sort by `sidebarOrder` (sidebar_view/ordering.rs `sort_pinned`) and a
+/// lead's linked sessions follow that order under it (`nest_threads`), so renumbering just these
+/// rows reorders them under the lead and moves nothing else.
+///
+/// CDXC:LeadLinks 2026-11-26 DECISION:
+/// GitHub #725 (a pinned linked session stays in place under its lead): the user picked "pin
+/// first", with "allow reorder using drag for those pinned threads under the lead too pls". A
+/// pinned session linked to a lead already sits first among the lead's sessions, but a drag
+/// between two of them was planned as the project order write, which pinned rows do not sort by,
+/// so the drop drew no line and moved nothing unless the lead itself was pinned. Such a drag now
+/// renumbers those pinned rows as a drag inside Pinned does.
+fn pinned_lead_siblings(
+    group: &crate::sidebar_view::GroupCore,
+    moved: &str,
+    target: &str,
+) -> Option<(crate::sidebar_view::SectionId, Vec<(String, Option<i64>)>)> {
+    let row_of = |id: &str| {
+        group
+            .sessions
+            .iter()
+            .find(|session| session.row.sidebar_session_id == id)
+    };
+    let (moved_row, target_row) = (row_of(moved)?, row_of(target)?);
+    let lead = moved_row.row.coordinator_parent.as_ref()?;
+    let linked_pinned_under = |session: &crate::sidebar_view::SessionView| {
+        session.row.lead_linked
+            && session.row.is_pinned
+            && session.nesting.depth > 0
+            && session.row.coordinator_parent.as_ref() == Some(lead)
+    };
+    if !linked_pinned_under(moved_row) || !linked_pinned_under(target_row) {
+        return None;
+    }
+    let section = group.sections.iter().find(|section| {
+        let drawn = |id: &str| section.session_ids.iter().any(|drawn| drawn == id);
+        drawn(moved) && drawn(target)
+    })?;
+    let rows = group
+        .sessions
+        .iter()
+        .filter(|session| {
+            linked_pinned_under(session)
+                && section
+                    .session_ids
+                    .iter()
+                    .any(|drawn| *drawn == session.row.sidebar_session_id)
+        })
+        .map(|session| {
+            (
+                session.row.sidebar_session_id.clone(),
+                session.row.sidebar_order,
+            )
+        })
+        .collect();
+    Some((section.id, rows))
 }
 
 /// `moveSessionToSection`: the flags of the section the row is dropped into, and for Pinned the
