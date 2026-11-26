@@ -5995,14 +5995,14 @@ the voice screen shows "Only about <title> (<project>)" with an All sessions
 button.
 
 It remembers your last conversation as a short summary, kept on your computer
-until the next conversation replaces it. When you start a new conversation, the
-panel shows a "Last conversation" card: press Continue and the agent says in a
-sentence where things stood and carries on from there, or press Start fresh (or
-just start talking) to begin a new topic. You can also say "pick up where we
-left off" at any time. Once it continues, the panel shows "Remembering last
-conversation"; click it to read the whole summary. Forget on the card, or the
-Forget button in Settings > Voice Agent > Memory, deletes the summary for the
-desktop and the phone. The summary is written by a small text model of the same
+until the next conversation replaces it. A new call doesn't offer it: say
+"pick up where we left off" (or ask what you talked about last time) and the
+agent says in a sentence where things stood and carries on from there. Once it
+has, the panel shows "Remembering last conversation"; click it to read the
+whole summary. Forget there, or the Forget button in Settings > Voice Agent >
+Memory, deletes the summary for the desktop and the phone. A computer with an
+older Ghostex still shows a "Last conversation" card with Continue and Start
+fresh when a call starts. The summary is written by a small text model of the same
 provider, with the same key, right after a conversation ends.
 
 It needs an API key: pick xAI Grok Voice (the default) or OpenAI GPT Realtime
@@ -6076,8 +6076,10 @@ Regular call with the switch on, the call's spoken introduction names them); the
 app shows that earlier switch only for a computer without the language settings, which still
 ends a turn on those three words only in a Regular call with that switch on.
 They save the computer's settings, so the desktop and the phone talk
-with the same voice at the same speed and in the same mode. It shows
-the same "Last conversation" card with Continue, Start fresh and Forget.
+with the same voice at the same speed and in the same mode. Once a call
+recalled the last conversation, it shows "Remembering last conversation" with
+Forget (a computer with an older Ghostex still offers the "Last conversation"
+card with Continue, Start fresh and Forget).
 
 The voice agent is a built-in extension, on by default; its settings are
 Settings > Voice Agent, under App in the Settings sidebar right below Dictation.

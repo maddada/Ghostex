@@ -563,10 +563,14 @@ impl Conversation {
                     })));
                     let _ = previous.send(ClientFrame::Close);
                 }
+                // A call that continued the remembered conversation shows it on every attach; one
+                // that did not offers it only as `memory::offered_at_start` says.
                 let memory = if self.started_focused {
                     Value::Null
-                } else {
+                } else if self.call_log.continued() {
                     memory::client_view(&self.state.paths)
+                } else {
+                    memory::offered_at_start(&self.state.paths)
                 };
                 let _ = out.send(ClientFrame::Json(self.ready_frame(resumed, memory)));
                 if resumed {
