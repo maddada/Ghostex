@@ -816,8 +816,9 @@ impl GpuiVisualPageModalWindow {
                 (this.host)(VisualPageModalCommand::Hide, cx)
             }),
         );
-        // The Keep open pin sits beyond the ⋯ menu (CDXC:SessionChat 2026-11-26 DECISION on
-        // `keep_open`): filled and in the page's ink while it is on, as the mockup's pin is.
+        // CDXC:SessionChat 2026-11-26 DECISION:
+        // User: "in live page swap pin with 3 dots button pls". The Keep open pin sits beside Hide and the ⋯ button beyond it: ⋯, pin, Hide, × in the right corner, and the mirror of that in the left corner (×, Hide, pin, ⋯). Supersedes the pin beyond the ⋯ button, as it was first built for #778.
+        // The pin is filled and in the page's ink while it is on, as the mockup's pin is.
         let (pin_icon, pin_label, pin_glass) = if self.keep_open {
             (
                 ICON_PIN_ON,
@@ -836,8 +837,9 @@ impl GpuiVisualPageModalWindow {
                 this.toggle_keep_open(cx);
             }),
         );
-        // The ⋯ menu (Export page, Import answers, Open in browser) sits beside Hide and Close
-        // (CDXC:SessionChat 2026-11-13 DECISION in more_menu.rs); its button's bounds place the menu.
+        // The ⋯ menu (Export page, Import answers, Open in browser) is one button among these
+        // controls (CDXC:SessionChat 2026-11-13 DECISION in more_menu.rs), beyond the pin; its
+        // button's bounds place the menu.
         let more_bounds = self.more_button.clone();
         let more = control_button("visual-page-more", ICON_MORE, "More", glass)
             .relative()
@@ -860,8 +862,8 @@ impl GpuiVisualPageModalWindow {
                         .gap(px(6.0))
                         .child(close)
                         .child(hide)
-                        .child(more)
-                        .child(pin),
+                        .child(pin)
+                        .child(more),
                 ),
                 None,
             )
@@ -871,8 +873,8 @@ impl GpuiVisualPageModalWindow {
                 Some(
                     h_flex()
                         .gap(px(6.0))
-                        .child(pin)
                         .child(more)
+                        .child(pin)
                         .child(hide)
                         .child(close),
                 ),

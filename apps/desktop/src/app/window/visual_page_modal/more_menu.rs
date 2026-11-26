@@ -1,6 +1,6 @@
 //! The page window's ⋯ menu: Export page, Import answers, Open in browser and, while the page waits
-//! for answers, Snooze with its lengths in a submenu, in one menu beside the window's Hide and
-//! Close instead of a round button each.
+//! for answers, Snooze with its lengths in a submenu, in one menu among the window's round
+//! controls instead of a round button each.
 //!
 //! The page is a native CEF view that nothing drawn in this window can sit above, so the menu
 //! always opens in a host window of its own (`FrostedHostKind::PageWindowMenu`) just under the ⋯
@@ -9,7 +9,7 @@
 //! the host window casts the menu's soft shadow (`frosted_host.rs`).
 //!
 //! CDXC:SessionChat 2026-11-13 DECISION:
-//! User: "in the desktop's floating Ghostex page window, add a ⋯ (three dots) button next to the close and minimize buttons, and move Export page, Import answers and Open externally (open in browser) into its menu instead of separate buttons. Same menu look as other Ghostex ⋯ menus." Supersedes the round Open in browser button of the 2026-11-04 DECISION in visual_page_modal.rs and the round Export button added the same day as exported pages (server/src/visual_pages/exported.rs).
+//! User: "in the desktop's floating Ghostex page window, add a ⋯ (three dots) button next to the close and minimize buttons, and move Export page, Import answers and Open externally (open in browser) into its menu instead of separate buttons. Same menu look as other Ghostex ⋯ menus." Supersedes the round Open in browser button of the 2026-11-04 DECISION in visual_page_modal.rs and the round Export button added the same day as exported pages (server/src/visual_pages/exported.rs). Since 2026-11-26 the Keep open pin sits between the ⋯ button and Hide (the user's "in live page swap pin with 3 dots button pls", the DECISION in visual_page_modal.rs `top_band`).
 //! CDXC:SessionChat 2026-11-13 DECISION:
 //! User: "add snooze to the inline page under the 3 dots menu (top). Also same, we need a snooze button for inline questions (Ghostex Forms)." Snooze is the dock's: For later with an end, 1, 6 or 24 hours (gx-chat-core questions/later.rs `snooze`), sent to the session that published the page (gxserver's `readVisualPageSource` names it), so the page leaves the dock and the unanswered counts until gxserver brings it back, and the agent is told nothing. Snoozing closes the window. The form card's Snooze is apps/desktop/src/app/native_chat/question_form.rs.
 //! SEE-ALSO: apps/desktop/src/app/native_sidebar/menus.rs (the menu look), apps/desktop/src/app/native_chat/coordinator_board.rs `board_card_menu_panel` (the same rows in a host window), server/src/visual_pages/import.rs (Import answers).
