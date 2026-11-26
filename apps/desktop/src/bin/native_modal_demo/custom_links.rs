@@ -10,7 +10,7 @@
 //!   rail row has) and an unpinned link's own menu open with Pin to rail.
 //! - `page`: the rail with two pinned links, the first one's page open, under the side panel
 //!   Browser's toolbar (Back, Forward, Reload, Home, the address, Page Size, Annotate, History,
-//!   Profile, DevTools, ⋯) and the link page's Close. The toolbar is drawn here in
+//!   Profile, Open Externally, ⋯) and the link page's Close. The toolbar is drawn here in
 //!   render_browser_toolbar's icons, order and sizes, and the page under it is a stand-in, since
 //!   the preview runs neither the app nor a browser engine.
 //! - `rail`: the same, with the pointer on the second pinned link and its tooltip.
@@ -528,7 +528,7 @@ fn page_stand_in() -> AnyElement {
 impl CustomLinksDemo {
     /// The side panel Browser's toolbar as render_browser_toolbar lays it out for the link page:
     /// Back, Forward, Reload, Home; the site icon and address; Page Size, Annotate, History,
-    /// Profile, DevTools and ⋯; then the link page's Close.
+    /// Profile, Open Externally and ⋯; then the link page's Close.
     fn render_toolbar(&self) -> AnyElement {
         let button = |icon: &'static str, enabled: bool| {
             div()
@@ -626,7 +626,7 @@ impl CustomLinksDemo {
                     .child(button("titlebar/pointer.svg", true))
                     .child(button("titlebar/history.svg", true))
                     .child(button("titlebar/user-circle.svg", true))
-                    .child(button("titlebar/tools.svg", true))
+                    .child(button("titlebar/external-link.svg", true))
                     .child(overflow)
                     .child(button("titlebar/x.svg", true)),
             )

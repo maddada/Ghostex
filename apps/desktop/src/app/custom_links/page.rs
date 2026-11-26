@@ -333,15 +333,13 @@ impl GhostexGpuiApp {
             | BrowserToolbarAction::Forward
             | BrowserToolbarAction::Reload
             | BrowserToolbarAction::StopLoading
-            | BrowserToolbarAction::ResetZoom
-            | BrowserToolbarAction::DevTools => match surface {
+            | BrowserToolbarAction::ResetZoom => match surface {
                 Some(surface) => surface.update(cx, |surface, _| match action {
                     BrowserToolbarAction::Back => surface.go_back(),
                     BrowserToolbarAction::Forward => surface.go_forward(),
                     BrowserToolbarAction::Reload => surface.reload(),
                     BrowserToolbarAction::StopLoading => surface.stop_load(),
-                    BrowserToolbarAction::ResetZoom => surface.reset_zoom(),
-                    _ => surface.toggle_dev_tools(),
+                    _ => surface.reset_zoom(),
                 }),
                 None if matches!(action, BrowserToolbarAction::Reload) => {
                     self.reload_titlebar_view(WebPlace::Link.mode(), window, cx)
@@ -385,6 +383,7 @@ impl GhostexGpuiApp {
                 }
             }
             BrowserToolbarAction::ResetMediaPermissions => {}
+            BrowserToolbarAction::OpenExternally => self.open_custom_link_page_externally(),
         }
         cx.notify();
     }
@@ -490,7 +489,7 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
-    /// The ⋯ menu's Open in External Browser on the link page.
+    /// The toolbar's Open Externally and the ⋯ menu's Open in External Browser on the link page.
     pub(crate) fn open_custom_link_page_externally(&mut self) {
         let (address, ..) = self.custom_link_toolbar_page();
         if !address.is_empty() {

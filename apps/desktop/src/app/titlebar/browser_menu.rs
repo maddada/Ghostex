@@ -106,6 +106,17 @@ impl GhostexGpuiApp {
                         )
                     },
                 )
+                .menu_element(
+                    Box::new(ToggleBrowserDevTools { pane_id: pane_id.0 }),
+                    |_, _| {
+                        titlebar_popup_standard_menu_row(
+                            BROWSER_ICON_TOOLS,
+                            TITLEBAR_POPUP_MENU_ROW_ICON_SIZE,
+                            "Toggle DevTools".to_string(),
+                            false,
+                        )
+                    },
+                )
                 .separator()
                 .item(
                     PopupMenuItem::element(|_, _| titlebar_popup_git_section_label("Appearance"))
@@ -133,6 +144,7 @@ impl GhostexGpuiApp {
 
     pub(crate) fn browser_actions_popup_content_height(&self) -> f32 {
         let mut rows = vec![
+            TITLEBAR_POPUP_MENU_ROW_HEIGHT,
             TITLEBAR_POPUP_MENU_ROW_HEIGHT,
             TITLEBAR_POPUP_MENU_SEPARATOR_HEIGHT,
             TITLEBAR_POPUP_MENU_MIN_ITEM_HEIGHT,

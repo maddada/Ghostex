@@ -413,6 +413,9 @@ view from the strip.
   pages, Delete closes the shown one and Enter goes back to the page. Closing the
   Browser tab hides the Browser and puts its pages to sleep; they come back the
   next time it opens.
+  **Open Externally** in the Browser toolbar (the box with an arrow) opens the
+  page in your system browser, and the toolbar's ⋯ menu has **Toggle DevTools**
+  and the page appearance (System, Light or Dark).
   Right-click a link or image in a page to open it in a new tab, save it
   (Save link as / Save image as ask where to save), copy its address, or copy
   the image itself; any page download also asks where to save.
@@ -1132,7 +1135,8 @@ sessions column's place, the way Grok Bot opens, under the side panel Browser's
 own toolbar, which stays on top: Back, Forward, Reload, Home (the link's own
 address), the address (type another and press Enter to go there), Page Size
 (phone and tablet preview), Annotate, History, Profile (the links' own profile,
-or one of the Browser's profiles), DevTools, the ⋯ menu, and Close. Each row
+or one of the Browser's profiles), Open Externally, the ⋯ menu (which has Toggle
+DevTools), and Close. Each row
 shows its chosen icon or the site's icon once the page has been opened, and its
 ⋯ (or a right-click) has Edit…, Change icon…, Pin to rail (or Unpin from rail)
 and Remove. A link also pins to the rail like any rail item from the pin button

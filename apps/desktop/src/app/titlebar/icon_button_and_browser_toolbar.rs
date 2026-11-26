@@ -47,7 +47,7 @@ impl GhostexGpuiApp {
         Browser Back and Forward controls must read their enabled state from the selected loaded tab's existing CEF surface and must no-op when that surface cannot navigate. Reload must call CEF `reload()` on the selected loaded surface instead of loading the shell URL again, so Chromium keeps ownership of history, POST/cache behavior, and address-only placeholder tabs remain unloaded.
 
         CDXC:Browser 2026-06-22-11:50:
-        The right-side Browser controls follow current macOS parity: zoom reset appears only when the active CEF surface is zoomed, the feedback button launches Agentation, History uses the app-modal host and Profile uses the shared GPUI popup window, DevTools toggles through the active CEF surface, and the removed Appearance control does not reserve toolbar space or hit area.
+        The right-side Browser controls follow current macOS parity: zoom reset appears only when the active CEF surface is zoomed, the feedback button launches Agentation, History uses the app-modal host and Profile uses the shared GPUI popup window, and the removed Appearance control does not reserve toolbar space or hit area.
 
         CDXC:Browser 2026-06-23-11:04:
         The Browser feedback toolbar starts Agentation through CEF main-frame JavaScript injection. Keep github.com and *.github.com disabled before injection, and keep the toolbar surface status private by showing only bounded page-data-free notifications for missing CEF surfaces or frames.
@@ -112,6 +112,12 @@ impl GhostexGpuiApp {
             .as_ref()
             .is_some_and(|surface| runtime_can_go_forward || surface.read(cx).can_go_forward());
         let can_reload = active_browser_surface.is_some();
+        let can_open_externally = self.browser_pane_can_open_externally(pane_id);
+        let open_externally_tooltip: gpui::SharedString = if can_open_externally {
+            self.view_pop_out_label(TitlebarMode::Browser, false).into()
+        } else {
+            "This view has no page to pop out yet".into()
+        };
         let reload_action = if is_loading {
             BrowserToolbarAction::StopLoading
         } else {
@@ -280,12 +286,14 @@ impl GhostexGpuiApp {
                         pane_id,
                         cx,
                     ))
+                    // CDXC:Browser 2026-11-27 DECISION:
+                    // User: "replace this button with the open page externally button please" (of the toolbar's DevTools button) and "move devtools inside the 3 dots pls". Open Externally takes that spot and leaves the view tab strip for the Browser, so it is not shown twice; DevTools is a row of the ⋯ menu (browser_menu.rs).
                     .child(self.render_browser_toolbar_button(
-                        "devtools",
-                        BROWSER_ICON_TOOLS,
-                        true,
-                        Some("Toggle DevTools".into()),
-                        BrowserToolbarAction::DevTools,
+                        "open-externally",
+                        TITLEBAR_ICON_EXTERNAL_LINK,
+                        can_open_externally,
+                        Some(open_externally_tooltip),
+                        BrowserToolbarAction::OpenExternally,
                         pane_id,
                         cx,
                     ))

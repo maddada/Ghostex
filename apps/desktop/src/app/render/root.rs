@@ -1269,13 +1269,15 @@ impl Render for GhostexGpuiApp {
             .on_action(cx.listener(|this, _: &ResetBrowserZoom, window, cx| {
                 this.reset_browser_zoom_from_toolbar(this.browser_tabs.focused_pane, window, cx);
             }))
-            .on_action(cx.listener(|this, _: &ToggleBrowserDevTools, window, cx| {
-                this.toggle_browser_devtools_from_toolbar(
-                    this.browser_tabs.focused_pane,
-                    window,
-                    cx,
-                );
-            }))
+            .on_action(
+                cx.listener(|this, action: &ToggleBrowserDevTools, window, cx| {
+                    this.toggle_browser_devtools_from_toolbar(
+                        BrowserPaneId(action.pane_id),
+                        window,
+                        cx,
+                    );
+                }),
+            )
             .on_action(
                 cx.listener(|this, action: &SelectClaudeWebAccount, _window, cx| {
                     this.select_claude_web_account(&action.account_id, cx);

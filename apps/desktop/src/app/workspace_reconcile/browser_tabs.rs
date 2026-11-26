@@ -476,7 +476,7 @@ impl GhostexGpuiApp {
                 | BrowserToolbarAction::ResetMediaPermissions
                 | BrowserToolbarAction::HistoryMenu
                 | BrowserToolbarAction::ProfileMenu
-                | BrowserToolbarAction::DevTools => {}
+                | BrowserToolbarAction::OpenExternally => {}
             });
         }
 
@@ -596,6 +596,13 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
+        // The link page's ⋯ menu (app/custom_links/page.rs).
+        if pane_id == crate::app::custom_links::CUSTOM_LINK_PAGE_PANE {
+            if let Some(surface) = self.custom_link_surface() {
+                surface.update(cx, |surface, _| surface.toggle_dev_tools());
+            }
+            return;
+        }
         if !self.prepare_browser_toolbar_right_action(pane_id, cx) {
             return;
         }

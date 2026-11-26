@@ -17,7 +17,7 @@ pub(crate) enum BrowserToolbarAction {
     ResetMediaPermissions,
     HistoryMenu,
     ProfileMenu,
-    DevTools,
+    OpenExternally,
 }
 
 #[derive(Clone, Debug, Default)]

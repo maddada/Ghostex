@@ -11,7 +11,8 @@ impl GhostexGpuiApp {
     /// Code, gxserver for Kanban, Automate and Docs, the extension's own server, the tab's own
     /// address for Browser), so popping out hands that exact page to a window of its own instead of
     /// building a second CEF host inside the app. A view with no page yet cannot be popped out, and
-    /// the control says so rather than opening an empty window.
+    /// the control says so rather than opening an empty window. Since 2026-11-27 the Browser's
+    /// control sits in its toolbar (DECISION in titlebar/icon_button_and_browser_toolbar.rs).
     /// CDXC:Docs 2026-10-01 DECISION:
     /// User chose option 3A: Files is drawn natively and has no page of its own, so its Open Externally pops out the open HTML, Markdown or Excalidraw file through gxserver's file link (`native_docs/open_externally.rs`) instead of staying disabled; its embed page is never handed out, because it only works inside Ghostex.
     /// CDXC:ProjectBoard 2026-10-10 WHY:
@@ -24,6 +25,17 @@ impl GhostexGpuiApp {
             TitlebarMode::Kanban => self.native_kanban_can_open_window(),
             _ => self.view_pop_out_url(mode).is_some(),
         }
+    }
+
+    /// Whether the toolbar of a Browser pane (or of the link page) has a page for Open Externally.
+    pub(crate) fn browser_pane_can_open_externally(&self, pane_id: BrowserPaneId) -> bool {
+        let web = |url: &str| url.starts_with("http://") || url.starts_with("https://");
+        if pane_id == crate::app::custom_links::CUSTOM_LINK_PAGE_PANE {
+            return web(&self.custom_link_toolbar_page().0);
+        }
+        self.browser_tabs
+            .active_tab_for_pane(pane_id)
+            .is_some_and(|tab| web(&tab.url))
     }
 
     /// What the pop-out control is called for `mode`: Kanban moves between the panel and a window

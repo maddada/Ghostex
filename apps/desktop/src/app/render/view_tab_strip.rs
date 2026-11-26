@@ -197,7 +197,10 @@ impl GhostexGpuiApp {
                 strip.children(self.render_storybook_controls(cx))
             })
             .when(
-                !matches!(active_mode, TitlebarMode::Source | TitlebarMode::SideChat),
+                !matches!(
+                    active_mode,
+                    TitlebarMode::Source | TitlebarMode::SideChat | TitlebarMode::Browser
+                ),
                 |strip| strip.child(self.render_view_tab_strip_pop_out_button(active_mode, cx)),
             )
             .child(self.render_view_tab_strip_expand_button(cx))
@@ -644,7 +647,8 @@ impl GhostexGpuiApp {
     }
 
     /// The strip's pop-out control: Open Externally for a page view, Open in New Window or Bring
-    /// Back to Panel for Kanban.
+    /// Back to Panel for Kanban. The Browser's is in its toolbar instead (CDXC:Browser 2026-11-27
+    /// DECISION in titlebar/icon_button_and_browser_toolbar.rs).
     fn render_view_tab_strip_pop_out_button(
         &self,
         active_mode: TitlebarMode,
