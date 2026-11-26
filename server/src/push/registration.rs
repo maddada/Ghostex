@@ -27,6 +27,7 @@ const REGISTER_FIELDS: &[&str] = &[
     "kinds",
     "deviceId",
     "sessionNames",
+    "hideProjectNames",
     "alerts",
 ];
 const UNREGISTER_FIELDS: &[&str] = &["action", "machineId"];
@@ -38,6 +39,7 @@ enum PushTokenRequest {
         kinds: PushKinds,
         device_id: Option<String>,
         session_names: bool,
+        hide_project_names: bool,
         alerts: Option<AlertChoices>,
     },
     Unregister {
@@ -138,6 +140,12 @@ fn parse_push_token_request(body: &Value) -> Result<PushTokenRequest, PushTokenE
                         .to_string(),
                 ),
             };
+            let hide_project_names = match params.get("hideProjectNames") {
+                None => false,
+                Some(value) => value.as_bool().ok_or_else(|| {
+                    PushTokenError::bad_request("hideProjectNames must be a boolean.")
+                })?,
+            };
             // The phone's "Show session names" switch; a phone that sends none keeps names off.
             let session_names = match params.get("sessionNames") {
                 None => false,
@@ -162,6 +170,7 @@ fn parse_push_token_request(body: &Value) -> Result<PushTokenRequest, PushTokenE
                 kinds,
                 device_id,
                 session_names,
+                hide_project_names,
                 alerts,
             })
         }
@@ -242,6 +251,7 @@ fn apply_push_token_request(
             kinds,
             device_id,
             session_names,
+            hide_project_names,
             alerts,
         } => {
             let device_id = match (caller_device, device_id) {
@@ -294,6 +304,7 @@ fn apply_push_token_request(
                 kinds,
                 device_id,
                 session_names,
+                hide_project_names,
                 alerts,
                 registered_at: chrono::Utc::now()
                     .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),

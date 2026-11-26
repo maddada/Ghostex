@@ -4,7 +4,7 @@
 //! - `{action: "status", machineId}`: this computer's server id, the computers it can speak for (connected,
 //!   with Agent access on and no approval waiting), and whether it holds this phone's tokens (`holds`) and
 //!   pushes with them (`confirmed`). The phone picks its one banner computer from these answers.
-//! - `{action: "register", machineId, activityToken?, pushToStartToken?, environment, sessionNames, computers}`:
+//! - `{action: "register", machineId, activityToken?, pushToStartToken?, environment, sessionNames, hideProjectNames?, computers}`:
 //!   this computer pushes the phone's banner from now on. `computers` are the phone's ids for its other
 //!   computers (`serverId`, `machineId`), so a row of a connected computer opens that session on the phone.
 //! - `{action: "clear", machineId}`: this computer stops at once and forgets the tokens.
@@ -49,6 +49,7 @@ const REGISTER_FIELDS: &[&str] = &[
     "pushToStartToken",
     "environment",
     "sessionNames",
+    "hideProjectNames",
     "computers",
 ];
 const CLEAR_FIELDS: &[&str] = &["action", "machineId"];
@@ -58,6 +59,7 @@ struct NewTokens {
     push_to_start_token: Option<String>,
     environment: LiveActivityEnvironment,
     session_names: bool,
+    hide_project_names: bool,
     computers: Vec<PhoneComputer>,
 }
 
@@ -268,6 +270,12 @@ fn parse(body: &Value) -> Result<Request, RegistrationError> {
                     ))
                 }
             };
+            let hide_project_names = match params.get("hideProjectNames") {
+                None => false,
+                Some(value) => value.as_bool().ok_or_else(|| {
+                    RegistrationError::bad_request("hideProjectNames must be a boolean.")
+                })?,
+            };
             let session_names = match params.get("sessionNames") {
                 None => false,
                 Some(value) => value.as_bool().ok_or_else(|| {
@@ -298,6 +306,7 @@ fn parse(body: &Value) -> Result<Request, RegistrationError> {
                     push_to_start_token,
                     environment,
                     session_names,
+                    hide_project_names,
                     computers,
                 },
             })
@@ -382,6 +391,7 @@ fn apply(
                 computers,
                 device_id: caller.map(str::to_string),
                 session_names: tokens.session_names,
+                hide_project_names: tokens.hide_project_names,
             });
             store
                 .write(&phones)

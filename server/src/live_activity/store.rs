@@ -86,6 +86,8 @@ pub(crate) struct LiveActivityPhone {
     /// The phone's "Show session names" switch: on, a row leads with the session's title.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub(crate) session_names: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub(crate) hide_project_names: bool,
 }
 
 /// One of the phone's other computers: its server id and the id the phone uses for it.

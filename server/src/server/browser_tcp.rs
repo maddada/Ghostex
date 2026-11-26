@@ -1,5 +1,6 @@
 //! Authenticated byte transport for the desktop's machine-scoped browser proxy.
 use super::*;
+use crate::auth::{authenticate_socket, bearer_token, DeviceSocket};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::Semaphore;
@@ -18,18 +19,21 @@ pub(crate) async fn handle_browser_tcp(
     let failure = |status, code, message| {
         json_response(status, rpc_error(code, message, Some(request_id(&headers))))
     };
-    if !is_authorized_client_headers(
-        &headers,
-        &state.auth_token,
-        &state.device_api_tokens,
-        &state.security.session_tokens,
-    ) {
+    let Some(device_socket) = bearer_token(&headers).and_then(|token| {
+        authenticate_socket(
+            token,
+            &state.auth_token,
+            &state.device_api_tokens,
+            &state.security.session_tokens,
+        )
+        .ok()
+    }) else {
         return failure(
             StatusCode::UNAUTHORIZED,
             "unauthorized",
             "gxserver authorization is required.",
         );
-    }
+    };
     let version = read_protocol_version(&headers, &uri, None);
     if !is_expected_protocol_version(version.as_ref()) {
         return json_response(
@@ -69,6 +73,8 @@ pub(crate) async fn handle_browser_tcp(
     let mut shutdown = state.shutdown_tx.subscribe();
     // The WebSocket upgrade acknowledges an actual connection, not merely a queued connect.
     let stream = tokio::select! {
+        biased;
+        _ = DeviceSocket::revoked(device_socket.as_ref()) => return failure(StatusCode::UNAUTHORIZED, "unauthorized", "gxserver authorization is required."),
         _ = shutdown.recv() => return failure(StatusCode::SERVICE_UNAVAILABLE, "unavailable", "The server is stopping."),
         result = tokio::time::timeout(Duration::from_secs(8), connect_browser_destination(&host, port)) => match result {
             Ok(Ok(stream)) => stream,
@@ -81,6 +87,8 @@ pub(crate) async fn handle_browser_tcp(
         .on_upgrade(move |socket| async move {
             let _permit = permit;
             tokio::select! {
+                biased;
+                _ = DeviceSocket::revoked(device_socket.as_ref()) => {},
                 _ = shutdown.recv() => {},
                 _ = relay(socket, stream) => {},
             }

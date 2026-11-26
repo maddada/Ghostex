@@ -427,3 +427,127 @@ fn built_in_changes_skip_ids_a_new_release_added() {
         extensions::built_in_extension_changes(&previous_known, &previous_on, &known, &["github"]);
     assert_eq!(changes, vec![("github", true)]);
 }
+
+#[test]
+fn weekly_identity_rotates_in_both_directions_and_survives_reload() {
+    use super::{gate::TelemetryMode, identity, queue::telemetry_for_test, task};
+
+    let home = tempfile::tempdir().unwrap();
+    let paths = crate::paths::get_gxserver_paths(Some(home.path().to_path_buf()));
+    let telemetry = telemetry_for_test(paths.clone());
+    let base = SystemTime::now() - Duration::from_secs(600);
+    write_settings(&paths, json!({ "analyticsEnabled": true }), base);
+    let full = telemetry.distinct_id(TelemetryMode::Full, true).unwrap();
+
+    write_settings(
+        &paths,
+        json!({ "analyticsEnabled": false }),
+        base + Duration::from_secs(60),
+    );
+    let weekly_preview = telemetry.distinct_id_for_preview(TelemetryMode::WeeklyCountOnly);
+    assert!(identity::read_mode_id(&paths, TelemetryMode::WeeklyCountOnly).is_none());
+    task::purge_for_mode(&paths, Some(&telemetry), TelemetryMode::WeeklyCountOnly);
+    assert!(identity::read_mode_id(&paths, TelemetryMode::Full).is_none());
+    let weekly = identity::read_mode_id(&paths, TelemetryMode::WeeklyCountOnly).unwrap();
+    assert_ne!(full, weekly);
+    assert_eq!(weekly_preview.as_deref(), Some(weekly.as_str()));
+
+    // Encode weekly submissions on both sides of a daemon restart. The ID is
+    // persisted independently of the week's timestamp.
+    for current in [&telemetry, &telemetry_for_test(paths.clone())] {
+        current.enqueue_weekly_count(false);
+        let batch = current.take_batch();
+        let id = current
+            .distinct_id(TelemetryMode::WeeklyCountOnly, true)
+            .unwrap();
+        let encoded = current.encode_batch(&batch, &id);
+        assert_eq!(encoded[0]["distinct_id"], json!(weekly));
+        assert_eq!(encoded[0]["properties"]["analytics_enabled"], json!(false));
+    }
+
+    write_settings(
+        &paths,
+        json!({ "analyticsEnabled": true }),
+        base + Duration::from_secs(120),
+    );
+    telemetry.retire_other_ids(TelemetryMode::Full);
+    assert!(identity::read_mode_id(&paths, TelemetryMode::WeeklyCountOnly).is_none());
+    let new_full = telemetry.distinct_id(TelemetryMode::Full, true).unwrap();
+    assert_ne!(new_full, weekly);
+    assert_ne!(new_full, full);
+
+    write_settings(
+        &paths,
+        json!({ "analyticsEnabled": false }),
+        base + Duration::from_secs(180),
+    );
+    task::purge_for_mode(&paths, Some(&telemetry), TelemetryMode::WeeklyCountOnly);
+    let new_weekly = identity::read_mode_id(&paths, TelemetryMode::WeeklyCountOnly).unwrap();
+    assert_ne!(new_weekly, weekly);
+    assert_ne!(new_weekly, new_full);
+}
+
+#[test]
+fn hard_opt_out_wipes_both_identities_and_never_flushes() {
+    use super::{gate, identity, queue::telemetry_for_test, state, task};
+
+    // Set the real launch gate in a subprocess so other tests have their usual gate.
+    const CHILD: &str = "GHOSTEX_TELEMETRY_HARD_OPT_OUT_TEST_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        let result = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "telemetry::tests::hard_opt_out_wipes_both_identities_and_never_flushes",
+            ])
+            .env(CHILD, "1")
+            .env("DO_NOT_TRACK", "1")
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success() && String::from_utf8_lossy(&result.stdout).contains("1 passed"),
+            "{}\n{}",
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr),
+        );
+        return;
+    }
+
+    let home = tempfile::tempdir().unwrap();
+    let paths = crate::paths::get_gxserver_paths(Some(home.path().to_path_buf()));
+    crate::storage::initialize_gxserver_storage(&paths).unwrap();
+    let db = crate::storage::open_gxserver_database(&paths).unwrap();
+    state::write_last_weekly_count_at(&db, "2026-11-25T00:00:00.000Z");
+    assert!(state::read_analytics_state(&db).is_some());
+    for filename in [identity::FULL_ID_FILE, identity::WEEKLY_ID_FILE] {
+        identity::persist_install_id(&paths, filename, &identity::generate_install_id());
+        assert!(paths.root_dir.join(filename).is_file());
+    }
+    let mut telemetry = telemetry_for_test(paths.clone());
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    telemetry.endpoint.batch_url = format!("http://{}/batch/", listener.local_addr().unwrap());
+    assert_eq!(gate::mode(&paths), gate::TelemetryMode::Off);
+
+    // A previously queued event must be discarded at the flush boundary.
+    telemetry.requeue_front(vec![super::queue::QueuedEvent {
+        event: taxonomy::EVENT_INSTALL_WEEKLY_COUNT.to_string(),
+        properties: Default::default(),
+        timestamp: "2026-11-25T00:00:00.000Z".to_string(),
+        attempts: 0,
+    }]);
+    task::flush_telemetry(&telemetry);
+    assert!(telemetry.queued_for_test().is_empty());
+    telemetry.enqueue_weekly_count(false);
+    assert!(telemetry.queued_for_test().is_empty());
+    assert!(telemetry
+        .distinct_id_for_preview(gate::TelemetryMode::Off)
+        .is_none());
+    assert!(state::read_analytics_state(&db).is_none());
+    for filename in [identity::FULL_ID_FILE, identity::WEEKLY_ID_FILE] {
+        assert!(!paths.root_dir.join(filename).exists());
+    }
+    assert_eq!(
+        listener.accept().unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock
+    );
+}

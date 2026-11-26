@@ -65,6 +65,8 @@ pub(crate) struct PushRegistration {
     /// The phone's "Show session names" switch: on, an alert's title leads with the session's title.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub(crate) session_names: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub(crate) hide_project_names: bool,
     /// The phone's choice for each kind; none from a phone older than the choices, which keeps `kinds`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) alerts: Option<AlertChoices>,

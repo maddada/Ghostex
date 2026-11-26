@@ -63,7 +63,7 @@ pub use profile::ProfileSnapshot;
 pub use queue::{
     build_preview_event, build_weekly_count_preview_event, handle, init, refresh_profile,
 };
-pub(crate) use task::note_accounts_discovered;
+pub(crate) use task::{note_accounts_discovered, reconcile_analytics_settings};
 pub use task::{purge_on_opt_out, spawn_flush_task, spawn_heartbeat_task, SHUTDOWN_FLUSH_TIMEOUT};
 
 /// True when `GHOSTEX_TELEMETRY_DEBUG=1` (or `true`) is set, enabling full

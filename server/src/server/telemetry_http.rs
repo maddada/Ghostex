@@ -87,8 +87,8 @@ fn build_telemetry_preview(state: &Arc<AppState>) -> Value {
         None
     } else {
         crate::telemetry::handle()
-            .map(crate::telemetry::queue::Telemetry::distinct_id_for_preview)
-            .unwrap_or_else(|| crate::telemetry::identity::read_existing_install_id(&state.paths))
+            .map(|telemetry| telemetry.distinct_id_for_preview(mode))
+            .unwrap_or_else(|| crate::telemetry::identity::read_mode_id(&state.paths, mode))
     };
     let endpoint = crate::telemetry::handle()
         .map(|telemetry| telemetry.endpoint_url().to_string())

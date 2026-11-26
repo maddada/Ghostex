@@ -898,11 +898,11 @@ pub(crate) async fn save_settings_patch(
             .as_ref()
             .and_then(|patch| patch.get("analyticsEnabled"))
             .and_then(Value::as_bool)
-            == Some(false)
+            .is_some()
         {
             let paths = state.paths.clone();
             let _ = tokio::task::spawn_blocking(move || {
-                crate::telemetry::purge_on_opt_out(&paths);
+                crate::telemetry::reconcile_analytics_settings(&paths);
             })
             .await;
         }

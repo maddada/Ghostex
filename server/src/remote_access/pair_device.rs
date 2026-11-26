@@ -1373,6 +1373,7 @@ fn finish_pairing(
         earlier,
         |id: &str| (context.remove_key)(id),
         |device, error| log_replaced_pairing_kept(context.logger, device, error),
+        |id| context.device_tokens.revoke_device(id),
     )?;
     for device in &replaced {
         super::paired_devices::forget_approver_key(context.security, device, &Principal::Anonymous);

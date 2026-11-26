@@ -172,6 +172,7 @@ pub(crate) fn alert_message(
     machine_id: &str,
     event: &AlertEvent,
     session_names: bool,
+    hide_project_names: bool,
     sound: bool,
     has_question: bool,
     ttl_secs: i64,
@@ -179,15 +180,17 @@ pub(crate) fn alert_message(
     let mut message = Map::new();
     message.insert("to".into(), json!(token));
     let session_title = one_line(&event.session_title);
+    let project = if hide_project_names {
+        ""
+    } else {
+        &event.project_name
+    };
     let leading_name = if session_names && !session_title.is_empty() {
         session_title.as_str()
     } else {
         event.agent_name.as_str()
     };
-    message.insert(
-        "title".into(),
-        json!(alert_title(leading_name, &event.project_name)),
-    );
+    message.insert("title".into(), json!(alert_title(leading_name, project)));
     message.insert("body".into(), json!(event.kind.words(has_question)));
     message.insert("data".into(), {
         let mut data = json!({

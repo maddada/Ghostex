@@ -1,8 +1,10 @@
 use std::{
     collections::HashMap,
-    fs, io,
+    fs,
+    future::Future,
+    io,
     path::Path,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
 };
 
 use anyhow::{bail, Context, Result};
@@ -11,6 +13,7 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use rand::Rng;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
+use tokio::sync::watch;
 
 use crate::paths::GxserverPaths;
 
@@ -146,6 +149,59 @@ SEE-ALSO: server/src/remote_access/pair_device.rs (minting), server/src/remote_a
 #[derive(Clone, Default)]
 pub struct DeviceApiTokens {
     entries: Arc<RwLock<HashMap<String, DeviceTokenEntry>>>,
+    sockets: Arc<Mutex<HashMap<String, Arc<watch::Sender<bool>>>>>,
+}
+
+pub(crate) struct DeviceSocket {
+    tokens: DeviceApiTokens,
+    device_id: String,
+    signal: Option<Arc<watch::Sender<bool>>>,
+}
+
+impl Drop for DeviceSocket {
+    fn drop(&mut self) {
+        let mut sockets = self
+            .tokens
+            .sockets
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let signal = self.signal.take().expect("socket signal");
+        let last = Arc::strong_count(&signal) == 2
+            && sockets
+                .get(&self.device_id)
+                .is_some_and(|current| Arc::ptr_eq(current, &signal));
+        drop(signal);
+        if last {
+            sockets.remove(&self.device_id);
+        }
+    }
+}
+
+impl DeviceSocket {
+    pub(crate) fn revoked(socket: Option<&Self>) -> impl Future<Output = ()> + Send + 'static {
+        let receiver =
+            socket.map(|socket| socket.signal.as_ref().expect("socket signal").subscribe());
+        async move {
+            let Some(mut receiver) = receiver else {
+                return std::future::pending().await;
+            };
+            let _ = receiver.wait_for(|revoked| *revoked).await;
+        }
+    }
+}
+
+pub(crate) fn authenticate_socket(
+    token: &str,
+    expected_token: &str,
+    devices: &DeviceApiTokens,
+    owner_sessions: &crate::security::SessionTokens,
+) -> Result<Option<DeviceSocket>, ()> {
+    if is_expected_gxserver_auth_token(token, expected_token)
+        || owner_sessions.is_owner_session(token)
+    {
+        return Ok(None);
+    }
+    devices.track_socket(token)
 }
 
 /*
@@ -158,6 +214,13 @@ pub struct DeviceTokenEntry {
     pub device_id: Option<String>,
     /// Milliseconds since the epoch after which the token no longer opens anything.
     pub expires_at_ms: Option<u64>,
+}
+
+impl DeviceTokenEntry {
+    fn is_live(&self) -> bool {
+        let now_ms = chrono::Utc::now().timestamp_millis().max(0) as u64;
+        self.expires_at_ms.is_none_or(|expires| now_ms < expires)
+    }
 }
 
 /// How long a device token works before the device key must renew it.
@@ -180,11 +243,67 @@ impl DeviceApiTokens {
     }
 
     pub fn replace_entries(&self, entries: impl IntoIterator<Item = (String, DeviceTokenEntry)>) {
+        self.reload_entries(|| Ok(entries))
+            .expect("infallible token map replacement");
+    }
+
+    /// Read the DB snapshot under the token write lock so an older snapshot cannot undo revocation.
+    pub(crate) fn reload_entries<I: IntoIterator<Item = (String, DeviceTokenEntry)>>(
+        &self,
+        load: impl FnOnce() -> Result<I>,
+    ) -> Result<()> {
         let mut map = self
             .entries
             .write()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        *map = entries.into_iter().collect();
+        *map = load()?.into_iter().collect();
+        let paired: std::collections::HashSet<_> = map
+            .values()
+            .filter_map(|entry| entry.device_id.as_deref())
+            .collect();
+        let mut sockets = self.sockets.lock().unwrap_or_else(|p| p.into_inner());
+        sockets.retain(|id, signal| {
+            if paired.contains(id.as_str()) {
+                return true;
+            }
+            signal.send_replace(true);
+            false
+        });
+        Ok(())
+    }
+
+    pub(crate) fn revoke_device(&self, device_id: &str) {
+        let mut entries = self.entries.write().unwrap_or_else(|p| p.into_inner());
+        entries.retain(|_, entry| entry.device_id.as_deref() != Some(device_id));
+        let mut sockets = self.sockets.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(signal) = sockets.remove(device_id) {
+            signal.send_replace(true);
+        }
+    }
+
+    /// Keep the token read lock through registration so a concurrent removal cannot miss the socket.
+    fn track_socket(&self, token: &str) -> Result<Option<DeviceSocket>, ()> {
+        if !token.starts_with(DEVICE_API_TOKEN_PREFIX) {
+            return Err(());
+        }
+        let entries = self.entries.read().unwrap_or_else(|p| p.into_inner());
+        let entry = entries
+            .get(&hash_device_api_token(token))
+            .filter(|entry| entry.is_live())
+            .ok_or(())?;
+        let Some(device_id) = entry.device_id.as_ref() else {
+            return Ok(None);
+        };
+        let mut sockets = self.sockets.lock().unwrap_or_else(|p| p.into_inner());
+        let signal = sockets
+            .entry(device_id.clone())
+            .or_insert_with(|| Arc::new(watch::Sender::new(false)))
+            .clone();
+        Ok(Some(DeviceSocket {
+            tokens: self.clone(),
+            device_id: device_id.clone(),
+            signal: Some(signal),
+        }))
     }
 
     pub fn accepts(&self, provided_token: &str) -> bool {
@@ -197,12 +316,11 @@ impl DeviceApiTokens {
             return None;
         }
         let hash = hash_device_api_token(provided_token);
-        let now_ms = chrono::Utc::now().timestamp_millis().max(0) as u64;
         self.entries
             .read()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .get(&hash)
-            .filter(|entry| entry.expires_at_ms.is_none_or(|expires| now_ms < expires))
+            .filter(|entry| entry.is_live())
             .cloned()
     }
 

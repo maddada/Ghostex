@@ -372,7 +372,7 @@ fn run(shared: Arc<Shared>) {
 /// The phones to look at: Live Activity entries whose phone is still paired (or that a caller with the main
 /// token registered) and that the phone confirmed since this gxserver started or last slept, each with its
 /// "Show session names" switch.
-fn registered_phones(shared: &Shared) -> Option<Vec<(LiveActivityPhone, bool)>> {
+fn registered_phones(shared: &Shared) -> Option<Vec<LiveActivityPhone>> {
     let phones = match LiveActivityStore::open(&shared.paths).read() {
         Ok(phones) => phones,
         Err(error) => {
@@ -423,10 +423,6 @@ fn registered_phones(shared: &Shared) -> Option<Vec<(LiveActivityPhone, bool)>> 
                     .device_id
                     .as_ref()
                     .is_none_or(|device_id| paired.contains(device_id))
-            })
-            .map(|phone| {
-                let names = phone.session_names;
-                (phone, names)
             })
             .collect(),
     )
@@ -688,11 +684,7 @@ fn pass(
     remotes: &mut Remotes,
 ) -> Option<i64> {
     let phones = registered_phones(shared)?;
-    states.retain(|machine_id, _| {
-        phones
-            .iter()
-            .any(|(phone, _)| &phone.machine_id == machine_id)
-    });
+    states.retain(|machine_id, _| phones.iter().any(|phone| &phone.machine_id == machine_id));
     if phones.is_empty() {
         memory.clear();
         remotes.lists.clear();
@@ -735,9 +727,9 @@ fn pass(
     let candidates = collect_candidates(&sources, now, memory);
     let mut next_due: Option<i64> = remote_due;
     let mut due = |at: i64| next_due = Some(next_due.map_or(at, |current: i64| current.min(at)));
-    for (phone, names) in phones {
+    for phone in phones {
         let state = states.entry(phone.machine_id.clone()).or_default();
-        if let Some(at) = phone_pass(shared, &phone, names, state, &candidates, now) {
+        if let Some(at) = phone_pass(shared, &phone, state, &candidates, now) {
             due(at);
         }
     }
@@ -757,7 +749,6 @@ fn pass(
 fn phone_pass(
     shared: &Shared,
     phone: &LiveActivityPhone,
-    names: bool,
     state: &mut PhoneState,
     candidates: &Candidates,
     now: i64,
@@ -769,7 +760,13 @@ fn phone_pass(
         .any(|stint| !state.known_stints.contains(stint));
     state.known_stints = candidates.working_stints.clone();
     let target = |server_id: &str| phone.machine_id_for(server_id, &shared.server_id);
-    let content = render(candidates, &target, names, now);
+    let content = render(
+        candidates,
+        &target,
+        phone.session_names,
+        phone.hide_project_names,
+        now,
+    );
     let shape = shape_of(&content);
     let active = candidates.active();
 

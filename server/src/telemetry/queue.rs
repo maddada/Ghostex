@@ -29,7 +29,8 @@ use crate::paths::GxserverPaths;
 use super::{
     base::build_base_properties,
     client::PostHogEndpoint,
-    gate, identity,
+    gate::{self, TelemetryMode},
+    identity,
     profile::{self, ProfileSnapshot},
     taxonomy::{self, PropertyValue},
 };
@@ -52,7 +53,7 @@ pub struct Telemetry {
     pub(super) paths: GxserverPaths,
     /// Random per-install UUIDv4 (`telemetry::identity`), loaded lazily and
     /// persisted only when analytics are enabled and ready to flush.
-    distinct_id: Mutex<Option<String>>,
+    distinct_id: Mutex<Option<(TelemetryMode, String)>>,
     pub(super) endpoint: PostHogEndpoint,
     pub(super) base_properties: Map<String, Value>,
     queue: Mutex<VecDeque<QueuedEvent>>,
@@ -67,28 +68,25 @@ pub struct Telemetry {
 /// Called exactly once, by the long-running server loop. Repeat calls are
 /// ignored, which is what keeps a second client from ever existing.
 pub fn init(paths: GxserverPaths) -> &'static Telemetry {
-    TELEMETRY.get_or_init(|| {
-        let existing_id = identity::read_existing_install_id(&paths);
-        Telemetry {
-            paths,
-            distinct_id: Mutex::new(existing_id),
-            endpoint: PostHogEndpoint::from_environment(),
-            base_properties: build_base_properties(),
-            queue: Mutex::new(VecDeque::with_capacity(64)),
-            throttles: Mutex::new(HashMap::new()),
-            profile: Mutex::new(ProfileSnapshot::default()),
-        }
+    TELEMETRY.get_or_init(|| Telemetry {
+        paths,
+        distinct_id: Mutex::new(None),
+        endpoint: PostHogEndpoint::from_environment(),
+        base_properties: build_base_properties(),
+        queue: Mutex::new(VecDeque::with_capacity(64)),
+        throttles: Mutex::new(HashMap::new()),
+        profile: Mutex::new(ProfileSnapshot::default()),
     })
 }
 
-/// A private `Telemetry` for unit tests: never the process-global handle, a
-/// fixed UUIDv4, and an endpoint that is never flushed, so a test cannot reach
+/// A private `Telemetry` for unit tests: never the process-global handle, an
+/// endpoint that is never flushed, so a test cannot reach
 /// PostHog.
 #[cfg(test)]
 pub(super) fn telemetry_for_test(paths: GxserverPaths) -> Telemetry {
     Telemetry {
         paths,
-        distinct_id: Mutex::new(Some("00000000-0000-4000-8000-000000000001".to_string())),
+        distinct_id: Mutex::new(None),
         endpoint: PostHogEndpoint {
             batch_url: "http://127.0.0.1:9/never-flushed".to_string(),
             api_key: "test".to_string(),
@@ -107,6 +105,18 @@ impl Telemetry {
             .iter()
             .map(|queued| (queued.event.clone(), queued.properties.clone()))
             .collect()
+    }
+}
+
+fn load_id(paths: &GxserverPaths, filename: &str) -> String {
+    identity::read_install_id(paths, filename).unwrap_or_else(identity::generate_install_id)
+}
+
+pub(super) fn retire_other_ids(paths: &GxserverPaths, mode: TelemetryMode) {
+    for filename in [identity::FULL_ID_FILE, identity::WEEKLY_ID_FILE] {
+        if identity::file_for_mode(mode) != Some(filename) {
+            identity::delete_install_id(paths, filename);
+        }
     }
 }
 
@@ -157,47 +167,47 @@ impl Telemetry {
         }
     }
 
-    /// Return the random per-install UUIDv4, generating one if needed. When
-    /// `persist` is `true`, ensures it is written to `analytics-install-id`.
-    /// When `persist` is `false` (e.g. preview while onboarding is pending),
-    /// keeps the UUIDv4 in memory without writing to disk.
-    pub(crate) fn ensure_distinct_id(&self, persist: bool) -> String {
-        let mut guard = self
-            .distinct_id
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let id = match guard.clone() {
-            Some(existing) => existing,
-            None => {
-                let resolved = identity::read_existing_install_id(&self.paths)
-                    .unwrap_or_else(identity::generate_install_id);
-                *guard = Some(resolved.clone());
-                resolved
+    /// Resolve an identity for the requested mode. Preview keeps a generated ID in
+    /// memory so the eventual send uses the same value without preview writing to disk.
+    pub(super) fn distinct_id(&self, mode: TelemetryMode, persist: bool) -> Option<String> {
+        let filename = identity::file_for_mode(mode)?;
+        let mut cached = self.distinct_id.lock().unwrap_or_else(|p| p.into_inner());
+        if persist {
+            // Settings may have changed while the flush was preparing the batch.
+            if gate::mode(&self.paths) != mode {
+                return None;
             }
-        };
-        if persist && identity::read_existing_install_id(&self.paths).is_none() {
-            identity::persist_install_id(&self.paths, &id);
+            retire_other_ids(&self.paths, mode);
         }
-        id
+        if cached
+            .as_ref()
+            .is_none_or(|(cached_mode, _)| *cached_mode != mode)
+        {
+            *cached = Some((mode, load_id(&self.paths, filename)));
+        }
+        let id = cached.as_ref().expect("resolved identity").1.clone();
+        if persist && identity::read_install_id(&self.paths, filename).as_deref() != Some(&id) {
+            identity::persist_install_id(&self.paths, filename, &id);
+        }
+        Some(id)
     }
 
-    /// Read the distinct id for read-only inspection (`POST /api/telemetryPreview`).
-    /// Returns `None` on hard opt-out (`DO_NOT_TRACK=1`, `GHOSTEX_TELEMETRY_DISABLED=1`,
-    /// `--no-analytics`, or remote helper). Returns an existing or in-memory random UUIDv4
-    /// without writing to disk in `full` and `weekly_count_only` modes.
-    pub(crate) fn distinct_id_for_preview(&self) -> Option<String> {
-        if gate::is_hard_opted_out(&self.paths) {
-            return None;
-        }
-        Some(self.ensure_distinct_id(false))
+    pub(crate) fn distinct_id_for_preview(&self, mode: TelemetryMode) -> Option<String> {
+        self.distinct_id(mode, false)
     }
 
-    pub(super) fn clear_cached_identity(&self) {
-        let mut guard = self
-            .distinct_id
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        *guard = None;
+    pub(super) fn retire_other_ids(&self, mode: TelemetryMode) {
+        let mut cached = self.distinct_id.lock().unwrap_or_else(|p| p.into_inner());
+        if gate::mode(&self.paths) != mode {
+            return;
+        }
+        retire_other_ids(&self.paths, mode);
+        if cached
+            .as_ref()
+            .is_some_and(|(cached_mode, _)| *cached_mode != mode)
+        {
+            *cached = None;
+        }
     }
 
     pub fn is_enabled(&self) -> bool {
@@ -234,7 +244,7 @@ impl Telemetry {
             */
             if gate::is_hard_opted_out(&self.paths) {
                 self.drop_queue();
-                self.clear_cached_identity();
+                self.retire_other_ids(TelemetryMode::Off);
             } else {
                 self.drop_product_events();
             }
@@ -283,7 +293,7 @@ impl Telemetry {
     pub(super) fn enqueue_weekly_count(&self, analytics_enabled: bool) {
         if gate::is_hard_opted_out(&self.paths) {
             self.drop_queue();
-            self.clear_cached_identity();
+            self.retire_other_ids(TelemetryMode::Off);
             super::task::purge_on_opt_out_if_needed(&self.paths);
             return;
         }
@@ -461,7 +471,7 @@ pub fn capture_throttled(
     if !telemetry.is_enabled() {
         if gate::is_hard_opted_out(telemetry.paths()) {
             telemetry.drop_queue();
-            telemetry.clear_cached_identity();
+            telemetry.retire_other_ids(TelemetryMode::Off);
         } else {
             telemetry.drop_product_events();
         }

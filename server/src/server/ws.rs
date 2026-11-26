@@ -1,4 +1,5 @@
 use super::*;
+use crate::auth::{authenticate_socket, bearer_token, DeviceSocket};
 use crate::session_chat_follower::{
     subscribe_session_chat_follower, unsubscribe_session_chat_follower,
 };
@@ -37,19 +38,19 @@ pub(crate) async fn handle_events(
     Plain HTTP requests to the WebSocket-only event path must keep the TypeScript JSON `notFound` envelope. Do not expose Axum WebSocket extractor rejection bodies because clients rely on gxserver's product/protocol/requestId error shape.
     */
     let query_token = query_value(&uri, "authToken");
-    let authorized = is_authorized_client_headers(
-        &headers,
-        &state.auth_token,
-        &state.device_api_tokens,
-        &state.security.session_tokens,
-    ) || query_token.as_deref().is_some_and(|token| {
-        is_authorized_client_token(
-            token,
-            &state.auth_token,
-            &state.device_api_tokens,
-            &state.security.session_tokens,
-        )
-    });
+    let authentication = bearer_token(&headers)
+        .into_iter()
+        .chain(query_token.as_deref())
+        .find_map(|token| {
+            authenticate_socket(
+                token,
+                &state.auth_token,
+                &state.device_api_tokens,
+                &state.security.session_tokens,
+            )
+            .ok()
+        });
+    let authorized = authentication.is_some();
     // A Ghostex Collab share token opens one chat's stream and nothing else
     // (server/src/collab_shim/registry.rs); the Collab component is the only holder.
     let share_scope = (!authorized)
@@ -108,6 +109,7 @@ pub(crate) async fn handle_events(
                 cut_outputs,
                 icon_refs,
             },
+            authentication.flatten(),
         )
     })
 }
@@ -216,7 +218,7 @@ pub(crate) async fn handle_event_socket(
     state: Arc<AppState>,
     mode: EventStreamMode,
 ) {
-    handle_event_socket_scoped(socket, state, mode, None, SocketOptions::default()).await
+    handle_event_socket_scoped(socket, state, mode, None, SocketOptions::default(), None).await
 }
 
 /// `only` keeps the socket to one chat: a Ghostex Collab guest's stream.
@@ -226,6 +228,7 @@ pub(crate) async fn handle_event_socket_scoped(
     mode: EventStreamMode,
     only: Option<(String, String)>,
     options: SocketOptions,
+    device_socket: Option<DeviceSocket>,
 ) {
     let SocketOptions {
         deflate,
@@ -308,7 +311,7 @@ pub(crate) async fn handle_event_socket_scoped(
     });
     let thread_patches = super::chat_frame_dedupe::ThreadPatchOptIn::default();
     let sender_thread_patches = thread_patches.clone();
-    let sender_task = tokio::spawn(async move {
+    let send_events = async move {
         // Unchanged heavy side fields stay out of state frames, and a client that asked gets thread
         // list patches (chat_frame_dedupe.rs).
         let mut chat_frames = super::chat_frame_dedupe::ChatFrameMemory::new(sender_thread_patches);
@@ -331,6 +334,14 @@ pub(crate) async fn handle_event_socket_scoped(
                 break;
             }
         }
+    };
+    let sender_revoked = DeviceSocket::revoked(device_socket.as_ref());
+    let sender_task = tokio::spawn(async move {
+        tokio::select! {
+            biased;
+            _ = sender_revoked => {},
+            _ = send_events => {},
+        }
     });
     let mut renderer_client_id: Option<String> = None;
     let mut session_chat_subscriptions: HashSet<(String, String)> = HashSet::new();
@@ -343,6 +354,8 @@ pub(crate) async fn handle_event_socket_scoped(
     });
     loop {
         let message = tokio::select! {
+            biased;
+            _ = DeviceSocket::revoked(device_socket.as_ref()) => break,
             _ = outbound_tx.wait_for_overflow() => break,
             message = socket_receiver.next() => message,
         };
@@ -390,6 +403,7 @@ pub(crate) async fn handle_event_socket_scoped(
             break;
         }
     }
+    sender_task.abort();
     if let Some(client_id) = renderer_client_id {
         state.event_hub.unregister_renderer_client(&client_id).await;
     }
@@ -401,7 +415,6 @@ pub(crate) async fn handle_event_socket_scoped(
     drop(sessions_list);
     drop(outbound_tx);
     broadcast_task.abort();
-    sender_task.abort();
     let _ = broadcast_task.await;
     let _ = sender_task.await;
 }

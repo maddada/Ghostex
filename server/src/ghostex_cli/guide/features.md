@@ -6302,8 +6302,9 @@ agents, a connection from either side is enough.
   Devices that can reach this computer).
   Each phone pairs with its own device key, kept in its Secure Enclave or
   Android Keystore, and gets an access token tied to that key, so removing it
-  cuts that phone off at once: its sign-in key, its token and its right to
-  approve go together. Pairing a phone again replaces only that same phone's
+  revokes its sign-in key, access token and right to approve. Its open Ghostex
+  chat, terminal, and browser connections close at once, including over
+  Tailscale or your local network. Pairing a phone again replaces only that same phone's
   earlier pairing (proven by its device key), and an Easy Connect key belongs to
   one device: a pairing that names a key another paired device holds is refused,
   and the message names that device and the day it paired, so you remove the
@@ -9109,15 +9110,18 @@ Ghostex has three telemetry states:
    (`analytics_enabled: true`).
 2. **Settings switch OFF (`analyticsEnabled: false`, on Onboarding Step 2 or in
    Settings > About):** Stops all usage and feature tracking immediately, drops
-   queued product events, wipes `analytics.state.v1` detail fields (retaining
-   only `lastWeeklyCountAt`), and sends at most 1 anonymous weekly active count
-   (`install.weekly_count`: random install UUIDv4 + `analytics_enabled: false` +
+   queued product events, and wipes `analytics.state.v1` detail fields (retaining
+   only `lastWeeklyCountAt`). Ghostex discards the full analytics ID and creates
+   a fresh random UUIDv4 for the weekly count. The ID stays stable while the
+   switch is off. Turning full analytics back on discards the weekly ID and
+   starts full analytics with a fresh ID. Ghostex sends at most 1 anonymous
+   weekly active count (`install.weekly_count`: weekly UUIDv4 + `analytics_enabled: false` +
    `$process_person_profile: false`, zero other properties, only when used that
    week). Your choice is preserved across "Reset all settings to defaults".
 3. **Complete opt-out (`DO_NOT_TRACK=1`, `GHOSTEX_TELEMETRY_DISABLED=1`, or
    `--no-analytics`):** Sends strictly 0 events ever (stops even the weekly
    active count completely), deletes the entire `analytics.state.v1` state row
-   from SQLite, and removes `analytics-install-id`.
+   from SQLite, and removes both `analytics-install-id` and `analytics-weekly-id`.
 
 What is collected, all validated against a closed schema in
 `server/src/telemetry/taxonomy.rs` (see `ANALYTICS.md` in the repository root

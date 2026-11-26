@@ -108,19 +108,11 @@ pub(crate) fn start_shared_settings_watch(state: Arc<AppState>) {
                 crate::telemetry::resolve_install_session_modes(watch.published.as_ref());
             if watch.read_done(identity, read) {
                 crate::ghostex_apps::settings_read(watch.published.as_ref());
-                let analytics_off = watch
-                    .published
-                    .as_ref()
-                    .and_then(|settings| settings.get("analyticsEnabled"))
-                    .and_then(Value::as_bool)
-                    == Some(false);
-                if analytics_off {
-                    let paths = state.paths.clone();
-                    let _ = tokio::task::spawn_blocking(move || {
-                        crate::telemetry::purge_on_opt_out(&paths);
-                    })
-                    .await;
-                }
+                let paths = state.paths.clone();
+                let _ = tokio::task::spawn_blocking(move || {
+                    crate::telemetry::reconcile_analytics_settings(&paths);
+                })
+                .await;
                 let after_modes =
                     crate::telemetry::resolve_install_session_modes(watch.published.as_ref());
                 if after_modes != before_modes {

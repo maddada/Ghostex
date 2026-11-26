@@ -13,20 +13,18 @@ returning (unless held during unfinished first-run onboarding or opted out), so
 the events from the last 30 seconds of a session are not lost every time someone
 quits Ghostex.
 
-CDXC:Telemetry 2026-11-24 (privacy overhaul, Q19/Q20/Q22):
+CDXC:Telemetry 2026-11-24 (privacy overhaul, Q19/Q20):
 - Q19: Zero bytes leave the machine while first-run onboarding is unfinished.
   Events buffer in memory and are immediately dropped + wiped if the user opts
   out during onboarding.
 - Q20: Daily `heartbeat`, `session_mode.daily_rollup`, and `settings.snapshot`
   only emit when a Ghostex client (desktop, web, mobile) or agent session was
   actively used since the previous heartbeat. An idle daemon never phones home.
-- Q22: Turning analytics off immediately drops the in-memory queue, deletes the
-  entire `analytics.state.v1` row from SQLite, and removes `analytics-install-id`.
 */
 
 use std::{
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU8, Ordering},
         Arc, OnceLock,
     },
     time::Duration,
@@ -36,9 +34,7 @@ use tokio::sync::{broadcast, Notify};
 
 use crate::paths::GxserverPaths;
 
-use super::{
-    client, extensions::ExtensionRef, gate, heartbeat, identity, queue, settings_snapshot, state,
-};
+use super::{client, extensions::ExtensionRef, gate, heartbeat, queue, settings_snapshot, state};
 
 pub const DEFAULT_FLUSH_INTERVAL: Duration = Duration::from_secs(30);
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
@@ -55,7 +51,7 @@ type SnapshotCollector = Arc<dyn Fn() -> settings_snapshot::SnapshotFacts + Send
 
 static SNAPSHOT_COLLECTOR: OnceLock<SnapshotCollector> = OnceLock::new();
 static SNAPSHOT_NEEDS_ACCOUNTS: AtomicBool = AtomicBool::new(false);
-static OPT_OUT_WIPED: AtomicBool = AtomicBool::new(false);
+static OPT_OUT_WIPED: AtomicU8 = AtomicU8::new(gate::TelemetryMode::Full as u8);
 static ACTIVITY_NOTIFY: OnceLock<Notify> = OnceLock::new();
 
 /// How long the caller may wait for the shutdown flush before giving up.
@@ -77,29 +73,57 @@ pub(super) fn notify_activity() {
 /// Drop queued telemetry and wipe local state on opt-out (Q22, Q29):
 /// - Hard opt-out (`DO_NOT_TRACK=1`, `GHOSTEX_TELEMETRY_DISABLED=1`, `--no-analytics`,
 ///   or remote helper): drops entire queue, clears cached identity, deletes
-///   `analytics-install-id`, clears all in-memory activity/switches, and deletes the
+///   both identity files, clears all in-memory activity/switches, and deletes the
 ///   entire `analytics.state.v1` row from SQLite.
 /// - UI toggle OFF (`analyticsEnabled == false`, no hard opt-out): drops all queued
-///   product events and wipes all `analytics.state.v1` detail fields (`cachedAccounts`,
+///   product events, rotates to a weekly-only identity, and wipes all `analytics.state.v1` detail fields (`cachedAccounts`,
 ///   `builtInExtensions*`, `lastMobileHelloAt`, `lastHeartbeatAt`, `lastActivityAt`,
 ///   `sessionModeSwitches`), retaining ONLY `lastWeeklyCountAt` so `install.weekly_count`
 ///   never fires more than once every 7 days.
 pub fn purge_on_opt_out(paths: &GxserverPaths) {
-    let hard = gate::is_hard_opted_out(paths);
-    if let Some(telemetry) = queue::handle() {
+    let mode = gate::mode(paths);
+    if mode != gate::TelemetryMode::Full {
+        purge_for_mode(paths, queue::handle(), mode);
+    }
+}
+
+/// Apply persisted analytics settings even when no event is due.
+pub(crate) fn reconcile_analytics_settings(paths: &GxserverPaths) {
+    match gate::mode(paths) {
+        gate::TelemetryMode::Full => {
+            reset_opt_out_wiped();
+            if let Some(telemetry) = queue::handle() {
+                telemetry.retire_other_ids(gate::TelemetryMode::Full);
+            } else {
+                queue::retire_other_ids(paths, gate::TelemetryMode::Full);
+            }
+        }
+        mode => purge_for_mode(paths, queue::handle(), mode),
+    }
+}
+
+pub(super) fn purge_for_mode(
+    paths: &GxserverPaths,
+    telemetry: Option<&queue::Telemetry>,
+    mode: gate::TelemetryMode,
+) {
+    let hard = mode == gate::TelemetryMode::Off;
+    if let Some(telemetry) = telemetry {
+        telemetry.retire_other_ids(mode);
         if hard {
             telemetry.drop_queue();
-            telemetry.clear_cached_identity();
         } else {
             telemetry.drop_product_events();
+            telemetry.distinct_id(mode, true);
         }
+    } else {
+        queue::retire_other_ids(paths, mode);
     }
     SNAPSHOT_NEEDS_ACCOUNTS.store(false, Ordering::SeqCst);
     super::capture::reset_mobile_hello_cache();
     state::clear_pending_switches();
     if hard {
         state::clear_pending_activity();
-        identity::delete_install_id(paths);
     }
     if let Ok(db) = crate::storage::open_gxserver_database(paths) {
         if hard {
@@ -107,20 +131,21 @@ pub fn purge_on_opt_out(paths: &GxserverPaths) {
         } else {
             state::wipe_product_state(&db);
         }
-        OPT_OUT_WIPED.store(true, Ordering::SeqCst);
+        OPT_OUT_WIPED.store(mode as u8, Ordering::SeqCst);
     }
 }
 
 /// Same as [`purge_on_opt_out`], guarded by an atomic so repeated dropped
 /// captures while already opted out do not re-open SQLite on every call.
 pub(super) fn purge_on_opt_out_if_needed(paths: &GxserverPaths) {
-    if !OPT_OUT_WIPED.load(Ordering::SeqCst) {
-        purge_on_opt_out(paths);
+    let mode = gate::mode(paths);
+    if mode != gate::TelemetryMode::Full && OPT_OUT_WIPED.load(Ordering::SeqCst) != mode as u8 {
+        purge_for_mode(paths, queue::handle(), mode);
     }
 }
 
 pub(super) fn reset_opt_out_wiped() {
-    OPT_OUT_WIPED.store(false, Ordering::SeqCst);
+    OPT_OUT_WIPED.store(gate::TelemetryMode::Full as u8, Ordering::SeqCst);
 }
 
 fn flush_interval() -> Duration {
@@ -138,6 +163,10 @@ fn flush_blocking() {
     let Some(telemetry) = queue::handle() else {
         return;
     };
+    flush_telemetry(telemetry);
+}
+
+pub(super) fn flush_telemetry(telemetry: &queue::Telemetry) {
     /*
     The gate is consulted at FLUSH as well as at capture. Hard opt-out emits
     strictly 0 events ever. UI toggle OFF (`analyticsEnabled == false`, no hard
@@ -145,7 +174,7 @@ fn flush_blocking() {
     allowing a due minimal `install.weekly_count` event to flush (Q29).
     */
     if gate::is_hard_opted_out(telemetry.paths()) {
-        purge_on_opt_out(telemetry.paths());
+        purge_for_mode(telemetry.paths(), Some(telemetry), gate::TelemetryMode::Off);
         return;
     }
     let full_enabled = telemetry.is_enabled();
@@ -175,14 +204,35 @@ fn flush_blocking() {
     if telemetry.queue_is_empty() {
         return;
     }
-    let distinct_id = telemetry.ensure_distinct_id(true);
     while !telemetry.queue_is_empty() {
+        let mode = gate::mode(telemetry.paths());
+        if mode == gate::TelemetryMode::Off {
+            purge_for_mode(telemetry.paths(), Some(telemetry), gate::TelemetryMode::Off);
+            return;
+        }
         let mut batch = telemetry.take_batch();
+        if mode == gate::TelemetryMode::WeeklyCountOnly {
+            batch.retain(|item| item.event == super::taxonomy::EVENT_INSTALL_WEEKLY_COUNT);
+        }
+        for item in &mut batch {
+            if item.event == super::taxonomy::EVENT_INSTALL_WEEKLY_COUNT {
+                item.properties.insert(
+                    "analytics_enabled".into(),
+                    (mode == gate::TelemetryMode::Full).into(),
+                );
+            }
+        }
         if batch.is_empty() {
             break;
         }
         for queued in &mut batch {
             queued.attempts = queued.attempts.saturating_add(1);
+        }
+        let Some(distinct_id) = telemetry.distinct_id(mode, true) else {
+            return;
+        };
+        if gate::mode(telemetry.paths()) != mode {
+            return;
         }
         let encoded = telemetry.encode_batch(&batch, &distinct_id);
         if client::send_batch(&telemetry.endpoint, encoded) {
@@ -193,7 +243,9 @@ fn flush_blocking() {
         interval retries it. Continuing would just fail the rest of the queue
         against the same dead network and burn every event's attempt cap at once.
         */
-        telemetry.requeue_front(batch);
+        if gate::mode(telemetry.paths()) == mode {
+            telemetry.requeue_front(batch);
+        }
         break;
     }
 }
@@ -437,7 +489,7 @@ where
         }
         return HeartbeatRunOutcome::WeeklyCountOnlyEmitted;
     }
-    reset_opt_out_wiped();
+    reconcile_analytics_settings(paths);
     /*
     CDXC:Telemetry 2026-08-27 (addendum v2, §3):
     Collect BEFORE the due-check, and refresh the per-event profile fields from

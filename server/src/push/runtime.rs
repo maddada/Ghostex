@@ -440,7 +440,12 @@ fn take_due_silent(shared: &Shared) -> Option<SilentJob> {
 /// The phone's current token when the job still applies to it, after charging its budget.
 enum Admission {
     /// The phone's token, its "Show session names" switch, and whether this one plays the sound.
-    Send((String, bool, bool)),
+    Send {
+        token: String,
+        session_names: bool,
+        hide_project_names: bool,
+        sound: bool,
+    },
     Later(i64),
     Drop,
 }
@@ -458,13 +463,13 @@ fn send_alert(shared: &Shared, mut job: AlertJob, next_receipt_due: &mut Option<
         }
         let chose_choices = registration.alerts.is_some();
         let (token, session_names) = (registration.token.clone(), registration.session_names);
+        let hide_project_names = registration.hide_project_names;
         let first = job.sends == 0;
         let budget = data.budgets.entry(job.machine_id.clone()).or_default();
         // CDXC:Notifications 2026-11-11 DECISION: several notices close together play one sound: for a phone
         // that sent its choices, a notice within 30 s of the last one to it shows without the sound.
         let sound = delivery == AlertChoice::Sound
             && !(chose_choices && budget.alerted_within(now, BURST_QUIET_MS));
-        let token = (token, session_names, sound);
         if first && !budget.session_free(&job.event.session_id, now) {
             return None;
         }
@@ -477,10 +482,20 @@ fn send_alert(shared: &Shared, mut job: AlertJob, next_receipt_due: &mut Option<
             });
         }
         budget.record_alert(now, first.then_some(job.event.session_id.as_str()));
-        Some(Admission::Send(token))
+        Some(Admission::Send {
+            token,
+            session_names,
+            hide_project_names,
+            sound,
+        })
     });
-    let (token, session_names, sound) = match admission {
-        Admission::Send(token) => token,
+    let (token, session_names, hide_project_names, sound) = match admission {
+        Admission::Send {
+            token,
+            session_names,
+            hide_project_names,
+            sound,
+        } => (token, session_names, hide_project_names, sound),
         Admission::Later(at) => {
             job.not_before = at;
             requeue(shared, |queue| queue.jobs.push(job));
@@ -495,6 +510,7 @@ fn send_alert(shared: &Shared, mut job: AlertJob, next_receipt_due: &mut Option<
         &job.machine_id,
         &job.event,
         session_names,
+        hide_project_names,
         sound,
         has_question,
         ttl_secs,
@@ -544,19 +560,20 @@ fn send_silent(shared: &Shared, mut job: SilentJob, next_receipt_due: &mut Optio
         return;
     }
     let admission = charge_budget(shared, &job.machine_id, &job.token_hash, |data| {
-        let token = (
-            data.registration(&job.machine_id)?.token.clone(),
-            false,
-            false,
-        );
+        let token = data.registration(&job.machine_id)?.token.clone();
         let budget = data.budgets.entry(job.machine_id.clone()).or_default();
         if !budget.silent_slot_free(now) {
             return Some(Admission::Drop);
         }
         budget.record_silent(now);
-        Some(Admission::Send(token))
+        Some(Admission::Send {
+            token,
+            session_names: false,
+            hide_project_names: false,
+            sound: false,
+        })
     });
-    let Admission::Send((token, _, _)) = admission else {
+    let Admission::Send { token, .. } = admission else {
         return;
     };
     let ttl_secs = remaining_secs(job.expires_at, now);
@@ -615,7 +632,7 @@ fn charge_budget(
     }
     prune_budgets(&mut data.budgets, now);
     let admission = decide(&mut data).unwrap_or(Admission::Drop);
-    if matches!(admission, Admission::Send(_)) && store.write(&data).is_err() {
+    if matches!(admission, Admission::Send { .. }) && store.write(&data).is_err() {
         shared.warn("pushStoreUnwritable", "send");
         return Admission::Drop;
     }

@@ -18,7 +18,7 @@ use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
     agents::read_agent_settings,
-    auth::{is_authorized_client_token, DeviceApiTokens},
+    auth::{authenticate_socket, DeviceApiTokens, DeviceSocket},
     constants::GXSERVER_PROTOCOL_VERSION,
     domain::DomainRepository,
     paths::GxserverPaths,
@@ -60,15 +60,15 @@ pub(crate) async fn handle_terminal_socket(
     state: TerminalWsState,
 ) {
     let query = terminal_query(&uri);
-    if query.get("authToken").map(String::as_str).map(|token| {
-        is_authorized_client_token(
+    let Some(device_socket) = query.get("authToken").and_then(|token| {
+        authenticate_socket(
             token,
             &state.auth_token,
             &state.device_api_tokens,
             &state.owner_sessions,
         )
-    }) != Some(true)
-    {
+        .ok()
+    }) else {
         send_error_and_close(
             &mut socket,
             "unauthorized",
@@ -76,7 +76,7 @@ pub(crate) async fn handle_terminal_socket(
         )
         .await;
         return;
-    }
+    };
     let protocol_version = query.get("protocolVersion");
     if protocol_version.and_then(|value| value.parse::<u64>().ok())
         != Some(GXSERVER_PROTOCOL_VERSION)
@@ -107,10 +107,13 @@ pub(crate) async fn handle_terminal_socket(
     let cols = query_dimension(&query, "cols", DEFAULT_COLS);
     let rows = query_dimension(&query, "rows", DEFAULT_ROWS);
     let metadata_state = state.clone();
-    let metadata = tokio::task::spawn_blocking(move || {
-        resolve_attach_metadata(&metadata_state, project_id, session_id)
-    })
-    .await;
+    let metadata = tokio::select! {
+        biased;
+        _ = DeviceSocket::revoked(device_socket.as_ref()) => return,
+        result = tokio::task::spawn_blocking(move || {
+            resolve_attach_metadata(&metadata_state, project_id, session_id)
+        }) => result,
+    };
     let metadata = match metadata {
         Ok(Ok(metadata)) => metadata,
         Ok(Err((code, message))) => {
@@ -128,7 +131,20 @@ pub(crate) async fn handle_terminal_socket(
         }
     };
     let zmx_name = metadata.zmx_name.clone();
-    let spawned = tokio::task::spawn_blocking(move || spawn_terminal(metadata, cols, rows)).await;
+    let mut spawn = tokio::task::spawn_blocking(move || spawn_terminal(metadata, cols, rows));
+    let spawned = tokio::select! {
+        biased;
+        _ = DeviceSocket::revoked(device_socket.as_ref()) => {
+            drop(socket);
+            // If the blocking spawn already started, it may still create a PTY.
+            spawn.abort();
+            if let Ok(Ok(spawned)) = spawn.await {
+                cleanup_terminal(spawned.killer, spawned.child, None, None).await;
+            }
+            return;
+        }
+        result = &mut spawn => result,
+    };
     let spawned = match spawned {
         Ok(Ok(spawned)) => spawned,
         Ok(Err(message)) => {
@@ -145,7 +161,7 @@ pub(crate) async fn handle_terminal_socket(
             return;
         }
     };
-    run_terminal_socket(socket, spawned, zmx_name, cols, rows).await;
+    run_terminal_socket(socket, spawned, zmx_name, cols, rows, device_socket).await;
 }
 
 fn resolve_attach_metadata(
@@ -289,6 +305,7 @@ async fn run_terminal_socket(
     zmx_name: String,
     cols: u16,
     rows: u16,
+    device_socket: Option<DeviceSocket>,
 ) {
     let SpawnedTerminal {
         child,
@@ -298,13 +315,17 @@ async fn run_terminal_socket(
         writer,
     } = spawned;
     let (mut socket_sender, mut socket_receiver) = socket.split();
-    if send_json(
-        &mut socket_sender,
-        json!({"type": "ready", "zmxName": zmx_name, "cols": cols, "rows": rows}),
-    )
-    .await
-    .is_err()
-    {
+    let ready = tokio::select! {
+        biased;
+        _ = DeviceSocket::revoked(device_socket.as_ref()) => false,
+        sent = send_json(
+            &mut socket_sender,
+            json!({"type": "ready", "zmxName": zmx_name, "cols": cols, "rows": rows}),
+        ) => sent.is_ok(),
+    };
+    if !ready {
+        drop(socket_sender);
+        drop(socket_receiver);
         cleanup_terminal(killer, child, None, None).await;
         return;
     }
@@ -320,56 +341,62 @@ async fn run_terminal_socket(
         child
     });
     let mut child_exited = false;
-    let mut visibility_state = None;
-    loop {
-        tokio::select! {
-            message = socket_receiver.next() => {
-                match message {
-                    Some(Ok(Message::Binary(bytes))) => {
-                        if input_tx.send(bytes.to_vec()).await.is_err() {
-                            break;
-                        }
-                    }
-                    Some(Ok(Message::Text(text))) => {
-                        if let Some(bytes) = handle_control_message(&master, text.as_str(), &mut visibility_state) {
-                            if input_tx.send(bytes).await.is_err() {
+    let child_exited_flag = &mut child_exited;
+    let exchange = async move {
+        let mut visibility_state = None;
+        loop {
+            tokio::select! {
+                message = socket_receiver.next() => {
+                    match message {
+                        Some(Ok(Message::Binary(bytes))) => {
+                            if input_tx.send(bytes.to_vec()).await.is_err() {
                                 break;
                             }
                         }
-                    }
-                    Some(Ok(Message::Ping(bytes))) => {
-                        if socket_sender.send(Message::Pong(bytes)).await.is_err() {
-                            break;
+                        Some(Ok(Message::Text(text))) => {
+                            if let Some(bytes) = handle_control_message(&master, text.as_str(), &mut visibility_state) {
+                                if input_tx.send(bytes).await.is_err() {
+                                    break;
+                                }
+                            }
                         }
-                    }
-                    Some(Ok(Message::Pong(_))) => {}
-                    Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
-                }
-            }
-            output = output_rx.recv() => {
-                match output {
-                    Some(bytes) => {
-                        if socket_sender.send(Message::Binary(bytes.into())).await.is_err() {
-                            break;
+                        Some(Ok(Message::Ping(bytes))) => {
+                            if socket_sender.send(Message::Pong(bytes)).await.is_err() {
+                                break;
+                            }
                         }
+                        Some(Ok(Message::Pong(_))) => {}
+                        Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
                     }
-                    None => break,
                 }
-            }
-            status = exit_rx.recv() => {
-                child_exited = true;
-                let code = status
-                    .and_then(Result::ok)
-                    .as_ref()
-                    .and_then(exit_code);
-                let _ = send_json(&mut socket_sender, json!({"type": "exit", "code": code})).await;
-                let _ = socket_sender.send(Message::Close(None)).await;
-                break;
+                output = output_rx.recv() => {
+                    match output {
+                        Some(bytes) => {
+                            if socket_sender.send(Message::Binary(bytes.into())).await.is_err() {
+                                break;
+                            }
+                        }
+                        None => break,
+                    }
+                }
+                status = exit_rx.recv() => {
+                    *child_exited_flag = true;
+                    let code = status
+                        .and_then(Result::ok)
+                        .as_ref()
+                        .and_then(exit_code);
+                    let _ = send_json(&mut socket_sender, json!({"type": "exit", "code": code})).await;
+                    let _ = socket_sender.send(Message::Close(None)).await;
+                    break;
+                }
             }
         }
+    };
+    tokio::select! {
+        biased;
+        _ = DeviceSocket::revoked(device_socket.as_ref()) => {},
+        _ = exchange => {},
     }
-    drop(input_tx);
-    drop(output_rx);
     if !child_exited {
         let _ = tokio::task::spawn_blocking(move || killer.kill()).await;
     }

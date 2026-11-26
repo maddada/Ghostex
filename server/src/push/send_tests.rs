@@ -87,6 +87,7 @@ impl Harness {
             },
             device_id: None,
             session_names: false,
+            hide_project_names: false,
             alerts: None,
             registered_at: "2026-10-31T10:00:00.000Z".to_string(),
         });

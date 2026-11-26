@@ -553,6 +553,7 @@ pub(crate) fn render(
     candidates: &Candidates,
     target: &dyn Fn(&str) -> Option<String>,
     show_session_names: bool,
+    hide_project_names: bool,
     now: i64,
 ) -> Value {
     let mut shown: Vec<&Shown> = candidates
@@ -582,7 +583,14 @@ pub(crate) fn render(
             row.insert("agentName".into(), json!(leading));
             row.insert("agentIcon".into(), json!(shown.agent_icon));
             row.insert("agentTint".into(), json!(shown.agent_tint));
-            row.insert("project".into(), json!(shown.project));
+            row.insert(
+                "project".into(),
+                json!(if hide_project_names {
+                    ""
+                } else {
+                    &shown.project
+                }),
+            );
             if several {
                 row.insert("computer".into(), json!(truncate(&shown.computer)));
             }

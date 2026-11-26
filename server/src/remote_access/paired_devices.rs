@@ -195,6 +195,7 @@ pub(crate) fn remove_paired_device_using(
         return Ok(None);
     }
     drop(push_registrations);
+    device_tokens.revoke_device(&device.id);
     reload_device_api_tokens(db, device_tokens)?;
     let link_key = repository.remove_device_link_key(&device.id)?;
     let purpose_keys = repository.remove_device_purpose_keys(&device.id)?;
@@ -253,7 +254,15 @@ pub fn replace_earlier_pairings_of_same_phone(
 ) -> Result<Vec<RemotePairedDeviceRecord>> {
     let earlier =
         earlier_pairings_of_same_device(db, new_device_id, tailcat_client_key, device_public_key)?;
-    retire_earlier_pairings(paths, db, new_device_id, earlier, remove_key_line, on_kept)
+    retire_earlier_pairings(
+        paths,
+        db,
+        new_device_id,
+        earlier,
+        remove_key_line,
+        on_kept,
+        |_| {},
+    )
 }
 
 /// The entries `replace_earlier_pairings_of_same_phone` retires for the new entry `new_device_id`.
@@ -311,6 +320,7 @@ pub(crate) fn retire_earlier_pairings(
     earlier: Vec<RemotePairedDeviceRecord>,
     mut remove_key_line: impl FnMut(&str) -> Result<bool>,
     mut on_kept: impl FnMut(&RemotePairedDeviceRecord, &anyhow::Error),
+    mut on_removed: impl FnMut(&str),
 ) -> Result<Vec<RemotePairedDeviceRecord>> {
     let repository = RemotePairingRepository::new(db);
     let mut replaced = Vec::new();
@@ -354,6 +364,7 @@ pub(crate) fn retire_earlier_pairings(
             }
         }
         if let Some(removed) = repository.remove_device(&device.id)? {
+            on_removed(&device.id);
             replaced.push(removed);
         }
     }
@@ -442,28 +453,28 @@ fn key_still_needed(db: &Connection, key: &str, owner_device_key: Option<&str>) 
 /// Mirrors the stored device tokens (paired v2 devices only) into the map every request is
 /// checked against, with the device each names and when it lapses.
 pub fn reload_device_api_tokens(db: &Connection, device_tokens: &DeviceApiTokens) -> Result<()> {
-    let entries = RemotePairingRepository::new(db)
-        .list_api_tokens()?
-        .into_iter()
-        .map(|(hash, device_id, expires_at)| {
-            let expires_at_ms = expires_at
-                .as_deref()
-                .and_then(|text| chrono::DateTime::parse_from_rfc3339(text).ok())
-                // An unreadable expiry lapses at once rather than never.
-                .map_or_else(
-                    || expires_at.as_ref().map(|_| 0),
-                    |time| Some(time.timestamp_millis().max(0) as u64),
-                );
-            (
-                hash,
-                DeviceTokenEntry {
-                    device_id: Some(device_id),
-                    expires_at_ms,
-                },
-            )
-        });
-    device_tokens.replace_entries(entries);
-    Ok(())
+    device_tokens.reload_entries(|| {
+        Ok(RemotePairingRepository::new(db)
+            .list_api_tokens()?
+            .into_iter()
+            .map(|(hash, device_id, expires_at)| {
+                let expires_at_ms = expires_at
+                    .as_deref()
+                    .and_then(|text| chrono::DateTime::parse_from_rfc3339(text).ok())
+                    // An unreadable expiry lapses at once rather than never.
+                    .map_or_else(
+                        || expires_at.as_ref().map(|_| 0),
+                        |time| Some(time.timestamp_millis().max(0) as u64),
+                    );
+                (
+                    hash,
+                    DeviceTokenEntry {
+                        device_id: Some(device_id),
+                        expires_at_ms,
+                    },
+                )
+            }))
+    })
 }
 
 pub fn touch_paired_device_seen(
