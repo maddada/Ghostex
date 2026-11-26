@@ -24,7 +24,9 @@ impl NativeChatView {
         let held = self.answer_hold_active()
             || self.transcript_focus_follow.get().is_some()
             || self.snapshot["subagent"].is_object();
-        let distance = super::scroll_bottom::transcript_distance_to_end(&self.list).as_f32();
+        let distance =
+            super::scroll_bottom::transcript_distance_to_end(&self.list, &self.spliced_height)
+                .as_f32();
         let rule = toggle_scroll(
             opening,
             self.list.is_following_tail(),
@@ -143,7 +145,11 @@ impl NativeChatView {
                 // are not left below the fold.
                 let top = self.list.logical_scroll_top();
                 let scale = super::appearance::ChatAppearance::current(&self.snapshot).scale;
-                let at_bottom = !super::scroll_bottom::transcript_left_bottom(&self.list, scale);
+                let at_bottom = !super::scroll_bottom::transcript_left_bottom(
+                    &self.list,
+                    &self.spliced_height,
+                    scale,
+                );
                 self.list.set_follow_mode(FollowMode::Tail);
                 if !at_bottom {
                     self.list.scroll_to(top);

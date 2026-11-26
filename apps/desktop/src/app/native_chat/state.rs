@@ -368,6 +368,9 @@ pub(crate) struct NativeChatView {
     pub(super) history_release_following: bool,
     /// Whether the last render drew the "Scroll to bottom" pill (scroll_bottom.rs).
     pub(super) scroll_bottom_drawn: std::rc::Rc<std::cell::Cell<bool>>,
+    /// The height rows replaced since the list's last layout took out below the reader, which the
+    /// list itself does not count until it lays them out (scroll_bottom.rs `SplicedHeight`).
+    pub(super) spliced_height: super::scroll_bottom::SplicedHeight,
     input_needs_sync: bool,
     pub(super) input_placeholder: String,
     input_undoable: bool,
@@ -827,6 +830,7 @@ impl NativeChatView {
             transcript_scrolled_at: None,
             history_release_following: false,
             scroll_bottom_drawn: Default::default(),
+            spliced_height: Default::default(),
             input_needs_sync: false,
             input_placeholder: String::new(),
             input_undoable: false,

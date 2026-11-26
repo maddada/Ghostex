@@ -129,7 +129,8 @@ impl NativeChatView {
         }
         self.under_workarea_header = under;
         if self.list.item_count() > 0 {
-            self.list.splice(0..1, 1);
+            self.spliced_height
+                .splice(&self.list, || self.list.splice(0..1, 1));
         }
         cx.notify();
     }
