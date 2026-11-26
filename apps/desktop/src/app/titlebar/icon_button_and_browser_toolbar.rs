@@ -287,7 +287,7 @@ impl GhostexGpuiApp {
                         cx,
                     ))
                     // CDXC:Browser 2026-11-27 DECISION:
-                    // User: "replace this button with the open page externally button please" (of the toolbar's DevTools button) and "move devtools inside the 3 dots pls". Open Externally takes that spot and leaves the view tab strip for the Browser, so it is not shown twice; DevTools is a row of the ⋯ menu (browser_menu.rs).
+                    // User: "replace this button with the open page externally button please" (of the toolbar's DevTools button) and "move devtools inside the 3 dots pls". Open Externally takes that spot and leaves the view tab strip for the Browser, so it is not shown twice; DevTools is a row of the ⋯ menu (browser_menu.rs). Asked whether the ⋯ menu's Open in External Browser row should go too, the user picked "Remove the menu row": this button is the only Open Externally in the toolbar and its menu.
                     .child(self.render_browser_toolbar_button(
                         "open-externally",
                         TITLEBAR_ICON_EXTERNAL_LINK,

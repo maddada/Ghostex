@@ -1126,11 +1126,6 @@ impl Render for GhostexGpuiApp {
                     );
                 }),
             )
-            .on_action(cx.listener(
-                |this, action: &OpenBrowserPaneInExternalBrowser, _window, cx| {
-                    this.open_browser_pane_in_external_browser(BrowserPaneId(action.pane_id), cx);
-                },
-            ))
             .on_action(
                 cx.listener(|this, action: &SetVoiceAgentCallMode, _window, cx| {
                     this.set_voice_agent_call_mode(action.push_to_talk, cx);

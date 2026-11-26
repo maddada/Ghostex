@@ -96,17 +96,6 @@ impl GhostexGpuiApp {
             titlebar_popup_menu_with_scroll_behavior(menu, width, max_height, scrollable)
                 .check_side(Side::Right)
                 .menu_element(
-                    Box::new(OpenBrowserPaneInExternalBrowser { pane_id: pane_id.0 }),
-                    |_, _| {
-                        titlebar_popup_standard_menu_row(
-                            BROWSER_ICON_WORLD,
-                            TITLEBAR_POPUP_MENU_ROW_ICON_SIZE,
-                            "Open in External Browser".to_string(),
-                            false,
-                        )
-                    },
-                )
-                .menu_element(
                     Box::new(ToggleBrowserDevTools { pane_id: pane_id.0 }),
                     |_, _| {
                         titlebar_popup_standard_menu_row(
@@ -144,7 +133,6 @@ impl GhostexGpuiApp {
 
     pub(crate) fn browser_actions_popup_content_height(&self) -> f32 {
         let mut rows = vec![
-            TITLEBAR_POPUP_MENU_ROW_HEIGHT,
             TITLEBAR_POPUP_MENU_ROW_HEIGHT,
             TITLEBAR_POPUP_MENU_SEPARATOR_HEIGHT,
             TITLEBAR_POPUP_MENU_MIN_ITEM_HEIGHT,
