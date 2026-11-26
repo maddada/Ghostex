@@ -396,6 +396,10 @@ pub async fn run_gxserver_foreground(
         .route("/api/browserTcp", any(browser_tcp::handle_browser_tcp))
         .route("/api/voice", any(crate::voice_agent::handle_voice))
         .route(
+            "/api/remoteScreen/{*rest}",
+            any(crate::remote_screen::handle_remote_screen_proxy),
+        )
+        .route(
             "/api/cefDevtools/host",
             any(cef_devtools::handle_cef_devtools_host),
         )

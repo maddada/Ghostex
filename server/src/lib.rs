@@ -107,6 +107,7 @@ pub(crate) mod project_views;
 pub mod protocol;
 pub(crate) mod push;
 pub mod remote_access;
+pub(crate) mod remote_screen;
 pub mod repository_clone;
 pub mod resume_lookup;
 pub mod runtime;

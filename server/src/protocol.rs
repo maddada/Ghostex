@@ -404,6 +404,10 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         // The Boost pill's prompt editor and hint on the phone and on a desktop connected to this
         // computer: the prompts this computer adds under its sessions' messages (boosts.rs).
         crate::boosts::BOOSTS_ENDPOINT => remote_allowed(path),
+        // CDXC:RemoteScreen 2026-11-26 WHY: a viewer reaches this computer's screen through its own tunnel to the local listener (the desktop's SSH or Easy Connect link, the phone's); another computer's agents on the way-back listener never start one.
+        "/api/remoteScreenStart" | "/api/remoteScreenStop" | "/api/remoteScreenStatus" => {
+            full_local(path)
+        }
         // Ghostex Collab: the owner's shares (the phone stops and approves them too), and the
         // typing signal both the owner and a guest send (server/src/collab_shim/http.rs; the component answers a guest's).
         // A guest's page reads the chat's pages and sends their answers through the same tunnel.

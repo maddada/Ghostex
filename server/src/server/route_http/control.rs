@@ -149,6 +149,16 @@ pub(super) async fn route_control_http(
             super::handle_autopilot_http(&state, &caller, endpoint.path, request_id, &body_json)
                 .await
         }
+        path if crate::remote_screen::REMOTE_SCREEN_ENDPOINTS.contains(&path) => {
+            crate::remote_screen::handle_remote_screen_http(
+                &state,
+                &caller,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
+        }
         crate::boosts::BOOSTS_ENDPOINT => {
             super::handle_boosts_http(&state, endpoint.path, request_id, &body_json).await
         }
