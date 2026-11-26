@@ -33,6 +33,9 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 struct Relay {
     host: String,
     child: Mutex<Child>,
+    /// Set by the first `stop`, which signals the process group while its leader is not yet
+    /// reaped; later calls signal nothing, as the pid may belong to another process by then.
+    stopped: AtomicBool,
     stdin: Mutex<ChildStdin>,
     pending: Arc<Mutex<HashMap<u64, mpsc::Sender<Value>>>>,
     next_id: AtomicU64,
@@ -42,6 +45,24 @@ struct Relay {
 }
 
 static RELAY: Mutex<Option<Arc<Relay>>> = Mutex::new(None);
+
+/// Why a request through the relay failed.
+enum Failure {
+    /// It never reached the relay (writing to it failed), so it can be sent again.
+    NotSent(String),
+    /// The relay stopped after it took the request: it may have run.
+    Lost(String),
+    /// Executor answered with an error, or didn't answer in time.
+    Other(String),
+}
+
+impl Failure {
+    fn message(self) -> String {
+        match self {
+            Failure::NotSent(text) | Failure::Lost(text) | Failure::Other(text) => text,
+        }
+    }
+}
 static START: Mutex<()> = Mutex::new(());
 
 impl Relay {
@@ -61,37 +82,43 @@ impl Relay {
         }
     }
 
-    fn request(&self, method: &str, params: Value, timeout: Duration) -> Result<Value, String> {
+    fn request(&self, method: &str, params: Value, timeout: Duration) -> Result<Value, Failure> {
         *lock(&self.last_used) = Instant::now();
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let (sender, answer) = mpsc::channel();
         lock(&self.pending).insert(id, sender);
-        let sent =
-            self.write(&json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }));
+        let sent = self
+            .write(&json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }))
+            .map_err(Failure::NotSent);
         let reply = sent.and_then(|_| {
             answer.recv_timeout(timeout).map_err(|error| match error {
-                mpsc::RecvTimeoutError::Timeout => format!(
+                mpsc::RecvTimeoutError::Timeout => Failure::Other(format!(
                     "Executor didn't answer within {} seconds.",
                     timeout.as_secs()
-                ),
-                mpsc::RecvTimeoutError::Disconnected => self.gone(),
+                )),
+                mpsc::RecvTimeoutError::Disconnected => Failure::Lost(self.gone()),
             })
         });
         lock(&self.pending).remove(&id);
         *lock(&self.last_used) = Instant::now();
         let reply = reply?;
         if let Some(error) = reply.get("error") {
-            return Err(error
-                .get("message")
-                .and_then(Value::as_str)
-                .unwrap_or("Executor refused the request.")
-                .to_string());
+            return Err(Failure::Other(
+                error
+                    .get("message")
+                    .and_then(Value::as_str)
+                    .unwrap_or("Executor refused the request.")
+                    .to_string(),
+            ));
         }
         Ok(reply.get("result").cloned().unwrap_or(Value::Null))
     }
 
     fn stop(&self) {
         self.alive.store(false, Ordering::Relaxed);
+        if self.stopped.swap(true, Ordering::Relaxed) {
+            return;
+        }
         let mut child = lock(&self.child);
         #[cfg(unix)]
         // SAFETY: signals the relay's own process group, which `start` created for it.
@@ -151,6 +178,7 @@ fn start(executable: &Path, host: &str) -> Result<Arc<Relay>, String> {
     let relay = Arc::new(Relay {
         host: host.to_string(),
         child: Mutex::new(child),
+        stopped: AtomicBool::new(false),
         stdin: Mutex::new(stdin),
         pending: Arc::new(Mutex::new(HashMap::new())),
         next_id: AtomicU64::new(1),
@@ -210,9 +238,9 @@ fn start(executable: &Path, host: &str) -> Result<Arc<Relay>, String> {
         }),
         INITIALIZE_WITHIN,
     );
-    if let Err(error) = initialized {
+    if let Err(failure) = initialized {
         relay.stop();
-        return Err(error);
+        return Err(failure.message());
     }
     relay.write(&json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }))?;
     start_idle_stop();
@@ -220,6 +248,8 @@ fn start(executable: &Path, host: &str) -> Result<Arc<Relay>, String> {
 }
 
 /// The running relay for `host`, started when there is none (or it stopped, or the host changed).
+/// One that stopped is forgotten before the new one starts, so a start that fails leaves none
+/// behind to signal again.
 fn ensure(executable: &Path, host: &str) -> Result<Arc<Relay>, String> {
     let current = lock(&RELAY).clone();
     if let Some(relay) =
@@ -228,9 +258,10 @@ fn ensure(executable: &Path, host: &str) -> Result<Arc<Relay>, String> {
         return Ok(relay);
     }
     let _start = lock(&START);
-    let current = lock(&RELAY).clone();
+    let current = lock(&RELAY).take();
     if let Some(relay) = current {
         if relay.alive.load(Ordering::Relaxed) && relay.host == host {
+            *lock(&RELAY) = Some(relay.clone());
             return Ok(relay);
         }
         relay.stop();
@@ -240,7 +271,9 @@ fn ensure(executable: &Path, host: &str) -> Result<Arc<Relay>, String> {
     Ok(relay)
 }
 
-/// One JSON-RPC request through the relay; a relay that stopped is started again once.
+/// One JSON-RPC request through the relay. A request that never reached a relay that had
+/// stopped goes to a new one; a tool call the relay took before it stopped is not sent again,
+/// since it may have run (after the user approved it, say), and the agent is told so.
 pub(super) fn request(
     executable: &Path,
     host: &str,
@@ -250,10 +283,23 @@ pub(super) fn request(
 ) -> Result<Value, String> {
     let relay = ensure(executable, host)?;
     match relay.request(method, params.clone(), timeout) {
-        Err(_) if !relay.alive.load(Ordering::Relaxed) => {
-            ensure(executable, host)?.request(method, params, timeout)
+        Ok(result) => Ok(result),
+        // Its input is closed: it stopped, and never read this request.
+        Err(Failure::NotSent(_)) => {
+            relay.alive.store(false, Ordering::Relaxed);
+            ensure(executable, host)?
+                .request(method, params, timeout)
+                .map_err(Failure::message)
         }
-        result => result,
+        Err(Failure::Lost(_)) if method == "tools/call" => Err(
+            "The Executor CLI's relay stopped during the call, so Ghostex can't tell whether it ran and didn't send it again. Check with a read before trying again."
+                .to_string(),
+        ),
+        // A read (the tool list) is safe to ask again.
+        Err(Failure::Lost(_)) => ensure(executable, host)?
+            .request(method, params, timeout)
+            .map_err(Failure::message),
+        Err(failure) => Err(failure.message()),
     }
 }
 
