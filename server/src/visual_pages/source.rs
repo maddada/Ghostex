@@ -116,6 +116,9 @@ pub(crate) fn handle_read_http(
                 "refreshable": source.is_some(),
                 "changed": changed,
                 "questionsLeft": super::questions::page_questions_left(&state.paths.root_dir, &id),
+                // Answered anywhere: a hidden page's pill goes (desktop `note_answered`, the
+                // phone's hiddenPages.ts).
+                "answered": super::questions::page_answered(&state.paths.root_dir, &id),
                 "questionsAnswered": counts.map(|(answered, _)| answered),
                 "questionsTotal": counts.map(|(_, total)| total),
                 "projectId": project_id,

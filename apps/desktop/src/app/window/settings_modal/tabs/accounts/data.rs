@@ -9,14 +9,14 @@ use serde_json::Value;
 pub(crate) const PROVIDERS: [&str; 2] = ["claude", "codex"];
 
 /// The providers Ghostex only shows the usage of (server/src/accounts/usage_only/).
-pub(crate) const USAGE_PROVIDERS: [&str; 3] = ["cursor", "gemini", "copilot"];
+pub(crate) const USAGE_PROVIDERS: [&str; 3] = ["cursor", "antigravity", "copilot"];
 
 /// `providerLabel`.
 pub(crate) fn provider_label(provider: &str) -> &'static str {
     match provider {
         "claude" => "Claude",
         "cursor" => "Cursor",
-        "gemini" => "Gemini",
+        "antigravity" => "Antigravity",
         "copilot" => "Copilot",
         _ => "Codex",
     }
@@ -231,7 +231,7 @@ impl Account {
     /// The windows the detail pane draws as bars: five-hour first, then the others (the headline windows already come in that order).
     pub(crate) fn usage_bars(&self) -> Vec<UsageWindow> {
         let mut windows = self.headline_windows();
-        // gxserver already lists a usage-only account's windows in order (Gemini's 5h, 7d, then
+        // gxserver already lists a usage-only account's windows in order (Antigravity's 5h, 7d, then
         // each other Antigravity group's 5h and 7d); sorting would pull every group's 5h together.
         if !self.usage_only() {
             windows.sort_by_key(|window| !window.is_five_hour());
@@ -239,7 +239,7 @@ impl Account {
         windows
     }
 
-    /// A Cursor, Gemini or Copilot account, which only shows usage.
+    /// A Cursor, Antigravity or Copilot account, which only shows usage.
     pub(crate) fn usage_only(&self) -> bool {
         self.raw["usageOnly"].as_bool() == Some(true)
     }
@@ -308,7 +308,7 @@ impl Account {
     pub(crate) fn headline_windows(&self) -> Vec<UsageWindow> {
         let usage = self.usage();
         if self.usage_only() {
-            // Cursor and Copilot have one month window; Gemini its 5h and 7d, then each other
+            // Cursor and Copilot have one month window; Antigravity its 5h and 7d, then each other
             // Antigravity group's (Claude/GPT 5h and 7d).
             return usage;
         }

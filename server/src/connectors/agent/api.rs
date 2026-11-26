@@ -39,9 +39,9 @@ fn workspace_tools(state: &AppState, workspace: &str) -> Vec<Value> {
         return tools;
     }
     let mut tools = composio::mcp_tools(&state.paths, workspace);
-    if executor::enabled(&state.paths, workspace) {
-        // A workspace whose Executor can't start still gets its Composio tools.
-        if let Ok(executor_tools) = executor::agent_tools(&state.paths, workspace) {
+    if executor::enabled() {
+        // A workspace whose Executor can't answer still gets its Composio tools.
+        if let Ok(executor_tools) = executor::agent_tools() {
             tools.extend(executor_tools);
         }
     }
@@ -90,16 +90,21 @@ pub(crate) async fn call_connector_agent_tool(
     super::calls::call(&state, params).await
 }
 
-/// `/api/cancelConnectorAgentToolCall`: the agent stopped a call (`callId`); its card goes away.
+/// `/api/cancelConnectorAgentToolCall`: the agent stopped a call (`callId`) of its session (the
+/// route puts the caller's in); its card goes away.
 pub(crate) fn cancel_connector_agent_tool_call(
     state: &AppState,
     params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
-    let call_id = params
-        .get("callId")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    Ok(json!({ "cancelled": super::cards::cancel_call(state, call_id) }))
+    let text = |key: &str| params.get(key).and_then(Value::as_str).unwrap_or_default();
+    Ok(json!({
+        "cancelled": super::cards::cancel_call(
+            state,
+            text("projectId"),
+            text("sessionId"),
+            text("callId"),
+        )
+    }))
 }
 
 /// The workspace's rules as `/api/readConnectors` shows them.

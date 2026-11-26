@@ -74,6 +74,8 @@ impl GhostexGpuiApp {
             Some(editor) => div()
                 .flex_1()
                 .min_w_0()
+                // The field's own right-click menu opens, not the row's (window/text_field_menu.rs).
+                .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation())
                 .on_action(cx.listener(|app, _: &Escape, _, cx| {
                     cx.stop_propagation();
                     app.finish_native_sidebar_rename(false, cx);

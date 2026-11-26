@@ -1126,11 +1126,6 @@ impl Render for GhostexGpuiApp {
                     );
                 }),
             )
-            .on_action(cx.listener(
-                |this, action: &OpenBrowserPaneInExternalBrowser, _window, cx| {
-                    this.open_browser_pane_in_external_browser(BrowserPaneId(action.pane_id), cx);
-                },
-            ))
             .on_action(
                 cx.listener(|this, action: &SetVoiceAgentCallMode, _window, cx| {
                     this.set_voice_agent_call_mode(action.push_to_talk, cx);
@@ -1269,13 +1264,15 @@ impl Render for GhostexGpuiApp {
             .on_action(cx.listener(|this, _: &ResetBrowserZoom, window, cx| {
                 this.reset_browser_zoom_from_toolbar(this.browser_tabs.focused_pane, window, cx);
             }))
-            .on_action(cx.listener(|this, _: &ToggleBrowserDevTools, window, cx| {
-                this.toggle_browser_devtools_from_toolbar(
-                    this.browser_tabs.focused_pane,
-                    window,
-                    cx,
-                );
-            }))
+            .on_action(
+                cx.listener(|this, action: &ToggleBrowserDevTools, window, cx| {
+                    this.toggle_browser_devtools_from_toolbar(
+                        BrowserPaneId(action.pane_id),
+                        window,
+                        cx,
+                    );
+                }),
+            )
             .on_action(
                 cx.listener(|this, action: &SelectClaudeWebAccount, _window, cx| {
                     this.select_claude_web_account(&action.account_id, cx);

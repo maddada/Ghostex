@@ -88,6 +88,18 @@ impl NativeChatView {
         inserted: usize,
         anchor_key: Vec<String>,
     ) {
+        self.spliced_height.splice(&self.list, || {
+            self.splice_transcript_rows(start, end, inserted, anchor_key)
+        });
+    }
+
+    fn splice_transcript_rows(
+        &self,
+        start: usize,
+        end: usize,
+        inserted: usize,
+        anchor_key: Vec<String>,
+    ) {
         let anchor = (!self.list.is_following_tail()).then(|| self.list.logical_scroll_top());
         self.list.splice(start..end, inserted);
         if let Some(anchor) = anchor

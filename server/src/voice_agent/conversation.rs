@@ -14,6 +14,7 @@ use serde_json::{json, Value};
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message as WsMessage;
 
+use super::call_language::CallLanguage;
 use super::control::{self, OpenConfirm};
 use super::focus::{self, FocusScope};
 use super::memory;
@@ -32,7 +33,7 @@ mod card;
 mod turn_word;
 
 pub(super) use announcement::Announcement;
-pub(super) use turn_word::TURN_WORD_INSTRUCTIONS;
+pub(super) use turn_word::turn_word_instructions;
 
 /// CDXC:VoiceMode 2026-10-20 DECISION:
 /// User: the voice agent "hangs up by itself after 5 minutes with nobody talking" because realtime is billed while connected. Talking is user speech the provider detected, typed text, or the agent's audio answering the user; the timer keeps running while no client is attached.
@@ -266,6 +267,9 @@ pub(super) struct Conversation {
     /// "Answer when I say "reply"" was on when the call started (`voiceAgentWaitForReply`): a
     /// Regular call answers spoken turns only after the turn word (`turn_word.rs`).
     wait_for_reply: bool,
+    /// The language the call speaks and the turn words that end a spoken turn in it
+    /// (`call_language.rs`), chosen when the call started.
+    call_language: CallLanguage,
     /// The intro is still to be said (on the first attach).
     intro_pending: bool,
     /// Replies gxserver asked for (`response.create`) that the provider has not started yet.
@@ -326,6 +330,7 @@ impl Conversation {
         session_update: Value,
         push_to_talk: bool,
         wait_for_reply: bool,
+        call_language: CallLanguage,
         focus: Option<FocusScope>,
         client_remote: bool,
         socket: ProviderSocket,
@@ -386,6 +391,7 @@ impl Conversation {
             scope_changes: 0,
             turn_unanswered: false,
             wait_for_reply,
+            call_language,
             intro_pending: true,
             responses_requested: 0,
             dropped_responses: HashSet::new(),
@@ -1154,7 +1160,11 @@ impl Conversation {
                 self.user_captions.remove(&item_id);
                 let mut text = str_field("transcript").trim().to_string();
                 let turn_word = if self.waits_for_word() {
-                    turn_word::strip_turn_word(&text)
+                    turn_word::strip_turn_word(
+                        &text,
+                        &self.call_language.turn_words,
+                        self.call_language.code,
+                    )
                 } else {
                     None
                 };
@@ -1569,7 +1579,13 @@ impl Conversation {
         registry::set_focus(&self.id, view.clone());
         self.scope_changes += 1;
         let mut update = self.session_update.clone();
-        update["session"]["instructions"] = json!(prompt::instructions(self.focus.as_ref()));
+        // The new scope's instructions keep the call's language and, while the call waits for the
+        // turn words, what the model is told about them (as the call started, socket.rs).
+        let mut instructions = prompt::instructions(self.focus.as_ref(), self.call_language.code);
+        if self.wait_for_reply {
+            instructions.push_str(&turn_word_instructions(&self.call_language.turn_words));
+        }
+        update["session"]["instructions"] = json!(instructions);
         update["session"]["tools"] = tools::definitions(self.focus.as_ref());
         self.session_update = update.clone();
         // A voice change still waiting for its answer keeps its voice.

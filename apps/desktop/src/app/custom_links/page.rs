@@ -3,7 +3,7 @@
 //! Back and Forward, its icon), and the address bar above it.
 //!
 //! CDXC:Browser 2026-11-22 DECISION:
-//! User: the link view's address bar has "the same full toolbar as the side panel Browser" (Back, Forward, Reload, Home, the lock and address, then the device view, the element picker, History, Profile, the annotate tool and the ⋯ menu), reusing the Browser's toolbar and its actions, with Close kept. The link page is still not a Browser tab: it belongs to no project, so it cannot live in a project's browser model (`browser_tabs`, swapped and parked with the project). So the Browser's own `render_browser_toolbar` is drawn for `CUSTOM_LINK_PAGE_PANE`, a pane id no Browser pane has, and each place the toolbar reads a pane or runs an action hands that id to the link page: its address, loading and history from what the page reports, its surface, Home as the link's own address, History opening a visit here, Profile choosing which Browser profile the page opens in (or the links' own, `CUSTOM_LINK_BROWSER_PROFILE`, kept in `custom-link-page.json`), the Page Size frame and user agent (this run only), and the ⋯ menu's Open in External Browser. The address field is the link page's own (it takes `localhost:8317`, `normalize_custom_link_url`); Escape puts the page's own address back. Supersedes the 2026-11-22 WHY that drew a reduced bar of its own.
+//! User: the link view's address bar has "the same full toolbar as the side panel Browser" (Back, Forward, Reload, Home, the lock and address, then the device view, the element picker, History, Profile, the annotate tool and the ⋯ menu), reusing the Browser's toolbar and its actions, with Close kept. The link page is still not a Browser tab: it belongs to no project, so it cannot live in a project's browser model (`browser_tabs`, swapped and parked with the project). So the Browser's own `render_browser_toolbar` is drawn for `CUSTOM_LINK_PAGE_PANE`, a pane id no Browser pane has, and each place the toolbar reads a pane or runs an action hands that id to the link page: its address, loading and history from what the page reports, its surface, Home as the link's own address, History opening a visit here, Profile choosing which Browser profile the page opens in (or the links' own, `CUSTOM_LINK_BROWSER_PROFILE`, kept in `custom-link-page.json`), the Page Size frame and user agent (this run only), and the toolbar's Open Externally (since 2026-11-27, when the ⋯ menu's Open in External Browser row was removed). The address field is the link page's own (it takes `localhost:8317`, `normalize_custom_link_url`); Escape puts the page's own address back. Supersedes the 2026-11-22 WHY that drew a reduced bar of its own.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -333,15 +333,13 @@ impl GhostexGpuiApp {
             | BrowserToolbarAction::Forward
             | BrowserToolbarAction::Reload
             | BrowserToolbarAction::StopLoading
-            | BrowserToolbarAction::ResetZoom
-            | BrowserToolbarAction::DevTools => match surface {
+            | BrowserToolbarAction::ResetZoom => match surface {
                 Some(surface) => surface.update(cx, |surface, _| match action {
                     BrowserToolbarAction::Back => surface.go_back(),
                     BrowserToolbarAction::Forward => surface.go_forward(),
                     BrowserToolbarAction::Reload => surface.reload(),
                     BrowserToolbarAction::StopLoading => surface.stop_load(),
-                    BrowserToolbarAction::ResetZoom => surface.reset_zoom(),
-                    _ => surface.toggle_dev_tools(),
+                    _ => surface.reset_zoom(),
                 }),
                 None if matches!(action, BrowserToolbarAction::Reload) => {
                     self.reload_titlebar_view(WebPlace::Link.mode(), window, cx)
@@ -385,6 +383,7 @@ impl GhostexGpuiApp {
                 }
             }
             BrowserToolbarAction::ResetMediaPermissions => {}
+            BrowserToolbarAction::OpenExternally => self.open_custom_link_page_externally(),
         }
         cx.notify();
     }
@@ -490,7 +489,7 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
-    /// The ⋯ menu's Open in External Browser on the link page.
+    /// The toolbar's Open Externally on the link page.
     pub(crate) fn open_custom_link_page_externally(&mut self) {
         let (address, ..) = self.custom_link_toolbar_page();
         if !address.is_empty() {

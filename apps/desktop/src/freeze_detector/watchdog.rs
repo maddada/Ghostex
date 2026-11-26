@@ -262,9 +262,21 @@ fn timestamp() -> String {
         .to_string()
 }
 
+const MAX_FREEZE_LOG_BYTES: u64 = 4 * 1024 * 1024;
+
 fn append(log_path: &PathBuf, text: &str) {
     if let Some(parent) = log_path.parent() {
         let _ = fs::create_dir_all(parent);
+    }
+    if fs::metadata(log_path)
+        .map(|meta| meta.len())
+        .unwrap_or(0)
+        .saturating_add(text.len() as u64)
+        > MAX_FREEZE_LOG_BYTES
+    {
+        let backup = PathBuf::from(format!("{}.1", log_path.display()));
+        let _ = fs::remove_file(&backup);
+        let _ = fs::rename(log_path, &backup);
     }
     if let Ok(mut file) = fs::OpenOptions::new()
         .create(true)

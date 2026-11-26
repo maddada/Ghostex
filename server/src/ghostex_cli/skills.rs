@@ -538,19 +538,13 @@ pub fn install_move_codex_session_skill_command(args: &[String]) -> CliResult<()
 mod tests {
     use super::*;
     use std::path::Path;
-    use std::sync::atomic::{AtomicU32, Ordering};
 
-    static TEMP_COUNTER: AtomicU32 = AtomicU32::new(0);
-
-    fn temp_root(name: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!(
-            "gx-cli-skills-{}-{}-{}",
-            std::process::id(),
-            name,
-            TEMP_COUNTER.fetch_add(1, Ordering::SeqCst)
-        ));
-        std::fs::create_dir_all(&root).expect("create temp root");
-        root
+    // Deleted when the returned guard drops, so a test run leaves nothing in the temp folder (leak audit row 13).
+    fn temp_root(name: &str) -> tempfile::TempDir {
+        tempfile::Builder::new()
+            .prefix(&format!("gx-cli-skills-{name}-"))
+            .tempdir()
+            .expect("create temp root")
     }
 
     fn touch(path: &Path) {
@@ -590,7 +584,8 @@ mod tests {
 
     #[test]
     fn package_source_resolves_directory_containing_skill() {
-        let root = temp_root("package-source");
+        let root_dir = temp_root("package-source");
+        let root = root_dir.path();
         let skill_name = "gx-test-skill-direct";
         let skills_dir = root.join("skills");
         touch(&skills_dir.join(skill_name).join("SKILL.md"));
@@ -610,7 +605,8 @@ mod tests {
 
     #[test]
     fn unresolved_explicit_source_is_returned_verbatim() {
-        let root = temp_root("package-source-verbatim");
+        let root_dir = temp_root("package-source-verbatim");
+        let root = root_dir.path();
         let missing = root.join("nowhere");
         let source = resolve_ghostex_agent_skill_package_source(
             "gx-test-skill-missing",

@@ -739,6 +739,9 @@ impl NativeChatView {
             self.invoke(json!({"type": "saveAsBoost", "text": text}), cx);
             #[cfg(not(ghostex_web))]
             self.open_boost_settings(Some("newBoost".to_string()), Some(text), cx);
+        } else if action.command["type"] == super::boosts::COMPOSER_EDIT_COMMAND {
+            // Cut, Copy, Paste or Select All in the chat box's right-click menu (boosts.rs).
+            self.composer_edit_command(&action.command, window, cx);
         } else if action.command["type"] == ghostex_gx_chat_core::extras::boosts::PILL_COMMAND {
             // Expand, Edit Boost or Remove on a chat box Boost pill's right-click menu (boosts.rs).
             self.boost_pill_command(&action.command, cx);

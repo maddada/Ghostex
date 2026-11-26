@@ -452,18 +452,15 @@ fn connector(
         params.insert("workspaceId".into(), json!(workspace));
     }
     params.insert("tool".into(), json!(tool));
-    let answer = match app {
-        Some(app) => {
-            params.insert("app".into(), json!(app));
-            params.insert("input".into(), arguments);
-            crate::connectors::call_executor_tool(state, &params)
-        }
-        None => {
-            params.insert("arguments".into(), arguments);
-            crate::connectors::call_composio_tool(state, &params)
-        }
+    // CDXC:Connectors 2026-11-27 WHY:
+    // Executor now comes through the user's Executor CLI, whose MCP relay never says which tools
+    // only read, and a pre-check runs with nobody to ask; so it no longer calls Executor apps.
+    if app.is_some() {
+        return Err("A pre-check can't call an Executor app's tool: Ghostex can't tell whether it only reads, and nobody is there to ask. Use a Composio tool or another kind of check.".to_string());
     }
-    .map_err(|error| error.message)?;
+    params.insert("arguments".into(), arguments);
+    let answer =
+        crate::connectors::call_composio_tool(state, &params).map_err(|error| error.message)?;
     let output = answer.get("output").cloned().unwrap_or(Value::Null);
     let mut ids = Vec::new();
     ids_in(&output, &mut ids);

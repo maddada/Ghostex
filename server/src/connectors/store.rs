@@ -43,7 +43,7 @@ pub(super) enum ReadError {
     /// User, asked whether Settings should say when a saved key can't be unlocked: "sure just make the error more general please". A saved sign-in that no longer opens shows on Settings > Connectors and in `ghostex connectors status` as needing a new sign-in instead of as signed out, in general words that never guess why (no other computer, restore or vault key).
     Unreadable,
     /// Couldn't read it right now (the vault key didn't load, or the file couldn't be read).
-    Failed(String),
+    Failed,
 }
 
 /// The workspace's saved sign-in, unsealed; `None` when it has none.
@@ -56,12 +56,10 @@ pub(super) fn read_secret(
         Ok(sealed) => match vault::unseal(paths, &sealed) {
             Ok(plain) => Ok(Some(plain)),
             Err(UnsealError::Unreadable) => Err(ReadError::Unreadable),
-            Err(UnsealError::Vault(message)) => Err(ReadError::Failed(message)),
+            Err(UnsealError::Vault(_)) => Err(ReadError::Failed),
         },
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(ReadError::Failed(format!(
-            "Couldn't read the saved sign-in: {error}"
-        ))),
+        Err(_) => Err(ReadError::Failed),
     }
 }
 

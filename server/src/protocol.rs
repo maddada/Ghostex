@@ -1075,7 +1075,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/skipDictationPolish" => remote_allowed(path),
         /*
         CDXC:Connectors 2026-10-15 WHY:
-        A workspace's Composio sign-in and Executor keys are secrets on this computer, and their browser sign-ins come back to this computer's listeners, so only this computer's clients may read or change connectors.
+        A workspace's Composio sign-in and the computer's Executor CLI sign-in are secrets on this computer, and their browser sign-ins come back to this computer's listeners, so only this computer's clients may read or change connectors.
         */
         "/api/readConnectors"
         | "/api/signInComposio"
@@ -1084,15 +1084,11 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/connectComposioApp"
         | "/api/listComposioTools"
         | "/api/callComposioTool"
-        | "/api/enableExecutor"
-        | "/api/disableExecutor"
-        | "/api/searchExecutorCatalog"
-        | "/api/addExecutorApp"
-        | "/api/addExecutorMcpServer"
-        | "/api/removeExecutorApp"
-        | "/api/connectExecutorApp"
-        | "/api/listExecutorTools"
-        | "/api/callExecutorTool"
+        | "/api/installExecutorCli"
+        | "/api/signInExecutorCli"
+        | "/api/cancelExecutorCliSignIn"
+        | "/api/signOutExecutorCli"
+        | "/api/removeOldExecutor"
         | "/api/listConnectorAgentTools"
         | "/api/callConnectorAgentTool"
         | "/api/cancelConnectorAgentToolCall"

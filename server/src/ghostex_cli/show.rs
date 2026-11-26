@@ -177,7 +177,7 @@ fn phone_note(findings: &[String], file: &str) -> String {
 /// (visual_page_check.rs `pick_findings`). A warning: the page is published and still works.
 fn picks_note(findings: &[String], file: &str) -> String {
     let mut note = format!(
-        "Pick buttons: the reader can only choose below. Fix it, look with `ghostex visual check {file}`, then run ghostex show again and reply with the new block."
+        "Pick buttons: the reader cannot pick on the cards (or at all). Fix it, look with `ghostex visual check {file}`, then run ghostex show again and reply with the new block."
     );
     for finding in findings {
         note.push_str("\n- ");

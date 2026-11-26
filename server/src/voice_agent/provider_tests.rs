@@ -62,7 +62,7 @@ fn multibyte_names_are_counted_in_characters() {
 #[test]
 fn no_names_that_fit_leaves_the_prompt_out_of_the_session() {
     assert_eq!(openai_transcription_prompt(&[]), "");
-    let update = Provider::OpenAi.session_update("marin", "hi", &json!([]), &[], true);
+    let update = Provider::OpenAi.session_update("marin", "hi", &json!([]), &[], true, "en");
     let transcription = &update["session"]["audio"]["input"]["transcription"];
     assert_eq!(transcription["model"], "gpt-4o-transcribe");
     assert!(transcription.get("prompt").is_none());
@@ -71,7 +71,7 @@ fn no_names_that_fit_leaves_the_prompt_out_of_the_session() {
 #[test]
 fn openai_session_update_carries_the_trimmed_prompt() {
     let names: Vec<String> = (0..80).map(|n| format!("Project Number {n:02}")).collect();
-    let update = Provider::OpenAi.session_update("marin", "hi", &json!([]), &names, true);
+    let update = Provider::OpenAi.session_update("marin", "hi", &json!([]), &names, true, "en");
     let prompt = update["session"]["audio"]["input"]["transcription"]["prompt"]
         .as_str()
         .expect("prompt");
@@ -98,7 +98,7 @@ fn xai_keeps_at_most_100_terms_of_50_characters() {
 #[test]
 fn xai_session_update_carries_the_capped_terms() {
     let names: Vec<String> = (0..150).map(|n| format!("Project {n}")).collect();
-    let update = Provider::Xai.session_update("eve", "hi", &json!([]), &names, false);
+    let update = Provider::Xai.session_update("eve", "hi", &json!([]), &names, false, "en");
     let sent = &update["session"]["audio"]["input"]["transcription"]["keyterms"];
     assert_eq!(sent.as_array().map(Vec::len), Some(XAI_KEYTERMS_MAX_COUNT));
 }

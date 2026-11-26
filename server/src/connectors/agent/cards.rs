@@ -1,6 +1,6 @@
 //! Ghostex's approval card: an agent's connector call that would change something waits here
 //! until the user answers the card in that session's chat (desktop or phone), the agent cancels
-//! the call, or 30 minutes pass.
+//! the call, or its time is up (30 minutes, 14 for a step Executor paused).
 //!
 //! CDXC:Connectors 2026-10-16 WHY:
 //! The card is the session's stored chat prompt (a question card whose `toolUseId` is `connectorcard:<id>`), so the desktop and phone chats draw it with no new card type, and answering it never types into the terminal: the agent waits inside an MCP tool call, not on a screen prompt. Cards live only in this gxserver, since a restart ends the waiting call anyway; one left on screen by a restart goes away when it is answered.
@@ -21,6 +21,7 @@ use crate::session_chat_interactive::{
 };
 use crate::storage::open_gxserver_database;
 
+/// How long a card waits for an answer.
 pub(crate) const CARD_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 /// How often a waiting card checks it is still on screen (a hook may have cleared it).
 const RESHOW_EVERY: Duration = Duration::from_secs(10);
@@ -273,13 +274,14 @@ impl Drop for WaitGuard {
     }
 }
 
-/// Shows a card in the session's chat and waits for its answer.
+/// Shows a card in the session's chat and waits for its answer, at most `timeout`.
 pub(crate) async fn ask(
     state: &Arc<AppState>,
     project_id: &str,
     session_id: &str,
     call_id: Option<&str>,
     question: String,
+    timeout: Duration,
 ) -> Answer {
     // Subscribed before anything can wait, so a shutdown while the card shows wakes it.
     let mut shutdown = state.shutdown_tx.subscribe();
@@ -305,7 +307,7 @@ pub(crate) async fn ask(
         move || show_next(&state, &project_id, &session_id)
     };
     let _ = tokio::task::spawn_blocking(show.clone()).await;
-    let deadline = tokio::time::Instant::now() + CARD_TIMEOUT;
+    let deadline = tokio::time::Instant::now() + timeout;
     loop {
         let wake = (tokio::time::Instant::now() + RESHOW_EVERY).min(deadline);
         let waited = tokio::select! {
@@ -369,12 +371,21 @@ pub(crate) fn release_waiting_card(card_id: &str) {
     with_cards(|cards| cards.retain(|card| card.id != card_id));
 }
 
-/// The agent cancelled an MCP call: its card goes away.
-pub(crate) fn cancel_call(state: &AppState, call_id: &str) -> bool {
+/// The agent cancelled an MCP call of its session: its card goes away.
+pub(crate) fn cancel_call(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    call_id: &str,
+) -> bool {
     let card_id = with_cards(|cards| {
         cards
             .iter()
-            .find(|card| card.call_id.as_deref() == Some(call_id))
+            .find(|card| {
+                card.call_id.as_deref() == Some(call_id)
+                    && card.project_id == project_id
+                    && card.session_id == session_id
+            })
             .map(|card| card.id.clone())
     });
     match card_id {

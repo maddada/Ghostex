@@ -81,17 +81,25 @@ fn session_from_env() -> (Option<String>, Option<String>) {
     (None, None)
 }
 
-/// gxserver as the session sees it (`GHOSTEX_GXSERVER_BASE_URL` + its token file), else the
-/// CLI's normal local target.
+/// gxserver as the session sees it (`GHOSTEX_GXSERVER_BASE_URL` + the session's own token, else
+/// the token file), else the CLI's normal local target.
 fn target_from_env() -> CliResult<Target> {
     let base_url = std::env::var("GHOSTEX_GXSERVER_BASE_URL")
         .ok()
         .map(|value| value.trim().trim_end_matches('/').to_string())
         .filter(|value| !value.is_empty());
-    let token = std::env::var("GHOSTEX_GXSERVER_AUTH_TOKEN_FILE")
+    // The session's own token names the session to gxserver, which runs the calls as that
+    // session's (connectors/agent/session.rs `bind_caller`); the token file can't.
+    let token = std::env::var(crate::security::SESSION_TOKEN_ENV)
         .ok()
-        .and_then(|file| std::fs::read_to_string(file.trim()).ok())
         .map(|token| token.trim().to_string())
+        .filter(|token| token.starts_with(crate::security::SESSION_TOKEN_PREFIX))
+        .or_else(|| {
+            std::env::var("GHOSTEX_GXSERVER_AUTH_TOKEN_FILE")
+                .ok()
+                .and_then(|file| std::fs::read_to_string(file.trim()).ok())
+                .map(|token| token.trim().to_string())
+        })
         .filter(|token| !token.is_empty());
     match (base_url, token) {
         (Some(base_url), Some(token)) => Ok(Target {

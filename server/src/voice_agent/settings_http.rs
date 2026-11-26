@@ -1,6 +1,7 @@
 //! `/api/setVoiceAgentSettings`: the voice picker and speed buttons of a voice screen on another
 //! device (the phone) save the computer's `voiceAgentXaiVoice` / `voiceAgentOpenaiVoice`,
-//! `voiceAgentSpeed`, `voiceAgentCallMode` and `voiceAgentWaitForReply`.
+//! `voiceAgentSpeed`, `voiceAgentCallMode`, `voiceAgentWaitForReply`, `voiceAgentLanguage` and
+//! `voiceAgentTurnWords` (`call_language.rs`).
 //!
 //! CDXC:VoiceMode 2026-10-20 WHY:
 //! The voice and the speed are the computer's settings, shared by every client, so the phone saves them here instead of keeping its own. The write goes through the running desktop app's `updateSettingsPatch` (CDXC:Settings 2026-09-09: settings writes go through the app, never a direct file write); this endpoint only checks the values first, so a remote client can change these two settings and nothing else.
@@ -8,6 +9,7 @@
 use axum::http::StatusCode;
 use serde_json::{json, Map, Value};
 
+use super::call_language;
 use super::keys;
 use super::provider::Provider;
 use crate::domain::read_domain_rpc_params;
@@ -27,7 +29,9 @@ fn bad_request(endpoint_path: String, request_id: String, message: String) -> Ro
 /// `{provider?, voice?, speed?}`: `voice` is one of `provider`'s voices (the selected provider
 /// when omitted), `speed` one of 1, 1.2, 1.4, 1.6, 1.8, 2, `callMode` `regular` or
 /// `pushToTalk` (switches the running calls at once, too), `waitForReply` true or false (read when
-/// a call starts, keys.rs). Answers the saved values.
+/// a call starts, keys.rs), `language` `device` or a supported code, and `turnWordsLanguage` with
+/// `turnWords` the words for that language (1 to 8, each 1 to 40 characters once trimmed; none
+/// goes back to the defaults). Answers the saved values.
 pub(crate) async fn handle_set_voice_agent_settings_http(
     state: &AppState,
     endpoint_path: String,
@@ -106,11 +110,80 @@ pub(crate) async fn handle_set_voice_agent_settings_http(
         };
         patch.insert(keys::WAIT_FOR_REPLY_SETTING.to_string(), json!(wait));
     }
+    if let Some(language) = params.get("language") {
+        let Some(language) = language.as_str().and_then(|language| {
+            (language == call_language::DEVICE)
+                .then_some(call_language::DEVICE)
+                .or_else(|| call_language::supported(language))
+        }) else {
+            return bad_request(
+                endpoint_path,
+                request_id,
+                format!(
+                    "language must be one of: {}.",
+                    call_language::accepted_languages()
+                ),
+            );
+        };
+        patch.insert(call_language::LANGUAGE_SETTING.to_string(), json!(language));
+    }
+    let words_language = params.get("turnWordsLanguage");
+    let words = params.get("turnWords");
+    if words_language.is_some() || words.is_some() {
+        let (Some(words_language), Some(words)) = (words_language, words) else {
+            return bad_request(
+                endpoint_path,
+                request_id,
+                "Send turnWordsLanguage and turnWords together.".to_string(),
+            );
+        };
+        let Some(code) = words_language.as_str().and_then(call_language::supported) else {
+            return bad_request(
+                endpoint_path,
+                request_id,
+                format!(
+                    "turnWordsLanguage must be one of: {}.",
+                    call_language::LANGUAGES.join(", ")
+                ),
+            );
+        };
+        let checked = match words.as_array() {
+            Some(words) if words.is_empty() => Some(None),
+            Some(words) => call_language::checked_turn_words(words).map(Some),
+            None => None,
+        };
+        let Some(checked) = checked else {
+            return bad_request(
+                endpoint_path,
+                request_id,
+                "turnWords must be 1 to 8 words or phrases, each 1 to 40 characters.".to_string(),
+            );
+        };
+        // The whole object is written, since a patch replaces a setting's value.
+        let mut saved = keys::read_settings(&state.paths)
+            .get(call_language::TURN_WORDS_SETTING)
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        match checked {
+            Some(words) => {
+                saved.insert(code.to_string(), json!(words));
+            }
+            // No words: the language goes back to its defaults.
+            None => {
+                saved.remove(code);
+            }
+        }
+        patch.insert(
+            call_language::TURN_WORDS_SETTING.to_string(),
+            Value::Object(saved),
+        );
+    }
     if patch.is_empty() {
         return bad_request(
             endpoint_path,
             request_id,
-            "Send a voice, a speed, a callMode or waitForReply.".to_string(),
+            "Send a voice, a speed, a callMode, waitForReply, language or turnWords.".to_string(),
         );
     }
     let mut payload = Map::new();

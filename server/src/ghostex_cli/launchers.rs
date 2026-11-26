@@ -1191,19 +1191,13 @@ pub fn is_existing_bare_path_argument(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicU32, Ordering};
 
-    static TEMP_COUNTER: AtomicU32 = AtomicU32::new(0);
-
-    fn temp_root(name: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!(
-            "gx-cli-launchers-{}-{}-{}",
-            std::process::id(),
-            name,
-            TEMP_COUNTER.fetch_add(1, Ordering::SeqCst)
-        ));
-        std::fs::create_dir_all(&root).expect("create temp root");
-        root
+    // Deleted when the returned guard drops, so a test run leaves nothing in the temp folder (leak audit row 13).
+    fn temp_root(name: &str) -> tempfile::TempDir {
+        tempfile::Builder::new()
+            .prefix(&format!("gx-cli-launchers-{name}-"))
+            .tempdir()
+            .expect("create temp root")
     }
 
     fn touch(path: &Path) {
@@ -1281,7 +1275,8 @@ mod tests {
 
     #[test]
     fn unique_paths_normalizes_and_dedupes() {
-        let root = temp_root("unique-paths");
+        let root_dir = temp_root("unique-paths");
+        let root = root_dir.path();
         let with_dots = root.join("a").join("..").join("b");
         let plain = root.join("b");
         let unique = unique_paths(&[Some(with_dots), None, Some(plain.clone()), Some(plain)]);
@@ -1339,7 +1334,8 @@ mod tests {
 
     #[test]
     fn bare_path_argument_requires_existing_path() {
-        let root = temp_root("bare-path");
+        let root_dir = temp_root("bare-path");
+        let root = root_dir.path();
         let file = root.join("notes.txt");
         touch(&file);
         let arg = format!("{}:3:4", file.display());
@@ -1355,7 +1351,8 @@ mod tests {
 
     #[test]
     fn history_launch_prefers_bundled_then_manifest_then_targets() {
-        let root = temp_root("history");
+        let root_dir = temp_root("history");
+        let root = root_dir.path();
         assert!(resolve_ghostex_history_launch_from_root(&root).is_none());
 
         let release = root
@@ -1421,7 +1418,8 @@ mod tests {
 
     #[test]
     fn linux_session_link_starts_the_app_with_the_link_alone() {
-        let root = std::env::temp_dir().join(format!("gx-link-launch-{}", std::process::id()));
+        let root_dir = temp_root("link-launch");
+        let root = root_dir.path();
         let app = root.join("Ghostex");
         let cli = root.join("gxserver/bin/ghostex");
         std::fs::create_dir_all(cli.parent().expect("a folder")).expect("folders");
@@ -1436,12 +1434,12 @@ mod tests {
         let launch = linux_session_link_launch(&cli, link).expect("a launch");
         assert_eq!(launch.args, vec![link.to_string()]);
         assert!(launch.command.ends_with("Ghostex"), "{}", launch.command);
-        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
     fn linux_desktop_launch_resolves_the_app_owning_the_cli() {
-        let root = temp_root("linux-desktop");
+        let root_dir = temp_root("linux-desktop");
+        let root = root_dir.path();
         let cli = root.join("Ghostex/gxserver/bin/ghostex");
         let app = root.join("Ghostex/Ghostex");
         touch(&cli);
@@ -1483,7 +1481,8 @@ mod tests {
 
     #[test]
     fn gxserver_launch_prefers_native_binary_and_supports_js_fallback() {
-        let root = temp_root("gxserver");
+        let root_dir = temp_root("gxserver");
+        let root = root_dir.path();
         assert!(resolve_gxserver_cli_launch_from_root(&root)
             .expect("no launch")
             .is_none());
@@ -1529,7 +1528,8 @@ mod tests {
 
     #[test]
     fn gxserver_launch_for_missing_path_matches_js_error() {
-        let root = temp_root("gxserver-missing");
+        let root_dir = temp_root("gxserver-missing");
+        let root = root_dir.path();
         let missing = root.join("gxserver-nope");
         let error = resolve_gxserver_cli_launch_for_path(&missing, false).expect_err("missing");
         assert_eq!(
@@ -1555,7 +1555,9 @@ mod tests {
             Some(PathBuf::from("/opt/Contents/MacOS"))
         );
 
-        let root = temp_root("bundled-gxserver");
+        let root_dir = temp_root("bundled-gxserver");
+
+        let root = root_dir.path();
         let resources = root.join("Ghostex.app/Contents/Resources");
         let web_package = resources.join("Web/gxserver");
         let program = web_package.join("GhostexServer.app/Contents/MacOS/gxserver");
@@ -1591,12 +1593,12 @@ mod tests {
             merged_cli_entry(&remote_program),
             Some(remote.join("bin/ghostex"))
         );
-        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
     fn find_ghostex_source_root_walks_up_to_marker() {
-        let root = temp_root("source-root");
+        let root_dir = temp_root("source-root");
+        let root = root_dir.path();
         touch(&root.join("scripts").join("ghostex-cli.mjs"));
         let nested = root.join("a").join("b");
         std::fs::create_dir_all(&nested).expect("mkdir");
@@ -1605,7 +1607,8 @@ mod tests {
             find_ghostex_source_root(Some(&std::fs::canonicalize(&nested).expect("nested"))),
             Some(canonical_root)
         );
-        let unrelated = temp_root("source-root-miss");
+        let unrelated_dir = temp_root("source-root-miss");
+        let unrelated = unrelated_dir.path();
         assert_eq!(
             find_ghostex_source_root(Some(&std::fs::canonicalize(&unrelated).expect("unrelated"))),
             None
@@ -1614,7 +1617,9 @@ mod tests {
 
     #[test]
     fn bundled_web_resource_roots_prefer_sibling_web_folder() {
-        let cli_dir = temp_root("web-roots")
+        let root_dir = temp_root("web-roots");
+        let cli_dir = root_dir
+            .path()
             .join("Contents")
             .join("Resources")
             .join("CLI");

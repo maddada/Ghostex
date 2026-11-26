@@ -15,7 +15,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
@@ -138,10 +138,14 @@ export function originProvenanceFromRelease({ gh = defaultGh, product, repo, tag
 
 export function originProvenanceFromRun({ gh = defaultGh, product, repo, runId }) {
   const scratch = mkdtempSync(path.join(tmpdir(), 'ghostex-reuse-origin-'));
-  gh(['run', 'download', String(runId), '--repo', repo, '--name', `release-provenance-${product}`, '--dir', scratch]);
-  const recordPath = path.join(scratch, 'provenance.json');
-  if (!existsSync(recordPath)) throw new Error(`run ${runId} carries no provenance record for ${product}`);
-  return JSON.parse(readFileSync(recordPath, 'utf8'));
+  try {
+    gh(['run', 'download', String(runId), '--repo', repo, '--name', `release-provenance-${product}`, '--dir', scratch]);
+    const recordPath = path.join(scratch, 'provenance.json');
+    if (!existsSync(recordPath)) throw new Error(`run ${runId} carries no provenance record for ${product}`);
+    return JSON.parse(readFileSync(recordPath, 'utf8'));
+  } finally {
+    rmSync(scratch, { force: true, recursive: true });
+  }
 }
 
 function defaultAttestationVerifier({ file, gh = defaultGh, repo }) {

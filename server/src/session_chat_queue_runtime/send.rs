@@ -510,6 +510,13 @@ pub(crate) async fn send_session_chat_message_with_draft(
     draft_version: Option<&crate::session_chat_draft_versions::DraftVersion>,
     interrupt: bool,
 ) -> std::result::Result<usize, DomainStateError> {
+    // The forms and pages this message answers count as answered from now on, before the send
+    // waits for the session's lock and types; a send that fails takes them back below.
+    let answered = if source == SessionChatMessageSource::GhostexNote {
+        Vec::new()
+    } else {
+        crate::session_chat_open_questions::mark_answers_sent(state, project_id, session_id, text)
+    };
     let lock = session_send_lock(project_id, session_id);
     let _owned = lock.lock().await;
     // Read before the message goes, so the open questions it answers by tag are left out.
@@ -562,6 +569,9 @@ pub(crate) async fn send_session_chat_message_with_draft(
         }
     } else {
         crate::session_chat_send::put_back_held_with_next(state, project_id, session_id, &held);
+        crate::session_chat_open_questions::take_back_answers_sent(
+            state, project_id, session_id, &answered,
+        );
     }
     sent
 }

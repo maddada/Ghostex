@@ -63,7 +63,6 @@ pub(crate) fn read_connectors(
                 "workspaceId": workspace.id,
                 "name": workspace.name,
                 "composio": composio_status(state, &workspace.id),
-                "executor": super::executor::status(&state.paths, &workspace.id),
                 "rules": super::agent::connector_rules(state, &workspace.id),
                 "cli": super::cli::status(&state.paths, &workspace.id),
             })
@@ -73,6 +72,7 @@ pub(crate) fn read_connectors(
         "workspacesEnabled": crate::workspaces::workspaces_feature_enabled(),
         "secretsSealedWith": crate::vault::vault_backend(&state.paths),
         "workspaces": workspaces,
+        "executor": super::executor::status(&state.paths),
     }))
 }
 

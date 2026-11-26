@@ -64,8 +64,17 @@ const AGENT_DEFAULT_KEYS: &[&str] = &[
 ///
 /// CDXC:GrokBot 2026-11-26 DECISION: what goes to Grok Bot (`grokBotSends`) syncs the same way:
 /// one bot follows all of the user's computers, so a choice made on one holds on all.
-pub const ALWAYS_SYNCED_KEYS: &[&str] =
-    &["memoryGuardEnabled", "memoryGuardNotify", "grokBotSends"];
+///
+/// CDXC:SessionChat 2026-11-26 DECISION: the Live page window's Keep open pin
+/// (`chatPageKeepOpen`) syncs the same way. User, on GitHub issue #778: "make all live pages
+/// remember what the user picked for that pin ... across all projects etc". It has no row in
+/// Settings, so no Sync switch could carry it.
+pub const ALWAYS_SYNCED_KEYS: &[&str] = &[
+    "memoryGuardEnabled",
+    "memoryGuardNotify",
+    "grokBotSends",
+    "chatPageKeepOpen",
+];
 
 /// Sidebar organization: the settings that change how the sidebar is organized, synced with the
 /// Spaces themselves (the `spaces` category, its switch `syncSpaces`).
@@ -359,5 +368,21 @@ mod tests {
                  from Laptop."
             )
         );
+    }
+
+    /// The Live page window's Keep open pin follows every computer, off until a page turns it on.
+    #[test]
+    fn the_live_page_keep_open_pin_always_syncs() {
+        let key = "always/setting/chatPageKeepOpen";
+        let (values, defaults) = category_setting_values(super::super::ALWAYS_CATEGORY, None);
+        assert_eq!(values.get(key), Some(&json!(false)));
+        assert!(defaults.contains(&key.to_string()));
+        let (values, defaults) = category_setting_values(
+            super::super::ALWAYS_CATEGORY,
+            Some(&json!({ "chatPageKeepOpen": true })),
+        );
+        assert_eq!(values.get(key), Some(&json!(true)));
+        assert!(!defaults.contains(&key.to_string()));
+        assert_eq!(setting_of_sync_key(key), Some("chatPageKeepOpen"));
     }
 }

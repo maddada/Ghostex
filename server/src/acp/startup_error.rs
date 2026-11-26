@@ -82,6 +82,54 @@ pub(crate) fn looks_like_auth_error(message: &str) -> bool {
         || lower.contains("has no stored credentials")
 }
 
+/// The first agy release that offers every model to every ACP client (`agy acp`).
+const ANTIGRAVITY_OPEN_MODELS: [u64; 3] = [1, 5, 1];
+/// What the refusal of an older agy says; `startup_error_notice` shows it as the card's text.
+const ANTIGRAVITY_TOO_OLD_TAIL: &str =
+    "Update it in Settings > Updates, or switch this chat to Terminal.";
+
+/// Why a Native Antigravity chat won't run on the agy that answered `initialize`, or `None`.
+///
+/// CDXC:AgentProviders 2026-11-26 DECISION:
+/// User, on the Antigravity compliance page (Q5149, "Refuse Native"): agy 1.5.0 and older offer
+/// Claude and GPT over ACP only to allowlisted editors, and Ghostex never poses as one, so a
+/// Native chat refuses those versions and asks for 1.5.1 or newer; Terminal chats run agy's own
+/// screen and still work. A version Ghostex can't read is let through.
+pub(crate) fn antigravity_too_old(initialize: &serde_json::Value) -> Option<String> {
+    let version = initialize
+        .pointer("/agentInfo/version")
+        .and_then(serde_json::Value::as_str)?
+        .trim();
+    let parsed = parse_agy_version(version)?;
+    (parsed < ANTIGRAVITY_OPEN_MODELS).then(|| {
+        format!(
+            "This computer has Antigravity CLI {}.{}.{}, and Native chats need 1.5.1 or newer. {ANTIGRAVITY_TOO_OLD_TAIL}",
+            parsed[0], parsed[1], parsed[2]
+        )
+    })
+}
+
+/// `1.5.0`, `v1.5.0` or `agy_acp_server_1.5.0`.
+fn parse_agy_version(version: &str) -> Option<[u64; 3]> {
+    let digits = version
+        .strip_prefix("agy_acp_server_")
+        .or_else(|| version.strip_prefix('v'))
+        .unwrap_or(version);
+    let mut parts = digits.splitn(3, '.');
+    let mut number = |last: bool| -> Option<u64> {
+        let part = parts.next()?;
+        let part = if last {
+            &part[..part
+                .find(|c: char| !c.is_ascii_digit())
+                .unwrap_or(part.len())]
+        } else {
+            part
+        };
+        part.parse().ok()
+    };
+    Some([number(false)?, number(false)?, number(true)?])
+}
+
 pub(crate) fn agent_label(family: &str) -> &'static str {
     match family {
         "codex" => "Codex",
@@ -105,6 +153,20 @@ pub(crate) fn startup_error_notice(err: &AcpStartupError) -> SessionChatTerminal
         kind: SessionChatTerminalNoticeActionKind::RestartAgent,
         send: None,
     };
+    if err.family == "antigravity" && err.message.ends_with(ANTIGRAVITY_TOO_OLD_TAIL) {
+        return SessionChatTerminalNotice::new(
+            SESSION_CHAT_NOTICE_AGENT_EXITED,
+            SessionChatTerminalNoticeSeverity::Error,
+            SessionChatTerminalNoticeSource::Watchdog,
+            "Antigravity needs an update".to_string(),
+        )
+        .with_detail(err.message.clone())
+        .with_actions(vec![
+            SessionChatTerminalNoticeAction::switch_to_terminal("Switch to Terminal"),
+            retry_action,
+        ])
+        .with_input_blocking(true);
+    }
     if err.is_auth {
         SessionChatTerminalNotice::new(
             SESSION_CHAT_NOTICE_LOGIN_EXPIRED,

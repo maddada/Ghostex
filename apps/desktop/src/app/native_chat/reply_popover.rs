@@ -1058,6 +1058,52 @@ pub(super) fn key_loss_closes(settling: bool, user_dismissed: bool, rekeys: u32)
     rekeys >= option_menu::MAX_REKEYS || (user_dismissed && !settling)
 }
 
+/// The reply box's right-click menu: every text field's (window/text_field_menu.rs), with Save as
+/// Boost under it while words are selected, as in the chat box (CDXC:ContextMenus 2026-11-27 there).
+fn show_reply_menu(
+    input: &WeakEntity<TextareaState>,
+    chat: &WeakEntity<NativeChatView>,
+    window: &mut Window,
+    cx: &mut gpui::App,
+) {
+    use crate::app::window::text_field_menu::{
+        TextFieldMenuAction, TextFieldMenuRow, request_for, show_text_field_menu,
+    };
+    let Some(input) = input.upgrade() else {
+        return;
+    };
+    let state = input.read(cx);
+    let request = request_for(
+        state.focus_handle(cx),
+        state.context_menu_capabilities(),
+        Some(state.selected_text().to_string()),
+        window,
+    );
+    let boost = request.selected_text.as_ref().and_then(|selected| {
+        chat.upgrade()?
+            .read(cx)
+            .selection_for_boost(selected.as_ref())
+    });
+    let extra = boost
+        .map(|text| {
+            let chat = chat.clone();
+            TextFieldMenuRow {
+                label: "Save as Boost".into(),
+                icon: "titlebar/sparkles.svg",
+                disabled: false,
+                action: TextFieldMenuAction::Run(std::rc::Rc::new(move |window, cx| {
+                    let action = super::actions::NativeChatAction {
+                        command: json!({"type": "saveAsBoost", "text": text}),
+                    };
+                    let _ = chat.update(cx, |chat, cx| chat.handle_action(&action, window, cx));
+                })),
+            }
+        })
+        .into_iter()
+        .collect();
+    show_text_field_menu(&request, extra, window, cx);
+}
+
 impl ReplyPopover {
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -1943,6 +1989,14 @@ impl Render for ReplyPopover {
             .child(
                 div().flex_shrink_0().px(px(4.0 * s)).pt(px(2.0 * s)).child(
                     Textarea::new(&self.input)
+                        .context_menu({
+                            let input = self.input.downgrade();
+                            let chat = self.chat.clone();
+                            move |menu, window, cx| {
+                                show_reply_menu(&input, &chat, window, cx);
+                                menu
+                            }
+                        })
                         .on_paste(paste)
                         .appearance(false)
                         .bordered(false)

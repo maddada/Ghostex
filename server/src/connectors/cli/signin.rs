@@ -60,6 +60,14 @@ pub(crate) fn signing_in(paths: &GxserverPaths, workspace: &str, tool: CliTool) 
     })
 }
 
+/// Whether a login is waiting under `key` for the browser.
+pub(crate) fn login_waiting(key: &Path) -> bool {
+    with_active(|active| match active.get_mut(key) {
+        Some(child) => matches!(child.try_wait(), Ok(None)),
+        None => false,
+    })
+}
+
 /// Stops a login and what it started: `gws` is a Node wrapper that runs the real `gws` as its
 /// child, so the whole process group goes.
 fn stop_child(child: &mut Child) {
@@ -72,7 +80,8 @@ fn stop_child(child: &mut Child) {
     let _ = child.wait();
 }
 
-fn stop_login(dir: &Path) {
+/// Stops the login waiting under `key`, if any.
+pub(crate) fn stop_login(dir: &Path) {
     if let Some(mut child) = with_active(|active| active.remove(dir)) {
         stop_child(&mut child);
     }
@@ -96,8 +105,13 @@ pub(crate) struct CliSignIn {
     pub(crate) code: Option<String>,
 }
 
-/// What the login printed, line by line, until it gave its link.
-fn read_link(tool: CliTool, lines: &mpsc::Receiver<String>) -> Option<CliSignIn> {
+/// Reads what a login prints, line by line, until `parse` has its link (and code, when `parse`
+/// needs one): `parse` is given each line with the link and code found so far, and answers
+/// whether it has everything.
+pub(crate) fn read_link(
+    lines: &mpsc::Receiver<String>,
+    parse: impl Fn(&str, &mut Option<String>, &mut Option<String>) -> bool,
+) -> Option<CliSignIn> {
     let deadline = std::time::Instant::now() + LINK_WITHIN;
     let mut url = None;
     let mut code = None;
@@ -105,28 +119,42 @@ fn read_link(tool: CliTool, lines: &mpsc::Receiver<String>) -> Option<CliSignIn>
         let Ok(line) = lines.recv_timeout(left) else {
             break;
         };
-        let line = line.trim();
-        if let Some(rest) = line.split("one-time code:").nth(1) {
-            code = Some(rest.trim().to_string());
-        }
-        if let Some(start) = line.find("https://") {
-            url = Some(
-                line[start..]
-                    .split_whitespace()
-                    .next()
-                    .unwrap_or_default()
-                    .to_string(),
-            );
-        }
-        let complete = match tool {
-            CliTool::Gh => url.is_some() && code.is_some(),
-            CliTool::Gws => url.is_some(),
-        };
-        if complete {
+        if parse(line.trim(), &mut url, &mut code) {
             return url.map(|url| CliSignIn { url, code });
         }
     }
     None
+}
+
+/// The first `https://` address in a line.
+pub(crate) fn https_link(line: &str) -> Option<String> {
+    let start = line.find("https://")?;
+    Some(
+        line[start..]
+            .split_whitespace()
+            .next()
+            .unwrap_or_default()
+            .to_string(),
+    )
+}
+
+/// `gh`'s link and one-time code, or `gws`'s link.
+fn tool_link(
+    tool: CliTool,
+    line: &str,
+    url: &mut Option<String>,
+    code: &mut Option<String>,
+) -> bool {
+    if let Some(rest) = line.split("one-time code:").nth(1) {
+        *code = Some(rest.trim().to_string());
+    }
+    if let Some(link) = https_link(line) {
+        *url = Some(link);
+    }
+    match tool {
+        CliTool::Gh => url.is_some() && code.is_some(),
+        CliTool::Gws => url.is_some(),
+    }
 }
 
 /// Starts the tool's login for the workspace and returns the link to open (and `gh`'s code). A
@@ -165,7 +193,13 @@ pub(crate) fn sign_in(
         command.env(name, value);
     }
     let workspace = workspace.to_string();
-    run_login(tool, command, dir, move |_| notify_changed(&workspace))
+    run_login(
+        tool.name(),
+        command,
+        dir,
+        move |lines| read_link(lines, |line, url, code| tool_link(tool, line, url, code)),
+        move |_| notify_changed(&workspace),
+    )
 }
 
 /// The key the computer's own `gh` login waits under (it has no workspace folder).
@@ -214,18 +248,28 @@ pub(crate) fn sign_in_machine_gh(
         "--web",
     ]);
     command.env("GH_NO_UPDATE_NOTIFIER", "1");
-    let started = run_login(CliTool::Gh, command, machine_gh_key(), move |ended| {
-        // A login replaced by a newer one leaves the newer one's state alone.
-        let Some(success) = ended else {
-            return;
-        };
-        set_machine_gh_result(if success {
-            MachineGhLogin::Done
-        } else {
-            MachineGhLogin::Failed
-        });
-        on_done(success);
-    })?;
+    let started = run_login(
+        CliTool::Gh.name(),
+        command,
+        machine_gh_key(),
+        |lines| {
+            read_link(lines, |line, url, code| {
+                tool_link(CliTool::Gh, line, url, code)
+            })
+        },
+        move |ended| {
+            // A login replaced by a newer one leaves the newer one's state alone.
+            let Some(success) = ended else {
+                return;
+            };
+            set_machine_gh_result(if success {
+                MachineGhLogin::Done
+            } else {
+                MachineGhLogin::Failed
+            });
+            on_done(success);
+        },
+    )?;
     set_machine_gh_result(MachineGhLogin::Waiting);
     Ok(started)
 }
@@ -248,14 +292,15 @@ pub(crate) fn cancel_machine_gh_login() {
     }
 }
 
-/// Runs a login that prints its link and waits for the browser: reads the link (and `gh`'s code),
-/// leaves the login waiting under `key` and calls `finished` with whether it succeeded once it
-/// ends or is stopped (`None` when a newer login under `key` replaced it). A login already waiting
-/// under `key` is replaced.
-fn run_login(
-    tool: CliTool,
+/// Runs a login that prints its link and waits for the browser: reads the link (and code) with
+/// `read`, leaves the login waiting under `key` and calls `finished` with whether it succeeded once
+/// it ends or is stopped (`None` when a newer login under `key` replaced it). A login already
+/// waiting under `key` is replaced. `name` is the tool's name in messages.
+pub(crate) fn run_login(
+    name: &str,
     mut command: std::process::Command,
     key: PathBuf,
+    read: impl FnOnce(&mpsc::Receiver<String>) -> Option<CliSignIn>,
     finished: impl FnOnce(Option<bool>) + Send + 'static,
 ) -> Result<CliSignIn, String> {
     stop_login(&key);
@@ -271,7 +316,7 @@ fn run_login(
     }
     let mut child = command
         .spawn()
-        .map_err(|error| format!("Couldn't start {}: {error}", tool.name()))?;
+        .map_err(|error| format!("Couldn't start {name}: {error}"))?;
     let (sender, lines) = mpsc::channel::<String>();
     let readers: Vec<Box<dyn Read + Send>> = [
         child
@@ -296,11 +341,10 @@ fn run_login(
         });
     }
     drop(sender);
-    let Some(started) = read_link(tool, &lines) else {
+    let Some(started) = read(&lines) else {
         stop_child(&mut child);
         return Err(format!(
-            "{} didn't show a sign-in link. Try again, or sign in from a terminal.",
-            tool.name()
+            "{name} didn't show a sign-in link. Try again, or sign in from a terminal."
         ));
     };
     let pid = child.id();

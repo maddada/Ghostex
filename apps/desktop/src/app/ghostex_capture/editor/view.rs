@@ -1269,6 +1269,9 @@ impl Render for EditorView {
                     ),
             );
         }
+        // A text field's right-click menu (window/text_field_menu.rs): this window has no GPUI
+        // Kit `Root` to carry it.
         root.child(toolbar)
+            .children(crate::app::window::text_field_menu::rootless_layer(window))
     }
 }

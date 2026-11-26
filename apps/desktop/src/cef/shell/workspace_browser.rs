@@ -86,6 +86,39 @@ fn clear_pending_marker(dir: &std::path::Path) -> PathBuf {
     dir.with_extension("clear-pending")
 }
 
+/// Finishes any workspace/account profile clears that were deferred via `.clear-pending` markers
+/// when the profile was open, even if that workspace or login is never reopened. Must run before
+/// `cef::initialize` opens any profile under `root_cache_path`.
+pub(super) fn drain_pending_workspace_profile_clears(root_cache_path: &std::path::Path) {
+    const MARKER_SUFFIX: &str = ".clear-pending";
+    let Ok(entries) = std::fs::read_dir(root_cache_path) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        let Some(profile) = name.strip_suffix(MARKER_SUFFIX) else {
+            continue;
+        };
+        if !cef_profile_is_workspace(profile) {
+            continue;
+        }
+        let marker = entry.path();
+        if !std::fs::symlink_metadata(&marker).is_ok_and(|meta| meta.is_file()) {
+            continue;
+        }
+        let profile_dir = root_cache_path.join(profile);
+        let removed_dir = match std::fs::symlink_metadata(&profile_dir) {
+            Ok(meta) if meta.is_dir() => std::fs::remove_dir_all(&profile_dir).is_ok(),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => true,
+            _ => false,
+        };
+        if removed_dir {
+            let _ = std::fs::remove_file(&marker);
+        }
+    }
+}
+
 /// CDXC:Browser 2026-10-09 WHY:
 /// A workspace's sign-ins must survive restarts, so its context is disk-backed under `<root cache>/<profile>` (see `workspace_profile_cache_dir`). CEF initializes a new disk-backed context asynchronously and `CreateBrowserSync` returns null until it is ready (the 2026-07-09 startup race that kept generated profiles in memory), so the context is created with a handler and no browser is created on it until `on_request_context_initialized` fires; callers get a receiver that resolves at that moment. There is no memory-context fallback: a failed context leaves the tab unloaded and reports the error.
 pub(crate) fn prepare_workspace_browser_context(

@@ -119,33 +119,93 @@ pub(crate) async fn submit(
         .unwrap_or("Live page")
         .to_string();
     let message = tagged_answers_message(&state_dir, &id, &title, &answers);
-    let (error, wait_for_idle) = deliver(
-        &state,
-        project_id.clone(),
-        session_id.clone(),
-        message,
-        format!("visual-page-{id}"),
-    )
-    .await;
-    let state_dir = state.paths.root_dir.clone();
-    let noted = error.clone();
-    let refresh_state = state.clone();
-    let _ = tokio::task::spawn_blocking(move || {
-        note_delivery(&state_dir, &id, noted.as_deref());
-        crate::session_chat_open_questions::refresh(&refresh_state, &project_id, &session_id, None);
-    })
-    .await;
-    match error {
-        None => reply(
-            StatusCode::OK,
-            json!({"ok": true, "answeredAt": answered_at, "queued": wait_for_idle, "delivered": true}),
-        ),
-        Some(error) => reply(
-            StatusCode::OK,
-            json!({"ok": true, "answeredAt": answered_at, "queued": false,
-                   "error": format!("Saved, but the agent was not told: {error}")}),
-        ),
+    // The stored answers already settle the page (`page_answered`): every client drops it from its
+    // lists now, and the page's window closes on this reply, while the answers are still being
+    // typed into the agent below.
+    //
+    // CDXC:SessionStatus 2026-11-26 DECISION:
+    // User: "I wanted it to be gone as soon as I answer", on the phone and the computer. The reply
+    // no longer waits for the agent to be told (typing into a terminal can take many seconds), so
+    // the page window and the phone's page sheet close at once. A failure to tell the agent is kept
+    // with the page (`note_delivery`), as before, when the window also closed. Supersedes the
+    // 2026-10-11 timing in apps/desktop/src/app/window/visual_page_modal.rs only in when gxserver
+    // answers: the window still stays open when gxserver cannot take the answers.
+    {
+        let (refresh_state, project_id, session_id) =
+            (state.clone(), project_id.clone(), session_id.clone());
+        let _ = tokio::task::spawn_blocking(move || {
+            crate::session_chat_open_questions::refresh(
+                &refresh_state,
+                &project_id,
+                &session_id,
+                None,
+            );
+        })
+        .await;
     }
+    let wait_for_idle =
+        crate::session_chat_catch_up::chat_setting_enabled(&state.paths, "chatAnswersWaitForIdle");
+    tokio::spawn(async move {
+        let (error, _) = deliver(
+            &state,
+            project_id.clone(),
+            session_id.clone(),
+            message.clone(),
+            format!("visual-page-{id}"),
+        )
+        .await;
+        let state_dir = state.paths.root_dir.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            note_delivery(&state_dir, &id, error.as_deref());
+            if let Some(error) = error.as_deref() {
+                keep_undelivered(&state, &project_id, &session_id, &message, error);
+            }
+            crate::session_chat_open_questions::refresh(&state, &project_id, &session_id, None);
+        })
+        .await;
+    });
+    reply(
+        StatusCode::OK,
+        json!({"ok": true, "answeredAt": answered_at, "queued": wait_for_idle, "delivered": true}),
+    )
+}
+
+/// Answers the agent could not be told after the reply went back to the page: kept in the session's
+/// chat as a failed message with the reason, as a failed chat send is (`queue_failed_send`), so they
+/// are never lost silently. False when the session is gone, so nothing can hold them; the page's
+/// record still says why (`note_delivery`).
+///
+/// CDXC:SessionChat 2026-11-26 DECISION:
+/// User, through the coordinator, once a page's Send stopped waiting for the agent to be typed to: "what happens if that typing then fails (agent gone, session closed, terminal busy, remote computer offline)? The answers must not be lost silently." A busy, starting, sleeping or asking agent was already handled by the send itself, which queues the answers and sends them when the agent can take them. Any other failure (the paste never showed, Enter did not submit, the terminal is gone) keeps the answers as the chat's failed message card: the real reason, Retry and Fix it, the sidebar's dot and a notification (CDXC:SessionChat 2026-10-31 in session_chat_send_failure.rs), and the card retires itself if the transcript turns out to hold them. The page stays answered and out of Needs you; the failed card is what asks for the user.
+fn keep_undelivered(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    message: &str,
+    error: &str,
+) -> bool {
+    let mut params = serde_json::Map::new();
+    params.insert("projectId".to_string(), json!(project_id));
+    params.insert("sessionId".to_string(), json!(session_id));
+    let Ok(target) = crate::session_chat_send::resolve_session_chat_send_target(
+        state,
+        &params,
+        "sendSessionChatMessage",
+    ) else {
+        return false;
+    };
+    // `deliver` hands back the send's reply body; its `message` is the reason the card shows.
+    let reason = serde_json::from_str::<Value>(error)
+        .ok()
+        .and_then(|reply| {
+            reply
+                .get("message")
+                .or_else(|| reply.get("error"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| error.to_string());
+    crate::session_chat_send_wake::queue_failed_send(state, &target, message, &reason).is_ok()
 }
 
 /// Whether a page's record was published from the coordinator flow page's file (`ghostex

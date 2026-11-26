@@ -1085,7 +1085,7 @@ fn guest_row(
         inputs.host.local_delayed_sends.get(&sidebar_id),
         context,
     );
-    row.is_autopilot_supervisor = is_autopilot;
+    row.mark_autopilot_supervisor(is_autopilot);
     row.machine_name = Some(machine.name.clone());
     row.machine_short_name = Some(machine.short_name.clone());
     *next_row_id += 1;

@@ -68,6 +68,7 @@ pub(crate) mod share_link_popover;
 pub(crate) mod share_popover_view;
 pub(crate) mod space_editor_modal;
 pub(crate) mod terminal_paste_confirm_modal;
+pub(crate) mod text_field_menu;
 mod titlebar_notifications_panel;
 pub(crate) mod titlebar_panels;
 pub(crate) mod titlebar_popup_chrome;

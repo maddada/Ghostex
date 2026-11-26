@@ -290,7 +290,8 @@ impl NativeChatView {
         // gpui's list turns wheel lines into 20px each (`ListElement::paint`).
         let delta = event.delta.pixel_delta(px(20.0)).y;
         if delta < px(0.0)
-            && transcript_distance_to_end(&self.list) + delta <= px(SPEC.edge_threshold * scale)
+            && transcript_distance_to_end(&self.list, &self.spliced_height) + delta
+                <= px(SPEC.edge_threshold * scale)
         {
             self.list.set_follow_mode(gpui::FollowMode::Tail);
         }
@@ -315,21 +316,27 @@ impl NativeChatView {
             return;
         }
         let scale = ChatAppearance::current(&self.snapshot).scale;
-        if transcript_distance_to_end(&self.list) <= px(SPEC.edge_threshold * scale) {
+        if transcript_distance_to_end(&self.list, &self.spliced_height)
+            <= px(SPEC.edge_threshold * scale)
+        {
             self.list.set_follow_mode(gpui::FollowMode::Tail);
         }
     }
 
     /// Paints nothing; placed after the list so its prepaint reads the layout this frame just made,
-    /// and redraws the chat when the pill drawn before that layout no longer matches it.
+    /// and redraws the chat when the pill drawn before that layout no longer matches it. That
+    /// layout measured the rows replaced since the one before, so the height they were missing is
+    /// let go here (`SplicedHeight`).
     pub(super) fn scroll_bottom_sync(&self, cx: &Context<Self>) -> AnyElement {
         let list = self.list.clone();
+        let spliced = self.spliced_height.clone();
         let drawn = self.scroll_bottom_drawn.clone();
         let chat = cx.entity_id();
         let scale = ChatAppearance::current(&self.snapshot).scale;
         gpui::canvas(
             move |_, _, cx| {
-                if transcript_left_bottom(&list, scale) != drawn.get() {
+                spliced.laid_out();
+                if transcript_left_bottom(&list, &spliced, scale) != drawn.get() {
                     cx.notify(chat);
                 }
             },
@@ -347,8 +354,11 @@ impl NativeChatView {
         let glass = crate::app::helpers::window_glass_active_for(self.main_window);
         let p = ChatAppearance::current(&self.snapshot).on_window_glass(glass);
         let toast = self.pill_toast();
-        self.scroll_bottom_drawn
-            .set(transcript_left_bottom(&self.list, p.scale));
+        self.scroll_bottom_drawn.set(transcript_left_bottom(
+            &self.list,
+            &self.spliced_height,
+            p.scale,
+        ));
         let shown = toast.is_some();
         if glass {
             let label = toast.map_or_else(String::new, |toast| toast.text);
@@ -401,7 +411,8 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) -> (Option<AnyElement>, bool) {
         let overlay = super::frosted_overlay_window::FrostedOverlay::JumpDown;
-        let shown = self.list.item_count() > 0 && transcript_left_bottom(&self.list, p.scale);
+        let shown = self.list.item_count() > 0
+            && transcript_left_bottom(&self.list, &self.spliced_height, p.scale);
         let s = p.scale;
         let button = if glass {
             let shown = shown && !self.frosted_overlay_covered(overlay, cx);
@@ -527,9 +538,43 @@ fn pill_row(p: &ChatAppearance) -> gpui::Div {
         .gap(px(SPEC.pill_gap * p.scale))
 }
 
-/// How far the viewport's bottom is above the transcript's end, as of the list's last layout.
-pub(super) fn transcript_distance_to_end(list: &gpui::ListState) -> gpui::Pixels {
+/// How far the viewport's bottom is above the transcript's end, as of the list's last layout,
+/// counting the rows replaced since then at the height they had (`SplicedHeight`).
+pub(super) fn transcript_distance_to_end(
+    list: &gpui::ListState,
+    spliced: &SplicedHeight,
+) -> gpui::Pixels {
+    list_distance_to_end(list) + spliced.0.get()
+}
+
+/// The list's own answer: rows it has not laid out since they were replaced count 0px in it.
+fn list_distance_to_end(list: &gpui::ListState) -> gpui::Pixels {
     list.max_offset_for_scrollbar().y + list.scroll_px_offset_for_scrollbar().y
+}
+
+/// The height that rows replaced since the list's last layout took out from below the reader.
+///
+/// CDXC:SessionChat 2026-11-26 WHY:
+/// GitHub issue #781: a reader scrolled up in a long chat (coordinator threads most of all) was thrown to the bottom while the agent kept working. gpui's list counts a replaced row as 0px until a layout measures it, and the core's splices are a prefix and suffix diff, so a finished turn regrouping into its summary, or a step rewriting the rows under it, takes their whole height out of the list at once. The chat asks whether the reader is at the end again before the list lays out (the next frame's rows, the status row, a message just sent: `follow_tail_if_near_end`), and that read the end as up to several hundred pixels nearer than it was, even below the viewport: reproduced in the web build at 200px from the end, read as -71px, after which following turned on and the list jumped to the end. Each splice of the transcript list goes through [`SplicedHeight::splice`], which keeps the height it took out from below the reader; every reader of the distance adds it back until the list's next layout measures the new rows (`scroll_bottom_sync`). Rows above the reader leave the distance unchanged, so they add nothing; nothing else changes about when the chat follows, so #615 (following a reader within the edge threshold) holds.
+#[derive(Clone, Default)]
+pub(super) struct SplicedHeight(std::rc::Rc<std::cell::Cell<gpui::Pixels>>);
+
+impl SplicedHeight {
+    /// Applies `splice` to `list` (the list's own splice and any re-anchoring after it) and keeps
+    /// what it took off the distance to the end.
+    pub(super) fn splice(&self, list: &gpui::ListState, splice: impl FnOnce()) {
+        let before = list_distance_to_end(list);
+        splice();
+        let lost = before - list_distance_to_end(list);
+        if lost > px(0.0) {
+            self.0.set(self.0.get() + lost);
+        }
+    }
+
+    /// The list laid out: what it measures again is its own.
+    fn laid_out(&self) {
+        self.0.set(px(0.0));
+    }
 }
 
 /// The reader has left the bottom of the transcript: the "Scroll to bottom" pill shows, and new
@@ -538,8 +583,13 @@ pub(super) fn transcript_distance_to_end(list: &gpui::ListState) -> gpui::Pixels
 ///
 /// CDXC:SessionChat 2026-10-04 WHY:
 /// User (Windows): "we're not auto scrolling down to the bottom automatically even when i don't see the scroll to bottom [button]". The pill used to hide within the 10px edge threshold while gpui's list resumes following only within 1px of the end, so a reader a few pixels short of it saw neither the pill nor following. This is now the one definition: the pill hides exactly while the list follows or will at its next layout, `scroll_bottom_sync` redraws it from the layout just made (the render decides it from the previous one), and the edge threshold only widens what counts as reaching the end on a downward wheel (`follow_tail_if_wheel_reaches_end`). Only a scroll up stops following. The 1px half of this is superseded by the 2026-11-14 WHY on `follow_tail_if_near_end`: the pill again hides within the edge threshold, and the list now follows from there too.
-pub(super) fn transcript_left_bottom(list: &gpui::ListState, scale: f32) -> bool {
-    !list.is_following_tail() && transcript_distance_to_end(list) > px(SPEC.edge_threshold * scale)
+pub(super) fn transcript_left_bottom(
+    list: &gpui::ListState,
+    spliced: &SplicedHeight,
+    scale: f32,
+) -> bool {
+    !list.is_following_tail()
+        && transcript_distance_to_end(list, spliced) > px(SPEC.edge_threshold * scale)
 }
 
 /// What the pill's slot shows instead of "Scroll to bottom".

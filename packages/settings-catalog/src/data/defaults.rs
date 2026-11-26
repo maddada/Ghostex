@@ -729,8 +729,12 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("voiceAgentOpenaiVoice", J::Str("marin")),
     ("voiceAgentSpeed", J::Str("1")),
     ("voiceAgentCallMode", J::Str("regular")),
-    // On: a Regular call answers once the user says "reply", "over" or "go ahead" (server/src/voice_agent/keys.rs).
+    // On: a Regular call answers once the user says one of the call language's turn words (server/src/voice_agent/keys.rs).
     ("voiceAgentWaitForReply", J::Bool(true)),
+    // "en": a call speaks English until the user picks a language or "device" (the calling device's
+    // language); no saved turn words: each language's built-in ones (server/src/voice_agent/call_language.rs).
+    ("voiceAgentLanguage", J::Str("en")),
+    ("voiceAgentTurnWords", J::Obj(&[])),
     // CDXC:VoiceMode 2026-11-05 DECISION: User (Q1261): the Dictate hotkey is Auto, a tap toggles and a hold of 300 ms or more records until release. These three are this app's own Dictate settings (the engine, model and clean-up are gxserver's, per computer); an empty microphone is the system default input.
     ("dictateHotkeyMode", J::Str("auto")),
     ("dictateMicrophone", J::Str("")),
@@ -743,6 +747,10 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("chatSendOnPick", J::Bool(false)),
     ("chatAnswersWaitForIdle", J::Bool(false)),
     ("chatPageOpenTarget", J::Str("popup")),
+    // CDXC:SessionChat 2026-11-26 SEE-ALSO: the Live page window's Keep open pin, remembered for
+    // every page window after it and synced to all the user's computers; the user decision is on
+    // `keep_open` in apps/desktop/src/app/window/visual_page_modal.rs.
+    ("chatPageKeepOpen", J::Bool(false)),
     // CDXC:SessionChat 2026-11-26 SEE-ALSO: the Inbox reply arrow opens the reply form unless set to Reply in the chat; the user decision is on `open_row_reply` in apps/desktop/src/app/native_chat/row_reply.rs.
     ("chatInboxReplyArrow", J::Str("form")),
     // CDXC:SessionChat 2026-11-07 SEE-ALSO: the chat look settings (Message layout, Your messages, Status line in the chat) are opt-in; Agent work and Tool call cards are retired (`migrate_retired_chat_looks` in lib.rs), all Default; the user decisions are in packages/gx-chat-core/src/transcript/chat_look.rs.

@@ -197,7 +197,7 @@ impl GhostexGpuiApp {
     /// (native_sidebar/chief.rs), so the rail leaves out its own Main Hub button then.
     ///
     /// CDXC:Sidebar 2026-11-21 DECISION:
-    /// User (main-hub-rail page): hide the rail's Main Hub button in the Unified sidebar only, where the fixed Chief of Staff row already shows above the list. The Project sidebar keeps it, and so does a hidden or floating sidebar: there it is the only one-click way to Chief of Staff and the only place its status dot shows. Only the rail button goes; the ⋯ menu still lists Main Hub with its pin.
+    /// User (main-hub-rail page): hide the rail's Main Hub button in the Unified sidebar only, where the fixed Chief of Staff row already shows above the list. The Project sidebar keeps it, and so does a hidden or floating sidebar: there it is the only one-click way to Chief of Staff (it carries no status dot since 2026-11-27, host.rs). Only the rail button goes; the ⋯ menu still lists Main Hub with its pin.
     pub(super) fn sidebar_rail_main_hub_in_sidebar(&self) -> bool {
         !self.sidebar_collapsed
             && self.native_sidebar.unified.is_some()
@@ -256,11 +256,6 @@ impl GhostexGpuiApp {
             }
             // A pinned link (`link:<id>`): its chosen app icon or site icon, its name, its page.
             if let Some(link) = self.sidebar_rail_link_pin(key) {
-                let state = RailItemState {
-                    available: true,
-                    showing: link.showing,
-                    badge: None,
-                };
                 let face = RailButtonFace {
                     label: link.label,
                     icon: link
@@ -272,7 +267,6 @@ impl GhostexGpuiApp {
                 entries.push(self.render_sidebar_rail_button(
                     key.clone(),
                     face,
-                    state,
                     RailButtonLook {
                         on: link.showing,
                         temporary: false,
@@ -289,11 +283,6 @@ impl GhostexGpuiApp {
                 let Some(view) = self.sidebar_rail_extension_pin(key) else {
                     continue;
                 };
-                let state = RailItemState {
-                    available: true,
-                    showing: view.showing,
-                    badge: None,
-                };
                 let face = RailButtonFace {
                     label: view.title,
                     icon: gpui::SharedString::new_static("titlebar/puzzle.svg"),
@@ -303,7 +292,6 @@ impl GhostexGpuiApp {
                 entries.push(self.render_sidebar_rail_button(
                     key.clone(),
                     face,
-                    state,
                     RailButtonLook {
                         on: view.showing,
                         temporary: false,
@@ -329,7 +317,6 @@ impl GhostexGpuiApp {
             entries.push(self.render_sidebar_rail_button(
                 item.key.to_string(),
                 rail_item_face(item.key),
-                state,
                 look,
                 Some(target),
                 appearance,
@@ -393,11 +380,9 @@ impl GhostexGpuiApp {
             }
         });
         let temporary = temporary.map(|item| {
-            let state = self.sidebar_rail_item_state(item.key, cx);
             self.render_sidebar_rail_button(
                 item.key.to_string(),
                 rail_item_face(item.key),
-                state,
                 RailButtonLook {
                     on: true,
                     temporary: true,
@@ -421,7 +406,6 @@ impl GhostexGpuiApp {
                 self.render_sidebar_rail_button(
                     RAIL_FOOT_ITEM.to_string(),
                     rail_item_face(RAIL_FOOT_ITEM),
-                    state,
                     RailButtonLook {
                         on: state.showing,
                         temporary: false,
@@ -671,7 +655,6 @@ impl GhostexGpuiApp {
         &self,
         key: String,
         face: RailButtonFace,
-        state: RailItemState,
         look: RailButtonLook,
         drop_target: Option<RailDropTarget>,
         appearance: &SidebarAppearance,
@@ -729,7 +712,6 @@ impl GhostexGpuiApp {
                     .when(look.temporary, |icon| icon.opacity(0.8))
                     .child(rail_button_artwork(&face, color)),
             )
-            .when_some(state.badge, |button, badge| button.child(rail_badge(badge)))
             .on_click({
                 let key = key.clone();
                 let bounds = bounds.clone();
@@ -1120,17 +1102,4 @@ fn rail_dashed_line(color: Hsla) -> AnyElement {
         .gap(px(2.0))
         .children((0..5).map(move |_| div().w(px(2.0)).h(px(1.0)).bg(color.opacity(0.7))))
         .into_any_element()
-}
-
-fn rail_badge(badge: RailBadge) -> AnyElement {
-    match badge {
-        RailBadge::Dot(color) => div()
-            .absolute()
-            .right(px(4.0))
-            .bottom(px(4.0))
-            .size(px(7.0))
-            .rounded_full()
-            .bg(color)
-            .into_any_element(),
-    }
 }

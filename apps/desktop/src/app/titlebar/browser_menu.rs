@@ -96,12 +96,12 @@ impl GhostexGpuiApp {
             titlebar_popup_menu_with_scroll_behavior(menu, width, max_height, scrollable)
                 .check_side(Side::Right)
                 .menu_element(
-                    Box::new(OpenBrowserPaneInExternalBrowser { pane_id: pane_id.0 }),
+                    Box::new(ToggleBrowserDevTools { pane_id: pane_id.0 }),
                     |_, _| {
                         titlebar_popup_standard_menu_row(
-                            BROWSER_ICON_WORLD,
+                            BROWSER_ICON_TOOLS,
                             TITLEBAR_POPUP_MENU_ROW_ICON_SIZE,
-                            "Open in External Browser".to_string(),
+                            "Toggle DevTools".to_string(),
                             false,
                         )
                     },

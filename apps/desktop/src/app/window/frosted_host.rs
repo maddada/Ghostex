@@ -54,6 +54,9 @@ pub(crate) enum FrostedHostKind {
     /// The Notifications dropdown's ⋯ menu (`window/titlebar_notifications_panel.rs`), the
     /// sidebar menu's look, over the dropdown's own window.
     NotificationsMenu,
+    /// A text field's right-click menu (`window/text_field_menu.rs`), the sidebar menu's look,
+    /// over whichever window the field is in.
+    TextFieldMenu,
 }
 
 /// How many stacked sidebar menu panels get a window of their own; deeper ones share none.
@@ -139,6 +142,7 @@ thread_local! {
     static PAGE_WINDOW_MENU_HOST: RefCell<HostSlot> = RefCell::default();
     static PAGE_WINDOW_SUBMENU_HOST: RefCell<HostSlot> = RefCell::default();
     static NOTIFICATIONS_MENU_HOST: RefCell<HostSlot> = RefCell::default();
+    static TEXT_FIELD_MENU_HOST: RefCell<HostSlot> = RefCell::default();
     static SIDEBAR_MENU_HOSTS: RefCell<Vec<HostSlot>> = RefCell::default();
 }
 
@@ -173,6 +177,9 @@ fn with_slot<R>(kind: FrostedHostKind, f: impl FnOnce(&mut HostSlot) -> R) -> R 
         }
         FrostedHostKind::NotificationsMenu => {
             NOTIFICATIONS_MENU_HOST.with(|slot| f(&mut slot.borrow_mut()))
+        }
+        FrostedHostKind::TextFieldMenu => {
+            TEXT_FIELD_MENU_HOST.with(|slot| f(&mut slot.borrow_mut()))
         }
         FrostedHostKind::SidebarMenu(level) => SIDEBAR_MENU_HOSTS.with(|slots| {
             let mut slots = slots.borrow_mut();
@@ -261,6 +268,7 @@ pub(crate) fn hide_frosted_hosts_over(parent: AnyWindowHandle, cx: &mut App) {
         FrostedHostKind::PageWindowMenu,
         FrostedHostKind::PageWindowSubmenu,
         FrostedHostKind::NotificationsMenu,
+        FrostedHostKind::TextFieldMenu,
     ]
     .into_iter()
     .chain(
@@ -393,7 +401,8 @@ fn open_host(
                 // window is simply rounded to the panel's corners.
                 FrostedHostKind::SidebarMenu(_)
                 | FrostedHostKind::BoardCardMenu
-                | FrostedHostKind::NotificationsMenu => {
+                | FrostedHostKind::NotificationsMenu
+                | FrostedHostKind::TextFieldMenu => {
                     window.set_background_corner_radius(gpui::px(SIDEBAR_MENU_HOST_RADIUS))
                 }
                 FrostedHostKind::PageWindowMenu | FrostedHostKind::PageWindowSubmenu => {
@@ -502,7 +511,9 @@ impl Render for FrostedHostView {
         if let Some(content) = content {
             host = host.child(content(window, cx));
         }
-        host
+        // A field in a hosted menu (a menu's search field) opens its right-click menu over this
+        // window, which has no GPUI Kit `Root` to carry its layer (window/text_field_menu.rs).
+        host.children(super::text_field_menu::rootless_layer(window))
     }
 }
 

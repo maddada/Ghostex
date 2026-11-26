@@ -113,8 +113,41 @@ impl Scanner {
             }
         }
         files.sort();
-        for path in files {
-            self.scan_codex_session_cached(&path);
+        for path in &files {
+            self.scan_codex_session_cached(path);
+        }
+        // Only prune after a readable listing: an unreadable sessions folder lists nothing and must not empty the cache.
+        if fs::read_dir(&base).is_ok() {
+            self.prune_codex_cache(&files);
+        }
+    }
+
+    // CDXC:PromptSearch 2026-11-26 WHY: each cache file belongs to one rollout path, and nothing reads it once that rollout is gone (Codex deleted or archived it), so the folder grew without bound (6,480 files, 50 MB, for 293 live rollouts on the user's Mac, leak audit row 12). Drop the files no listed rollout maps to. The day of grace spares a file another scanner just wrote for a rollout created after this listing; a wrongly dropped file only costs one re-parse.
+    fn prune_codex_cache(&self, files: &[PathBuf]) {
+        const GRACE: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
+        let keep: std::collections::HashSet<PathBuf> = files
+            .iter()
+            .filter_map(|path| self.codex_cache_path(path))
+            .collect();
+        let dir = self.cache_root.join("codex-sessions-v5");
+        let Ok(entries) = fs::read_dir(&dir) else {
+            return;
+        };
+        let now = std::time::SystemTime::now();
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if keep.contains(&path) || path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+                continue;
+            }
+            let Ok(meta) = entry.metadata() else { continue };
+            let old_enough = meta
+                .modified()
+                .ok()
+                .and_then(|modified| now.duration_since(modified).ok())
+                .is_some_and(|age| age >= GRACE);
+            if meta.is_file() && old_enough {
+                let _ = fs::remove_file(&path);
+            }
         }
     }
 

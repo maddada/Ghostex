@@ -34,19 +34,19 @@ pub(crate) fn executor() -> Section {
         "Executor",
         vec![
             row(
-                "executorEnabled",
-                "Executor",
-                "Turn on Executor for a workspace; Ghostex downloads it the first time and runs it on this computer.",
+                "executorCli",
+                "Executor CLI",
+                "The Executor CLI installed on this computer and its one sign-in, which every workspace's agents share: install it, sign in to executor.sh or a self-hosted Executor, or sign out.",
             ),
             row(
                 "executorApps",
                 "Executor apps",
-                "Add apps from Executor's catalog or any remote MCP server, sign them in and remove them.",
+                "The apps the Executor CLI's sign-in reaches; add apps and their accounts in Executor itself.",
             ),
             row(
-                "executorCallbackUrl",
-                "Sign-in callback address",
-                "The address to give an app's developer console when it needs your own sign-in app (OAuth client).",
+                "executorOldApps",
+                "Apps on the old Executor",
+                "The apps Ghostex's own Executor had, listed until you remove their data or 30 days pass; add them again in Executor.",
             ),
         ],
     )

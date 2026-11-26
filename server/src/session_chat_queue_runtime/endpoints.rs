@@ -256,5 +256,9 @@ pub(crate) fn broadcast_session_chat_queue_state(
         screen.borrow(),
     );
     publish_session_chat_queue_presentation_delta(state, project_id, session_id);
+    // Answers that joined or left the queue settle or reopen their forms and pages on every client
+    // now, not at the next open-questions sweep (CDXC:SessionStatus 2026-11-26 in
+    // session_chat_open_questions/answers_sent.rs).
+    crate::session_chat_open_questions::refresh_soon(state, project_id, session_id);
     super::scheduler::kick_session_chat_queue();
 }

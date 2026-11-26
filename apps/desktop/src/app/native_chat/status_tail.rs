@@ -54,10 +54,12 @@ impl NativeChatView {
         }
         // After the transcript's rows and the messages just sent (send_watch.rs).
         let rows = self.items.len() + self.sent_rows_listed;
-        self.list.splice(
-            rows..rows + usize::from(self.status_tail),
-            usize::from(wanted),
-        );
+        self.spliced_height.splice(&self.list, || {
+            self.list.splice(
+                rows..rows + usize::from(self.status_tail),
+                usize::from(wanted),
+            )
+        });
         self.status_tail = wanted;
         if !wanted {
             self.working_card.tail_lead.set(None);

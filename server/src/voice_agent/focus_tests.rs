@@ -204,10 +204,11 @@ impl Call {
         let provider_id = Provider::Xai;
         let update = provider_id.session_update(
             "eve",
-            &prompt::instructions(focus.as_ref()),
+            &prompt::instructions(focus.as_ref(), "en"),
             &tools::definitions(focus.as_ref()),
             &[],
             false,
+            "en",
         );
         let id = uuid::Uuid::new_v4().to_string();
         let (tx, rx) = mpsc::unbounded_channel();
@@ -220,6 +221,7 @@ impl Call {
             update,
             false,
             false,
+            crate::voice_agent::call_language::for_call(&serde_json::Value::Null, None),
             focus,
             client_remote,
             socket,
@@ -410,10 +412,10 @@ async fn the_focused_configuration_offers_only_its_tools() {
         .unwrap()
         .iter()
         .any(|tool| tool["name"] == "widen_call"));
-    let instructions = prompt::instructions(Some(&scope("P1:T1")));
+    let instructions = prompt::instructions(Some(&scope("P1:T1")), "en");
     assert!(instructions.contains("This call is about one session only: \"Voice mode\""));
     assert!(!instructions.contains("list_sessions"));
-    assert!(prompt::instructions(None).contains("call list_sessions"));
+    assert!(prompt::instructions(None, "en").contains("call list_sessions"));
 }
 
 #[tokio::test]

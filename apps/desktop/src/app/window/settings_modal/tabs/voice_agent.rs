@@ -1,7 +1,8 @@
 //! Settings › Dictation and Settings › Voice Agent, two pages drawn by one view type
 //! ([`VoiceAgentTab`], `page` says which). Dictation: the machine picker, Dictate's engine with
 //! the key a cloud engine needs right under it (`voice_dictate.rs`) and the Dictation history. Voice Agent: the provider with its key right under it, the voice, speed and
-//! call mode (catalog rows, `packages/settings-catalog/src/pages/voice_agent.rs`), and Memory.
+//! call mode (catalog rows, `packages/settings-catalog/src/pages/voice_agent.rs`), the call's
+//! language and its turn words (listed and saved by gxserver, `/api/setVoiceAgentSettings`), and Memory.
 //! A key is pasted, sent once to `/api/setVoiceAgentKey` (which checks it with the provider
 //! before sealing it) and never shown again; the pages only learn whether each provider has one
 //! (`/api/readVoiceAgent`). Both pages save the same key and say the other uses it too.
@@ -42,6 +43,10 @@ const SPEED: &str = "voiceAgentSpeed";
 const CALL_MODE: &str = "voiceAgentCallMode";
 const WAIT_FOR_REPLY: &str = "voiceAgentWaitForReply";
 const XAI_KEY: &str = "voiceAgentXaiKey";
+const LANGUAGE: &str = "voiceAgentLanguage";
+const TURN_WORDS: &str = "voiceAgentTurnWords";
+/// `voiceAgentLanguage` when a call speaks the language of the device that places it.
+const DEVICE_LANGUAGE: &str = "device";
 const OPENAI_KEY: &str = "voiceAgentOpenaiKey";
 const MEMORY: &str = "voiceAgentMemory";
 
@@ -134,6 +139,26 @@ pub(crate) struct VoiceAgentTab {
     memory_error: Option<String>,
     /// Dictation history, Dictation's last section (`voice_agent_history.rs`).
     history: Option<Entity<super::voice_agent_history::DictationHistory>>,
+    /// The saved call language (`language` of `/api/readVoiceAgent`): `device` or a code. `None`
+    /// until read, and from a gxserver without the setting, which hides the Language and turn-word rows.
+    language: Option<String>,
+    /// The languages a call can speak (`languages`), as the Language picker lists them.
+    languages: Vec<SettingOption>,
+    /// The turn words per language (`turnWords`), the user's own or the defaults.
+    turn_words: serde_json::Value,
+    /// The comma-separated turn words of the language the editor shows.
+    turn_words_input: Entity<InputState>,
+    /// The language whose words `turn_words_input` holds; `None` refills it on the next render.
+    turn_words_shown: Option<String>,
+    /// A Language or turn-word save is on its way.
+    language_busy: bool,
+    /// Why the last Language save failed.
+    language_note: Option<String>,
+    /// Why the last turn-word save failed.
+    turn_words_note: Option<String>,
+    /// This computer's language (`system_language`), which calls send while Language is "Same as
+    /// the calling device".
+    system_language: Option<String>,
 }
 
 impl SettingsPage for VoiceAgentTab {
@@ -199,6 +224,16 @@ impl VoiceAgentTab {
             ),
             chatgpt_signin_available: false,
             read_error: None,
+            language: None,
+            languages: Vec::new(),
+            turn_words: serde_json::Value::Null,
+            turn_words_input: cx
+                .new(|cx| InputState::new(window, cx).placeholder("reply, over, go ahead")),
+            turn_words_shown: None,
+            language_busy: false,
+            language_note: None,
+            turn_words_note: None,
+            system_language: system_language(),
             memory: None,
             memory_pending: false,
             memory_busy: false,
@@ -255,6 +290,23 @@ impl VoiceAgentTab {
                             page.memory = Some(status["memory"].clone());
                             page.memory_pending =
                                 status["memorySummaryPending"].as_bool().unwrap_or(false);
+                            page.language = status["language"].as_str().map(str::to_string);
+                            page.languages = status["languages"]
+                                .as_array()
+                                .map(|languages| {
+                                    languages
+                                        .iter()
+                                        .filter_map(|language| {
+                                            Some(SettingOption {
+                                                label: language["label"].as_str()?.to_string(),
+                                                value: language["code"].as_str()?.to_string(),
+                                            })
+                                        })
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+                            page.turn_words = status["turnWords"].clone();
+                            page.turn_words_shown = None;
                         }
                         Err(error) => page.read_error = Some(error),
                     }
@@ -787,6 +839,24 @@ impl VoiceAgentTab {
             {
                 provider_rows.push(row);
             }
+            // The call's language sits under the speed, with the voice it speaks in.
+            if key == SPEED
+                && search.row_visible("provider", LANGUAGE)
+                && let Some(row) = self.call_language_row(p, window, cx)
+            {
+                provider_rows.push(row);
+                if let Some(error) = &self.language_note {
+                    provider_rows.push(
+                        div()
+                            .px(px(16.0))
+                            .py(px(10.0))
+                            .text_size(px(12.5))
+                            .text_color(hsla(p.destructive))
+                            .child(error.clone())
+                            .into_any_element(),
+                    );
+                }
+            }
             // CDXC:VoiceMode 2026-11-12 DECISION: User (Q2747, Q2748): "Answer when I say "reply""
             // sits right under Call mode as its dependent row, shown only while the mode is Regular,
             // since a push-to-talk turn ends when the talk button is let go (server/src/voice_agent/keys.rs).
@@ -803,10 +873,20 @@ impl VoiceAgentTab {
                     p,
                     WAIT_FOR_REPLY,
                     spec,
-                    [("When I pause", false), ("When I say \"reply\"", true)],
+                    [("When I pause", false), ("When I say a turn word", true)],
                     values.bool(WAIT_FOR_REPLY),
                     cx,
                 ));
+            }
+            // The turn words of the call's language, right under "The agent answers" while
+            // "When I say a turn word" is picked.
+            if key == CALL_MODE
+                && values.string(CALL_MODE) != "pushToTalk"
+                && values.bool(WAIT_FOR_REPLY)
+                && search.row_visible("provider", TURN_WORDS)
+                && let Some(row) = self.turn_words_row(p, window, cx)
+            {
+                provider_rows.push(row);
             }
             // The key the chosen provider needs, right under the picker (Q1711).
             if key == PROVIDER
@@ -871,4 +951,239 @@ impl VoiceAgentTab {
         }
         blocks
     }
+}
+
+/// Settings › Voice Agent's Language row and the turn words of a language.
+///
+/// CDXC:VoiceMode 2026-11-25 DECISION: User: the language the agent speaks is a setting, English by default
+/// (or the calling device's), and each language has several turn words of its own. Both save through
+/// `/api/setVoiceAgentSettings`, which checks them as it does for the phone (server/src/voice_agent/call_language.rs).
+impl VoiceAgentTab {
+    /// The language whose turn words the editor shows: the saved language, or with "Same as the
+    /// calling device" this computer's language when a call can speak it (English otherwise).
+    fn turn_words_language(&self) -> Option<String> {
+        let saved = self.language.as_deref()?;
+        if saved != DEVICE_LANGUAGE {
+            return Some(saved.to_string());
+        }
+        let system = self.system_language.clone();
+        Some(
+            system
+                .filter(|code| {
+                    self.languages
+                        .iter()
+                        .any(|language| language.value == *code)
+                })
+                .unwrap_or_else(|| "en".to_string()),
+        )
+    }
+
+    fn language_label(&self, code: &str) -> String {
+        self.languages
+            .iter()
+            .find(|language| language.value == code)
+            .map(|language| language.label.clone())
+            .unwrap_or_else(|| code.to_string())
+    }
+
+    /// Saves `params` through `/api/setVoiceAgentSettings`, then reads the saved values back.
+    fn save_language_settings(
+        &mut self,
+        params: serde_json::Value,
+        turn_words: bool,
+        cx: &mut Context<Self>,
+    ) {
+        self.language_busy = true;
+        self.language_note = None;
+        self.turn_words_note = None;
+        let page = cx.entity().downgrade();
+        store_gxserver_rpc(
+            &self.store,
+            "/api/setVoiceAgentSettings",
+            params,
+            READ_TIMEOUT,
+            move |result, cx| {
+                let _ = page.update(cx, |page, cx| {
+                    page.language_busy = false;
+                    match result {
+                        Ok(_) => page.read_status(cx),
+                        Err(error) if turn_words => page.turn_words_note = Some(error),
+                        Err(error) => page.language_note = Some(error),
+                    }
+                    cx.notify();
+                });
+            },
+            cx,
+        );
+        cx.notify();
+    }
+
+    fn call_language_row(
+        &mut self,
+        p: &super::super::palette::SettingsPalette,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let saved = self.language.clone()?;
+        let (title, subtitle, _) = Self::catalog_row(LANGUAGE)?;
+        let mut options = vec![SettingOption {
+            label: "Same as the calling device".to_string(),
+            value: DEVICE_LANGUAGE.to_string(),
+        }];
+        options.extend(self.languages.iter().cloned());
+        Some(select_field(
+            self,
+            p,
+            LANGUAGE,
+            RowSpec::new(title).description(subtitle),
+            None,
+            &options,
+            &saved,
+            None,
+            move |page: &mut Self, next, _window, cx| {
+                page.save_language_settings(json!({ "language": next }), false, cx);
+            },
+            window,
+            cx,
+        ))
+    }
+
+    fn turn_words_row(
+        &mut self,
+        p: &super::super::palette::SettingsPalette,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let code = self.turn_words_language()?;
+        let (title, subtitle, _) = Self::catalog_row(TURN_WORDS)?;
+        // The editor holds the shown language's words, refilled after a read or a language change.
+        if self.turn_words_shown.as_deref() != Some(code.as_str()) && !self.language_busy {
+            let words: Vec<&str> = self.turn_words[code.as_str()]
+                .as_array()
+                .map(|words| words.iter().filter_map(|word| word.as_str()).collect())
+                .unwrap_or_default();
+            let text = words.join(", ");
+            self.turn_words_input
+                .update(cx, |input, cx| input.set_value(text, window, cx));
+            self.turn_words_shown = Some(code.clone());
+        }
+        let label = self.language_label(&code);
+        let which = if self.language.as_deref() == Some(DEVICE_LANGUAGE) {
+            format!(
+                "Words for {label}, this computer's language; a phone in another language uses that language's words."
+            )
+        } else {
+            format!("Words for {label}.")
+        };
+        let busy = self.language_busy;
+        let note = self.turn_words_note.clone();
+        let save_id = SharedString::from(format!("{TURN_WORDS}-save"));
+        let reset_id = SharedString::from(format!("{TURN_WORDS}-reset"));
+        let save_code = code.clone();
+        let control = v_flex()
+            .w_full()
+            .gap(px(6.0))
+            .child(
+                h_flex()
+                    .w_full()
+                    .gap(px(8.0))
+                    .items_center()
+                    .child(settings_text_input(
+                        p,
+                        &self.turn_words_input,
+                        None,
+                        false,
+                        window,
+                        cx,
+                    ))
+                    .child(settings_button(
+                        p,
+                        save_id,
+                        "Save",
+                        None,
+                        ButtonVariant::Outline,
+                        busy,
+                        None,
+                        move |page: &mut Self, _window, cx| {
+                            let words: Vec<String> = page
+                                .turn_words_input
+                                .read(cx)
+                                .value()
+                                .split(',')
+                                .map(str::trim)
+                                .filter(|word| !word.is_empty())
+                                .map(str::to_string)
+                                .collect();
+                            page.save_language_settings(
+                                json!({ "turnWordsLanguage": &save_code, "turnWords": words }),
+                                true,
+                                cx,
+                            );
+                        },
+                        cx,
+                    ))
+                    .child(settings_button(
+                        p,
+                        reset_id,
+                        "Reset to defaults",
+                        None,
+                        ButtonVariant::Outline,
+                        busy,
+                        None,
+                        move |page: &mut Self, _window, cx| {
+                            page.save_language_settings(
+                                json!({ "turnWordsLanguage": &code, "turnWords": [] }),
+                                true,
+                                cx,
+                            );
+                        },
+                        cx,
+                    )),
+            )
+            .child(
+                div()
+                    .text_size(px(12.5))
+                    .text_color(hsla(p.muted))
+                    .child(format!("{subtitle} {which}")),
+            )
+            .when_some(note, |this, text| {
+                this.child(
+                    div()
+                        .text_size(px(12.5))
+                        .text_color(hsla(p.destructive))
+                        .child(text),
+                )
+            })
+            .into_any_element();
+        Some(setting_row(
+            p,
+            TURN_WORDS,
+            RowSpec::new(title).wide().dependent(),
+            None,
+            control,
+            cx,
+        ))
+    }
+}
+
+/// The primary language subtag, lowercase, of this computer's first preferred language ("de" for
+/// German (Germany)): what a call sends as `language`. `None` when the system says none.
+///
+/// CDXC:VoiceMode 2026-11-26 DECISION: User picked the `sys-locale` library for this (Cargo.toml), so
+/// macOS, Windows and Linux all read the system's preferred languages the same way; the first one
+/// is the computer's language. It replaces the first version's macOS preferences file and POSIX
+/// variables, which left Windows without a language.
+pub(crate) fn system_language() -> Option<String> {
+    primary_language_subtag(&sys_locale::get_locales().next()?)
+}
+
+/// "de" from "de-DE", "de_DE.UTF-8" or "DE".
+fn primary_language_subtag(tag: &str) -> Option<String> {
+    let primary = tag
+        .split(['-', '_', '.', '@'])
+        .next()?
+        .trim()
+        .to_ascii_lowercase();
+    (!primary.is_empty() && primary.len() <= 8 && primary.chars().all(|c| c.is_ascii_alphabetic()))
+        .then_some(primary)
 }

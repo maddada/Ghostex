@@ -31,16 +31,33 @@ pub(super) const GUARDRAILS_AND_STYLE: &str = "## Guardrails & Escalation
 ";
 
 /// The instructions for a call about all sessions, about the one session `focus` names, or with
-/// the GBot whose chat it is (`gbot_call/prompt.rs`).
-pub(super) fn instructions(focus: Option<&FocusScope>) -> String {
+/// the GBot whose chat it is (`gbot_call/prompt.rs`), spoken in `language` (`call_language.rs`).
+pub(super) fn instructions(focus: Option<&FocusScope>, language: &str) -> String {
     let today = chrono::Local::now().format("%A %-d %B %Y").to_string();
-    match focus {
+    let mut instructions = match focus {
         None => all_sessions_instructions(&today),
         Some(scope) => match &scope.gbot {
             Some(bot) => super::gbot_call::instructions(bot, scope, &today),
             None => focused_instructions(scope, &today),
         },
-    }
+    };
+    instructions.push_str(&language_instructions(language));
+    instructions
+}
+
+/// The call's language section.
+///
+/// CDXC:VoiceMode 2026-11-25 DECISION: User: the language the agent speaks is a setting, English by default (2026-11-26) with the calling device's language as a choice (`call_language.rs`).
+/// CDXC:VoiceMode 2026-11-25 WHY: Ghostex's own messages, tool results and session messages stay as they are (mostly English), so the model is told to answer in the call's language whatever they are in, and to keep code, paths and names as written.
+fn language_instructions(language: &str) -> String {
+    format!(
+        "
+
+## Language
+- Speak and answer in {label}, whatever language tool results, session messages and Ghostex messages are in. Say Ghostex updates, questions and options in {label} too.
+- Keep code, file paths, commands, session titles, project names and agent names exactly as they are; never translate them.",
+        label = super::call_language::label(language)
+    )
 }
 
 /// CDXC:VoiceMode 2026-11-10 WHY: "What are my sessions doing?" was answered with a 28 to 31 second monologue at 1.6x (every working session, every sub-thread, the idle ones per project), measured on the user's PC; on his Android phone that read as "super slow" and "it only replied once". The status line now asks for the counts and the sessions waiting on him only, as the 2026-10-20 DECISION at the top of this file asks ("Replies are short and spoken").

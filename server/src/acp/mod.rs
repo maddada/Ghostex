@@ -40,6 +40,20 @@ pub(crate) mod ignored_flags;
 mod omp_elicitation;
 pub(crate) mod pending_switch;
 pub(crate) mod spec;
+
+/// What every Native host says it is in its handshake (`clientInfo`): Ghostex, by its own name
+/// and the app's real version.
+///
+/// CDXC:AgentProviders 2026-11-26 DECISION:
+/// User, on the Antigravity compliance page (Q5150): Ghostex always identifies as itself, never as
+/// another editor or client, and with the app's version (it sent the server crate's `0.1.0`).
+pub(crate) fn client_info() -> Value {
+    serde_json::json!({
+        "name": "ghostex",
+        "title": "Ghostex",
+        "version": crate::constants::GXSERVER_VERSION,
+    })
+}
 pub(crate) mod startup_error;
 
 pub use approval::{AcpApprovalLevel, SESSION_ACP_APPROVAL_LEVEL_KEY};

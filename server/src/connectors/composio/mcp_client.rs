@@ -1,8 +1,7 @@
 //! A blocking MCP client over Streamable HTTP, the transport `@modelcontextprotocol/sdk`'s
 //! `StreamableHTTPClientTransport` speaks: every JSON-RPC message is a POST, the answer is JSON or
 //! a `text/event-stream`, and the `Mcp-Session-Id` from `initialize` rides on every later request.
-//! Composio's hosted server and a workspace's Executor (`/mcp`) both use it; `server` is the name
-//! its messages give the other side.
+//! Composio's hosted server uses it; `server` is the name its messages give the other side.
 
 use std::io::{BufRead, BufReader};
 use std::sync::atomic::{AtomicU64, Ordering};

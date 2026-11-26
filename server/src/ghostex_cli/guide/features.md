@@ -413,6 +413,9 @@ view from the strip.
   pages, Delete closes the shown one and Enter goes back to the page. Closing the
   Browser tab hides the Browser and puts its pages to sleep; they come back the
   next time it opens.
+  **Open Externally** in the Browser toolbar (the box with an arrow) opens the
+  page in your system browser, and the toolbar's ⋯ menu has **Toggle DevTools**
+  and the page appearance (System, Light or Dark).
   Right-click a link or image in a page to open it in a new tab, save it
   (Save link as / Save image as ask where to save), copy its address, or copy
   the image itself; any page download also asks where to save.
@@ -1132,7 +1135,8 @@ sessions column's place, the way Grok Bot opens, under the side panel Browser's
 own toolbar, which stays on top: Back, Forward, Reload, Home (the link's own
 address), the address (type another and press Enter to go there), Page Size
 (phone and tablet preview), Annotate, History, Profile (the links' own profile,
-or one of the Browser's profiles), DevTools, the ⋯ menu, and Close. Each row
+or one of the Browser's profiles), Open Externally, the ⋯ menu (which has Toggle
+DevTools), and Close. Each row
 shows its chosen icon or the site's icon once the page has been opened, and its
 ⋯ (or a right-click) has Edit…, Change icon…, Pin to rail (or Unpin from rail)
 and Remove. A link also pins to the rail like any rail item from the pin button
@@ -2699,7 +2703,11 @@ can open it in your browser or close it; or System browser, your default web
 browser. The popup hides, still open, when you click outside it or press its Hide
 button: a pill in the row above the chat box (the page's title and how many of its
 questions you answered, for example 3/16) brings it back as you left it, and the x that
-shows when you point at the pill closes it. Your answers reach the agent the same way
+shows when you point at the pill closes it. To keep the popup up while you click
+around and work in other threads, turn on the Keep open pin among its round
+buttons: clicks in Ghostex then leave it where it is, and Hide, the x and Escape
+still put it away. Ghostex remembers the pin for every page you open after, in
+any project and on your other computers. Your answers reach the agent the same way
 from all three, and the picture viewer and the remembered scroll position below work in all three.
 A page that links to other pages the agent wrote beside it (a cover page and its decks) opens
 each one in place when you click it, also for an agent on another computer. A page opened
@@ -2818,7 +2826,7 @@ form is answered once you have typed an answer for each of its questions.
 Quoted lines and a tag followed by other words ("Q12 what does it mean?")
 answer nothing. When you answer a question some other way, by doing what it
 asked, the agent withdraws it so it stops counting as open. Settings: `chatPageOpenTarget` (`popup`,
-`files` or `system-browser`) and
+`files` or `system-browser`), `chatPageKeepOpen` (the popup's Keep open pin) and
 (under the page's Advanced fold) `chatSendOnPick`, which makes picking an answer send a
 card that asks a single choice question right away, without Send answers
 (off by default; cards with several questions, multiple choice, Other or text
@@ -3619,7 +3627,7 @@ icon, when the chat box is narrow). Click (or tap) it to preview the draft, then
 choose Use draft to load it into your input, or Dismiss to keep what you have.
 
 Settings > Accounts saves Claude and Codex logins, and shows the usage of
-Cursor, Gemini and Copilot accounts. The left side has one **Add account**
+Cursor, Antigravity and Copilot accounts. The left side has one **Add account**
 button over each provider's accounts, each with a usage bar (or "Sign in
 needed" when a login stopped working: its Reconnect is on the right), and the
 Claude and Codex rules. Within each provider, turned-off accounts (Disabled)
@@ -3680,14 +3688,18 @@ chat's Accounts & limits panel of a session on another computer opens Settings
 › Accounts on that computer. When that computer can't be reached, Accounts says
 so instead of offering a sign-in that can't work. The phone's accounts screen
 works the same way for each paired computer.
-**Cursor, Gemini and Copilot** accounts only show usage: Ghostex never runs or
-switches a session on them. Cursor and Gemini sign in in the browser; Copilot
-shows a code to type on GitHub's page. Cursor and Copilot show their plan's use
+**Cursor, Antigravity and Copilot** accounts only show usage: Ghostex never runs or
+switches a session on them. Cursor signs in in the browser; Copilot
+shows a code to type on GitHub's page; Antigravity needs no sign-in of its own:
+it reads the Antigravity CLI signed in on that computer (`agy -p "/usage"`, at
+most every 10 minutes), and asks you to run `agy` to sign in when it is signed out. Cursor and Copilot show their plan's use
 of the billing month, labelled Mo (with Cursor's Auto and API split and extra
 usage spend, and Copilot's chat and premium requests, on the account's page);
-Gemini shows the 5h and 7d limits of the Google AI plan as Antigravity (agy's
-`/usage`) counts them: the Gemini models' limits, and Claude/GPT 5h and 7d for
-the Claude and GPT models agy runs; the sidebar shows whichever is more used.
+Antigravity shows the 5h and 7d limits agy's own `/usage` reports: the Gemini
+models' limits, and Claude/GPT 5h and 7d for the Claude and GPT models agy runs;
+the sidebar shows whichever is more used. Ghostex never calls Google itself for
+them: the Gemini account it used to offer, which read Google's quota service
+directly, is gone, and updating deleted its saved sign-in (the bell said so once).
 Ghostex shows what is used, agy's `/usage` what is left (74% used is agy's
 26.00%). Their usage shows in
 the sidebar, on the account's page, and under Other usage in a chat's Accounts &
@@ -4189,6 +4201,9 @@ Terminal-first new installs keep their existing mode (existing installs see the 
 Rewind to here works in Native Claude Code and Codex chats too: the agent goes back to
 before that message, the message returns to the chat box for editing, and files stay as
 they are. Native Antigravity chats do not offer it, because Antigravity has no way to go back.
+Native Antigravity chats need Antigravity CLI 1.5.1 or newer (older versions offer
+Claude and GPT only to some editors, and Ghostex always says it is Ghostex); on an
+older one the chat asks you to update it in Settings > Updates or switch to Terminal-based.
 A Native Codex chat's `/` list offers only `/compact`, `/btw` and `/mention`; the other
 Codex commands need Terminal-based mode.
 For a Native session, **Switch to Terminal-based** lives in the chat's
@@ -4727,7 +4742,7 @@ version of the Projects features in Cursor and Claude Code.
   coordinator itself never answers these cards: only your click does. After an
   answer the card folds to one line that says how it ended: answered here,
   answered in the thread (when you answered it there instead), expired (a
-  Connectors card waits 30 minutes) or moved on (the thread stopped asking).
+  Connectors card waits 30 minutes, an Executor one 14) or moved on (the thread stopped asking).
   A click on a card that changed in the meantime is refused and the card shows
   the current one. Threads on another computer are answered in that thread.
 - **Work items**: a coordinator keeps each line of work as one work item (W7),
@@ -5931,14 +5946,23 @@ typing anywhere (the panel shows a Space key when it works), or hold the
 while you hold Space, what you said so far is sent. On Grok push-to-talk
 calls you pay only for the audio you send and the agent's replies. GPT
 Realtime bills only audio in both modes. A change applies to your next call;
-Regular stays the default. The agent answers: When I say "reply" (Settings > Voice Agent,
+Regular stays the default. The agent answers: When I say a turn word (Settings > Voice Agent,
 right under Call mode, the default, shown only while the call mode is Regular; When I pause
 answers as soon as you stop) makes a Regular call wait for you: the agent answers only once what you said ends
-with "reply", "over" or "go ahead", and that word is taken off the caption. Anything
-it would have started to say by itself is dropped. Each call opens with a short spoken
-introduction that also asks you to say "reply" while the setting is on. Push-to-talk,
-typed turns and recorded turns are unchanged. Turn it off to have the agent answer
-as soon as you stop talking. Mute turns your microphone off; in a push-to-talk
+with one of the turn words of the call's language, and that word is taken off the caption. English
+defaults to "reply", "over" and "go ahead", German to "fertig" and "antworte", and every other language
+uses the English ones until you set your own under Turn words (right under The agent answers,
+shown only while the call mode is Regular and When I say a turn word is picked, so pick both to
+find it). Anything it would have
+started to say by itself is dropped. The
+language a call speaks is Language (Settings > Voice Agent): English by default, Same as the
+calling device, which is the language of the phone or computer that places the call (English when
+that device sends no language or one the agent does not offer), or one fixed
+language. Each call opens with a short spoken
+introduction; only in a Regular call with When I say a turn word picked does it also name the
+turn words. Push-to-talk, typed turns and recorded turns are unchanged: each is answered
+without a turn word. Pick When I pause (on the phone, turn the switch off) to have the agent
+answer as soon as you stop talking. Mute turns your microphone off; in a push-to-talk
 call it also locks the talk button ("Unmute to talk"), and in a muted Regular
 call holding the talk button, Space or the hotkey unmutes you for as long as
 you hold. It hangs up by itself after 5 minutes with nobody talking.
@@ -6043,9 +6067,19 @@ speeds, the same gear for the call mode, and the same talk button between
 Mute and Hang up: press and hold it to talk and let go to send, or slide your
 finger off it ("Release to cancel") and let go to send nothing; slide back on
 to keep talking. Stop talking is a pill above the buttons while the agent
-speaks. The call mode is also in the phone's Settings > Voice, with the same Answer when I
-say "reply" switch under it while Regular is picked (a computer too old to have it
-shows no switch). They save the computer's settings, so the desktop and the phone talk
+speaks. The call mode is also in the phone's Settings > Voice. With an updated phone app and a
+computer that reports the language settings, the page also has a Language row, in every call
+mode, for the language the voice agent speaks in calls from the phone. While Regular is picked,
+an Answer when I say … switch under the call mode names that language's turn words, and while
+the switch is on, the turn words to edit follow it. An older phone app, or a computer without
+the language settings, shows the earlier Answer when I say "reply" switch while Regular is
+picked, and no Language row or turn words; a computer too old for the switch shows none of
+them. On an updated computer, the older phone app's switch still names "reply", "over" and
+"go ahead", although the words in effect can differ (in a
+Regular call with the switch on, the call's spoken introduction names them); the updated phone
+app shows that earlier switch only for a computer without the language settings, which still
+ends a turn on those three words only in a Regular call with that switch on.
+They save the computer's settings, so the desktop and the phone talk
 with the same voice at the same speed and in the same mode. It shows
 the same "Last conversation" card with Continue, Start fresh and Forget.
 
@@ -6060,7 +6094,7 @@ Voice Agent leaves the sidebar. Dictate keeps working: Settings > Dictation
 still shows the key its engine needs and Past recordings. Turn it back on and everything returns, with your voice
 settings as you left them.
 
-Settings: `voiceAgentHidden` (off by default, which keeps the voice agent on), `voiceAgentProvider`, `voiceAgentXaiVoice`, `voiceAgentOpenaiVoice`, `voiceAgentSpeed`, `voiceAgentCallMode`, `voiceAgentWaitForReply`; the Memory row (`voiceAgentMemory`) forgets the remembered conversation. Hotkeys: Toggle Voice Agent, Session: Voice Call, Hold to Talk (`holdToTalk`).
+Settings: `voiceAgentHidden` (off by default, which keeps the voice agent on), `voiceAgentProvider`, `voiceAgentXaiVoice`, `voiceAgentOpenaiVoice`, `voiceAgentSpeed`, `voiceAgentCallMode`, `voiceAgentWaitForReply`, `voiceAgentLanguage`, `voiceAgentTurnWords`; the Memory row (`voiceAgentMemory`) forgets the remembered conversation. Hotkeys: Toggle Voice Agent, Session: Voice Call, Hold to Talk (`holdToTalk`).
 
 ## Remote machines, web, and mobile
 
@@ -8108,7 +8142,7 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   limits, so the Fable limit is never hidden when it is running out; launcher
   and picker rows and the Accounts figures use the same two numbers. Each
   meter opens that login's live limits, reset times, and extra usage or rate
-  limit resets, with the Fable limit as a main bar for Claude. A Gemini, Cursor
+  limit resets, with the Fable limit as a main bar for Claude. An Antigravity, Cursor
   or Copilot meter opens that provider's own popup: its name and logo, its
   limits and plan, and a cell that opens the account in Settings. Right-click a
   usage meter for Extensions and Accounts. Click the same
@@ -8426,22 +8460,36 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   takes `--workspace <name>`, and `ghostex connectors help` lists them all,
   so an agent can set connectors up for you. Settings › Connectors (shown while
   Connectors is on) does the same with buttons, one section per
-  workspace: the Composio sign-in and apps, Executor and its apps, the
-  Ask/Allow/Never rules and the `gh` and `gws` sign-ins.
+  workspace (the Composio sign-in and apps, the Ask/Allow/Never rules and
+  the `gh` and `gws` sign-ins) and one Executor section for the computer.
+  The rules and the Executor sign-in, its Install and Remove change only in
+  Settings › Connectors in the Ghostex app on this computer, as pairing codes
+  do: agents and the `ghostex` CLI can read them but not change them.
 - Agents use connectors on their own: every Claude and Codex session that
   starts or resumes while Connectors is on gets its workspace's connector
-  tools (Composio's and, when Executor is on, Executor's), so you can just
+  tools (Composio's and, once the Executor CLI is signed in, Executor's), so you can just
   ask an agent to read your mail or file a Linear issue. Apps connected
   later reach running sessions within seconds. Reads run at once. Before an
   agent sends, posts, creates, changes or deletes anything, Ghostex shows a
   card in that session's chat: Approve, Always allow (stop asking for that
   tool in this workspace) or Deny, and the session shows waiting on you in
   the sidebar until it is answered; a card nobody answers ends after 30
-  minutes. A program an agent runs through Executor asks only for the steps
-  whose app asks for approval. `ghostex connectors rules` shows what a
+  minutes (14 for Executor, whose own approval ends at 15). Every Executor
+  tool call (`executor_call`) counts as one that may change something, since
+  Executor doesn't say beforehand which tools only read, so it asks until you
+  pick Always allow for that tool, and the card shows the call's whole input
+  (long values shortened, saying so). A program an agent runs through
+  Executor (`executor_execute`) follows the rules for every app and tool it
+  names: with Ask its card shows the program's code first, with Never it
+  doesn't run. Ghostex refuses a program that uses Executor's own app or
+  reaches apps without naming each one, as `tools.<app>.<tool>(…)`. An
+  Approve answers one step: a later step that asks again shows another card.
+  `ghostex connectors rules` shows what a
   workspace does with such calls, and `ghostex connectors rule <tool|all>
   <ask|allow|never|default>` changes it, for example `rule all never` so
-  agents in that workspace can only read, or `rule GMAIL_SEND_EMAIL allow`.
+  agents in that workspace can only read, or `rule GMAIL_SEND_EMAIL allow`
+  (on a computer where the Ghostex app holds no owner key yet; otherwise
+  change rules in Settings › Connectors).
 - A workspace can also have its own GitHub CLI (`gh`) and Google Workspace
   CLI (`gws`) sign-in, so work agents act as your work accounts:
   `ghostex connectors gh sign-in` (or `gws`) opens the sign-in page in your
@@ -8456,24 +8504,24 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   or Use usual goes back). An Internal client only signs in accounts of its
   own Google organization, so a personal Gmail needs an External one. This is
   part of Connectors and also experimental.
-- Executor is the second way Connectors links apps, next to Composio, and
-  runs on this computer. `ghostex connectors executor enable` turns it on for
-  a workspace (the first time, Ghostex downloads Executor). Each workspace
-  gets its own Executor with its own apps and sign-ins; it starts when needed
-  and stops after 15 minutes unused. Find an app in Executor's catalog with
-  `ghostex connectors executor catalog <words>` and add it with `ghostex
-  connectors executor add <app>`, or add any remote MCP server with `ghostex
-  connectors executor add-mcp <name> <url>` (Linear's is
-  `https://mcp.linear.app/mcp`). Sign it in with `ghostex connectors executor
-  connect <app>`, which opens your browser; some catalog apps, Google's for
-  example, first need your own OAuth client from that app's developer
-  console. `ghostex connectors executor tools [app]` lists an app's tools and
-  `ghostex connectors executor call <app> <tool> --args '<json>'` runs one
-  that only reads; anything else is refused for now. `ghostex connectors
-  executor remove <app>` removes an app, and `ghostex connectors executor
-  disable` turns Executor off for the workspace but keeps its apps and
-  sign-ins for next time. `ghostex connectors executor` shows its state.
-  Every command takes `--workspace <name>`.
+- Executor is the second way Connectors links apps, next to Composio, through
+  the Executor CLI installed on this computer (Executor 2; Ghostex uses the
+  one on your PATH or in `~/.executor` and never downloads its own copy).
+  Its one sign-in is the computer's: every workspace's agents and every other
+  harness that uses the CLI share it. Install in Settings › Connectors runs
+  Executor's own installer, Sign in signs the CLI in to executor.sh (it shows
+  a code and opens your browser; Self-hosted… takes the https address of your
+  own Executor), and Sign out signs it out for everything on the computer.
+  Until it is signed in, agents get no Executor tools. Apps and
+  their accounts are added in Executor itself (Manage in Executor in Settings
+  > Connectors opens it); agents reach them only through Ghostex's
+  `executor_*` tools, so Ghostex's cards and rules answer Executor's
+  approvals. `ghostex connectors executor` shows the CLI's version, sign-in,
+  approval mode and apps; Ghostex needs Executor's model approval mode, the
+  default. Apps the old built-in Executor had are listed once, so you can add
+  them again in Executor; their data is deleted after 30 days or with Remove.
+  Rules set for the old built-in Executor's tools were dropped when Ghostex
+  moved to the CLI, so they don't carry over to an app of the same name.
 - Ask Ghostex AI is a row of the sidebar's menu (below Keep Awake), and Extensions, Dev
   servers and Resources are under Tools. Each opens a panel under the menu
   button that closes when you click away. Ask Ghostex AI and Resources are
@@ -9210,7 +9258,7 @@ for the full table):
   switch it and whether from Settings or Meet the rail's Switch, and the layout
   Meet the rail opened on and the one kept on Done; never your pinned icons or
   their order.
-- Accounts: bucketed counts of Claude, Codex, Cursor, Gemini, and Copilot
+- Accounts: bucketed counts of Claude, Codex, Cursor, Antigravity, and Copilot
   accounts, and the plan tier Claude and Codex report for them (such as Pro,
   Max, Team, or Plus); never emails, account names, org names, or account ids.
 

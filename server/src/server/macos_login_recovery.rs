@@ -136,6 +136,26 @@ pub(crate) fn uninstall(port: u16) -> Result<()> {
     }
 }
 
+/// Deletes an isolated profile's `gxserver.plist` from `~/Library/LaunchAgents` during `stop-all`
+/// so launchd does not reload a stopped test/isolated server on the next login. Never touches the
+/// production `com.madda.ghostex.gxserver.plist`.
+pub(crate) fn remove_isolated_gxserver_plist(port: u16) -> Result<()> {
+    let prefix = ghostex_paths::launchd_label_prefix(port);
+    if !prefix.starts_with("com.madda.ghostex-isolated.") {
+        return Ok(());
+    }
+    let home = env::var_os("HOME").context("HOME is unavailable")?;
+    let plist_path = PathBuf::from(home)
+        .join("Library/LaunchAgents")
+        .join(format!("{prefix}gxserver.plist"));
+    match fs::remove_file(&plist_path) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+            Err(error).with_context(|| format!("remove {}", plist_path.display()))
+        }
+        _ => Ok(()),
+    }
+}
+
 /// The LaunchAgents folder, the agent's label and its plist path for this profile.
 fn agent_location(port: u16) -> Result<(PathBuf, String, PathBuf)> {
     let home = env::var_os("HOME").context("HOME is unavailable")?;

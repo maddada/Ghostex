@@ -30,6 +30,8 @@ pub(crate) fn agent() -> &'static ureq::Agent {
 pub(crate) enum Failure {
     /// The provider refused the sign-in for good: the user has to sign in again.
     SignInExpired,
+    /// The sign-in is not Ghostex's to renew (Antigravity's is agy's own): what to do about it.
+    NeedsSignIn(String),
     /// Anything time may fix (an outage, a timeout) or the provider's own explanation.
     Unavailable(String),
 }
@@ -38,7 +40,7 @@ impl Failure {
     pub(crate) fn message(&self) -> String {
         match self {
             Failure::SignInExpired => "Its sign-in stopped working. Sign in again.".to_string(),
-            Failure::Unavailable(message) => message.clone(),
+            Failure::NeedsSignIn(message) | Failure::Unavailable(message) => message.clone(),
         }
     }
 }
@@ -89,12 +91,6 @@ pub(crate) fn pkce() -> (String, String) {
     (verifier, challenge)
 }
 
-pub(crate) fn random_state() -> String {
-    let mut bytes = [0u8; 16];
-    rand::rng().fill_bytes(&mut bytes);
-    URL_SAFE_NO_PAD.encode(bytes)
-}
-
 /// A JWT's claims, unverified: only read to name the account and time its renewal.
 pub(crate) fn jwt_claims(token: &str) -> Option<Value> {
     let payload = token.split('.').nth(1)?;
@@ -123,8 +119,4 @@ pub(crate) fn rfc3339_from_ms(ms: i64) -> Option<String> {
 /// Percent used, kept within 0 to 100.
 pub(crate) fn clamp_percent(value: f64) -> f64 {
     value.clamp(0.0, 100.0)
-}
-
-pub(crate) fn url_encode(value: &str) -> String {
-    url::form_urlencoded::byte_serialize(value.as_bytes()).collect()
 }

@@ -272,7 +272,9 @@ impl NativeChatView {
             self.follow_tail_if_near_end();
         }
         let rows = self.items.len();
-        self.list.splice(rows..rows + self.sent_rows_listed, wanted);
+        self.spliced_height.splice(&self.list, || {
+            self.list.splice(rows..rows + self.sent_rows_listed, wanted)
+        });
         self.sent_rows_listed = wanted;
         true
     }

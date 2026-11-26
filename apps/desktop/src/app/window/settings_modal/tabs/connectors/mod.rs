@@ -1,7 +1,7 @@
-//! The Connectors page (experimental): each workspace's connectors, what the `ghostex connectors`
-//! CLI does with buttons. Composio (sign in, connect apps), Executor (turn it on, add apps from
-//! its catalog or a remote MCP server, sign them in), the rules for calls that change something
-//! (Ask, Allow, Never) and the workspace's own gh and gws sign-ins. It reads `/api/readConnectors`
+//! The Connectors page (experimental): what the `ghostex connectors` CLI does with buttons. The
+//! computer's Executor CLI (install it, sign it in or out), then each workspace's Composio (sign
+//! in, connect apps), the rules for calls that change something (Ask, Allow, Never) and the
+//! workspace's own gh and gws sign-ins. It reads `/api/readConnectors`
 //! when it opens and on every `connectorsChanged` the app forwards, and after each action.
 //! SEE-ALSO: server/src/connectors/ (the routes), server/src/connectors/gate.rs (the experimental
 //! switch this page follows, `SettingsStore::connectors_visible`).
@@ -49,11 +49,11 @@ pub(crate) struct ConnectorsTab {
     notes: HashMap<String, String>,
     /// A browser sign-in waiting to be finished, keyed `<workspace>:<section>` (signin_panel.rs).
     pending: HashMap<String, signin_panel::PendingSignIn>,
-    /// Executor catalog results per workspace, from the last search.
-    catalog_results: HashMap<String, Vec<Value>>,
+    /// The self-hosted Executor address row is open.
+    executor_host_open: bool,
     /// The page was the active one at the last store change, to read again when it comes back.
     was_active: bool,
-    /// The next read while an Executor downloads or starts.
+    /// The next read while the Executor CLI installs.
     pending_reread: Option<gpui::Task<()>>,
 }
 
@@ -101,7 +101,7 @@ impl ConnectorsTab {
             busy: HashSet::new(),
             notes: HashMap::new(),
             pending: HashMap::new(),
-            catalog_results: HashMap::new(),
+            executor_host_open: false,
             was_active: true,
             pending_reread: None,
         }
@@ -144,7 +144,7 @@ impl Render for ConnectorsTab {
         }
         let intro = static_note(
             &p,
-            "Each workspace has its own sign-ins and apps. Reads run on their own; before an agent sends, posts, changes or deletes anything, Ghostex asks you in that chat. Experimental.",
+            "Each workspace has its own Composio and command-line sign-ins; the Executor CLI's sign-in is the computer's. Composio reads run on their own; before an agent sends, posts, changes or deletes anything, Ghostex asks you in that chat. Experimental.",
             false,
         );
         let refresh = settings_button(
@@ -193,6 +193,18 @@ impl Render for ConnectorsTab {
             let result = search.section(section);
             !result.is_searching || result.has_visible()
         };
+        if section_shown("executor")
+            && let Some(executor) = self
+                .connectors
+                .as_ref()
+                .and_then(|connectors| connectors.get("executor"))
+                .filter(|executor| executor.is_object())
+                .cloned()
+        {
+            if let Some(section) = self.executor_section(&p, &executor, window, cx) {
+                blocks.push(PageBlock::section("executor".to_string(), section));
+            }
+        }
         for workspace in data::workspaces(self.connectors.as_ref()) {
             let id = data::text(&workspace, "workspaceId");
             let title = |section: &str| {
@@ -206,12 +218,6 @@ impl Render for ConnectorsTab {
                 && let Some(section) = self.composio_section(&p, &workspace, title("Composio"), cx)
             {
                 blocks.push(PageBlock::section(format!("{id}-composio"), section));
-            }
-            if section_shown("executor")
-                && let Some(section) =
-                    self.executor_section(&p, &workspace, title("Executor"), window, cx)
-            {
-                blocks.push(PageBlock::section(format!("{id}-executor"), section));
             }
             if section_shown("rules")
                 && let Some(section) =

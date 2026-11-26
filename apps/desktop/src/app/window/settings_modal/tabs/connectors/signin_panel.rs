@@ -1,7 +1,7 @@
 //! The panel a browser sign-in leaves on the page until it is finished: what to do, the one-time
 //! code in large type with Copy (Ghostex copies it before it opens the page), and buttons to open
 //! the page again or copy its link. Every sign-in and connect on the page uses it: Composio, its
-//! apps, Executor's apps and the gh and gws sign-ins.
+//! apps, the Executor CLI and the gh and gws sign-ins.
 //!
 //! CDXC:Connectors 2026-10-17 DECISION:
 //! User, on the first gh sign-in: "the ux for this is VERY bad", "we need to make the button that opens copy the code", "this tiny text is NOT GOOD", and "this ux needs to improve for all of them that have the same issue please, not just gh cli". Sign in copies the code before it opens the page, and every browser sign-in shows this panel in normal-size text, the code large, until the page sees it finished or the user closes it.
@@ -22,7 +22,8 @@ use serde_json::Value;
 pub(super) enum DoneWhen {
     ComposioSignedIn,
     ComposioApp(String),
-    ExecutorApp(String),
+    /// The computer's Executor CLI is signed in (`executor` in the read, not a workspace's).
+    ExecutorCli,
     Cli(String),
 }
 
@@ -50,7 +51,7 @@ impl PendingSignIn {
                 .get("composio")
                 .is_some_and(|composio| flag(composio, "signedIn")),
             DoneWhen::ComposioApp(slug) => app_done("composio", slug, "connected"),
-            DoneWhen::ExecutorApp(app) => app_done("executor", app, "signedIn"),
+            DoneWhen::ExecutorCli => false,
             DoneWhen::Cli(tool) => workspace
                 .get("cli")
                 .and_then(|cli| cli.get(tool))
@@ -80,7 +81,15 @@ impl ConnectorsTab {
     /// Drops the sign-ins the last read shows finished.
     pub(super) fn drop_finished_sign_ins(&mut self) {
         let workspaces = data::workspaces(self.connectors.as_ref());
+        let executor_signed_in = self
+            .connectors
+            .as_ref()
+            .and_then(|connectors| connectors.get("executor"))
+            .is_some_and(|executor| flag(executor, "signedIn"));
         self.pending.retain(|key, pending| {
+            if matches!(pending.done_when, DoneWhen::ExecutorCli) {
+                return !executor_signed_in;
+            }
             let workspace_id = key.split(':').next().unwrap_or_default();
             !workspaces
                 .iter()

@@ -777,6 +777,24 @@ impl SessionRow {
         ghostex_gx_protocol::session_has_question(self.pending_question_count, self.awaiting_answer)
     }
 
+    /// Marks the row as an Autopilot supervisor's and drops its working, attention and grey
+    /// background-work dots, so only its red (approval, failed, stuck, blocked) and pink (question)
+    /// dots show, and it adds no working or attention dot to any header.
+    ///
+    /// CDXC:Autopilot 2026-11-26 DECISION:
+    /// User: "the autopilot thread should never show working or attention in the sidebar dots please, only should show pink or red dots (blocked or ping). ex this guy was showing blue dot, this isn't wanted". The supervisor wakes and finishes turns on its own all day, so its orange and blue dots were noise; a red or pink dot still means it needs the user.
+    pub(crate) fn mark_autopilot_supervisor(&mut self, is_autopilot: bool) {
+        self.is_autopilot_supervisor = is_autopilot;
+        if !is_autopilot {
+            return;
+        }
+        if matches!(self.activity.as_str(), "working" | "attention") {
+            self.activity = "idle".to_string();
+        }
+        self.attention_needs_input = false;
+        self.has_background_work = false;
+    }
+
     /// CDXC:SessionStatus 2026-09-24 DECISION:
     /// User: a section, project, collection, Space or machine header shows the grey dot when it has no working session but has a grey-dot session, so the headers count exactly the rows that draw the grey dot: idle rows with a background shell or monitor still running.
     pub fn shows_background_work(&self) -> bool {
@@ -1280,5 +1298,60 @@ mod tests {
         status.add(&row);
         assert!(status.question);
         assert!(!status.attention);
+    }
+
+    /// The Autopilot supervisor's row never draws or counts the orange working, blue attention or
+    /// grey dots, keeps its pink and red ones, and other rows keep all of theirs.
+    #[test]
+    fn autopilot_supervisor_row_shows_only_red_and_pink_dots() {
+        for activity in ["working", "attention"] {
+            let mut row = SessionRow {
+                activity: activity.to_string(),
+                attention_needs_input: true,
+                has_background_work: true,
+                ..SessionRow::default()
+            };
+            row.mark_autopilot_supervisor(true);
+            assert!(row.is_autopilot_supervisor);
+            assert_eq!(row.tile_status(), None);
+            assert_eq!(row.needs_you(), None);
+            assert!(!row.shows_background_work());
+            let mut status = FoldedStatus::default();
+            status.add(&row);
+            assert_eq!(status, FoldedStatus::default());
+        }
+
+        let mut asking = SessionRow {
+            activity: "attention".to_string(),
+            awaiting_answer: true,
+            ..SessionRow::default()
+        };
+        asking.mark_autopilot_supervisor(true);
+        assert_eq!(asking.tile_status(), Some(TileStatus::Question));
+        assert_eq!(asking.needs_you(), Some(NeedsYou::Question));
+
+        let mut blocked = SessionRow {
+            activity: "working".to_string(),
+            stuck: true,
+            ..SessionRow::default()
+        };
+        blocked.mark_autopilot_supervisor(true);
+        assert_eq!(blocked.tile_status(), Some(TileStatus::Failed));
+
+        let mut approval = SessionRow {
+            activity: "working".to_string(),
+            awaiting_approval: true,
+            ..SessionRow::default()
+        };
+        approval.mark_autopilot_supervisor(true);
+        assert_eq!(approval.tile_status(), Some(TileStatus::Approval));
+
+        let mut other = SessionRow {
+            activity: "attention".to_string(),
+            ..SessionRow::default()
+        };
+        other.mark_autopilot_supervisor(false);
+        assert_eq!(other.activity, "attention");
+        assert_eq!(other.tile_status(), Some(TileStatus::Attention));
     }
 }

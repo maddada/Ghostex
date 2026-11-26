@@ -591,6 +591,23 @@ pub(super) async fn send_session_chat_message_attempt(
                 error,
             )
         }
+        // A form's or page's answers that could not be typed are kept as the chat's failed message
+        // card too, whoever sent them, and the form stays answered while the card holds them
+        // (CDXC:SessionChat 2026-11-26 DECISION in apps/desktop/src/app/native_chat/resource_modal.rs).
+        Err(error)
+            if !ghostex_gx_chat_core::transcript::page_answers::answers_page_ids(&text)
+                .is_empty() =>
+        {
+            crate::session_chat_send_wake::queue_failed_composer_send(
+                state,
+                endpoint_path,
+                request_id,
+                &params,
+                &target,
+                &text,
+                error,
+            )
+        }
         Err(error) => domain_error_response(endpoint_path, request_id, error),
     }
 }

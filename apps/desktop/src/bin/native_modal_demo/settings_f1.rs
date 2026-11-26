@@ -303,8 +303,8 @@ fn accounts_rpc(state: &str, params: &Value) -> Answer {
             account["status"] = json!("disabled");
         }
     }
-    // A Gemini account with Antigravity's Claude/GPT windows beside its own 5h and 7d.
-    if state == "accounts-gemini"
+    // The Antigravity entry (agy's own /usage): its Claude/GPT windows beside its Gemini 5h and 7d.
+    if state == "accounts-antigravity"
         && let Some(accounts) = data["accounts"].as_array_mut()
     {
         let window = |id: &str, label: &str, seconds: i64, model: Option<&str>| {
@@ -316,9 +316,9 @@ fn accounts_rpc(state: &str, params: &Value) -> Answer {
             })
         };
         accounts.push(json!({
-            "id": "gemini-1", "provider": "gemini", "usageOnly": true,
-            "name": "m.yahia@example.com", "email": "m.yahia@example.com",
-            "registered": true, "status": "ready", "plan": "Google AI Pro",
+            "id": "antigravity-1", "provider": "antigravity", "usageOnly": true,
+            "name": "Antigravity", "email": "",
+            "registered": true, "status": "ready",
             "showInTitlebar": true, "selector": "", "color": "neutral", "eligible": false,
             "usage": [
                 window("fiveHour", "5h", 18_000, None),

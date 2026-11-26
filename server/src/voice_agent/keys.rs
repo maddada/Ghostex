@@ -68,6 +68,8 @@ pub(super) fn push_to_talk_calls(paths: &GxserverPaths) -> bool {
 
 /// CDXC:VoiceMode 2026-11-12 DECISION:
 /// User: "when a voice agent starts ... it should say something like 'Hey, I hear you. Please say reply after you finish speaking so I can reply to you.' ... Make this a setting people can turn off if they want, but it should be on by default." Q2747 named it "Answer when I say "reply"", Q2748 kept it to Regular (hands-free) calls (letting go of the talk button already ends a push-to-talk turn), Q2749 put the same switch on the phone, Q2750 ended a turn on "reply", "over" or "go ahead", and Q2751 made the agent never answer a spoken turn without one of them while it is on.
+/// CDXC:VoiceMode 2026-11-25 DECISION:
+/// User: turn words are set per language, several for each, so the fixed "reply", "over" and "go ahead" became each language's own words (`voiceAgentTurnWords`, call_language.rs). English defaults to "reply", "over" and "go ahead" (User, 2026-11-26: "over" stays a default, call_language.rs).
 pub(super) const WAIT_FOR_REPLY_SETTING: &str = "voiceAgentWaitForReply";
 
 /// Whether a Regular call answers only once the user says the turn word (`voiceAgentWaitForReply`,

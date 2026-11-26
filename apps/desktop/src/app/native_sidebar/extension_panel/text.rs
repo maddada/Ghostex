@@ -39,6 +39,8 @@ impl GhostexGpuiApp {
                 return div()
                     .w_full()
                     .px(px(6.0 * scale))
+                    // The field's own right-click menu opens, not the panel's.
+                    .on_mouse_down(gpui::MouseButton::Right, |_, _, cx| cx.stop_propagation())
                     .on_action(
                         cx.listener(|app, _: &gpui_component::input::Escape, _, cx| {
                             cx.stop_propagation();

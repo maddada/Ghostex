@@ -18,9 +18,11 @@ use std::time::Duration;
 /// How often the open window asks whether the page's file changed.
 const SOURCE_CHECK_EVERY: Duration = Duration::from_secs(2);
 
-/// The page saves its draft synchronously (the page API's `__flush`), then reloads.
-const RELOAD_AFTER_FLUSH: &str =
-    "try{window.ghostex&&ghostex.__flush&&ghostex.__flush();}finally{location.reload();}";
+/// The page saves its draft synchronously (the page API's `__flush`), then reloads. The page
+/// dropped the `gx-floating=1` it was opened with from its address (the page bootstrap in
+/// server/src/visual_pages/theme.rs), so it is put back first: without it the reloaded page would
+/// not close this window once its answers are sent.
+const RELOAD_AFTER_FLUSH: &str = "try{window.ghostex&&ghostex.__flush&&ghostex.__flush();}finally{if(document.documentElement.hasAttribute(\"data-gx-floating\"))try{history.replaceState(history.state,\"\",location.pathname+location.search+\"#gx-floating=1\");}catch(e){}location.reload();}";
 
 /// The project and session that published the page (a gxserver from 2026-11-13 on says), for
 /// the ⋯ menu's Snooze (`more_menu.rs`).
@@ -74,6 +76,7 @@ impl GpuiVisualPageModalWindow {
                     continue;
                 };
                 let questions_left = status["questionsLeft"].as_bool();
+                let answered = status["answered"].as_bool();
                 let counts = question_counts(&status);
                 let session = page_session(&status);
                 let starred = status["starred"].as_bool();
@@ -103,6 +106,7 @@ impl GpuiVisualPageModalWindow {
                     if let Some(left) = questions_left {
                         this.note_questions_left(left, counts, cx);
                     }
+                    this.note_answered(answered, cx);
                 });
                 if updated.is_err() {
                     return;
@@ -129,6 +133,24 @@ impl GpuiVisualPageModalWindow {
         }
     }
 
+    /// A hidden page that became answered meanwhile (on another device, or by its own Send) closes
+    /// for good, which takes its pill away (app/visual_page_modal_lifecycle.rs closes a hidden
+    /// page on `Close`). A page already answered when it was opened stays until the reader closes
+    /// it, since its pill then only brings back what they chose to read.
+    ///
+    /// CDXC:SessionStatus 2026-11-26 DECISION:
+    /// User: "I wanted it to be gone as soon as I answer", on the phone and the computer. A hidden
+    /// page's pill goes away once the page is answered anywhere, not only by its own Send.
+    fn note_answered(&mut self, answered: Option<bool>, cx: &mut Context<Self>) {
+        let Some(answered) = answered else {
+            return;
+        };
+        let was = self.page_answered.replace(answered);
+        if answered && was == Some(false) && self.hidden {
+            (self.host)(VisualPageModalCommand::Close, cx);
+        }
+    }
+
     /// Asks once, a moment after the page was told to save its draft (`set_hidden`), so the
     /// answer counts the reader's last pick.
     pub(super) fn check_questions_left_soon(&mut self, cx: &mut Context<Self>) {
@@ -149,10 +171,15 @@ impl GpuiVisualPageModalWindow {
             else {
                 return;
             };
-            if let Some(left) = status["questionsLeft"].as_bool() {
-                let counts = question_counts(&status);
-                let _ = this.update(cx, |this, cx| this.note_questions_left(left, counts, cx));
-            }
+            let answered = status["answered"].as_bool();
+            let left = status["questionsLeft"].as_bool();
+            let counts = question_counts(&status);
+            let _ = this.update(cx, |this, cx| {
+                if let Some(left) = left {
+                    this.note_questions_left(left, counts, cx);
+                }
+                this.note_answered(answered, cx);
+            });
         })
         .detach();
     }

@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 use serde_json::{Map, Value};
 
 use crate::domain::{DomainRepository, DomainStateError};
+use crate::security::Principal;
 use crate::server::AppState;
 use crate::storage::open_gxserver_database;
 
@@ -36,6 +37,48 @@ fn param<'a>(params: &'a Map<String, Value>, key: &str) -> Result<&'a str, Domai
                 "Connector tools only work inside a Ghostex session (no session was named).",
             )
         })
+}
+
+fn forbidden(message: &str) -> DomainStateError {
+    DomainStateError {
+        code: "forbidden",
+        message: message.to_string(),
+    }
+}
+
+/// Puts the caller's own session in an agent-tool request (`projectId`, `sessionId`), from its
+/// session token. A caller without one, or a request naming another session, is refused.
+///
+/// CDXC:Connectors 2026-11-27 WHY:
+/// The session, and so the workspace whose rules a call follows, came from the request body, which any agent could fill in with a session in a workspace set to Allow (security review of 769647fe4e, M6). The `ghostex connectors mcp` helper now speaks with its session's own `gxs_` token, which names the session for it.
+pub(crate) fn bind_caller(
+    caller: &Principal,
+    params: &mut Map<String, Value>,
+) -> Result<(), DomainStateError> {
+    let Principal::Session {
+        project_id,
+        session_id,
+        ..
+    } = caller
+    else {
+        return Err(forbidden(
+            "Connector tools only work inside a Ghostex session, with its own token. Start or resume the session again.",
+        ));
+    };
+    for (key, own) in [("projectId", project_id), ("sessionId", session_id)] {
+        let named = params
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|named| !named.is_empty());
+        if named.is_some_and(|named| named != own) {
+            return Err(forbidden(
+                "This call names another session than the one it comes from.",
+            ));
+        }
+        params.insert(key.to_string(), Value::String(own.clone()));
+    }
+    Ok(())
 }
 
 /// The same as [`resolve`], remembered for a minute, for the tool list every helper asks for.

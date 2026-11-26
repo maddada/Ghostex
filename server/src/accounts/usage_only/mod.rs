@@ -1,17 +1,20 @@
-//! Usage-only accounts: Cursor, Gemini and Copilot logins Ghostex signs in to itself, only to show
-//! their usage beside the Claude and Codex accounts (Settings > Accounts, the sidebar meters, the
-//! phone).
+//! Usage-only accounts: Cursor and Copilot logins Ghostex signs in to itself, and the Antigravity CLI
+//! signed in on this computer, only to show their usage beside the Claude and Codex accounts
+//! (Settings > Accounts, the sidebar meters, the phone).
 //!
 //! CDXC:AgentProviders 2026-11-05 DECISION:
 //! User picked "Usage only for now" for Cursor (Q1336) and asked: "lets do gemini and copilot usage also ... just to show usage". These accounts never run, switch or pick a session, so they are kept apart from the Claude and Codex registry (`model::Provider`, which every launch and switch rule reads) and answered under their own `usageAccounts` key, which the launcher, the switch menus and the new-thread picker never read.
 //! SEE-ALSO: apps/desktop/src/app/window/settings_modal/tabs/accounts/ (Settings), apps/desktop/src/app/titlebar/account_usage.rs (the sidebar meters), apps/mobile/app/src/chat/native/composer/AccountsPanel.tsx (the phone).
 
+mod antigravity;
 mod copilot;
 mod cursor;
-mod gemini;
 mod http;
+mod retire_gemini;
 mod signin;
 mod store;
+
+pub(crate) use retire_gemini::retire_gemini_accounts;
 
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
@@ -29,8 +32,11 @@ use crate::paths::GxserverPaths;
 #[serde(rename_all = "lowercase")]
 pub(crate) enum UsageProvider {
     Cursor,
+    /// Retired 2026-11-26: only read so a saved Gemini account can be removed
+    /// (retire_gemini.rs); it is never listed, read or signed in to.
     Gemini,
     Copilot,
+    Antigravity,
 }
 
 impl UsageProvider {
@@ -39,13 +45,14 @@ impl UsageProvider {
             Self::Cursor => "cursor",
             Self::Gemini => "gemini",
             Self::Copilot => "copilot",
+            Self::Antigravity => "antigravity",
         }
     }
     fn parse(text: &str) -> Option<Self> {
         match text {
             "cursor" => Some(Self::Cursor),
-            "gemini" => Some(Self::Gemini),
             "copilot" => Some(Self::Copilot),
+            "antigravity" => Some(Self::Antigravity),
             _ => None,
         }
     }
@@ -59,14 +66,14 @@ fn account_id(provider: UsageProvider, identity: &str) -> String {
     )
 }
 
-/// How many usage-only accounts there are per provider (`cursor`, `gemini`, `copilot`), for the
+/// How many usage-only accounts there are per provider (`cursor`, `antigravity`, `copilot`), for the
 /// anonymous daily snapshot (telemetry/settings_snapshot.rs). `None` when the file can't be read.
 pub(crate) fn provider_counts(paths: &GxserverPaths) -> Option<Vec<(&'static str, usize)>> {
     let accounts = store::read(paths).ok()?;
     Some(
         [
             UsageProvider::Cursor,
-            UsageProvider::Gemini,
+            UsageProvider::Antigravity,
             UsageProvider::Copilot,
         ]
         .into_iter()
@@ -83,7 +90,7 @@ pub(crate) fn provider_counts(paths: &GxserverPaths) -> Option<Vec<(&'static str
 
 /// Whether an account id is one of these accounts' (they are named after their provider).
 pub(crate) fn owns_id(id: &str) -> bool {
-    ["cursor-", "gemini-", "copilot-"]
+    ["cursor-", "gemini-", "copilot-", "antigravity-"]
         .iter()
         .any(|prefix| id.starts_with(prefix))
 }
@@ -150,8 +157,20 @@ fn reading_now() -> &'static Mutex<std::collections::HashSet<String>> {
     NOW.get_or_init(Default::default)
 }
 
-/// A reading is refreshed after two minutes, like the Claude and Codex usage.
-const FRESH_FOR: Duration = Duration::from_secs(120);
+/// A reading is refreshed after two minutes, like the Claude and Codex usage; Antigravity's, which
+/// runs agy, after ten (antigravity.rs).
+fn fresh_for(provider: UsageProvider) -> Duration {
+    match provider {
+        UsageProvider::Antigravity => antigravity::FRESH_FOR,
+        _ => Duration::from_secs(120),
+    }
+}
+
+/// Whether an account may be read again right now even when asked: agy at most once a minute.
+fn may_read_again(provider: UsageProvider, cached: &Cached) -> bool {
+    provider != UsageProvider::Antigravity
+        || cached.fetched_at.elapsed() >= antigravity::AT_MOST_EVERY
+}
 
 /// Reads one account's usage, saves renewed tokens and keeps the result.
 fn refresh(paths: &GxserverPaths, account: &store::UsageAccount) {
@@ -164,8 +183,11 @@ fn refresh(paths: &GxserverPaths, account: &store::UsageAccount) {
     }
     let result = match account.provider {
         UsageProvider::Cursor => cursor::read(account),
-        UsageProvider::Gemini => gemini::read(account),
         UsageProvider::Copilot => copilot::read(account),
+        UsageProvider::Antigravity => antigravity::read(account),
+        UsageProvider::Gemini => Err(http::Failure::Unavailable(
+            retire_gemini::RETIRED.to_string(),
+        )),
     };
     let previous = reading(&account.id);
     let cached = match result {
@@ -184,7 +206,10 @@ fn refresh(paths: &GxserverPaths, account: &store::UsageAccount) {
             }
         }
         Err(failure) => {
-            let expired = matches!(failure, http::Failure::SignInExpired);
+            let expired = matches!(
+                failure,
+                http::Failure::SignInExpired | http::Failure::NeedsSignIn(_)
+            );
             let previous = previous.filter(|_| !expired);
             Cached {
                 status: if expired {
@@ -234,6 +259,10 @@ pub(crate) fn rows(paths: &GxserverPaths, sidebar_only: bool, wait: Wait) -> Vec
         let _lock = store::lock();
         store::read(paths).unwrap_or_default()
     };
+    let accounts: Vec<_> = accounts
+        .into_iter()
+        .filter(|account| account.provider != UsageProvider::Gemini)
+        .collect();
     let active: Vec<_> = accounts
         .iter()
         .filter(|account| !account.user_disabled && (!sidebar_only || account.show_in_titlebar))
@@ -244,8 +273,10 @@ pub(crate) fn rows(paths: &GxserverPaths, sidebar_only: bool, wait: Wait) -> Vec
     for account in active {
         match reading(&account.id) {
             None if wait != Wait::Never => now.push(account),
-            Some(_) if wait == Wait::Always => now.push(account),
-            Some(cached) if cached.fetched_at.elapsed() < FRESH_FOR => {}
+            Some(cached) if wait == Wait::Always && may_read_again(account.provider, &cached) => {
+                now.push(account)
+            }
+            Some(cached) if cached.fetched_at.elapsed() < fresh_for(account.provider) => {}
             _ => later.push(account),
         }
     }
@@ -322,7 +353,11 @@ pub(crate) fn handle(
 ) -> Result<Handled, DomainStateError> {
     let operation = field(params, "operation")?;
     if operation == "usageSignInStart" {
-        let provider = UsageProvider::parse(field(params, "provider")?)
+        let named = field(params, "provider")?;
+        if named == "gemini" {
+            return Err(DomainStateError::bad_request(retire_gemini::RETIRED));
+        }
+        let provider = UsageProvider::parse(named)
             .ok_or_else(|| DomainStateError::bad_request("Unknown provider."))?;
         let again = params
             .get("accountId")

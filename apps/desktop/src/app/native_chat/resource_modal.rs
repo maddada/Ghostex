@@ -157,14 +157,18 @@ impl NativeChatView {
         }
     }
 
-    /// The modal's sent form settled: OK fades the modal out and closes it; a failure (the form
-    /// open again, with its `sendError`) keeps it open on the answers.
+    /// The modal's form went out: the modal fades out and closes at once, without waiting for the
+    /// answers' call to settle.
     ///
-    /// CDXC:SessionChat 2026-11-12 DECISION:
-    /// User, of a question form opened from the work dock: once the answers are sent the popup
-    /// should close itself, with a short fade, and stay open with the answers if the send fails.
+    /// CDXC:SessionChat 2026-11-26 DECISION:
+    /// User: "I wanted it to be gone as soon as I answer." The question form popup closes with its
+    /// short fade the moment its answers go out, as the Ghostex page popup does, instead of when the
+    /// send's call settles. A send that then fails comes back as the chat's failed message card with
+    /// the reason and Retry (server/src/session_chat_send/send_http.rs), not as the popup kept open.
+    /// Supersedes the 2026-11-12 decision ("once the answers are sent the popup should close
+    /// itself, with a short fade, and stay open with the answers if the send fails").
     fn settle_resource_modal_send(&mut self, cx: &mut Context<Self>) {
-        let Some((id, seen)) = self.resource_modal_sent.clone() else {
+        let Some((id, _)) = self.resource_modal_sent.clone() else {
             return;
         };
         if text(&self.snapshot["resourceModal"], "id") != id {
@@ -172,15 +176,8 @@ impl NativeChatView {
             return;
         }
         let form = &self.snapshot["questionForms"][id.as_str()];
-        if form["sendInFlight"] == true {
-            self.resource_modal_sent = Some((id, true));
-            return;
-        }
-        if form["state"] == "open" {
-            // Not dispatched yet, or it failed after going out.
-            if seen {
-                self.resource_modal_sent = None;
-            }
+        if form["sendInFlight"] != true && form["state"] == "open" {
+            // Not dispatched yet.
             return;
         }
         self.resource_modal_sent = None;

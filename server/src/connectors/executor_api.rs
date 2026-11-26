@@ -1,141 +1,60 @@
-//! What the Executor routes do: turn a workspace's Executor on or off and manage its apps, their
-//! sign-ins and tools. All blocking (Executor may have to start first), so the routes run these
-//! on `spawn_blocking`.
+//! What the Executor routes do: read and change the computer's Executor CLI (install it, sign it
+//! in or out), and remove what the old built-in Executor left. Blocking (they run the CLI), so the
+//! routes run these on `spawn_blocking`.
 //!
-//! CDXC:Connectors 2026-10-15 DECISION:
-//! User: Executor is a first-class connector next to Composio, on its v2 beta now, and Ghostex downloads it the first time a workspace turns it on rather than shipping it inside the app.
+//! CDXC:Connectors 2026-11-27 DECISION:
+//! User: "implement executor cli support instead of the current one", and on the Executor CLI page: one CLI sign-in for the computer, agents through Ghostex's relay with its cards, the user's own CLI (no copy Ghostex downloads), the old built-in Executor's apps listed once and then cleaned up, and no Executor tools until the CLI is signed in. Replaces the 2026-10-15 decision to download a pinned Executor and run one per workspace.
 
 use serde_json::{json, Map, Value};
 
 use crate::domain::DomainStateError;
 use crate::server::AppState;
 
-use super::api::{failed, workspace_param};
+use super::api::failed;
 use super::executor;
 
-fn text_param<'a>(params: &'a Map<String, Value>, key: &str) -> &'a str {
-    params
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .unwrap_or_default()
+/// `/api/installExecutorCli`: runs Executor's official installer in the background
+/// (`readConnectors` shows its progress).
+pub(crate) fn install_executor_cli(
+    _state: &AppState,
+    _params: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
+    executor::install().map_err(failed)
 }
 
-/// `/api/enableExecutor`: turns the workspace's Executor on, downloading Executor first when this
-/// computer has none (the download runs in the background; `readConnectors` shows its progress).
-pub(crate) fn enable_executor(
-    state: &AppState,
+/// `/api/signInExecutorCli`: starts `executor login` (to `host`, a self-hosted Executor, when
+/// given) and returns the page to open and its code.
+pub(crate) fn sign_in_executor_cli(
+    _state: &AppState,
     params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
-    let workspace = workspace_param(state, params)?;
-    let executor = executor::enable(&state.paths, &workspace).map_err(failed)?;
-    Ok(json!({ "workspaceId": workspace, "executor": executor }))
+    let host = params.get("host").and_then(Value::as_str);
+    executor::sign_in(host).map_err(failed)
 }
 
-/// `/api/disableExecutor`: stops the workspace's Executor and keeps its data.
-pub(crate) fn disable_executor(
-    state: &AppState,
-    params: &Map<String, Value>,
+/// `/api/cancelExecutorCliSignIn`: stops a waiting `executor login`.
+pub(crate) fn cancel_executor_cli_sign_in(
+    _state: &AppState,
+    _params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
-    let workspace = workspace_param(state, params)?;
-    let executor = executor::disable(&state.paths, &workspace).map_err(failed)?;
-    Ok(json!({ "workspaceId": workspace, "executor": executor }))
+    executor::cancel_sign_in();
+    Ok(json!({ "cancelled": true }))
 }
 
-/// `/api/searchExecutorCatalog`: catalog apps matching `query`.
-pub(crate) fn search_executor_catalog(
-    state: &AppState,
-    params: &Map<String, Value>,
+/// `/api/signOutExecutorCli`: `executor logout`.
+pub(crate) fn sign_out_executor_cli(
+    _state: &AppState,
+    _params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
-    let workspace = workspace_param(state, params)?;
-    let apps = executor::search_catalog(&state.paths, &workspace, text_param(params, "query"))
-        .map_err(failed)?;
-    Ok(json!({ "workspaceId": workspace, "apps": apps }))
+    executor::sign_out().map_err(failed)?;
+    Ok(json!({ "signedIn": false }))
 }
 
-/// `/api/addExecutorApp`: adds a catalog app (`app`: its catalog id or name).
-pub(crate) fn add_executor_app(
+/// `/api/removeOldExecutor`: deletes what the old built-in Executor left now.
+pub(crate) fn remove_old_executor(
     state: &AppState,
-    params: &Map<String, Value>,
+    _params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
-    let workspace = workspace_param(state, params)?;
-    let app = executor::add_catalog_app(&state.paths, &workspace, text_param(params, "app"))
-        .map_err(failed)?;
-    Ok(json!({ "workspaceId": workspace, "app": app }))
-}
-
-/// `/api/addExecutorMcpServer`: adds a remote MCP server (`name`, `url`).
-pub(crate) fn add_executor_mcp_server(
-    state: &AppState,
-    params: &Map<String, Value>,
-) -> Result<Value, DomainStateError> {
-    let workspace = workspace_param(state, params)?;
-    let app = executor::add_mcp_server(
-        &state.paths,
-        &workspace,
-        text_param(params, "name"),
-        text_param(params, "url"),
-    )
-    .map_err(failed)?;
-    Ok(json!({ "workspaceId": workspace, "app": app }))
-}
-
-/// `/api/removeExecutorApp`: removes an app (`app`: its name, slug or id).
-pub(crate) fn remove_executor_app(
-    state: &AppState,
-    params: &Map<String, Value>,
-) -> Result<Value, DomainStateError> {
-    let workspace = workspace_param(state, params)?;
-    let name = executor::remove_app(&state.paths, &workspace, text_param(params, "app"))
-        .map_err(failed)?;
-    Ok(json!({ "workspaceId": workspace, "removed": name }))
-}
-
-/// `/api/connectExecutorApp`: the sign-in page for an app, or `alreadyConnected`.
-pub(crate) fn connect_executor_app(
-    state: &AppState,
-    params: &Map<String, Value>,
-) -> Result<Value, DomainStateError> {
-    let workspace = workspace_param(state, params)?;
-    let started = executor::connect_app(&state.paths, &workspace, text_param(params, "app"))
-        .map_err(failed)?;
-    Ok(json!({
-        "workspaceId": workspace,
-        "name": started.name,
-        "alreadyConnected": started.url.is_none(),
-        "url": started.url,
-    }))
-}
-
-/// `/api/listExecutorTools`: one app's tools (`app`), or every app's.
-pub(crate) fn list_executor_tools(
-    state: &AppState,
-    params: &Map<String, Value>,
-) -> Result<Value, DomainStateError> {
-    let workspace = workspace_param(state, params)?;
-    let app = Some(text_param(params, "app")).filter(|app| !app.is_empty());
-    let apps = executor::list_tools(&state.paths, &workspace, app).map_err(failed)?;
-    Ok(json!({ "workspaceId": workspace, "apps": apps }))
-}
-
-/// `/api/callExecutorTool`: runs one of an app's read-only tools (`app`, `tool`, `input`).
-pub(crate) fn call_executor_tool(
-    state: &AppState,
-    params: &Map<String, Value>,
-) -> Result<Value, DomainStateError> {
-    let workspace = workspace_param(state, params)?;
-    let tool = text_param(params, "tool");
-    if tool.is_empty() {
-        return Err(failed("Name the tool to call.".to_string()));
-    }
-    let input = params.get("input").cloned().unwrap_or_else(|| json!({}));
-    let output = executor::call_tool(
-        &state.paths,
-        &workspace,
-        text_param(params, "app"),
-        tool,
-        &input,
-    )
-    .map_err(failed)?;
-    Ok(json!({ "workspaceId": workspace, "tool": tool, "output": output }))
+    executor::remove_old_executor(&state.paths);
+    Ok(json!({ "removed": true }))
 }

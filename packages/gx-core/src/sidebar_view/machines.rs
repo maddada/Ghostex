@@ -143,7 +143,8 @@ pub(crate) fn machine_tab_summary(
                 .get(&(session.project_id.clone(), session.session_id.clone()))
                 .copied()
                 .unwrap_or_default();
-            // `SessionRow::tile_status`, after the same side-chat rollup as the row.
+            // `SessionRow::tile_status`, after the same side-chat rollup as the row. The Autopilot
+            // supervisor counts only its red and pink dots (`SessionRow::mark_autopilot_supervisor`).
             summary.count(tile_status(
                 session.awaiting_approval || side_chats.approval,
                 super::rows::session_failed(&session),
@@ -151,8 +152,12 @@ pub(crate) fn machine_tab_summary(
                     session.pending_question_count + side_chats.questions,
                     session.awaiting_answer || side_chats.awaiting_answer,
                 ),
-                session.activity.as_str(),
-                session.background_work_detected_at.is_some(),
+                if is_autopilot {
+                    "idle"
+                } else {
+                    session.activity.as_str()
+                },
+                !is_autopilot && session.background_work_detected_at.is_some(),
             ));
         }
     }

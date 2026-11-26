@@ -11,11 +11,15 @@
 //! SEE-ALSO: server/src/visual_pages/fit.rs (`window.__ghostexFit`), server/src/visual_pages/kit.rs (the safe layout defaults), server/src/ghostex_cli/visual_guide.md (tells agents to run the check).
 
 use std::{
-    io::{Read, Write},
-    net::TcpStream,
+    io::{ErrorKind, Read, Write},
+    net::{SocketAddr, TcpStream},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    time::{Duration, Instant},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
+    time::{Duration, Instant, SystemTime},
 };
 
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
@@ -61,6 +65,12 @@ const SCREENSHOT_PART_HEIGHT: f64 = 6000.0;
 const SCREENSHOT_MAX_HEIGHT: f64 = 48000.0;
 const CHROME_START_TIMEOUT: Duration = Duration::from_secs(20);
 const CDP_TIMEOUT: Duration = Duration::from_secs(20);
+const CDP_POLL_TIMEOUT: Duration = Duration::from_millis(250);
+const BROWSER_CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
+const BROWSER_CLOSE_IO_TIMEOUT: Duration = Duration::from_secs(1);
+const SCRATCH_PREFIX: &str = "ghostex-page-check-";
+const OWNER_PID_FILE: &str = "owner.pid";
+const STALE_SCRATCH_AGE: Duration = Duration::from_secs(10 * 60);
 
 /// Whether `ghostex visual check` was given a page rather than a block's JSON.
 pub(crate) fn is_page_file(file: &str) -> bool {
@@ -183,11 +193,20 @@ pub(crate) fn check_page_command(
     }
     // The Pick buttons do not depend on the width, so they are said once.
     let mut repeated = 0;
+    let mut cards = 0;
     if let Some(result) = results.first() {
         let picks = pick_findings(&result.report);
         if !picks.is_empty() {
             println!("Pick buttons:");
             for finding in picks {
+                println!("  - {finding}");
+            }
+        }
+        let unpickable = card_findings(&result.report);
+        cards = unpickable.len();
+        if !unpickable.is_empty() {
+            println!("Nothing to pick:");
+            for finding in unpickable {
                 println!("  - {finding}");
             }
         }
@@ -208,6 +227,13 @@ pub(crate) fn check_page_command(
         }
     }
     println!("Look at each screenshot before sending the page.");
+    if cards > 0 {
+        return Err(CliError::Other(format!(
+            "{cards} question{} or option card{} on this page cannot be picked; fix what is listed under \"Nothing to pick\" and check again.",
+            if cards == 1 { "" } else { "s" },
+            if cards == 1 { "" } else { "s" },
+        )));
+    }
     if repeated > 0 {
         return Err(CliError::Other(format!(
             "{repeated} question{} {} the items listed above {}; put the picks on the rows and check again.",
@@ -260,7 +286,8 @@ pub(crate) fn findings_for_show(path: &Path) -> ShowFindings {
             picks: results
                 .first()
                 .map(|result| {
-                    let mut picks = pick_findings(&result.report);
+                    let mut picks = card_findings(&result.report);
+                    picks.extend(pick_findings(&result.report));
                     picks.extend(repeated_findings(&result.report));
                     picks
                 })
@@ -282,10 +309,8 @@ pub(crate) fn check_page(path: &Path, checks: &[PageCheck]) -> CliResult<Vec<Pag
                 .to_string(),
         )
     })?;
-    let scratch = tempfile::Builder::new()
-        .prefix("ghostex-page-check-")
-        .tempdir()
-        .map_err(|error| CliError::Other(format!("Could not make a scratch folder: {error}")))?;
+    let _interrupt = InterruptGuard::install();
+    let scratch = ScratchDir::new()?;
     let page = scratch.path().join("page.html");
     std::fs::write(&page, prepared.html)
         .map_err(|error| CliError::Other(format!("Could not write the page to check: {error}")))?;
@@ -294,6 +319,7 @@ pub(crate) fn check_page(path: &Path, checks: &[PageCheck]) -> CliResult<Vec<Pag
     let mut cdp = browser.connect()?;
     let mut results = Vec::new();
     for check in checks {
+        check_interrupted()?;
         results.push(check_width(&mut cdp, &page, check)?);
     }
     Ok(results)
@@ -319,6 +345,7 @@ fn check_width(cdp: &mut Cdp, page: &Path, check: &PageCheck) -> CliResult<PageC
     cdp.call("Page.navigate", json!({ "url": url }))?;
     let deadline = Instant::now() + CDP_TIMEOUT;
     loop {
+        check_interrupted()?;
         let answer = cdp.call(
             "Runtime.evaluate",
             json!({ "expression": PROBE, "awaitPromise": true, "returnByValue": true }),
@@ -851,6 +878,138 @@ pub(crate) fn repeated_findings(report: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// The questions and option cards a reader could not pick from, from the kit's report
+/// (`window.__ghostexKit`, visual_pages/kit.rs `addCardChoices`, `bindOptions`, `looseCards`): a
+/// question with no `<gx-choice>` (`made` when the kit made its choices from the cards tied to it,
+/// `empty` when it was left with only "Other"), a tied card whose question or choice does not exist
+/// (`orphans`), and an option card with no Pick button (`loose`). Each line says the markup that
+/// fixes it. `ghostex visual check` fails on them; `ghostex show` warns.
+///
+/// CDXC:SessionChat 2026-11-26 DECISION:
+/// User, on a page whose two option cards sat above a question that listed no choice, so the cards had no Pick button and the question offered only "Other / none of these" (and `ghostex visual check` had passed it): "You sent me this question with 2 choices but without the ability to pick :( please fix this so it never happens again". The kit now makes such a question's choices from its cards, and the check refuses the page anyway, since older Ghostex versions make no choices from cards and only the written `<gx-choice>` lines are the documented way.
+pub(crate) fn card_findings(report: &Value) -> Vec<String> {
+    let list = |key: &str| {
+        report
+            .pointer(&format!("/kit/{key}"))
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    };
+    let text = |item: &Value, key: &str| {
+        item.get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(str::to_string)
+    };
+    let name = |item: &Value| match (text(item, "tag"), text(item, "title")) {
+        (Some(tag), Some(title)) => format!("{tag} \"{title}\""),
+        (None, Some(title)) => format!("\"{title}\""),
+        (Some(tag), None) => tag,
+        (None, None) => format!(
+            "\"{}\"",
+            text(item, "question").unwrap_or_else(|| "a question".to_string())
+        ),
+    };
+    let mut findings = Vec::new();
+    for question in list("made") {
+        let choices: Vec<String> = question
+            .get("choices")
+            .and_then(Value::as_array)
+            .map(|choices| {
+                choices
+                    .iter()
+                    .map(|choice| {
+                        let value = text(choice, "value").unwrap_or_default();
+                        let label = text(choice, "label").unwrap_or_else(|| value.clone());
+                        let recommended = if choice
+                            .get("recommended")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(false)
+                        {
+                            " recommended"
+                        } else {
+                            ""
+                        };
+                        format!(
+                            "<gx-choice value=\"{}\"{recommended}>{}<small>its trade-off in one line</small></gx-choice>",
+                            attr(&value),
+                            html(&label)
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        findings.push(format!(
+            "{} lists no <gx-choice>, so older Ghostex versions show its {} cards with no Pick button and the question with only \"Other / none of these\". Write one <gx-choice> per card inside the <gx-question>, in the cards' order, its value exactly the card's data-choice: {}",
+            name(&question),
+            choices.len(),
+            choices.join(" ")
+        ));
+    }
+    for question in list("empty") {
+        let asked = text(&question, "tag")
+            .or_else(|| text(&question, "question"))
+            .unwrap_or_else(|| "Q1".to_string());
+        findings.push(format!(
+            "{} has no choices of its own, so the reader sees only \"Other / none of these\" and cannot pick. Write one <gx-choice value=\"…\">Label<small>one line</small></gx-choice> per option inside the <gx-question>; for option cards above it, also put data-question=\"{asked}\" and data-choice=\"<that choice's value>\" on each card (the element holding its heading). If it asks for words, not a pick, give it type=\"text\".",
+            name(&question)
+        ));
+    }
+    for card in list("orphans") {
+        let asked = text(&card, "question").unwrap_or_default();
+        let wanted = text(&card, "choice").unwrap_or_default();
+        let label = text(&card, "label").unwrap_or_else(|| wanted.clone());
+        let found = card.get("found").and_then(Value::as_bool).unwrap_or(false);
+        if found {
+            let choices: Vec<String> = card
+                .get("choices")
+                .and_then(Value::as_array)
+                .map(|choices| {
+                    choices
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(|value| format!("\"{value}\""))
+                        .collect()
+                })
+                .unwrap_or_default();
+            findings.push(format!(
+                "The card \"{label}\" has data-choice=\"{wanted}\", but {} has no such choice (its choices: {}), so the card got no Pick button. Set data-choice to one of those values, or add <gx-choice value=\"{}\">{}</gx-choice> to the question.",
+                name(&card),
+                if choices.is_empty() { "none".to_string() } else { choices.join(", ") },
+                attr(&wanted),
+                html(&label)
+            ));
+        } else {
+            findings.push(format!(
+                "The card \"{label}\" has data-question=\"{asked}\", but no <gx-question> has that tag, name or title, so the card got no Pick button. Set data-question to the tag of the question it answers (for example data-question=\"Q1\" for <gx-question tag=\"Q1\">), or write that question under the cards."
+            ));
+        }
+    }
+    for card in list("loose") {
+        let label = text(&card, "label").unwrap_or_else(|| "an option card".to_string());
+        let ribbon = card.get("ribbon").and_then(Value::as_bool).unwrap_or(false);
+        findings.push(format!(
+            "The option card \"{label}\"{} looks pickable but has no Pick button, because no question is tied to it. Put data-question=\"<the question's tag>\" and data-choice=\"<its choice's value>\" on the card and list that <gx-choice> in the question under it; if the cards are not options to pick from, use a .gx-grid of .gx-card instead of .gx-options{}.",
+            if ribbon { " (marked Recommended)" } else { "" },
+            if ribbon { " and drop the .gx-ribbon" } else { "" }
+        ));
+    }
+    findings
+}
+
+/// `text` safe inside a double-quoted HTML attribute.
+fn attr(text: &str) -> String {
+    html(text).replace('"', "&quot;")
+}
+
+/// `text` safe as HTML text.
+fn html(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
 fn describe(item: &Value) -> String {
     let element = item
         .get("element")
@@ -963,7 +1122,9 @@ fn file_url(path: &Path) -> String {
     }
 }
 
-/// A Chromium browser to check with: `GHOSTEX_CHROME` when set, else the usual install places.
+/// A Chromium browser to check with: `GHOSTEX_CHROME` when set, else a standalone headless shell
+/// when installed (no Dock icon on macOS, no 2 GB code-sign bundle copy), else the usual install
+/// places.
 fn chrome_binary() -> Option<PathBuf> {
     if let Some(path) = std::env::var_os("GHOSTEX_CHROME")
         .map(PathBuf::from)
@@ -975,7 +1136,7 @@ fn chrome_binary() -> Option<PathBuf> {
 }
 
 fn chrome_candidates() -> Vec<PathBuf> {
-    let mut candidates = Vec::new();
+    let mut candidates = headless_shell_candidates();
     if cfg!(target_os = "macos") {
         let apps = [
             "Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -1026,29 +1187,504 @@ fn chrome_candidates() -> Vec<PathBuf> {
     candidates
 }
 
-/// A headless Chrome with its own throwaway profile, stopped when dropped.
+/// Standalone `chrome-headless-shell` builds (Playwright cache, Puppeteer cache, PATH), newest
+/// first. On macOS this avoids launching `Google Chrome.app`, so LaunchServices never flashes a
+/// Dock icon and Chrome never clones its 2 GB bundle.
+fn headless_shell_candidates() -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    let subpaths: &[&str] = if cfg!(target_os = "macos") {
+        if cfg!(target_arch = "aarch64") {
+            &[
+                "chrome-headless-shell-mac-arm64/chrome-headless-shell",
+                "chrome-headless-shell-mac-x64/chrome-headless-shell",
+                "chrome-headless-shell-mac/chrome-headless-shell",
+                "chrome-mac/headless_shell",
+            ]
+        } else {
+            &[
+                "chrome-headless-shell-mac-x64/chrome-headless-shell",
+                "chrome-headless-shell-mac-arm64/chrome-headless-shell",
+                "chrome-headless-shell-mac/chrome-headless-shell",
+                "chrome-mac/headless_shell",
+            ]
+        }
+    } else if cfg!(windows) {
+        &[
+            "chrome-headless-shell-win64/chrome-headless-shell.exe",
+            "chrome-headless-shell-win32/chrome-headless-shell.exe",
+            "chrome-win/headless_shell.exe",
+        ]
+    } else if cfg!(target_arch = "aarch64") {
+        &[
+            "chrome-headless-shell-linux-arm64/chrome-headless-shell",
+            "chrome-headless-shell-linux64/chrome-headless-shell",
+            "chrome-linux/headless_shell",
+        ]
+    } else {
+        &[
+            "chrome-headless-shell-linux64/chrome-headless-shell",
+            "chrome-headless-shell-linux-arm64/chrome-headless-shell",
+            "chrome-linux/headless_shell",
+        ]
+    };
+
+    // 1. Playwright browser caches (newest revision first).
+    let mut playwright_roots = Vec::new();
+    if let Some(env_path) = std::env::var_os("PLAYWRIGHT_BROWSERS_PATH") {
+        if !env_path.is_empty() && env_path != "0" {
+            playwright_roots.push(PathBuf::from(env_path));
+        }
+    }
+    if cfg!(target_os = "macos") {
+        if let Some(home) = std::env::var_os("HOME") {
+            let home = PathBuf::from(home);
+            playwright_roots.push(home.join("Library/Caches/ms-playwright"));
+            playwright_roots.push(home.join(".cache/ms-playwright"));
+        }
+    } else if cfg!(windows) {
+        if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+            playwright_roots.push(PathBuf::from(local).join("ms-playwright"));
+        }
+    } else {
+        if let Some(xdg) = std::env::var_os("XDG_CACHE_HOME") {
+            if !xdg.is_empty() {
+                playwright_roots.push(PathBuf::from(xdg).join("ms-playwright"));
+            }
+        }
+        if let Some(home) = std::env::var_os("HOME") {
+            playwright_roots.push(PathBuf::from(home).join(".cache/ms-playwright"));
+        }
+    }
+    for root in playwright_roots {
+        let Ok(entries) = std::fs::read_dir(&root) else {
+            continue;
+        };
+        let mut revisions: Vec<(u64, PathBuf)> = entries
+            .filter_map(Result::ok)
+            .filter_map(|entry| {
+                let name = entry.file_name();
+                let rev = name
+                    .to_str()?
+                    .strip_prefix("chromium_headless_shell-")?
+                    .parse::<u64>()
+                    .ok()?;
+                Some((rev, entry.path()))
+            })
+            .collect();
+        revisions.sort_by(|a, b| b.0.cmp(&a.0));
+        for (_, dir) in revisions {
+            for subpath in subpaths {
+                candidates.push(dir.join(subpath));
+            }
+        }
+    }
+
+    // 2. Puppeteer browser caches (newest version first).
+    let mut puppeteer_roots = Vec::new();
+    if let Some(env_path) = std::env::var_os("PUPPETEER_CACHE_DIR") {
+        if !env_path.is_empty() {
+            puppeteer_roots.push(PathBuf::from(env_path));
+        }
+    }
+    if cfg!(windows) {
+        if let Some(profile) = std::env::var_os("USERPROFILE") {
+            puppeteer_roots.push(PathBuf::from(profile).join(".cache/puppeteer"));
+        }
+    } else if let Some(home) = std::env::var_os("HOME") {
+        puppeteer_roots.push(PathBuf::from(home).join(".cache/puppeteer"));
+    }
+    for root in puppeteer_roots {
+        let shell_root = root.join("chrome-headless-shell");
+        let Ok(entries) = std::fs::read_dir(&shell_root) else {
+            continue;
+        };
+        let mut versions: Vec<(Vec<u64>, PathBuf)> = entries
+            .filter_map(Result::ok)
+            .filter_map(|entry| {
+                let name = entry.file_name();
+                let key = version_sort_key(name.to_str()?);
+                Some((key, entry.path()))
+            })
+            .collect();
+        versions.sort_by(|a, b| b.0.cmp(&a.0));
+        for (_, dir) in versions {
+            for subpath in subpaths {
+                candidates.push(dir.join(subpath));
+            }
+        }
+    }
+
+    // 3. Standalone binary on PATH (and Homebrew bins on macOS for GUI-launched callers).
+    let bin_names: &[&str] = if cfg!(windows) {
+        &["chrome-headless-shell.exe", "headless_shell.exe"]
+    } else {
+        &["chrome-headless-shell", "headless_shell"]
+    };
+    if let Some(path) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path) {
+            for name in bin_names {
+                candidates.push(dir.join(name));
+            }
+        }
+    }
+    if cfg!(target_os = "macos") {
+        for dir in ["/opt/homebrew/bin", "/usr/local/bin"] {
+            for name in bin_names {
+                candidates.push(Path::new(dir).join(name));
+            }
+        }
+    }
+
+    candidates
+}
+
+fn version_sort_key(name: &str) -> Vec<u64> {
+    name.split(|c: char| !c.is_ascii_digit())
+        .filter(|part| !part.is_empty())
+        .filter_map(|part| part.parse::<u64>().ok())
+        .collect()
+}
+
+/// Throwaway scratch folder for one page check; cleans up identifiable leftovers from earlier
+/// crashed runs on creation, and retries removal on drop so transient Chrome file locks never
+/// strand the profile folder.
+struct ScratchDir(Option<tempfile::TempDir>);
+
+impl ScratchDir {
+    fn new() -> CliResult<Self> {
+        let dir = tempfile::Builder::new()
+            .prefix(SCRATCH_PREFIX)
+            .tempdir()
+            .map_err(|error| {
+                CliError::Other(format!("Could not make a scratch folder: {error}"))
+            })?;
+        let _ = std::fs::write(
+            dir.path().join(OWNER_PID_FILE),
+            std::process::id().to_string(),
+        );
+        cleanup_stale_scratch_dirs(dir.path());
+        Ok(Self(Some(dir)))
+    }
+
+    fn path(&self) -> &Path {
+        self.0
+            .as_ref()
+            .expect("scratch directory exists while alive")
+            .path()
+    }
+}
+
+impl Drop for ScratchDir {
+    fn drop(&mut self) {
+        let Some(dir) = self.0.take() else {
+            return;
+        };
+        let path = dir.path().to_path_buf();
+        remove_singleton_socket_dir(&path.join("profile"));
+        if dir.close().is_err() {
+            for _ in 0..10 {
+                if !path.exists() {
+                    break;
+                }
+                if std::fs::remove_dir_all(&path).is_ok() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+    }
+}
+
+/// Removes stale `ghostex-page-check-*` folders left in `temp_dir` by earlier killed or crashed
+/// runs, without touching the current run or any live concurrent check.
+fn cleanup_stale_scratch_dirs(current: &Path) {
+    let temp_dir = std::env::temp_dir();
+    let Ok(entries) = std::fs::read_dir(&temp_dir) else {
+        return;
+    };
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+        if path == current {
+            continue;
+        }
+        let Some(name) = entry.file_name().to_str().map(str::to_string) else {
+            continue;
+        };
+        if !name.starts_with(SCRATCH_PREFIX) {
+            continue;
+        }
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if !file_type.is_dir() {
+            continue;
+        }
+        if !is_scratch_dir_stale(&path) {
+            continue;
+        }
+        remove_singleton_socket_dir(&path.join("profile"));
+        let _ = std::fs::remove_dir_all(&path);
+    }
+}
+
+fn is_scratch_dir_stale(dir: &Path) -> bool {
+    if let Ok(text) = std::fs::read_to_string(dir.join(OWNER_PID_FILE)) {
+        if let Ok(pid) = text.trim().parse::<u32>() {
+            return !is_pid_alive(pid);
+        }
+    }
+    #[cfg(unix)]
+    if let Ok(target) = std::fs::read_link(dir.join("profile").join("SingletonLock")) {
+        if let Some(pid) = target
+            .to_string_lossy()
+            .rsplit('-')
+            .next()
+            .and_then(|value| value.parse::<u32>().ok())
+        {
+            return !is_pid_alive(pid);
+        }
+    }
+    let modified = std::fs::metadata(dir).and_then(|meta| meta.modified()).ok();
+    modified
+        .and_then(|mtime| SystemTime::now().duration_since(mtime).ok())
+        .is_some_and(|age| age >= STALE_SCRATCH_AGE)
+}
+
+/// When Chrome exits abnormally on Unix, its `profile/SingletonSocket` symlink points to a
+/// per-instance socket folder directly inside `temp_dir` (e.g. `com.google.Chrome.XXXXXX`).
+/// Remove that folder when we know its owning check is finished or dead.
+fn remove_singleton_socket_dir(profile: &Path) {
+    #[cfg(unix)]
+    {
+        let Ok(target) = std::fs::read_link(profile.join("SingletonSocket")) else {
+            return;
+        };
+        let Some(socket_dir) = target.parent() else {
+            return;
+        };
+        let temp_dir = std::env::temp_dir();
+        let Ok(temp_canon) = std::fs::canonicalize(&temp_dir) else {
+            return;
+        };
+        let Ok(parent_canon) = socket_dir
+            .parent()
+            .ok_or(())
+            .and_then(|p| std::fs::canonicalize(p).map_err(|_| ()))
+        else {
+            return;
+        };
+        if parent_canon != temp_canon {
+            return;
+        }
+        let Some(name) = socket_dir.file_name().and_then(|n| n.to_str()) else {
+            return;
+        };
+        let browser_socket = name.starts_with("com.google.Chrome.")
+            || name.starts_with("org.chromium.")
+            || name.starts_with("com.microsoft.edgemac.")
+            || name.starts_with("com.brave.Browser.");
+        if browser_socket {
+            let _ = std::fs::remove_dir_all(socket_dir);
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = profile;
+    }
+}
+
+fn is_pid_alive(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        if pid > i32::MAX as u32 {
+            return false;
+        }
+        // SAFETY: `kill(pid, 0)` only checks process existence without sending a signal.
+        let rc = unsafe { libc::kill(pid as libc::pid_t, 0) };
+        if rc == 0 {
+            return true;
+        }
+        std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+    }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Foundation::{CloseHandle, STILL_ACTIVE};
+        use windows_sys::Win32::System::Threading::{
+            GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+        };
+        // SAFETY: Win32 handle opened for query-only and closed immediately below.
+        let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+        if handle.is_null() {
+            return false;
+        }
+        let mut exit_code: u32 = 0;
+        let ok = unsafe { GetExitCodeProcess(handle, &mut exit_code) };
+        unsafe { CloseHandle(handle) };
+        ok != 0 && exit_code == STILL_ACTIVE as u32
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        false
+    }
+}
+
+static INTERRUPTED: AtomicBool = AtomicBool::new(false);
+
+fn check_interrupted() -> CliResult<()> {
+    if INTERRUPTED.load(Ordering::Relaxed) {
+        return Err(CliError::Other("Page check was interrupted.".to_string()));
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+struct InterruptGuard;
+
+#[cfg(unix)]
+struct SavedSignals {
+    depth: usize,
+    prev_int: Option<libc::sigaction>,
+    prev_term: Option<libc::sigaction>,
+}
+
+#[cfg(unix)]
+static SIGNAL_STATE: Mutex<SavedSignals> = Mutex::new(SavedSignals {
+    depth: 0,
+    prev_int: None,
+    prev_term: None,
+});
+
+#[cfg(unix)]
+extern "C" fn handle_interrupt(_sig: libc::c_int) {
+    INTERRUPTED.store(true, Ordering::SeqCst);
+}
+
+#[cfg(unix)]
+impl InterruptGuard {
+    fn install() -> Self {
+        let mut state = SIGNAL_STATE
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if state.depth == 0 {
+            INTERRUPTED.store(false, Ordering::SeqCst);
+            state.prev_int = Self::install_one(libc::SIGINT);
+            state.prev_term = Self::install_one(libc::SIGTERM);
+        }
+        state.depth += 1;
+        Self
+    }
+
+    fn install_one(sig: libc::c_int) -> Option<libc::sigaction> {
+        // SAFETY: Installs an async-signal-safe handler only when the signal currently uses
+        // `SIG_DFL`, so we never clobber a caller's custom signal handler.
+        unsafe {
+            let mut old: libc::sigaction = std::mem::zeroed();
+            if libc::sigaction(sig, std::ptr::null(), &mut old) != 0 {
+                return None;
+            }
+            if old.sa_sigaction != libc::SIG_DFL {
+                return None;
+            }
+            let mut action: libc::sigaction = std::mem::zeroed();
+            action.sa_sigaction = handle_interrupt as *const () as usize;
+            libc::sigemptyset(&mut action.sa_mask);
+            action.sa_flags = 0;
+            if libc::sigaction(sig, &action, std::ptr::null_mut()) == 0 {
+                Some(old)
+            } else {
+                None
+            }
+        }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for InterruptGuard {
+    fn drop(&mut self) {
+        let mut state = SIGNAL_STATE
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        state.depth = state.depth.saturating_sub(1);
+        if state.depth == 0 {
+            if let Some(prev) = state.prev_int.take() {
+                // SAFETY: Restores the exact `sigaction` saved when installed.
+                unsafe {
+                    libc::sigaction(libc::SIGINT, &prev, std::ptr::null_mut());
+                }
+            }
+            if let Some(prev) = state.prev_term.take() {
+                // SAFETY: Restores the exact `sigaction` saved when installed.
+                unsafe {
+                    libc::sigaction(libc::SIGTERM, &prev, std::ptr::null_mut());
+                }
+            }
+        }
+    }
+}
+
+#[cfg(not(unix))]
+struct InterruptGuard;
+
+#[cfg(not(unix))]
+impl InterruptGuard {
+    fn install() -> Self {
+        Self
+    }
+}
+
+fn read_devtools_active_port(profile: &Path) -> Option<(u16, Option<String>)> {
+    let text = std::fs::read_to_string(profile.join("DevToolsActivePort")).ok()?;
+    let mut lines = text.lines();
+    let port = lines.next()?.trim().parse::<u16>().ok()?;
+    let ws_path = lines
+        .next()
+        .map(str::trim)
+        .filter(|path| path.starts_with('/'))
+        .map(str::to_string);
+    Some((port, ws_path))
+}
+
+/// A headless Chrome with its own throwaway profile, closed cleanly via CDP `Browser.close` when
+/// dropped (falling back to killing only its own PID if it does not exit in time).
 struct Browser {
     child: Child,
     port: u16,
+    browser_ws_path: Option<String>,
+    profile: PathBuf,
 }
 
 impl Browser {
     fn start(chrome: &Path, profile: &Path) -> CliResult<Browser> {
-        let child = Command::new(chrome)
-            .args([
-                "--headless=new",
-                "--remote-debugging-port=0",
-                "--no-first-run",
-                "--no-default-browser-check",
-                "--disable-extensions",
-                "--hide-scrollbars",
-                "--mute-audio",
-                "--allow-file-access-from-files",
-                // Without these Chrome asks the macOS keychain for its "Chrome Safe Storage" key, and where
-                // the sandbox blocks ~/Library/Keychains macOS shows a "Keychain Not Found" popup.
-                "--use-mock-keychain",
-                "--password-store=basic",
-            ])
+        let mut cmd = Command::new(chrome);
+        cmd.args([
+            "--headless=new",
+            "--remote-debugging-port=0",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--disable-extensions",
+            "--hide-scrollbars",
+            "--mute-audio",
+            "--allow-file-access-from-files",
+            // Without these Chrome asks the macOS keychain for its "Chrome Safe Storage" key, and where
+            // the sandbox blocks ~/Library/Keychains macOS shows a "Keychain Not Found" popup.
+            "--use-mock-keychain",
+            "--password-store=basic",
+        ]);
+        // On macOS, full Chrome clones its ~2 GB app bundle into
+        // `$TMPDIR/../X/com.google.Chrome.code_sign_clone/` on startup unless this feature is
+        // disabled; disabling it prevents stranded clones even if our process is killed abruptly.
+        #[cfg(target_os = "macos")]
+        cmd.arg("--disable-features=MacAppCodeSignClone");
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+        let child = cmd
             .arg(format!("--user-data-dir={}", profile.display()))
             .arg("about:blank")
             .stdin(Stdio::null())
@@ -1058,15 +1694,18 @@ impl Browser {
             .map_err(|error| {
                 CliError::Other(format!("Could not start {}: {error}", chrome.display()))
             })?;
-        let mut browser = Browser { child, port: 0 };
+        let mut browser = Browser {
+            child,
+            port: 0,
+            browser_ws_path: None,
+            profile: profile.to_path_buf(),
+        };
         let deadline = Instant::now() + CHROME_START_TIMEOUT;
-        let active = profile.join("DevToolsActivePort");
         loop {
-            if let Some(port) = std::fs::read_to_string(&active)
-                .ok()
-                .and_then(|text| text.lines().next()?.trim().parse::<u16>().ok())
-            {
+            check_interrupted()?;
+            if let Some((port, ws_path)) = read_devtools_active_port(profile) {
                 browser.port = port;
+                browser.browser_ws_path = ws_path;
                 return Ok(browser);
             }
             if Instant::now() >= deadline || browser.child.try_wait().ok().flatten().is_some() {
@@ -1083,6 +1722,7 @@ impl Browser {
     fn connect(&self) -> CliResult<Cdp> {
         let deadline = Instant::now() + CHROME_START_TIMEOUT;
         loop {
+            check_interrupted()?;
             let pages = http(self.port, "GET", "/json/list").unwrap_or(Value::Null);
             let socket = pages.as_array().and_then(|pages| {
                 pages
@@ -1111,20 +1751,104 @@ impl Browser {
             std::thread::sleep(Duration::from_millis(150));
         }
     }
-}
 
-impl Drop for Browser {
-    fn drop(&mut self) {
+    fn browser_ws_url(&self) -> Option<String> {
+        if self.port == 0 {
+            return None;
+        }
+        if let Some(path) = &self.browser_ws_path {
+            return Some(format!("ws://127.0.0.1:{}{path}", self.port));
+        }
+        if let Ok(version) =
+            http_with_timeout(self.port, "GET", "/json/version", BROWSER_CLOSE_IO_TIMEOUT)
+        {
+            if let Some(url) = version
+                .get("webSocketDebuggerUrl")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+            {
+                return Some(url);
+            }
+        }
+        http_with_timeout(self.port, "GET", "/json/list", BROWSER_CLOSE_IO_TIMEOUT)
+            .ok()
+            .and_then(|pages| {
+                pages
+                    .as_array()?
+                    .first()?
+                    .get("webSocketDebuggerUrl")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
+    }
+
+    /// Asks the browser to shut down via CDP `Browser.close` so macOS Chrome deletes any temporary
+    /// code-sign clone and flushes/removes its socket files, waits up to `BROWSER_CLOSE_TIMEOUT`,
+    /// and only falls back to killing this child's own PID if it did not exit in time.
+    fn close_cleanly(&mut self) {
+        if matches!(self.child.try_wait(), Ok(Some(_))) {
+            return;
+        }
+        if self.port == 0 {
+            if let Some((port, ws_path)) = read_devtools_active_port(&self.profile) {
+                self.port = port;
+                self.browser_ws_path = ws_path;
+            }
+        }
+        if let Some(url) = self.browser_ws_url() {
+            let _ = send_browser_close(self.port, &url);
+            let deadline = Instant::now() + BROWSER_CLOSE_TIMEOUT;
+            while Instant::now() < deadline {
+                if matches!(self.child.try_wait(), Ok(Some(_))) {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+        }
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
 }
 
+impl Drop for Browser {
+    fn drop(&mut self) {
+        self.close_cleanly();
+    }
+}
+
+fn send_browser_close(port: u16, url: &str) -> Result<(), String> {
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let stream =
+        TcpStream::connect_timeout(&addr, BROWSER_CLOSE_IO_TIMEOUT).map_err(|e| e.to_string())?;
+    let _ = stream.set_read_timeout(Some(BROWSER_CLOSE_IO_TIMEOUT));
+    let _ = stream.set_write_timeout(Some(BROWSER_CLOSE_IO_TIMEOUT));
+    let (mut socket, _) = tungstenite::client::client(url, stream).map_err(|e| e.to_string())?;
+    let payload = json!({ "id": 1, "method": "Browser.close", "params": {} }).to_string();
+    socket
+        .send(tungstenite::Message::Text(payload.into()))
+        .map_err(|e| e.to_string())?;
+    let _ = socket.read();
+    let _ = socket.close(None);
+    Ok(())
+}
+
 /// One small HTTP request to the browser's DevTools endpoint, answered with JSON (HTTP/1.1: Chrome
 /// answers an HTTP/1.0 request with nothing).
 fn http(port: u16, method: &str, path: &str) -> Result<Value, String> {
-    let mut stream = TcpStream::connect(("127.0.0.1", port)).map_err(|error| error.to_string())?;
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+    http_with_timeout(port, method, path, Duration::from_secs(5))
+}
+
+fn http_with_timeout(
+    port: u16,
+    method: &str,
+    path: &str,
+    timeout: Duration,
+) -> Result<Value, String> {
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let mut stream =
+        TcpStream::connect_timeout(&addr, timeout).map_err(|error| error.to_string())?;
+    let _ = stream.set_read_timeout(Some(timeout));
+    let _ = stream.set_write_timeout(Some(timeout));
     write!(
         stream,
         "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 0\r\n\r\n"
@@ -1165,14 +1889,18 @@ struct Cdp {
 
 impl Cdp {
     fn connect(port: u16, url: &str) -> CliResult<Cdp> {
-        let stream = TcpStream::connect(("127.0.0.1", port))
+        let addr = SocketAddr::from(([127, 0, 0, 1], port));
+        let stream = TcpStream::connect_timeout(&addr, Duration::from_secs(5))
             .map_err(|error| CliError::Other(format!("Could not reach Chrome: {error}")))?;
+        let _ = stream.set_read_timeout(Some(CDP_TIMEOUT));
+        let _ = stream.set_write_timeout(Some(CDP_TIMEOUT));
         let (socket, _) = tungstenite::client::client(url, stream)
             .map_err(|error| CliError::Other(format!("Could not reach Chrome: {error}")))?;
         Ok(Cdp { socket, next_id: 1 })
     }
 
     fn call(&mut self, method: &str, params: Value) -> CliResult<Value> {
+        check_interrupted()?;
         let id = self.next_id;
         self.next_id += 1;
         let payload = json!({ "id": id, "method": method, "params": params }).to_string();
@@ -1181,17 +1909,33 @@ impl Cdp {
             .map_err(|error| CliError::Other(format!("Chrome stopped answering: {error}")))?;
         let deadline = Instant::now() + CDP_TIMEOUT;
         loop {
+            check_interrupted()?;
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
                 return Err(CliError::Other(format!(
                     "Chrome did not answer {method} in time."
                 )));
             }
-            let _ = self.socket.get_mut().set_read_timeout(Some(remaining));
-            let message = self
+            let _ = self
                 .socket
-                .read()
-                .map_err(|error| CliError::Other(format!("Chrome stopped answering: {error}")))?;
+                .get_mut()
+                .set_read_timeout(Some(remaining.min(CDP_POLL_TIMEOUT)));
+            let message = match self.socket.read() {
+                Ok(message) => message,
+                Err(tungstenite::Error::Io(ref error))
+                    if matches!(
+                        error.kind(),
+                        ErrorKind::WouldBlock | ErrorKind::TimedOut | ErrorKind::Interrupted
+                    ) =>
+                {
+                    continue;
+                }
+                Err(error) => {
+                    return Err(CliError::Other(format!(
+                        "Chrome stopped answering: {error}"
+                    )));
+                }
+            };
             let tungstenite::Message::Text(text) = message else {
                 continue;
             };
@@ -1618,6 +2362,90 @@ mod tests {
             pick_findings(&json!({"page":true,"kit":{"tied":1,"auto":[],"untied":[]}})).is_empty()
         );
         assert!(pick_findings(&json!({"page":true,"kit":null})).is_empty());
+    }
+
+    /// The agy page (Q5147): two tied cards over a question that listed no `<gx-choice>`. The kit
+    /// makes the choices from the cards so each gets its Pick button, and reports the question; a
+    /// question left with only "Other", tied cards naming a missing question or choice, and a
+    /// Recommended card tied to nothing are reported too. A page written the documented way, and
+    /// a Today vs proposal comparison row, report nothing.
+    #[test]
+    fn cards_the_reader_cannot_pick_are_reported_and_tied_cards_always_get_a_pick() {
+        const KIT: &str = r#"JSON.stringify({kit:window.__ghostexKit,picks:Array.prototype.map.call(document.querySelectorAll(".gx-pick"),function(p){return p.closest("[data-question]")?p.closest("[data-question]").getAttribute("data-choice"):"";})})"#;
+        let page = format!(
+            "<gx-questions>{}{}{}{}{}</gx-questions>",
+            "<gx-wide><div class=\"gx-options\"><section data-question=\"Q1\" data-choice=\"agy usage\"><span class=\"gx-ribbon\">Recommended</span><h3>A. From agy's own /usage</h3></section><section data-question=\"Q1\" data-choice=\"notices\"><h3>B. Only the notice</h3></section></div></gx-wide><gx-question tag=\"Q1\" title=\"How should usage show?\"><p>Why.</p></gx-question>",
+            "<gx-question tag=\"Q2\" title=\"Nothing here\"></gx-question>",
+            "<section data-question=\"Q3\" data-choice=\"gamma\"><h3>A. Alpha</h3></section><section data-question=\"Q9\" data-choice=\"x\"><h3>B. Lost</h3></section><gx-question tag=\"Q3\" title=\"Which?\"><gx-choice value=\"alpha\">A. Alpha</gx-choice></gx-question>",
+            "<div class=\"gx-options\"><div class=\"gx-card\"><span class=\"gx-ribbon\">Recommended</span><h3>Fast lane</h3></div><div class=\"gx-card\"><h3>Slow lane</h3></div></div>",
+            "<div class=\"gx-options\"><section><h3>Today</h3></section><section><h3>With the new rules</h3></section></div><gx-question tag=\"Q4\" title=\"Notes?\" type=\"text\"></gx-question>",
+        );
+        let Some(found) = eval_in_page(&page, KIT) else {
+            return;
+        };
+        let kit = &found["kit"];
+        assert_eq!(found["picks"], json!(["agy usage", "notices"]), "{found}");
+        assert_eq!(kit["made"][0]["tag"], "Q1", "{found}");
+        assert_eq!(kit["made"][0]["choices"][0]["recommended"], true, "{found}");
+        assert_eq!(
+            kit["made"][0]["choices"][1]["label"], "B. Only the notice",
+            "{found}"
+        );
+        assert_eq!(kit["empty"].as_array().unwrap().len(), 1, "{found}");
+        assert_eq!(kit["empty"][0]["tag"], "Q2", "{found}");
+        let orphans: Vec<(&str, bool)> = kit["orphans"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|o| (o["choice"].as_str().unwrap(), o["found"].as_bool().unwrap()))
+            .collect();
+        assert_eq!(orphans, vec![("gamma", true), ("x", false)], "{found}");
+        let loose: Vec<&str> = kit["loose"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["label"].as_str().unwrap())
+            .collect();
+        assert_eq!(loose, vec!["Fast lane", "Slow lane"], "{found}");
+        let findings = card_findings(&json!({ "kit": kit }));
+        assert_eq!(findings.len(), 6, "{findings:#?}");
+
+        let good = "<gx-questions><gx-wide><div class=\"gx-options\"><section data-question=\"Q1\" data-choice=\"a\"><span class=\"gx-ribbon\">Recommended</span><h3>A. One</h3></section><section data-question=\"Q1\" data-choice=\"b\"><h3>B. Two</h3></section></div></gx-wide><gx-question tag=\"Q1\" title=\"Which?\"><gx-choice value=\"a\" recommended>A. One</gx-choice><gx-choice value=\"b\">B. Two</gx-choice></gx-question></gx-questions>";
+        let Some(found) = eval_in_page(good, KIT) else {
+            return;
+        };
+        assert_eq!(found["picks"], json!(["a", "b"]), "{found}");
+        assert!(
+            card_findings(&json!({ "kit": found["kit"] })).is_empty(),
+            "{found}"
+        );
+    }
+
+    #[test]
+    fn each_unpickable_finding_says_the_markup_that_fixes_it() {
+        let report = json!({"kit":{
+            "made":[{"question":"How?","tag":"Q5147","title":"How?","choices":[
+                {"value":"agy usage","label":"A. From agy's own /usage","recommended":true},
+                {"value":"notices","label":"B. <Only> notices","recommended":false}]}],
+            "empty":[{"question":"Why?","tag":"Q2","title":"Why?"}],
+            "orphans":[{"question":"Colour theme","choice":"Ocean","label":"Ocean","found":false},
+                       {"question":"Q3","choice":"gamma","label":"A. Alpha","found":true,"tag":"Q3","title":"Which?","choices":["alpha"]}],
+            "loose":[{"label":"Fast lane","ribbon":true}]}});
+        let findings = card_findings(&report);
+        assert_eq!(findings.len(), 5, "{findings:#?}");
+        assert!(findings[0].starts_with("Q5147 \"How?\" lists no <gx-choice>"));
+        assert!(findings[0].contains(
+            "<gx-choice value=\"agy usage\" recommended>A. From agy's own /usage<small>"
+        ));
+        assert!(findings[0].contains("<gx-choice value=\"notices\">B. &lt;Only&gt; notices<small>"));
+        assert!(findings[1].starts_with("Q2 \"Why?\" has no choices of its own"));
+        assert!(findings[1].contains("data-question=\"Q2\""));
+        assert!(findings[2].contains("data-question=\"Colour theme\", but no <gx-question>"));
+        assert!(findings[3].contains("its choices: \"alpha\""));
+        assert!(findings[4].contains("(marked Recommended) looks pickable"));
+        assert!(findings[4].contains(".gx-grid of .gx-card"));
+        assert!(card_findings(&json!({"kit":{"tied":1}})).is_empty());
+        assert!(card_findings(&json!({"kit":null})).is_empty());
     }
 
     #[test]

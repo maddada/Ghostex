@@ -265,13 +265,13 @@ impl Render for GpuiTitlebarPopupWindow {
                 }
                 this.close_from_popup_window(window, cx);
             }))
-            .on_action(cx.listener(
-                |this, action: &OpenBrowserPaneInExternalBrowser, _window, cx| {
+            .on_action(
+                cx.listener(|this, action: &ToggleBrowserDevTools, _window, cx| {
                     this.update_main_window(cx, |_, window, cx| {
                         window.dispatch_action(Box::new(*action), cx);
                     });
-                },
-            ))
+                }),
+            )
             .on_action(
                 cx.listener(|this, action: &SetBrowserDeviceView, _window, cx| {
                     this.update_main_window(cx, |_, window, cx| {

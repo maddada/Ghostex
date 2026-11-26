@@ -459,7 +459,11 @@ whose content overflows it or is cut off, content a sideways scroller can't
 reach, and text drawn over other text; it ends with an error while any are
 left. Look at the screenshots and fix everything it lists, including a "Pick
 buttons" warning that a question sits under mockups with no Pick button tied
-(see Live pages with questions). `ghostex show` runs the narrow sizes
+(see Live pages with questions). It also fails, under "Nothing to pick", on a
+question with no `<gx-choice>` of its own, a card tied to a question or choice
+that does not exist, and an option card (one marked Recommended, or one in a
+`.gx-options` row of lettered or Recommended options) with no Pick button; each
+line says the markup that fixes it. `ghostex show` runs the narrow sizes
 again after publishing and lists anything left: fix it, run `ghostex show`
 again and reply with the new block. If `visual check` can't read an `.html`
 file, this Ghostex is older than the check: skip it.
@@ -479,7 +483,8 @@ Ghostex injects the page's look, so a page that styles itself fights it:
   - `<div class="gx-callout">` (add `data-tone="warn"`, `"good"` or `"bad"`).
   - `<div class="gx-card">`, several in a `<div class="gx-grid">`.
   - Options compared side by side: `<div class="gx-options">` holding one tied
-    `<section data-question data-choice>` per option (see Live pages with questions), a
+    `<section data-question data-choice>` per option, each also listed as a
+    `<gx-choice>` in the question under the row (see Live pages with questions), a
     `<span class="gx-ribbon">Recommended</span>` on the recommended one,
     `<div class="gx-chips"><span class="gx-chip"><b>38</b> files</span></div>`
     for small facts and
@@ -577,9 +582,11 @@ top (the header and the first lines), then in the window. Aim for the look of
   scale (the same axis, the same units), so the differences show without
   reading. Mark the recommended one with a `.gx-ribbon` and `recommended`.
 - **Then one question.** The `<gx-question>` sits directly under the row,
-  its choices in the same order. When every choice has its tied variant, the
-  question shows only what was picked and its note, not the choices again, so
-  put each option's trade-off on its card (a `.how` line, `.gx-stat`s).
+  with one `<gx-choice>` per card, in the same order, its `value` exactly the
+  card's `data-choice`. Always write those choices: the cards get their Pick
+  buttons from them. When every choice has its tied variant, the question
+  shows only what was picked and its note, not the choices again, so put each
+  option's trade-off on its card (a `.how` line, `.gx-stat`s).
 - **One question per dimension.** When the variants differ in more than one
   way (a look, a layout, extras), split them: one `.gx-options` row and one
   question for each kind of choice, never one long list that mixes them, so
@@ -746,6 +753,16 @@ and `data-choice` (first bullet below), which gives it a Pick button:
 </gx-questions>
 ```
 
+- **Every card's choice is written in its question.** For each tied card,
+  the `<gx-question>` under it lists a `<gx-choice>` whose `value` is the
+  card's `data-choice` (as `tabs` and `one page` above). A question with cards
+  above it and no `<gx-choice>` of its own shows only "Other / none of these"
+  in older Ghostex versions, so `ghostex visual check` fails it and prints
+  the lines to add. Only rows (`<gx-pick>`, `data-pick`, below) make their own
+  choices; cards never replace them. Cards that only compare (Today and a
+  proposal) are no choice: put them in a `.gx-grid` of `.gx-card` with no
+  `.gx-ribbon`, since a card marked Recommended, or a `.gx-options` row of
+  lettered cards, must have a Pick button.
 - **Tie every variant to its choice, so each mockup has a Pick button at the
   right end of its title and the reader never has to scroll down to choose.**
   Wrap the variant's title and its mockup in one element with `data-question`
@@ -808,7 +825,8 @@ and `data-choice` (first bullet below), which gives it a Pick button:
   run C, B, A under mockups A, B, C makes the reader pick the wrong one.
 - Write only that markup. When every choice of a question has its tied
   variant or row, the question shows what was picked as chips, Other and its
-  note box, not the choices again. The kit letters the choices, ends every choice
+  note box, not the choices again (still write the `<gx-choice>` lines for
+  tied cards; only rows make their own). The kit letters the choices, ends every choice
   question with "Other / none of these" and a note box, ends the page with
   an "Anything else?" box (the reader can type there and paste images) just
   above the send button, and adds the send button. Nothing is preselected unless you mark it `picked` (the reader can also click a pick again
@@ -855,7 +873,9 @@ it needs: paragraphs, lists, tables, fenced code, links, images by path,
 quotes, and raw HTML for a small mockup in a `.gx-frame`), inside an element
 with `data-question` naming the question. Start each with a heading: it is the
 row's title and its label. The question gets no `<gx-choice>` lines; the kit
-makes them from the rows, in their order:
+makes them from the rows, in their order. This is for rows only: mockup cards
+tied with `data-question` + `data-choice` still need their `<gx-choice>` lines
+(see Live pages with questions):
 
 ```html
 <div data-question="Q7">

@@ -1069,7 +1069,7 @@ fn resolve_row(
         inputs.host.local_delayed_sends.get(&sidebar_id),
         context,
     );
-    row.is_autopilot_supervisor = is_autopilot;
+    row.mark_autopilot_supervisor(is_autopilot);
     row.cloud_box = row.cloud_box.map(|badge| badge.with_started_box(boxes));
     state.next_row_id += 1;
     state.work.rows_built += 1;

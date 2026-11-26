@@ -217,10 +217,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                 "subagents": true,
             },
         },
-        "clientInfo": {
-            "name": "ghostex",
-            "version": env!("CARGO_PKG_VERSION"),
-        },
+        "clientInfo": crate::acp::client_info(),
     });
     if let Err(err) = transport.call("initialize", init_params, CURSOR_RPC_TIMEOUT) {
         eprintln!("Cursor Native initialize failed: {err}");

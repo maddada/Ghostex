@@ -1,5 +1,5 @@
 //! `connectorsChanged`: tells clients a workspace's connectors changed (signed in or out, apps
-//! connected, tools listed, Executor installed, started or stopped), so Settings refetches
+//! connected, tools listed, the Executor CLI installed or signed in or out), so Settings refetches
 //! `/api/readConnectors`.
 
 use std::sync::{Arc, Weak};
@@ -21,10 +21,8 @@ pub(crate) fn broadcast_connectors_changed(state: &AppState, workspace: &str) {
     }));
 }
 
-/// Wires the Composio and Executor change listeners to the event and stops every workspace's
-/// Executor when gxserver shuts down, for this gxserver's lifetime. The idle-stop thread starts with
-/// the first Connectors route served ([`start_connectors_work`]), so it never runs while Connectors
-/// is off.
+/// Wires the Composio, CLI and Executor change listeners to the event and stops the Executor CLI's
+/// MCP relay when gxserver shuts down, for this gxserver's lifetime.
 pub(crate) fn start_connectors(state: Arc<AppState>) {
     let mut shutdown = state.shutdown_tx.subscribe();
     let weak: Weak<AppState> = Arc::downgrade(&state);
@@ -38,12 +36,6 @@ pub(crate) fn start_connectors(state: Arc<AppState>) {
     super::executor::set_changed_listener(listener);
     tokio::spawn(async move {
         let _ = shutdown.recv().await;
-        let _ = tokio::task::spawn_blocking(super::executor::stop_all).await;
+        let _ = tokio::task::spawn_blocking(super::executor::stop_relay).await;
     });
-}
-
-/// Starts the background work Connectors needs once it is in use (only Executors started by a
-/// route can be idle); safe to call on every route.
-pub(crate) fn start_connectors_work() {
-    super::executor::start_idle_stop();
 }

@@ -37,7 +37,7 @@
  */
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -307,37 +307,44 @@ export async function resolveSha256({ repo, sha256, version }) {
 function verifyProvenance({ repo, sha256, version }) {
   const assetName = releaseProvenanceAssetName(version);
   const scratch = mkdtempSync(path.join(os.tmpdir(), `ghostex-${version}-provenance-`));
-  const result = gh(['release', 'download', `v${version}`, '--repo', repo, '--pattern', assetName, '--dir', scratch], {
-    allowFailure: true,
-  });
-  const file = path.join(scratch, assetName);
-  if (result.status !== 0 || !existsSync(file)) {
+  try {
+    const result = gh(
+      ['release', 'download', `v${version}`, '--repo', repo, '--pattern', assetName, '--dir', scratch],
+      {
+        allowFailure: true,
+      }
+    );
+    const file = path.join(scratch, assetName);
+    if (result.status !== 0 || !existsSync(file)) {
+      process.stdout.write(
+        `v${version} carries no ${assetName} (released before change-aware planning); using the live DMG digest only.\n`
+      );
+      return;
+    }
+    const provenance = validateReleaseProvenance(JSON.parse(readFileSync(file, 'utf8')));
+    const macos = provenance.products['macos-arm64'];
+    if (!macos) {
+      throw new Error(
+        `Refusing to update Homebrew: v${version} published no macOS product, so the cask must not advance`
+      );
+    }
+    const recorded = macos.artifacts.find((artifact) => artifact.name === releaseAssetName(version));
+    if (!recorded) {
+      throw new Error(`Refusing to update Homebrew: v${version} provenance records no ${releaseAssetName(version)}`);
+    }
+    if (recorded.sha256 !== sha256) {
+      throw new Error(
+        `Refusing to update Homebrew: live ${releaseAssetName(version)} digest ${sha256} does not match the recorded ${recorded.sha256}`
+      );
+    }
     process.stdout.write(
-      `v${version} carries no ${assetName} (released before change-aware planning); using the live DMG digest only.\n`
+      `macOS was ${macos.action} for ${version} (${
+        macos.action === 'built' ? 'this release' : `from ${macos.reusedFrom.tag ?? `run ${macos.reusedFrom.runId}`}`
+      }); cask update authorized.\n`
     );
-    return;
+  } finally {
+    rmSync(scratch, { force: true, recursive: true });
   }
-  const provenance = validateReleaseProvenance(JSON.parse(readFileSync(file, 'utf8')));
-  const macos = provenance.products['macos-arm64'];
-  if (!macos) {
-    throw new Error(
-      `Refusing to update Homebrew: v${version} published no macOS product, so the cask must not advance`
-    );
-  }
-  const recorded = macos.artifacts.find((artifact) => artifact.name === releaseAssetName(version));
-  if (!recorded) {
-    throw new Error(`Refusing to update Homebrew: v${version} provenance records no ${releaseAssetName(version)}`);
-  }
-  if (recorded.sha256 !== sha256) {
-    throw new Error(
-      `Refusing to update Homebrew: live ${releaseAssetName(version)} digest ${sha256} does not match the recorded ${recorded.sha256}`
-    );
-  }
-  process.stdout.write(
-    `macOS was ${macos.action} for ${version} (${
-      macos.action === 'built' ? 'this release' : `from ${macos.reusedFrom.tag ?? `run ${macos.reusedFrom.runId}`}`
-    }); cask update authorized.\n`
-  );
 }
 
 /*

@@ -17,7 +17,7 @@ use super::scan::{mcp_server_key, TranscriptFacts};
 /// The MCP server Ghostex Connectors adds to every Claude launch (connectors/agent/launch.rs).
 const CONNECTORS_SERVER: &str = "ghostex-connectors";
 
-/// How long a workspace's app list is reused (reading it can start the workspace's Executor).
+/// How long a workspace's app list is reused (reading it can run the Executor CLI).
 const WORKSPACE_FRESH_FOR: Duration = Duration::from_secs(60);
 /// Hard cap for a synchronous (non-progressive) workspace connectors read.
 const WORKSPACE_SYNC_WAIT: Duration = Duration::from_secs(3);
@@ -94,10 +94,16 @@ fn read_workspace_group(state: &AppState, project_id: &str, session_id: &str) ->
             }));
         }
     }
-    for app in entry["executor"]["apps"].as_array().into_iter().flatten() {
-        let name = app["name"].as_str().or_else(|| app["slug"].as_str());
-        if let (Some(name), true) = (name, app["connected"] == true) {
-            rows.push(json!({"name": name, "slug": app["slug"], "status": "connected"}));
+    // The Executor CLI's sign-in is the computer's, so every workspace's agents get its apps.
+    if connectors["executor"]["usable"] == true {
+        for app in connectors["executor"]["apps"]
+            .as_array()
+            .into_iter()
+            .flatten()
+        {
+            if let Some(name) = app["name"].as_str().or_else(|| app["slug"].as_str()) {
+                rows.push(json!({"name": name, "slug": app["slug"], "status": "connected"}));
+            }
         }
     }
     if let Some(cli) = entry["cli"].as_object() {

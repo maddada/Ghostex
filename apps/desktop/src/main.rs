@@ -400,6 +400,8 @@ fn main() {
         gpui_component::init(cx);
         // A session pill's tooltip is its hover card (native_chat/session_card.rs).
         crate::app::native_chat::session_card::install(cx);
+        // Every text field's right-click menu is Ghostex's own (window/text_field_menu.rs).
+        crate::app::window::text_field_menu::install(cx);
         crate::app::native_docs::grammars::register();
         // CDXC:Clipboard 2026-11-14 WHY: the terminal's copy and paste keys work in every text
         // field as they do in the terminal: the CUA keys (Ctrl+Insert / Shift+Insert) on Windows

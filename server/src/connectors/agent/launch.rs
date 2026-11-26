@@ -21,11 +21,13 @@ pub(crate) const CONNECTORS_MCP_SERVER_NAME: &str = "ghostex-connectors";
 
 /// The variables the `ghostex connectors mcp` process reads to learn its session and reach
 /// gxserver.
-const MCP_SESSION_ENV: [&str; 4] = [
+const MCP_SESSION_ENV: [&str; 5] = [
     "GHOSTEX_SESSION_ID",
     "GHOSTEX_GLOBAL_SESSION_REF",
     "GHOSTEX_GXSERVER_BASE_URL",
     "GHOSTEX_GXSERVER_AUTH_TOKEN_FILE",
+    // The session's own token, with which gxserver knows the session the calls come from.
+    "GHOSTEX_SESSION_TOKEN",
 ];
 
 /// The `ghostex` CLI shipped beside this gxserver, else `ghostex` on PATH.

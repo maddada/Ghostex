@@ -313,12 +313,6 @@ pub(crate) struct CopyVoiceAgentText {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
-pub(crate) struct OpenBrowserPaneInExternalBrowser {
-    pub(crate) pane_id: u64,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
-#[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct SetBrowserDeviceView {
     pub(crate) pane_id: u64,
     pub(crate) device_view: crate::app::model::BrowserDeviceView,
@@ -381,7 +375,9 @@ pub(crate) struct ToggleAnnotate;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
-pub(crate) struct ToggleBrowserDevTools;
+pub(crate) struct ToggleBrowserDevTools {
+    pub(crate) pane_id: u64,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]

@@ -5,7 +5,7 @@
 pub(super) mod dictate;
 pub(super) mod hex;
 mod http;
-mod languages;
+pub(super) mod languages;
 pub(super) mod retired;
 pub(super) mod settings;
 pub(super) mod superwhisper;

@@ -34,11 +34,13 @@ pub(crate) fn session_daemon_zmx(zmx: GxserverResolvedTool) -> GxserverResolvedT
     };
     match plan.ensure() {
         Ok((executable, created)) => {
+            macos::note_issued(&plan.key);
             let runs = plan.runs(&executable);
             if created {
                 macos::unregister_bundle_async(plan.host_app());
             }
             if runs {
+                macos::note_issued(&plan.key);
                 GxserverResolvedTool {
                     executable_path: executable.to_string_lossy().into_owned(),
                     ..zmx
@@ -86,11 +88,7 @@ pub(crate) fn remove_unused_session_hosts() {
                     macos::SessionHostPlan::for_zmx(std::path::Path::new(&zmx.executable_path))
                 })
                 .map(|plan| plan.key);
-            macos::remove_unused(
-                &root,
-                current.as_deref(),
-                &crate::setup::running_executable_paths(),
-            );
+            macos::remove_unused(&root, current.as_deref());
             macos::unregister_existing(&root);
         });
 }
@@ -112,14 +110,40 @@ mod macos {
         time::{Duration, Instant},
     };
 
-    /// Serialises clone creation, so two sessions starting together make one copy.
+    /// Serialises clone creation and unused-host cleanup so a sweep cannot delete a clone while
+    /// another thread is creating or handing it out.
     static CLONE_LOCK: Mutex<()> = Mutex::new(());
+
+    /// Last time `session_daemon_zmx` handed out each clone key, so `remove_unused` never deletes
+    /// a host while a session is still launching via `launchctl` before its `zmx` process shows up
+    /// in `running_executable_paths()`.
+    static RECENTLY_ISSUED: LazyLock<Mutex<HashMap<String, Instant>>> =
+        LazyLock::new(Default::default);
+
+    /// Grace period after issuing a session host key (well above launchctl startup timeouts).
+    const IN_FLIGHT_GRACE: Duration = Duration::from_secs(60);
 
     /// Whether each clone's zmx runs, by clone key; sessions starting together wait for one check.
     static RUN_CHECKS: LazyLock<Mutex<HashMap<String, bool>>> = LazyLock::new(Default::default);
 
     /// A working zmx prints its version in milliseconds; one macOS holds never starts.
     const RUN_CHECK_TIMEOUT: Duration = Duration::from_secs(3);
+
+    pub(super) fn note_issued(key: &str) {
+        let mut issued = RECENTLY_ISSUED
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        issued.insert(key.to_string(), Instant::now());
+    }
+
+    fn is_recently_issued(key: &str) -> bool {
+        let mut issued = RECENTLY_ISSUED
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let now = Instant::now();
+        issued.retain(|_, at| now.saturating_duration_since(*at) < IN_FLIGHT_GRACE);
+        issued.contains_key(key)
+    }
 
     pub(super) fn hosts_root() -> PathBuf {
         crate::paths::get_gxserver_paths(None)
@@ -192,13 +216,11 @@ mod macos {
         /// The cloned zmx (and whether this call created the clone), cloning the app first when this zmx has no copy yet.
         pub(super) fn ensure(&self) -> io::Result<(PathBuf, bool)> {
             let host_zmx = self.host_zmx();
-            if host_zmx.is_file() {
-                return Ok((host_zmx, false));
-            }
             let _guard = CLONE_LOCK
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
             if host_zmx.is_file() {
+                note_issued(&self.key);
                 return Ok((host_zmx, false));
             }
             fs::create_dir_all(&self.root)?;
@@ -222,12 +244,13 @@ mod macos {
                     format!("{} is missing from the copy", self.relative_zmx.display()),
                 ));
             }
+            note_issued(&self.key);
             let root = self.root.clone();
             let key = self.key.clone();
             let _ = thread::Builder::new()
                 .name("session-host-cleanup".to_string())
                 .spawn(move || {
-                    remove_unused(&root, Some(&key), &crate::setup::running_executable_paths());
+                    remove_unused(&root, Some(&key));
                 });
             Ok((host_zmx, true))
         }
@@ -381,18 +404,24 @@ mod macos {
 
     /// Removes every copy but `current` that no running program was started from, and partial copies left by an ended gxserver.
     /// Unregisters each copy from LaunchServices before deleting it, because `lsregister -u` cannot remove an entry once the bundle is gone.
-    pub(super) fn remove_unused(root: &Path, current: Option<&str>, running: &[PathBuf]) {
+    pub(super) fn remove_unused(root: &Path, current: Option<&str>) {
+        let _guard = CLONE_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let Ok(entries) = fs::read_dir(root) else {
             return;
         };
-        let running: Vec<PathBuf> = running
-            .iter()
-            .map(|exe| fs::canonicalize(exe).unwrap_or_else(|_| exe.clone()))
+        let running: Vec<PathBuf> = crate::setup::running_executable_paths()
+            .into_iter()
+            .map(|exe| fs::canonicalize(&exe).unwrap_or(exe))
             .collect();
         let own_partial_suffix = format!(".partial-{}", std::process::id());
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().into_owned();
-            if Some(name.as_str()) == current || name.ends_with(&own_partial_suffix) {
+            if Some(name.as_str()) == current
+                || name.ends_with(&own_partial_suffix)
+                || is_recently_issued(&name)
+            {
                 continue;
             }
             let path = fs::canonicalize(entry.path()).unwrap_or_else(|_| entry.path());

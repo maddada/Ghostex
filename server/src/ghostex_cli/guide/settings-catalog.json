@@ -10248,6 +10248,18 @@
       "agentWritable": false
     },
     {
+      "key": "chatPageKeepOpen",
+      "title": "chatPageKeepOpen",
+      "subtitle": "App-managed state saved with the settings; not a user preference.",
+      "tab": "about",
+      "tabTitle": "About",
+      "section": "internalState",
+      "sectionTitle": "Internal state (not user settings)",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": false
+    },
+    {
       "key": "coordinatorBoardCollapsedColumns",
       "title": "coordinatorBoardCollapsedColumns",
       "subtitle": "App-managed state saved with the settings; not a user preference.",
@@ -10548,7 +10560,7 @@
     {
       "key": "accounts",
       "title": "Accounts, usage stats and automatic continuation",
-      "subtitle": "Current CLI login, Claude cswap, Codex xswap, add account, Cursor, Gemini and Copilot usage, reconnect, sign in again, use this account automatically, only when I pick it, or paused, update, reinstall or uninstall Claude Swap and Codex Swap, show usage in the sidebar, status lines, usage limits and resets (5h, 7d, Mo), session badges, account numbers, auto-switch, new sessions start on, when an account hits its limit, hide emails, privacy, error recovery and retry settings.",
+      "subtitle": "Current CLI login, Claude cswap, Codex xswap, add account, Cursor, Antigravity and Copilot usage, reconnect, sign in again, use this account automatically, only when I pick it, or paused, update, reinstall or uninstall Claude Swap and Codex Swap, show usage in the sidebar, status lines, usage limits and resets (5h, 7d, Mo), session badges, account numbers, auto-switch, new sessions start on, when an account hits its limit, hide emails, privacy, error recovery and retry settings.",
       "tab": "accounts",
       "tabTitle": "Accounts",
       "section": "accounts",
@@ -10559,7 +10571,7 @@
     {
       "key": "accountTitlebarUsage",
       "title": "Account usage in the sidebar",
-      "subtitle": "Show or hide usage stats for saved Claude, Codex, Cursor, Gemini and Copilot accounts at the bottom of the desktop sidebar. Adding an account pins the usage there.",
+      "subtitle": "Show or hide usage stats for saved Claude, Codex, Cursor, Antigravity and Copilot accounts at the bottom of the desktop sidebar. Adding an account pins the usage there.",
       "tab": "accounts",
       "tabTitle": "Accounts",
       "section": "accounts",
@@ -14669,9 +14681,9 @@
       "agentWritable": false
     },
     {
-      "key": "executorEnabled",
-      "title": "Executor",
-      "subtitle": "Turn on Executor for a workspace; Ghostex downloads it the first time and runs it on this computer.",
+      "key": "executorCli",
+      "title": "Executor CLI",
+      "subtitle": "The Executor CLI installed on this computer and its one sign-in, which every workspace's agents share: install it, sign in to executor.sh or a self-hosted Executor, or sign out.",
       "tab": "connectors",
       "tabTitle": "Connectors",
       "section": "executor",
@@ -14682,7 +14694,7 @@
     {
       "key": "executorApps",
       "title": "Executor apps",
-      "subtitle": "Add apps from Executor's catalog or any remote MCP server, sign them in and remove them.",
+      "subtitle": "The apps the Executor CLI's sign-in reaches; add apps and their accounts in Executor itself.",
       "tab": "connectors",
       "tabTitle": "Connectors",
       "section": "executor",
@@ -14691,9 +14703,9 @@
       "agentWritable": false
     },
     {
-      "key": "executorCallbackUrl",
-      "title": "Sign-in callback address",
-      "subtitle": "The address to give an app's developer console when it needs your own sign-in app (OAuth client).",
+      "key": "executorOldApps",
+      "title": "Apps on the old Executor",
+      "subtitle": "The apps Ghostex's own Executor had, listed until you remove their data or 30 days pass; add them again in Executor.",
       "tab": "connectors",
       "tabTitle": "Connectors",
       "section": "executor",
@@ -15113,6 +15125,18 @@
       "agentWritable": true
     },
     {
+      "key": "voiceAgentLanguage",
+      "title": "Language",
+      "subtitle": "The language the voice agent speaks and listens for, English by default. Same as the calling device follows the language of the phone or computer that starts the call, and English when that language isn't one the agent speaks. A change applies to your next call.",
+      "tab": "voiceAgent",
+      "tabTitle": "Voice Agent",
+      "section": "provider",
+      "sectionTitle": "Provider and voice",
+      "type": "string",
+      "default": "en",
+      "agentWritable": true
+    },
+    {
       "key": "voiceAgentCallMode",
       "title": "Call mode",
       "subtitle": "Regular calls listen hands-free; on Grok they're billed for the whole time the call is connected, quiet and muted time included (about $0.08 a minute). Push-to-talk calls listen only while you hold the talk button next to Mute (or Space, or the Hold to Talk hotkey); on Grok you pay only for the audio you send and the agent's replies. In a muted Regular call, holding it unmutes you for as long as you hold. GPT Realtime bills only audio in both modes. A change applies to your next call; the gear in the voice panel changes it too.",
@@ -15137,7 +15161,7 @@
     {
       "key": "voiceAgentWaitForReply",
       "title": "The agent answers",
-      "subtitle": "When I pause: the voice agent answers when you stop speaking. When I say \"reply\": it keeps listening until you end with \"reply\", \"over\" or \"go ahead\", then answers, and each Regular call starts with it saying \"Hey, I hear you. Please say reply after you finish speaking so I can reply to you.\" Shown while the call mode is Regular: a push-to-talk turn ends when you let go of the talk button. A change applies to your next call.",
+      "subtitle": "When I pause: the voice agent answers when you stop speaking. When I say a turn word: it keeps listening until you end with one of the call language's turn words (English \"reply\", \"over\" or \"go ahead\", German \"fertig\" or \"antworte\", and the English ones for any other language until you set some), then answers, and each Regular call starts with it asking you to say one of them when you finish speaking. Shown while the call mode is Regular: a push-to-talk turn ends when you let go of the talk button. A change applies to your next call.",
       "tab": "voiceAgent",
       "tabTitle": "Voice Agent",
       "section": "provider",
@@ -15145,6 +15169,18 @@
       "type": "boolean",
       "default": true,
       "agentWritable": true
+    },
+    {
+      "key": "voiceAgentTurnWords",
+      "title": "Turn words",
+      "subtitle": "The words that end your turn, separated by commas, for one language at a time: English \"reply\", \"over\" and \"go ahead\", German \"fertig\" and \"antworte\", and the English ones for any other language until you set some. Up to 8, each up to 40 characters. Reset to defaults puts that language's own words back.",
+      "tab": "voiceAgent",
+      "tabTitle": "Voice Agent",
+      "section": "provider",
+      "sectionTitle": "Provider and voice",
+      "type": "json",
+      "default": {},
+      "agentWritable": false
     },
     {
       "key": "voiceAgentMemory",

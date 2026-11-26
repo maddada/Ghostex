@@ -297,7 +297,8 @@ everything they need to decide**. Never write answer links (`ghostex-answer:`) i
   `item ask` refuses more answers or longer ones.
 - **Choices that need a sentence each to explain, more than 4 of them, or ones the user must
   compare** (fixes from a report, options with trade-offs): a Live page, a short card per choice
-  with its explanation, and the question (pick any) under the cards. Wrong: `item ask --multiple`
+  with its explanation, and the question (pick any) under the cards, listing a `<gx-choice>` per
+  card so each card gets its Pick button (`ghostex visual check` fails a question without them). Wrong: `item ask --multiple`
   with six answers like "Chat engine: stop building each chat twice per update and ...". Right: a
   Live page with a card per lag fix and "Which lag fixes should I make?" under them.
 - **No line of work fits, or several questions, or a text answer:** a Ghostex form, a ` ```questions ` block in your reply holding every open

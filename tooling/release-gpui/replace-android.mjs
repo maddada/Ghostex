@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { customerDownloadUrl, mergeCustomerDownloadNotes } from './customer-downloads.mjs';
@@ -88,11 +88,15 @@ if (currentSha !== actualSha) {
 }
 if (updatedBody !== release.body) {
   const temporary = mkdtempSync(path.join(os.tmpdir(), `ghostex-${version}-android-notes-`));
-  const notesPath = path.join(temporary, 'release-notes.md');
-  writeFileSync(notesPath, updatedBody);
-  run('gh', ['release', 'edit', tag, '--repo', repo, '--notes-file', notesPath], {
-    capture: false,
-  });
+  try {
+    const notesPath = path.join(temporary, 'release-notes.md');
+    writeFileSync(notesPath, updatedBody);
+    run('gh', ['release', 'edit', tag, '--repo', repo, '--notes-file', notesPath], {
+      capture: false,
+    });
+  } finally {
+    rmSync(temporary, { force: true, recursive: true });
+  }
 }
 
 let verified;

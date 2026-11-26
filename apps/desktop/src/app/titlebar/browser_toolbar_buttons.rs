@@ -249,8 +249,8 @@ impl GhostexGpuiApp {
                                     );
                                 }
                             }
-                            BrowserToolbarAction::DevTools => {
-                                this.toggle_browser_devtools_from_toolbar(pane_id, window, cx);
+                            BrowserToolbarAction::OpenExternally => {
+                                this.open_browser_pane_in_external_browser(pane_id, cx);
                             }
                         }
                         window.prevent_default();

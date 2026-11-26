@@ -14,7 +14,7 @@ pub(crate) use launch::{
     with_project_cli_env_for_resume,
 };
 pub(crate) use signin::{
-    cancel_machine_gh_login, machine_gh_login, set_changed_listener, sign_in_machine_gh,
-    MachineGhLogin,
+    cancel_machine_gh_login, https_link, login_waiting, machine_gh_login, read_link, run_login,
+    set_changed_listener, sign_in_machine_gh, stop_login, MachineGhLogin,
 };
 pub(crate) use tools::status;

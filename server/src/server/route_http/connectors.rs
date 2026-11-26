@@ -1,19 +1,18 @@
 //! Connectors routes (crate::connectors): read every workspace's connectors, sign a workspace in
 //! to and out of Composio, list its tools again, connect one of its apps and call one of its tools;
-//! turn a workspace's Executor on or off and manage its apps and tools; give agent sessions their
+//! install the Executor CLI, sign it in or out and remove the old built-in Executor's data; give agent sessions their
 //! connector tools and run their calls; read and change a workspace's Ask/Allow/Never rules.
 
 use serde_json::{Map, Value};
 
 use crate::connectors::{
-    add_executor_app, add_executor_mcp_server, broadcast_connectors_changed, call_composio_tool,
-    call_connector_agent_tool, call_executor_tool, cancel_connector_agent_tool_call,
-    connect_composio_app, connect_executor_app, connectors_enabled, connectors_off_message,
-    disable_executor, enable_executor, list_composio_tools, list_connector_agent_tools,
-    list_executor_tools, read_connector_rules, read_connectors, refresh_composio,
-    remove_executor_app, search_executor_catalog, set_connector_cli_client, set_connector_rule,
-    sign_in_composio, sign_in_connector_cli, sign_out_composio, sign_out_connector_cli,
-    start_connectors_work, wait_connector_agent_tools,
+    bind_connector_agent_caller, broadcast_connectors_changed, call_composio_tool,
+    call_connector_agent_tool, cancel_connector_agent_tool_call, cancel_executor_cli_sign_in,
+    connect_composio_app, connectors_enabled, connectors_off_message, install_executor_cli,
+    list_composio_tools, list_connector_agent_tools, read_connector_rules, read_connectors,
+    refresh_composio, remove_old_executor, set_connector_cli_client, set_connector_rule,
+    sign_in_composio, sign_in_connector_cli, sign_in_executor_cli, sign_out_composio,
+    sign_out_connector_cli, sign_out_executor_cli, wait_connector_agent_tools,
 };
 use crate::domain::DomainStateError;
 use crate::protocol::rpc_success;
@@ -21,6 +20,20 @@ use crate::protocol::rpc_success;
 use super::*;
 
 type ConnectorAction = fn(&AppState, &Map<String, Value>) -> Result<Value, DomainStateError>;
+
+/// What only the user's own app (or a paired phone) may do, as with pairing codes
+/// (`SecurityState::keeps_door`): repoint or end the Executor sign-in every workspace's agents
+/// use, run its installer, delete the old Executor's data, and change what agents may run.
+///
+/// CDXC:Connectors 2026-11-27 WHY:
+/// These were open to agents' session tokens and to the `ghostex connectors` CLI any agent can run (security review of 769647fe4e, M3): an agent could sign the CLI in to a host of its own, which approves its own device code, and every workspace's agents would then get tools whose descriptions and results that host controls; or set its workspace's rules to Allow. The desktop sends its owner session with these calls (`is_door_call` in apps/desktop/src/app/owner_security/mod.rs).
+const OWNER_ONLY: [&str; 5] = [
+    "/api/installExecutorCli",
+    "/api/signInExecutorCli",
+    "/api/signOutExecutorCli",
+    "/api/removeOldExecutor",
+    "/api/setConnectorRule",
+];
 
 pub(super) async fn route_connectors_http(
     request: RouteHttpRequest,
@@ -33,15 +46,11 @@ pub(super) async fn route_connectors_http(
         "/api/connectComposioApp" => Some(connect_composio_app),
         "/api/listComposioTools" => Some(list_composio_tools),
         "/api/callComposioTool" => Some(call_composio_tool),
-        "/api/enableExecutor" => Some(enable_executor),
-        "/api/disableExecutor" => Some(disable_executor),
-        "/api/searchExecutorCatalog" => Some(search_executor_catalog),
-        "/api/addExecutorApp" => Some(add_executor_app),
-        "/api/addExecutorMcpServer" => Some(add_executor_mcp_server),
-        "/api/removeExecutorApp" => Some(remove_executor_app),
-        "/api/connectExecutorApp" => Some(connect_executor_app),
-        "/api/listExecutorTools" => Some(list_executor_tools),
-        "/api/callExecutorTool" => Some(call_executor_tool),
+        "/api/installExecutorCli" => Some(install_executor_cli),
+        "/api/signInExecutorCli" => Some(sign_in_executor_cli),
+        "/api/cancelExecutorCliSignIn" => Some(cancel_executor_cli_sign_in),
+        "/api/signOutExecutorCli" => Some(sign_out_executor_cli),
+        "/api/removeOldExecutor" => Some(remove_old_executor),
         "/api/listConnectorAgentTools" => Some(list_connector_agent_tools),
         "/api/cancelConnectorAgentToolCall" => Some(cancel_connector_agent_tool_call),
         "/api/readConnectorRules" => Some(read_connector_rules),
@@ -59,6 +68,7 @@ pub(super) async fn route_connectors_http(
         endpoint,
         request_id,
         body_json,
+        caller,
         ..
     } = request;
     if !connectors_enabled(&state.paths) {
@@ -68,11 +78,32 @@ pub(super) async fn route_connectors_http(
             DomainStateError::bad_request(connectors_off_message(&state.paths)),
         ));
     }
-    start_connectors_work();
-    let params = match read_domain_rpc_params(&body_json) {
+    let mut params = match read_domain_rpc_params(&body_json) {
         Ok(params) => params,
         Err(error) => return Ok(domain_error_response(endpoint.path, request_id, error)),
     };
+    if OWNER_ONLY.contains(&endpoint.path.as_str()) && !state.security.keeps_door(&caller) {
+        return Ok(domain_error_response(
+            endpoint.path,
+            request_id,
+            DomainStateError {
+                code: "forbidden",
+                message: "Only the Ghostex app on this computer can change that: use Settings > Connectors there.".to_string(),
+            },
+        ));
+    }
+    // An agent's tools and calls belong to the session its token is (connectors/agent/session.rs).
+    let for_agent_session = matches!(
+        endpoint.path.as_str(),
+        "/api/listConnectorAgentTools"
+            | "/api/callConnectorAgentTool"
+            | "/api/cancelConnectorAgentToolCall"
+    );
+    if for_agent_session {
+        if let Err(error) = bind_connector_agent_caller(&caller, &mut params) {
+            return Ok(domain_error_response(endpoint.path, request_id, error));
+        }
+    }
     let Some(action) = action else {
         let result = if endpoint.path == "/api/waitConnectorAgentTools" {
             wait_connector_agent_tools(&state, params).await

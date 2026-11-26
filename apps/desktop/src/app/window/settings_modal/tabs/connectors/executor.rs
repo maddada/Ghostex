@@ -1,278 +1,242 @@
-//! The Executor section of a workspace: turning it on or off and its state, its apps with their
-//! sign-ins, adding an app from Executor's catalog or a remote MCP server, and the sign-in
-//! callback address an app's own OAuth client needs.
-use super::super::super::fields::toggle_from_row;
+//! The Executor section: the computer's Executor CLI (installed or not, its one sign-in, which
+//! every workspace and every harness on the computer shares), the apps that sign-in reaches with a
+//! link to manage them in Executor, a self-hosted sign-in, and the apps the old built-in Executor
+//! left until they are cleaned up.
+//!
+//! CDXC:Connectors 2026-11-27 DECISION:
+//! User (Executor CLI page): one section for the whole computer, as the mockups "Signed in", "Signing in" and "Not installed" showed, with the old apps listed once (PLACEHOLDER-4). The catalog search, the remote MCP server row, the per-workspace switch and the callback address are gone: apps and their accounts are added in Executor itself.
 use super::super::super::fields::{
-    ButtonVariant, FieldStates, ListItemStatus, ROW_PADDING_X, ROW_PADDING_Y, full_value_tooltip,
-    settings_button, settings_icon_button, settings_list_item, settings_section,
-    settings_text_input, switch_control,
+    ButtonVariant, FieldStates, ListItemStatus, ROW_PADDING_X, ROW_PADDING_Y, settings_button,
+    settings_list_item, settings_list_item_wrapped_with_status, settings_section,
+    settings_text_input,
 };
 use super::super::super::palette::SettingsPalette;
-use super::super::super::store::store_copy_to_clipboard;
 use super::ConnectorsTab;
 use super::data::{busy_key, flag, list, text};
 use super::widgets::{detail, note_row};
 use gpui::{
-    AnyElement, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _,
-    SharedString, Styled as _, Window, div, px,
+    AnyElement, Context, Div, IntoElement, ParentElement as _, SharedString, Styled as _, Window,
+    div, px,
 };
 use gpui_component::h_flex;
 use serde_json::Value;
 
-/// The id of one of a workspace's Executor inputs (`catalog`, `mcp-name`, `mcp-url`).
-pub(super) fn input_id(workspace: &str, field: &str) -> SharedString {
-    SharedString::from(format!("connectors-{workspace}-executor-{field}"))
+/// The key the Executor section's busy buttons, notes and sign-in panel go under: the CLI is the
+/// computer's, not a workspace's.
+pub(super) const EXECUTOR_KEY: &str = "executor-cli";
+
+fn host_input_id() -> SharedString {
+    SharedString::from("connectors-executor-host")
 }
 
-/// What Executor is doing, as one line.
-fn state_line(executor: &Value) -> (ListItemStatus, String) {
-    let installing = executor
+/// "A, B and C".
+fn joined(names: &[String]) -> String {
+    match names {
+        [] => String::new(),
+        [one] => one.clone(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
+}
+
+/// The installer is running.
+pub(super) fn installing(executor: &Value) -> bool {
+    executor
         .get("install")
         .and_then(|install| install.get("status"))
         .and_then(Value::as_str)
-        .is_some_and(|status| matches!(status, "queued" | "running"));
-    let error = text(executor, "error");
-    // Its saved keys can't be read anymore: gxserver's `error` says so in general words.
-    if flag(executor, "unreadable") && !error.is_empty() {
-        (ListItemStatus::Warning, error)
-    } else if !flag(executor, "enabled") {
-        (
-            ListItemStatus::Neutral,
-            "Off. Turn it on to add apps; Ghostex downloads Executor the first time.".to_string(),
-        )
-    } else if installing {
-        (ListItemStatus::Neutral, "Downloading Executor…".to_string())
-    } else if !error.is_empty() {
-        (ListItemStatus::Warning, error)
-    } else if flag(executor, "starting") {
-        (ListItemStatus::Neutral, "Starting…".to_string())
-    } else if flag(executor, "running") {
-        (
-            ListItemStatus::Success,
-            "Running on this computer".to_string(),
-        )
-    } else {
-        (
-            ListItemStatus::Success,
-            "On. It starts when an agent needs it and stops after 15 minutes unused.".to_string(),
-        )
-    }
+        .is_some_and(|status| matches!(status, "queued" | "running"))
 }
 
 impl ConnectorsTab {
-    fn input_value(&self, workspace: &str, field: &str, cx: &Context<Self>) -> String {
-        self.fields
-            .texts
-            .get(&input_id(workspace, field))
-            .map(|state| state.input.read(cx).value().trim().to_string())
-            .unwrap_or_default()
-    }
-
-    fn input(
-        &mut self,
-        workspace: &str,
-        field: &str,
-        placeholder: &str,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> gpui::Entity<gpui_component::input::InputState> {
-        FieldStates::text_state(
-            self,
-            &input_id(workspace, field),
-            "",
-            Some(placeholder),
-            |_: &mut Self, _, _, _| {},
-            window,
-            cx,
-        )
-    }
-
-    fn app_row(
+    /// The first row: the CLI's state and the one action it needs next.
+    fn executor_cli_row(
         &mut self,
         p: &SettingsPalette,
-        workspace: &str,
-        app: &Value,
+        executor: &Value,
         offline: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let app_id = text(app, "id");
-        let signed_in = flag(app, "signedIn");
-        let connecting = self.is_busy(workspace, &format!("executor-connect-{app_id}"));
-        let removing = self.is_busy(workspace, &format!("executor-remove-{app_id}"));
-        let mut controls: Vec<AnyElement> = Vec::new();
-        if !signed_in {
-            let (target, connect_id) = (workspace.to_string(), app_id.clone());
-            controls.push(settings_button(
+        let version = text(executor, "version");
+        let installed = flag(executor, "installed");
+        let title = if installed && !version.is_empty() {
+            format!("Executor CLI {version}")
+        } else {
+            "Executor CLI".to_string()
+        };
+        if !installed {
+            let running = installing(executor) || self.is_busy(EXECUTOR_KEY, "install");
+            let install_error = executor
+                .get("install")
+                .and_then(|install| install.get("error"))
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            let problem = text(executor, "problem");
+            let (status, line) = if running {
+                (
+                    ListItemStatus::Neutral,
+                    "Running Executor's installer…".to_string(),
+                )
+            } else if !problem.is_empty() {
+                (ListItemStatus::Warning, problem)
+            } else if let Some(error) = install_error {
+                (ListItemStatus::Warning, error)
+            } else {
+                (
+                    ListItemStatus::Neutral,
+                    "Not installed on this computer".to_string(),
+                )
+            };
+            let install = settings_button(
                 p,
-                format!("connectors-{workspace}-executor-connect-{app_id}"),
-                if connecting { "Opening…" } else { "Sign in" },
+                "connectors-executor-install",
+                if running { "Installing…" } else { "Install" },
+                Some("modals/settings/download.svg"),
+                ButtonVariant::Outline,
+                offline || running,
+                None,
+                |page: &mut Self, _window, cx| page.executor_install(cx),
+                cx,
+            );
+            return settings_list_item_wrapped_with_status(
+                p,
+                status,
+                title,
+                detail(line),
+                Some(install),
+            );
+        }
+        if flag(executor, "signedIn") {
+            let organization = text(executor, "organization");
+            let account = if organization.is_empty() {
+                format!("Signed in to {}", text(executor, "hostLabel"))
+            } else {
+                format!(
+                    "Signed in to {} as @{organization}",
+                    text(executor, "hostLabel")
+                )
+            };
+            let line = format!(
+                "{account} · {} · approvals in {} mode",
+                text(executor, "access"),
+                text(executor, "mode")
+            );
+            let error = text(executor, "error");
+            let signing_out = self.is_busy(EXECUTOR_KEY, "sign-out");
+            let sign_out = settings_button(
+                p,
+                "connectors-executor-sign-out",
+                if signing_out {
+                    "Signing out…"
+                } else {
+                    "Sign out"
+                },
                 None,
                 ButtonVariant::Outline,
-                offline || connecting,
+                offline || signing_out,
                 None,
-                move |page: &mut Self, _window, cx| page.executor_connect(&target, &connect_id, cx),
+                |page: &mut Self, _window, cx| page.executor_sign_out(cx),
                 cx,
-            ));
+            );
+            if error.is_empty() {
+                return settings_list_item(
+                    p,
+                    Some(ListItemStatus::Success),
+                    None,
+                    title,
+                    Some(detail(line)),
+                    Some(sign_out),
+                );
+            }
+            return settings_list_item_wrapped_with_status(
+                p,
+                ListItemStatus::Warning,
+                title,
+                detail(format!("{line}. {error}")),
+                Some(sign_out),
+            );
         }
-        let (target, remove_id) = (workspace.to_string(), app_id.clone());
-        controls.push(settings_icon_button(
+        let signing_in = self.is_busy(EXECUTOR_KEY, "sign-in");
+        let self_hosted = settings_button(
             p,
-            SharedString::from(format!("connectors-{workspace}-executor-remove-{app_id}")),
-            "modals/settings/trash.svg",
-            16.0,
-            32.0,
-            ButtonVariant::Ghost,
-            Some("Remove this app".into()),
-            offline || removing,
-            move |page: &mut Self, _window, cx| page.executor_remove(&target, &remove_id, cx),
-            cx,
-        ));
-        let needs = list(app, "needsSignIn")
-            .iter()
-            .filter_map(Value::as_str)
-            .map(str::to_string)
-            .collect::<Vec<_>>();
-        settings_list_item(
-            p,
-            Some(if signed_in {
-                ListItemStatus::Success
-            } else {
-                ListItemStatus::Warning
-            }),
+            "connectors-executor-self-hosted",
+            "Self-hosted…",
             None,
-            text(app, "name"),
-            Some(detail(if signed_in {
-                "Signed in".to_string()
-            } else if needs.is_empty() {
-                "Needs a sign-in".to_string()
-            } else {
-                format!("Needs a sign-in: {}", needs.join(", "))
-            })),
+            ButtonVariant::Ghost,
+            offline || signing_in,
+            None,
+            |page: &mut Self, _window, cx| {
+                page.executor_host_open = !page.executor_host_open;
+                cx.notify();
+            },
+            cx,
+        );
+        let sign_in = settings_button(
+            p,
+            "connectors-executor-sign-in",
+            if signing_in { "Opening…" } else { "Sign in" },
+            None,
+            ButtonVariant::Outline,
+            offline || signing_in,
+            None,
+            |page: &mut Self, _window, cx| page.executor_sign_in(None, cx),
+            cx,
+        );
+        let error = text(executor, "error");
+        let line = if error.is_empty() {
+            "Not signed in. Agents get Executor's tools once you sign in.".to_string()
+        } else {
+            error
+        };
+        settings_list_item_wrapped_with_status(
+            p,
+            ListItemStatus::Warning,
+            title,
+            detail(line),
             Some(
                 h_flex()
                     .items_center()
                     .gap(px(8.0))
-                    .children(controls)
+                    .child(self_hosted)
+                    .child(sign_in)
                     .into_any_element(),
             ),
         )
     }
 
-    fn catalog_rows(
+    /// The address of a self-hosted Executor to sign in to.
+    fn executor_host_row(
         &mut self,
         p: &SettingsPalette,
-        workspace: &str,
-        offline: bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Vec<AnyElement> {
-        let input = self.input(
-            workspace,
-            "catalog",
-            "Search Executor's catalog, like linear or notion",
-            window,
-            cx,
-        );
-        let searching = self.is_busy(workspace, "executor-search");
-        let target = workspace.to_string();
-        let search = settings_button(
-            p,
-            format!("connectors-{workspace}-executor-search"),
-            if searching { "Searching…" } else { "Search" },
-            Some("modals/settings/search.svg"),
-            ButtonVariant::Outline,
-            offline || searching,
-            None,
-            move |page: &mut Self, _window, cx| {
-                let query = page.input_value(&target, "catalog", cx);
-                page.executor_search(&target, query, cx);
-            },
-            cx,
-        );
-        let mut rows = vec![
-            h_flex()
-                .w_full()
-                .px(px(ROW_PADDING_X))
-                .py(px(ROW_PADDING_Y))
-                .gap(px(8.0))
-                .items_center()
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .child(settings_text_input(p, &input, None, false, window, cx)),
-                )
-                .child(search)
-                .into_any_element(),
-        ];
-        for entry in self
-            .catalog_results
-            .get(workspace)
-            .cloned()
-            .unwrap_or_default()
-        {
-            let catalog_id = text(&entry, "id");
-            let adding = self.is_busy(workspace, &format!("executor-add-{catalog_id}"));
-            let (target, add_id) = (workspace.to_string(), catalog_id.clone());
-            let category = text(&entry, "category");
-            let description = text(&entry, "description");
-            let line = match (category.is_empty(), description.is_empty()) {
-                (false, false) => format!("{category} · {description}"),
-                (false, true) => category,
-                _ => description,
-            };
-            rows.push(settings_list_item(
-                p,
-                None,
-                None,
-                text(&entry, "name"),
-                (!line.is_empty()).then(|| detail(line)),
-                Some(settings_button(
-                    p,
-                    format!("connectors-{workspace}-executor-add-{catalog_id}"),
-                    if adding { "Adding…" } else { "Add" },
-                    Some("modals/settings/plus.svg"),
-                    ButtonVariant::Outline,
-                    offline || adding,
-                    None,
-                    move |page: &mut Self, _window, cx| page.executor_add(&target, &add_id, cx),
-                    cx,
-                )),
-            ));
-        }
-        rows
-    }
-
-    fn mcp_row(
-        &mut self,
-        p: &SettingsPalette,
-        workspace: &str,
         offline: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let name = self.input(workspace, "mcp-name", "Name", window, cx);
-        let url = self.input(
-            workspace,
-            "mcp-url",
-            "https://… address of a remote MCP server",
+        let input = FieldStates::text_state(
+            self,
+            &host_input_id(),
+            "",
+            Some("https://… address of your Executor"),
+            |_: &mut Self, _, _, _| {},
             window,
             cx,
         );
-        let adding = self.is_busy(workspace, "executor-add-mcp");
-        let target = workspace.to_string();
-        let add = settings_button(
+        let signing_in = self.is_busy(EXECUTOR_KEY, "sign-in");
+        let sign_in = settings_button(
             p,
-            format!("connectors-{workspace}-executor-add-mcp"),
-            if adding { "Adding…" } else { "Add server" },
-            Some("modals/settings/plus.svg"),
-            ButtonVariant::Outline,
-            offline || adding,
+            "connectors-executor-host-sign-in",
+            "Sign in",
             None,
-            move |page: &mut Self, _window, cx| {
-                let name = page.input_value(&target, "mcp-name", cx);
-                let url = page.input_value(&target, "mcp-url", cx);
-                page.executor_add_mcp(&target, name, url, cx);
+            ButtonVariant::Outline,
+            offline || signing_in,
+            None,
+            |page: &mut Self, _window, cx| {
+                let host = page
+                    .fields
+                    .texts
+                    .get(&host_input_id())
+                    .map(|state| state.input.read(cx).value().trim().to_string())
+                    .unwrap_or_default();
+                page.executor_sign_in(Some(host), cx);
             },
             cx,
         );
@@ -282,120 +246,123 @@ impl ConnectorsTab {
             .py(px(ROW_PADDING_Y))
             .gap(px(8.0))
             .items_center()
-            .child(settings_text_input(
-                p,
-                &name,
-                Some(140.0),
-                false,
-                window,
-                cx,
-            ))
             .child(
                 div()
                     .flex_1()
                     .min_w_0()
-                    .child(settings_text_input(p, &url, None, false, window, cx)),
+                    .child(settings_text_input(p, &input, None, false, window, cx)),
             )
-            .child(add)
+            .child(sign_in)
             .into_any_element()
+    }
+
+    /// The apps the sign-in reaches, and where to manage them.
+    fn executor_apps_row(
+        &mut self,
+        p: &SettingsPalette,
+        executor: &Value,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let names: Vec<String> = list(executor, "apps")
+            .iter()
+            .map(|app| text(app, "name"))
+            .filter(|name| !name.is_empty())
+            .collect();
+        let apps_error = text(executor, "appsError");
+        let line = if !names.is_empty() {
+            names.join(", ")
+        } else if !apps_error.is_empty() {
+            apps_error
+        } else {
+            "None yet".to_string()
+        };
+        let manage_url = text(executor, "manageUrl");
+        let manage = (!manage_url.is_empty()).then(|| {
+            settings_button(
+                p,
+                "connectors-executor-manage",
+                "Manage in Executor",
+                Some("modals/settings/external-link.svg"),
+                ButtonVariant::Outline,
+                false,
+                None,
+                move |page: &mut Self, _window, cx| page.open_url(&manage_url, cx),
+                cx,
+            )
+        });
+        settings_list_item(p, None, None, "Apps", Some(detail(line)), manage)
+    }
+
+    /// The apps the old built-in Executor had, until their data is removed.
+    fn executor_old_apps_row(
+        &mut self,
+        p: &SettingsPalette,
+        old: &Value,
+        offline: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let names: Vec<String> = list(old, "apps")
+            .iter()
+            .filter_map(|name| name.as_str().map(str::to_string))
+            .collect();
+        let removing = self.is_busy(EXECUTOR_KEY, "remove-old");
+        let remove = settings_button(
+            p,
+            "connectors-executor-remove-old",
+            if removing { "Removing…" } else { "Remove" },
+            None,
+            ButtonVariant::Outline,
+            offline || removing,
+            None,
+            |page: &mut Self, _window, cx| page.executor_remove_old(cx),
+            cx,
+        );
+        // Apps whose names couldn't be read (`git` couldn't run) still count, so the row stays.
+        let unreadable = old.get("unreadable").and_then(Value::as_u64).unwrap_or(0);
+        let which = match (names.is_empty(), unreadable) {
+            (true, _) => "Some apps".to_string(),
+            (false, 0) => joined(&names),
+            (false, 1) => format!("{} and 1 app Ghostex couldn't name", joined(&names)),
+            (false, more) => format!("{} and {more} apps Ghostex couldn't name", joined(&names)),
+        };
+        settings_list_item_wrapped_with_status(
+            p,
+            ListItemStatus::Warning,
+            "Apps on the old Executor",
+            detail(format!(
+                "{which} ran on Ghostex's own Executor. Add them again in Executor; their sign-ins can't move."
+            )),
+            Some(remove),
+        )
     }
 
     pub(super) fn executor_section(
         &mut self,
         p: &SettingsPalette,
-        workspace: &Value,
-        title: String,
+        executor: &Value,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<Div> {
-        let executor = workspace.get("executor")?.clone();
-        let id = text(workspace, "workspaceId");
-        let enabled = flag(&executor, "enabled");
         let offline = !self.rpc_available(cx);
-        let toggling = self.is_busy(&id, "executor-enable");
-        let (status, line) = state_line(&executor);
-        let version = text(&executor, "version");
-        let target = id.clone();
-        let executor_switch = switch_control(
-            p,
-            format!("connectors-{id}-executor-enabled"),
-            "Executor",
-            enabled,
-            offline || toggling,
-            None,
-            move |page: &mut Self, on, _window, cx| page.executor_set_enabled(&target, on, cx),
-            cx,
-        );
-        let (executor_switch, executor_press) = executor_switch.into_row_parts();
-        let mut rows: Vec<AnyElement> = vec![toggle_from_row(
-            p,
-            format!("connectors-{id}-executor-row"),
-            settings_list_item(
-                p,
-                Some(status),
-                None,
-                if version.is_empty() {
-                    "Executor".to_string()
-                } else {
-                    format!("Executor {version}")
-                },
-                Some(detail(line)),
-                Some(executor_switch.into_any_element()),
-            ),
-            executor_press,
-        )];
-        if enabled {
-            for app in list(&executor, "apps") {
-                let row = self.app_row(p, &id, &app, offline, cx);
-                rows.push(row);
-            }
-            rows.extend(self.catalog_rows(p, &id, offline, window, cx));
-            rows.push(self.mcp_row(p, &id, offline, window, cx));
-            let callback = text(&executor, "oauthCallbackUrl");
-            if !callback.is_empty() {
-                let store = self.store.clone();
-                let copied = callback.clone();
-                rows.push(settings_list_item(
-                    p,
-                    None,
-                    None,
-                    "Sign-in callback address",
-                    // Cut at its end in the row; whole on hover, and Copy copies it.
-                    Some(
-                        full_value_tooltip(
-                            div()
-                                .id(SharedString::from(format!(
-                                    "connectors-{id}-executor-callback"
-                                )))
-                                .child(callback.clone()),
-                            callback,
-                        )
-                        .into_any_element(),
-                    ),
-                    Some(settings_button(
-                        p,
-                        format!("connectors-{id}-executor-callback-copy"),
-                        "Copy",
-                        Some("modals/settings/copy.svg"),
-                        ButtonVariant::Outline,
-                        false,
-                        None,
-                        move |_page: &mut Self, _window, cx| {
-                            store_copy_to_clipboard(&store, copied.clone(), cx)
-                        },
-                        cx,
-                    )),
-                ));
-            }
+        let mut rows: Vec<AnyElement> = vec![self.executor_cli_row(p, executor, offline, cx)];
+        let signed_in = flag(executor, "signedIn");
+        if flag(executor, "installed") && !signed_in && self.executor_host_open {
+            rows.push(self.executor_host_row(p, offline, window, cx));
         }
-        if let Some(note) = self.notes.get(&busy_key(&id, "executor")) {
+        rows.extend(self.sign_in_panel(p, EXECUTOR_KEY, "executor", cx));
+        if signed_in {
+            rows.push(self.executor_apps_row(p, executor, cx));
+        }
+        if let Some(old) = executor.get("oldApps").filter(|old| !old.is_null()) {
+            rows.push(self.executor_old_apps_row(p, old, offline, cx));
+        }
+        if let Some(note) = self.notes.get(&busy_key(EXECUTOR_KEY, "executor")) {
             rows.push(note_row(p, note));
         }
-        rows.extend(self.sign_in_panel(p, &id, "executor", cx));
         settings_section(
             p,
-            title,
-            Some("Runs on this computer. Some apps, Google's for example, first need your own OAuth client from their developer console, with the callback address below.".into()),
+            "Executor".to_string(),
+            Some("Your Executor CLI sign-in, shared with every agent on this computer. Add apps and their accounts in Executor.".into()),
             None,
             rows,
         )

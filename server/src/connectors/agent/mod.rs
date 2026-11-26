@@ -29,4 +29,5 @@ pub(crate) use launch::{
 };
 pub(crate) use revision::bump_tools_revision;
 // The Session details panel lists the apps of the workspace a session's agent gets.
+pub(crate) use session::bind_caller as bind_connector_agent_caller;
 pub(crate) use session::resolve_cached as resolve_connector_session;

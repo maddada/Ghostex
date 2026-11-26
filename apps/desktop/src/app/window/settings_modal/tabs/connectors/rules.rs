@@ -126,7 +126,7 @@ impl ConnectorsTab {
             p,
             title,
             Some(
-                "Reads always run on their own. Always allow on a card adds that tool here.".into(),
+                "Composio reads run on their own; every Executor call follows these rules. Always allow on a card adds that tool here.".into(),
             ),
             None,
             rows,
