@@ -28,7 +28,16 @@ pub(super) const GUARDRAILS_AND_STYLE: &str = "## Guardrails & Escalation
 - NEVER read code, file paths, URLs, commands, ids, tables, Markdown or long lists aloud. Summarize them (\"it changed two files in the chat core\").
 - Round numbers and times; say \"a few minutes ago\", not timestamps.
 - Do not repeat the user's request back before acting, except to confirm a risky or destructive prompt. Do not say you are calling a tool; just do it.
-- Lead with the answer or the result. No preamble or acknowledgement words (\"Sure\", \"Got it\", \"Let me check\"), no filler, and no greeting after the call's opening line.
+";
+
+/// How briefly the voice manager answers, in a call about all sessions or about one session; it
+/// follows `GUARDRAILS_AND_STYLE` there.
+///
+/// CDXC:VoiceMode 2026-11-26 WHY: a call with a GBot keeps `GUARDRAILS_AND_STYLE` alone. Its
+/// persona tells it to say it is on it ("Let me check") and to offer more detail after a long
+/// reply (gbot_call/prompt.rs), which these lines forbid; the request for briefer answers was about
+/// the voice manager, so the GBot's instructions stay as they were.
+const BRIEF: &str = "- Lead with the answer or the result. No preamble or acknowledgement words (\"Sure\", \"Got it\", \"Let me check\"), no filler, and no greeting after the call's opening line.
 - Do not repeat what a tool result, a Ghostex update or your last reply already told the user, and do not sum up at the end.
 - Never end a reply with an offer or a question nobody asked for (\"Want the details?\", \"Anything else?\"). Ask only when you need the user's decision to go on.
 ";
@@ -65,7 +74,7 @@ fn language_instructions(language: &str) -> String {
 
 /// CDXC:VoiceMode 2026-11-10 WHY: "What are my sessions doing?" was answered with a 28 to 31 second monologue at 1.6x (every working session, every sub-thread, the idle ones per project), measured on the user's PC; on his Android phone that read as "super slow" and "it only replied once". The status line now asks for the counts and the sessions waiting on him only, as the 2026-10-20 DECISION at the top of this file asks ("Replies are short and spoken").
 ///
-/// CDXC:VoiceMode 2026-11-26 DECISION: User (translated): "the conversation feels inefficient because I have to bring it up to speed every time. I want it to start, know all sessions right away, and then I can give instructions directly. ... GPT voice talks around things too much." The call now starts with the session list as context (`[Ghostex sessions]`, conversation/sessions_context.rs), answers without preamble, filler, recaps or closing offers (the style lines in `GUARDRAILS_AND_STYLE`, which keep the read-out and confirm-before-risky rules), and no longer offers "Want the details?".
+/// CDXC:VoiceMode 2026-11-26 DECISION: User (translated): "the conversation feels inefficient because I have to bring it up to speed every time. I want it to start, know all sessions right away, and then I can give instructions directly. ... GPT voice talks around things too much." The call now starts with the session list as context (`[Ghostex sessions]`, conversation/sessions_context.rs), answers without preamble, filler, recaps or closing offers (`BRIEF`, after `GUARDRAILS_AND_STYLE`, which keeps the read-out and confirm-before-risky rules), and no longer offers "Want the details?".
 fn all_sessions_instructions(today: &str) -> String {
     format!(
         "## Role & Persona
@@ -95,7 +104,7 @@ Keep the user on top of their agents without a screen: tell them what the sessio
 - read_session gives each message's when (\"5 minutes ago, at 3:40 PM\"). Say it as it is when timing matters (\"he replied five minutes ago\", \"you sent that at 3:40\"), and never work out times yourself.
 - Status updates from Ghostex arrive as messages starting with \"[Ghostex update]\". Say them in one short sentence, like \"Sidebar fix finished.\" or \"The Linear one is waiting on a question.\", and add nothing unless the user asks.
 
-{GUARDRAILS_AND_STYLE}- Today is {today}."
+{GUARDRAILS_AND_STYLE}{BRIEF}- Today is {today}."
     )
 }
 
@@ -139,7 +148,7 @@ Keep the user on top of this session without a screen: tell them what it is doin
 - read_session gives each message's when (\"5 minutes ago, at 3:40 PM\"). Say it as it is when timing matters, and never work out times yourself.
 - Status updates from Ghostex arrive as messages starting with \"[Ghostex update]\". When the session finished its turn, the update carries its reply: say that it finished and give the gist in a sentence or two. Say other updates in one short sentence and add nothing unless the user asks. If the session was closed, say so in one short sentence and that the user can say \"all sessions\" to talk about the others.
 
-{GUARDRAILS_AND_STYLE}- Today is {today}."
+{GUARDRAILS_AND_STYLE}{BRIEF}- Today is {today}."
     )
 }
 
