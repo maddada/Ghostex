@@ -1028,6 +1028,11 @@ pub(crate) fn resolve_hub_profile_dir(family: &str, hub_id: &str) -> Option<Path
     ))
 }
 
+/// CDXC:AgentProviders 2026-11-26 WHY:
+/// GitHub #773: Claude Code labels a run started with `--output-format stream-json` (or `-p`) `sdk-cli` unless `CLAUDE_CODE_ENTRYPOINT` already names one, so every Native Claude chat went out as `sdk-cli`, in its transcript (`"entrypoint":"sdk-cli"`) and in the `cc_entrypoint` of its requests' billing header, while a Terminal-based chat is `cli`. An open Claude Code issue (anthropics/claude-code#97074) reports that `sdk-cli` and Agent SDK usage counts about 1.8x against the 5-hour limit. A host that names itself keeps its own name: Claude 2.1.332 only rewrites an inherited `cli` to `sdk-cli`, and its own SDK sets `sdk-ts` only when the variable is unset. So Native Claude runs under Ghostex's own name, over whatever the host process inherited. Anthropic does not document how each name weighs against the limit; the label is what this changes.
+/// SEE-ALSO: server/src/agent_hooks/nested_agent.rs `is_headless_claude_entrypoint` (a Native Claude's hooks, and a `claude -p` its tools start, inherit this name and stay headless).
+pub(crate) const GHOSTEX_CLAUDE_ENTRYPOINT: &str = "ghostex";
+
 /// Build `(envs, program, args)` to launch the agent's stdio ACP/SDK subprocess strictly from
 /// Ghostex's static per-agent spec and server-generated `AcpLaunchProfile`.
 ///
@@ -1053,6 +1058,12 @@ pub fn build_acp_server_argv(
         });
 
     let mut envs: Vec<(String, String)> = Vec::new();
+    if spec.family == "claude" {
+        envs.push((
+            "CLAUDE_CODE_ENTRYPOINT".to_string(),
+            GHOSTEX_CLAUDE_ENTRYPOINT.to_string(),
+        ));
+    }
     if wrapper.is_none() {
         if let Some(hub_id) = profile.hub_id.as_deref() {
             if let Some(dir) = resolve_hub_profile_dir(spec.family, hub_id) {

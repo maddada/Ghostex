@@ -11099,7 +11099,7 @@
     {
       "key": "agentSessionMode",
       "title": "Session mode",
-      "subtitle": "Choose Native (faster, more stable structured host; default on new Chat-first installs; switching to Terminal-based asks first and interrupts any active turn) or Terminal-based (legacy interactive terminal, will be removed in a future release). Applies to sessions started or resumed after you change it.",
+      "subtitle": "Choose Native (faster, with live approvals; the default on new Chat-first installs; switching a chat to Terminal-based asks first and interrupts any active turn) or Terminal-based (the agent's own app in a terminal, with instant switching between Chat and Terminal). Applies to sessions started or resumed after you change it.",
       "tab": "agents",
       "tabTitle": "Agents",
       "section": "agentList",

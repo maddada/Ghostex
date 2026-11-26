@@ -4181,10 +4181,9 @@ when available) and command output, or open its Install docs link. For agents
 that support Native mode (Claude Code, Codex, and Antigravity), the row also offers
 **Session mode** (`agentSessionMode`): **Native** (default on new Chat-first installs;
 structured host inside `zmx` that is faster, more stable, and survives Ghostex reloads
-without terminal scraping) or **Terminal-based** (legacy interactive terminal with instant
-switching between Chat and Terminal; will be removed in a future release, and picking it
-in Settings shows a yellow dot next to the dropdown with a tooltip). Existing installs and Terminal-first new
-installs keep their existing mode (existing installs see the one-time Native mode prompt).
+without terminal scraping) or **Terminal-based** (the agent's own app in a terminal, with
+instant switching between Chat and Terminal; fully supported). Existing installs and
+Terminal-first new installs keep their existing mode (existing installs see the one-time Native mode prompt).
 Rewind to here works in Native Claude Code and Codex chats too: the agent goes back to
 before that message, the message returns to the chat box for editing, and files stay as
 they are. Native Antigravity chats do not offer it, because Antigravity has no way to go back.

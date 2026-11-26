@@ -50,8 +50,13 @@ pub(crate) fn hook_agent_runs_headless(agent_key: &str) -> bool {
         && is_headless_claude_entrypoint(std::env::var("CLAUDE_CODE_ENTRYPOINT").ok().as_deref())
 }
 
+/// CDXC:SessionIdentity 2026-11-26 WHY:
+/// GitHub #773: Native Claude now runs under Ghostex's own entrypoint name instead of `sdk-cli` (server/src/acp/spec.rs `GHOSTEX_CLAUDE_ENTRYPOINT`). That Claude is just as headless: its hooks inherit the Native host's GHOSTEX_GLOBAL_SESSION_REF and were dropped here as `sdk-cli`, and a `claude -p` one of its tools starts keeps the inherited name (Claude rewrites only an inherited `cli`). Both stay dropped; the Native host, not the hooks, reports a Native chat.
 fn is_headless_claude_entrypoint(entrypoint: Option<&str>) -> bool {
-    entrypoint.is_some_and(|entrypoint| entrypoint.trim().starts_with("sdk-"))
+    entrypoint.is_some_and(|entrypoint| {
+        let entrypoint = entrypoint.trim();
+        entrypoint.starts_with("sdk-") || entrypoint == crate::acp::spec::GHOSTEX_CLAUDE_ENTRYPOINT
+    })
 }
 
 /// The executable a hook's agent runs as, for the agents whose own process carries that name.
@@ -353,11 +358,11 @@ mod posix {
 mod tests {
     use super::is_headless_claude_entrypoint;
 
-    /// `claude -p` reports `sdk-cli`, the TypeScript and Python Agent SDKs `sdk-ts` and `sdk-py`;
-    /// an interactive Claude reports `cli`.
+    /// `claude -p` reports `sdk-cli`, the TypeScript and Python Agent SDKs `sdk-ts` and `sdk-py`,
+    /// a Native Claude `ghostex`; an interactive Claude reports `cli`.
     #[test]
     fn only_a_headless_claude_entrypoint_is_headless() {
-        for headless in ["sdk-cli", "sdk-ts", "sdk-py"] {
+        for headless in ["sdk-cli", "sdk-ts", "sdk-py", "ghostex"] {
             assert!(is_headless_claude_entrypoint(Some(headless)), "{headless}");
         }
         for interactive in [None, Some(""), Some("cli")] {
