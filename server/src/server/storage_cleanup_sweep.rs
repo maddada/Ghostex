@@ -64,7 +64,20 @@ fn run_sweep(state: &AppState) {
             "acpSpool",
             crate::acp::host::prune_acp_spool(&paths.root_dir, now),
         ),
+        (
+            "visualChecks",
+            crate::storage_cleanup::prune_visual_checks(now),
+        ),
+        (
+            "chatMirrors",
+            crate::storage_cleanup::prune_chat_mirrors(&paths.root_dir, now),
+        ),
+        (
+            "commandActions",
+            crate::storage_cleanup::prune_command_actions(&paths.app_state_dir, now),
+        ),
     ];
+    crate::zmx::remove_unused_session_hosts();
     let sessions = remove_expired_closed_sessions(state);
     let mut total = Tally::default();
     let mut details = Map::new();

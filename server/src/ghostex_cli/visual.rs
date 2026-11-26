@@ -232,8 +232,8 @@ fn default_out(source: &str, options: &CheckOptions) -> PathBuf {
     source.hash(&mut hasher);
     options.width.map(f32::to_bits).hash(&mut hasher);
     options.light.hash(&mut hasher);
-    std::env::temp_dir()
-        .join("ghostex-visuals")
+    let _ = crate::storage_cleanup::prune_visual_checks(std::time::SystemTime::now());
+    crate::storage_cleanup::visual_checks_dir()
         .join(format!("check-{:016x}.png", hasher.finish()))
 }
 

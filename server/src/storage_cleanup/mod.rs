@@ -4,12 +4,16 @@
 //! with their owners (`codex_rollout_archive.rs`, `visual_pages/store.rs`).
 
 mod backups;
+mod caches;
 mod files;
 mod images;
 mod logs;
 mod sessions;
 
 pub(crate) use backups::prune_backups;
+pub(crate) use caches::{
+    prune_chat_mirrors, prune_command_actions, prune_visual_checks, visual_checks_dir,
+};
 pub(crate) use files::{is_older, prune_tree, remove_file, Since, Tally, DAY};
 pub(crate) use images::prune_images;
 pub(crate) use logs::prune_logs;
