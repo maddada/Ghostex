@@ -11,9 +11,13 @@
 //! (2026-11-21, User: "scrolling sideways is broken in the settings. Scrolling sideways scrolls me
 //! up and down also, so it should lock whenever I'm scrolling the themes. It shouldn't lock me,
 //! and it shouldn't scroll me up and down.")
+//!
+//! A plain mouse wheel (line steps, no sideways part) has no sideways axis to lock to, so over a
+//! strip that overflows it turns the strip sideways instead of scrolling the page; without that a
+//! mouse could never reach the themes past the right edge (#776).
 use gpui::{
-    Bounds, DispatchPhase, Hitbox, HitboxBehavior, IntoElement, Pixels, ScrollEvent, ScrollHandle,
-    TouchPhase, Window, canvas, point, px,
+    Bounds, DispatchPhase, Hitbox, HitboxBehavior, IntoElement, Pixels, ScrollDelta, ScrollEvent,
+    ScrollHandle, TouchPhase, Window, canvas, point, px,
 };
 use std::cell::Cell;
 use std::rc::Rc;
@@ -100,25 +104,38 @@ pub(crate) fn strip_wheel(
             return;
         }
         let delta = event.delta.pixel_delta(window.line_height());
-        let mut gesture = lock.0.get();
-        let route = gesture.route(
-            f32::from(delta.x),
-            f32::from(delta.y),
-            event.touch_phase,
-            Instant::now(),
-        );
-        lock.0.set(gesture);
-        if route == StripRoute::Page {
-            return;
-        }
+        let sideways = if is_plain_wheel(&event.delta) {
+            if handle.max_offset().x <= px(0.0) {
+                return;
+            }
+            delta.y
+        } else {
+            let mut gesture = lock.0.get();
+            let route = gesture.route(
+                f32::from(delta.x),
+                f32::from(delta.y),
+                event.touch_phase,
+                Instant::now(),
+            );
+            lock.0.set(gesture);
+            if route == StripRoute::Page {
+                return;
+            }
+            delta.x
+        };
         cx.stop_propagation();
         let offset = handle.offset();
-        let next = (offset.x + delta.x).clamp(-handle.max_offset().x, px(0.0));
+        let next = (offset.x + sideways).clamp(-handle.max_offset().x, px(0.0));
         if next != offset.x {
             handle.set_offset(point(next, offset.y));
             window.refresh();
         }
     });
+}
+
+/// A mouse wheel turn: line steps up or down with no sideways part (a trackpad sends pixels).
+fn is_plain_wheel(delta: &ScrollDelta) -> bool {
+    matches!(delta, ScrollDelta::Lines(lines) if lines.x == 0.0 && lines.y != 0.0)
 }
 
 /// An invisible layer over a `relative` strip that gives it [`strip_wheel`]'s lock. The strip must
