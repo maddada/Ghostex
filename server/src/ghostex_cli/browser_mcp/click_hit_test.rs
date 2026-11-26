@@ -8,6 +8,7 @@
 //! Coordinator, on the user's behalf (re-check 6 of #762, R1 to R3): Chromium keeps scroll offsets on whole device pixels, so at 125% and 150% a whole CSS offset is not always reachable; the point script rounds to an offset whole in both (a multiple of the smallest step that is), and steps back towards the start when the page's end clamps it. Only a refusal that may be a race (a frame, nothing, or a scroll under the pointer, `may_be_a_race`) starts the minute of script clicks; another element of the page itself (a menu's backdrop, a button drawn again on hover) does not, and a frame outside the element is told from another element by its node name.
 //! Coordinator, on the user's behalf (re-check 7 of #762, S3 and S4): a frame with a namespace prefix read as `X:IFRAME` and was not seen as a frame, so frames are now told by local name (or by holding a document). And Chromium's hit test and its routing of a real press round a frame's box differently, so at a frame's edge the check could say "the element" while the press went to the frame: while the button is down the element must now match `:active` in the page's own document (asked through DevTools' selector engine), or the press is released at the far corner and counts as a race. The geometry checks stay; `:active` is the last word.
 //! Coordinator, on the user's behalf (re-check 8 of #762, S5, R4 and R5): the `:active` and `:disabled` checks spliced the agent's selector into `:is(<selector>):active`, so a selector with an unclosed parenthesis (which CSS closes at the end) moved `:active` onto one branch and let the page answer the other; the checks now list the document's `:active` (or `:disabled`) elements with `DOM.querySelectorAll` and look for the element's node id. An open `<select>` counts as pressed, since its popup clears `:active` on an honest press. And a press whose element is not `:active` keeps the hit test's "another element" answer (a button drawn again on mousedown), which does not start the minute; only otherwise is it "another site's frame took it".
+//! Coordinator, on the user's behalf (re-check 9 of #762, S6, N4 and N5): counting an open `<select>` as pressed let a page open its own select (`showPicker()` on `blur`, with the user activation a press into a cross-site frame gives the frame's ancestors) and so answer "pressed" for a press the frame took. Only `:active` now counts as pressed. A select whose list opened but is not `:active` after the press is released at the far corner (`SELECT_OPENED`, not a race, so no minute; an honest select click is now a script click); a select already open before the press is refused (`SELECT_ALREADY_OPEN`). `:disabled` is asked only of elements that can be disabled, and `select:open` only of a select, by the element's local name.
 //! SEE-ALSO: server/src/server/cef_devtools_scope.rs (the DOM commands a session's tools may send), server/src/ghostex_cli/browser_mcp/page_scripts.rs (`GHOSTEX_CLICK_POINT_SCRIPT`).
 
 use super::*;
@@ -45,6 +46,8 @@ pub(super) struct ClickTarget {
     /// The document's root node id and the element's, for `being_pressed`.
     root: i64,
     node: i64,
+    /// The element's local name, lower case (`select` for `X:SELECT`); empty when unknown.
+    local_name: String,
 }
 
 /// Where the view stands in the page: how far it is scrolled, in CSS pixels, and its pinch-zoom
@@ -87,6 +90,12 @@ pub(super) const PRESS_WENT_ELSEWHERE: &str =
     "The press did not reach the element (another site's frame took it)";
 /// The refusal for an element that was already being pressed before the press.
 pub(super) const ALREADY_PRESSED: &str = "The element was already being pressed";
+/// The refusal for a select whose list was already open before the press.
+pub(super) const SELECT_ALREADY_OPEN: &str = "The select's list is already open";
+/// The refusal for a select whose list opened while it was not `:active`: the page may have opened
+/// it, so the press is not known to have reached it. Not a race, so it starts no minute.
+pub(super) const SELECT_OPENED: &str =
+    "The select's list opened, but the press is not known to have reached it";
 
 /// Whether `target` is among the elements matching `state_selector` in the page's own document,
 /// asked through DevTools' selector engine, which the page cannot answer for. The agent's selector
@@ -120,21 +129,45 @@ fn holds_node(found: &Value, node: i64) -> bool {
 /// Whether the page's own document has `target` (or something inside it) pressed now: it matches
 /// `:active`. A press that went to another site's frame leaves nothing `:active` in the page.
 /// Chromium's hit test and its routing of a real press round a frame's box differently, so this,
-/// not geometry, is the last word (re-check 7 of #762, S4). A `<select>` opens its popup on the
-/// press, which takes the mouse and clears `:active`, so an open select counts as pressed too: only
-/// a press the page's own document got can open it (re-check 8, R4).
+/// not geometry, is the last word (re-check 7 of #762, S4). Only `:active` needs the press itself
+/// in the page's document; anything the page can reach with user activation (an open list, focus)
+/// is the page's to answer (re-check 9, S6).
 pub(super) fn being_pressed(state: &mut McpState, page_id: &str, target: &ClickTarget) -> bool {
-    in_state(state, page_id, target, ":active") || in_state(state, page_id, target, "select:open")
+    in_state(state, page_id, target, ":active")
 }
+
+/// Whether `target` is a `<select>` with its list open. An honest press on a select opens it and
+/// clears `:active` (re-check 8, R4), but the page can open it too (`showPicker()`, with the user
+/// activation a press into another site's frame gives its ancestors), so an open list never counts
+/// as a press (re-check 9 of #762, S6). Only a select is asked.
+pub(super) fn select_open(state: &mut McpState, page_id: &str, target: &ClickTarget) -> bool {
+    may_be(target, &["select"]) && in_state(state, page_id, target, "select:open")
+}
+
+/// Whether the element's local name is one of `names`, or unknown (asked rather than guessed).
+fn may_be(target: &ClickTarget, names: &[&str]) -> bool {
+    target.local_name.is_empty() || names.contains(&target.local_name.as_str())
+}
+
+/// The elements `:disabled` can match: form controls, and custom elements (form-associated ones).
+const CAN_BE_DISABLED: &[&str] = &[
+    "button", "fieldset", "input", "optgroup", "option", "select", "textarea",
+];
 
 /// The refusal for a disabled element: it cannot be pressed (`:active`), and a real press on it
 /// does nothing anyway.
 pub(super) const DISABLED: &str = "The element is disabled";
 
 /// Whether `target` matches `:disabled`: such an element never becomes `:active`, so a press on it
-/// would read as one another site's frame took.
+/// would read as one another site's frame took. Asked only of an element that can be disabled,
+/// since listing every disabled element of a large form is slow (re-check 9, N4).
 pub(super) fn is_disabled(state: &mut McpState, page_id: &str, target: &ClickTarget) -> bool {
-    in_state(state, page_id, target, ":disabled")
+    can_be_disabled(&target.local_name) && in_state(state, page_id, target, ":disabled")
+}
+
+/// Whether an element with this local name can match `:disabled` (an unknown name may).
+fn can_be_disabled(local_name: &str) -> bool {
+    local_name.is_empty() || local_name.contains('-') || CAN_BE_DISABLED.contains(&local_name)
 }
 
 /// Whether a described node shows another document: by local name (`nodeName` carries a namespace
@@ -283,6 +316,11 @@ pub(super) fn click_target(
     if let Some(node) = described.get("node") {
         collect_subtree(node, &mut found);
     }
+    let local_name = described
+        .pointer("/node/localName")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_ascii_lowercase();
     let (point, view, offset) = element_point(state, page_id, node_id)?;
     Ok(Some(ClickTarget {
         main_frame,
@@ -294,6 +332,7 @@ pub(super) fn click_target(
         offset,
         root,
         node: node_id,
+        local_name,
     }))
 }
 
@@ -487,6 +526,7 @@ mod tests {
             offset: None,
             root: 1,
             node: 2,
+            local_name: "button".to_string(),
         }
     }
 
@@ -607,6 +647,8 @@ mod tests {
         for honest in [
             ANOTHER_ELEMENT,
             ALREADY_PRESSED,
+            SELECT_ALREADY_OPEN,
+            SELECT_OPENED,
             "The page is zoomed in",
             "The page's scroll position is unknown",
         ] {
@@ -619,6 +661,26 @@ mod tests {
         let button = target(&[5]);
         assert_eq!(button.far_corner((10, 10)), (799, 599));
         assert_eq!(button.far_corner((700, 500)), (0, 0));
+    }
+
+    #[test]
+    fn only_elements_that_can_be_disabled_or_open_are_asked() {
+        for name in [
+            "button", "input", "select", "textarea", "option", "optgroup", "fieldset",
+        ] {
+            assert!(can_be_disabled(name), "{name}");
+        }
+        assert!(can_be_disabled("my-button"));
+        assert!(can_be_disabled(""));
+        for name in ["div", "a", "span", "label", "svg"] {
+            assert!(!can_be_disabled(name), "{name}");
+        }
+        let mut element = target(&[2]);
+        assert!(!may_be(&element, &["select"]));
+        element.local_name = "select".to_string();
+        assert!(may_be(&element, &["select"]));
+        element.local_name.clear();
+        assert!(may_be(&element, &["select"]));
     }
 
     #[test]

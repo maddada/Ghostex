@@ -428,6 +428,10 @@ fn press_mouse_at(
         *refusal = Some(ALREADY_PRESSED);
         return Ok(Pressed::Moved);
     }
+    if select_open(state, page_id, target) {
+        *refusal = Some(SELECT_ALREADY_OPEN);
+        return Ok(Pressed::Moved);
+    }
     *refusal = press_refusal(state, page_id, target, at)?;
     if refusal.is_some() {
         return Ok(Pressed::Moved);
@@ -448,6 +452,8 @@ fn press_mouse_at(
     *refusal = match (pressed_here, hit) {
         (true, hit) => hit,
         (false, Some(why)) if why == ANOTHER_ELEMENT => Some(ANOTHER_ELEMENT),
+        // An open list is not proof of the press: the page can open it (re-check 9, S6).
+        (false, _) if select_open(state, page_id, target) => Some(SELECT_OPENED),
         (false, _) => Some(PRESS_WENT_ELSEWHERE),
     };
     if refusal.is_some() {
