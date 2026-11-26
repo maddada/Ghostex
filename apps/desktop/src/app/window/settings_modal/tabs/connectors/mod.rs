@@ -144,7 +144,7 @@ impl Render for ConnectorsTab {
         }
         let intro = static_note(
             &p,
-            "Each workspace has its own Composio and command-line sign-ins; the Executor CLI's sign-in is the computer's. Reads run on their own; before an agent sends, posts, changes or deletes anything, Ghostex asks you in that chat. Experimental.",
+            "Each workspace has its own Composio and command-line sign-ins; the Executor CLI's sign-in is the computer's. Composio reads run on their own; before an agent sends, posts, changes or deletes anything, Ghostex asks you in that chat. Experimental.",
             false,
         );
         let refresh = settings_button(
