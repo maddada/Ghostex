@@ -150,13 +150,6 @@ pub(crate) fn rail_item_icon_size(key: &str) -> f32 {
     }
 }
 
-/// A dot on an icon (Main Hub's). The web build's items carry none.
-#[cfg_attr(ghostex_web, allow(dead_code))]
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum RailBadge {
-    Dot(Hsla),
-}
-
 /// What one item shows now.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct RailItemState {
@@ -165,7 +158,6 @@ pub(crate) struct RailItemState {
     /// Its page, view or popup is the one on screen: the filled tile, and an unpinned item shows
     /// on the rail while this holds.
     pub(crate) showing: bool,
-    pub(crate) badge: Option<RailBadge>,
 }
 
 /// A pinned link, as its rail button shows it (packages/gx-core/src/sidebar_rail.rs,

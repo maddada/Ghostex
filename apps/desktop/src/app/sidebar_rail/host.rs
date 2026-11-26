@@ -4,7 +4,7 @@
 use gpui::Window;
 use serde_json::json;
 
-use super::model::{RailBadge, RailExtensionView, RailItemState, RailLinkPin};
+use super::model::{RailExtensionView, RailItemState, RailLinkPin};
 use crate::GhostexGpuiApp;
 use crate::app::claude_web::{TakeoverPage, WebPlace};
 use crate::app::native_sidebar::actions::NativeSidebarAction;
@@ -18,8 +18,7 @@ fn rail_web_place(key: &str) -> Option<WebPlace> {
 }
 
 impl GhostexGpuiApp {
-    /// What item `key` shows now: whether it applies here, whether its page or view is on screen,
-    /// and its count or dot.
+    /// What item `key` shows now: whether it applies here and whether its page or view is on screen.
     pub(crate) fn sidebar_rail_item_state(&self, key: &str, _cx: &gpui::App) -> RailItemState {
         let mut state = RailItemState::default();
         let snapshot = self.native_sidebar.snapshot.as_ref();
@@ -32,20 +31,13 @@ impl GhostexGpuiApp {
             // Settings and the compact Theme editor are windows over the app, never a view on the
             // rail, so neither shows as on (CDXC:Sidebar 2026-11-25 on gx-core `RAIL_FOOT_ITEM`).
             "search" | "findPrompts" | "commands" | "settings" | "theme" => state.available = true,
+            // CDXC:Chief 2026-11-27 DECISION:
+            // User: "icon in the rail for a Ask Ghostex AI shows red dot when it needs something lets not show dot on thhat rail icon pls". The rail's Ask Ghostex AI button draws no dot or badge in any state of its session (needs you or working); its sidebar row, notifications, Needs you and Inbox still show it.
             "mainHub" => {
                 let chief = snapshot
                     .and_then(|snapshot| snapshot.chiefs.iter().find(|chief| chief.is_local));
                 state.available = true;
                 state.showing = chief.is_some_and(|chief| chief.is_focused) && !self.claude_on();
-                if let Some(chief) = chief {
-                    if chief.awaiting_approval || chief.has_question {
-                        state.badge = Some(RailBadge::Dot(
-                            gpui::rgb(crate::app::native_sidebar::status::APPROVAL_COLOR).into(),
-                        ));
-                    } else if chief.activity == "working" {
-                        state.badge = Some(RailBadge::Dot(gpui::rgb(0xd29a2e).into()));
-                    }
-                }
             }
             "agentsHub" => {
                 state.available = true;
