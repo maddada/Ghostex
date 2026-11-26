@@ -2092,6 +2092,9 @@ impl Render for VoicePanelWindow {
             .when(self.drag.is_some(), |this| {
                 this.child(self.drag_listener(cx))
             })
+            // The text box's right-click menu (window/text_field_menu.rs): this window has no
+            // GPUI Kit `Root` to carry it.
+            .children(crate::app::window::text_field_menu::rootless_layer(window))
             .into_any_element()
     }
 }

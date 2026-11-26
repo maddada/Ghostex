@@ -34,6 +34,7 @@ pub(crate) mod round_close_button;
 pub(crate) mod session_handoff_modal;
 pub(crate) mod session_note_modal;
 pub(crate) mod settings_modal;
+pub(crate) mod text_field_menu;
 pub(crate) mod toast;
 pub(crate) mod work_link_picker_modal;
 

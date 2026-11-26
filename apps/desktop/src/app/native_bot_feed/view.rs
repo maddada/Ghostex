@@ -905,6 +905,8 @@ impl NativeBotFeedView {
             .h(px(28.0))
             .px(px(8.0))
             .gap(px(6.0))
+            // The field's own right-click menu opens, not a channel's (window/text_field_menu.rs).
+            .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation())
             .on_action(cx.listener(|this, _: &Escape, _, cx| {
                 cx.stop_propagation();
                 this.finish_naming(false, cx);

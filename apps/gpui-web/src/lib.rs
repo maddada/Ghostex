@@ -171,6 +171,8 @@ pub fn run() -> Result<(), JsValue> {
         gpui_component::init(cx);
         // A session pill's tooltip is its hover card (native_chat/session_card.rs).
         crate::app::native_chat::session_card::install(cx);
+        // Every text field's right-click menu is Ghostex's own (window/text_field_menu.rs).
+        crate::app::window::text_field_menu::install(cx);
         ui_fonts::register(cx);
         // Match desktop's terminal keymap: Root's focus traversal otherwise
         // consumes Tab/Shift+Tab before the shared terminal encoder sees them.
