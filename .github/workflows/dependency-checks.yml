@@ -54,6 +54,7 @@ jobs:
           - apps/editor/desktop
           - apps/gpui-web
           - apps/history-cli
+          - apps/screen-helper
           - packages/agent-sync
           - packages/client-storage-native
           - packages/editor-client

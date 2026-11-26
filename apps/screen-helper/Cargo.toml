@@ -1,0 +1,22 @@
+[package]
+name = "ghostex-screen"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Remote screen helper: streams this computer's screen to a Ghostex viewer and applies its mouse and keyboard (voxl)"
+# The binary links x264 (GPL-2.0-or-later), so the helper as a whole is GPL. It is its own program,
+# started by gxserver as a separate process and never compiled into gxserver or the app (deny.toml).
+license = "GPL-2.0-or-later"
+
+[[bin]]
+name = "ghostex-screen"
+path = "src/main.rs"
+
+[dependencies]
+# Desktop audio on Linux (PulseAudio) stays out until the first version needs sound.
+voxl-server = { version = "=0.4.0", default-features = false }
+
+[profile.release]
+opt-level = 3
+codegen-units = 1
+lto = "thin"

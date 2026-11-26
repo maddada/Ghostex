@@ -1,4 +1,4 @@
-# cargo-deny policy for every Rust project in this repository (15 separate Cargo.lock roots).
+# cargo-deny policy for every Rust project in this repository (16 separate Cargo.lock roots).
 # CI runs `cargo deny --manifest-path <root>/Cargo.toml check --config deny.toml advisories licenses bans`
 # for each root (.github/workflows/dependency-checks.yml).
 #
@@ -65,6 +65,17 @@ confidence-threshold = 0.9
 # First-party crates are `publish = false` and carry no licence field; the repository is MIT (LICENSE).
 [licenses.private]
 ignore = true
+
+# CDXC:RemoteScreen 2026-11-26 DECISION:
+# User (Q5110): "it's fine to use gpl code in ghostex as long as it's a external lib or linked from
+# outside basically". The one GPL part is x264 (GPL-2.0-or-later, a C library, so no crate in any
+# lockfile), linked only into `ghostex-screen` (apps/screen-helper), the remote screen helper. That
+# helper is its own program, which gxserver starts as a separate process and talks to over a
+# loopback socket; it must stay separate: never a dependency of gxserver, the app or any other crate
+# here, and never linked into them. This exception covers exactly that crate and nothing else.
+[[licenses.exceptions]]
+crate = "ghostex-screen"
+allow = ["GPL-2.0-or-later"]
 
 # gxserver is the one first-party crate without `publish = false`.
 [[licenses.clarify]]
