@@ -16,6 +16,10 @@ path = "src/main.rs"
 # Desktop audio on Linux (PulseAudio) stays out until the first version needs sound.
 voxl-server = { version = "=0.4.0", default-features = false }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# posix_spawn with responsibility disclaimed (src/main.rs, become_own_privacy_identity).
+libc = "0.2"
+
 [profile.release]
 opt-level = 3
 codegen-units = 1
