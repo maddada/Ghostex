@@ -1966,18 +1966,26 @@ Once Ghostex has the answer, the row says Approved or Denied (or the words you
 picked, such as "Yes, and don't ask again for …") and the command for a few seconds, then leaves; the list above the chat box is
 the only bar there, with the agent's status on its top line. While the chat box
 is maximized, or a question card is open, the approval shows as its own card.
+An OMP bash approval keeps Allow and Deny, in the chat, on the phone and in a
+coordinator, when OMP's dialog shows its command on one line and that command
+is exactly the card's. Spaces at the end of a command are not compared, because
+the terminal cannot show them, so an older card can answer a newer command that
+differs from its own only in spaces at its end.
 An OMP approval that Ghostex cannot firmly tie to its request (one that shows
-only "Allow tool: <name>", and every bash command, whose trailing spaces the
-terminal cannot show) shows "OMP is waiting for tool approval" with Open
-terminal instead of answer buttons: answer it in the terminal. Keys typed on
-that card, and its arrow, Enter and Esc buttons where the app still shows them,
-are not passed to OMP, also after you started a message in OMP's dialog ("Deny
-and send message"); Ghostex says to answer it in the terminal. A key from
-another OMP card is checked against the screen right before it is typed, and
-is not typed once an approval is up.
-Right after an earlier OMP approval with answer rows, a bash approval can show
-those rows for a moment until Ghostex reads the screen again; tapping one is
-refused. If two devices answer the same OMP approval card in a coordinator at
+only "Allow tool: <name>", such as a commit approval, and a bash command over
+several lines, one OMP or the card cut short, or one that ends in a backslash,
+a tab or another kind of space) shows "OMP is waiting for tool approval" with
+only Open terminal ("Terminal view" on iPhone): answer it in the terminal. That
+card has no keys and no live view of the terminal; the terminal's last lines
+are behind Show terminal output. App versions from before this change still
+show the terminal's lines with arrow, Enter and Esc buttons there; those type
+nothing. Keys typed on that card are not passed to OMP, also after you started
+a message in OMP's dialog ("Deny and send message"); Ghostex says to answer it
+in the terminal. A key from another OMP card is checked against the screen
+right before it is typed, and is not typed once an approval is up.
+Right after an earlier OMP approval with answer rows, the next approval can
+show those rows for a moment until Ghostex reads the screen again; tapping one
+is refused. If two devices answer the same OMP approval card in a coordinator at
 the same moment, the coordinator can show the other device's choice as the
 answer; OMP only ever gets keys for a dialog that still shows the card's request.
 Voice mode still answers OMP's own rows, but only the ones it read out to you:
