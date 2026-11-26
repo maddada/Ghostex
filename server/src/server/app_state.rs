@@ -179,6 +179,9 @@ pub(super) const RENDERER_COMMAND_ACTIONS: &[&str] = &[
     "openBrowserPane",
     "openPaths",
     "openSettings",
+    // `ghostex screen open`: a computer's screen in a window of its own (CDXC:RemoteScreen
+    // 2026-11-27 in remote_screen/endpoint.rs); only the user may ask, and only while it is on.
+    "openRemoteScreen",
     "readFocusedSession",
     "readResourcesSnapshot",
     "restartSession",

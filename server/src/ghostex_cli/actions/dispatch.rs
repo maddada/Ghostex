@@ -282,6 +282,7 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
         | "openBrowserPane"
         | "openPaths"
         | "openSettings"
+        | "openRemoteScreen"
         | "readResourcesSnapshot"
         | "restartSession"
         | "runCommand"

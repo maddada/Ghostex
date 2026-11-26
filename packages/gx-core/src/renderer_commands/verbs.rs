@@ -137,6 +137,13 @@ pub enum RendererVerb {
         command_id: String,
     },
     ReadResourcesSnapshot,
+    /// `openRemoteScreen` (`ghostex screen open`): a computer's screen in a window of its own.
+    /// `machine_id` names a connected computer (none: this one); `viewer_url` is a viewer address
+    /// gxserver already handed out (a test copy viewing a forwarded gxserver), opened as it is.
+    OpenRemoteScreen {
+        machine_id: Option<String>,
+        viewer_url: Option<String>,
+    },
     /// `readFocusedSession`: the session the window shows focused, and every one on screen (the
     /// voice agent's "this session", server/src/voice_agent/screen.rs).
     ReadFocusedSession,
@@ -307,6 +314,19 @@ pub fn plan_renderer_command(
             run_command(payload, "id")
         }
         "readResourcesSnapshot" => Ok(RendererVerb::ReadResourcesSnapshot),
+        "openRemoteScreen" => {
+            let viewer_url = trimmed(payload, "viewerUrl");
+            // Only a loopback viewer address of gxserver's own proxy: the window shows nothing else.
+            if viewer_url.as_deref().is_some_and(|url| {
+                !(url.starts_with("http://127.0.0.1:") && url.contains("/api/remoteScreen/"))
+            }) {
+                return Err(RendererCommandError::Failed);
+            }
+            Ok(RendererVerb::OpenRemoteScreen {
+                machine_id: trimmed(payload, "machineId"),
+                viewer_url,
+            })
+        }
         "readFocusedSession" => Ok(RendererVerb::ReadFocusedSession),
         "updateSettingsPatch" => settings_patch(payload),
         "addRemoteMachine" => {

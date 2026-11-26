@@ -170,6 +170,13 @@ impl GhostexGpuiApp {
             RendererVerb::ReadResourcesSnapshot => {
                 Ok(self.gpui_native_resources_snapshot_export(cx))
             }
+            RendererVerb::OpenRemoteScreen {
+                machine_id,
+                viewer_url,
+            } => match self.open_remote_screen_window(machine_id, viewer_url, cx) {
+                Ok(()) => Ok(json!({ "accepted": true, "action": action, "ok": true })),
+                Err(error) => Ok(json!({ "accepted": false, "action": action, "ok": false, "error": error })),
+            },
             RendererVerb::ReadFocusedSession => {
                 // This computer's sessions in `focused`/`onScreen`; a connected machine's go in
                 // `focusedElsewhere`/`onScreenElsewhere` with its gxserver's server id, which the

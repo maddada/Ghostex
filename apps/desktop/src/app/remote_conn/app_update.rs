@@ -225,7 +225,7 @@ fn remote_app_update_request(
         .unwrap_or_else(|| "The machine did not accept the update request.".to_string()))
 }
 
-fn remote_machine_name(machine_id: &str) -> String {
+pub(crate) fn remote_machine_name(machine_id: &str) -> String {
     let settings = shared_settings::shared_sidebar_settings_snapshot();
     settings
         .object()

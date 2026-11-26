@@ -660,6 +660,35 @@ pub(crate) async fn handle_renderer_command_http(
         }
     };
     let mut payload = with_renderer_session_target(payload);
+    // CDXC:RemoteScreen 2026-11-27 WHY: the window starts the stream with the app's own access,
+    // so asking for it is the user's alone (the same rule as `may_use_screen` on the screen calls,
+    // with the token file counting as the user only outside a Ghostex session), and only while
+    // this computer has the remote screen switched on.
+    if action == "openRemoteScreen" {
+        let is_user = caller.is_owner_device()
+            && !(matches!(caller, crate::security::Principal::LocalAgent)
+                && crate::audit::token_file_names_session());
+        let refusal = if !is_user {
+            Some((
+                "forbidden",
+                "Only you can open a computer's screen, not an agent.",
+            ))
+        } else if payload.get("machineId").is_none()
+            && payload.get("viewerUrl").is_none()
+            && !crate::remote_screen::remote_screen_enabled(&state.paths)
+        {
+            Some(("remoteScreenOff", "Remote screen is off on this computer."))
+        } else {
+            None
+        };
+        if let Some((code, message)) = refusal {
+            return routed_json(
+                Some(endpoint_path),
+                StatusCode::FORBIDDEN,
+                rpc_error(code, message, Some(request_id)),
+            );
+        }
+    }
     // `ghostex close-after-done` reaches the app through here; an orchestrator is refused before
     // the app is asked, so the CLI (and the phone, which runs it) gets the plain error.
     if action == "toggleCloseAfterDone" && renderer_command_targets_orchestrator(state, &payload) {

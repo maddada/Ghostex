@@ -83,6 +83,7 @@ mod session_links;
 mod session_parking;
 pub mod sessions;
 mod sessions_brief;
+mod screen;
 pub mod settings;
 mod settings_hotkeys;
 mod settings_transfer;
@@ -594,6 +595,7 @@ fn is_known_command(name: &str) -> bool {
         "page",
         "visual",
         "install-help-skill",
+        "screen",
         "settings",
         "toggle-sidebar",
         "assert-card",
@@ -1219,6 +1221,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "agent-sync" => agent_sync::agent_sync_command(args),
         "install-help-skill" => skills::install_help_skill_command(args),
         "settings" => settings::settings_command(args),
+        "screen" => screen::screen_command(args),
         "theme" => theme_cli::run(args),
         "toggle-sidebar" => run_bridge_action("toggleSidebarCollapsed", Parser::None, plain, args),
         "assert-card" => {

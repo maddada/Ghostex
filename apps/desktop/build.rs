@@ -1173,6 +1173,16 @@ fn main() {
         .file(gpui_intro_video_web_view)
         .compile("ghostex_gpui_intro_video_web_view");
 
+    // The remote screen window's viewer (CDXC:RemoteScreen 2026-11-27 in the .m file).
+    let gpui_remote_screen_web_view = manifest_dir.join("native/macos/GpuiRemoteScreenWebView.m");
+    println!(
+        "cargo:rerun-if-changed={}",
+        gpui_remote_screen_web_view.display()
+    );
+    gpui_macos_objc_build()
+        .file(gpui_remote_screen_web_view)
+        .compile("ghostex_gpui_remote_screen_web_view");
+
     /*
     CDXC:AppModal 2026-07-04:
     Compile the toast popup chrome shim separately because it only strips AppKit

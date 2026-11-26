@@ -54,6 +54,7 @@ pub(crate) mod popup_frame;
 pub(crate) mod quick_access;
 pub(crate) mod rail_intro_modal;
 pub(crate) mod remote_gxserver_install_modal;
+pub(crate) mod remote_screen;
 pub(crate) mod remote_sites;
 pub(crate) mod rename_session_modal;
 pub(crate) mod rename_worktree_modal;

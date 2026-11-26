@@ -8,4 +8,5 @@ mod helper;
 mod proxy;
 
 pub(crate) use endpoint::{handle_remote_screen_http, REMOTE_SCREEN_ENDPOINTS};
+pub(crate) use gate::remote_screen_enabled;
 pub(crate) use proxy::handle_remote_screen_proxy;
