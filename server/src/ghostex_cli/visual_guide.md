@@ -786,13 +786,21 @@ and `data-choice` (first bullet below), which gives it a Pick button:
   collect all the mockups first and all the questions at the end.
 - `<gx-question>`: `title`; `tag`, an optional short label such as an issue
   id; `name`, the answer's key (the title when there is none); `multiple`
-  for several picks; `type="text"` for a text box instead of choices. Content
+  for several picks; `type="text"` for a text box instead of choices;
+  `type="menus"` for named `<select>` menus whose answer is
+  `{"<menu name>": "<value>"}` (an `<option data-when="agent=Claude">` shows
+  only while the menu named `agent` has that value, `a=x; b=y` needs both;
+  `<select data-look="tiles">` draws its options as logo tiles, with
+  `data-logo` naming a logo class and `data-note` a small line, and
+  `data-look="seg"` as segmented buttons). Content
   before its choices, such as a `<p>`, explains the question. Link what the
   question is about here too: a Markdown link or a bare `https://` address in
   `title` becomes a link, and a `<p>` takes an `<a href>`.
 - `<gx-choice>`: its text is the choice and a `<small>` inside is a one-line
   detail. `value` is what you receive (the text without the `<small>` when
-  there is none). `recommended` adds a Recommended badge.
+  there is none). `recommended` adds a Recommended badge. `picked` opens it
+  already picked (a prefilled answer the reader can send as is); a
+  `data-pick` row takes `data-picked`.
 - List a question's choices in exactly the order its variants appear above
   it: the first variant on the page is the first choice, and a variant
   lettered "A." is choice a. Never move the recommended choice to the top;
@@ -803,7 +811,7 @@ and `data-choice` (first bullet below), which gives it a Pick button:
   note box, not the choices again. The kit letters the choices, ends every choice
   question with "Other / none of these" and a note box, ends the page with
   an "Anything else?" box (the reader can type there and paste images) just
-  above the send button, and adds the send button. Nothing is ever preselected (the reader can also click a pick again
+  above the send button, and adds the send button. Nothing is preselected unless you mark it `picked` (the reader can also click a pick again
   to clear it), and a question left blank arrives as `"skipped"` (`null` in older
   Ghostex versions). Don't write your
   own form, button, "Other" choice, note box or "Anything else?" question. Newer Ghostex versions also add

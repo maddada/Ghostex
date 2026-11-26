@@ -1687,6 +1687,66 @@ mod tests {
         );
     }
 
+    fn agent(id: &str, name: &str, models: Vec<Model>, default: &str) -> Agent {
+        Agent {
+            id: id.into(),
+            name: name.into(),
+            family: id.into(),
+            icon: id.into(),
+            all_models: models.clone(),
+            models,
+            default_model: Some(default.into()),
+            note: String::new(),
+        }
+    }
+
+    #[test]
+    fn page_answers_become_the_setup_lines() {
+        let agents = vec![
+            agent(
+                "claude",
+                "Claude",
+                vec![model("opus[1m]", "Opus 5.5"), model("sonnet", "Sonnet 5.5")],
+                "opus[1m]",
+            ),
+            agent(
+                "antigravity",
+                "Antigravity CLI",
+                vec![model("gemini-4-neon", "Gemini 4 Neon")],
+                "gemini-4-neon",
+            ),
+            agent("pi", "Pi Agent", Vec::new(), ""),
+        ];
+        let base = playbook_setup(&agents);
+        let answers = json!({
+            "Who does which work": {
+                "large agent": "Claude", "large model": "Opus 5.5", "large effort": "High",
+                "hard agent": "Claude", "hard model": "Opus 5.5", "hard effort": "Medium",
+                "simple agent": "Pi Agent", "simple model": NO_MODEL, "simple effort": NO_EFFORT,
+            },
+            "Low usage": "Switch",
+            "Other agent": { "other agent": "Antigravity CLI" },
+            "Never use": ["Claude #2"],
+            "Computers": "skipped",
+        });
+        let all = vec!["Macbook 16".to_string(), "m7-arch".to_string()];
+        let setup = setup_from_answers(&answers, &agents, &base, &all);
+        let notes = setup.notes();
+        assert_eq!(notes[0], "Setup: large, complex work: Claude · Opus 5.5 · High (start-thread --agent claude --model opus[1m] --effort high)");
+        assert_eq!(notes[2], "Setup: simple, contained work: Pi Agent · its own model (start-thread --agent pi)");
+        assert_eq!(notes[3], "Setup: when usage runs low: Claude until every Claude account is low, then every new thread on Antigravity (large work Gemini 4 Neon High, hard work Gemini 4 Neon Medium, simple work Gemini 4 Neon Low). (start-thread --agent antigravity --model gemini-4-neon --effort high|medium|low, by kind of work)");
+        assert!(notes[4].starts_with("Setup: accounts threads never use: Claude #2 ("));
+        assert_eq!(notes[5], "Setup: computers threads may run on: all");
+        // The lines read back to the same setup (a redo prefills from them).
+        assert_eq!(setup_from_notes(&notes, &agents, &base).notes()[..3], notes[..3]);
+
+        // The user's own words are kept as they wrote them.
+        let own = json!({ "Low usage": KIT_OTHER, "Low usage (note)": "split usage between Opus 5.5 and Antigravity sessions" });
+        let setup = setup_from_answers(&own, &agents, &base, &all);
+        assert_eq!(setup.low, "own");
+        assert_eq!(setup.rule, "split usage between Opus 5.5 and Antigravity sessions");
+    }
+
     #[test]
     fn efforts_fall_to_the_nearest_level() {
         let mut m = model("gemini-4-neon", "Gemini 4 Neon");

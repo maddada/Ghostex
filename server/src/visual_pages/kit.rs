@@ -225,7 +225,7 @@ gx-question.gx-answered .gx-choice[aria-checked=true] .gx-mark{border-color:var(
 .gx-menu-label{font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--gx-muted)}
 gx-question select[hidden]{display:none}
 /* A menu drawn as buttons (`<select data-look="tiles|seg">`): logo tiles in a wrapping grid, or segmented buttons that wrap; the pick is marked in pick ink. A menu with one choice left reads as text. */
-.gx-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,158px),1fr));gap:8px}
+.gx-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,132px),1fr));gap:8px}
 .gx-tiles>button{display:flex;align-items:center;gap:10px;min-width:0;padding:10px 12px;border-radius:12px;background:var(--gx-option);border:1px solid var(--gx-option-border);color:var(--gx-fg);font:550 13px/1.25 var(--font-sans);text-align:left;cursor:pointer;transition:border-color .15s,box-shadow .15s}
 .gx-tiles>button>span{min-width:0;overflow-wrap:anywhere}
 .gx-tiles>button small{display:block;margin-top:2px;font-size:11.5px;font-weight:400;color:var(--gx-muted)}
