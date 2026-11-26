@@ -15,6 +15,9 @@ pub(crate) const REMOTE_SCREEN_START_ENDPOINT: &str = "/api/remoteScreenStart";
 pub(crate) const REMOTE_SCREEN_STOP_ENDPOINT: &str = "/api/remoteScreenStop";
 pub(crate) const REMOTE_SCREEN_STATUS_ENDPOINT: &str = "/api/remoteScreenStatus";
 
+/// The smallest `maxPixels` a viewer may ask for (640x360).
+const MIN_MAX_PIXELS: u64 = 640 * 360;
+
 pub(crate) const REMOTE_SCREEN_ENDPOINTS: &[&str] = &[
     REMOTE_SCREEN_START_ENDPOINT,
     REMOTE_SCREEN_STOP_ENDPOINT,
@@ -87,6 +90,11 @@ pub(crate) async fn handle_remote_screen_http(
                                 byte.is_ascii_alphanumeric() || b"\\.-_:".contains(&byte)
                             })
                     }),
+                // At least 640x360, so a bad value can't make the screen unreadable.
+                max_pixels: params
+                    .get("maxPixels")
+                    .and_then(Value::as_u64)
+                    .map(|pixels| pixels.max(MIN_MAX_PIXELS)),
             };
             match helper::start(&state.paths, options).await {
                 Ok(info) => session_json(&info),
@@ -128,6 +136,7 @@ fn session_json(info: &helper::ScreenSessionInfo) -> Value {
         "viewOnly": info.view_only,
         "startedAtMs": info.started_at_ms,
         "display": info.display,
+        "maxPixels": info.max_pixels,
     })
 }
 

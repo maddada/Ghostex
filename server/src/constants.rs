@@ -121,6 +121,10 @@ pub const GXSERVER_CAPABILITIES: &[&str] = &[
     "nativeModeSwitch",
     // Built-in tunnel sharing for Live pages and localhost ports (`/api/sharing`, CDXC:Sharing 2026-11-24).
     "shareLinks",
+    // `/api/remoteScreenStart|Stop|Status` and the `/api/remoteScreen/<ticket>/` viewer (CDXC:RemoteScreen
+    // 2026-11-26 in remote_screen/). Supported is not on: clients ask `/api/remoteScreenStatus`, whose
+    // `enabled` follows this computer's off-by-default `remoteScreenEnabled` setting.
+    "remoteScreen",
 ];
 
 pub const GXSERVER_MIGRATION_IDS: &[&str] = &[

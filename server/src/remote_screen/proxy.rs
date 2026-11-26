@@ -186,7 +186,8 @@ fn dropped_request_header(name: &HeaderName, upgrade: bool) -> bool {
         | "transfer-encoding"
         | "te"
         | "trailer"
-        | "x-ghostex-protocol-version" => true,
+        | "x-gxserver-protocol-version"
+        | "x-ghostex-caller-session" => true,
         "connection" | "upgrade" => !upgrade,
         _ => false,
     }

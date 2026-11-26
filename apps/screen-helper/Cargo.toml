@@ -20,3 +20,10 @@ voxl-server = { version = "=0.4.0", default-features = false }
 opt-level = 3
 codegen-units = 1
 lto = "thin"
+
+# CDXC:RemoteScreen 2026-11-26 DECISION: voxl 0.4.0 with one change, Windows `--max-capture-pixels`
+# (a phone gets a ~1080p copy of a 4K display instead of the full size, which phones decode badly or
+# not at all). The change is listed in vendor/voxl-server-0.4.0/GHOSTEX-CHANGES.md and is meant to go
+# upstream to tembo/voxl; drop this patch once a release has it.
+[patch.crates-io]
+voxl-server = { path = "vendor/voxl-server-0.4.0" }

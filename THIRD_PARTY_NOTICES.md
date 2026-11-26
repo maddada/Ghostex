@@ -260,7 +260,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 `ghostex-screen` (apps/screen-helper), the separate program that streams a computer's screen for Remote screen, is built on voxl and links x264. It is started by gxserver as its own process and is not part of gxserver or the app. It is not in any release yet.
 
-- voxl, <https://github.com/tembo/voxl>, MIT, Copyright (c) 2026 Tembo.
+- voxl, <https://github.com/tembo/voxl>, MIT, Copyright (c) 2026 Tembo. The helper builds a modified copy of voxl-server 0.4.0 (apps/screen-helper/vendor/voxl-server-0.4.0, its changes in GHOSTEX-CHANGES.md there), with voxl's LICENSE beside it.
 - x264, <https://www.videolan.org/developers/x264.html>, GPL-2.0-or-later. Because the helper links x264, the helper binary as a whole is distributed under the GPL (version 2 or later); its complete source is apps/screen-helper in this repository plus voxl and x264 at the versions its Cargo.lock and build record. The full GPL text ships beside the helper when it ships.
 
 ## Theme preset terminal palettes

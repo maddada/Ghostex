@@ -30,6 +30,7 @@ pub(crate) struct ScreenSessionInfo {
     pub(crate) view_only: bool,
     pub(crate) started_at_ms: u64,
     pub(crate) display: Option<String>,
+    pub(crate) max_pixels: Option<u64>,
 }
 
 /// Where the proxy sends a request that carried the right ticket.
@@ -58,6 +59,9 @@ pub(crate) enum StartError {
 pub(crate) struct StartOptions {
     pub(crate) view_only: bool,
     pub(crate) display: Option<String>,
+    /// Stream a smaller copy of a display with more pixels than this (a phone asks for about
+    /// 1080p); `None` streams the display's own size.
+    pub(crate) max_pixels: Option<u64>,
 }
 
 fn running() -> std::sync::MutexGuard<'static, Option<RunningHelper>> {
@@ -110,7 +114,17 @@ pub(crate) async fn start(
 ) -> Result<ScreenSessionInfo, StartError> {
     let _starting = STARTING.lock().await;
     if let Some(info) = current() {
-        return Ok(info);
+        // CDXC:RemoteScreen 2026-11-26 WHY: one helper streams one size, so a viewer asking for
+        // another (the phone's ~1080p after the desktop's full size, or view-only) restarts it with
+        // a new ticket and the earlier viewer's stream ends. Two viewers at once at different sizes
+        // is later work (a second helper, or voxl streaming two sizes).
+        if info.view_only == options.view_only
+            && info.display == options.display
+            && info.max_pixels == options.max_pixels
+        {
+            return Ok(info);
+        }
+        stop();
     }
     let binary = helper_binary().ok_or(StartError::HelperMissing)?;
     let port = free_loopback_port().map_err(|error| StartError::Failed(error.to_string()))?;
@@ -137,6 +151,9 @@ pub(crate) async fn start(
         .stderr(Stdio::from(log));
     if let Some(display) = options.display.as_deref() {
         command.arg(format!("--display={display}"));
+    }
+    if let Some(max_pixels) = options.max_pixels {
+        command.arg(format!("--max-capture-pixels={max_pixels}"));
     }
     let mut child = command.spawn().map_err(|error| {
         StartError::Failed(format!("Could not start {}: {error}", binary.display()))
@@ -181,6 +198,7 @@ pub(crate) async fn start(
             .map(|elapsed| elapsed.as_millis() as u64)
             .unwrap_or(0),
         display: options.display,
+        max_pixels: options.max_pixels,
     };
     *running() = Some(RunningHelper {
         child,
