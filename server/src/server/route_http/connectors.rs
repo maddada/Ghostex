@@ -21,6 +21,20 @@ use super::*;
 
 type ConnectorAction = fn(&AppState, &Map<String, Value>) -> Result<Value, DomainStateError>;
 
+/// What only the user's own app (or a paired phone) may do, as with pairing codes
+/// (`SecurityState::keeps_door`): repoint or end the Executor sign-in every workspace's agents
+/// use, run its installer, delete the old Executor's data, and change what agents may run.
+///
+/// CDXC:Connectors 2026-11-27 WHY:
+/// These were open to agents' session tokens and to the `ghostex connectors` CLI any agent can run (security review of 769647fe4e, M3): an agent could sign the CLI in to a host of its own, which approves its own device code, and every workspace's agents would then get tools whose descriptions and results that host controls; or set its workspace's rules to Allow. The desktop sends its owner session with these calls (`is_door_call` in apps/desktop/src/app/owner_security/mod.rs).
+const OWNER_ONLY: [&str; 5] = [
+    "/api/installExecutorCli",
+    "/api/signInExecutorCli",
+    "/api/signOutExecutorCli",
+    "/api/removeOldExecutor",
+    "/api/setConnectorRule",
+];
+
 pub(super) async fn route_connectors_http(
     request: RouteHttpRequest,
 ) -> Result<RoutedResponse, RouteHttpRequest> {
@@ -68,6 +82,16 @@ pub(super) async fn route_connectors_http(
         Ok(params) => params,
         Err(error) => return Ok(domain_error_response(endpoint.path, request_id, error)),
     };
+    if OWNER_ONLY.contains(&endpoint.path.as_str()) && !state.security.keeps_door(&caller) {
+        return Ok(domain_error_response(
+            endpoint.path,
+            request_id,
+            DomainStateError {
+                code: "forbidden",
+                message: "Only the Ghostex app on this computer can change that: use Settings > Connectors there.".to_string(),
+            },
+        ));
+    }
     // An agent's tools and calls belong to the session its token is (connectors/agent/session.rs).
     let for_agent_session = matches!(
         endpoint.path.as_str(),

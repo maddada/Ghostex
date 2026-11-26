@@ -42,23 +42,32 @@ fn login_link(line: &str, url: &mut Option<String>, code: &mut Option<String>) -
     url.is_some() && code.is_some()
 }
 
-/// A self-hosted Executor's address: `https://…`, or `http://` on this computer.
+/// A self-hosted Executor's address as its origin: `https://<host>`, or `http://` with this
+/// computer's own address (`localhost`, `127.0.0.1`, `[::1]`, as Executor allows), read as a URL
+/// and compared exactly, with no user name, path, query or fragment.
 fn checked_host(host: &str) -> Result<String, String> {
-    let host = host.trim().trim_end_matches('/');
-    let local = ["http://127.0.0.1", "http://localhost", "http://[::1]"]
-        .iter()
-        .any(|prefix| host.starts_with(prefix));
-    let valid = (host.starts_with("https://") || local)
-        && !host.contains(char::is_whitespace)
-        && host
-            .split("://")
-            .nth(1)
-            .is_some_and(|rest| !rest.is_empty());
-    if valid {
-        Ok(host.to_string())
-    } else {
-        Err("Give the self-hosted Executor's address, like https://executor.example.com.".into())
+    use std::net::{Ipv4Addr, Ipv6Addr};
+    use url::Host;
+    let refused = || {
+        "Give the self-hosted Executor's address, like https://executor.example.com.".to_string()
+    };
+    let url = url::Url::parse(host.trim()).map_err(|_| refused())?;
+    let this_computer = match url.host() {
+        Some(Host::Domain(domain)) => domain == "localhost",
+        Some(Host::Ipv4(ip)) => ip == Ipv4Addr::LOCALHOST,
+        Some(Host::Ipv6(ip)) => ip == Ipv6Addr::LOCALHOST,
+        None => false,
+    };
+    let scheme_ok = url.scheme() == "https" || (url.scheme() == "http" && this_computer);
+    let bare = url.username().is_empty()
+        && url.password().is_none()
+        && matches!(url.path(), "" | "/")
+        && url.query().is_none()
+        && url.fragment().is_none();
+    if !(scheme_ok && bare && url.has_host()) {
+        return Err(refused());
     }
+    Ok(url.origin().ascii_serialization())
 }
 
 /// Starts `executor login` (to `host`, else hosted Executor) and returns its page and code.
@@ -66,10 +75,14 @@ pub(crate) fn sign_in(host: Option<&str>) -> Result<Value, String> {
     let found = cli::find()
         .filter(|found| found.usable())
         .ok_or("Install the Executor CLI first, then sign in.")?;
-    let mut command = cli::command(&found.executable);
+    let host = match host.map(str::trim).filter(|host| !host.is_empty()) {
+        Some(host) => Some(checked_host(host)?),
+        None => None,
+    };
+    let mut command = cli::command(&found.executable, host.as_deref());
     command.arg("login");
-    if let Some(host) = host.map(str::trim).filter(|host| !host.is_empty()) {
-        command.args(["--host", &checked_host(host)?]);
+    if let Some(host) = &host {
+        command.args(["--host", host]);
     }
     // The CLI opens its page itself unless it thinks it runs over SSH; Ghostex opens it in the
     // browser of the computer the user is at (gxserver may run on another one), so only once.
@@ -117,7 +130,7 @@ pub(crate) fn sign_out() -> Result<(), String> {
         .filter(|found| found.usable())
         .ok_or("The Executor CLI isn't installed on this computer.")?;
     super::relay::stop();
-    let mut command = cli::command(&found.executable);
+    let mut command = cli::command(&found.executable, None);
     command.arg("logout");
     let output =
         crate::managed_tools::run::output_within(command, std::time::Duration::from_secs(20))
@@ -133,4 +146,43 @@ pub(crate) fn sign_out() -> Result<(), String> {
         .find_map(|line| line.strip_prefix("Error:"))
         .map(|reason| format!("executor logout failed: {}", reason.trim()))
         .unwrap_or_else(|| "executor logout failed. Run it in a terminal to see why.".to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::checked_host;
+
+    #[test]
+    fn self_hosted_addresses_are_compared_exactly() {
+        assert_eq!(
+            checked_host("https://executor.example.com/").unwrap(),
+            "https://executor.example.com"
+        );
+        assert_eq!(
+            checked_host(" http://localhost:4000 ").unwrap(),
+            "http://localhost:4000"
+        );
+        assert_eq!(
+            checked_host("http://127.0.0.1:8787").unwrap(),
+            "http://127.0.0.1:8787"
+        );
+        assert_eq!(
+            checked_host("http://[::1]:8787").unwrap(),
+            "http://[::1]:8787"
+        );
+        for refused in [
+            "http://localhost.evil.com",
+            "http://127.0.0.1.evil.com",
+            "http://localhost@evil.com",
+            "http://evil.com",
+            "https://user@executor.example.com",
+            "https://executor.example.com/path",
+            "https://executor.example.com/?q=1",
+            "ftp://executor.example.com",
+            "executor.example.com",
+            "https://",
+        ] {
+            assert!(checked_host(refused).is_err(), "{refused}");
+        }
+    }
 }

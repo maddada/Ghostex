@@ -193,6 +193,14 @@ fn is_door_call(path: &str, params: &Value) -> bool {
         "/api/approveApprovalRequest"
         | "/api/removePairedDevice"
         | "/api/signComputerConnectBack" => true,
+        // Settings > Connectors: the Executor sign-in every workspace's agents use, its
+        // installer, the old Executor's data, and what agents may run (`OWNER_ONLY` in
+        // server/src/server/route_http/connectors.rs).
+        "/api/installExecutorCli"
+        | "/api/signInExecutorCli"
+        | "/api/signOutExecutorCli"
+        | "/api/removeOldExecutor"
+        | "/api/setConnectorRule" => true,
         _ => false,
     }
 }

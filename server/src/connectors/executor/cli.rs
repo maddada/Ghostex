@@ -34,22 +34,48 @@ fn install_dirs() -> Vec<PathBuf> {
     }
 }
 
-/// An `executor` command with the environment every run gets: the live PATH (so a CLI installed
-/// while gxserver runs is found) and no telemetry or update prompt. The user's own `EXECUTOR_*`
-/// variables (a host, an access token) are kept, as their terminal would.
-pub(super) fn command(executable: &Path) -> Command {
+/// An Executor address as scheme and host (and port), for comparing two of them exactly.
+pub(super) fn origin(host: &str) -> Option<String> {
+    let url = url::Url::parse(host.trim()).ok()?;
+    url.has_host().then(|| url.origin().ascii_serialization())
+}
+
+/// Whether gxserver's own `EXECUTOR_ACCESS_TOKEN` may go with a command for `host` (`None`: the
+/// CLI's default, which is `EXECUTOR_HOST` when that is set).
+///
+/// CDXC:Connectors 2026-11-27 WHY:
+/// The Executor CLI sends `EXECUTOR_ACCESS_TOKEN` as the bearer to whatever host a command names (hosts.ts `toolsTarget`), so a token in gxserver's environment would go to any host a sign-in or relay is pointed at (security review of 769647fe4e, M3). It belongs to the host it was set up with, `EXECUTOR_HOST`, and goes only there; without `EXECUTOR_HOST` it is never passed on.
+fn access_token_goes_to(host: Option<&str>) -> bool {
+    let Some(own) = std::env::var("EXECUTOR_HOST")
+        .ok()
+        .as_deref()
+        .and_then(origin)
+    else {
+        return false;
+    };
+    host.is_none_or(|host| origin(host).as_deref() == Some(own.as_str()))
+}
+
+/// An `executor` command for `host` with the environment every run gets: the live PATH (so a CLI
+/// installed while gxserver runs is found) and no telemetry or update prompt. The user's own
+/// `EXECUTOR_*` variables are kept, as their terminal would, except an access token meant for
+/// another host ([`access_token_goes_to`]).
+pub(super) fn command(executable: &Path, host: Option<&str>) -> Command {
     let mut command = crate::platform::process::background_command(executable);
     command
         .env("PATH", crate::platform::live_path::value())
         .env("DO_NOT_TRACK", "1")
         .env("EXECUTOR_NO_UPDATE_CHECK", "1")
         .env("NO_COLOR", "1");
+    if !access_token_goes_to(host) {
+        command.env_remove("EXECUTOR_ACCESS_TOKEN");
+    }
     command
 }
 
 /// The version an `executor` reports (`executor v2.0.0-beta.79` gives `2.0.0-beta.79`).
 fn read_version(executable: &Path) -> Option<String> {
-    let mut command = command(executable);
+    let mut command = command(executable, None);
     command.arg("--version");
     let output = output_within(command, PROBE_TIMEOUT).ok()?;
     let line = output.stdout.trim();
@@ -190,7 +216,11 @@ fn cli_error(stdout: &str) -> Option<(String, String)> {
 }
 
 fn run_json(executable: &Path, args: &[&str]) -> Result<Value, (Option<String>, String)> {
-    let mut command = command(executable);
+    let host = args
+        .windows(2)
+        .find(|pair| pair[0] == "--host")
+        .map(|pair| pair[1]);
+    let mut command = command(executable, host);
     command.args(args);
     let output = match output_within(command, NETWORK_TIMEOUT) {
         Ok(output) => output,

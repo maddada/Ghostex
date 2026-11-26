@@ -131,7 +131,7 @@ fn answer_server_request(relay_stdin: &Mutex<ChildStdin>, message: &Value) {
 }
 
 fn start(executable: &Path, host: &str) -> Result<Arc<Relay>, String> {
-    let mut command = cli::command(executable);
+    let mut command = cli::command(executable, Some(host));
     command
         .args(["mcp", "--host", host])
         .stdin(Stdio::piped())
