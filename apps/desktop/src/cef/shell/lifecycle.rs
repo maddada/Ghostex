@@ -67,6 +67,7 @@ pub fn initialize(cx: &gpui::App) -> Result<()> {
     crate::crash_report::note_cef_phase("executeProcessDone");
 
     let root_cache_path = cef_root_cache_path()?;
+    drain_pending_workspace_profile_clears(&root_cache_path);
     /*
     CDXC:Telemetry 2026-06-23-13:18:
     The built-in Default Browser profile and first-party app UI use the app-owned persistent global CEF store, while generated Browser profiles remain memory-backed. Keep CEF file logging disabled and Chromium runtime data out of support-bundle logs.
@@ -363,6 +364,13 @@ wrap_app! {
                 command_line.append_switch(Some(&CefString::from("use-mock-keychain")));
                 command_line.append_switch(Some(&CefString::from("enable-fullscreen")));
                 command_line.append_switch(Some(&CefString::from("allow-insecure-localhost")));
+                // Cap Chromium's HTTP disk cache to 128 MiB per profile so multi-account/workspace
+                // profiles (`Default`, `workspace-claude-*`, `workspace-grok-*`, `workspace-ws-*`)
+                // do not accumulate multiple GB of HTTP cache. Sign-in cookies and storage stay intact.
+                command_line.append_switch_with_value(
+                    Some(&CefString::from("disk-cache-size")),
+                    Some(&CefString::from("134217728")),
+                );
                 // Per-OS Chromium switches (e.g. Linux forcing Ozone onto
                 // X11 to match the app-wide X11 embedding constraint) stay
                 // behind the platform seam like every other OS-specific
