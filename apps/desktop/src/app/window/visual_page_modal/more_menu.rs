@@ -291,9 +291,13 @@ impl GpuiVisualPageModalWindow {
                     );
                 }
             }
+            // The page's own address, as the page card's Export sends it: `/api/exportVisualPage
+            // {url}` (server/src/visual_pages/exported.rs `export_url`) reads a page address, and
+            // refused this window's `<page>/export` as "That is not a page address", so Export
+            // page in the window saved nothing for any page.
             MoreAction::Export => {
                 let end = self.url.find(['?', '#']).unwrap_or(self.url.len());
-                let url = format!("{}/export", self.url[..end].trim_end_matches('/'));
+                let url = self.url[..end].trim_end_matches('/').to_string();
                 (self.host)(VisualPageModalCommand::ExportPage { url }, cx);
             }
             MoreAction::OpenInBrowser => {

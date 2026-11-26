@@ -434,7 +434,7 @@ impl GhostexGpuiApp {
                 let _ = gpui_open_external_http_url(&url);
                 return;
             }
-            // The browser downloads the exported page; the page stays open.
+            // The exported page is saved where the reader picks; the page stays open.
             VisualPageModalCommand::ExportPage { url } => {
                 self.export_visual_page_to_file(url, cx);
                 return;

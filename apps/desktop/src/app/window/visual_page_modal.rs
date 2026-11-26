@@ -102,8 +102,8 @@ pub(crate) enum VisualPageModalCommand {
     },
     /// Closes the window and opens the page in the reader's browser.
     OpenInBrowser { url: String },
-    /// Downloads the page's exported file in the reader's browser and keeps the window open
-    /// (server/src/visual_pages/exported.rs).
+    /// Saves the page's exported file, built by this computer's gxserver from the page at `url`
+    /// (app/visual_page_modal_lifecycle.rs `export_visual_page_to_file`), and keeps the window open.
     ExportPage { url: String },
     /// A link the page opened (a new window or `target=_blank`), for the app to route by the
     /// machine the page came from.
