@@ -1,7 +1,9 @@
 //! OMP's inline tool approval as the chat core shows it: its permission rows share the notice
-//! card, and a typed draft uses the pass-through card with the chat's keyboard. Its release button
-//! hides that card for one approval only. Every test drives the chat core the way a host does
-//! (start, composer boot read, gxserver frames, the user's actions) and reads the renderer document.
+//! card, and the approval it leaves to the terminal (a typed draft included) is a card with only
+//! Open terminal, without the pass-through card's keys; other agents' pass-through cards keep the
+//! chat's keyboard. Its hide button hides that card for one approval only. Every test drives the
+//! chat core the way a host does (start, composer boot read, gxserver frames, the user's actions)
+//! and reads the renderer document.
 
 use ghostex_gx_chat_core::{
     ActionKind, ChatContext, ChatCore, ChatFrame, ChatSnapshotFrame, ChatStateFrame,
@@ -117,16 +119,25 @@ impl Chat {
     }
 
     fn card_shown(&self) -> bool {
-        let document = self.document();
-        document["noticeVisible"] == true && document["terminalNotice"]["passthrough"].is_object()
+        self.document()["noticeVisible"] == true
+    }
+
+    /// Whether the shown card is the pass-through card, which takes the chat's keyboard.
+    fn has_keyboard(&self) -> bool {
+        self.card_shown() && self.document()["terminalNotice"]["passthrough"].is_object()
     }
 }
 
 #[test]
 fn the_passthrough_card_uses_the_shared_keyboard_hint_and_release_label() {
-    let mut chat = Chat::open();
-    chat.screen(Some(approval("echo ghostex-approval-test")));
-    assert!(chat.card_shown());
+    // Another agent's screen the chat cannot read: OMP's tool approval has no pass-through card
+    // (CDXC:SessionChat 2026-11-26 in src/questions/terminal_picker.rs).
+    let mut chat = Chat::open_as("codex");
+    let mut notice = approval("echo ghostex-approval-test");
+    notice["kind"] = json!("codexInputBlocked");
+    notice["title"] = json!("Codex is waiting for terminal interaction");
+    chat.screen(Some(notice));
+    assert!(chat.has_keyboard());
     let passthrough = chat.document()["terminalNotice"]["passthrough"].clone();
     assert_eq!(passthrough["releaseLabel"], "Return keyboard to chat");
     assert_eq!(
@@ -151,10 +162,7 @@ fn a_hidden_approval_card_stays_hidden_only_until_omp_closes_that_approval() {
     // within ten minutes, under the same `detectedAt`.
     chat.screen(None);
     chat.screen(Some(approval("echo second-approval")));
-    assert!(
-        chat.card_shown(),
-        "the next approval's card shows, so its keys can reach OMP"
-    );
+    assert!(chat.card_shown(), "the next approval's card shows");
 }
 
 /// The permission card gxserver sends for an agent's own approval rows.
@@ -300,7 +308,14 @@ fn a_stored_approval_steps_aside_while_a_live_notice_holds_a_typed_draft() {
         .expect("the typed draft frame parses");
         chat.drive(Event::Frame(Box::new(ChatFrame::State(Box::new(frame)))));
         let document = chat.document();
-        assert!(chat.card_shown(), "{agent}: the draft notice has the keyboard");
+        assert!(chat.card_shown(), "{agent}: the draft notice shows");
+        // OMP's approval is answered in the terminal: its card has no keys (CDXC:SessionChat
+        // 2026-11-26 in src/questions/terminal_picker.rs); Codex's takes the keyboard.
+        assert_eq!(
+            chat.has_keyboard(),
+            agent == "codex",
+            "{agent}: the draft notice's keyboard"
+        );
         assert_eq!(document["prompt"], prompt, "{agent}: approval stays stored");
         let card_count = usize::from(document["noticeVisible"] == true)
             + usize::from(document["questionCard"]["visible"] == true);

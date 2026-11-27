@@ -157,7 +157,16 @@ pub(crate) fn choices(card: &Value) -> Vec<Choice> {
             return out;
         }
     }
-    // A hook approval with no screen reading: the thread card's Allow and Deny.
+    // A hook approval with no screen reading: the thread card's Allow and Deny. OMP's screen card
+    // that leaves its approval to the terminal (a dialog that does not show what it asks) offers
+    // none: gxserver refuses them there (CDXC:SessionChat 2026-11-25 in
+    // server/src/session_chat_send/answer_http.rs).
+    if notice
+        .as_ref()
+        .is_some_and(|notice| notice.passthrough && notice.kind == "ompInputBlocked")
+    {
+        return Vec::new();
+    }
     if let Some(InteractivePrompt::Approval {
         tool,
         summary,
@@ -165,13 +174,20 @@ pub(crate) fn choices(card: &Value) -> Vec<Choice> {
         ..
     }) = prompt
     {
-        let mut allow = json!({ "kind": "approval", "approvalSend": "1", "promptTool": tool });
+        // Allow and Deny both name the card they answer (its tool, summary and call), so gxserver
+        // types neither into a newer request the thread shows by then (CDXC:SessionChat 2026-11-25
+        // in server/src/session_chat_send/answer_http.rs).
+        let mut shown = json!({ "kind": "approval", "promptTool": tool });
         if let Some(summary) = summary {
-            allow["promptSummary"] = json!(summary);
+            shown["promptSummary"] = json!(summary);
         }
         if let Some(id) = tool_use_id {
-            allow["toolUseId"] = json!(id);
+            shown["toolUseId"] = json!(id);
         }
+        let mut allow = shown.clone();
+        allow["approvalSend"] = json!("1");
+        let mut deny = shown;
+        deny["approvalSend"] = json!("");
         return vec![
             Choice {
                 label: "Allow".to_string(),
@@ -183,7 +199,7 @@ pub(crate) fn choices(card: &Value) -> Vec<Choice> {
                 label: "Deny".to_string(),
                 tone: "deny",
                 tooltip: String::new(),
-                answer: json!({ "kind": "approval", "approvalSend": "" }),
+                answer: deny,
             },
         ];
     }

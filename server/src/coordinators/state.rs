@@ -593,8 +593,9 @@ pub struct ThreadScreenWait {
     notice_resets_at: Option<String>,
     /// True when the usage-limit notice says it continues automatically at reset.
     notice_auto_recover: bool,
-    /// The notice itself, as a chat frame carries it, for a permission prompt or a folder-trust
-    /// question: the card its coordinator's chat relays (relay.rs).
+    /// The notice itself, as a chat frame carries it, for a permission prompt (OMP's approval that
+    /// the chat leaves to the terminal included) or a folder-trust question: the card its
+    /// coordinator's chat relays (relay.rs).
     notice: Option<Value>,
 }
 
@@ -607,7 +608,8 @@ fn notice_wait_kind(notice: &SessionChatTerminalNotice) -> ThreadWaitKind {
         SESSION_CHAT_NOTICE_EMPRYO_SIGN_IN if notice.blocks_input() => ThreadWaitKind::SignIn,
         SESSION_CHAT_NOTICE_USAGE_LIMIT => ThreadWaitKind::UsageLimit,
         SESSION_CHAT_NOTICE_AGENT_EXITED => ThreadWaitKind::AgentExited,
-        _ if notice.permission_request.is_some()
+        _ if notice.is_permission_request()
+            || notice.permission_request.is_some()
             || notice
                 .approval_command
                 .as_deref()
@@ -777,17 +779,19 @@ impl ThreadScreenWait {
                 from_notice: true,
                 blocking,
                 user_approval,
-                asks: notice.kind == SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
-                approval: notice.kind == SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
+                // OMP's approval that the chat leaves to the terminal is a screen approval like a
+                // permission prompt (`is_screen_approval`, CDXC:SessionChat 2026-11-25 in
+                // session_chat_omp_blocking.rs); its relayed card carries the notice, whose card
+                // points to the terminal and offers no answers.
+                asks: notice.is_screen_approval(),
+                approval: notice.is_screen_approval(),
                 agent_gone: notice.kind == SESSION_CHAT_NOTICE_AGENT_EXITED,
                 at_limit: at_limit(notice),
                 short_summary: notice_short_summary(notice, kind),
                 notice_resets_at: notice_resets_at(notice),
                 notice_auto_recover: notice_auto_recover(notice),
-                notice: matches!(
-                    notice.kind.as_str(),
-                    SESSION_CHAT_NOTICE_PERMISSION_PROMPT | SESSION_CHAT_NOTICE_TRUST_PROMPT
-                )
+                notice: (notice.kind == SESSION_CHAT_NOTICE_TRUST_PROMPT
+                    || notice.is_screen_approval())
                 .then(|| notice.to_value()),
             });
         }
@@ -915,9 +919,19 @@ pub fn screen_waits_on_approval(session: &Value) -> bool {
 }
 
 /// The permission prompt or folder-trust question a thread's screen last showed, as a chat frame
-/// carries it.
+/// carries it. With no screen wait recorded, OMP's terminal card for a bash hook card answered in
+/// the terminal that no screen reading has shown yet (CDXC:SessionChat 2026-11-26 in
+/// session_chat_notice/classify.rs).
 pub fn screen_wait_notice(session: &Value) -> Option<Value> {
-    recorded_screen_wait(session).and_then(|wait| wait.notice)
+    match recorded_screen_wait(session) {
+        Some(wait) => wait.notice,
+        None => crate::session_chat_notice::with_omp_hook_terminal_notice(
+            crate::session_chat_composer::session_chat_composer_agent_id(session).as_deref(),
+            session_chat_prompt_setting(session).as_deref(),
+            None,
+        )
+        .map(|notice| notice.to_value()),
+    }
 }
 
 /// True when the thread waits on something its screen shows; the supervisor's transcript check

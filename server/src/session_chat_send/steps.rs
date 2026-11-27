@@ -1,5 +1,17 @@
 use super::*;
 
+/// Why an OMP approval guard (`GuardOmpApprovalRequest`, `GuardOmpApprovalRow`) typed nothing: the
+/// dialog no longer showed the request the answer was for.
+pub const OMP_APPROVAL_CHANGED: &str =
+    "The prompt changed before your answer arrived. Answer the one showing now.";
+/// Why an OMP approval guard typed nothing: the screen could not be read at the guard.
+pub const OMP_APPROVAL_UNREAD: &str =
+    "Ghostex couldn't read OMP's terminal. Answer it in the terminal.";
+/// Why a key passed on to an OMP session's screen (`GuardOmpTerminalKey`) typed nothing: the
+/// screen showed OMP's tool approval, which is answered in the terminal.
+pub const OMP_APPROVAL_TAKES_NO_KEYS: &str =
+    "OMP is waiting for tool approval. Answer it in the terminal.";
+
 // ---------------------------------------------------------------------------
 // Step builders (upstream chat spec §7.5)
 // ---------------------------------------------------------------------------
@@ -59,6 +71,27 @@ pub enum SessionChatSendStep {
     VerifyTerminalPicker {
         agent: String,
     },
+    /// Answer a chat card for OMP's tool approval at the front of the send queue: read the screen
+    /// and type the Approve row's keys (`allow`) or Escape only while the dialog shows exactly the
+    /// card's request (`omp_card_answer_key`), the keys read from that same screen; otherwise stop
+    /// the job and type nothing (`OMP_APPROVAL_CHANGED`, or `OMP_APPROVAL_UNREAD` when the screen
+    /// could not be read). The request can change between the card's check and this step: another
+    /// client or the terminal answered it, and OMP showed the next call's dialog.
+    GuardOmpApprovalRequest {
+        tool: String,
+        summary: String,
+        allow: bool,
+    },
+    /// The same guard for a pick of one of OMP's own rows on the chat's screen card: type the
+    /// row's keys, read from the screen at this step, only while the dialog is still the one the
+    /// pick was made on (`omp_row_answer_key`); otherwise stop the job and type nothing.
+    GuardOmpApprovalRow(crate::session_chat_omp_blocking::OmpRowPick),
+    /// A key the chat passes on to an OMP session's screen (`terminalKey`): read the screen and
+    /// type it only while that screen takes passed-on keys (`screen_takes_picker_keys`) and shows
+    /// no tool approval (`omp_shows_tool_approval`), typed draft included; otherwise stop the job
+    /// and type nothing (`OMP_APPROVAL_TAKES_NO_KEYS` for an approval). An approval can come up
+    /// between the key's admission and this step.
+    GuardOmpTerminalKey(String),
     /// Move any existing agent-TUI composer draft into Saved Prompts before
     /// chat takes ownership of the input line. The prompt-editor handshake
     /// answers only after the CLI has durably stashed and cleared that draft.

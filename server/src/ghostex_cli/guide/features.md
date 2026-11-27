@@ -2023,6 +2023,49 @@ Once Ghostex has the answer, the row says Approved or Denied (or the words you
 picked, such as "Yes, and don't ask again for …") and the command for a few seconds, then leaves; the list above the chat box is
 the only bar there, with the agent's status on its top line. While the chat box
 is maximized, or a question card is open, the approval shows as its own card.
+An OMP bash approval keeps Allow and Deny, in the chat, on the phone and in a
+coordinator, when OMP's dialog shows its command on one line, as the last line
+of the request details above the choices (Approve, Deny and the key hints below
+them don't count), and that command is exactly the card's. Spaces at the end of
+a command are not compared, because the terminal cannot show them, so an older
+card can answer a newer command that differs from its own only in spaces at its
+end.
+An OMP approval that Ghostex cannot firmly tie to its request (one that shows
+only "Allow tool: <name>", such as a commit approval, and a bash command over
+several lines, one OMP or the card cut short, one that ends in a backslash, a
+tab or another kind of space, or one with a line below the command in the
+request details, above the choices: the folder or safety-check lines OMP
+sometimes adds there look the same as a command's next line) shows "OMP is
+waiting for tool approval": answer it in the terminal. In the desktop chat that
+card has only its Terminal view button, no
+keys and no live view of the terminal; in a wide chat the terminal's last lines
+are behind Show terminal output. In a coordinator the card has no Terminal view
+button and no Allow or Deny; its "Only you can answer this" line opens the
+thread, whose own card has Terminal view. On the phone the card depends on the
+app version: versions from before this change still show the terminal's lines
+with arrow, Enter and Esc buttons there, and those type
+nothing. Keys typed on that card are not passed to OMP, also after you started
+a message in OMP's dialog ("Deny and send message"); Ghostex says to answer it
+in the terminal. A key from another OMP card is checked against the screen
+right before it is typed, and is not typed if an approval is up then; Allow,
+Deny and OMP's rows are typed only if that same check still shows the card's
+request. Between that check and the keys reaching the terminal there is a gap
+Ghostex cannot close, and its length is not measured: if the terminal changes
+then (someone types in it, the call is aborted or OMP gives up waiting), the
+keys reach whatever it shows.
+So answer an approval either in the chat or in the terminal, not in both at once.
+Right after an earlier OMP approval with answer rows, the next approval can
+show those rows for a moment until Ghostex reads the screen again; tapping one
+is refused. If two devices answer the same OMP approval card in a coordinator at
+the same moment, the coordinator can show the other device's choice as the
+answer; the keys typed are only those the check above allows for the dialog on
+screen.
+Voice mode still answers OMP's own rows, but only the ones it read out to you:
+if OMP shows something else by the time you answer, nothing is answered and it
+has to read the new choices out first. For an OMP approval that is answered in
+the terminal, voice mode tells you to answer it there and answers nothing. A row
+picked with `ghostex answer-session-chat-prompt`, or from an app version from
+before 2026-11-05, is answered in the terminal.
 **Quote or reply to part of the chat**: select any text in the chat (a reply,
 your own message, tool output or code) and a small bar of buttons shows by
 where you let go: Copy, Add to Chat (puts the text in the chat box as a quote)

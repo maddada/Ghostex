@@ -208,7 +208,10 @@ fn a_standalone_omp_session_showing_an_approval_waits_for_the_user() {
     .expect("the screen notice");
     assert_eq!(
         (notice.kind.as_str(), notice.title.as_str()),
-        ("permissionPrompt", "Allow this?")
+        (
+            "ompInputBlocked",
+            crate::session_chat_omp_blocking::OMP_TOOL_APPROVAL_TITLE
+        )
     );
     assert_eq!(
         fixture.stored()["runtimeSettings"]["agentActivity"]["activity"],
@@ -363,7 +366,10 @@ fn a_same_looking_approval_after_a_clear_screen_is_a_new_request() {
     let second = screen_notice(&fixture).expect("the second commit approval");
     assert_eq!(
         (second.kind.as_str(), second.title.as_str()),
-        ("permissionPrompt", "Allow this?")
+        (
+            "ompInputBlocked",
+            crate::session_chat_omp_blocking::OMP_TOOL_APPROVAL_TITLE
+        )
     );
     assert_ne!(second.detected_at, first.detected_at);
 }

@@ -152,6 +152,16 @@ pub struct TerminalNotice {
     pub passthrough: bool,
 }
 
+/// The title gxserver gives OMP's tool approval that the chat leaves to the terminal.
+/// SEE-ALSO: server/src/session_chat_omp_blocking.rs (`OMP_TOOL_APPROVAL_TITLE`).
+pub const OMP_TOOL_APPROVAL_TITLE: &str = "OMP is waiting for tool approval";
+
+/// Whether a notice of `kind` titled `title` is OMP's tool approval that the chat leaves to the
+/// terminal.
+pub fn is_omp_tool_approval(kind: &str, title: &str) -> bool {
+    kind == "ompInputBlocked" && title == OMP_TOOL_APPROVAL_TITLE
+}
+
 impl TerminalNotice {
     /// The notice carried by `state.session.terminal_notice`, or `None`.
     pub fn parse(value: Option<&Value>) -> Option<Self> {
@@ -172,6 +182,14 @@ impl TerminalNotice {
         self.choices.as_ref().is_some_and(|rows| !rows.is_empty())
             || self.dialog.is_some()
             || self.conversation_lock.is_some()
+    }
+
+    /// Whether this is OMP's tool approval that the chat leaves to the terminal: gxserver's
+    /// `ompInputBlocked` notice titled `OMP_TOOL_APPROVAL_TITLE`. It is marked `passthrough`, and
+    /// owns the input like one, but its card passes no keys
+    /// (`terminal_picker::passthrough_presentation`).
+    pub fn is_omp_tool_approval(&self) -> bool {
+        is_omp_tool_approval(&self.kind, &self.title)
     }
 
     /// The rows the card actually offers, blank labels dropped.

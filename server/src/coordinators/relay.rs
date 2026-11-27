@@ -80,6 +80,16 @@ pub fn relay_card(session: &Value) -> Option<Value> {
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
+    // OMP's card for an approval it leaves to the terminal (a dialog that does not show what it
+    // asks, a bash command that shows no unique request): relayed like a permission prompt, so the
+    // coordinator's card says to answer in the terminal, with no Allow or Deny, which gxserver
+    // would refuse.
+    let terminal_only_omp = notice_kind == "ompInputBlocked"
+        && notice
+            .as_ref()
+            .and_then(|notice| notice.get("title"))
+            .and_then(Value::as_str)
+            == Some(crate::session_chat_omp_blocking::OMP_TOOL_APPROVAL_TITLE);
     let (kind, key) = match &stored {
         Some(prompt) if crate::connectors::is_connector_card(prompt) => (
             "connector",
@@ -93,6 +103,7 @@ pub fn relay_card(session: &Value) -> Option<Value> {
             let kind = match notice_kind.as_str() {
                 "permissionPrompt" => "permission",
                 "trustPrompt" => "trust",
+                "ompInputBlocked" if terminal_only_omp => "permission",
                 _ => return None,
             };
             let detected_at = notice
@@ -104,8 +115,18 @@ pub fn relay_card(session: &Value) -> Option<Value> {
         }
     };
     let mut card = json!({ "key": key, "kind": kind });
-    // The stored prompt goes as its chat frame carries it (`prompt`); a trust question has none.
-    if kind != "trust" {
+    /*
+    CDXC:Coordinators 2026-11-26 WHY:
+    The stored prompt goes as its chat frame carries it (`prompt`); a trust question has none, and
+    neither has OMP's terminal-only card. By the owner's decision (CDXC:SessionChat 2026-11-25
+    DECISION in session_chat_send/omp_approval_answer.rs) such a card (a bash command that shows no
+    unique request, a tool-only dialog such as annotation_open, an eval cell) has no Allow and no
+    Deny in a coordinator. The chat core at upstream 56b2016cd (the closest core that can be
+    checked; which core a released client carries is not known) draws a hook card's Allow and Deny
+    beside any notice without rows, so the card carries the notice alone, as an eval cell's card
+    always did; its key still names the stored prompt.
+    */
+    if kind != "trust" && !terminal_only_omp {
         if let Some(prompt) = stored_text
             .as_deref()
             .and_then(|text| serde_json::from_str::<Value>(text).ok())
@@ -114,8 +135,10 @@ pub fn relay_card(session: &Value) -> Option<Value> {
         }
     }
     // A Connectors card is the stored prompt alone; the others draw the screen's rows when it
-    // shows the prompt (a trust question has nothing else).
-    if kind != "connector" && matches!(notice_kind.as_str(), "permissionPrompt" | "trustPrompt") {
+    // shows the prompt (a trust question has nothing else), or OMP's terminal-only card.
+    if kind != "connector"
+        && (matches!(notice_kind.as_str(), "permissionPrompt" | "trustPrompt") || terminal_only_omp)
+    {
         if let Some(notice) = notice {
             card["notice"] = notice;
         }
@@ -126,12 +149,15 @@ pub fn relay_card(session: &Value) -> Option<Value> {
     Some(card)
 }
 
-/// One answer the user sent from a coordinator's chat, until the card it answered ends.
+/// One answer the user sent from a coordinator's chat, until the card it answered ends. It is
+/// pending (`applied` false) from admission until the thread's answer path reports how it went
+/// ([`settle_answer`]): only an applied one makes its card end as answered here.
 #[derive(Clone, Debug)]
 struct AnsweredHere {
     label: String,
     coordinator_title: String,
     at_ms: i64,
+    applied: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -156,14 +182,18 @@ fn relays() -> &'static Mutex<HashMap<SessionKey, ThreadRelay>> {
 }
 
 /// How the card `live` of thread `thread` ended. `replaced`: the thread now shows another card.
+/// An answer from the coordinator still pending when the card ends stays recorded, and the card
+/// ends as it would without it until [`settle_answer`] reports the answer applied.
 fn ended(relay: &mut ThreadRelay, live: &LiveCard, replaced: bool, now: i64) -> Value {
     let mut card = live.card.clone();
     card["settledAt"] = json!(iso(now));
-    if let Some(answered) = relay.answered_here.remove(&live.key) {
-        card["status"] = json!("answeredHere");
-        card["answer"] = json!(answered.label);
-        card["answeredFrom"] = json!(answered.coordinator_title);
-        card["settledAt"] = json!(iso(answered.at_ms));
+    if let Some(answered) = relay
+        .answered_here
+        .get(&live.key)
+        .filter(|answered| answered.applied)
+    {
+        answered_here(&mut card, answered);
+        relay.answered_here.remove(&live.key);
         return card;
     }
     let connector_outcome = (live.card["kind"] == "connector")
@@ -184,6 +214,14 @@ fn ended(relay: &mut ThreadRelay, live: &LiveCard, replaced: bool, now: i64) -> 
         card["answer"] = json!(answer);
     }
     card
+}
+
+/// Marks the ended card `card` as answered from the coordinator's chat with `answered`.
+fn answered_here(card: &mut Value, answered: &AnsweredHere) {
+    card["status"] = json!("answeredHere");
+    card["answer"] = json!(answered.label);
+    card["answeredFrom"] = json!(answered.coordinator_title);
+    card["settledAt"] = json!(iso(answered.at_ms));
 }
 
 /// Follows every listed thread's card from one tick to the next and returns the coordinator's
@@ -289,6 +327,33 @@ pub struct RelayedAnswer {
     pub label: String,
     coordinator_title: String,
     question: String,
+    /// The hook approval the clicked card showed (tool, summary, call id), read from the relay's
+    /// own snapshot of that card, which `live_card` checked is still the thread's.
+    clicked_approval: Option<(String, Option<String>, Option<String>)>,
+}
+
+impl RelayedAnswer {
+    /// An approval answer that names no card (an older coordinator chat's Deny named none) is
+    /// given the tool, summary and call of the card it was clicked on: the relay's snapshot of
+    /// that card, never the thread's newest stored card, which can already be the next request.
+    /// An answer that names its card keeps what it names.
+    pub fn name_clicked_approval(&self, params: &mut Map<String, Value>) {
+        if params.get("kind").and_then(Value::as_str) != Some("approval")
+            || params.contains_key("promptTool")
+        {
+            return;
+        }
+        let Some((tool, summary, tool_use_id)) = &self.clicked_approval else {
+            return;
+        };
+        params.insert("promptTool".into(), json!(tool));
+        if let Some(summary) = summary {
+            params.insert("promptSummary".into(), json!(summary));
+        }
+        if let Some(id) = tool_use_id {
+            params.insert("toolUseId".into(), json!(id));
+        }
+    }
 }
 
 fn refused(message: &str) -> DomainStateError {
@@ -408,6 +473,20 @@ pub fn begin_relayed_answer(
             .chars()
             .take(120)
             .collect::<String>();
+        let clicked_approval = card
+            .get("prompt")
+            .map(Value::to_string)
+            .as_deref()
+            .and_then(parse_stored_session_chat_prompt)
+            .and_then(|prompt| match prompt {
+                SessionChatInteractivePrompt::Approval {
+                    tool,
+                    summary,
+                    tool_use_id,
+                    ..
+                } => Some((tool, summary, tool_use_id)),
+                _ => None,
+            });
         let answer = RelayedAnswer {
             thread: thread.clone(),
             coordinator,
@@ -415,6 +494,7 @@ pub fn begin_relayed_answer(
             label: label.clone(),
             coordinator_title: coordinator_title.clone(),
             question: card_question(&card),
+            clicked_approval,
         };
         relays()
             .lock()
@@ -428,6 +508,7 @@ pub fn begin_relayed_answer(
                     label,
                     coordinator_title,
                     at_ms: now_ms(),
+                    applied: false,
                 },
             );
         Ok(answer)
@@ -500,23 +581,55 @@ fn card_question(card: &Value) -> String {
         .collect()
 }
 
-/// Ends a relayed answer: a refused one is forgotten, so the card stays open; an applied one
-/// writes the thread's audit line ("Approved from Main Coordinator") and republishes its chat.
+/*
+CDXC:Coordinators 2026-11-25 WHY:
+A relayed answer is pending from admission until the thread's answer path returns: for OMP's
+approval that is once its send-queue guard typed the keys or typed nothing. A coordinator refresh
+can see the card end meanwhile (the guard found the next request on screen); publishing that card
+as answered here at that point told the user their click answered it when the guard was about to
+refuse it. So a card that ends while its answer is pending ends as it would without the answer,
+and becomes answered here only when this answer is applied; a refused answer is forgotten.
+*/
+/// Ends a relayed answer: a refused one is forgotten, so the card stays open (or, if it ended
+/// meanwhile, keeps the end it had without this answer); an applied one marks its card answered
+/// here, also when the card already ended, writes the thread's audit line ("Approved from Main
+/// Coordinator") and republishes its chat.
 pub(crate) fn settle_answer(
     state: &crate::server::AppState,
     answer: &RelayedAnswer,
     applied: bool,
 ) {
-    if !applied {
-        if let Some(relay) = relays()
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .get_mut(&answer.thread)
-        {
+    if let Some(relay) = relays()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get_mut(&answer.thread)
+    {
+        if !applied {
             relay.answered_here.remove(&answer.key);
+        } else {
+            if let Some(answered) = relay.answered_here.get_mut(&answer.key) {
+                answered.applied = true;
+                answered.at_ms = now_ms();
+            }
+            // The card ended while the answer was pending: it becomes answered here now.
+            if let Some((_, card)) = relay
+                .settled
+                .iter_mut()
+                .rev()
+                .find(|(_, card)| card["key"] == answer.key.as_str())
+            {
+                if let Some(answered) = relay.answered_here.remove(&answer.key) {
+                    answered_here(card, &answered);
+                }
+            }
         }
-        return;
     }
+    if applied {
+        record_applied(state, answer);
+    }
+}
+
+fn record_applied(state: &crate::server::AppState, answer: &RelayedAnswer) {
     record_audit(
         &state.paths,
         &answer.thread,
@@ -698,6 +811,7 @@ mod tests {
                     label: "Yes".to_string(),
                     coordinator_title: "Main Coordinator".to_string(),
                     at_ms: now_ms(),
+                    applied: true,
                 },
             );
         let mut rows = vec![row("G-track-1", None), row("G-track-2", None)];

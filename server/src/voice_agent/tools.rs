@@ -346,6 +346,9 @@ pub(super) struct ToolMemory {
     /// The token the attached client opened the call with; the tools' requests send it
     /// (`loopback::ToolCaller`). The last client to attach is the one the call acts for.
     caller_token: std::sync::Mutex<Option<String>>,
+    /// The OMP row selection `get_pending_prompt` read out per session and nobody has answered yet
+    /// (`answer_prompt` binds its pick to it).
+    omp_reads: std::sync::Mutex<std::collections::HashMap<String, OmpReadOut>>,
 }
 
 impl ToolMemory {
@@ -424,6 +427,39 @@ impl ToolMemory {
             drafts.get(&session.reference()).map(String::as_str) == Some(content)
         })
     }
+
+    /// `get_pending_prompt` read out the OMP row selection `detected_at` in `session`. A different
+    /// one read while an earlier read is unanswered makes the session ambiguous: the model may
+    /// answer either, and only a new read-out after the next answer attempt ties it again.
+    fn note_omp_read(&self, session: &SessionInfo, detected_at: &str) {
+        if let Ok(mut reads) = self.omp_reads.lock() {
+            let read = match reads.get(&session.reference()) {
+                None => OmpReadOut::Notice(detected_at.to_string()),
+                Some(OmpReadOut::Notice(earlier)) if earlier == detected_at => {
+                    OmpReadOut::Notice(detected_at.to_string())
+                }
+                Some(_) => OmpReadOut::Ambiguous,
+            };
+            reads.insert(session.reference(), read);
+        }
+    }
+
+    /// The unanswered OMP read-out of `session`, which an answer attempt uses up.
+    fn take_omp_read(&self, session: &SessionInfo) -> Option<OmpReadOut> {
+        self.omp_reads
+            .lock()
+            .ok()
+            .and_then(|mut reads| reads.remove(&session.reference()))
+    }
+}
+
+/// What `get_pending_prompt` last read out of an OMP session's row selection.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum OmpReadOut {
+    /// The notice it read out, by its `detectedAt`.
+    Notice(String),
+    /// Two different selections were read out and neither was answered.
+    Ambiguous,
 }
 
 pub(super) async fn run(
@@ -1026,6 +1062,11 @@ enum PendingPrompt {
         detail: Option<String>,
         options: Vec<PromptOption>,
     },
+    /// OMP's tool approval the chat leaves to the terminal: nothing here answers it.
+    InTerminal {
+        title: String,
+        detail: Option<String>,
+    },
 }
 
 fn pending_prompt(chat: &Value) -> PendingPrompt {
@@ -1053,6 +1094,21 @@ fn pending_prompt(chat: &Value) -> PendingPrompt {
             .or_else(|| notice.get("detail"))
             .and_then(Value::as_str)
             .map(str::to_string);
+        /*
+        CDXC:VoiceMode 2026-11-26 WHY:
+        OMP's tool approval the chat leaves to the terminal ("OMP is waiting for tool approval") is
+        answered there, with neither Allow nor Deny from the card (the owner's decision above
+        `omp_shown_request` in session_chat_omp_blocking.rs). The stored hook card still rides the
+        read beside it, so falling through to it below offered its Allow and Deny, which gxserver
+        then refused: the user was asked to choose where nothing can be answered. Such a notice is
+        read out as answered in the terminal instead, whatever the hook card says.
+        */
+        if notice.get("kind").and_then(Value::as_str)
+            == Some(crate::session_chat_notice::SESSION_CHAT_NOTICE_OMP_INPUT_BLOCKED)
+            && title == crate::session_chat_omp_blocking::OMP_TOOL_APPROVAL_TITLE
+        {
+            return PendingPrompt::InTerminal { title, detail };
+        }
         let dialog_id = notice.pointer("/dialog/id").and_then(Value::as_str);
         let choice_answer = |index: usize| match dialog_id {
             Some(id) => json!({"kind": "terminalDialog", "choiceIndex": index, "dialogId": id}),
@@ -1151,7 +1207,32 @@ async fn get_pending_prompt(
 ) -> Result<Value, String> {
     let session = resolve_session(state, memory, args, Purpose::Read).await?;
     let chat = read_chat(state, &session, 20).await?;
+    if let Some(detected_at) = omp_row_selection(&session, &chat) {
+        memory.note_omp_read(&session, &detected_at);
+    }
     Ok(pending_view(state, &session, &chat).await)
+}
+
+/// The `detectedAt` of OMP's own row selection when that is what `session` (an OMP session) waits
+/// on in `chat`: a screen notice whose rows the answer picks by number.
+fn omp_row_selection(session: &SessionInfo, chat: &Value) -> Option<String> {
+    if !session.agent.eq_ignore_ascii_case("omp")
+        || !matches!(pending_prompt(chat), PendingPrompt::Choice { .. })
+    {
+        return None;
+    }
+    let notice = chat.get("terminalNotice")?;
+    if notice.get("dialog").is_some_and(|dialog| !dialog.is_null()) {
+        return None;
+    }
+    notice
+        .get("choices")
+        .and_then(Value::as_array)
+        .filter(|choices| !choices.is_empty())?;
+    notice
+        .get("detectedAt")
+        .and_then(Value::as_str)
+        .map(str::to_string)
 }
 
 /// What `session` waits on, read from its `chat`: `get_pending_prompt`'s answer.
@@ -1203,6 +1284,17 @@ async fn pending_view(state: &Arc<AppState>, session: &SessionInfo, chat: &Value
             "title": short(&title, 300),
             "detail": detail.map(|detail| short(&detail, 400)),
             "options": options.iter().enumerate().map(|(n, option)| json!({"number": n + 1, "label": short(&option.label, 200)})).collect::<Vec<_>>(),
+        }),
+        PendingPrompt::InTerminal { title, detail } => json!({
+            "ok": true,
+            "session": session.to_tool_value(),
+            "kind": "answerInTerminal",
+            "title": short(&title, 300),
+            "detail": detail.map(|detail| short(&detail, 400)),
+            "note": format!(
+                "This approval in \"{}\" can only be answered in its terminal, not from here. Tell the user to answer it in the session's terminal; there is nothing to choose.",
+                session.title
+            ),
         }),
     };
     if !forms.is_empty() {
@@ -1282,11 +1374,47 @@ async fn answer_prompt(
     args: &Value,
 ) -> Result<Value, String> {
     let session = resolve_session(state, memory, args, Purpose::Answer).await?;
-    // Answers that name questions by ref are for the question forms and pages in its chat.
+    /*
+    CDXC:VoiceMode 2026-11-26 DECISION:
+    User: voice mode keeps answering OMP's row selections it read out; the answer is bound to the
+    selection the user heard.
+
+    CDXC:VoiceMode 2026-11-26 WHY:
+    gxserver answers an OMP row pick only for the notice it names (`noticeDetectedAt`), and in the
+    terminal when it names none (session_chat_send/omp_approval_answer.rs). So the pick names the
+    selection `get_pending_prompt` read out, never one read now: before anything else, while that
+    read-out is unanswered, the screen must still show it. Anything else (another OMP request, a
+    question, also one the answer names by ref, a dialog, another approval), or two different
+    selections read out, is refused with nothing typed, and the model reads out anew. An OMP
+    selection the model answers without having read it out is left to the terminal.
+    */
+    let read_out_anew = || {
+        format!(
+            "Nothing was answered: what \"{}\" asks now is not the OMP approval you read out. Call get_pending_prompt again and read its options out to the user before answering.",
+            session.title
+        )
+    };
+    // Answers that name questions by ref are for the question forms and pages in its chat, and
+    // never for an OMP selection still waiting on the answer the user gave for it.
     if question_forms::names_questions(args) {
+        if memory.take_omp_read(&session).is_some() {
+            return Err(read_out_anew());
+        }
         return question_forms::answer(state, &session, args).await;
     }
     let chat = read_chat(state, &session, 20).await?;
+    let shown = omp_row_selection(&session, &chat);
+    let omp_notice = match (memory.take_omp_read(&session), shown) {
+        (None, None) => None,
+        (None, Some(_)) => {
+            return Err(format!(
+                "Nothing was answered: Ghostex can only answer OMP's approval in \"{}\" for the options you read out. Call get_pending_prompt and read them out first, or the user answers it in the terminal.",
+                session.title
+            ))
+        }
+        (Some(OmpReadOut::Notice(read)), Some(shown)) if read == shown => Some(read),
+        (Some(_), _) => return Err(read_out_anew()),
+    };
     let single_option = args
         .get("option")
         .and_then(Value::as_u64)
@@ -1295,6 +1423,12 @@ async fn answer_prompt(
     let free_text = arg_text(args, "text");
     let (answer, said) = match pending_prompt(&chat) {
         PendingPrompt::None => return question_forms::answer(state, &session, args).await,
+        PendingPrompt::InTerminal { .. } => {
+            return Err(format!(
+                "Nothing was answered: the approval \"{}\" waits on can only be answered in its terminal. Tell the user to answer it there.",
+                session.title
+            ))
+        }
         PendingPrompt::Questions(questions) => {
             let mut selections: Vec<Value> = Vec::new();
             let mut said: Vec<String> = Vec::new();
@@ -1381,7 +1515,11 @@ async fn answer_prompt(
                     format!("There are only {} options.", options.len())
                 });
             };
-            (option.answer.clone(), option.label.clone())
+            let mut answer = option.answer.clone();
+            if let (Some(read), Some(answer)) = (&omp_notice, answer.as_object_mut()) {
+                answer.insert("noticeDetectedAt".to_string(), json!(read));
+            }
+            (answer, option.label.clone())
         }
     };
     let mut params = answer.as_object().cloned().unwrap_or_default();

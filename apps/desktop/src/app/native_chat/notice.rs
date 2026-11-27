@@ -633,19 +633,7 @@ impl NativeChatView {
                 );
             }
         }
-        // A card with rows or a dialog is answered, not closed, until an answer on it is refused
-        // or it is an unacknowledged every-account-full usage-limit wait (Q4472; `dismiss_notice`
-        // in the chat core's questions/actions.rs).
-        let unacknowledged_pool_wait = notice["kind"].as_str() == Some("usageLimit")
-            && notice["accountWait"].as_object().is_some_and(|wait| {
-                wait.get("provider").and_then(Value::as_str).is_some()
-                    && wait.get("mode").and_then(Value::as_str).is_none()
-                    && wait.get("acknowledgedAt").and_then(Value::as_str).is_none()
-            });
-        if (notice["choices"].is_null() && notice["dialog"].is_null())
-            || snapshot["noticeError"].is_string()
-            || unacknowledged_pool_wait
-        {
+        if notice_offers_dismiss(notice, &snapshot) {
             footer_end.push(
                 self.tone_button(
                     "dismiss-notice",
@@ -834,4 +822,31 @@ impl NativeChatView {
         }
         row.into_any_element()
     }
+}
+
+/// Whether the notice card ends with Dismiss. A card with rows or a dialog is answered, not
+/// closed, until an answer on it is refused or it is an unacknowledged every-account-full
+/// usage-limit wait (Q4472; `dismiss_notice` in the chat core's questions/actions.rs).
+///
+/// CDXC:SessionChat 2026-11-26 WHY: OMP's tool approval the chat leaves to the terminal ("OMP is
+/// waiting for tool approval") shows only Terminal view (the owner's decision above
+/// `passthrough_presentation` in the chat core's questions/terminal_picker.rs). It has neither rows
+/// nor a dialog, so it got the generic Dismiss too, which hid its terminal guidance while OMP still
+/// waited for the answer.
+fn notice_offers_dismiss(notice: &Value, snapshot: &Value) -> bool {
+    if ghostex_gx_chat_core::questions::model::is_omp_tool_approval(
+        &text(notice, "kind"),
+        &text(notice, "title"),
+    ) {
+        return false;
+    }
+    let unacknowledged_pool_wait = notice["kind"].as_str() == Some("usageLimit")
+        && notice["accountWait"].as_object().is_some_and(|wait| {
+            wait.get("provider").and_then(Value::as_str).is_some()
+                && wait.get("mode").and_then(Value::as_str).is_none()
+                && wait.get("acknowledgedAt").and_then(Value::as_str).is_none()
+        });
+    (notice["choices"].is_null() && notice["dialog"].is_null())
+        || snapshot["noticeError"].is_string()
+        || unacknowledged_pool_wait
 }

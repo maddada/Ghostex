@@ -439,6 +439,61 @@ fn notice_from_omp_blocking_screen(
 }
 
 /*
+CDXC:SessionChat 2026-11-26 WHY:
+A bash hook card whose own command shows no unique request (a command over several lines, one the
+card cut, one ending in a backslash or in whitespace other than spaces) is answered in the
+terminal whatever OMP's dialog shows (the owner's decision above `omp_shown_request` in
+session_chat_omp_blocking.rs). Until gxserver had read the screen, the stored hook card reached
+the chat alone, and with no notice beside it the chat core drew Allow and Deny, which gxserver
+then refused (`answerInTerminal`). So the card the screen reading gives such an approval
+(`OMP_TOOL_APPROVAL`, Open terminal) is derived from that stored bash hook card while the session
+shows no notice: a notice the session shows comes first, and the derived one ends with the stored
+card. Its `detectedAt` names the stored card (a time taken from the card's hash), so every
+producer of a frame restates the same instance, and the next card is a new one. A bash card whose
+command does show a unique request keeps its Allow and Deny, as an MCP tool's card does.
+SEE-ALSO: server/src/session_chat_omp_blocking.rs (`omp_bash_card_answered_in_terminal`).
+*/
+/// `notice`, or OMP's terminal card for the stored hook card `stored` of an OMP session (`agent`)
+/// that is answered in the terminal, while there is no `notice`.
+pub fn with_omp_hook_terminal_notice(
+    agent: Option<&str>,
+    stored: Option<&str>,
+    notice: Option<SessionChatTerminalNotice>,
+) -> Option<SessionChatTerminalNotice> {
+    if notice.is_some() || session_chat_option_agent(agent) != Some(SessionChatOptionAgent::Omp) {
+        return notice;
+    }
+    let stored = stored?;
+    let Some(crate::session_chat_interactive::SessionChatInteractivePrompt::Approval {
+        tool,
+        summary,
+        ..
+    }) = crate::session_chat::parse_stored_session_chat_prompt(stored)
+    else {
+        return None;
+    };
+    if !crate::session_chat_omp_blocking::omp_bash_card_answered_in_terminal(
+        &tool,
+        summary.as_deref(),
+    ) {
+        return None;
+    }
+    let mut derived = notice_from_omp_blocking_screen(
+        &NoticeScreen::new(""),
+        crate::session_chat_omp_blocking::OMP_TOOL_APPROVAL,
+    );
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(stored.as_bytes());
+    let millis = digest[..5]
+        .iter()
+        .fold(0i64, |millis, byte| millis << 8 | i64::from(*byte));
+    derived.detected_at = chrono::DateTime::from_timestamp_millis(millis)
+        .unwrap_or_default()
+        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    Some(derived)
+}
+
+/*
 CDXC:AgentScreenDetection 2026-08-19:
 Pure classifier over ONE terminal capture. Rules are evaluated in the catalog's
 precedence order (login > trust > permissions > exited > usage > stream >
@@ -752,10 +807,14 @@ pub fn classify_session_chat_terminal_notice(
         }
     }
     if agent == SessionChatOptionAgent::Omp {
-        if let Some((picker, command)) =
+        if let Some((picker, command, request)) =
             crate::session_chat_omp_blocking::detect_omp_permission_picker_with_command(screen_text)
         {
-            return Some(notice_from_picker(&screen, picker).with_approval_command(command));
+            return Some(
+                notice_from_picker(&screen, picker)
+                    .with_approval_command(command)
+                    .with_request_identity(request),
+            );
         }
         if let Some(blocking) =
             crate::session_chat_omp_blocking::detect_omp_blocking_screen(screen_text)

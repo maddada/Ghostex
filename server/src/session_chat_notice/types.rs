@@ -320,6 +320,10 @@ pub struct SessionChatTerminalNotice {
     pub send_failure_prompt_id: Option<String>,
     /// Server-side delivery policy for this particular detected state.
     blocks_input: bool,
+    /// The identity of the exact request an OMP approval's rows answer (`omp_request_identity` in
+    /// session_chat_omp_blocking.rs): part of what makes two readings the same notice, never sent
+    /// to a client.
+    request_identity: Option<String>,
 }
 
 impl SessionChatTerminalNotice {
@@ -355,6 +359,7 @@ impl SessionChatTerminalNotice {
             checkboxes_detail: None,
             send_failure_prompt_id: None,
             blocks_input: session_chat_notice_kind_blocks_input(kind),
+            request_identity: None,
         }
     }
 
@@ -416,7 +421,20 @@ impl SessionChatTerminalNotice {
         self
     }
 
+    /// Binds the notice to the exact request its rows answer (`request_identity`).
+    pub(crate) fn with_request_identity(mut self, identity: String) -> Self {
+        self.request_identity = Some(identity);
+        self
+    }
+
+    /// The identity of the exact request this notice's rows answer, when it was read with one.
+    pub(crate) fn request_identity(&self) -> Option<&str> {
+        self.request_identity.as_deref()
+    }
+
     /// CDXC:SessionChat 2026-10-11 WHY: the chat cannot read these screens row by row (other agents' pickers and dialogs, and Codex's own screens its dialog reader does not know), so while one owns the input the chat passes keys through to the terminal and shows the screen region (`screenTail`) live; see the DECISION in session_chat_resume_picker.rs.
+    /// OMP's tool approval is marked so too, which hides a hook card's Allow and Deny beside it in
+    /// every chat core, but its keys are refused (`is_omp_tool_approval`).
     pub fn passes_keys_through(&self) -> bool {
         self.dialog.is_none()
             && self.choices.is_empty()
@@ -459,6 +477,9 @@ impl SessionChatTerminalNotice {
                 && self.dialog == other.dialog
                 && self.conversation_lock == other.conversation_lock
                 && self.auto_trust == other.auto_trust
+                // The exact request, which the words can show alike for two requests
+                // (CDXC:SessionChat 2026-11-26 in session_chat_omp_blocking.rs).
+                && self.request_identity == other.request_identity
                 // Labels only: the highlight moves whenever the user arrows
                 // around in the terminal, and re-minting `detectedAt` for that
                 // would resurrect a card they just dismissed.
@@ -496,7 +517,26 @@ impl SessionChatTerminalNotice {
     decides whether a reading inherits the key) still ignores the key.
     */
     fn same_permission_request(&self, other: &SessionChatTerminalNotice) -> bool {
-        self.kind != SESSION_CHAT_NOTICE_PERMISSION_PROMPT || self.detected_at == other.detected_at
+        !self.is_permission_request() || self.detected_at == other.detected_at
+    }
+
+    /// A permission prompt read off the screen: the agent's own (`permissionPrompt`), or OMP's
+    /// approval that the chat leaves to the terminal because its dialog does not show what it asks
+    /// (CDXC:SessionChat 2026-11-25 in session_chat_omp_blocking.rs), which is a request of its own
+    /// in every rule a permission prompt has.
+    pub fn is_permission_request(&self) -> bool {
+        self.kind == SESSION_CHAT_NOTICE_PERMISSION_PROMPT || self.is_omp_tool_approval()
+    }
+
+    /// OMP's tool approval that the chat leaves to the terminal (`OMP_TOOL_APPROVAL_TITLE`), read
+    /// off the screen or derived from a stored bash hook card answered in the terminal
+    /// (`with_omp_hook_terminal_notice`).
+    /// Its card passes no keys (CDXC:SessionChat 2026-11-26 above `answer_terminal_key` in
+    /// session_chat_resume_picker.rs), though it is marked `passthrough` like the other screens
+    /// whose keys the chat passes on.
+    pub fn is_omp_tool_approval(&self) -> bool {
+        self.kind == SESSION_CHAT_NOTICE_OMP_INPUT_BLOCKED
+            && self.title == crate::session_chat_omp_blocking::OMP_TOOL_APPROVAL_TITLE
     }
 
     /*
@@ -535,9 +575,13 @@ impl SessionChatTerminalNotice {
 
     /// A permission prompt that holds the agent's input and that Ghostex is not answering itself:
     /// an approval only the user can grant, the same test a coordinator thread's screen wait makes
-    /// (`ThreadScreenWait::from_screen` in coordinators/state.rs).
+    /// (`ThreadScreenWait::from_screen` in coordinators/state.rs). OMP's approval that the chat
+    /// leaves to the terminal is one too.
     pub fn is_screen_approval(&self) -> bool {
-        self.kind == SESSION_CHAT_NOTICE_PERMISSION_PROMPT && self.blocks_input && !self.auto_trust
+        !self.auto_trust
+            && (self.kind == SESSION_CHAT_NOTICE_PERMISSION_PROMPT && self.blocks_input
+                || self.kind == SESSION_CHAT_NOTICE_OMP_INPUT_BLOCKED
+                    && self.is_permission_request())
     }
 
     /// The session's login can never answer again (its organization disabled Claude
@@ -591,6 +635,11 @@ impl SessionChatTerminalNotice {
         if let Some(request) = self.permission_request.as_ref() {
             identity.push('\u{1f}');
             identity.push_str(&request.to_value().to_string());
+        }
+        // Two OMP approvals whose words read alike differ in their exact request.
+        if let Some(request) = self.request_identity.as_deref() {
+            identity.push('\u{1f}');
+            identity.push_str(request);
         }
         // The dialog id is the plain panel's hash, which a side answer read whole does not change.
         if let Some(side_question) = self

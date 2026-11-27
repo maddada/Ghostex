@@ -2112,20 +2112,10 @@ mod tests {
 
     #[test]
     fn a_message_sent_during_an_omp_tool_approval_waits_for_the_answer() {
-        // The open approval is a permission card with rows: a send meets the chat's "Answer it in
-        // chat before sending" refusal, as during Claude Code's (`is_answerable`, send.rs).
-        for screen in [
-            include_str!("../session_chat_tests/fixtures/omp-tool-approval-pi.txt"),
-            include_str!("../session_chat_tests/fixtures/omp-tool-approval-box.txt"),
-        ] {
-            let notice = crate::session_chat_notice::classify_session_chat_terminal_notice(
-                Some("omp"),
-                screen,
-            )
-            .expect("the open approval is a notice");
-            assert!(notice.is_answerable());
-        }
-        // With a message typed into it in OMP's terminal it is the card that passes keys through.
+        // An open approval that shows its request is a permission card with rows, so a send meets
+        // the chat's "Answer it in chat before sending" refusal (`is_answerable`, send.rs; checked in
+        // session_chat_tests/omp_tool_approval.rs). With a message typed into it in OMP's terminal it
+        // is the card that passes keys through.
         for screen in [
             include_str!("../session_chat_tests/fixtures/omp-tool-approval-draft-pi.txt"),
             include_str!("../session_chat_tests/fixtures/omp-tool-approval-draft-box.txt"),

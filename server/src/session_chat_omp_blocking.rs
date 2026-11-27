@@ -38,6 +38,8 @@ use crate::session_chat_resume_prompt::{
 
 const OMP_BLOCKING_SCAN_LINES: usize = 240;
 const OMP_PAIR_RADIUS: usize = 100;
+/// The title of the card for OMP's live tool approval when the chat does not answer it itself.
+pub const OMP_TOOL_APPROVAL_TITLE: &str = "OMP is waiting for tool approval";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct OmpBlockingScreen {
@@ -49,6 +51,29 @@ const LIVE_MODE: OmpBlockingScreen = OmpBlockingScreen {
     title: "OMP live mode owns terminal input",
     detail: "End the realtime voice session in the terminal before sending a normal text message.",
 };
+
+/// OMP's live tool approval when the chat does not answer it itself.
+pub const OMP_TOOL_APPROVAL: OmpBlockingScreen = OmpBlockingScreen {
+    title: OMP_TOOL_APPROVAL_TITLE,
+    detail: "Approve or deny the pending tool call in the terminal before sending a message.",
+};
+
+/// Whether OMP's hook card for `tool` with `summary` is answered in the terminal whatever its
+/// dialog shows: a bash card whose command shows no unique request (`omp_bash_request`), such as
+/// a command over several lines or one the card cut (CDXC:SessionChat 2026-11-26 DECISION above
+/// `omp_shown_request`).
+pub fn omp_bash_card_answered_in_terminal(tool: &str, summary: Option<&str>) -> bool {
+    crate::session_chat_interactive::normalize_session_chat_tool_name(tool) == "bash"
+        && summary.and_then(omp_bash_request).is_none()
+}
+
+/// Whether `text` shows OMP's live tool approval, with or without a message typed into it ("Deny
+/// and send message"), and whether or not its dialog shows a unique request: a screen a passed-on
+/// key must never reach (CDXC:SessionChat 2026-11-26 above `answer_terminal_key` in
+/// session_chat_resume_picker.rs).
+pub fn omp_shows_tool_approval(text: &str) -> bool {
+    detect_omp_blocking_screen(text) == Some(OMP_TOOL_APPROVAL)
+}
 
 fn collapse_spaces(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
@@ -405,11 +430,7 @@ fn classify_rounded_frame(
 
     let composer_on_frame = on_composer == Some(end);
     if is_live_approval(&text, composer, on_composer, end) {
-        return Some(OmpBlockingScreen {
-            title: "OMP is waiting for tool approval",
-            detail:
-                "Approve or deny the pending tool call in the terminal before sending a message.",
-        });
+        return Some(OMP_TOOL_APPROVAL);
     }
 
     if (title == "ask" || title.starts_with("ask ("))
@@ -495,11 +516,14 @@ pub fn detect_omp_permission_picker(text: &str) -> Option<SessionChatTerminalPic
     read_omp_permission_picker(text).map(|(picker, _)| picker)
 }
 
-/// The same live picker with the command lines its dialog actually shows, for the folded card.
+/// The same live picker with the command lines its dialog actually shows, for the folded card,
+/// and the server-only identity of the exact request it asks about (`omp_request_identity`).
 pub fn detect_omp_permission_picker_with_command(
     text: &str,
-) -> Option<(SessionChatTerminalPicker, Option<String>)> {
-    let (picker, request) = read_omp_permission_picker(text)?;
+) -> Option<(SessionChatTerminalPicker, Option<String>, String)> {
+    let (picker, request, dialog) =
+        read_omp_approval_frame(text).filter(|(_, _, dialog)| dialog.shown.is_some())?;
+    let identity = omp_request_identity(&dialog);
     let mut command = String::new();
     let mut found = false;
     for raw in text.lines().skip(request.start).take(request.len()) {
@@ -517,11 +541,6 @@ pub fn detect_omp_permission_picker_with_command(
         };
         let line = line.strip_prefix(' ').unwrap_or(line).trim_end();
         if found {
-            // OMP appends the grant's folder and provider safety checks after tool details.
-            // Expanded commands keep their own newlines, without continuation indentation.
-            if line.starts_with("Folder:") || line == "Provider safety checks:" {
-                break;
-            }
             command.push('\n');
             command.push_str(line);
         } else if let Some(value) = line.strip_prefix("Command:") {
@@ -529,57 +548,314 @@ pub fn detect_omp_permission_picker_with_command(
             found = true;
         }
     }
-    Some((picker, (!command.trim().is_empty()).then_some(command)))
+    Some((
+        picker,
+        (!command.trim().is_empty()).then_some(command),
+        identity,
+    ))
 }
 
-/// Whether OMP's live approval dialog shows the request a chat card named by its summary
-/// (`summarize_approval_input`: the command, path, URL or pattern, cut at 200 characters with an
-/// ellipsis). `None` when no approval dialog is up.
-///
-/// CDXC:SessionChat 2026-11-07 WHY:
-/// The 2026-11-05 DECISION in session_chat_send/answer_http.rs applies an answer only to the prompt its card showed, and OMP's Allow (PR #465) walks the Approve row of whatever dialog is up, so before pressing it the dialog must show the request the card was for. Both sides are compared with their whitespace collapsed and their cut ends dropped, so a summary cut at 200 characters, or a long command OMP wraps or cuts, still matches its own dialog and never another one.
-pub fn omp_permission_dialog_shows(text: &str, summary: &str) -> Option<bool> {
-    let (_, request) = read_omp_permission_picker(text)?;
-    let collapse = |value: &str| value.split_whitespace().collect::<Vec<_>>().join(" ");
-    let uncut = |value: &str| {
-        value
-            .trim_end_matches(['\u{2026}', '.'])
-            .trim_end()
-            .to_string()
+/*
+CDXC:SessionChat 2026-11-26 WHY:
+The chat's row card shows OMP's dialog in its display words (`detail`, space-collapsed), so two
+MCP requests whose arguments differ only in a double or non-breaking space read the same, and the
+detector gave the second the first one's `detectedAt`: a row picked on the first passed the
+answer's admission for the second. So the notice also carries the identity of the exact request
+(the dialog's tool and its request lines as drawn, the same ones a row pick and the send worker
+compare), which decides together with the words whether a reading is the same notice and keeps
+its `detectedAt`. The identity never leaves gxserver and cannot be read back: it is an HMAC-SHA256
+under a key drawn at random once per process, chosen over a random id mapped to each request
+because a map would have to keep the request itself to recognise it again. A restart draws a new
+key, so the request read after it is a new notice and a pick made before it is refused.
+*/
+/// The server-only identity of the exact request `dialog` asks about: its tool and its request
+/// lines as drawn, keyed with this process's secret.
+fn omp_request_identity(dialog: &OmpPermissionDialog) -> String {
+    static KEY: std::sync::LazyLock<ring::hmac::Key> = std::sync::LazyLock::new(|| {
+        ring::hmac::Key::generate(ring::hmac::HMAC_SHA256, &ring::rand::SystemRandom::new())
+            .expect("OS RNG failed")
+    });
+    let request = serde_json::json!([dialog.tool, dialog.request]).to_string();
+    hex::encode(ring::hmac::sign(&KEY, request.as_bytes()).as_ref())
+}
+
+/// How OMP's live approval dialog relates to the request a chat card names by its summary
+/// (`summarize_approval_input`: the command, path, URL or pattern, else the input's JSON, cut at
+/// 200 characters with an ellipsis).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OmpRequestMatch {
+    /// The dialog shows exactly the card's request.
+    Same,
+    /// The dialog shows another request.
+    Other,
+    /// What the dialog or the card shows could stand for more than one request.
+    NotUnique,
+}
+
+/// The one request an OMP approval dialog shows, read back from the lines OMP 18.21 draws for it:
+/// bash's `Command: <command>` on one line (`omp_bash_request`), or an MCP tool's `Arguments:`
+/// followed by the whole arguments as JSON.
+#[derive(Clone, Debug, PartialEq)]
+pub enum OmpShownRequest {
+    Command(String),
+    Arguments(serde_json::Value),
+}
+
+/*
+CDXC:SessionChat 2026-11-25 DECISION:
+User: a stale card never answers another request; an approval Ghostex cannot tie to its request
+is answered in the terminal, with neither Allow nor Deny from the card; two requests whose text
+is exactly identical may answer each other.
+
+CDXC:SessionChat 2026-11-26 DECISION:
+User: bash approvals in OMP keep Allow and Deny, in the chat, on the phone and in a coordinator,
+when the card's command matches the command on screen exactly. Spaces at the end are not
+compared, so a stale card may answer a command that differs from its own only in spaces at the
+end; the user accepted that. What stays in the terminal shows only Open terminal. This replaces
+the decision of the same day that bash approvals in OMP are answered in the terminal.
+
+CDXC:SessionChat 2026-11-25 WHY:
+So a dialog's request is compared as its content, and only OMP's own display formatting is
+removed: the frame, its padding and the indentation of each line (OMP 18.21 draws
+`Command: ${command}` on one line, and an MCP tool's arguments as indented JSON under
+`Arguments:`, whose indentation is JSON whitespace). Spaces inside a command are content: two
+commands that differ only in them are two requests. Wherever the drawing cannot be read back
+without loss, the dialog shows no unique request: anything OMP or the card cut (an ellipsis,
+OMP's "… elided", "… allowed segments"), a command drawn over several lines, text with control or
+invisible characters, arguments that are no whole JSON, arguments the card names only by their
+path, and any other tool's own approval details. The 2026-11-07 check passed a card whose
+summary occurred anywhere in the dialog, and the first 2026-11-25 version compared both sides
+with their whitespace collapsed, so `printf 'a  b'` passed for `printf 'a b'`.
+
+CDXC:SessionChat 2026-11-26 WHY:
+OMP pads its frame with spaces (U+0020), so a command's spaces at the end never show, and the
+frame's padding cannot be told from them: a bash request is compared without them, on the card
+and on the screen (`omp_bash_request`), which is the residual case the user accepted. Any other
+whitespace or invisible character at the end (a tab, a non-breaking or other Unicode space, a
+zero-width character) is not padding and could be part of an argument, and a command ending in a
+backslash makes the space after it meaningful (an escaped space): such a command shows no unique
+request, on either side, and is answered in the terminal.
+
+CDXC:SessionChat 2026-11-26 WHY:
+OMP 18.21 draws a tool's approval details, then the grant's folder line (`Folder: …`) and its
+provider safety checks (`Provider safety checks:` and their lines). Bash's details are
+`Command: ${command}` with the command's own line breaks kept, so a line below `Command:` that
+starts with `Folder:` or reads `Provider safety checks:` can be the command's next line as well
+as OMP's appendix, and the screen cannot tell which. A bash request is therefore decided on every
+line below `Command:`: with any line there, the dialog shows no unique request and is answered in
+the terminal, appendix or not. Cutting at those markers first left `echo a` as the request of a
+dialog for `echo a` plus a line `Folder: …`, so a card or a row for `echo a` answered the longer
+command. An MCP tool's arguments are one whole JSON value, which ends where its JSON ends, so the
+appendix below it is told apart and cut off.
+*/
+/// The request `request` (a dialog's lines below its title) shows, when it shows exactly one.
+pub fn omp_shown_request(request: &[String]) -> Option<OmpShownRequest> {
+    let mut markers = request
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| line.starts_with("Command:") || line.starts_with("Arguments:"));
+    let (start, _) = markers.next()?;
+    if markers.next().is_some() {
+        return None;
+    }
+    if let Some(command) = request[start].strip_prefix("Command:") {
+        let command = command.strip_prefix(' ').unwrap_or(command);
+        return (start + 1 == request.len())
+            .then(|| omp_bash_request(command))
+            .flatten()
+            .map(|command| OmpShownRequest::Command(command.to_string()));
+    }
+    // OMP appends the grant's folder and provider safety checks after the tool's details.
+    let end = request[start..]
+        .iter()
+        .position(|line| line.starts_with("Folder:") || line == "Provider safety checks:")
+        .map_or(request.len(), |offset| start + offset);
+    let shown = &request[start..end];
+    if shown.iter().any(|line| line.contains('\u{2026}')) {
+        return None;
+    }
+    let arguments = shown
+        .join("\n")
+        .strip_prefix("Arguments:")
+        .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())?;
+    json_reads_back_verbatim(&arguments).then_some(OmpShownRequest::Arguments(arguments))
+}
+
+/// The bash request `command` (a card's command, or the command OMP's `Command:` line shows) stands
+/// for, as it is compared: without the spaces (U+0020) at its end, which OMP's frame padding hides.
+/// `None` when it shows no unique request: nothing left, a cut command, a control or invisible
+/// character anywhere, any other whitespace at its end, or a backslash at its end
+/// (CDXC:SessionChat 2026-11-26 WHY above `omp_shown_request`).
+pub fn omp_bash_request(command: &str) -> Option<&str> {
+    let command = command.trim_end_matches(' ');
+    (!command.is_empty()
+        && !command.contains('\u{2026}')
+        && reads_back_verbatim(command)
+        && !command.ends_with(|c: char| c == '\\' || c.is_whitespace()))
+    .then_some(command)
+}
+
+/// Text a terminal frame shows as it is: no control characters (tabs, line breaks, escapes) and
+/// no invisible ones (zero-width, bidirectional marks), which a terminal draws differently or not
+/// at all.
+fn reads_back_verbatim(text: &str) -> bool {
+    !text.chars().any(|c| {
+        c.is_control()
+            || matches!(c, '\u{200b}'..='\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2060}'..='\u{2069}' | '\u{feff}')
+    })
+}
+
+fn json_reads_back_verbatim(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::String(text) => reads_back_verbatim(text),
+        serde_json::Value::Array(items) => items.iter().all(json_reads_back_verbatim),
+        serde_json::Value::Object(map) => map
+            .iter()
+            .all(|(key, value)| reads_back_verbatim(key) && json_reads_back_verbatim(value)),
+        _ => true,
+    }
+}
+
+/// Whether the dialog shows exactly the card's request (CDXC:SessionChat 2026-11-25 and
+/// 2026-11-26 DECISIONs above `omp_shown_request`).
+pub fn omp_permission_request_match(
+    dialog: &OmpPermissionDialog,
+    summary: &str,
+) -> OmpRequestMatch {
+    let Some(shown) = dialog.shown.as_ref() else {
+        return OmpRequestMatch::NotUnique;
     };
-    let dialog = collapse(
-        &text
-            .lines()
-            .skip(request.start)
-            .take(request.len())
-            .map(|raw| {
-                strip_ansi_sgr(raw)
-                    .trim()
-                    .trim_matches(|c| matches!(c, '\u{2502}' | '\u{2503}'))
-                    .trim()
-                    .to_string()
-            })
-            .collect::<Vec<_>>()
-            .join(" "),
-    );
-    let wanted = uncut(&collapse(summary));
-    if wanted.is_empty() {
-        return Some(false);
+    if summary.contains('\u{2026}') {
+        return OmpRequestMatch::NotUnique;
     }
-    if dialog.contains(&wanted) {
-        return Some(true);
+    match shown {
+        // Both sides without the spaces at their end (`omp_bash_request`); a card whose own
+        // command shows no unique request is answered in the terminal.
+        OmpShownRequest::Command(command) => match omp_bash_request(summary) {
+            None => OmpRequestMatch::NotUnique,
+            Some(card) if card == command => OmpRequestMatch::Same,
+            Some(_) => OmpRequestMatch::Other,
+        },
+        OmpShownRequest::Arguments(arguments) => {
+            if arguments.to_string() == summary {
+                OmpRequestMatch::Same
+            } else if crate::session_chat_interactive::summarize_approval_input(Some(arguments))
+                == summary
+            {
+                OmpRequestMatch::NotUnique
+            } else {
+                OmpRequestMatch::Other
+            }
+        }
     }
-    // OMP cuts a long command in its dialog: the shown part must start the card's request.
-    let shown_command = detect_omp_permission_picker_with_command(text)
-        .and_then(|(_, command)| command)
-        .map(|command| uncut(&collapse(&command)))
-        .filter(|command| command.chars().count() >= 8);
-    Some(shown_command.is_some_and(|command| wanted.starts_with(&command)))
 }
 
+/// The keys that answer a chat card for OMP's approval of `tool` with `summary` on `text`, read
+/// from that same screen: the Approve row's for Allow, Escape for Deny. `None` unless the dialog
+/// is that tool's and shows exactly the card's request (`omp_permission_request_match`), so
+/// nothing is typed into another request's dialog.
+pub fn omp_card_answer_key(text: &str, tool: &str, summary: &str, allow: bool) -> Option<String> {
+    let (picker, _, dialog) = read_omp_approval_frame(text)?;
+    let normalize = crate::session_chat_interactive::normalize_session_chat_tool_name;
+    if normalize(&dialog.tool) != normalize(tool)
+        || omp_permission_request_match(&dialog, summary) != OmpRequestMatch::Same
+    {
+        return None;
+    }
+    if !allow {
+        return Some(crate::session_chat_send::SESSION_CHAT_INTERRUPT.to_string());
+    }
+    let approve = picker
+        .rows
+        .iter()
+        .position(|row| matches!(row.label.as_str(), "Approve" | "Approve Once"))?;
+    picker.answer_key(approve)
+}
+
+/// What a pick of one of OMP's own rows on the chat's screen card was made on: the dialog's tool,
+/// its request lines, its rows and the highlighted row, as the answer's admission read them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OmpRowPick {
+    pub tool: String,
+    pub request: Vec<String>,
+    pub rows: Vec<String>,
+    pub selected: usize,
+    pub choice_index: usize,
+}
+
+/// The pick of row `choice_index` on the dialog `text` shows, when that dialog shows a unique
+/// request (`omp_shown_request`) and has that row. `None` otherwise: a dialog without a unique
+/// request has no rows on the chat's card.
+pub fn omp_row_pick(text: &str, choice_index: usize) -> Option<OmpRowPick> {
+    read_omp_row_pick(text, choice_index).map(|(_, pick)| pick)
+}
+
+/// The keys for `pick` on `text`, read from that same screen: `None` unless the dialog is still
+/// the one the pick was made on (its tool, its whole request, its rows and its highlight), so a
+/// row picked for one request is never typed into another's dialog.
+pub fn omp_row_answer_key(text: &str, pick: &OmpRowPick) -> Option<String> {
+    let (picker, now) = read_omp_row_pick(text, pick.choice_index)?;
+    if now != *pick {
+        return None;
+    }
+    picker.answer_key(pick.choice_index)
+}
+
+fn read_omp_row_pick(
+    text: &str,
+    choice_index: usize,
+) -> Option<(SessionChatTerminalPicker, OmpRowPick)> {
+    let (picker, _, dialog) = read_omp_approval_frame(text)?;
+    dialog.shown.as_ref()?;
+    picker.rows.get(choice_index)?;
+    let pick = OmpRowPick {
+        tool: dialog.tool,
+        request: dialog.request,
+        rows: picker.rows.iter().map(|row| row.label.clone()).collect(),
+        selected: picker.selected_index,
+        choice_index,
+    };
+    Some((picker, pick))
+}
+
+/// What OMP's live approval dialog asks about: the tool its `Allow tool: <name>` title names, the
+/// request lines below it (OMP 18.21 draws an MCP tool's origin, the reason it asks, then a tool's
+/// `formatApprovalDetails` or an MCP tool's `Arguments:`), and the one request those lines show,
+/// when they show one (`omp_shown_request`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct OmpPermissionDialog {
+    pub tool: String,
+    pub request: Vec<String>,
+    pub shown: Option<OmpShownRequest>,
+}
+
+/// The live approval dialog, `None` when none is up (or it reads as "deny and send").
+pub fn read_omp_permission_dialog(text: &str) -> Option<OmpPermissionDialog> {
+    read_omp_approval_frame(text).map(|(_, _, dialog)| dialog)
+}
+
+/// CDXC:SessionChat 2026-11-25 WHY:
+/// The owner's decision above `omp_shown_request` covers OMP's eval-cell approvals too. A dialog
+/// that shows no unique request (a tool-only dialog such as "Allow tool: commit" with nothing below
+/// it, a cut or segmented command, another tool's own details) can look the same for two calls,
+/// and a row picked on one would answer the next, so it is no picker: the blocking card above
+/// (`OMP_TOOL_APPROVAL_TITLE`, Open terminal) is its card.
+/// SEE-ALSO: server/src/session_chat_send/answer_http.rs (`verify_omp_hook_answer_targets_dialog`).
 fn read_omp_permission_picker(
     text: &str,
 ) -> Option<(SessionChatTerminalPicker, std::ops::Range<usize>)> {
+    read_omp_approval_frame(text)
+        .filter(|(_, _, dialog)| dialog.shown.is_some())
+        .map(|(picker, request, _)| (picker, request))
+}
+
+fn read_omp_approval_frame(
+    text: &str,
+) -> Option<(
+    SessionChatTerminalPicker,
+    std::ops::Range<usize>,
+    OmpPermissionDialog,
+)> {
     let (lines, composer, on_composer, raw_rows) = scan_lines(text);
     let (start, end) = rounded_frames(&lines).into_iter().find(|&(start, end)| {
         composer != Some(start)
@@ -633,6 +909,27 @@ fn read_omp_permission_picker(
         .filter(|line| !line.is_empty())
         .collect::<Vec<_>>()
         .join(" ");
+    let title = inner(&lines[start])
+        .trim_matches(|c| matches!(c, '\u{256d}' | '\u{256e}' | '\u{2500}'))
+        .trim()
+        .to_string();
+    // Only the frame and its padding (spaces, U+0020) are removed: any other whitespace at a line's
+    // end is not OMP's and stays, so a request showing it is no unique one (CDXC:SessionChat
+    // 2026-11-26 WHY above `omp_shown_request`).
+    let request_lines: Vec<String> = text
+        .lines()
+        .skip(request.start)
+        .take(request.len())
+        .map(|raw| {
+            strip_ansi_sgr(raw)
+                .trim_matches(' ')
+                .trim_matches(|c| matches!(c, '\u{2502}' | '\u{2503}'))
+                .trim_matches(' ')
+                .to_string()
+        })
+        .filter(|line| !line.is_empty())
+        .collect();
+    let shown = omp_shown_request(&request_lines);
     Some((
         SessionChatTerminalPicker {
             kind: SessionChatTerminalPickerKind::OmpPermission,
@@ -641,6 +938,15 @@ fn read_omp_permission_picker(
             selected_index,
         },
         request,
+        OmpPermissionDialog {
+            tool: title
+                .strip_prefix("Allow tool:")
+                .map(str::trim)
+                .unwrap_or_default()
+                .to_string(),
+            request: request_lines,
+            shown,
+        },
     ))
 }
 

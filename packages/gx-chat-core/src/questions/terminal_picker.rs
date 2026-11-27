@@ -122,9 +122,26 @@ fn passthrough_screen(tail: &str) -> String {
         .join("\n")
 }
 
-/// The pass-through card for a notice gxserver cannot read row by row, or `None`.
+/*
+CDXC:SessionChat 2026-11-26 DECISION:
+User: what stays in the terminal shows only "Open terminal": OMP's card "OMP is waiting for tool
+approval" has no keys, no text field and no live screen region.
+
+CDXC:SessionChat 2026-11-26 WHY:
+Each renderer draws a `passthrough` object as the pass-through card, with its own key buttons and
+the keyboard taken, even when the object carries no keys (apps/desktop native_chat/notice.rs and
+terminal_picker.rs). So OMP's tool approval gets no `passthrough` object at all: its card is the
+notice's own, with Open terminal (its action) and the screen's tail only behind "Show terminal
+output". gxserver still marks the notice `passthrough` (server/src/session_chat_notice/types.rs
+`passes_keys_through`), so this core still treats it as owning the input: a hook card's Allow and
+Deny stay hidden beside it (`gates::question_card_visible`, extras/relayed_approvals.rs), and a
+core that still draws its keys (upstream 56b2016cd) keeps hiding them too; gxserver refuses those
+keys. Its place below the Inbox dock stays (`notice_tone::is_error_terminal_notice`).
+*/
+/// The pass-through card for a notice gxserver cannot read row by row, or `None`, also for OMP's
+/// tool approval that the chat leaves to the terminal.
 pub fn passthrough_presentation(notice: &TerminalNotice) -> Option<Value> {
-    if !notice.passthrough {
+    if !notice.passthrough || notice.is_omp_tool_approval() {
         return None;
     }
     let keys: Map<String, Value> = PASSTHROUGH_KEYS

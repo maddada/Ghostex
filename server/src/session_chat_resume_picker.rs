@@ -470,7 +470,26 @@ pub(crate) async fn answer_resume_picker(
 
 /// A key the chat passes through to an agent screen it cannot read (`terminalKey`).
 ///
-/// CDXC:SessionChat 2026-11-03 WHY: every key is checked at the front of the send queue against the screen it is meant for (`VerifyTerminalPicker`), because the screen can go away while a card is still up or a key is on its way: another client or the terminal answered it, the agent timed out or exited. Without the check such a key lands on whatever the terminal shows next, an Enter submitting another prompt's draft or a shell command. A screen that changes because of the card's own keys (OMP's tool approval switching to "Deny and send message" after the first typed letter) is the detector's to keep recognizing (`session_chat_omp_blocking.rs`), not a reason to drop the check.
+/// CDXC:SessionChat 2026-11-03 WHY: every key is checked at the front of the send queue against the screen it is meant for (`VerifyTerminalPicker`), because the screen can go away while a card is still up or a key is on its way: another client or the terminal answered it, the agent timed out or exited. Without the check such a key lands on whatever the terminal shows next, an Enter submitting another prompt's draft or a shell command.
+/*
+CDXC:SessionChat 2026-11-26 DECISION:
+User: OMP's card "OMP is waiting for tool approval" shows no keys any more, only "Open terminal".
+
+CDXC:SessionChat 2026-11-26 WHY:
+That card is OMP's approval the chat leaves to the terminal (the owner's decision above
+`verify_omp_hook_answer_targets_dialog` in session_chat_send/omp_approval_answer.rs), but it was
+marked as a screen whose keys the chat passes on, so its keys reached OMP's dialog: Enter on the
+card approved a bash command the card never showed (for a bash hook card answered in the terminal
+it is derived before any screen read, from an empty screen), and with a message typed into the
+dialog ("Deny and send message") Enter denied and sent it. An OMP session's key is therefore typed
+only by its send-queue guard (`GuardOmpTerminalKey`), which reads the screen once more and types
+nothing while it shows OMP's tool approval, typed message included (`omp_shows_tool_approval`), so
+a key admitted on another of OMP's screens does not land in an approval that came up before the
+worker wrote. The answer route already refuses such a key while the session's notice is that card
+(`refuse_key_on_omp_tool_approval` in session_chat_send/omp_approval_answer.rs). Both refusals are
+`answerInTerminal`. Chat cores that still draw the card's keys get the refusal; nothing is typed.
+What remains is the moment between the guard's read and its write, the same as for Allow and Deny.
+*/
 pub(crate) async fn answer_terminal_key(
     target: &SessionChatSendTarget,
     agent: &str,
@@ -493,15 +512,36 @@ pub(crate) async fn answer_terminal_key(
         Some("pageDown") => "\x1b[6~",
         _ => return Err(invalid()),
     };
-    run(
-        target,
-        agent,
-        vec![SessionChatSendStep::Write(bytes.to_string())],
+    let steps = if agent == "omp" {
+        vec![SessionChatSendStep::GuardOmpTerminalKey(bytes.to_string())]
+    } else {
+        vec![
+            SessionChatSendStep::VerifyTerminalPicker {
+                agent: agent.to_string(),
+            },
+            SessionChatSendStep::Write(bytes.to_string()),
+        ]
+    };
+    execute_session_chat_send(
+        &target.project_id,
+        &target.session_id,
+        &target.zmx_name,
+        "session-chat-picker",
+        steps,
     )
     .await
-    .map_err(|_| DomainStateError {
-        code: "invalidState",
-        message: "The agent's screen changed. Review it and try again.".to_string(),
+    .map_err(|error| {
+        if error.message == crate::session_chat_send::OMP_APPROVAL_TAKES_NO_KEYS {
+            DomainStateError {
+                code: crate::session_chat_send::ANSWER_IN_TERMINAL,
+                message: error.message,
+            }
+        } else {
+            DomainStateError {
+                code: "invalidState",
+                message: "The agent's screen changed. Review it and try again.".to_string(),
+            }
+        }
     })?;
     Ok(json!({ "queued": true }))
 }
