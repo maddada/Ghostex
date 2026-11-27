@@ -159,13 +159,27 @@ pub(crate) async fn create_worktree_session(
         crate::agents::check_requested_account(&db, &project, &check)?;
     }
     let prepared = prepare_worktree_session_checkout(state, &context, &request).await?;
+    // A session folder (a project with several repos) becomes a worktree project of its own and
+    // the session starts in it (multi_repo.rs `register_worktree_session_folder`).
+    let registered =
+        match super::multi_repo::register_worktree_session_folder(state, &context, &prepared) {
+            Ok(registered) => registered,
+            Err(error) => {
+                rollback_worktree_session_checkout(&context, &prepared).await;
+                return Err(error);
+            }
+        };
+    let mut session_context = context.clone();
+    if let Some(project_id) = registered.as_deref() {
+        session_context.source_project_id = project_id.to_string();
+    }
     // Said back so `start-thread --read-only --computer` can tell this gxserver started it
     // read-only (one from before 2026-11-13 ignores the param).
     let read_only = crate::coordinators::read_only_thread_requested(&request.agent_session_params);
-    match start_worktree_session(state, &context, &request, &prepared).await {
+    match start_worktree_session(state, &session_context, &request, &prepared).await {
         Ok(session_id) => {
             let mut created = json!({
-                "projectId": context.source_project_id,
+                "projectId": session_context.source_project_id,
                 "branch": prepared.branch,
                 "sessionId": session_id,
                 "worktreePath": prepared.path,
@@ -176,6 +190,9 @@ pub(crate) async fn create_worktree_session(
             Ok(created)
         }
         Err(error) => {
+            if let Some(project_id) = registered.as_deref() {
+                super::multi_repo::unregister_worktree_session_folder(state, project_id);
+            }
             if prepared.created {
                 rollback_worktree_session_checkout(&context, &prepared).await;
             }

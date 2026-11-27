@@ -898,6 +898,22 @@ pub(crate) fn run_worktree_branch_rename_once(
             if crate::multi_repo::session_folder::rename_branch(&root, &renamed).is_err() {
                 continue;
             }
+            // A registered session folder (createWorktreeSession, the draft move) records it too.
+            if let Some(project_id) =
+                crate::server::worktree_ops::multi_repo::sync_session_folder_project_branch(
+                    &repository,
+                    &plan.worktree_path,
+                    &renamed,
+                )?
+            {
+                schedule_presentation_project_delta(
+                    state,
+                    &db,
+                    &repository,
+                    &project_id,
+                    "projectUpdated",
+                )?;
+            }
             finish_worktree_branch_rename(state, &db, &repository, &plan, &renamed)?;
             continue;
         }

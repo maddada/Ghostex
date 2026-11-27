@@ -146,11 +146,11 @@ fn registered_paths(context: &ProjectWorktreeOperationContext) -> HashSet<String
 /// its parent in the sidebar, plus `multiRepo`.
 fn session_folder_metadata(
     context: &ProjectWorktreeOperationContext,
-    made: &session_folder::Made,
+    branch: &str,
     name: &str,
 ) -> Map<String, Value> {
     let mut metadata = Map::new();
-    metadata.insert("branch".to_string(), json!(made.branch));
+    metadata.insert("branch".to_string(), json!(branch));
     metadata.insert("createdAt".to_string(), json!(crate::domain::now_iso()));
     metadata.insert("name".to_string(), json!(name));
     metadata.insert(
@@ -174,7 +174,8 @@ fn session_folder_metadata(
 fn register_session_folder_project(
     state: &AppState,
     context: &ProjectWorktreeOperationContext,
-    made: &session_folder::Made,
+    project_dir: &Path,
+    branch: &str,
     name: &str,
 ) -> std::result::Result<Value, ProjectWorktreeOperationError> {
     let parent_name = context
@@ -184,7 +185,7 @@ fn register_session_folder_project(
         .unwrap_or("Project");
     let project = register_project_worktree_path(
         state,
-        &path_to_string(&made.project_dir),
+        &path_to_string(project_dir),
         &format!("{parent_name}-{name}"),
         "projectAdded",
     )?;
@@ -198,7 +199,7 @@ fn register_session_folder_project(
     update.insert("projectId".to_string(), json!(project_id));
     update.insert(
         "worktree".to_string(),
-        Value::Object(session_folder_metadata(context, made, name)),
+        Value::Object(session_folder_metadata(context, branch, name)),
     );
     let project = repository.update_project(&update)?;
     schedule_presentation_project_delta(state, &db, &repository, &project_id, "projectUpdated")?;
@@ -243,7 +244,13 @@ pub(crate) async fn create_multi_repo_for_move(
     .await?;
     made.session_folder = Some(session.root.clone());
     let name = session.branch.clone();
-    let project = register_session_folder_project(state, context, &session, &name)?;
+    let project = register_session_folder_project(
+        state,
+        context,
+        &session.project_dir,
+        &session.branch,
+        &name,
+    )?;
     made.registered_project_id = Some(value_text(&project, "projectId")?);
     let projects = list_domain_projects(state)?;
     run_registered_worktree_setup_command(
@@ -317,6 +324,78 @@ pub(crate) async fn prepare_multi_repo_session_checkout(
         return Err(error);
     }
     Ok(prepared)
+}
+
+/// `createWorktreeSession`'s session folder registered as a worktree project of the source
+/// project, as the draft move's is, so the session's header, Changes and git menu read the session
+/// folder's repos and not the parent's. `None` when the checkout is not a session folder this call
+/// made. The project is named after the folder (`shop-1b54dbd1`); the branch rename pass later
+/// keeps its recorded branch in step (`sync_session_folder_project_branch`).
+///
+/// CDXC:MultiRepo 2026-11-27 WHY: a coordinator thread's session in a session folder was
+/// unregistered, like a one-repo worktree session, so the desktop read the parent project's git
+/// state: its Commit saw only the parent's checkout and could not reach the session's repos.
+pub(crate) fn register_worktree_session_folder(
+    state: &AppState,
+    context: &ProjectWorktreeOperationContext,
+    prepared: &PreparedWorktreeCheckout,
+) -> std::result::Result<Option<String>, ProjectWorktreeOperationError> {
+    if !prepared.created || session_folder_root(&prepared.path).is_none() {
+        return Ok(None);
+    }
+    let name = prepared
+        .branch
+        .rsplit('/')
+        .next()
+        .unwrap_or(prepared.branch.as_str())
+        .to_string();
+    let project = register_session_folder_project(
+        state,
+        context,
+        Path::new(&prepared.path),
+        &prepared.branch,
+        &name,
+    )?;
+    Ok(Some(value_text(&project, "projectId")?))
+}
+
+/// Takes back a registration `register_worktree_session_folder` made, when the session it was
+/// for failed to start. Best effort: the create has already failed.
+pub(crate) fn unregister_worktree_session_folder(state: &AppState, project_id: &str) {
+    if remove_worktree_project_row(state, project_id).is_ok() {
+        let _ = schedule_deleted_worktree_project_delta(state, project_id);
+    }
+}
+
+/// After the rename pass gave a session folder's branch a real name: the registered project of
+/// that folder (if any) records the new branch, so its card and Delete dialog name it.
+pub(crate) fn sync_session_folder_project_branch(
+    repository: &DomainRepository<'_>,
+    project_dir: &str,
+    branch: &str,
+) -> std::result::Result<Option<String>, DomainStateError> {
+    let wanted = normalize_project_path_for_comparison(project_dir);
+    for project in repository.list_projects()? {
+        let same = project
+            .get("path")
+            .and_then(Value::as_str)
+            .is_some_and(|path| normalize_project_path_for_comparison(path) == wanted);
+        let Some(worktree) = project.get("worktree").and_then(Value::as_object) else {
+            continue;
+        };
+        if !same || worktree.get("multiRepo") != Some(&json!(true)) {
+            continue;
+        }
+        let project_id = value_text(&project, "projectId")?;
+        let mut worktree = worktree.clone();
+        worktree.insert("branch".to_string(), json!(branch));
+        let mut update = Map::new();
+        update.insert("projectId".to_string(), json!(project_id));
+        update.insert("worktree".to_string(), Value::Object(worktree));
+        repository.update_project(&update)?;
+        return Ok(Some(project_id));
+    }
+    Ok(None)
 }
 
 /// The session folder a checkout path sits in, for a rollback.
