@@ -312,6 +312,11 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
     }
     // Coordinator, Browser and Terminal moved here (and to the project header menu) when the New
     // Thread picker was removed.
+    // CDXC:Sidebar 2026-11-27 DECISION:
+    // User: "Add a "New" label above these so it's clear what they do". A "New" heading, in the
+    // menu's own heading style (the Sort & Filter page's "Pinned order"), sits over Terminal,
+    // Coordinator and Browser.
+    more.push(MenuItem::heading("New"));
     more.push(
         MenuItem::row(
             "Terminal",
@@ -442,6 +447,31 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
     more.push(MenuItem::separator());
     more.push(intent("Settings", "settings", "settings"));
     more
+}
+
+/// The rail item (`sidebar_rail::RAIL_ITEMS` key) that opens what this More menu row (or Tools
+/// row) opens, as the row's JSON (`menu_to_json`) has it; `None` for a row the rail can't reach.
+///
+/// CDXC:Sidebar 2026-11-27 DECISION:
+/// User: "also i see a lot of duplicates between the dropdown in the sidebar and the rail pls remove from the sidebar menu". While the rail is on, the host leaves out every ☰ row the rail reaches, pinned or under its ⋯ (whatever the user pinned): Commands, Agents Hub, All Automations, Ask Ghostex AI and Tools > Search by Prompt. Settings stays (the user kept it), as do the New rows, Sort & Filter, Collapse All, Connect a Phone and Connect a Computer (not rail items), Keep Awake, Join Discord, Send Bug / Feedback, the rest of Tools and the Ghostex submenu. With the Classic sidebar there is no rail, so the menu keeps every row.
+/// The menu's Ask Ghostex AI row opened the sample-question popup that starts a Ghostex Help chat, and the rail's opens Ask Ghostex AI's chat: one name, one purpose, so it counts as a duplicate (Ask Ghostex Help in Commands, and its `openGhostexHelp` hotkey, still open the popup).
+/// SEE-ALSO: apps/desktop/src/app/native_sidebar/menus.rs `native_sidebar_more_menu_now` (where the rows leave), apps/desktop/src/app/sidebar_rail/host.rs `sidebar_rail_item_state` (whether the rail offers the item).
+pub fn more_menu_row_rail_key(row: &serde_json::Value) -> Option<&'static str> {
+    let command = &row["command"];
+    if command["type"] == "sidebarAction" {
+        return match command["action"].as_str()? {
+            COMMANDS_ACTION => Some("commands"),
+            "agentsHub" => Some("agentsHub"),
+            _ => None,
+        };
+    }
+    let message = &command["message"];
+    match message["type"].as_str()? {
+        "openAutomationsPage" => Some("allAutomations"),
+        "searchPreviousSessionsByText" => Some("findPrompts"),
+        MENU_PANEL_MESSAGE_TYPE if message["panel"] == MENU_PANEL_HELP => Some("mainHub"),
+        _ => None,
+    }
 }
 
 #[cfg(test)]

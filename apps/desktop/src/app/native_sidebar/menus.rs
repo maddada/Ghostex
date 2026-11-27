@@ -249,6 +249,7 @@ impl GhostexGpuiApp {
         items: &Value,
         add_project_in_row: bool,
         commands_shortcut: Option<&str>,
+        cx: &gpui::App,
     ) -> Value {
         let mut items = items.clone();
         if let Some(rows) = items.as_array_mut() {
@@ -269,12 +270,22 @@ impl GhostexGpuiApp {
                     row["suffix"] = Value::from(label);
                 }
             }
+            // A row the rail reaches (pinned or under its ⋯) is the rail's while the rail is on
+            // (CDXC:Sidebar 2026-11-27 DECISION on gx-core `more_menu_row_rail_key`).
+            let rail_on = self.sidebar_rail_shown();
+            let not_on_rail = |row: &Value| {
+                !rail_on
+                    || ghostex_gx_core::more_menu_row_rail_key(row)
+                        .is_none_or(|key| !self.sidebar_rail_item_state(key, cx).available)
+            };
+            rows.retain(not_on_rail);
             let offered = |row: &Value| {
                 let message = &row["command"]["message"];
-                message["type"] != ghostex_gx_core::MENU_PANEL_MESSAGE_TYPE
-                    || message["panel"]
-                        .as_str()
-                        .is_some_and(|panel| self.sidebar_menu_panel_offered(panel))
+                not_on_rail(row)
+                    && (message["type"] != ghostex_gx_core::MENU_PANEL_MESSAGE_TYPE
+                        || message["panel"]
+                            .as_str()
+                            .is_some_and(|panel| self.sidebar_menu_panel_offered(panel)))
             };
             if add_project_in_row {
                 rows.retain(|row| {

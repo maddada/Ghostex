@@ -44,9 +44,10 @@ hotkeys Every shortcut and its default binding
 - **Sidebar** (left by default): projects, their sessions, tags and filters
   (every connected computer's projects in one list, a project on several
   computers as one entry, unless Computers is set to A tab each), and the More Options menu under the three-lines button (☰) at
-  the top right (Sort & Filter, Collapse All, Terminal, Coordinator, Browser, Commands, Agents Hub, All Automations,
-  Connect a Phone, Connect a Computer, Keep Awake, then Ask Ghostex AI, Join Discord and Send Bug / Feedback, then the Tools and Ghostex submenus and
-  Settings; Ghostex holds New Window, Check for Updates, Restart Ghostex, Quit
+  the top right (Sort & Filter, Collapse All, then under a New heading Terminal, Coordinator and Browser, then
+  Connect a Phone, Connect a Computer, Keep Awake, then Join Discord and Send Bug / Feedback, then the Tools and Ghostex submenus and
+  Settings; with the rail on, Commands, Agents Hub, All Automations, Ask Ghostex AI and Search by Prompt are the
+  rail's (pinned or under its ⋯), and with the Classic sidebar the menu lists them too; Ghostex holds New Window, Check for Updates, Restart Ghostex, Quit
   Ghostex, and Quit Ghostex & BG Service, which also stops the background
   service and every session; Tools holds Search by Prompt, Import
   Sessions, Extensions, Dev servers and Resources). The
@@ -60,8 +61,9 @@ hotkeys Every shortcut and its default binding
   the bottom right when the pointer is at the bottom of the sidebar (point at
   it to peek, click it to pin them). The workspace button (when Workspaces is on) sits on a
   line of its own above the meters, at the left. There are no other buttons
-  down there: Commands and Settings are rows of the More Options menu, with
-  Cmd+Shift+P and Cmd+, as their hotkeys. Search is an icon button that keeps
+  down there: Settings is a row of the More Options menu and Commands is on the
+  rail's ⋯ menu (a row of More Options with the Classic sidebar), with
+  Cmd+, and Cmd+Shift+P as their hotkeys. Search is an icon button that keeps
   its name and shortcut in its tooltip.
 - **Work area**: your sessions, and the views open beside them. The sessions are
   a grid of terminal panes and tabs; each pane can show the raw terminal or the

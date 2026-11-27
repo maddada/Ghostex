@@ -442,6 +442,7 @@ impl GhostexGpuiApp {
             &snapshot.more_menu,
             add_project,
             snapshot.commands_shortcut.as_deref(),
+            cx,
         );
         h_flex()
             .w_full()

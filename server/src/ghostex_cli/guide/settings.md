@@ -620,7 +620,7 @@ How to use this file:
 - **Hide Storybook view** `storybookViewTabHidden` (boolean, default false): Hide the built-in component workshop. When enabled, it appears only in projects with Storybook.
 - **Hide Terminal view** `terminalViewTabHidden` (boolean, default false): Stop offering the Terminal view, so it is missing from the view panel tab strip, its + menu and the view picker.
 - **Hide Notifications bell** `notificationsTitlebarButtonHidden` (boolean, default false): Hide the Notifications bell from the sidebar's top row.
-- **Hide Help button** `helpTitlebarButtonHidden` (boolean, default false): Stop offering the Ask Ghostex AI page, so it is missing from the sidebar's menu and the view picker.
+- **Hide Help button** `helpTitlebarButtonHidden` (boolean, default false): Stop offering the Ask Ghostex AI page, so it is missing from the sidebar's menu (Classic sidebar) and the view picker.
 - **Hide Resources button** `resourcesTitlebarButtonHidden` (boolean, default false): Stop offering the Resources page, so it is missing from the sidebar's menu and the view picker.
 - **Hide Dev Servers button** `devServersTitlebarButtonHidden` (boolean, default false): Hide Dev servers from the sidebar's menu.
 - **Hide Extensions button** `extensionsTitlebarButtonHidden` (boolean, default false): Hide Extensions from the sidebar's menu.
@@ -648,7 +648,7 @@ How to use this file:
 - **Changes** `changes` (Settings UI row without a settings key; use `ghostex settings open`): Review what changed, comment on lines for your agent, revert a hunk, and commit, all beside your sessions.
 - **Terminal** `terminal` (Settings UI row without a settings key; use `ghostex settings open`): A command terminal beside your sessions, with its own tabs and splits, that works like the Commands pane but lives in the view panel.
 - **Notifications** `notifications` (Settings UI row without a settings key; use `ghostex settings open`): A bell in the sidebar's top row that lists what your agents finished or need from you.
-- **Ghostex Help** `help` (Settings UI row without a settings key; use `ghostex settings open`): The Ask Ghostex AI row in the sidebar's menu, with sample questions that start a Ghostex Help chat: an agent explains the app or changes settings for you.
+- **Ghostex Help** `help` (Settings UI row without a settings key; use `ghostex settings open`): Ask Ghostex Help in Commands and, with the Classic sidebar, the Ask Ghostex AI row in the sidebar's menu, with sample questions that start a Ghostex Help chat: an agent explains the app or changes settings for you.
 - **Dev servers** `devServers` (Settings UI row without a settings key; use `ghostex settings open`): A panel listing development servers running on this computer, opened from Tools in the sidebar's menu.
 - **Resources** `resources` (Settings UI row without a settings key; use `ghostex settings open`): A panel listing what Ghostex is running right now, with the CPU and memory each part is using, opened from Tools in the sidebar's menu.
 - **Git actions** `gitActions` (Settings UI row without a settings key; use `ghostex settings open`): A work area header button for commit, branch, and worktree helpers on the active project.

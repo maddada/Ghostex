@@ -227,7 +227,7 @@ pub use crate::sidebar_drag::{
 };
 pub use crate::sidebar_menu::{
     agent_launcher_items, agent_launcher_items_with_accounts, agent_logo_color, agent_logo_icons,
-    agent_logo_svg, colored_agent_logo, hover_slots, hover_strip, machine_workspace_menu,
+    agent_logo_svg, colored_agent_logo, hover_slots, more_menu_row_rail_key, hover_strip, machine_workspace_menu,
     menu_to_json, project_header_actions, unified_default_hover_buttons,
     unified_delete_worktree_menu, unified_hover_buttons, without_project_rename, workspace_menu,
     workspace_switch_target, HeaderCommand, HoverAction, HoverSlot, HoverStrip, LauncherAgent,

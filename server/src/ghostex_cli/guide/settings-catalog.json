@@ -12427,7 +12427,7 @@
     {
       "key": "helpTitlebarButtonHidden",
       "title": "Hide Help button",
-      "subtitle": "Stop offering the Ask Ghostex AI page, so it is missing from the sidebar's menu and the view picker.",
+      "subtitle": "Stop offering the Ask Ghostex AI page, so it is missing from the sidebar's menu (Classic sidebar) and the view picker.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "viewOrder",
@@ -12718,7 +12718,7 @@
     {
       "key": "help",
       "title": "Ghostex Help",
-      "subtitle": "The Ask Ghostex AI row in the sidebar's menu, with sample questions that start a Ghostex Help chat: an agent explains the app or changes settings for you.",
+      "subtitle": "Ask Ghostex Help in Commands and, with the Classic sidebar, the Ask Ghostex AI row in the sidebar's menu, with sample questions that start a Ghostex Help chat: an agent explains the app or changes settings for you.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",

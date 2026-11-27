@@ -1116,15 +1116,20 @@ Shortcuts: `focusNextSession`, `focusPreviousSession`, `focusNextPaneTab`,
 `focusPreviousPaneTab`; setting: `sidebarSessionCycleSkipsSleeping`.
 Top chrome holds tag filters, Spaces, and the sidebar's menu (More Options, the
 three-lines button at the top of the sidebar): Sort & Filter and Collapse All;
-then Commands, Agents Hub, All Automations, Connect a Phone, Connect a Computer and Keep Awake
-(while it is switched on); then, between lines, Ask Ghostex AI, Join Discord and
-Send Bug / Feedback; then two submenus: Tools (Search by Prompt, Import Sessions,
+then, under a New heading, Terminal, Coordinator and Browser; then Connect a Phone,
+Connect a Computer and Keep Awake (while it is switched on); then, between lines,
+Join Discord and Send Bug / Feedback; then two submenus: Tools (Import Sessions,
 Extensions, Dev servers, Resources) and, in the desktop app, Ghostex (New Window, Check
 for Updates, Restart Ghostex and the Quit rows); and Settings as the last row
 (there is no Settings gear at the bottom of the sidebar). Add Project is
 the folder button right of Search; it is the menu's first row only while the
 sidebar is too narrow for that button. On another computer's tab the menu also
-has Edit Machine.
+has Edit Machine. With the rail on, the menu leaves out what the rail already
+opens, pinned or under its ⋯: Commands, Agents Hub, All Automations, Ask Ghostex
+AI and Search by Prompt (use their rail icons, or the rail's ⋯). With the Classic
+sidebar there is no rail, so the menu lists them too: Commands, Agents Hub and
+All Automations above Connect a Phone, Ask Ghostex AI above Join Discord, and
+Search by Prompt first in Tools.
 **Links in the rail menu** (desktop app). Add link… under the Links heading in
 the rail's ⋯ menu (not in the sidebar's ☰ menu) saves any web page there, such
 as a local dashboard. The address can be a full address or just a host and port:
@@ -1879,8 +1884,9 @@ when you open it.
   Cmd+K, the Actions button at the bottom right, or a right-click lists
   everything else the row can do (star, tag, copy, edit, delete, remove, New
   Prompt) with each action's hotkey. Cmd+Shift+P opens Commands directly to
-  search app commands, pane actions, and project actions. Commands in the
-  sidebar's menu opens the same thing, and Settings is that menu's last row
+  search app commands, pane actions, and project actions. Commands on the
+  rail (its ⋯ menu, or the sidebar's menu with the Classic sidebar) opens the
+  same thing, and Settings is the sidebar menu's last row
   (Cmd+, opens it too).
   The Search button at the top of the sidebar opens Quick Access > Sessions,
   which lists past conversations from every agent CLI with resume and fork;
@@ -1912,7 +1918,7 @@ when you open it.
   and replies there do not reach the chat app. Other chat apps, cron, empty
   sessions, Discord threads only bots wrote in, and scripted one-shot runs
   (`hermes chat -q`) are left out.
-- Search by Prompt (By prompt in Quick Access > Sessions or Saved Prompts, Past prompts on a new chat, the sidebar rail's ⋯ menu, Tools in the sidebar's menu, Actions (Cmd+K) in Quick Access > Sessions,
+- Search by Prompt (By prompt in Quick Access > Sessions or Saved Prompts, Past prompts on a new chat, the sidebar rail's ⋯ menu, Tools in the sidebar's menu with the Classic sidebar, Actions (Cmd+K) in Quick Access > Sessions,
   the `openFindPrompts` hotkey, default
   `cmd+shift+f`, or `gx f` in a terminal) fuzzy-searches every prompt you ever
   sent to an agent; Enter resumes that session, and starred prompts stay on
@@ -8606,8 +8612,9 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   them again in Executor; their data is deleted after 30 days or with Remove.
   Rules set for the old built-in Executor's tools were dropped when Ghostex
   moved to the CLI, so they don't carry over to an app of the same name.
-- Ask Ghostex AI is a row of the sidebar's menu (below Keep Awake), and Extensions, Dev
-  servers and Resources are under Tools. Each opens a panel under the menu
+- Extensions, Dev servers and Resources are under Tools in the sidebar's menu,
+  and with the Classic sidebar Ask Ghostex AI is a row of it too (below Keep
+  Awake; with the rail on, use the rail's Ask Ghostex AI). Each opens a panel under the menu
   button that closes when you click away. Ask Ghostex AI and Resources are
   available in every project. Resources lists what Ghostex is running with
   per-session CPU and RAM, and can put a session or the editor to sleep; Ask
