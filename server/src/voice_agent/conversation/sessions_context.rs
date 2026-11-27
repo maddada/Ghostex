@@ -29,6 +29,16 @@
 //! sessions are never called closed. The list goes in only while nothing is said, asked for,
 //! spoken or run (`give_sessions_context`), and a call about all sessions says its intro once the
 //! model has it (`open_with_sessions`), so the first answer already knows the sessions.
+//!
+//! CDXC:VoiceMode 2026-11-27 WHY: `MODEL_BYTES` bounds the whole message, the notes on connected
+//! computers included: a computer's name is bounded, the number of computers is not, and many
+//! unreachable ones pushed the message past its bound and the sessions, this computer's too, out
+//! of it. The sessions come first; up to `COMPUTERS_NAMED` unreachable computers are named after
+//! them when they fit, and the rest are counted. A connected computer that did not say which of
+//! its sessions are threads (`SessionsRead::threads_unknown`) is named as such, so the model does
+//! not guess; when that changes, or a session becomes a thread or a thread a session, the whole
+//! list goes again, since that is neither an opened nor a closed session. A coordinator's changed
+//! number of sub-threads is a change the model hears.
 
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
@@ -53,6 +63,11 @@ const NAME_CHARS: usize = 40;
 const REASON_CHARS: usize = 240;
 /// Room kept in `MODEL_BYTES` for the line that counts the rows left out.
 const LEFT_LINE_BYTES: usize = 100;
+/// Room kept in `MODEL_BYTES` for the line that counts the unreachable computers not named.
+const COUNTED_LINE_BYTES: usize = 100;
+/// Connected computers the model gets by name at most, among those that could not be read and
+/// among those that did not say which sessions are threads; the rest are counted.
+const COMPUTERS_NAMED: usize = 3;
 /// How often the model hears changes at most.
 pub(in crate::voice_agent) const CHANGES_EVERY: Duration = Duration::from_secs(15);
 /// More changes than this send the whole list again.
@@ -102,6 +117,11 @@ impl Row {
 
     /// `"Title" (project, on Omarchy, a coordinator running 3 sub-threads)`.
     fn named(&self) -> String {
+        self.named_with(true)
+    }
+
+    /// `"Title" (project, on Omarchy)`, with how many sub-threads it runs when `threads`.
+    fn named_with(&self, threads: bool) -> String {
         let title = cut(&self.title, TITLE_CHARS);
         let mut about = Vec::new();
         if !self.project.is_empty() {
@@ -110,16 +130,27 @@ impl Row {
         if let Some(computer) = &self.computer {
             about.push(format!("on {}", cut(computer, NAME_CHARS)));
         }
-        if let Some(threads) = self.sub_threads {
-            about.push(match threads {
+        if let Some(count) = self.sub_threads.filter(|_| threads) {
+            about.push(match count {
                 1 => "a coordinator running 1 sub-thread".to_string(),
-                threads => format!("a coordinator running {threads} sub-threads"),
+                count => format!("a coordinator running {count} sub-threads"),
             });
         }
         if about.is_empty() {
             format!("\"{title}\"")
         } else {
             format!("\"{title}\" ({})", about.join(", "))
+        }
+    }
+
+    /// The change of how many sub-threads it runs, in words.
+    fn threads_changed(&self) -> String {
+        let who = self.named_with(false);
+        match self.sub_threads {
+            Some(0) => format!("{who} now runs no sub-threads."),
+            Some(1) => format!("{who} now runs 1 sub-thread."),
+            Some(count) => format!("{who} now runs {count} sub-threads."),
+            None => format!("{who} is no longer a coordinator."),
         }
     }
 
@@ -190,6 +221,10 @@ struct Told {
     unavailable: Vec<(String, String)>,
     /// The connected computers with sessions in the list, by server id.
     computers: HashSet<String>,
+    /// The sessions it leaves out as a coordinator's threads, by ref.
+    threads: HashSet<String>,
+    /// The connected computers that did not say which of their sessions are threads, by name.
+    threads_unknown: Vec<String>,
 }
 
 /// A message for the model that waits for a quiet moment, what the model knows once it got it,
@@ -210,6 +245,10 @@ pub(super) struct SessionsContext {
     rows: Option<Vec<Row>>,
     /// The connected computers the last read could not reach, with why, by name.
     unavailable: Vec<(String, String)>,
+    /// The sessions of the last read that are a coordinator's threads, by ref.
+    threads: HashSet<String>,
+    /// The connected computers that did not say in the last read which sessions are threads.
+    threads_unknown: Vec<String>,
     /// What the model got of the list; `None` until a whole list reached it.
     model: Option<Told>,
     /// The model's next message.
@@ -258,6 +297,15 @@ impl SessionsContext {
             .collect();
         unavailable.sort();
         self.unavailable = unavailable;
+        self.threads = read
+            .sessions
+            .iter()
+            .filter(|session| session.thread_of.is_some())
+            .map(|session| session.reference())
+            .collect();
+        let mut threads_unknown = read.threads_unknown.clone();
+        threads_unknown.sort();
+        self.threads_unknown = threads_unknown;
         if for_model {
             self.model_update(now);
         }
@@ -303,7 +351,12 @@ impl SessionsContext {
 
     fn model_update(&mut self, now: Instant) {
         let Some(rows) = &self.rows else { return };
-        let (whole, told) = model_list(rows, &self.unavailable);
+        let (whole, told) = model_list(
+            rows,
+            &self.unavailable,
+            &self.threads,
+            &self.threads_unknown,
+        );
         let Some(known) = &self.model else {
             // Nothing reached the model yet: the latest whole list, never changes to a list it
             // did not get.
@@ -360,24 +413,30 @@ impl SessionsContext {
     }
 }
 
-/// The whole list for the model, at most `MODEL_ROWS` rows and `MODEL_BYTES` bytes, and what it
-/// tells.
-fn model_list(rows: &[Row], unavailable: &[(String, String)]) -> (String, Told) {
+/// The whole list for the model, at most `MODEL_ROWS` rows and `MODEL_BYTES` bytes in all, and
+/// what it tells. The sessions come first; the connected computers that could not be read are
+/// named after them, up to `COMPUTERS_NAMED` and as far as they fit, and counted past that.
+fn model_list(
+    rows: &[Row],
+    unavailable: &[(String, String)],
+    threads: &HashSet<String>,
+    threads_unknown: &[String],
+) -> (String, Told) {
     let mut text = format!(
         "{SESSIONS_PREFIX} The user's open sessions, waiting ones first ({} in all; sub-threads are counted under their coordinator). This is context, not something to say.",
         rows.len()
     );
-    let unread: String = unavailable
-        .iter()
-        .map(|(computer, reason)| {
-            format!(
-                "\nNot listed: the sessions on {}. {}",
-                cut(computer, NAME_CHARS),
-                cut(reason, REASON_CHARS)
-            )
-        })
-        .collect();
-    let room = MODEL_BYTES.saturating_sub(text.len() + unread.len() + LEFT_LINE_BYTES);
+    let unknown = threads_unknown_line(threads_unknown);
+    // Kept for the lines after the sessions that are always there: the unreachable computers
+    // counted, the computers whose threads are unknown, and the sessions left out.
+    let tail = LEFT_LINE_BYTES
+        + unknown.len()
+        + if unavailable.is_empty() {
+            0
+        } else {
+            COUNTED_LINE_BYTES
+        };
+    let room = MODEL_BYTES.saturating_sub(text.len() + tail);
     let mut listed = Vec::new();
     let mut used = 0;
     for row in rows.iter().take(MODEL_ROWS) {
@@ -389,7 +448,29 @@ fn model_list(rows: &[Row], unavailable: &[(String, String)]) -> (String, Told) 
         text.push_str(&line);
         listed.push(row.clone());
     }
-    text.push_str(&unread);
+    let mut named = 0;
+    for (computer, reason) in unavailable.iter().take(COMPUTERS_NAMED) {
+        let line = format!(
+            "\nNot listed: the sessions on {}. {}",
+            cut(computer, NAME_CHARS),
+            cut(reason, REASON_CHARS)
+        );
+        if text.len() + line.len() + tail > MODEL_BYTES {
+            break;
+        }
+        text.push_str(&line);
+        named += 1;
+    }
+    let counted = unavailable.len() - named;
+    if counted > 0 {
+        text.push_str(&format!(
+            "\n{counted} {}computer{} unreachable; {} sessions are not listed.",
+            if named > 0 { "more " } else { "" },
+            if counted == 1 { "" } else { "s" },
+            if counted == 1 { "its" } else { "their" },
+        ));
+    }
+    text.push_str(&unknown);
     let left = &rows[listed.len()..];
     let sleeping = left
         .iter()
@@ -407,17 +488,50 @@ fn model_list(rows: &[Row], unavailable: &[(String, String)]) -> (String, Told) 
         left: (left.len(), sleeping),
         unavailable: unavailable.to_vec(),
         computers: rows.iter().filter_map(|row| row.server_id.clone()).collect(),
+        threads: threads.clone(),
+        threads_unknown: threads_unknown.to_vec(),
     };
     (text, told)
 }
 
+/// The line that names the connected computers that did not say which sessions are threads (up
+/// to `COMPUTERS_NAMED`, the rest counted), or nothing.
+fn threads_unknown_line(computers: &[String]) -> String {
+    if computers.is_empty() {
+        return String::new();
+    }
+    let mut names: Vec<String> = computers
+        .iter()
+        .take(COMPUTERS_NAMED)
+        .map(|computer| cut(computer, NAME_CHARS))
+        .collect();
+    let more = computers.len() - names.len();
+    if more > 0 {
+        names.push(format!(
+            "{more} more computer{}",
+            if more == 1 { "" } else { "s" }
+        ));
+    }
+    let names = match names.split_last() {
+        Some((last, [])) => last.clone(),
+        Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
+        None => String::new(),
+    };
+    format!("\nNot known: which sessions on {names} are sub-threads (no answer in time), so each is listed as a session of its own; don't guess which are sub-threads.")
+}
+
 /// What changed for the model between what it was told (`known`) and what a whole list would tell
-/// it now: sessions that opened, were renamed, changed state or closed among the rows it gets.
-/// `None` when only the whole list says it right: the rows at the bound, the number left out or
-/// the computers that could not be read changed, or a connected computer's sessions are all gone
-/// (it was disconnected, which says nothing about its sessions).
+/// it now: sessions that opened, were renamed, changed state or their number of sub-threads, or
+/// closed among the rows it gets. `None` when only the whole list says it right: the rows at the
+/// bound, the number left out, the computers that could not be read or did not say which sessions
+/// are threads changed, a session became a thread or a thread a session (neither opened nor
+/// closed), or a connected computer's sessions are all gone (it was disconnected, which says
+/// nothing about its sessions).
 fn model_changes(known: &Told, now: &Told) -> Option<Vec<String>> {
-    if known.left != now.left || known.unavailable != now.unavailable {
+    if known.left != now.left
+        || known.unavailable != now.unavailable
+        || known.threads_unknown != now.threads_unknown
+    {
         return None;
     }
     let mut changes = Vec::new();
@@ -427,7 +541,11 @@ fn model_changes(known: &Told, now: &Told) -> Option<Vec<String>> {
             .iter()
             .find(|before| before.reference == row.reference)
         {
-            None if known.counted.contains(&row.reference) => return None,
+            None if known.counted.contains(&row.reference)
+                || known.threads.contains(&row.reference) =>
+            {
+                return None
+            }
             None => changes.push(format!("{} opened: {}.", row.named(), row.spoken_state())),
             Some(before) => {
                 if before.title != row.title {
@@ -442,6 +560,9 @@ fn model_changes(known: &Told, now: &Told) -> Option<Vec<String>> {
                 {
                     changes.push(format!("{} is now {}.", row.named(), row.spoken_state()));
                 }
+                if before.sub_threads != row.sub_threads {
+                    changes.push(row.threads_changed());
+                }
             }
         }
     }
@@ -454,6 +575,7 @@ fn model_changes(known: &Told, now: &Told) -> Option<Vec<String>> {
             continue;
         }
         if now.counted.contains(&before.reference)
+            || now.threads.contains(&before.reference)
             || before
                 .server_id
                 .as_ref()
