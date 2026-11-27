@@ -449,6 +449,15 @@ fn here_doc(command: &str, prompt: &str) -> String {
 
 /// `getSessionTitleGenerationCommandPreview(agent, { command })`.
 pub(super) fn title_generation_preview(agent: &str, command: Option<&str>) -> String {
+    // A command that runs agy is refused and titles use Claude (Q5229, CDXC:AgentProviders
+    // 2026-11-27 in packages/gx-core/src/sidebar_actions/generate_title.rs).
+    if command.is_some_and(ghostex_gx_core::title_command_runs_agy) {
+        return format!(
+            "{}\n\n{}",
+            ghostex_gx_core::TITLE_COMMAND_AGY_REFUSAL,
+            title_generation_preview("claude", None)
+        );
+    }
     let command = preview_command(agent, command);
     let read_only = one_shot_text_job_command(agent, &command);
     let prompt = settings_catalog().text(

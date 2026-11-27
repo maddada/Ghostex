@@ -14,6 +14,10 @@ use crate::*;
 
 use super::GpuiNotificationFeedState;
 
+/// The account id gxserver gives the row warning that a CLIProxyAPI hub holds a Google login
+/// (`GOOGLE_LOGIN_NOTICE_PREFIX` in server/src/accounts/hub/mod.rs).
+const HUB_GOOGLE_LOGIN_NOTICE_PREFIX: &str = "cliproxy-google:";
+
 /// The banner's id prefix: a click on a banner with it opens the account, not a session.
 pub(crate) const ACCOUNT_RESET_BANNER_PREFIX: &str = "account-reset:";
 pub(crate) const RESET_EXPIRY_SYSTEM_NOTIFICATIONS_SETTINGS_KEY: &str =
@@ -40,15 +44,32 @@ impl GhostexGpuiApp {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |elapsed| elapsed.as_secs() as i64);
-        let (fresh_reset, fresh_pool) = {
+        let (fresh_reset, fresh_pool, fresh_hub_google) = {
             let mut seen = SEEN.lock().unwrap_or_else(|e| e.into_inner());
             let first_read = seen.is_none();
             let seen = seen.get_or_insert_with(HashSet::new);
             let mut fresh_reset = Vec::new();
             let mut fresh_pool = Vec::new();
+            let mut fresh_hub_google = Vec::new();
             for item in state.items.iter() {
                 // A remote computer's accounts are not this computer's to warn about.
                 if !item.machine.is_local() || !seen.insert(item.id.clone()) || item.read {
+                    continue;
+                }
+                // Q5230: a hub's Google login warning opens as a dialog once, when it arrives (or,
+                // on the first feed after launch, only when it is recent).
+                if item
+                    .account_id
+                    .as_deref()
+                    .is_some_and(|id| id.starts_with(HUB_GOOGLE_LOGIN_NOTICE_PREFIX))
+                {
+                    if !first_read
+                        || item
+                            .created_at_epoch_secs
+                            .is_some_and(|at| now - at <= FIRST_READ_RECENT_SECS)
+                    {
+                        fresh_hub_google.push((item.title.clone(), item.body.clone()));
+                    }
                     continue;
                 }
                 let is_reset = item.kind == super::GpuiNotificationFeedKind::ResetExpiring;
@@ -92,8 +113,30 @@ impl GhostexGpuiApp {
                 }
             }
             seen.retain(|id| state.items.iter().any(|item| &item.id == id));
-            (fresh_reset, fresh_pool)
+            (fresh_reset, fresh_pool, fresh_hub_google)
         };
+        // CDXC:AgentProviders 2026-11-27 DECISION: User (Q5230): "please warn the user with a
+        // dialog saying that we don't support agy in cliproxyapi since it's not allowed by
+        // google." gxserver writes the row once per hub; a toast with Open Accounts opens as the
+        // centred notice modal (app/notice_modal_host.rs), and Accounts is where hubs are managed.
+        for (title, body) in fresh_hub_google {
+            self.app_toast_id_counter = self.app_toast_id_counter.wrapping_add(1);
+            self.upsert_gpui_app_toast(
+                GpuiAppToast {
+                    id: format!("gpui-app-toast-{}", self.app_toast_id_counter),
+                    level: GpuiAppToastLevel::Warning,
+                    title,
+                    description: Some(body),
+                    copy_text: None,
+                    action: Some(GpuiAppToastAction::OpenAccounts { provider: None }),
+                    loading: false,
+                    persistent: true,
+                    duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
+                    epoch: 0,
+                },
+                cx,
+            );
+        }
         // Q4472: one per-pool sound and OS banner when an agent's auto-switchable pool hits 0%
         // (affected sessions carry `blockedAlertedBy: "accountPool"` so they do not fire per chat).
         // Respects both sound settings (inside `gpui_play_not_moving_sound`) and system attention

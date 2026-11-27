@@ -266,14 +266,21 @@ impl AgentsTab {
         }
         if title_agent == "custom" && should_show_setting(&section, "customTitleCommand", None) {
             let value = values.string(CUSTOM_TITLE_COMMAND);
+            let description = if ghostex_gx_core::title_command_runs_agy(&value) {
+                format!(
+                    "Run this command with the title prompt on stdin. It should print only the title.\n\n{}",
+                    ghostex_gx_core::TITLE_COMMAND_AGY_REFUSAL
+                )
+            } else {
+                "Run this command with the title prompt on stdin. It should print only the title."
+                    .to_string()
+            };
             rows.push(text_field(
                 self,
                 p,
                 CUSTOM_TITLE_COMMAND,
                 RowSpec::new("Custom Title Command")
-                    .description(
-                        "Run this command with the title prompt on stdin. It should print only the title.",
-                    )
+                    .description(description)
                     .dependent()
                     .modified(value != default_text(CUSTOM_TITLE_COMMAND)),
                 Some(reset_to(CUSTOM_TITLE_COMMAND)),
