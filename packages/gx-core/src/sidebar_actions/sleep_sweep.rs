@@ -27,10 +27,13 @@ use super::bulk::is_inactive;
 /// machine this run's stream delivered. A machine drawn from its last-seen copy has no tunnel to
 /// sleep through and is skipped, as the runtime's `remotePresentations` skipped it.
 pub fn titlebar_sleep_inactive_ids(core: &Core) -> Vec<String> {
-    let mut ids = machine_rows(core, &MachineId::Local, is_inactive);
+    // Native chats release themselves (CDXC:SessionSleep 2026-11-27 in sidebar_menu/capabilities.rs).
+    let keep =
+        |row: &ghostex_gx_protocol::PresentationSession| is_inactive(row) && !row.non_cli_mode;
+    let mut ids = machine_rows(core, &MachineId::Local, keep);
     for (machine, _) in core.presentation().machines() {
         if !machine.is_local() {
-            ids.extend(machine_rows(core, machine, is_inactive));
+            ids.extend(machine_rows(core, machine, keep));
         }
     }
     ids

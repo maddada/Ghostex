@@ -211,7 +211,19 @@ impl GhostexGpuiApp {
         let click_to_wake = gpui_click_to_wake_sleeping_sessions_from_shared_settings(
             &shared_settings::shared_sidebar_settings_snapshot(),
         );
-        let keep_sleeping = options.keep_sleeping && click_to_wake && sleeping;
+        /*
+        CDXC:SessionSleep 2026-11-27 DECISION:
+        User, of a Native chat whose idle agent Ghostex stopped: "wake on send". Opening it in Chat shows its conversation without starting the agent; the next message sent to it starts the agent (server/src/session_chat_send_wake.rs). Opening it in Terminal still wakes it, since the terminal shows the running host.
+        */
+        let native_chat_stays_released = sleeping
+            && preferred_interface != Some(GpuiPreferredAgentInterface::Terminal)
+            && self
+                .gx_store
+                .core
+                .presentation()
+                .is_native_chat_local_session(&session.project_id, &session.session_id);
+        let keep_sleeping =
+            (options.keep_sleeping && click_to_wake && sleeping) || native_chat_stays_released;
         let wake_sleeping = sleeping && !keep_sleeping;
         if wake_sleeping {
             /*

@@ -781,10 +781,22 @@ impl GhostexGpuiApp {
             .agents_sidebar_session_for_terminal(session_id)
             .is_some_and(|session| session.is_orchestrator);
         let has_switch_account = self.terminal_agent_bar_has_switch_account(session_id);
+        // A Native chat offers no Sleep (CDXC:SessionSleep 2026-11-27 in focus/agents_tab_actions.rs).
+        let native_chat = self
+            .agents_chat_local_key_for_session(session_id)
+            .is_some_and(|key| {
+                self.gx_store
+                    .core
+                    .presentation()
+                    .is_native_chat_local_session(&key.project_id, &key.session_id)
+            });
         let mut rows = Vec::new();
         for row in TERMINAL_AGENT_BAR_MENU_ROWS {
             match row {
                 Some(action) => {
+                    if *action == TerminalAgentBarAction::Sleep && native_chat {
+                        continue;
+                    }
                     if *action == TerminalAgentBarAction::SwitchAccount && !has_switch_account {
                         continue;
                     }

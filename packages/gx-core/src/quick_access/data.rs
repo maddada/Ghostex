@@ -98,6 +98,9 @@ pub struct QuickAccessData {
     pub platform: HotkeyPlatformWire,
     /// The host is the desktop app, which can check for updates, restart and quit.
     pub app_lifecycle: bool,
+    /// The focused session is a Native chat, which offers no Sleep or Wake
+    /// (CDXC:SessionSleep 2026-11-27 in sidebar_menu/capabilities.rs).
+    pub focused_session_is_native_chat: bool,
 }
 
 /// [`HotkeyPlatform`] as the replay files spell it.

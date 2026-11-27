@@ -67,8 +67,10 @@ impl SessionCapabilities {
             can_rename_session: terminal_action,
             // `canSleepSidebarSession || canWakeSidebarSession`: a row that is neither running nor
             // sleeping (a stopped one kept visible by a pin or a tag) offers neither.
-            can_sleep_session: row.lifecycle_state == "running"
-                || row.lifecycle_state == "sleeping",
+            //
+            // CDXC:SessionSleep 2026-11-27 DECISION: User: "don't show sleep as an option if a chat is a native chat please". Ghostex stops a Native chat's idle agent by itself, so its row has neither Sleep nor Wake.
+            can_sleep_session: !row.is_native_chat
+                && (row.lifecycle_state == "running" || row.lifecycle_state == "sleeping"),
             can_tag_session: terminal_action,
             is_browser_session: is_browser,
         }
@@ -77,12 +79,12 @@ impl SessionCapabilities {
 
 /// `canSleepSidebarSession`.
 pub(crate) fn can_sleep(row: &SessionRow) -> bool {
-    row.lifecycle_state == "running"
+    !row.is_native_chat && row.lifecycle_state == "running"
 }
 
 /// `canWakeSidebarSession`.
 pub(crate) fn can_wake(row: &SessionRow) -> bool {
-    row.lifecycle_state == "sleeping"
+    !row.is_native_chat && row.lifecycle_state == "sleeping"
 }
 
 /// `supportsFork`.

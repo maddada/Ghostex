@@ -171,6 +171,15 @@ impl PresentationStore {
         self.local_lifecycle(project_id, session_id) == Some(LifecycleState::Sleeping)
     }
 
+    /// Whether this computer's session is a Native chat (gxserver's `nonCliMode`): Ghostex stops
+    /// its idle agent by itself (server/src/session_native_release.rs), so it offers no Sleep, never
+    /// looks asleep, and opening it shows the chat without starting the agent.
+    pub fn is_native_chat_local_session(&self, project_id: &str, session_id: &str) -> bool {
+        self.machine(&MachineId::Local)
+            .and_then(|machine| machine.effective_session(project_id, session_id))
+            .is_some_and(|session| session.non_cli_mode)
+    }
+
     fn local_lifecycle(&self, project_id: &str, session_id: &str) -> Option<LifecycleState> {
         self.machine(&MachineId::Local)?
             .effective_session(project_id, session_id)

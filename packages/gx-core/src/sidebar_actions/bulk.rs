@@ -305,18 +305,22 @@ pub fn plan_bulk_request(core: &Core, message: &Value) -> Option<BulkRequest> {
                     };
                     (
                         action,
-                        project_rows(core, &project, |row| row.lifecycle_state == wanted),
+                        // Native chats are not slept or woken in bulk (CDXC:SessionSleep 2026-11-27 in sidebar_menu/capabilities.rs).
+                        project_rows(core, &project, |row| {
+                            row.lifecycle_state == wanted && !row.non_cli_mode
+                        }),
                     )
                 }
                 "wakeProjectSleepingSessions" => (
                     BulkAction::Wake,
                     project_rows(core, &project, |row| {
-                        row.lifecycle_state == LifecycleState::Sleeping
+                        row.lifecycle_state == LifecycleState::Sleeping && !row.non_cli_mode
                     }),
                 ),
-                "sleepInactiveProjectSessions" => {
-                    (BulkAction::Sleep, project_rows(core, &project, is_inactive))
-                }
+                "sleepInactiveProjectSessions" => (
+                    BulkAction::Sleep,
+                    project_rows(core, &project, |row| is_inactive(row) && !row.non_cli_mode),
+                ),
                 "closeInactiveProjectSessions" => {
                     (BulkAction::Close, project_rows(core, &project, is_inactive))
                 }

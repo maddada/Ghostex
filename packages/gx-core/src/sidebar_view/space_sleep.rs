@@ -169,7 +169,8 @@ pub fn plan_space_sleep(
         push_project(&mut plans.space.project_ids, &group.core.group_id);
         for session in &group.core.sessions {
             let row = &session.row;
-            if row.is_browser || row.lifecycle_state != "running" {
+            // Native chats release themselves (CDXC:SessionSleep 2026-11-27 in sidebar_menu/capabilities.rs).
+            if row.is_browser || row.is_native_chat || row.lifecycle_state != "running" {
                 continue;
             }
             if in_space.insert(row.sidebar_session_id.as_str()) {
@@ -194,6 +195,7 @@ pub fn plan_space_sleep(
         for session in &group.core.sessions {
             let row = &session.row;
             if row.is_browser
+                || row.is_native_chat
                 || row.lifecycle_state != "running"
                 || in_space.contains(row.sidebar_session_id.as_str())
             {

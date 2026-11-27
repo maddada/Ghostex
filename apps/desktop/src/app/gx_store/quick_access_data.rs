@@ -107,6 +107,16 @@ impl GhostexGpuiApp {
             },
             // The web build compiles this file too, and a page cannot update, restart or quit the app.
             app_lifecycle: cfg!(not(ghostex_web)),
+            focused_session_is_native_chat: store
+                .core
+                .focus()
+                .focused_session
+                .as_ref()
+                .is_some_and(|session| {
+                    session.machine.is_local()
+                        && presentation
+                            .is_native_chat_local_session(&session.project_id, &session.session_id)
+                }),
         }
     }
 }

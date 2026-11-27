@@ -169,8 +169,19 @@ impl GhostexGpuiApp {
             let sleep_candidate = mapped_key.is_some_and(|key| {
                 zmx_session_is_idle(&key.project_id, &key.session_id, &processes)
             });
+            // CDXC:SessionSleep 2026-11-27 DECISION: User: "don't show sleep as an option if a chat is a native chat please". A Native chat's row keeps its CPU and memory but has no Sleep button; Ghostex stops its idle agent by itself.
+            let native_chat = mapped_key.is_some_and(|key| {
+                self.gx_store
+                    .core
+                    .presentation()
+                    .is_native_chat_local_session(&key.project_id, &key.session_id)
+            });
             session_rows.push(GpuiNativeResourceRow {
-                action: GpuiNativeResourceAction::Session,
+                action: if native_chat {
+                    GpuiNativeResourceAction::None
+                } else {
+                    GpuiNativeResourceAction::Session
+                },
                 agent_icon: session.agent_icon,
                 children: gpui_native_resource_child_rows(&tree, seeds.first().map(|row| row.pid)),
                 cpu,
@@ -249,8 +260,17 @@ impl GhostexGpuiApp {
                     });
                 &mut other_project_groups[group_index].rows
             };
+            let native_chat = self
+                .gx_store
+                .core
+                .presentation()
+                .is_native_chat_local_session(&owner.project_id, &owner.session_id);
             rows.push(GpuiNativeResourceRow {
-                action: GpuiNativeResourceAction::Session,
+                action: if native_chat {
+                    GpuiNativeResourceAction::None
+                } else {
+                    GpuiNativeResourceAction::Session
+                },
                 agent_icon: None,
                 children: gpui_native_resource_child_rows(&tree, seeds.first().map(|row| row.pid)),
                 cpu,

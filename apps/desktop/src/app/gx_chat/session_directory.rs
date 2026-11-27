@@ -225,7 +225,14 @@ pub(crate) fn publish(store: &PresentationStore, tabs: &[MachineTabInput]) {
                 main_coordinator: session.is_main_coordinator,
                 // The composer's `+` picker shows each session's state, newest first.
                 activity: session.activity.as_str().to_string(),
-                lifecycle_state: session.lifecycle_state.as_str().to_string(),
+                // A released Native chat reads like any idle chat (CDXC:SessionSleep 2026-11-27 in gx-core selectors.rs).
+                lifecycle_state: if session.non_cli_mode
+                    && session.lifecycle_state == ghostex_gx_protocol::LifecycleState::Sleeping
+                {
+                    "running".to_string()
+                } else {
+                    session.lifecycle_state.as_str().to_string()
+                },
                 active_at: session
                     .meaningful_activity_at
                     .clone()

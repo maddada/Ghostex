@@ -1067,7 +1067,12 @@ fn build_session(
         is_pinned: row.is_pinned,
         is_draft: row.is_draft,
         last_interaction_at: row.last_interaction_at.clone(),
-        lifecycle_state: Some(row.lifecycle_state.clone()),
+        // CDXC:SessionSleep 2026-11-27 DECISION: User: "I really want users to not worry about "sleeping"". A Native chat whose idle agent Ghostex stopped is drawn like any idle chat: no dimming, no sleeping icon or time colour (gx-core `SessionRow::is_native_chat`).
+        lifecycle_state: Some(if row.is_native_chat && row.lifecycle_state == "sleeping" {
+            "running".to_string()
+        } else {
+            row.lifecycle_state.clone()
+        }),
         session_note: row.session_note.clone(),
         favicon_data_url: row.favicon_data_url.clone(),
         has_composer_draft: row.has_composer_draft,

@@ -42,7 +42,8 @@ pub fn plan_group_sleep(core: &Core, message: &Value) -> Option<(bool, Vec<Strin
         .filter(|session_id| {
             loaded
                 .and_then(|loaded| loaded.server_session(&project.project_id, session_id))
-                .is_some_and(|row| row.lifecycle_state == wanted)
+                // Native chats are not slept or woken in bulk (CDXC:SessionSleep 2026-11-27 in sidebar_menu/capabilities.rs).
+                .is_some_and(|row| row.lifecycle_state == wanted && !row.non_cli_mode)
         })
         .map(|session_id| {
             SessionKey {

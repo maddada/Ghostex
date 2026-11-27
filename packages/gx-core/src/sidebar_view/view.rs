@@ -917,6 +917,10 @@ pub struct SessionRow {
     pub session_kind: Option<String>,
     /// The sidebar's own lifecycle vocabulary: `running`, `sleeping`, `error`, `done`.
     pub lifecycle_state: String,
+    /// A Native chat (gxserver's `nonCliMode`). Ghostex stops its idle agent by itself
+    /// (server/src/session_native_release.rs), so its row offers no Sleep or Wake, bulk sleeps
+    /// pass it by, and it never looks asleep even while `lifecycle_state` says `sleeping`.
+    pub is_native_chat: bool,
     /// Pinned by the user, or this is a computer's Chief of Staff, which is always pinned
     /// (`is_chief`).
     pub is_pinned: bool,

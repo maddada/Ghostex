@@ -277,6 +277,10 @@ fn hidden_workarea_command_ids(data: &QuickAccessData) -> BTreeSet<&'static str>
     if flag(settings, "terminalViewTabHidden") || !view_scope_visible(data, "terminal") {
         hidden.insert("switchTerminalView");
     }
+    if data.focused_session_is_native_chat {
+        hidden.insert("sleepFocusedSession");
+        hidden.insert("wakeFocusedSession");
+    }
     hidden
 }
 

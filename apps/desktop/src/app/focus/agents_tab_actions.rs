@@ -309,9 +309,21 @@ impl GhostexGpuiApp {
         CDXC:SessionSleep 2026-06-26-06:57:
         Agents context-menu Sleep keeps tabs in the main workspace instead of closing them. Direct Sleep may retarget active selection to an awake sibling from the clicked pane group; Sleep Right/Left/Others preserve shell focus and only mark resolved sessions sleeping so parked-owner detach happens through normal surface reconciliation.
         */
-        let session_ids = self
+        let mut session_ids = self
             .agents_workspace
             .tab_session_ids_for_sleep_scope(pane_id, session_id, scope);
+        // CDXC:SessionSleep 2026-11-27 DECISION: User: "don't show sleep as an option if a chat is a native chat please". Ghostex stops a Native chat's idle agent by itself, so the Sleep hotkey and every tab scope (Sleep Others, Left, Right) pass Native chats by.
+        session_ids.retain(|candidate| {
+            !matches!(
+                self.workspace_terminal_key_for_shell_session(*candidate),
+                Some(GpuiWorkspaceTerminalSessionKey::Local(key))
+                    if self
+                        .gx_store
+                        .core
+                        .presentation()
+                        .is_native_chat_local_session(&key.project_id, &key.session_id)
+            )
+        });
         if session_ids.is_empty() {
             return false;
         }

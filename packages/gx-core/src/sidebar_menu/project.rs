@@ -60,14 +60,15 @@ pub struct RemoteProjectWorkspace<'a> {
 pub fn project_menu(input: &ProjectMenuInput<'_>) -> Vec<MenuItem> {
     let group = input.group;
     let group_id = group.group_id;
+    // Native chats are not slept or woken from a menu (CDXC:SessionSleep 2026-11-27 in capabilities.rs).
     let sleeping = input
         .sessions
         .iter()
-        .any(|session| session.row.lifecycle_state == "sleeping");
+        .any(|session| !session.row.is_native_chat && session.row.lifecycle_state == "sleeping");
     let running = input
         .sessions
         .iter()
-        .any(|session| session.row.lifecycle_state == "running");
+        .any(|session| !session.row.is_native_chat && session.row.lifecycle_state == "running");
     let Some(project) = group.project else {
         let wake = sleeping && !running;
         let mut menu = vec![MenuItem {
@@ -172,6 +173,7 @@ impl ProjectPlaces<'_, '_> {
         self.input.sessions.iter().any(|session| {
             let row = &session.row;
             row.session_kind.as_deref() == Some("terminal")
+                && !row.is_native_chat
                 && row.lifecycle_state == "running"
                 && row.activity != "working"
                 && row.activity != "attention"

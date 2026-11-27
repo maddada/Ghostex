@@ -238,8 +238,13 @@ pub(crate) fn session_row(
         effective_tag: effective.as_deref(),
         is_live: Some(is_live),
         is_running: Some(is_live),
-        is_sleeping: Some(lifecycle_state == "sleeping"),
-        lifecycle_state: Some(lifecycle_state),
+        // A released Native chat's tooltip reads like any idle chat's (CDXC:SessionSleep 2026-11-27 in selectors.rs).
+        is_sleeping: Some(lifecycle_state == "sleeping" && !session.non_cli_mode),
+        lifecycle_state: Some(if lifecycle_state == "sleeping" && session.non_cli_mode {
+            "running"
+        } else {
+            lifecycle_state
+        }),
         native_pane_state: None,
         provider_session_state: Some(provider.as_str()),
         session_persistence_provider: session
@@ -361,6 +366,7 @@ pub(crate) fn session_row(
         agent_icon: agent_icon.map(str::to_string),
         session_kind: Some(session_kind),
         lifecycle_state: lifecycle_state.to_string(),
+        is_native_chat: session.non_cli_mode,
         is_pinned: session.is_pinned || session.is_chief,
         is_chief: session.is_chief,
         is_autopilot_supervisor: false,

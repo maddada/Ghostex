@@ -56,7 +56,14 @@ pub fn quick_access_store_groups(
                     favicon_data_url: row.favicon_data_url.clone(),
                     agent_icon: row.agent_icon.clone(),
                     session_kind: row.session_kind.clone(),
-                    lifecycle_state: Some(row.lifecycle_state.clone()),
+                    // A released Native chat is listed like any idle chat (CDXC:SessionSleep 2026-11-27 in selectors.rs).
+                    lifecycle_state: Some(
+                        if row.is_native_chat && row.lifecycle_state == "sleeping" {
+                            "running".to_string()
+                        } else {
+                            row.lifecycle_state.clone()
+                        },
+                    ),
                     agent_session_id: row.menu_facts.agent_session_id.clone(),
                     session_routing_id: row.menu_facts.session_routing_id.clone(),
                 })

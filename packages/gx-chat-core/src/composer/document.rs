@@ -201,6 +201,8 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
                 state.session.coordinator_threads.as_deref(),
             );
             match action.id.as_str() {
+                // CDXC:SessionSleep 2026-11-27 DECISION: User: "don't show sleep as an option if a chat is a native chat please". Ghostex stops a Native chat's idle agent by itself (server/src/session_native_release.rs).
+                "sleep" => !state.session.non_cli_mode,
                 "closeAfterDone" => !coordinator,
                 // Only a coordinator has a playbook to show.
                 "viewPlaybook" => coordinator,
