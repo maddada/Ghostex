@@ -93,7 +93,11 @@ impl ExtensionsTab {
                 .iter()
                 .find(|extension| extension.id == id)
                 .is_some_and(|extension| self.official_matches(extension, filter, cx)),
-            Pick::Boosts => boosts_matches(filter),
+            // Boosts' switch is gxserver's: without it (as for the Installed cards) the card is
+            // left out rather than shown with a switch that cannot be read.
+            Pick::Boosts => {
+                self.store.read(cx).request().gxserver_rpc_available && boosts_matches(filter)
+            }
         }
     }
 
