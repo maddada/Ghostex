@@ -715,7 +715,8 @@ impl QuickAccessController {
                     },
                 ],
                 scope_hotkey: format_hotkey_label(SESSIONS_SCOPE_TOGGLE_HOTKEY, platform),
-                tag_filter_active: !self.sessions.tag_filters.is_empty(),
+                tag_filter_active: !self.sessions.tag_filters.is_empty()
+                    && sessions::session_tags_enabled(data),
                 tags: sessions::tag_select(&self.sessions, data),
                 projects: sessions::project_select(&self.sessions, data),
             },

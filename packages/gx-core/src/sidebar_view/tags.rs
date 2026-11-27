@@ -247,6 +247,9 @@ fn is_session_tag(value: &str) -> bool {
     is_builtin_tag(value) || is_custom_tag_id(value)
 }
 
+/// The Favorite tag: a tag value, but favouriting stays while Session Tags is off.
+pub(crate) const FAVORITE_TAG: &str = "favorite";
+
 /// `getEffectiveSidebarSessionTag`: the stored tag, else `favorite` for a legacy favorite. The
 /// stored value is taken as the daemon sent it, without validation.
 pub(crate) fn effective_tag(session_tag: Option<&str>, is_favorite: bool) -> Option<String> {

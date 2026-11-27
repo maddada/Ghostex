@@ -16,6 +16,11 @@
 //! User: "cloud boxes should be a staff picks extension to show that item in the sidebar of
 //! settings". Cloud Boxes joins Work on code with VS Code, as a Feature card whose switch is
 //! `cloudBoxesEnabled`; Settings > Cloud Boxes is in the rail only while it is on.
+//!
+//! CDXC:SessionTags 2026-11-27 DECISION:
+//! User: "please make tagging sessions in general an advanced feature. show it in staff picks
+//! extensions disabled by default". Session Tags gets its own group, Keep track of your sessions,
+//! as a Feature card whose switch is `sessionTagsEnabled`.
 use super::super::super::fields::small_switch_control;
 use super::super::super::model::SettingsTabId;
 use super::super::super::palette::SettingsPalette;
@@ -50,7 +55,7 @@ enum Pick {
 }
 
 /// The groups, in order, each named for what its cards are for.
-const GROUPS: [(&str, &[Pick]); 3] = [
+const GROUPS: [(&str, &[Pick]); 4] = [
     (
         "Work on code",
         &[
@@ -66,6 +71,10 @@ const GROUPS: [(&str, &[Pick]); 3] = [
             Pick::BuiltIn("catchMeUp", "Chat"),
             Pick::BuiltIn("ghostexApps", "Feature"),
         ],
+    ),
+    (
+        "Keep track of your sessions",
+        &[Pick::BuiltIn("sessionTags", "Feature")],
     ),
     (
         "Your team's tools",

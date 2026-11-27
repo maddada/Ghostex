@@ -12982,6 +12982,18 @@
       "agentWritable": true
     },
     {
+      "key": "sessionTagsEnabled",
+      "title": "Session Tags",
+      "subtitle": "Turn Session Tags on or off: Tag As in a session's menus and hover buttons, a tag's icon on its card, Show only sessions tagged in the sidebar's menu, the All tags filter in Quick Access and the Session Tags section of Settings > Sidebar & Sessions, here and in the phone app. Off by default; Favorites keep working, and tags you set are kept.",
+      "tab": "extensions",
+      "tabTitle": "Extensions",
+      "section": "official",
+      "sectionTitle": "Built-in",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
       "key": "chatStatusLineEnabled",
       "title": "Chat Status Line",
       "subtitle": "Turn the Chat Status Line on or off: the line under the chat box with the details you pin to it, such as your plan limits, context or account. Off by default; the details you pinned are kept while it is off.",

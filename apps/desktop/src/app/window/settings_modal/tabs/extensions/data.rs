@@ -199,6 +199,7 @@ pub(crate) fn official_icon(id: &str) -> &'static str {
         "voiceAgent" => "titlebar/headset.svg",
         "readAloud" => "titlebar/volume.svg",
         "sessionNotes" => "modals/settings/note.svg",
+        "sessionTags" => "modals/settings/tag.svg",
         "chatStatusLine" => "titlebar/info-circle.svg",
         "catchMeUp" => "titlebar/history.svg",
         "ghostexApps" => "titlebar/device-desktop.svg",

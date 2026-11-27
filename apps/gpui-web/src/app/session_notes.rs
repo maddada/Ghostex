@@ -6,3 +6,10 @@ pub(crate) fn session_notes_on() -> bool {
         ghostex_settings_catalog::built_in_extensions::SESSION_NOTES,
     )
 }
+
+/// Session Tags the same way: the handshake's `builtInFeatures` of the computer serving the page.
+pub(crate) fn session_tags_on() -> bool {
+    crate::app::read_aloud::computer_feature_on(
+        ghostex_settings_catalog::built_in_extensions::SESSION_TAGS,
+    )
+}

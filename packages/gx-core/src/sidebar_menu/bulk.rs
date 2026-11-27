@@ -86,7 +86,8 @@ pub fn bulk_menu(input: &BulkMenuInput<'_>) -> Option<Vec<MenuItem>> {
         .collect();
     if !park.is_empty() {
         menu.push(
-            if input.settings.show_tag_menu_when_parking && !taggable.is_empty() {
+            if input.settings.show_tag_menu_when_parking && !taggable.is_empty() && !tags.is_empty()
+            {
                 let mut children = vec![
                     MenuItem::row(
                         "No Tag Change",
@@ -156,6 +157,10 @@ fn tag_rows(
     taggable: &[&SessionRow],
     shared_tag: Option<&str>,
 ) -> Vec<MenuItem> {
+    // Session Tags off: no Tag Selected As and no tag prompt when parking the selection.
+    if !input.settings.session_tags_enabled {
+        return Vec::new();
+    }
     let include: Vec<&str> = shared_tag.into_iter().collect();
     let sections =
         enabled_visible_tag_sections(&input.settings.tag_list_items, input.catalog, &include);

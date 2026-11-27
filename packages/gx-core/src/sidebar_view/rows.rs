@@ -14,7 +14,7 @@ use crate::presentation_store::PresentationStore;
 use super::agents::{resolve_agent_icon, BROWSER_AGENT_ICON};
 use super::inputs::{BrowserTabInput, CloseAfterDoneInput, DelayedSendInput};
 use super::session_text::{session_heading, session_tooltip, TitleInput};
-use super::tags::{effective_tag, tag_presentation, TagCatalog};
+use super::tags::{effective_tag, tag_presentation, TagCatalog, FAVORITE_TAG};
 use super::text::{encode_uri_component, js_trim, parse_iso_ms};
 use super::view::{DelayedSendView, SessionMenuFacts, SessionRow, SessionTiming};
 
@@ -31,6 +31,9 @@ pub(crate) struct RowContext<'a> {
     /// The Session notes extension is on; while it is off a row carries no note, so neither its
     /// dot nor its tooltip line draws and the note itself stays saved.
     pub(crate) session_notes: bool,
+    /// The Session Tags extension is on; while it is off a row's tag other than Favorite is not
+    /// shown (no icon, no tooltip label, no checked Tag As row) and stays saved.
+    pub(crate) session_tags: bool,
     /// What the side chats of each main session wait on (`side_chat_needs`).
     pub(crate) side_chat_needs: &'a HashMap<(String, String), SideChatNeeds>,
 }
@@ -208,7 +211,8 @@ pub(crate) fn session_row(
         .filter(|_| context.session_notes)
         .filter(|note| !js_trim(note).is_empty())
         .map(str::to_string);
-    let effective = effective_tag(session.session_tag.as_deref(), session.is_favorite);
+    let effective = effective_tag(session.session_tag.as_deref(), session.is_favorite)
+        .filter(|tag| context.session_tags || tag == FAVORITE_TAG);
     let alias = session.title.clone();
     let primary_title = Some(
         session

@@ -350,6 +350,8 @@ impl SidebarViewModel {
                 || state.inputs.settings.debugging_mode != inputs.settings.debugging_mode
                 || state.inputs.settings.session_notes_enabled
                     != inputs.settings.session_notes_enabled
+                || state.inputs.settings.session_tags_enabled
+                    != inputs.settings.session_tags_enabled
         });
         let meta_dirty = previous.as_ref().is_none_or(|previous| {
             !changes.projects_changed.is_empty()
@@ -383,6 +385,7 @@ impl SidebarViewModel {
             debugging_mode: effective.settings.debugging_mode,
             always_show_state_tooltip: !machine.is_local(),
             session_notes: effective.settings.session_notes_enabled,
+            session_tags: effective.settings.session_tags_enabled,
             side_chat_needs: &side_chat_needs,
         };
 

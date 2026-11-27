@@ -946,6 +946,8 @@ impl GpuiQuickAccessWindow {
                 ..
             } => (segments_as_select(views, view), None, projects, tags, false),
         };
+        let show_tags = !(matches!(snapshot.toolbar, QuickAccessToolbar::Sessions { .. })
+            && tags.options.is_empty());
         let mut tags = tags.clone();
         if tags.label.is_empty() {
             tags.label = "Tags".to_string();
@@ -953,7 +955,7 @@ impl GpuiQuickAccessWindow {
         // CDXC:Sessions 2026-11-27 DECISION: User chose to remove the "By prompt" button: the
         // search box finds chats by what was said in them now, and the Search by Prompt window
         // is retired.
-        vec![
+        let mut filters = vec![
             div()
                 .flex_shrink_0()
                 .on_children_prepainted(capture_bounds(self.view_menu.trigger_bounds.clone(), 0))
@@ -992,26 +994,32 @@ impl GpuiQuickAccessWindow {
                     cx,
                 ))
                 .into_any_element(),
-            div()
-                .flex_shrink_0()
-                .on_children_prepainted(capture_bounds(self.tag_menu.trigger_bounds.clone(), 0))
-                .child(quick_access_filter_trigger(
-                    p,
-                    &tags,
-                    &self.tag_menu,
-                    "quick-access-tag-filter",
-                    tags_active,
-                    None,
-                    |this: &mut Self, _window, cx| {
-                        this.view_menu.close();
-                        this.project_menu.close();
-                        this.tag_menu.toggle();
-                        cx.notify();
-                    },
-                    cx,
-                ))
-                .into_any_element(),
-        ]
+        ];
+        // Session Tags off: History offers no tag filter (gx-core sends it no options).
+        if show_tags {
+            filters.push(
+                div()
+                    .flex_shrink_0()
+                    .on_children_prepainted(capture_bounds(self.tag_menu.trigger_bounds.clone(), 0))
+                    .child(quick_access_filter_trigger(
+                        p,
+                        &tags,
+                        &self.tag_menu,
+                        "quick-access-tag-filter",
+                        tags_active,
+                        None,
+                        |this: &mut Self, _window, cx| {
+                            this.view_menu.close();
+                            this.project_menu.close();
+                            this.tag_menu.toggle();
+                            cx.notify();
+                        },
+                        cx,
+                    ))
+                    .into_any_element(),
+            );
+        }
+        filters
     }
 
     fn render_list(

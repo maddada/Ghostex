@@ -322,6 +322,10 @@ fn action_rows(
 
 /// The Tag As options, or the one placeholder that stands in for them on a publish.
 fn tag_items(input: &SessionMenuInput<'_>, include_menu: bool) -> Vec<MenuItem> {
+    // Session Tags off: no Tag As, no hover Tag button, no tag prompt when parking or snoozing.
+    if !input.settings.session_tags_enabled {
+        return Vec::new();
+    }
     let row = input.row;
     let id = row.sidebar_session_id.as_str();
     let tag = row.effective_tag.as_deref();
@@ -368,6 +372,33 @@ fn tag_items(input: &SessionMenuInput<'_>, include_menu: bool) -> Vec<MenuItem> 
         ));
     }
     items
+}
+
+/// Add to Favorites / Remove from Favorites, in Tag As's place while Session Tags is off.
+///
+/// CDXC:SessionTags 2026-11-27 DECISION:
+/// The coordinator, relaying the user: "Favorites keep working ... don't remove favouriting itself".
+/// Favorite is a tag value (`sessionTag: favorite`) and Tag As was the only way to set it, so this
+/// row sets and clears that same value; a favourite keeps its star on its card.
+fn favorite_rows(id: &str, row: &SessionRow, caps: SessionCapabilities) -> Vec<MenuItem> {
+    if !caps.can_tag_session {
+        return Vec::new();
+    }
+    let favorite = row.effective_tag.as_deref() == Some(crate::sidebar_view::tags::FAVORITE_TAG);
+    let (label, icon, tag) = if favorite {
+        ("Remove from Favorites", "star-filled", None)
+    } else {
+        (
+            "Add to Favorites",
+            "star",
+            Some(crate::sidebar_view::tags::FAVORITE_TAG),
+        )
+    };
+    vec![MenuItem::row(
+        label,
+        icon,
+        MenuCommand::command(message::set_session_tag(id, tag)),
+    )]
 }
 
 /// A Tag As row turned into "set this tag, then park". A row without a `command` (a separator) and
@@ -980,6 +1011,7 @@ impl Places<'_, '_> {
             "coordinator" => coordinator_rows(row, group.is_stale, input.has_inactive_threads),
             "markThreadDone" => thread_rows(row, group.is_stale),
             "copy" => vec![super::copy::copy_submenu(id, row, group)],
+            "tagAs" if !input.settings.session_tags_enabled => favorite_rows(id, row, *caps),
             "tagAs" => self.action(HoverAction::Tag),
             "sleep" => self.action(HoverAction::Sleep),
             "fork" if caps.can_fork_session && !in_box => vec![layout_row(

@@ -219,6 +219,12 @@ impl GhostexPaths {
         self.state_dir.join("cloud-boxes-default-migrated")
     }
 
+    /// Written once the Session Tags default step (`keep_session_tags_once` in the desktop app) has
+    /// run, so someone who already uses tags keeps Session Tags on.
+    pub fn session_tags_default_marker_file(&self) -> PathBuf {
+        self.state_dir.join("session-tags-default-migrated")
+    }
+
     pub fn gxserver_config_dir(&self) -> PathBuf {
         self.config_dir.join("gxserver")
     }

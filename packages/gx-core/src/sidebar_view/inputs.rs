@@ -429,6 +429,9 @@ pub struct SidebarSettings {
     pub open_in_enabled: bool,
     /// The Session notes extension is on: rows offer Note and draw their note dot and tooltip line.
     pub session_notes_enabled: bool,
+    /// The Session Tags extension is on: Tag As, the ☰ menu's tag filters, a tag's icon on a card
+    /// and Quick Access's All tags. Favorite stays while it is off (sidebar_menu/session.rs).
+    pub session_tags_enabled: bool,
     /// Settings › Sidebar is Unified sidebar (`sidebarView: unified`); the Project sidebar is
     /// the default (unified_sidebar/).
     pub unified_sidebar: bool,
@@ -495,6 +498,7 @@ impl Default for SidebarSettings {
             actions_enabled: false,
             open_in_enabled: true,
             session_notes_enabled: false,
+            session_tags_enabled: false,
             unified_sidebar: false,
             unified_working_section: true,
             unified_session_order: UnifiedSessionOrder::Recent,
@@ -648,11 +652,19 @@ impl SidebarSettings {
                 Some(settings),
                 built_in_extensions::SESSION_NOTES,
             ),
+            session_tags_enabled: built_in_extensions::enabled_in_value(
+                Some(settings),
+                built_in_extensions::SESSION_TAGS,
+            ),
         }
     }
 
-    /// The tag filters the Sort & Filter menu offers.
+    /// The tag filters the Sort & Filter menu offers: none while Session Tags is off, so a host
+    /// prunes a filter ticked before it was turned off.
     pub(crate) fn enabled_tag_filters(&self, catalog: &TagCatalog) -> Vec<String> {
+        if !self.session_tags_enabled {
+            return Vec::new();
+        }
         super::tags::enabled_visible_tag_filters(&self.tag_list_items, catalog)
     }
 

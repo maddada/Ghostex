@@ -257,7 +257,12 @@ impl QuickAccessController {
         let mut message = json!({
             "limit": SESSIONS_PAGE_SIZE,
             "requestId": request_id,
-            "sessionTags": self.sessions.tag_filters,
+            // Session Tags off: a filter ticked before it was turned off filters nothing.
+            "sessionTags": if super::sessions::session_tags_enabled(context.data) {
+                self.sessions.tag_filters.clone()
+            } else {
+                Vec::new()
+            },
             "externalOnly": self.sessions.scope == SessionScope::External,
             "refreshExternalSessions": refresh_external,
             "type": "requestPreviousSessions",

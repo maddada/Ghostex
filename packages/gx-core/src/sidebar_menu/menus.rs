@@ -588,6 +588,7 @@ impl<'a> SidebarMenus<'a> {
                 .collection_keys
                 .contains(&collection.storage_id),
             tag_list_items: &self.inputs.settings.tag_list_items,
+            session_tags_enabled: self.inputs.settings.session_tags_enabled,
             catalog: &self.catalog,
             spaces: own_spaces.as_deref(),
         })

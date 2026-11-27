@@ -42,6 +42,8 @@ pub struct CollectionMenuInput<'a> {
     pub hidden: bool,
     /// The user's tag filter list, raw as it sits in settings.
     pub tag_list_items: &'a Value,
+    /// The Session Tags extension is on; while it is off there is no Tag Sessions row.
+    pub session_tags_enabled: bool,
     pub catalog: &'a TagCatalog,
     pub spaces: Option<&'a SpacesState>,
 }
@@ -86,7 +88,7 @@ pub fn collection_menu(input: &CollectionMenuInput<'_>) -> Vec<MenuItem> {
         &filtered(input.sessions, |session| can_wake(&session.row)),
         |session_id| message::set_session_sleeping(session_id, false),
     ));
-    if !agents.is_empty() && !tags.is_empty() {
+    if input.session_tags_enabled && !agents.is_empty() && !tags.is_empty() {
         let mut children = batch("No Tag", "tag-off", &agents, |session_id| {
             message::set_session_tag(session_id, None)
         });

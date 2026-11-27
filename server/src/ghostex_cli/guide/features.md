@@ -1183,7 +1183,7 @@ again. A project whose sessions run in its worktrees (or in a merged copy of the
 repository) counts as having sessions. The phone follows the same switch, synced
 with your computers: Hide Projects Without Sessions in its computer menu (hold
 the title), in Sort & Filter in its ⋯ menu and in its Settings > Sidebar &
-Sessions changes it on your computers too. On the same Sort & Filter page, the tag rows sit under the heading "Show only
+Sessions changes it on your computers too. On the same Sort & Filter page, while Session Tags is on, the tag rows sit under the heading "Show only
 sessions tagged"; when nothing matches, the list says "No sessions tagged X.
 Right-click a session > Tag As" with a Clear filter button.
 
@@ -1725,7 +1725,19 @@ the process alive) and are restored with the agent's resume command. From the
 sidebar or `ghostex`, a session can be focused, renamed, pinned, tagged,
 slept and woken (`ghostex sleep|wake <selector>`), forked, closed, or moved
 between panes and groups. Selecting a session shows it in the focused pane;
-dragging its row onto a pane's edge opens it in a new split beside that pane. A session carries one tag at a time, chosen from the
+dragging its row onto a pane's edge opens it in a new split beside that pane.
+
+Tagging is the Session Tags built-in extension, off by default (Settings >
+Extensions > Staff picks, `sessionTagsEnabled`); it stays on for anyone who
+already used tags. While it is off there is no Tag As, no tag prompt when
+parking or snoozing, no tag icon on a card, no Show only sessions tagged in
+the sidebar's menu, no All tags filter in Quick Access and no Session Tags
+section in Settings, on the computer and the phone; the tags you set are kept.
+Favorites keep working: a session's menu has Add to Favorites (or Remove from
+Favorites) in Tag As's place, and a favourite keeps its star.
+`ghostex tag-session` still works while it is off.
+
+With Session Tags on, a session carries one tag at a time, chosen from the
 Tag As menu (right-click the session): the built-in Priority, Progress, and
 Type tags, plus any custom tags you define. Custom tags are created in one
 place, Settings > Sidebar & Sessions > Session Tags: choose Add tag, then give

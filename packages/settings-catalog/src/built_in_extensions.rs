@@ -58,6 +58,10 @@ pub const CONNECTORS: &str = "connectors";
 /// line, the chat's Session note row, the note dialog, its hotkey, `ghostex session-note`). Off by
 /// default; the phone learns it from `builtInFeaturesOff`. Saved notes are kept while it is off.
 pub const SESSION_NOTES: &str = "sessionNotes";
+/// Session Tags (Tag As, the ☰ menu's tag filters, a tag's icon on a card, Quick Access's All tags,
+/// Settings' Session Tags section); its switch is `sessionTagsEnabled`. Off by default; Favorite
+/// stays while it is off. The phone learns it from `builtInFeaturesOff`.
+pub const SESSION_TAGS: &str = "sessionTags";
 /// The Chat Status Line (the line of pinned details under the chat box). Off by default.
 pub const CHAT_STATUS_LINE: &str = "chatStatusLine";
 /// Catch Me Up (the button at the top right of an empty chat box and its summary card); its switch

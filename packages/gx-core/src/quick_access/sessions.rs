@@ -966,8 +966,15 @@ fn closed_project_label(session: &Value) -> String {
 /// The leading identity glyph, in `SessionFloatingAgentIcon`'s order: the session tag at rest,
 /// then the browser favicon, the colored agent logo, and the terminal glyph for an agentless
 /// terminal row.
-fn session_icon(session: &dyn SessionFields, catalog: &TagCatalog) -> QuickAccessIcon {
-    if let Some(tag) = session_effective_tag(session).filter(|tag| !tag.is_empty()) {
+fn session_icon(
+    session: &dyn SessionFields,
+    catalog: &TagCatalog,
+    tags_enabled: bool,
+) -> QuickAccessIcon {
+    if let Some(tag) = session_effective_tag(session)
+        .filter(|tag| !tag.is_empty())
+        .filter(|tag| tags_enabled || tag == "favorite")
+    {
         return match tag_presentation(Some(&tag), catalog) {
             Some(presentation) => {
                 QuickAccessIcon::asset(&presentation.icon, Some(&presentation.icon_color))
@@ -1067,7 +1074,7 @@ pub(crate) fn session_groups(
                 .chat_match()
                 .and_then(|found| chat_match_line(found, session, &words)),
             title,
-            icon: session_icon(session, &catalog),
+            icon: session_icon(session, &catalog, session_tags_enabled(data)),
             project_label,
             computer_icon,
             file_size: match size {
@@ -1104,8 +1111,29 @@ pub(crate) fn session_groups(
         .collect()
 }
 
-/// The tag filter menu, built from the Settings-managed sidebar tag row set.
+/// Whether the Session Tags extension is on: while it is off History has no All tags filter, sends
+/// no tag filter and shows no tag other than Favorite on a row.
+pub(crate) fn session_tags_enabled(data: &QuickAccessData) -> bool {
+    ghostex_settings_catalog::built_in_extensions::enabled_in_value(
+        Some(data.settings()),
+        ghostex_settings_catalog::built_in_extensions::SESSION_TAGS,
+    )
+}
+
+/// The tag filter menu, built from the Settings-managed sidebar tag row set; no options while
+/// Session Tags is off (the desktop then leaves the filter out).
 pub(crate) fn tag_select(state: &SessionsTabState, data: &QuickAccessData) -> QuickAccessSelect {
+    if !session_tags_enabled(data) {
+        return QuickAccessSelect {
+            label: "All tags".to_string(),
+            count: None,
+            detail: String::new(),
+            color: String::new(),
+            options: Vec::new(),
+            searchable: true,
+            search_placeholder: "Filter tags...".to_string(),
+        };
+    }
     let local = TagCatalog::from_state(data.local_custom_tags.as_ref());
     let settings_items = &data.settings()["sidebarSessionTagListItems"];
     let items = normalize_tag_list_items(settings_items, Some(&local));

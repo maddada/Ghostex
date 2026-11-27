@@ -178,6 +178,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:SessionDetails 2026-11-27 DECISION: User: "we can't disable session details panel and it's no longer shown in extensions". `sessionDetailsPanelHidden` is retired (official_extensions.rs); a saved `true` only starts the header's Session Details button unpinned.
     // CDXC:SessionNotes 2026-10-30 DECISION: Session notes is off by default (official_extensions.rs).
     ("sessionNotesHidden", J::Bool(true)),
+    // CDXC:SessionTags 2026-11-27 DECISION: Session Tags is off by default (official_extensions.rs); this is the one place its default lives.
+    ("sessionTagsEnabled", J::Bool(false)),
     // CDXC:SessionChat 2026-11-22 DECISION: the Chat Status Line is off by default, for existing users too (official_extensions.rs).
     ("chatStatusLineEnabled", J::Bool(false)),
     // CDXC:GhostexApps 2026-11-25 DECISION: Ghostex Apps is off by default, a Beta built-in extension (official_extensions.rs).

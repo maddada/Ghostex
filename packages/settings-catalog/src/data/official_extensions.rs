@@ -335,6 +335,20 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("title", J::Str("Session notes")),
         ("hotkeys", J::Arr(&[J::Str("sessionNote")])),
     ]),
+    // CDXC:SessionTags 2026-11-27 DECISION:
+    // User: "please make tagging sessions in general an advanced feature. show it in staff picks extensions disabled by default. also dont show it here by default" ("here" being the sidebar ☰ menu's Show only sessions tagged section). A whole-feature entry, off by default under a key that enables (`sessionTagsEnabled`, data/defaults.rs, the one place), listed in Staff picks. Off hides tagging everywhere: the ☰ menu's Show only sessions tagged section, Tag As in a session's menus and hover strip, Tag Selected As and Tag Sessions, the tag prompt when parking or snoozing, a tag's icon on a card and its tooltip, Quick Access's All tags filter, the Session Tags section of Settings > Sidebar & Sessions, and the phone's (through `builtInFeaturesOff`). Favorite is a tag value, and favouriting stays: while this is off a session's menu has Add to Favorites / Remove from Favorites in Tag As's place, and a favourite keeps its star. Tags already on sessions and the custom tag list are kept. apps/desktop/src/shared_settings/session_tags_default.rs keeps it on, once, for someone who already uses tags.
+    // SEE-ALSO: packages/gx-core/src/sidebar_view/inputs.rs (`session_tags_enabled`), packages/gx-core/src/sidebar_menu/session.rs (the Favorite row), apps/mobile/app/src/sessions/sessionTagsSwitch.ts.
+    J::Obj(&[
+        ("description", J::Str("Tag your sessions (In Progress, Testing, Blocked, Done and your own tags), see each tag's icon on its card, and show only the sessions with a tag from the sidebar's menu. Favorites work while this is off; tags you set are kept.")),
+        ("category", J::Str("features")),
+        ("id", J::Str("sessionTags")),
+        ("placement", J::Str("feature")),
+        ("settingsKey", J::Str("sessionTagsEnabled")),
+        ("settingsKeyEnables", J::Bool(true)),
+        ("appWide", J::Bool(true)),
+        ("title", J::Str("Session Tags")),
+        ("settingKeys", J::Arr(&[J::Str("sidebarSessionTagListItems"), J::Str("showTagMenuWhenParking")])),
+    ]),
     // CDXC:SessionChat 2026-11-22 DECISION:
     // User, of the row of pills under the chat box (the status line, which old users saw as three empty grey placeholder pills): "i dont wanna see this anymore". It becomes opt-in: a built-in extension, Chat Status Line, off by default under a key that enables (`chatStatusLineEnabled`), so a settings file from before it, which has no such key, reads off and existing users lose the line too. Off, no line and no room for one under the chat box, in the desktop and Ghostex in a browser; on, the line shows the details pinned to it as before. The pinned details are kept either way.
     // SEE-ALSO: apps/desktop/src/app/gx_chat/boot.rs (`ChatSettings::status_line`, the desktop's and the browser's switch), packages/gx-chat-core/src/menus/context/document.rs (`statusLineOff`), apps/desktop/src/app/native_chat/context_meter.rs (the line).

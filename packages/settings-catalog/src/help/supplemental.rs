@@ -481,6 +481,17 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         user_only: false,
     },
     Supplemental {
+        key: "sessionTagsEnabled",
+        tab: EXTENSIONS,
+        group: None,
+        section: "official",
+        section_title: "Built-in",
+        title: "Session Tags",
+        subtitle: "Turn Session Tags on or off: Tag As in a session's menus and hover buttons, a tag's icon on its card, Show only sessions tagged in the sidebar's menu, the All tags filter in Quick Access and the Session Tags section of Settings > Sidebar & Sessions, here and in the phone app. Off by default; Favorites keep working, and tags you set are kept.",
+        options: &[],
+        user_only: false,
+    },
+    Supplemental {
         key: "chatStatusLineEnabled",
         tab: EXTENSIONS,
         group: None,

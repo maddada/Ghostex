@@ -102,6 +102,8 @@ impl SidebarList {
         // Session notes the same way: the computer's handshake says whether it is on.
         self.last_inputs.settings.session_notes_enabled =
             crate::app::session_notes::session_notes_on();
+        self.last_inputs.settings.session_tags_enabled =
+            crate::app::session_notes::session_tags_on();
         // How long this computer's Ghostex service has been away, which the empty list's waiting
         // copy reads, as the desktop's `note_machine_state` tracks it.
         let loaded = core

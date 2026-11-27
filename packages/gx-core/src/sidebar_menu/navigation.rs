@@ -203,9 +203,14 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
         }
         // CDXC:Sidebar 2026-10-31 DECISION: User (Q853): a heading says what the tag rows do. The reporter ticked one expecting it to tag something.
         let tag_rows_start = sort.len();
-        for item in
+        // CDXC:SessionTags 2026-11-27 DECISION: User: "also dont show it here by default": the
+        // whole Show only sessions tagged section is left out while Session Tags is off.
+        let tag_list_items = if input.settings.session_tags_enabled {
             normalize_tag_list_items(&input.settings.tag_list_items, Some(input.filter_catalog))
-        {
+        } else {
+            Vec::new()
+        };
+        for item in tag_list_items {
             if !item.visible {
                 continue;
             }
@@ -501,7 +506,12 @@ mod tests {
 
     #[test]
     fn the_project_sidebars_page_has_the_hide_switch_and_a_heading_over_its_tags() {
-        let (top, sort) = page(&SidebarSettings::default(), &MenuHost::default());
+        // The tag rows show while Session Tags is on (off by default since 2026-11-27).
+        let settings = SidebarSettings {
+            session_tags_enabled: true,
+            ..SidebarSettings::default()
+        };
+        let (top, sort) = page(&settings, &MenuHost::default());
         assert!(top.iter().any(|label| label == "Collapse All"));
         assert_eq!(sort[0], "Switch to Unified View");
         assert_eq!(sort[1], "Show Hidden");
