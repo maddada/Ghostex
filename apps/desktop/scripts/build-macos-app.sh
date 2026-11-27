@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export MACOSX_DEPLOYMENT_TARGET=15.0
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GPUI_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$GPUI_DIR/../.." && pwd)"
@@ -474,7 +476,7 @@ build_gpui_lid_sleep_helper() {
 	local helper_build_dir="$LID_SLEEP_HELPER_BUILD_DIR/$GHOSTEX_MACOS_ARCH"
 	local helper_binary="$helper_build_dir/$GPUI_LID_SLEEP_HELPER_LABEL"
 	local helper_info_plist="$helper_build_dir/Info.plist"
-	local swift_target="$GHOSTEX_MACOS_ARCH-apple-macos13.0"
+	local swift_target="$GHOSTEX_MACOS_ARCH-apple-macos15.0"
 	local helper_swift_developer_dir
 	local helper_sdk_path
 	local helper_digest
@@ -525,7 +527,7 @@ build_gpui_lid_sleep_helper() {
 	<key>CFBundleVersion</key>
 	<string>$GPUI_BUILD_VERSION</string>
 	<key>LSMinimumSystemVersion</key>
-	<string>13.0</string>
+	<string>15.0</string>
 </dict>
 </plist>
 EOF_HELPER_PLIST
@@ -1556,7 +1558,7 @@ cat >"$APP_PATH/Contents/Info.plist" <<EOF_PLIST
 	reads them and none of it ships in this bundle. GPUI Rust resolves
 	GHOSTEX_HOME or the same XDG storage directories used on Linux. -->
 	<key>LSMinimumSystemVersion</key>
-	<string>13.0</string>
+	<string>15.0</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<!-- Chromium's passkey/security-key flow can request Bluetooth transport.
@@ -1641,6 +1643,8 @@ for helper_name in "${helper_names[@]}"; do
 	<string>$GPUI_MARKETING_VERSION</string>
 	<key>CFBundleVersion</key>
 	<string>$GPUI_BUILD_VERSION</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>15.0</string>
 	<key>LSUIElement</key>
 	<string>1</string>
 </dict>

@@ -92,6 +92,15 @@
          .slow_runtime_safety = switch (optimize) {
              .debug => true,
              .safe,
+@@ -923,7 +945,7 @@
+         // We support back to the earliest officially supported version
+         // of macOS by Apple. EOL versions are not supported.
+         .macos => .{ .semver = .{
+-            .major = 13,
++            .major = 15,
+             .minor = 0,
+             .patch = 0,
+         } },
 --- a/src/build/GhosttyResources.zig
 +++ b/src/build/GhosttyResources.zig
 @@ -427,6 +427,22 @@

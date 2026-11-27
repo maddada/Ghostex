@@ -3,6 +3,9 @@
 # Every Rust build in the repository (dev and release, every crate, local and CI) carries no debug info and no symbol table; on Windows the linker also writes no .pdb. A panic still logs its message and file:line (those are compiled into the binary), but backtraces print `<unknown>` frames.
 # Turn it back on for one build with `cargo xtask start --debug-info` (or `GHOSTEX_DEBUG_INFO=1`); plain cargo commands take the environment variables listed in ai/local-start-performance.md ("Debug info").
 # SEE-ALSO: tooling/xtask/src/util.rs (debug_info_environment), which must undo exactly what this file sets.
+[env]
+MACOSX_DEPLOYMENT_TARGET = "15.0"
+
 [profile.dev]
 debug = false
 strip = "symbols"

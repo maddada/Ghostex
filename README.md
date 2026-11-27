@@ -178,7 +178,7 @@ Fuzzy search every prompt you ever sent, across all your agents. Press Enter to 
 
 ### On your computer
 
-**macOS:** [Apple Silicon DMG](https://maddada.com/download/macos-arm64)
+**macOS 15.0 or later:** [Apple Silicon DMG](https://maddada.com/download/macos-arm64)
 
 <details>
 <summary>Or install with Homebrew</summary>

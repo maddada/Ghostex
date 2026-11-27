@@ -37,7 +37,7 @@ fi
 
 SWIFT_BUILD_ARGS=(-c release --package-path "$MACOS_PACKAGE")
 if [[ -n "$EDITOR_ARCH" ]]; then
-	SWIFT_BUILD_ARGS+=(--triple "$EDITOR_ARCH-apple-macosx13.0")
+	SWIFT_BUILD_ARGS+=(--triple "$EDITOR_ARCH-apple-macosx15.0")
 fi
 
 swift build "${SWIFT_BUILD_ARGS[@]}"
@@ -85,7 +85,7 @@ cat >"$CONTENTS_DIR/Info.plist" <<'PLIST'
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>LSMinimumSystemVersion</key>
-	<string>13.0</string>
+	<string>15.0</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSHighResolutionCapable</key>
