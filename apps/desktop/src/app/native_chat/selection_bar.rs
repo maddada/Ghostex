@@ -137,11 +137,24 @@ impl NativeChatView {
         if !from_transcript || self.snapshot["subagent"].is_object() {
             return;
         }
-        let selection = gpui_component::TextSelection::selected_text(window, cx)
-            .trim()
-            .to_owned();
+        let selected = gpui_component::TextSelection::selected_text(window, cx);
+        let selection = selected.trim().to_owned();
         if selection.is_empty() {
             return;
+        }
+        // Copy on select (`chatCopyOnSelect`): the chat's twin of the terminal's
+        // `terminalCopyOnSelect`, for transcript selections only, never the chat box. It copies
+        // the untrimmed text so a code line keeps its indentation.
+        if crate::shared_settings::shared_sidebar_settings_snapshot()
+            .object()
+            .get("chatCopyOnSelect")
+            .and_then(Value::as_bool)
+            == Some(true)
+        {
+            crate::app::helpers::gpui_copy_to_clipboard(
+                gpui::ClipboardItem::new_string(selected.to_string()),
+                cx,
+            );
         }
         // The composer hides behind a question card, which is when Add to Chat and Reply are off.
         let question_active = self.snapshot["questionCard"]["visible"] == true
