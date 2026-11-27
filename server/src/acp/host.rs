@@ -54,6 +54,15 @@ extern "C" fn handle_termination_signal(_signal: libc::c_int) {
     SIGNAL_TERMINATE.store(true, Ordering::SeqCst);
 }
 
+/// Which installed guard the unhandled-termination watchdog belongs to; a dropped guard bumps it.
+#[cfg(unix)]
+static SIGNAL_GUARD_GENERATION: AtomicU64 = AtomicU64::new(0);
+
+/// How long a termination signal may go unanswered before the host exits on its own. A driver's
+/// signal thread acts within 50 ms and spends at most about a second stopping the agent.
+#[cfg(unix)]
+const UNHANDLED_TERMINATION_EXIT_AFTER: Duration = Duration::from_secs(3);
+
 pub(super) struct TerminationSignalGuard;
 
 impl TerminationSignalGuard {
@@ -66,7 +75,45 @@ impl TerminationSignalGuard {
             libc::signal(libc::SIGHUP, handler as libc::sighandler_t);
             libc::signal(libc::SIGINT, handler as libc::sighandler_t);
         }
+        #[cfg(unix)]
+        Self::watch_for_unhandled_termination();
         Self
+    }
+
+    /// CDXC:AgentProviders 2026-11-27 WHY (GitHub #786 follow-up):
+    /// Every driver installs this handler before it starts the agent, but only starts the thread
+    /// that acts on it once the agent has answered its startup handshake. A host whose agent hung
+    /// there (a stuck `claude` on a busy server, an agent that never answers `initialize`) took
+    /// SIGTERM, SIGHUP and SIGINT as a flag nobody read and kept running; only SIGKILL ended it.
+    /// This watchdog exits the host when a termination request is still unanswered after
+    /// `UNHANDLED_TERMINATION_EXIT_AFTER`. The agent it may have started is stopped by the
+    /// `acp-child-watch` process (and `PR_SET_PDEATHSIG` on Linux) that already covers a host
+    /// that dies hard (child_lifetime.rs).
+    #[cfg(unix)]
+    fn watch_for_unhandled_termination() {
+        let generation = SIGNAL_GUARD_GENERATION.fetch_add(1, Ordering::AcqRel) + 1;
+        let _ = thread::Builder::new()
+            .name("acp-host-termination-watchdog".to_string())
+            .spawn(move || {
+                let mut requested_at: Option<std::time::Instant> = None;
+                loop {
+                    thread::sleep(Duration::from_millis(100));
+                    if SIGNAL_GUARD_GENERATION.load(Ordering::Acquire) != generation {
+                        return;
+                    }
+                    if !termination_requested() {
+                        requested_at = None;
+                        continue;
+                    }
+                    let since = *requested_at.get_or_insert_with(std::time::Instant::now);
+                    if since.elapsed() >= UNHANDLED_TERMINATION_EXIT_AFTER {
+                        eprintln!(
+                            "[Native] Stopping: a termination signal arrived while the agent was still starting."
+                        );
+                        std::process::exit(143);
+                    }
+                }
+            });
     }
 }
 
@@ -74,6 +121,7 @@ impl Drop for TerminationSignalGuard {
     fn drop(&mut self) {
         #[cfg(unix)]
         unsafe {
+            SIGNAL_GUARD_GENERATION.fetch_add(1, Ordering::AcqRel);
             libc::signal(libc::SIGTERM, libc::SIG_DFL);
             libc::signal(libc::SIGHUP, libc::SIG_DFL);
             libc::signal(libc::SIGINT, libc::SIG_DFL);
