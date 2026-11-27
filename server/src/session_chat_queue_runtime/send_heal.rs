@@ -34,6 +34,9 @@ pub(crate) const RESTART_SAME_RESUME_FAILED: &str =
 pub(crate) const RESTART_REPEATED_WITHOUT_AGENT: &str =
     "restarting the agent the same way did not bring it back after 3 tries";
 
+/// The refusal of a restart for an agent with no conversation to come back on.
+pub(crate) const RESTART_NOTHING_TO_RESUME: &str = "the agent has no conversation to resume";
+
 /// Whether `reason` (from `restart_agent_for_send`) means no later automatic restart will run.
 pub(crate) fn restart_refusal_is_final(reason: &str) -> bool {
     reason == RESTART_SAME_RESUME_FAILED || reason == RESTART_REPEATED_WITHOUT_AGENT
@@ -352,7 +355,7 @@ pub(crate) async fn restart_agent_for_send(
         return restart_without_missing_resume(state, target, &reference).await;
     }
     if !can_start_on_its_conversation(state, &session).await {
-        return Err("the agent has no conversation to resume");
+        return Err(RESTART_NOTHING_TO_RESUME);
     }
     if agent_running && agent_is_busy(&session).await {
         return Err("the agent is in the middle of a turn");
@@ -426,7 +429,7 @@ pub(crate) async fn reload_idle_agent_for_input_box(
     let session = &target.session;
     if !can_start_on_its_conversation(state, session).await {
         return Err(ReloadRefusal {
-            reason: "the agent has no conversation to resume".to_string(),
+            reason: RESTART_NOTHING_TO_RESUME.to_string(),
             lasting: true,
         });
     }

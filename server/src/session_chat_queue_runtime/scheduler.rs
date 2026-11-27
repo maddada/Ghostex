@@ -932,6 +932,14 @@ impl SessionChatQueueRuntime {
                 || self.transcript_lifecycle_is_working(key, &session)
             {
                 WaitReason::Working
+            } else if let Some(failed) = crate::acp::startup_error::get(project_id, session_id) {
+                // GitHub #782: a Native host that reported why it could not start is not
+                // "starting": the row says so until the wake above restarts it or fails the row.
+                if failed.is_auth {
+                    WaitReason::MissingLogin
+                } else {
+                    WaitReason::StartFailed
+                }
             } else {
                 WaitReason::Starting
             };

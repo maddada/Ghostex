@@ -59,6 +59,9 @@ pub(crate) enum SendFailureNext {
     Fix,
     /// The agent is gone with no conversation to resume: only a new conversation can take it.
     StartFresh,
+    /// The agent never started a conversation (it failed at startup): Retry starts it again and
+    /// sends the message, which is all Start fresh would do (GitHub #782).
+    StartAgain,
 }
 
 /// The record behind the card, the dot and the notification.
@@ -80,6 +83,7 @@ pub(crate) fn send_failed_notice(failure: &SendFailure) -> SessionChatTerminalNo
         SendFailureNext::RetryOrFix => "Retry, or Fix it to restart the agent and send it.",
         SendFailureNext::Fix => "Fix it restarts the agent and sends it.",
         SendFailureNext::StartFresh => "Start fresh starts the agent over and sends it.",
+        SendFailureNext::StartAgain => "Retry starts the agent again and sends it.",
     };
     let terminal = SessionChatTerminalNoticeAction::switch_to_terminal("Terminal view");
     let actions = match failure.next {
@@ -95,6 +99,7 @@ pub(crate) fn send_failed_notice(failure: &SendFailure) -> SessionChatTerminalNo
                 terminal,
             ]
         }
+        SendFailureNext::StartAgain => vec![SessionChatTerminalNoticeAction::retry_send(), terminal],
     };
     let mut notice = SessionChatTerminalNotice::new(
         SESSION_CHAT_NOTICE_DELIVERY_FAILED,
@@ -498,6 +503,8 @@ async fn record_failed_row(state: &AppState, row: FailedRow) {
     .await;
     let next = if running {
         SendFailureNext::RetryOrFix
+    } else if never_had_a_conversation(&session) {
+        SendFailureNext::StartAgain
     } else if crate::session_chat_queue_runtime::can_start_on_its_conversation(state, &session)
         .await
     {
@@ -528,6 +535,17 @@ async fn record_failed_row(state: &AppState, row: FailedRow) {
     }
     notify_once(state, &row.project_id, &row.session_id, &session, &failure);
     publish(state, &row.project_id, &row.session_id);
+}
+
+/// Whether the session's agent never named a conversation (no id and no transcript path), as when
+/// it failed at startup: starting it again is all a new conversation would do.
+fn never_had_a_conversation(session: &Value) -> bool {
+    ["agentSessionId", "agentSessionPath"].iter().all(|key| {
+        session
+            .pointer(&format!("/runtimeSettings/{key}"))
+            .and_then(Value::as_str)
+            .is_none_or(|value| value.trim().is_empty())
+    })
 }
 
 fn store_failure(state: &AppState, project_id: &str, session_id: &str, failure: &SendFailure) {
@@ -974,7 +992,8 @@ pub(crate) async fn answer_card_action(
     if action == ACTION_START_FRESH {
         forget_conversation(state, &project_id, &session_id);
     }
-    if action != ACTION_RETRY {
+    // Retry on a message whose agent never started is that start again (GitHub #782).
+    if action != ACTION_RETRY || failure.next == SendFailureNext::StartAgain {
         if let Err(reason) =
             crate::session_chat_queue_runtime::cycle_session(state, &project_id, &session_id).await
         {

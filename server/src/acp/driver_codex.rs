@@ -33,6 +33,35 @@ use super::spec::{
 
 const CODEX_RPC_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// How many of Codex's first stderr lines a failed start quotes.
+const STARTUP_STDERR_LINES: usize = 20;
+
+/// Why Codex did not start, for the failed-start card and the log: what Codex printed on stderr
+/// first (so the log's first line is Codex's own words), then whether it exited or why
+/// `initialize` failed.
+///
+/// CDXC:AgentProviders 2026-11-27 WHY:
+/// GitHub #782: a Codex Native chat that could not start reported only "Codex RPC `initialize`
+/// timed out", because a Codex that exits at once leaves `initialize` waiting out its 30 seconds;
+/// what Codex itself printed (its config error, a missing library, a refused flag) went only to
+/// the host's spool. The card and the `piChatChannel.startupError` log line now carry it.
+fn startup_failure_message(
+    init_error: &str,
+    exited: Option<std::process::ExitStatus>,
+    stderr_head: &str,
+) -> String {
+    let lead = match exited {
+        Some(status) => format!("Codex app-server stopped before it started ({status})"),
+        None => format!("Codex app-server initialize failed: {init_error}"),
+    };
+    let said = stderr_head.trim();
+    if said.is_empty() {
+        lead
+    } else {
+        format!("{said}\n{lead}")
+    }
+}
+
 #[path = "driver_codex_rewind.rs"]
 mod rewind;
 
@@ -869,14 +898,21 @@ fn spawn_and_init_codex(
     let transport = Arc::new(CodexTransport::new(stdin, &cfg.spool_session_id));
     *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = Some(transport.clone());
 
+    // The first lines Codex prints on stderr, kept for a start that fails before `initialize`.
+    let stderr_head: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
     if let Some(stderr) = stderr {
         let t_err = transport.clone();
+        let head = stderr_head.clone();
         thread::spawn(move || {
             let reader = BufReader::new(stderr);
             for line in reader.lines().map_while(Result::ok) {
                 let trimmed = line.trim();
                 if !trimmed.is_empty() {
                     t_err.spool_event(&json!({ "stderr": trimmed }));
+                    let mut head = head.lock().unwrap_or_else(|p| p.into_inner());
+                    if head.len() < STARTUP_STDERR_LINES {
+                        head.push(trimmed.to_string());
+                    }
                 }
             }
         });
@@ -905,8 +941,13 @@ fn spawn_and_init_codex(
         process_gen.fetch_add(1, Ordering::AcqRel);
         *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
         state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = 0;
+        let exited = child.try_wait().ok().flatten();
         stop_codex_gracefully(&transport, &mut child, &mut lifetime, child_pid);
-        return Err(format!("Codex app-server initialize failed: {err}"));
+        let said = stderr_head
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .join("\n");
+        return Err(startup_failure_message(&err, exited, &said));
     }
     let _ = transport.notify("initialized", json!({}));
 

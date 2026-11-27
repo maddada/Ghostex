@@ -137,6 +137,7 @@ pub fn plain_reason(reason: &str) -> String {
         " Retry, or Fix it to restart the agent and send it.",
         " Fix it restarts the agent and sends it.",
         " Start fresh starts the agent over and sends it.",
+        " Retry starts the agent again and sends it.",
     ] {
         if let Some(rest) = text.strip_suffix(tail) {
             text = rest.trim_end();

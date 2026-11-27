@@ -64,6 +64,44 @@ pub(crate) fn clear(project_id: &str, session_id: &str) {
     }
 }
 
+/// The first non-empty line of a startup error as the `piChatChannel.startupError` log line
+/// carries it: the home folder shown as `~`, words that look like a credential hidden, and cut to
+/// a sentence or two (`displayable_reason`).
+///
+/// CDXC:AgentProviders 2026-11-27 WHY:
+/// GitHub #782: a Codex Native chat on Linux stayed at "Waiting to send" and the log said only
+/// `piChatChannel.startupError family=codex isAuth=false`, so nobody could tell from a report why
+/// Codex would not start. The log now carries what the agent said first, without its secrets or
+/// the user's home folder.
+pub(crate) fn first_line_for_log(message: &str) -> String {
+    let line = message
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or_default();
+    let home = crate::resume_lookup::home_dir();
+    let home = home.to_string_lossy();
+    let line = if home.len() > 1 {
+        line.replace(home.as_ref(), "~")
+    } else {
+        line.to_string()
+    };
+    crate::session_chat_send_failure::displayable_reason(&line)
+}
+
+/// The failed message's reason for a Native agent that could not start: its name and the first
+/// line of its error.
+pub(crate) fn failed_start_reason(err: &AcpStartupError) -> String {
+    let label = agent_label(&err.family);
+    let first = first_line_for_log(&err.message);
+    let first = first.trim_end_matches('.');
+    if first.is_empty() {
+        format!("{label} couldn't start, so the message was not sent.")
+    } else {
+        format!("{label} couldn't start, so the message was not sent: {first}.")
+    }
+}
+
 pub(crate) fn looks_like_auth_error(message: &str) -> bool {
     let lower = message.to_ascii_lowercase();
     lower.contains("authentication required")

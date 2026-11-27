@@ -375,6 +375,16 @@ fn gave_up(state: &AppState, db: &rusqlite::Connection, key: &SessionKey, reason
         key,
         json!({ "reason": format!("{reason:?}") }),
     );
+    // GitHub #782: with no conversation to come back on, or a Native host that failed at startup
+    // each time it was restarted, nothing will start this agent, so the message waiting for it
+    // fails with the reason and Retry instead of waiting.
+    if matches!(reason, GiveUpReason::NothingToResume)
+        || crate::acp::startup_error::get(&key.0, &key.1).is_some()
+    {
+        crate::session_chat_send_wake::fail_waiting_message_after_heal_gave_up(
+            state, &key.0, &key.1,
+        );
+    }
 }
 
 fn log(state: &AppState, event: &str, level: LogLevel, key: &SessionKey, details: Value) {

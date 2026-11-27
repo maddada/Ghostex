@@ -364,7 +364,7 @@ pub(crate) async fn heal_failed_start(
     state: &AppState,
     project_id: &str,
     session_id: &str,
-) -> Option<&'static str> {
+) -> Option<String> {
     let mut params = Map::new();
     params.insert("projectId".to_string(), json!(project_id));
     params.insert("sessionId".to_string(), json!(session_id));
@@ -424,10 +424,27 @@ pub(crate) async fn heal_failed_start(
         if host_running {
             return None;
         }
-        return crate::session_chat_queue_runtime::restart_agent_for_send(state, &target, false)
-            .await
-            .err()
-            .filter(|reason| crate::session_chat_queue_runtime::restart_refusal_is_final(reason));
+        let refusal =
+            crate::session_chat_queue_runtime::restart_agent_for_send(state, &target, false)
+                .await
+                .err()?;
+        if crate::session_chat_queue_runtime::restart_refusal_is_final(refusal) {
+            return Some(could_not_start_again(refusal));
+        }
+        // CDXC:SessionChat 2026-11-27 WHY:
+        // GitHub #782: a Codex Native chat whose host failed at startup, before any conversation
+        // existed, held its first message at "Waiting for the agent to start" for good: the
+        // restart is refused for having nothing to resume, and that refusal waited for a later
+        // check that could never do better. With the host's own startup error on record, the
+        // message fails with that error and Retry, which starts the agent again and sends it.
+        if refusal == crate::session_chat_queue_runtime::RESTART_NOTHING_TO_RESUME {
+            if let Some(failed) = crate::acp::startup_error::get(project_id, session_id) {
+                if !failed.is_auth {
+                    return Some(crate::acp::startup_error::failed_start_reason(&failed));
+                }
+            }
+        }
+        return None;
     }
     let composer = crate::session_chat_options::cached_session_chat_composer_readiness(
         state, project_id, session_id,
@@ -451,6 +468,15 @@ pub(crate) async fn heal_failed_start(
         .await
         .err()
         .filter(|reason| crate::session_chat_queue_runtime::restart_refusal_is_final(reason))
+        .map(could_not_start_again)
+}
+
+/// The failed message's reason when no later check could restart its agent.
+fn could_not_start_again(refusal: &str) -> String {
+    crate::session_chat_send_failure::send_failure_reason(
+        "The agent in this session could not start again, so the message was not sent.",
+        Some(refusal),
+    )
 }
 
 /// Whether claude-swap now holds a usable login for `slot`.

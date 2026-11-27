@@ -576,6 +576,7 @@ fn startup_error(
             "sessionId": session_id,
             "family": family,
             "isAuth": is_auth,
+            "firstLine": crate::acp::startup_error::first_line_for_log(&message),
         }),
     );
     Ok(json!({ "recorded": true }))

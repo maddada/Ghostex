@@ -383,16 +383,14 @@ pub(crate) fn wake_session_holding_startup_send(
                 )
                 .await
                 {
-                    // GitHub #456: no later check could start it, so the message stops waiting.
+                    // GitHub #456 and #782: no later check could start it, so the message stops
+                    // waiting and becomes a failed message with the reason and Retry.
                     fail_held_message(
                         &state,
                         &project_id,
                         &session_id,
                         prompt_id.as_deref().unwrap_or_default(),
-                        &crate::session_chat_send_failure::send_failure_reason(
-                            "The agent in this session could not start again, so the message was not sent.",
-                            Some(reason),
-                        ),
+                        &reason,
                     );
                 }
             }
@@ -675,6 +673,36 @@ fn fail_held_message(
         None,
         true,
     );
+}
+
+/// The message waiting at the head of a session's queue fails with the reason and Retry, because
+/// self-heal gave up on its agent with no conversation to come back on, or on a Native host that
+/// failed at startup each time, so nothing will start it.
+///
+/// CDXC:SessionChat 2026-11-27 WHY:
+/// GitHub #782: a Codex Native chat whose agent failed at startup logged `sessionSelfHealGaveUp
+/// reason=NothingToResume` and left the first message at "Waiting to send" on the desktop and the
+/// phone, though no later check could start that agent. The message is the user's to send again:
+/// it fails here with the agent's own startup error when the host reported one, and Retry on its
+/// card starts the agent again and sends it.
+pub(crate) fn fail_waiting_message_after_heal_gave_up(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) {
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return;
+    };
+    let snapshot =
+        crate::session_chat_queue::read_session_chat_queue_snapshot_with(&db, project_id, session_id);
+    let Some(prompt_id) = snapshot.deliverable_head().map(|head| head.id.clone()) else {
+        return;
+    };
+    let reason = match crate::acp::startup_error::get(project_id, session_id) {
+        Some(failed) => crate::acp::startup_error::failed_start_reason(&failed),
+        None => "The agent stopped before it started a conversation, and Ghostex had nothing to restart it on, so the message was not sent.".to_string(),
+    };
+    fail_held_message(state, project_id, session_id, &prompt_id, &reason);
 }
 
 /// CDXC:SessionChat 2026-10-11 WHY:
