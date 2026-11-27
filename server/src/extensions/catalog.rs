@@ -57,7 +57,17 @@ fn fill_source_urls(catalog: &mut super::ExtensionCatalog, url: &str) {
 /// CDXC:Extensions 2026-11-19 DECISION:
 /// User, after the Git extension's modal got stuck on screen: "anyways we dont need it". The Git
 /// extension leaves the Store; the header's Commit/Git popover is Ghostex's own and stays.
-pub(crate) const RETIRED_OFFICIAL_EXTENSIONS: [&str; 2] = ["storybook", "git"];
+///
+/// CDXC:Extensions 2026-11-27 DECISION:
+/// User, of the Claude Usage Community extension (Q5223): "let's remove this extesnion and it's
+/// code, same for codex one, not needed, they just login with claude to get this to work without
+/// needing the extension". Claude Usage and Codex Usage leave the Store and their source leaves
+/// the Ghostex-extensions repo; an installed copy is uninstalled quietly at start (its pinned
+/// header badge and popup go with it), so nobody who had one sees an error. The usage meters a
+/// Claude or Codex sign-in gives (Settings > Accounts, the sidebar meter, the usage popup) are
+/// Ghostex's own and stay.
+pub(crate) const RETIRED_OFFICIAL_EXTENSIONS: [&str; 4] =
+    ["storybook", "git", "claude-usage", "codex-usage"];
 
 /// Whether the extension `id` by `author` is one of [`RETIRED_OFFICIAL_EXTENSIONS`]: Storybook
 /// whoever made it (as before), the others only as Ghostex published them, so a user's own
