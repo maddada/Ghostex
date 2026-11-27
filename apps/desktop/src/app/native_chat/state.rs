@@ -407,6 +407,11 @@ pub(crate) struct NativeChatView {
     pub(super) boost_preview: Option<String>,
     /// Where the Boost menu's list is scrolled; its section chips scroll it (boosts.rs).
     pub(super) boost_scroll: gpui::ScrollHandle,
+    /// The Boost menu's filter field, made in the menu's own window, and what it holds (boosts.rs).
+    pub(super) boost_filter: Option<Entity<InputState>>,
+    pub(super) boost_filter_subscription: Option<Subscription>,
+    pub(super) boost_filter_window: Option<gpui::WindowId>,
+    pub(super) boost_filter_query: String,
     /// Where the strip's Boost pill was painted, which its menu lines up with (boosts.rs).
     pub(super) boost_pill_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
     /// Top edge of any bar or card stacked above the chat box (`composer.rs`), so floating
@@ -861,6 +866,10 @@ impl NativeChatView {
             note_subscription: None,
             boost_preview: None,
             boost_scroll: gpui::ScrollHandle::new(),
+            boost_filter: None,
+            boost_filter_subscription: None,
+            boost_filter_window: None,
+            boost_filter_query: String::new(),
             boost_pill_bounds: Default::default(),
             composer_above_top: Default::default(),
             form_inputs: Default::default(),

@@ -489,6 +489,11 @@ impl ChatOptionMenu {
         self.windows.len() > 1
     }
 
+    /// Closes the side panel beside the menu, leaving the menu open.
+    pub(in crate::app::native_chat) fn close_side_panel(&mut self, cx: &mut Context<Self>) {
+        self.truncate(1, false, cx);
+    }
+
     /// A select's list: below its trigger (above when there is no room), left edges aligned.
     pub(super) fn open_dropdown(
         &mut self,
@@ -546,6 +551,10 @@ impl ChatOptionMenu {
             }
         }
         self.truncate(depth, false, cx);
+        // CDXC:Boosts 2026-11-27 WHY: the Boost menu's preview (the one side panel) opens on a
+        // row's hover or highlight while the menu's filter field is being typed in; taking key
+        // status sent the next letters to the preview card, so it opens without it.
+        let takes_focus = !self.side_left;
         let scale = self.appearance.scale;
         let available = self.source_bounds;
         let metrics = self.metrics();
@@ -695,7 +704,7 @@ impl ChatOptionMenu {
                     window_bounds: Some(WindowBounds::Windowed(bounds)),
                     display_id,
                     titlebar: None,
-                    focus: true,
+                    focus: takes_focus,
                     show: true,
                     is_movable: false,
                     is_resizable: false,

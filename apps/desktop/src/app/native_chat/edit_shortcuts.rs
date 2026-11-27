@@ -335,6 +335,7 @@ impl NativeChatView {
                 self.search_input
                     .iter()
                     .chain(self.files_links_input.iter())
+                    .chain(self.boost_filter.iter())
                     .chain(self.secret_fields())
                     .chain(self.board.topic_edit.iter().map(|(input, _)| input))
                     .chain(
@@ -603,6 +604,7 @@ impl NativeChatView {
             .chain(
                 self.files_links_input
                     .iter()
+                    .chain(self.boost_filter.iter())
                     .map(|input| input.focus_handle(cx)),
             )
             .chain(

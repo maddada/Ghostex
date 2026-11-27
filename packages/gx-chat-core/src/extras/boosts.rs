@@ -646,6 +646,23 @@ pub fn filter_choices<'a>(
         .collect()
 }
 
+/// Whether a Boost menu row stays under the menu's filter field: every word of `query` (any case)
+/// appears in the Boost's name or description. An empty query keeps every row.
+///
+/// CDXC:Boosts 2026-11-27 DECISION:
+/// User: "when i open the boosts menu please show a text box up top that lets me type to filter to
+/// reach a specific one". The menu's field filters every section at once (Show, Actions, Work,
+/// Custom) on the name and the description, unlike the `*` picker's name-word prefix
+/// ([`filter_choices`]), since the menu's rows show their descriptions.
+pub fn menu_filter_matches(query: &str, label: &str, description: &str) -> bool {
+    let label = label.to_lowercase();
+    let description = description.to_lowercase();
+    query
+        .to_lowercase()
+        .split_whitespace()
+        .all(|word| label.contains(word) || description.contains(word))
+}
+
 fn read(state: &mut ChatState, request_id: u64, params: Value) -> Effect {
     state.extras.boosts.request = Some(request_id);
     state.extras.boosts.started = true;

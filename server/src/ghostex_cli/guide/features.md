@@ -2684,8 +2684,11 @@ message with context and a Done button or choices; Inbox it!, where the agent an
 list instead of in the chat: your ask and its answer arrive as one to-do with Done (or
 choices), which Details opens in full; Schedule it, which saves the job as an automation that
 runs once later or on repeat and reports back, changed or stopped in All Automations; Tell me
-when done) and Custom, your own. The chips at the bottom of the menu jump to a
-section, and Edit… beside them opens Settings > Boosts. Pointing at a Boost shows a small
+when done) and Custom, your own. Typing in the Filter Boosts field at the top of the
+menu (it has the keyboard when the menu opens) keeps only the Boosts whose name or
+description has every word typed, across all sections; Up and Down move through them,
+Enter adds the highlighted one, and Escape empties the field, then closes the menu. The
+chips at the bottom of the menu jump to a section, and Edit… beside them opens Settings > Boosts. Pointing at a Boost shows a small
 preview of what comes back, with its whole description. You can also type `*` at the start of a word in the chat box
 to pick one, your own Boosts included (`*ch` finds Chart it; a space right after the `*` closes the list, so lists
 and sums type as before). A pick adds a Boost pill

@@ -816,7 +816,7 @@ impl NativeChatView {
             self.resource_modal_closed(cx);
         }
         if trigger == super::boosts::BOOST_TRIGGER {
-            self.boost_preview = None;
+            self.boost_menu_closed();
         }
         if trigger == super::sent_history::SENT_TRIGGER {
             self.sent_history_menu_closed(cx);

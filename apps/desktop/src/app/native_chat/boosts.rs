@@ -25,10 +25,11 @@ use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text}
 use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Bounds, Context, FontWeight, Hsla, InteractiveElement as _, IntoElement,
-    ParentElement as _, Pixels, StatefulInteractiveElement as _, Styled as _, Window, canvas, div,
-    px, relative, rgb, svg,
+    AnyElement, AppContext as _, Bounds, Context, Focusable as _, FontWeight, Hsla,
+    InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
+    StatefulInteractiveElement as _, Styled as _, Window, canvas, div, px, relative, rgb, svg,
 };
+use gpui_component::input::{Input, InputEvent, InputState};
 use serde_json::{Value, json};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -59,6 +60,44 @@ const ROW_GAP: f32 = 2.0;
 const FOOTER_HEIGHT: f32 = 40.0;
 /// The tallest the list gets before it scrolls, so the menu never stands taller than this.
 const MENU_MAX_HEIGHT: f32 = 420.0;
+/// The filter field at the menu's top (the Files and links filter's height) and the line that
+/// says nothing matches.
+const FILTER_HEIGHT: f32 = 30.0;
+const EMPTY_HEIGHT: f32 = 34.0;
+/// The key context around the filter field. The field's own bindings (Up, Down, Enter, Escape)
+/// sit as deep as these and were bound first, so these, bound later, reach the menu first; letters
+/// are not bound, so they type (the model picker's search field does the same, model_menu/keys.rs).
+const FILTER_KEY_CONTEXT: &str = "ChatBoostFilter";
+
+#[derive(Clone, Debug, PartialEq, gpui::Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(super) struct BoostFilterKey {
+    key: String,
+}
+
+struct BoostFilterKeysBound;
+impl gpui::Global for BoostFilterKeysBound {}
+
+/// Binds the filter field's Up, Down, Enter and Escape to the menu, once.
+fn register_filter_keys(cx: &mut gpui::App) {
+    if cx.has_global::<BoostFilterKeysBound>() {
+        return;
+    }
+    cx.set_global(BoostFilterKeysBound);
+    let context = format!("{FILTER_KEY_CONTEXT} > Input");
+    let bindings: Vec<_> = ["up", "down", "ctrl-p", "ctrl-n", "enter", "escape"]
+        .into_iter()
+        .map(|key| {
+            crate::app::hotkeys::gpui_runtime_key_binding(
+                key,
+                BoostFilterKey { key: key.into() },
+                Some(&context),
+                cx,
+            )
+        })
+        .collect();
+    cx.bind_keys(bindings);
+}
 
 /// The Boosts' accent: gold.
 /// CDXC:Boosts 2026-11-20 DECISION: User: "make Boost gold please, and make the colour of a Boost
@@ -120,10 +159,27 @@ impl NativeChatView {
     /// The menu's sections in order (Show, Actions, Work, then Custom once there is one), each
     /// with its name and its Boosts.
     fn boost_sections(&self) -> Vec<(String, String, Vec<Value>)> {
+        self.boost_sections_matching("")
+    }
+
+    /// The sections with only the Boosts the filter field keeps; a section with none left goes.
+    fn boost_sections_matching(&self, query: &str) -> Vec<(String, String, Vec<Value>)> {
         let Some(boosts) = self.boosts() else {
             return Vec::new();
         };
-        let list = boosts["list"].as_array().cloned().unwrap_or_default();
+        let list: Vec<Value> = boosts["list"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|row| {
+                ghostex_gx_chat_core::extras::boosts::menu_filter_matches(
+                    query,
+                    &text(row, "label"),
+                    &text(row, "description"),
+                )
+            })
+            .cloned()
+            .collect();
         boosts["tabs"]
             .as_array()
             .into_iter()
@@ -489,8 +545,139 @@ impl NativeChatView {
             self.invoke(json!({"type": "dismissBoostHint"}), cx);
         }
         self.boost_preview = None;
+        self.boost_menu_closed();
+        self.boost_scroll.set_offset(gpui::point(px(0.0), px(0.0)));
         self.invoke(json!({"type": "refreshBoosts"}), cx);
         self.toggle_pill_menu(BOOST_MENU, pill, window, cx);
+    }
+
+    /// The menu went away: the filter field goes with the window it was made in, and the next
+    /// opening starts with every Boost.
+    pub(super) fn boost_menu_closed(&mut self) {
+        self.boost_preview = None;
+        self.boost_filter = None;
+        self.boost_filter_subscription = None;
+        self.boost_filter_window = None;
+        self.boost_filter_query.clear();
+    }
+
+    /// The filter field, made in the menu's own window the first time the menu draws there and
+    /// focused, so typing filters straight away.
+    fn sync_boost_filter(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let here = window.window_handle().window_id();
+        if self.boost_filter.is_some() && self.boost_filter_window == Some(here) {
+            return;
+        }
+        register_filter_keys(cx);
+        self.boost_filter_window = Some(here);
+        let query = self.boost_filter_query.clone();
+        let input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Filter Boosts")
+                .default_value(query)
+        });
+        self.boost_filter_subscription = Some(cx.subscribe_in(
+            &input,
+            window,
+            |chat, input, event: &InputEvent, window, cx| {
+                if matches!(event, InputEvent::Change) {
+                    let query = input.read(cx).value().to_string();
+                    if query != chat.boost_filter_query {
+                        chat.boost_filter_query = query;
+                        chat.boost_scroll.set_offset(gpui::point(px(0.0), px(0.0)));
+                        // The first match is highlighted, so Enter adds it.
+                        match chat.boost_filtered_rows().first() {
+                            Some((_, id)) => {
+                                let id = id.clone();
+                                chat.preview_boost(&id, window, cx);
+                            }
+                            None => chat.hide_boost_preview(cx),
+                        }
+                        cx.notify();
+                    }
+                }
+            },
+        ));
+        // Key presses reach the menu only through its window's native keyboard owner
+        // (native_chat/focus.rs), as the model picker's search field does.
+        super::focus::reclaim_keyboard_focus(window);
+        input.read(cx).focus_handle(cx).focus(window, cx);
+        self.boost_filter = Some(input);
+    }
+
+    /// The rows the filter keeps, in the menu's order: each one's place among the list's children
+    /// (a section's header comes before its rows) and its Boost.
+    fn boost_filtered_rows(&self) -> Vec<(usize, String)> {
+        let mut rows = Vec::new();
+        let mut child = 0;
+        for (_, _, section) in self.boost_sections_matching(&self.boost_filter_query) {
+            child += 1;
+            for row in section {
+                rows.push((child, text(&row, "id")));
+                child += 1;
+            }
+        }
+        rows
+    }
+
+    /// Up, Down, Enter and Escape in the filter field: Up and Down move the highlight through the
+    /// rows the filter keeps (stopping at either end), Enter adds the highlighted Boost (or takes
+    /// it out, as a click does), and Escape empties the field first, then closes the menu.
+    ///
+    /// CDXC:Boosts 2026-11-27 DECISION:
+    /// User: "when i open the boosts menu please show a text box up top that lets me type to
+    /// filter to reach a specific one". The field sits at the menu's top, focused on opening, in
+    /// the Files and links filter's look; it filters every section; the highlight is the hovered
+    /// row's, so the pointer and the keys share one, and the preview follows it.
+    fn boost_filter_key(
+        &mut self,
+        action: &BoostFilterKey,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        cx.stop_propagation();
+        window.prevent_default();
+        let rows = self.boost_filtered_rows();
+        let current = self
+            .boost_preview
+            .as_deref()
+            .and_then(|id| rows.iter().position(|(_, row)| row == id));
+        match action.key.as_str() {
+            "escape" => {
+                if self.boost_filter_query.is_empty() {
+                    self.close_pill_menu(cx);
+                } else if let Some(input) = self.boost_filter.clone() {
+                    input.update(cx, |input, cx| input.set_value("", window, cx));
+                    self.boost_filter_query.clear();
+                    self.hide_boost_preview(cx);
+                    self.boost_scroll.set_offset(gpui::point(px(0.0), px(0.0)));
+                }
+            }
+            "up" | "ctrl-p" | "down" | "ctrl-n" if !rows.is_empty() => {
+                let up = matches!(action.key.as_str(), "up" | "ctrl-p");
+                let next = match current {
+                    None if up => rows.len() - 1,
+                    None => 0,
+                    Some(index) if up => index.saturating_sub(1),
+                    Some(index) => (index + 1).min(rows.len() - 1),
+                };
+                let (child, id) = rows[next].clone();
+                self.boost_scroll.scroll_to_item(child);
+                self.preview_boost(&id, window, cx);
+            }
+            "enter" => {
+                if let Some((_, id)) = current
+                    .or((!rows.is_empty()).then_some(0))
+                    .map(|index| rows[index].clone())
+                {
+                    let draft = self.draft.clone();
+                    self.invoke(json!({"type": "toggleBoost", "id": id, "text": draft}), cx);
+                    self.close_pill_menu(cx);
+                }
+            }
+            _ => {}
+        }
+        cx.notify();
     }
 
     /// The menu's content height (unscaled): every section's header and rows, up to
@@ -511,7 +698,7 @@ impl NativeChatView {
                     + rows.len() as f32 * (ROW_PAD_Y * 2.0 + LABEL_LINE + DETAIL_LINE + ROW_GAP)
             })
             .sum();
-        Some(list.min(MENU_MAX_HEIGHT) + 6.0 + FOOTER_HEIGHT)
+        Some(FILTER_HEIGHT + 6.0 + list.min(MENU_MAX_HEIGHT) + 6.0 + FOOTER_HEIGHT)
     }
 
     /// The preview card's content height, while there is a Boost to preview.
@@ -528,11 +715,12 @@ impl NativeChatView {
     pub(super) fn boost_menu_body(
         &mut self,
         p: &ChatAppearance,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         self.boosts()?;
-        let sections = self.boost_sections();
+        self.sync_boost_filter(window, cx);
+        let sections = self.boost_sections_matching(&self.boost_filter_query);
         let s = p.scale;
         let tone = accent(p.light);
         let draft = self.draft.clone();
@@ -706,6 +894,21 @@ impl NativeChatView {
                 );
             }
         }
+        if children.is_empty() {
+            children.push(
+                div()
+                    .id("boost-menu-no-match")
+                    .flex_shrink_0()
+                    .h(px(EMPTY_HEIGHT * s))
+                    .flex()
+                    .items_center()
+                    .px(px(10.0 * s))
+                    .text_size(px(13.0 * s))
+                    .text_color(p.card_muted)
+                    .child("No Boosts match")
+                    .into_any_element(),
+            );
+        }
         let rows = div()
             .id("boost-menu-rows")
             .flex()
@@ -716,6 +919,44 @@ impl NativeChatView {
             .track_scroll(&scroll)
             .gap(px(ROW_GAP * s))
             .children(children);
+        // The Files and links menu's filter field (files_links.rs), in the menu's own colours.
+        let filter = self.boost_filter.clone().map(|input| {
+            div()
+                .key_context(FILTER_KEY_CONTEXT)
+                .on_action(cx.listener(Self::boost_filter_key))
+                .w_full()
+                .flex_shrink_0()
+                .h(px(FILTER_HEIGHT * s))
+                .flex()
+                .items_center()
+                .gap(px(6.0 * s))
+                .rounded(px(8.0 * s))
+                .border_1()
+                .border_color(p.input_border)
+                .bg(p.composer_background)
+                .px(px(10.0 * s))
+                .child(
+                    svg()
+                        .path("titlebar/search.svg")
+                        .size(px(14.0 * s))
+                        .flex_shrink_0()
+                        .text_color(p.muted),
+                )
+                .child(
+                    div().flex_1().min_w_0().child(
+                        Input::new(&input)
+                            .appearance(false)
+                            .bordered(false)
+                            .focus_bordered(false)
+                            .w_full()
+                            .p_0()
+                            .text_size(px(13.0 * s))
+                            .text_color(p.primary)
+                            .placeholder_color(p.muted.opacity(0.6))
+                            .caret_color(p.foreground),
+                    ),
+                )
+        });
         let chips =
             div()
                 .flex()
@@ -812,6 +1053,7 @@ impl NativeChatView {
                 .flex()
                 .flex_col()
                 .gap(px(6.0 * s))
+                .children(filter)
                 .child(rows)
                 .child(footer)
                 .into_any_element(),
@@ -842,6 +1084,15 @@ impl NativeChatView {
                 cx,
             );
         });
+    }
+
+    /// No row is highlighted any more (nothing matches the filter, or it was emptied): the
+    /// preview card beside the menu goes rather than standing empty.
+    fn hide_boost_preview(&mut self, cx: &mut Context<Self>) {
+        self.boost_preview = None;
+        if let Some(menu) = self.option_menu.clone() {
+            menu.update(cx, |menu, cx| menu.close_side_panel(cx));
+        }
     }
 
     /// The preview card: the Boost's name, a small picture of what the agent sends back, and what
