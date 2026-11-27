@@ -48,9 +48,7 @@ fn gpui_rename_session_generator_name() -> String {
     };
     // A pick that is no longer offered (Antigravity, Q5212) runs on the default, as gxserver's
     // `normalize_title_generation_agent` reads it.
-    label(&agent)
-        .or_else(|| label("claude"))
-        .unwrap_or(agent)
+    label(&agent).or_else(|| label("claude")).unwrap_or(agent)
 }
 
 /// Asks this computer's gxserver for a name (`/api/previewSessionTitle`) without applying it.

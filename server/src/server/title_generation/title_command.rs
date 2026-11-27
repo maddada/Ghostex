@@ -429,7 +429,10 @@ mod saved_command_tests {
 
     #[test]
     fn saved_antigravity_agy_command_never_runs_for_titles() {
-        assert_eq!(job_command(&session("antigravity", "agy")).unwrap(), "claude");
+        assert_eq!(
+            job_command(&session("antigravity", "agy")).unwrap(),
+            "claude"
+        );
         assert_eq!(
             job_command(&session("antigravity", "/opt/bin/agy --profile x")).unwrap(),
             "claude"
@@ -477,18 +480,24 @@ mod summary_agent_tests {
 
     #[test]
     fn a_custom_command_that_runs_agy_titles_with_claude() {
-        for typed in ["agy -p", "/usr/local/bin/agy -p --model x", "sh -c 'agy -p'"] {
+        for typed in [
+            "agy -p",
+            "/usr/local/bin/agy -p --model x",
+            "sh -c 'agy -p'",
+        ] {
             let settings = json!({
                 "sessionTitleGenerationAgent": "custom",
                 "customSessionTitleGenerationCommand": typed,
             });
             let (agent, command) = summary_agent(&settings, &json!({})).unwrap();
-            assert_eq!((agent.as_str(), command.as_str()), ("claude", "claude"), "{typed}");
+            assert_eq!(
+                (agent.as_str(), command.as_str()),
+                ("claude", "claude"),
+                "{typed}"
+            );
         }
-        let (agent, command) = super::without_agy_title_command(
-            "custom".to_string(),
-            "agy -p".to_string(),
-        );
+        let (agent, command) =
+            super::without_agy_title_command("custom".to_string(), "agy -p".to_string());
         assert_eq!((agent.as_str(), command.as_str()), ("claude", "claude"));
     }
 
@@ -499,7 +508,10 @@ mod summary_agent_tests {
             "customSessionTitleGenerationCommand": "my-titler --short",
         });
         let (agent, command) = summary_agent(&settings, &json!({})).unwrap();
-        assert_eq!((agent.as_str(), command.as_str()), ("custom", "my-titler --short"));
+        assert_eq!(
+            (agent.as_str(), command.as_str()),
+            ("custom", "my-titler --short")
+        );
     }
 
     #[test]
@@ -534,7 +546,13 @@ mod agy_title_command_tests {
         ] {
             assert!(title_command_runs_agy(command), "{command}");
         }
-        for command in ["claude -p", "my-titler --short", "agyle", "python3 titles.py", ""] {
+        for command in [
+            "claude -p",
+            "my-titler --short",
+            "agyle",
+            "python3 titles.py",
+            "",
+        ] {
             assert!(!title_command_runs_agy(command), "{command}");
         }
     }

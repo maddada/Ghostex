@@ -264,10 +264,17 @@ fn google_logins(files: &[Value]) -> Vec<String> {
                 .and_then(Value::as_str)?
                 .trim()
                 .to_ascii_lowercase();
-            ["antigravity", "gemini", "vertex", "aistudio", "ai-studio", "ai_studio"]
-                .iter()
-                .any(|google| provider.contains(google))
-                .then_some(provider)
+            [
+                "antigravity",
+                "gemini",
+                "vertex",
+                "aistudio",
+                "ai-studio",
+                "ai_studio",
+            ]
+            .iter()
+            .any(|google| provider.contains(google))
+            .then_some(provider)
         })
         .collect();
     found.sort();
@@ -393,7 +400,11 @@ fn google_login_warned_path(paths: &GxserverPaths) -> std::path::PathBuf {
 /// can't be reached, and the user is warned once per hub, not on every launch. The row is a red
 /// account row like the pool-limit one, which the desktop and phones already draw and open on
 /// Settings > Accounts, where the hub is managed.
-pub(crate) fn warn_google_login_once(db: &rusqlite::Connection, paths: &GxserverPaths, hub_id: &str) {
+pub(crate) fn warn_google_login_once(
+    db: &rusqlite::Connection,
+    paths: &GxserverPaths,
+    hub_id: &str,
+) {
     static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
     let _gate = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
     let path = google_login_warned_path(paths);
@@ -1249,7 +1260,10 @@ mod tests {
         kept("hub-resume-clean", &[], Duration::ZERO, None);
         let on = |id: &str| json!({"runtimeSettings": {launch::RUNTIME_KEY: id}});
         let reason = session_hub_refusal(&paths, &on("hub-resume-google")).unwrap();
-        assert!(reason.contains("Home hub") && reason.contains("antigravity"), "{reason}");
+        assert!(
+            reason.contains("Home hub") && reason.contains("antigravity"),
+            "{reason}"
+        );
         let picked = json!({"runtimeSettings": {"accountId": "cliproxy:hub-resume-google"}});
         assert!(session_hub_refusal(&paths, &picked).is_some());
         assert!(session_hub_refusal(&paths, &on("hub-resume-clean")).is_none());
@@ -1259,7 +1273,10 @@ mod tests {
         assert!(plan.get("primaryCommand").is_none());
         assert!(plan.get("fallbackCommand").is_none());
         assert_eq!(plan["hubRefusal"], json!(reason));
-        assert!(plan["startupText"].as_str().unwrap().contains("Google login"));
+        assert!(plan["startupText"]
+            .as_str()
+            .unwrap()
+            .contains("Google login"));
     }
 
     /// Q5230: the warning that a hub holds a Google login reaches the bell once per hub, as a red
@@ -1283,7 +1300,10 @@ mod tests {
         assert_eq!(rows.len(), 1, "{feed}");
         assert_eq!(rows[0]["kind"], json!("failed"));
         assert!(rows[0]["body"].as_str().unwrap().contains("Home hub"));
-        assert!(rows[0]["body"].as_str().unwrap().contains("Google doesn't allow it"));
+        assert!(rows[0]["body"]
+            .as_str()
+            .unwrap()
+            .contains("Google doesn't allow it"));
     }
 
     /// A reading older than `FRESH_FOR`, or a failed one, is read again; a hub whose list can't be

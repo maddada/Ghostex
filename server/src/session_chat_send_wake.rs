@@ -693,8 +693,9 @@ pub(crate) fn fail_waiting_message_after_heal_gave_up(
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return;
     };
-    let snapshot =
-        crate::session_chat_queue::read_session_chat_queue_snapshot_with(&db, project_id, session_id);
+    let snapshot = crate::session_chat_queue::read_session_chat_queue_snapshot_with(
+        &db, project_id, session_id,
+    );
     let Some(prompt_id) = snapshot.deliverable_head().map(|head| head.id.clone()) else {
         return;
     };

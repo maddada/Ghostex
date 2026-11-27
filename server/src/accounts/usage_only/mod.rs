@@ -72,14 +72,14 @@ pub(crate) fn provider_counts(paths: &GxserverPaths) -> Option<Vec<(&'static str
     Some(
         [UsageProvider::Cursor, UsageProvider::Copilot]
             .into_iter()
-        .map(|provider| {
-            let count = accounts
-                .iter()
-                .filter(|account| account.provider == provider)
-                .count();
-            (provider.id(), count)
-        })
-        .collect(),
+            .map(|provider| {
+                let count = accounts
+                    .iter()
+                    .filter(|account| account.provider == provider)
+                    .count();
+                (provider.id(), count)
+            })
+            .collect(),
     )
 }
 
@@ -156,7 +156,8 @@ fn reading_now() -> &'static Mutex<std::collections::HashSet<String>> {
 const FRESH_FOR: Duration = Duration::from_secs(120);
 
 /// A provider's usage reader.
-pub(crate) type Reader = fn(&store::UsageAccount) -> Result<(Reading, Option<store::Credential>), http::Failure>;
+pub(crate) type Reader =
+    fn(&store::UsageAccount) -> Result<(Reading, Option<store::Credential>), http::Failure>;
 
 /// The usage reader of `provider`, or `None` for a retired one (Gemini, Antigravity), which is never
 /// read: Antigravity offers other apps only ACP, which has no usage yet (retire.rs).

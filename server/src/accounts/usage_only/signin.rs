@@ -127,9 +127,9 @@ pub(crate) fn start(
         let result = match provider {
             UsageProvider::Cursor => super::cursor::sign_in(&progress),
             UsageProvider::Copilot => super::copilot::sign_in(&progress),
-            UsageProvider::Gemini | UsageProvider::Antigravity => Err(Failure::Unavailable(
-                super::retire::RETIRED.to_string(),
-            )),
+            UsageProvider::Gemini | UsageProvider::Antigravity => {
+                Err(Failure::Unavailable(super::retire::RETIRED.to_string()))
+            }
         }
         .and_then(|signed_in| save(&paths, provider, account_id, signed_in));
         progress.change(|view| match result {

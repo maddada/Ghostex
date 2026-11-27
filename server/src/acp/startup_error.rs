@@ -144,7 +144,8 @@ pub(crate) fn antigravity_too_old(initialize: &serde_json::Value) -> Option<Stri
     let version = initialize
         .pointer("/agentInfo/version")
         .and_then(serde_json::Value::as_str);
-    antigravity_update_needed(version).map(|message| format!("{message} {ANTIGRAVITY_TOO_OLD_TAIL}"))
+    antigravity_update_needed(version)
+        .map(|message| format!("{message} {ANTIGRAVITY_TOO_OLD_TAIL}"))
 }
 
 /// The update instruction for an agy older than 1.5.1 or whose version can't be read, or `None`
@@ -250,7 +251,10 @@ impl AgyVersion {
                 prerelease: suffix_from.is_some(),
                 shown: text[at..shown_end].to_string(),
             };
-            if oldest.as_ref().is_none_or(|oldest| version.order() < oldest.order()) {
+            if oldest
+                .as_ref()
+                .is_none_or(|oldest| version.order() < oldest.order())
+            {
                 oldest = Some(version);
             }
             at = shown_end.max(end);

@@ -465,12 +465,7 @@ pub(crate) fn note_agy_version(version_text: &str) {
     let _ = std::thread::Builder::new()
         .name("agy-lineup".to_string())
         .spawn(move || {
-            read_antigravity_lineup_once_per_version(
-                &version_text,
-                &paths,
-                &event_hub,
-                &server_id,
-            )
+            read_antigravity_lineup_once_per_version(&version_text, &paths, &event_hub, &server_id)
         });
 }
 

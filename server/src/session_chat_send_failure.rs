@@ -99,7 +99,9 @@ pub(crate) fn send_failed_notice(failure: &SendFailure) -> SessionChatTerminalNo
                 terminal,
             ]
         }
-        SendFailureNext::StartAgain => vec![SessionChatTerminalNoticeAction::retry_send(), terminal],
+        SendFailureNext::StartAgain => {
+            vec![SessionChatTerminalNoticeAction::retry_send(), terminal]
+        }
     };
     let mut notice = SessionChatTerminalNotice::new(
         SESSION_CHAT_NOTICE_DELIVERY_FAILED,

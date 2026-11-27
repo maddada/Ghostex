@@ -226,8 +226,7 @@ fn reading(home: &Path, agent_id: &str, now: bool) -> Reading {
     if let Some(kept) = kept.filter(|kept| {
         kept.at.is_some_and(|at| {
             at >= asked
-                || (!now
-                    && (sign_in_running(agent_id) || at.elapsed() < ACCOUNT_CHECK_FRESH_FOR))
+                || (!now && (sign_in_running(agent_id) || at.elapsed() < ACCOUNT_CHECK_FRESH_FOR))
         })
     }) {
         return kept;

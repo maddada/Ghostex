@@ -127,7 +127,8 @@ mod tests {
 
     /// The one Google host Ghostex fetches from for Antigravity: agy's own auto-updater, read for
     /// this computer's update manifest (agent_cli/latest.rs). A changed or added address fails here.
-    const ALLOWED_FETCH_HOST: &str = "antigravity-cli-auto-updater-974169037036.us-central1.run.app";
+    const ALLOWED_FETCH_HOST: &str =
+        "antigravity-cli-auto-updater-974169037036.us-central1.run.app";
 
     /// CDXC:AgentProviders 2026-11-27 (Fable re-review, finding 9): the update check's address is
     /// agy's updater host and nothing else, and no other host on Google's app hosting appears in
@@ -149,7 +150,10 @@ mod tests {
         let app_hosting = ["run", ".app"].concat();
         for source in SOURCES {
             let without = source.replace(ALLOWED_FETCH_HOST, "");
-            assert!(!without.contains(&app_hosting), "another {app_hosting} host is named");
+            assert!(
+                !without.contains(&app_hosting),
+                "another {app_hosting} host is named"
+            );
         }
     }
 
@@ -195,10 +199,14 @@ mod tests {
             .find(|line| line.starts_with("const SIGN_IN_AGENTS"))
             .expect("the welcome card's sign-in list");
         assert!(!sign_in_agents.contains("antigravity"), "{sign_in_agents}");
-        use crate::server::{
-            argument_title_generation_command, normalize_title_generation_agent,
-        };
-        assert_eq!(normalize_title_generation_agent(Some("antigravity")), "claude");
-        assert_eq!(argument_title_generation_command("antigravity", "agy", "'x'"), None);
+        use crate::server::{argument_title_generation_command, normalize_title_generation_agent};
+        assert_eq!(
+            normalize_title_generation_agent(Some("antigravity")),
+            "claude"
+        );
+        assert_eq!(
+            argument_title_generation_command("antigravity", "agy", "'x'"),
+            None
+        );
     }
 }

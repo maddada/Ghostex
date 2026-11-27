@@ -95,17 +95,15 @@ pub(crate) fn read_lineup(agent: &str, cache_dir: &std::path::Path, fresh: bool)
     }?;
     // Cursor's list differs from its picker in order and rows (Q2983).
     let entry = match agent {
-        "cursor" => {
-            match crate::agent_model_pickers::picker_rows(agent, &home, cache_dir, fresh) {
-                Some(picker) => crate::agent_model_pickers::order_by_picker(
-                    agent,
-                    entry,
-                    &picker,
-                    crate::agent_model_catalog::published_agent(agent).as_ref(),
-                ),
-                None => entry,
-            }
-        }
+        "cursor" => match crate::agent_model_pickers::picker_rows(agent, &home, cache_dir, fresh) {
+            Some(picker) => crate::agent_model_pickers::order_by_picker(
+                agent,
+                entry,
+                &picker,
+                crate::agent_model_catalog::published_agent(agent).as_ref(),
+            ),
+            None => entry,
+        },
         _ => entry,
     };
     entry

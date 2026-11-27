@@ -81,8 +81,9 @@ fn title_command_for_agent(agent_id: &str) -> &'static str {
 }
 
 /// `SESSION_TITLE_GENERATION_AGENT_OPTIONS` (no Antigravity since 2026-11-27, Q5212).
-const TITLE_GENERATION_AGENTS: [&str; 7] =
-    ["codex", "cursor", "claude", "grok", "pi", "empryo", "custom"];
+const TITLE_GENERATION_AGENTS: [&str; 7] = [
+    "codex", "cursor", "claude", "grok", "pi", "empryo", "custom",
+];
 
 impl GhostexGpuiApp {
     /// The agents the HUD lists.

@@ -233,13 +233,7 @@ fn get(url: &str) -> Option<String> {
         .proxy(ureq::Proxy::try_from_env())
         .build()
         .into();
-    agent
-        .get(url)
-        .call()
-        .ok()?
-        .body_mut()
-        .read_to_string()
-        .ok()
+    agent.get(url).call().ok()?.body_mut().read_to_string().ok()
 }
 
 fn fetch(url: &str, field: Option<&str>) -> Option<String> {
