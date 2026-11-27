@@ -5931,7 +5931,8 @@ waiting on a question or an approval, but not about a coordinator's threads
 That goes for a coordinator on a connected computer too; when that computer
 doesn't say within 2 seconds which of its sessions are threads, the threads
 it named before stay threads while they are open, its other sessions count as
-sessions of their own, and the agent is told that it doesn't know which are
+sessions of their own, and the agent is told (in the list when it has room, and
+always when it looks the sessions up) that it doesn't know which are
 threads there. So a thread on a connected computer can still be announced
 when it opened after that computer last said which sessions are threads, or
 before that computer ever did. A
