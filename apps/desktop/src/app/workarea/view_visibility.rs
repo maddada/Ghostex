@@ -58,6 +58,11 @@ impl GhostexGpuiApp {
         let available = match mode {
             // A sidebar extension's side panel view is drawn natively and needs no project.
             TitlebarMode::Extension(id) if self.extension_side_panel_offered(id) => true,
+            // Canvas keeps its drawings in the project, so it needs one on this computer.
+            mode if mode.is_canvas() => {
+                crate::app::canvas::canvas_view().is_some_and(|view| view.enabled)
+                    && self.canvas_available()
+            }
             TitlebarMode::Extension(id) => {
                 if gpui_custom_view(id).is_some() {
                     gpui_enabled_custom_view(id)
@@ -167,10 +172,16 @@ impl GhostexGpuiApp {
                 // A link's page opens from its row of the sidebar's ⋯ menu only (app/custom_links/).
                 .filter(|view| !TitlebarMode::Extension(view.id).is_link_web())
                 .filter(|view| self.custom_project_view_visible(view))
-                .map(|view| TitlebarModeSwitcherItem {
-                    mode: TitlebarMode::Extension(view.id),
-                    is_available: true,
-                    disabled_reason: None,
+                .map(|view| {
+                    let mode = TitlebarMode::Extension(view.id);
+                    // Canvas's card stays in the picker without a project, disabled with why.
+                    let is_available = !mode.is_canvas() || self.canvas_available();
+                    TitlebarModeSwitcherItem {
+                        mode,
+                        is_available,
+                        disabled_reason: (!is_available)
+                            .then_some(crate::app::canvas::CANVAS_NO_PROJECT_REASON),
+                    }
                 }),
         );
         // CDXC:Titlebar 2026-09-20 DECISION:

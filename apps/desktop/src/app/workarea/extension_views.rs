@@ -55,6 +55,10 @@ impl GhostexGpuiApp {
         &self,
         id: ExtensionId,
     ) -> Option<ProjectWorkareaRealRuntimeUrl> {
+        // The built-in Canvas shows the Files embed page on the open drawing (app/canvas/).
+        if TitlebarMode::Extension(id).is_canvas() {
+            return self.canvas_page_url();
+        }
         if let Some(custom_view) = gpui_custom_view(id) {
             if !custom_view.enabled {
                 return None;

@@ -223,6 +223,39 @@ impl GhostexGpuiApp {
                     this.dispatch_manage_files_answer(&page, &response.to_string(), cx);
                 });
             }
+            // Canvas's page is the Files embed page on one drawing: it reads and saves that file
+            // and nothing else (manage_embed_request_allowed), through the Files bridge.
+            (
+                ProjectWorkareaCefSurfaceSlotKey::Extension(id),
+                cef::ProjectWorkareaBridgeEvent::ManageFilesRequest(payload),
+            ) if TitlebarMode::Extension(id).is_canvas() => {
+                let Ok(request) = serde_json::from_str::<serde_json::Value>(&payload) else {
+                    return;
+                };
+                let allowed =
+                    crate::app::helpers::manage_embed_page_rules::manage_embed_request_allowed(
+                        &page.value,
+                        &request,
+                    )
+                    .and_then(|()| {
+                        match manage_request_string(&request, "action").as_deref() {
+                            Some("read" | "save") => Ok(()),
+                            _ => Err("This page cannot do that."),
+                        }
+                    });
+                if let Err(reason) = allowed {
+                    let response = serde_json::json!({
+                        "action": manage_request_string(&request, "action").unwrap_or_default(),
+                        "requestId": manage_request_string(&request, "requestId").unwrap_or_default(),
+                        "error": reason,
+                    });
+                    self.dispatch_files_answer_to_slot(slot_key, &page, &response.to_string(), cx);
+                    return;
+                }
+                self.run_docs_files_request(payload, cx, move |this, response, cx| {
+                    this.dispatch_files_answer_to_slot(slot_key, &page, &response.to_string(), cx);
+                });
+            }
             // The Work page's requests (app/work_view/bridge.rs).
             (
                 ProjectWorkareaCefSurfaceSlotKey::Work,
@@ -250,7 +283,22 @@ impl GhostexGpuiApp {
         json: &str,
         cx: &mut gpui::Context<Self>,
     ) {
-        let slot_key = ProjectWorkareaCefSurfaceSlotKey::Manage;
+        self.dispatch_files_answer_to_slot(
+            ProjectWorkareaCefSurfaceSlotKey::Manage,
+            page,
+            json,
+            cx,
+        );
+    }
+
+    /// `dispatch_manage_files_answer` for the embed page in `slot_key` (Files, or Canvas).
+    pub(crate) fn dispatch_files_answer_to_slot(
+        &mut self,
+        slot_key: ProjectWorkareaCefSurfaceSlotKey,
+        page: &ProjectWorkareaRealRuntimeUrl,
+        json: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let surface = self
             .project_workarea_runtime_cef_surfaces
             .get(&slot_key)

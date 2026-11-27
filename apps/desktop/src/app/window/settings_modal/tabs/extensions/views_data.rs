@@ -371,6 +371,11 @@ pub(crate) fn view_order_items(
             "Storybook",
             !values.bool("storybookViewTabHidden"),
         ),
+        item(
+            "extension:canvas",
+            "Canvas",
+            !values.bool("canvasViewTabHidden"),
+        ),
     ];
     let website_ids: Vec<&OfficialExtension> = official_extensions()
         .iter()
@@ -390,6 +395,7 @@ pub(crate) fn view_order_items(
         .filter(|extension| {
             let id = extension.id();
             id != "storybook"
+                && id != "canvas"
                 && !website_ids.iter().any(|provider| provider.id == id)
                 && extension
                     .placements()

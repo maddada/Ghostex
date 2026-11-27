@@ -38,6 +38,7 @@ pub(crate) fn titlebar_mode_official_extension_id(mode: TitlebarMode) -> Option<
             mode.website_provider().map(|provider| provider.id.as_str())
         }
         mode if mode.is_storybook() => Some("storybook"),
+        mode if mode.is_canvas() => Some("canvas"),
         TitlebarMode::Source => Some("code"),
         TitlebarMode::Browser => Some("browser"),
         TitlebarMode::Kanban => Some("kanban"),
@@ -305,6 +306,7 @@ impl GhostexGpuiApp {
                 .website_provider()
                 .map(|provider| official_view_scope_key(&provider.id)),
             mode if mode.is_storybook() => Some(official_view_scope_key("storybook")),
+            mode if mode.is_canvas() => Some(official_view_scope_key("canvas")),
             TitlebarMode::Extension(id) => {
                 (gpui_custom_view(id).is_none()).then(|| extension_view_scope_key(id.as_str()))
             }
@@ -464,6 +466,7 @@ impl GhostexGpuiApp {
                 self.official_view_scope_allows(&mode.website_provider().unwrap().id)
             }
             mode if mode.is_storybook() => self.official_view_scope_allows("storybook"),
+            mode if mode.is_canvas() => self.official_view_scope_allows("canvas"),
             TitlebarMode::Extension(id) => {
                 gpui_custom_view(id).is_some()
                     || self.view_scope_allows(&extension_view_scope_key(id.as_str()))

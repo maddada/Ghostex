@@ -40,7 +40,7 @@ pub(crate) struct GpuiCustomView {
 /// settings and on the link the link page shows, so it is built once per settings revision and
 /// picked link on each thread (the picked link is per thread too: custom_links/store.rs).
 pub(crate) fn gpui_custom_views_from_settings() -> std::rc::Rc<[GpuiCustomView]> {
-    type Key = (u64, u64, Option<String>);
+    type Key = (u64, u64, Option<String>, bool);
     thread_local! {
         static CACHE: std::cell::RefCell<Option<(Key, std::rc::Rc<[GpuiCustomView]>)>> =
             const { std::cell::RefCell::new(None) };
@@ -50,6 +50,7 @@ pub(crate) fn gpui_custom_views_from_settings() -> std::rc::Rc<[GpuiCustomView]>
         settings.revision(),
         settings.content_hash(),
         crate::app::custom_links::custom_link_page_link_id(),
+        crate::app::canvas::canvas_extension_installed(),
     );
     if let Some(views) = CACHE.with_borrow(|cache| {
         cache
@@ -66,6 +67,7 @@ pub(crate) fn gpui_custom_views_from_settings() -> std::rc::Rc<[GpuiCustomView]>
 
 fn build_gpui_custom_views() -> Vec<GpuiCustomView> {
     std::iter::once(crate::app::storybook::storybook_view())
+        .chain(crate::app::canvas::canvas_view())
         .chain(crate::app::project_websites::website_views())
         .chain(std::iter::once(crate::app::claude_web::claude_web_view()))
         .chain(std::iter::once(crate::app::claude_web::grok_web_view()))
@@ -184,6 +186,7 @@ pub(crate) fn titlebar_mode_view_tab_hidden_settings_key(
             .website_provider()
             .map(|provider| provider.hidden_settings_key.as_str()),
         mode if mode.is_storybook() => Some("storybookViewTabHidden"),
+        mode if mode.is_canvas() => Some(crate::app::canvas::CANVAS_VIEW_TAB_HIDDEN_SETTINGS_KEY),
         TitlebarMode::Source => Some(SOURCE_CODE_VIEW_TAB_HIDDEN_SETTINGS_KEY),
         TitlebarMode::Browser => Some(BROWSER_VIEW_TAB_HIDDEN_SETTINGS_KEY),
         TitlebarMode::Kanban => Some(KANBAN_VIEW_TAB_HIDDEN_SETTINGS_KEY),

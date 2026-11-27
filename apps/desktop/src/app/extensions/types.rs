@@ -151,6 +151,9 @@ pub(crate) struct GpuiExtensionPopupSize {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct GpuiExtensionsSnapshot {
     pub(crate) installed: HashMap<String, GpuiInstalledExtension>,
+    /// The one-time note after the Community Canvas extension's boards became drawings
+    /// (server/src/extensions/canvas_migration.rs), until it is shown.
+    pub(crate) canvas_moved: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Default)]

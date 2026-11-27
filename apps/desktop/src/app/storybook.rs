@@ -30,6 +30,7 @@ impl TitlebarMode {
     pub(crate) fn is_addon_view(self) -> bool {
         matches!(self, Self::Extension(_))
             && !self.is_storybook()
+            && !self.is_canvas()
             && self.website_provider().is_none()
     }
 }

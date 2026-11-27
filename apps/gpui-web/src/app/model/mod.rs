@@ -70,6 +70,13 @@ mod storybook {
     include!(concat!(env!("OUT_DIR"), "/storybook.rs"));
 }
 
+#[allow(dead_code, unused_imports)]
+mod canvas {
+    use crate::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    include!(concat!(env!("OUT_DIR"), "/canvas.rs"));
+}
+
 /// The desktop's project website providers are read from settings and installed extensions; the browser build offers no views, so no mode is ever a website.
 pub(crate) struct WebsiteProvider {
     pub(crate) id: String,

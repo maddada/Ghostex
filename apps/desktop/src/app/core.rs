@@ -1015,6 +1015,8 @@ pub struct GhostexGpuiApp {
     /// The native Kanban board's state; see app/native_kanban/.
     /// The native Docs view's state; see app/native_docs/.
     pub(crate) native_docs: crate::app::native_docs::state::NativeDocsState,
+    /// The built-in Canvas view's drawings and dialog (app/canvas/).
+    pub(crate) canvas: crate::app::canvas::CanvasState,
     pub(crate) native_kanban: crate::app::native_kanban::state::NativeKanbanState,
     /// The sessions in windows of their own; see app/session_popup/.
     pub(crate) session_popups: crate::app::session_popup::SessionPopups,

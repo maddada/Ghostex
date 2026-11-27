@@ -43,6 +43,7 @@ pub(crate) mod browser_page_notifications;
 pub(crate) mod browser_pane;
 pub(crate) mod browser_parked_runtime;
 pub(crate) mod browser_site_requests;
+pub(crate) mod canvas;
 pub(crate) mod cef_deferred_startup;
 pub(crate) mod chrome_input_focus;
 pub(crate) mod claude_cloud_chat_page;

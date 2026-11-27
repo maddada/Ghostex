@@ -259,6 +259,9 @@ pub(crate) enum GpuiAppToastAction {
     OpenAccounts { provider: Option<String> },
     /// Settings > Extensions, where views are turned on.
     OpenViewSettings,
+    /// The built-in Canvas view, from the note after Canvas's boards became drawings
+    /// (app/canvas/note.rs).
+    OpenCanvas,
     /// Settings > Agents, where an agent that isn't installed is installed or another one picked
     /// (gx_store/create/agent.rs `show_agent_not_installed_notice`).
     OpenAgentSettings,
@@ -318,6 +321,7 @@ impl GpuiAppToastAction {
             Self::SwitchRequest(request) => request.primary_label.as_str(),
             Self::OpenAccounts { .. } => "Open Accounts",
             Self::OpenViewSettings => "Open Settings",
+            Self::OpenCanvas => "Open Canvas",
             Self::OpenAgentSettings => "Install or pick another agent",
             Self::OpenUpdateDownloadPage => "Open download page",
             Self::UndoSyncedChange { .. } | Self::ChatUndo(_) => "Undo",

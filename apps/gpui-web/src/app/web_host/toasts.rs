@@ -177,6 +177,9 @@ impl GhostexGpuiApp {
                 "Views are turned on in the Ghostex app's Settings > Extensions.",
                 cx,
             ),
+            // Raised only by the app's note after Canvas's boards became drawings
+            // (app/canvas/note.rs), which a page does not get.
+            GpuiAppToastAction::OpenCanvas => {}
             GpuiAppToastAction::OpenAgentSettings => self.dispatch_gpui_workspace_action_toast(
                 "info",
                 "Not in the browser",

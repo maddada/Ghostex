@@ -162,6 +162,7 @@ impl TitlebarMode {
                 }
             }
             mode if mode.is_storybook() => TITLEBAR_ICON_LAYOUT_BOARD_SPLIT,
+            mode if mode.is_canvas() => "titlebar/edit.svg",
             mode if mode.is_claude_web() => "agent-icons/claude.svg",
             mode if mode.is_grok_web() => "agent-icons/grok-build.svg",
             mode if mode.is_link_web() => TITLEBAR_ICON_WORLD,

@@ -552,6 +552,7 @@ impl GhostexGpuiApp {
                 agent_hook_status_request_queued: None,
                 native_sidebar: Default::default(),
                 native_docs: Default::default(),
+                canvas: Default::default(),
                 native_kanban: Default::default(),
                 session_popups: Default::default(),
                 native_beads: None,

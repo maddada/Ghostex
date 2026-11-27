@@ -72,6 +72,7 @@ fn view_picker_description(mode: TitlebarMode) -> (gpui::SharedString, Option<gp
     }
     let line = match mode {
         mode if mode.is_storybook() => "Annotate your project’s components.",
+        mode if mode.is_canvas() => "Sketches and diagrams on a board.",
         TitlebarMode::Source => "Edit and search project files.",
         TitlebarMode::Browser => "Open a local app or any website.",
         TitlebarMode::Kanban => "See what's ready, who's on what and what's blocked.",
@@ -441,6 +442,7 @@ fn view_picker_card_colors() -> (gpui::Hsla, gpui::Hsla, gpui::Hsla) {
 fn view_picker_shortcut(mode: TitlebarMode) -> Option<char> {
     match mode {
         mode if mode.is_storybook() => Some('S'),
+        mode if mode.is_canvas() => Some('V'),
         TitlebarMode::Source => Some('C'),
         TitlebarMode::Browser => Some('B'),
         TitlebarMode::Kanban => Some('K'),

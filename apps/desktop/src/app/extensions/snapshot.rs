@@ -29,6 +29,10 @@ pub(crate) fn read_gpui_extensions_snapshot(
         &serde_json::json!({}),
         Duration::from_secs(5),
     )?;
+    let canvas_moved = result
+        .get("canvasMoved")
+        .filter(|note| note.is_object())
+        .cloned();
     let extensions = result
         .get("extensions")
         .and_then(serde_json::Value::as_array)
@@ -63,7 +67,7 @@ pub(crate) fn read_gpui_extensions_snapshot(
     Ok((
         GpuiExtensionsSnapshot {
             installed,
-            ..Default::default()
+            canvas_moved,
         },
         projects,
         presentation_sessions,
@@ -130,6 +134,17 @@ impl GhostexGpuiApp {
                         })
                         .filter_map(|extension| ExtensionId::new(&extension.id))
                         .collect();
+                    // The built-in Canvas takes the `canvas` id once the Community extension is
+                    // gone (app/canvas/).
+                    // (The custom views' cache is keyed on it, so the next read sees the change.)
+                    crate::app::canvas::note_canvas_extension_installed(
+                        snapshot
+                            .installed
+                            .contains_key(crate::app::canvas::CANVAS_VIEW_ID),
+                    );
+                    if let Some(note) = snapshot.canvas_moved.clone() {
+                        this.canvas_show_moved_note(note, cx);
+                    }
                     this.extensions_snapshot = snapshot;
                     this.extension_projects = projects;
                     this.extension_session_details = session_details;

@@ -356,6 +356,23 @@ impl GhostexGpuiApp {
                     .unwrap_or_else(|| self.extension_view_placeholder_signature(id));
                 self.render_project_editor_placeholder(signature, cx)
             };
+        // Canvas's Rename and Delete dialogs sit where its page is; the page hides meanwhile.
+        if TitlebarMode::Extension(id).is_canvas() {
+            let dialog = self.render_canvas_dialog(window, cx);
+            let page = if dialog.is_some() {
+                div().size_full().into_any_element()
+            } else {
+                page
+            };
+            return div()
+                .relative()
+                .size_full()
+                .min_w_0()
+                .min_h_0()
+                .child(page)
+                .children(dialog)
+                .into_any_element();
+        }
         // The Claude and Grok views have their account or login bar above the page
         // (claude_web/accounts.rs, claude_web/grok.rs), a sibling row, never over it.
         let Some(place) = crate::app::claude_web::WebPlace::from_mode(TitlebarMode::Extension(id))

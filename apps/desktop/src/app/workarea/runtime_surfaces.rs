@@ -115,6 +115,8 @@ impl GhostexGpuiApp {
                 || slot_key == ProjectWorkareaCefSurfaceSlotKey::Work)
             && !(slot_key == ProjectWorkareaCefSurfaceSlotKey::Manage
                 && self.native_docs_browser_area_covered())
+            // Canvas's Rename and Delete dialogs are drawn where its page is.
+            && !(mode.is_canvas() && self.canvas.dialog.is_some())
             && !self.browser_tab_drag_active
             && !self.command_tab_drag_active
             && !self.workspace_tab_drag_active
@@ -192,7 +194,13 @@ impl GhostexGpuiApp {
 
         let parent_ns_view = self.parent_ns_view;
         let surface_id = slot_key.cef_surface_id();
-        let mut profile = slot_key.cef_profile_id();
+        // Canvas's page is the Files embed page, with the Files bridge, in Files' own profile.
+        let canvas_page = slot_key.titlebar_mode().is_canvas();
+        let mut profile = if canvas_page {
+            ProjectWorkareaCefSurfaceSlotKey::Manage.cef_profile_id()
+        } else {
+            slot_key.cef_profile_id()
+        };
         let website_view = slot_key.titlebar_mode().website_provider().is_some();
         if website_view {
             profile =
@@ -227,14 +235,15 @@ impl GhostexGpuiApp {
         // Files bridge (native_docs/published_page.rs).
         let published_page = slot_key == ProjectWorkareaCefSurfaceSlotKey::Manage
             && self.native_docs_active_page().is_some();
-        let themed_page = !published_page
-            && matches!(
-                slot_key,
-                ProjectWorkareaCefSurfaceSlotKey::Kanban
-                    | ProjectWorkareaCefSurfaceSlotKey::Automate
-                    | ProjectWorkareaCefSurfaceSlotKey::Manage
-                    | ProjectWorkareaCefSurfaceSlotKey::Work
-            );
+        let themed_page = canvas_page
+            || !published_page
+                && matches!(
+                    slot_key,
+                    ProjectWorkareaCefSurfaceSlotKey::Kanban
+                        | ProjectWorkareaCefSurfaceSlotKey::Automate
+                        | ProjectWorkareaCefSurfaceSlotKey::Manage
+                        | ProjectWorkareaCefSurfaceSlotKey::Work
+                );
         let mut url = runtime_url.clone().into_cef_url();
         if themed_page {
             let separator = if url.contains('?') { '&' } else { '?' };
@@ -251,8 +260,9 @@ impl GhostexGpuiApp {
         let code_window_popup_handler = slot_key
             .is_code_editor()
             .then(|| self.code_window_popup_open_handler(&url, cx));
-        let project_workarea_bridge_event_handler = (!published_page
-            && !matches!(slot_key, ProjectWorkareaCefSurfaceSlotKey::Extension(_)))
+        let project_workarea_bridge_event_handler = (canvas_page
+            || !published_page
+                && !matches!(slot_key, ProjectWorkareaCefSurfaceSlotKey::Extension(_)))
         .then(|| self.project_workarea_bridge_event_handler(slot_key, runtime_url.clone(), cx));
         let surface_background =
             if CHROME_LIGHT_APPEARANCE.load(std::sync::atomic::Ordering::Relaxed) {
@@ -262,15 +272,37 @@ impl GhostexGpuiApp {
             } else {
                 workspace_background_color()
             };
-        let manage_docs_resource_scope =
-            if slot_key == ProjectWorkareaCefSurfaceSlotKey::Manage && !published_page {
-                Some(self.manage_docs_resource_scope()?)
-            } else {
-                None
-            };
+        let manage_docs_resource_scope = if canvas_page
+            || slot_key == ProjectWorkareaCefSurfaceSlotKey::Manage && !published_page
+        {
+            Some(self.manage_docs_resource_scope()?)
+        } else {
+            None
+        };
         let page_loaded = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let page_load_end_handler = self.project_workarea_page_load_end_handler(&page_loaded, cx);
         let creation_result = match slot_key {
+            ProjectWorkareaCefSurfaceSlotKey::Extension(_) if canvas_page => CefSurface::try_new(
+                surface_id,
+                parent_ns_view,
+                url,
+                profile,
+                pane_prepaint_background_color(),
+                false,
+                surface_background,
+                None,
+                true,
+                None,
+                None,
+                None,
+                None,
+                project_workarea_bridge_event_handler,
+                manage_docs_resource_scope,
+                Some(page_load_end_handler),
+                None,
+                None,
+                cx,
+            ),
             ProjectWorkareaCefSurfaceSlotKey::Manage if published_page => self
                 .native_docs_create_page_surface(
                     surface_id,
@@ -463,6 +495,8 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         self.ensure_custom_project_views(cx);
+        // Canvas picks (or makes) the drawing its page shows before the page's address is asked.
+        self.canvas_prepare();
         /*
         CDXC:Workarea 2026-06-24-11:03:
         Workarea CEF surface materialization is active-workarea-only. The app creates Kanban/Automate/Manage CefSurface entities only when CEF is initialized, the workarea is selected and awake, and a real bundled runtime URL can be issued from the current explicit sidebar snapshot; it does not prewarm hidden surfaces or synthesize Source/code-server URLs.

@@ -225,7 +225,14 @@ impl GhostexGpuiApp {
     ) -> AnyElement {
         let pinned = slot.pinned;
         let is_active = mode == active_mode;
-        let label = mode.tab_label();
+        // CDXC:Canvas 2026-11-27 (Q5279 B, app/canvas/menu.rs): the Canvas tab shows the open
+        // drawing's name with a chevron, and a click on it while it is showing opens the switcher.
+        let canvas = mode.is_canvas();
+        let label = if canvas {
+            self.canvas_tab_label()
+        } else {
+            mode.tab_label()
+        };
         let slug = mode.element_slug();
         let sleeping =
             mode.is_project_editor_mode() && !self.project_editor_shell.is_mode_awake(mode);
@@ -269,6 +276,10 @@ impl GhostexGpuiApp {
                 cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
                     window.prevent_default();
                     cx.stop_propagation();
+                    if canvas && this.active_mode == mode {
+                        this.show_canvas_switcher(window, cx);
+                        return;
+                    }
                     this.open_view_tab(mode, window, cx);
                 }),
             )
@@ -313,6 +324,9 @@ impl GhostexGpuiApp {
                     titlebar_icon_color()
                 },
             ))
+            .when(canvas, |this| {
+                this.child(crate::app::canvas::menu::canvas_tab_anchor())
+            })
             .when(!pinned, |this| {
                 this.child(
                     div()
@@ -323,6 +337,13 @@ impl GhostexGpuiApp {
                         .text_ellipsis()
                         .child(label),
                 )
+                .when(canvas && is_active, |this| {
+                    this.child(div().flex_none().opacity(0.7).child(titlebar_svg_icon(
+                        "titlebar/chevron-down.svg",
+                        11.0,
+                        titlebar_active_text_color(),
+                    )))
+                })
                 .child(self.render_view_tab_close_button(mode, is_active, cx))
             })
             .into_any_element()

@@ -231,6 +231,7 @@ impl GhostexGpuiApp {
             GpuiAppToastAction::OpenViewSettings => {
                 self.open_gpui_settings_extensions_page(None, cx);
             }
+            GpuiAppToastAction::OpenCanvas => self.open_canvas_from_note(cx),
             GpuiAppToastAction::OpenAgentSettings => {
                 self.open_gpui_settings_tab("agents", None, cx);
             }
