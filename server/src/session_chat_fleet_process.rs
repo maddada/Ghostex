@@ -53,10 +53,13 @@ fn read_current_process(
         crate::zmx::read_cached_zmx_session_process_identities(&names, &home)
     }
     .map_err(|e| anyhow::anyhow!("Cannot read subagent process owner: {e:?}"))?;
-    let identity = identities
+    let Some(identity) = identities
         .get(name)
         .filter(|identity| identity.agent_id.as_deref() == Some(agent))
-        .ok_or_else(|| anyhow::anyhow!("Agent process owner is unavailable"))?;
+    else {
+        return native_host_child(session)
+            .ok_or_else(|| anyhow::anyhow!("Agent process owner is unavailable"));
+    };
     // CDXC:SessionIdentity 2026-09-21 WHY: Claude's process id comes from launch argv, which `/clear`, `/resume` and a self-fork leave stale while hooks report the live conversation; comparing it hid the Subagents card for every such session. Codex's id is read from its open rollout, so it stays a valid ownership check.
     if let Some(id) = identity
         .agent_session_id
@@ -102,6 +105,29 @@ fn read_current_process(
         pid,
         started_at: start,
         open_file_paths: identity.open_file_paths.clone(),
+    })
+}
+
+/*
+CDXC:SessionStatus 2026-11-28 WHY:
+GitHub #791: a Native Claude chat runs `claude --output-format stream-json --input-format stream-json …` under `ghostex acp-host`, and the process scan deliberately counts no Claude with those flags as a pane's agent (`is_headless_claude_process`, zmx/process_identity.rs). So every Native Claude roster read stopped at "Agent process owner is unavailable" and a running background agent never reached the Subagents card. The Native host knows its own agent: its state names the child it started (`childPid`, the same evidence accounts/restart.rs uses), so a Native session falls back to that process when the scan names none. It carries no open-file list; a Codex roster then reads the child's files itself.
+*/
+fn native_host_child(session: &Value) -> Option<CurrentProcess> {
+    if !crate::acp::session_is_acp(session) {
+        return None;
+    }
+    let pid = crate::acp::channel::channel_state(
+        session.get("projectId")?.as_str()?,
+        session.get("sessionId")?.as_str()?,
+    )
+    .filter(|state| state.get("childExited").and_then(Value::as_bool) != Some(true))?
+    .get("childPid")
+    .and_then(Value::as_i64)
+    .filter(|pid| *pid > 0)?;
+    Some(CurrentProcess {
+        pid,
+        started_at: process_started_at(pid).ok()?,
+        open_file_paths: None,
     })
 }
 

@@ -34,6 +34,21 @@ fn live_rollout_paths(
     Ok((paths, process.started_at))
 }
 
+/// How recently a working child's rollout must have been written to count as live without the
+/// current process holding it open.
+const CHILD_ROLLOUT_FRESH_MS: i64 = 3 * 60 * 1000;
+
+/// CDXC:SessionStatus 2026-11-28 WHY:
+/// GitHub #791: after a Native Codex session was resumed (`acp-host --agent codex --resume`), 16 sub-agents were writing their rollouts (each updated within two minutes, `thread_source: subagent`, parent edges to the lead or to one of its sub-agents) while the Subagents roster read 0. Ownership by the current process's open files (`live_rollout_paths`) is how a crashed child's stale "working" turn is kept out (the ClipBook case above), but it also dropped children whose rollout the current process does not hold: ones an earlier process of the same session started and still runs, and any it has not opened. A rollout written in the last few minutes is being written by someone, so that is proof enough of live work; a crashed child stops writing and falls back to the ownership rule once the window passes.
+fn being_written(rollout: &Path, now_ms: i64) -> bool {
+    std::fs::metadata(rollout)
+        .and_then(|meta| meta.modified())
+        .ok()
+        .and_then(|modified| modified.duration_since(std::time::UNIX_EPOCH).ok())
+        .and_then(|modified| i64::try_from(modified.as_millis()).ok())
+        .is_some_and(|modified| now_ms.saturating_sub(modified) <= CHILD_ROLLOUT_FRESH_MS)
+}
+
 /// The session a Codex state database read is recorded under (`crash_report::step`).
 fn crash_subject(session: &Value) -> String {
     format!(
@@ -130,15 +145,17 @@ pub(crate) fn read_codex_fleet(session: &Value) -> anyhow::Result<Option<Session
         if !lifecycle.working {
             continue;
         }
-        if process_started.is_some_and(|started| lifecycle.timestamp < started) {
-            continue;
-        }
-        if live_paths.is_none() {
-            live_paths = Some(live_rollout_paths(session, rollout)?);
-        }
-        let (paths, started_at) = live_paths.as_ref().unwrap();
-        if lifecycle.timestamp < *started_at || !paths.contains(Path::new(&path)) {
-            continue;
+        if !being_written(Path::new(&path), now) {
+            if process_started.is_some_and(|started| lifecycle.timestamp < started) {
+                continue;
+            }
+            if live_paths.is_none() {
+                live_paths = Some(live_rollout_paths(session, rollout)?);
+            }
+            let (paths, started_at) = live_paths.as_ref().unwrap();
+            if lifecycle.timestamp < *started_at || !paths.contains(Path::new(&path)) {
+                continue;
+            }
         }
         let source: Value = serde_json::from_str(&source)?;
         let spawn = source.pointer("/subagent/thread_spawn");

@@ -1068,6 +1068,27 @@ fn spawn_and_init_claude(
                     }
 
                     let msg_type = msg.get("type").and_then(Value::as_str).unwrap_or_default();
+                    /*
+                    CDXC:AgentProviders 2026-11-28 WHY:
+                    GitHub #791: a sub-agent's frames come on the lead's stream with
+                    `parent_tool_use_id` set to the Agent call that started it (recorded with Claude
+                    Code 2.1.332: whole `assistant` and `user` rows interleaved with the lead's own
+                    turn, for foreground and background agents alike). Read as the lead's, they
+                    swapped the chat's model for the sub-agent's, moved the context meter to the
+                    sub-agent's context, and a sub-agent's API error failed the lead's turn; a build
+                    that also forwards sub-agent `stream_event`s would stream its text into the
+                    lead's live message. Only the lead's own frames feed the live state; the
+                    sub-agent's text reaches the chat through its own transcript (the Subagents card
+                    and viewer). Its permission requests are `control_request`s and still surface.
+                    */
+                    if matches!(msg_type, "stream_event" | "assistant")
+                        && msg
+                            .get("parent_tool_use_id")
+                            .and_then(Value::as_str)
+                            .is_some_and(|id| !id.is_empty())
+                    {
+                        return;
+                    }
                     match msg_type {
                         "control_response" => {
                             if let Some(req_id) =

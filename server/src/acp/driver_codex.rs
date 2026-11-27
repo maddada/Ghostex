@@ -2162,6 +2162,27 @@ fn spawn_codex_stdout_reader(
                     .and_then(Value::as_str)
                     .unwrap_or_default();
                 let params = msg.get("params").unwrap_or(&Value::Null);
+                /*
+                CDXC:AgentProviders 2026-11-28 WHY:
+                GitHub #791: one `codex app-server` runs the lead thread and every sub-agent thread
+                it spawns, and sends each thread's turn, item, delta, token-usage and name
+                notifications on the same stream, told apart only by `threadId`. Read as the lead's,
+                three sub-agents' replies streamed into the parent's live message, spliced mid-word
+                on a long job; a child's `turn/started` also took over the lead's active turn id.
+                The lead keeps only its own thread's notifications. A sub-agent's text reaches the
+                chat through its own rollout (the Subagents card and viewer). Requests that need an
+                answer (a child's approval) were handled above and still surface.
+                */
+                if let Some(event_thread) = params.get("threadId").and_then(Value::as_str) {
+                    let own_thread = st_out
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .thread_id
+                        .clone();
+                    if own_thread.is_some_and(|own| own != event_thread) {
+                        return;
+                    }
+                }
                 match method {
                     "turn/started" => {
                         let tid = params

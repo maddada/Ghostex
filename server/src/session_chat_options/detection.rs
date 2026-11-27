@@ -903,7 +903,18 @@ pub fn detect_session_chat_terminal_state(
                 repository, project_id, session_id, notice,
             );
         }
-        let (fleet, fleet_observed) = if family == "omp" {
+        /*
+        CDXC:SessionStatus 2026-11-28 WHY:
+        GitHub #791: Native Claude and Codex chats never read their sub-agent roster here. This
+        branch answered "observed, no fleet" for them, which also kept the daemon's fleet pass from
+        filling the gap while a chat was open (it skips a session observed within the cache TTL),
+        so a running Claude background agent left `agentFleet` null on every read and Codex's
+        roster came and went. Their roster lives in the agent's own transcripts and spawn graph,
+        the same as in a terminal, so they read it the way OMP does; with no screen, Claude keeps
+        only working children (no footer row to keep an idle one).
+        */
+        let reads_transcript_fleet = matches!(family, "omp" | "claude" | "codex");
+        let (fleet, fleet_observed) = if reads_transcript_fleet {
             match session_row.as_ref().and_then(|session| {
                 crate::session_chat_fleet_status::read_fleet(session, None).ok()
             }) {
@@ -1050,7 +1061,7 @@ pub fn detect_session_chat_terminal_state(
                 detection.fleet = Some(fleet);
                 detection.fleet_observed = true;
             }
-        } else if family == "omp" {
+        } else if reads_transcript_fleet {
             detection.fleet = fleet;
             detection.fleet_observed = fleet_observed;
         }
