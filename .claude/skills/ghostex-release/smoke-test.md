@@ -74,9 +74,9 @@ only by its own pid and window ids. What 12.2.0's run learned:
 
 - **Launch the app with `env -i`** and only the test server's variables
   (`GHOSTEX_HOME`, `GHOSTEX_GXSERVER_DEV_PORT`, `GHOSTEX_GXSERVER_BIN`/`_CLI`,
-  `ZMX_DIR`, `GHOSTEX_OWNER_KEYS_STORE=file`, a free
+  `ZMX_DIR`, `GHOSTEX_OWNER_KEYS_STORE=file`, its own `HOME` from env.sh, a free
   `GHOSTEX_GPUI_CEF_REMOTE_DEBUGGING_PORT` and `GHOSTEX_CODE_SERVER_PORT`)
-  plus `HOME`, `USER`, `PATH`, `LANG`, `TMPDIR`.
+  plus `USER`, `PATH`, `LANG`, `TMPDIR`; never the real `HOME`.
   Started from an agent's shell, it otherwise inherits that agent's
   `GHOSTEX_*` variables and talks to the user's real server (12.2.0 run 1 made
   a launchd job for the real server's port that had to be removed). Write its
@@ -114,7 +114,10 @@ only by its own pid and window ids. What 12.2.0's run learned:
   its ref) into the command's environment, printing none of them. Test
   servers only.
 - **Without a working Claude login on the test server**, 2.1, 3.1 and 6.1's
-  reply are Warn, and 5.3 runs on the 2.2 Codex chat (`$S page 2.2`).
+  reply are Warn, and 5.3 runs on the 2.2 Codex chat (`$S page 2.2`). Since
+  2026-11-27 every test server has its own HOME, so no agent there has a
+  login: never start one with `--real-home` to get one (user rule: test
+  servers never touch the user's real agent logins).
 - **Agent browser tools** (`ghostex browser mcp`) are checked against a local
   fixture page served by `python3 -m http.server` from the scratch folder: a
   button, a link, a text field, a file input, a button under an overlay and a
@@ -667,7 +670,8 @@ this so i allow u for the smoke to click on approve using /cua-driver please".
 It is narrow:
 - Only during a release smoke, and only to pair **the smoke's Android emulator
   on m7-arch** with **a throwaway test server started for that run**
-  (`cargo xtask test-server … --isolated-home`). Never the user's real
+  (`cargo xtask test-server start …`, which gives it its own HOME; never
+  `--real-home`). Never the user's real
   gxserver or their own Ghostex window, never a real phone or computer.
 - For that pairing only, the smoke agent may make the Connect a Phone code in
   that test server's own window and press its **Approve** with cua-driver,
@@ -696,10 +700,10 @@ Written 2026-11-20 from the code; not run yet. Fix what the first run finds.
    afterwards that the pairing wrote nothing into the real HOME.
 2. **Test server with its own HOME**, in the m7-arch checkout at the release
    point: `cargo xtask test-server start --name smoke-phone --projects
-   <scratch folder> --isolated-home`, then in every shell `source
+   <scratch folder>` (its own HOME is the default), then in every shell `source
    ~/.local/share/agent-work/Ghostex/test-servers/smoke-phone/env.sh` and
    check `command -v ghostex` names that server's `gxserver/bin/`. Never pair
-   with a test server started without `--isolated-home`: the approval would
+   with a test server started with `--real-home`: the approval would
    write the phone's SSH key line into the user's real
    `~/.ssh/authorized_keys` and tailcat's key into the real HOME (issue
    #674). Turn Easy Connect on there: `ghostex tailcat enable` (the
@@ -789,6 +793,8 @@ Steps 2, 4.1 and 5 against a throwaway gxserver and the GPUI web build in headle
    longer than usual to load"): restart `ghostex web` for a new tab.
 2. Create Claude threads in a project folder Claude already trusts (the repo): in a new
    folder Claude stops at its own "trust this folder" prompt, which agents don't answer.
+   Since 2026-11-27 the test server has its own HOME and so no Claude login: a thread there
+   shows Claude's sign-in, so the reply checks are Warn (never `--real-home` for a login).
 3. Send messages by typing in the page's chat box: from an agent's shell the CLI refuses
    `agents send` and `send-session-chat-message` on the test server ("its session can't be
    identified", the 2026-11-19 guard).

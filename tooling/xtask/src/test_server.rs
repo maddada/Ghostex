@@ -20,13 +20,15 @@ use crate::gxserver::health;
 use crate::util::{home_dir, kill_pid, output, root, sleep_ms, stdout_if_ok, xdg_state_root, Res};
 
 const USAGE: &str = "Usage: cargo xtask test-server <command>
-  start [--name <n>] [--projects <path>...] [--port <p>] [--network online|offline|probe] [--no-build] [--dry-run] [--binaries <dir>] [--isolated-home]
+  start [--name <n>] [--projects <path>...] [--port <p>] [--network online|offline|probe] [--no-build] [--dry-run] [--binaries <dir>] [--real-home]
                 build (or reuse) the debug gxserver, start it on its own GHOSTEX_HOME and port,
                 add the projects, and print the env lines for the ghostex CLI and `ghostex web`;
                 --binaries runs the gxserver and ghostex in <dir> instead (an older release's, to check
                 compatibility); --network sets what its online check sees (online by default, probe for
-                the real check); --isolated-home gives it a HOME of its own (<home>/user-home), so
-                pairing tests write no SSH key line into your ~/.ssh and use no tailcat key of yours
+                the real check). By default it runs with a HOME of its own (<home>/user-home), so its
+                agents use no login of yours (~/.claude, ~/.claude.json, ~/.codex) and pairing
+                writes no SSH key line into your ~/.ssh; --real-home gives it your real HOME instead
+                (warned: its agents then run on your own logins and write into your home files)
   network <name> online|offline|probe
                 switch what a running test server's online check sees: offline holds Autopilot and
                 coordinator reports as a real outage does, online brings them back, probe uses the real check
@@ -41,7 +43,7 @@ const USAGE: &str = "Usage: cargo xtask test-server <command>
 /// Ports the test servers pick from: clear of the real gxserver (58744/58745/58746) and the isolated app variants (58747, 58751).
 const PORT_RANGE: std::ops::RangeInclusive<u16> = 58900..=58999;
 const RECORD_FILE: &str = "test-server.json";
-/// Present (holding the tailcat helper's path) for a server started with `--isolated-home`.
+/// Present (holding the tailcat helper's path) for a server with its own HOME: every server unless started with `--real-home`.
 const ISOLATED_HOME_MARKER: &str = "isolated-home";
 const MAX_NAME_LENGTH: usize = 20;
 
@@ -292,7 +294,11 @@ impl Server {
     CDXC:Build 2026-11-19 WHY:
     Pairing tests (issue #674, server links) on a test server wrote what pairing writes into the real HOME: an approved phone's SSH key line into the user's ~/.ssh/authorized_keys, and tailcat's shared client key under ~/Library/Application Support/tailcat, which the user's own Easy Connect connections dial with. `--isolated-home` gives the server (and the CLI pointed at it) a HOME of its own inside its GHOSTEX_HOME, and names the tailcat helper the real HOME has, which the new HOME can't find.
     */
-    /// `HOME` and `GHOSTEX_TAILCAT_BIN` for a server started with `--isolated-home`.
+    /*
+    CDXC:Build 2026-11-27 DECISION:
+    User: "test copies and test servers never touch the user's real agent logins or home files." A server started without `--isolated-home` ran its model-picker check (and every agent session) as `claude` on the user's real login, which left 584 `/tmp/gxts-<uid>-<name>/cache/model-picker-scratch` project entries in the real ~/.claude.json. The own HOME is now the default and `--real-home` the warned opt-out; `--isolated-home` is still accepted and does nothing more.
+    */
+    /// `HOME` and `GHOSTEX_TAILCAT_BIN` for a server with its own HOME (every server unless started with `--real-home`).
     fn isolated_home_environment(&self) -> Vec<(&'static str, String)> {
         let Ok(tailcat) = fs::read_to_string(self.folder.join(ISOLATED_HOME_MARKER)) else {
             return Vec::new();
@@ -414,7 +420,7 @@ fn start(args: &[String]) -> Res<i32> {
     let mut binaries: Option<PathBuf> = None;
     // Online unless asked: a throwaway server should not depend on the shell reaching the agents' API hosts (the plan's default was the real check; online is deliberate, since the real check is what failed).
     let mut network: Option<String> = None;
-    let mut isolated_home = false;
+    let mut isolated_home = true;
     let mut index = 0;
     while index < args.len() {
         let value = |index: usize| -> Res<&String> {
@@ -448,7 +454,9 @@ fn start(args: &[String]) -> Res<i32> {
             }
             "--no-build" => build = false,
             "--dry-run" => dry_run = true,
+            // The default since 2026-11-27; still accepted so older commands keep working.
             "--isolated-home" => isolated_home = true,
+            "--real-home" => isolated_home = false,
             // Another build's gxserver and ghostex (an older release's, for a compatibility check): staged instead of
             // server/target/debug, with the same isolation.
             "--binaries" => {
@@ -557,6 +565,14 @@ fn start(args: &[String]) -> Res<i32> {
             .map(|path| path.display().to_string())
             .unwrap_or_default();
         fs::write(server.folder.join(ISOLATED_HOME_MARKER), tailcat)?;
+    } else {
+        // A restart with --real-home drops the own HOME a previous start gave it.
+        let _ = fs::remove_file(server.folder.join(ISOLATED_HOME_MARKER));
+        eprintln!(
+            "Warning: --real-home runs test server {} with your real HOME ({}). Its agents (and its model-picker check) run on your own Claude, Codex and other logins and write into ~/.claude, ~/.claude.json, ~/.codex and the like, and pairing writes into your ~/.ssh/authorized_keys and tailcat key. Leave it out unless a test truly needs your logins.",
+            server.name,
+            home_dir().display()
+        );
     }
     set_network(&server, network.as_deref().unwrap_or("online"))?;
     ensure_isolated(&server)?;

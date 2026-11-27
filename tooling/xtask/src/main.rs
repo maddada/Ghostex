@@ -46,7 +46,7 @@ Desktop app
                           main checkout's copies), its CEF and Zig package caches, bun install, a ReleaseSafe zmx
 
 Testing
-  test-server start [--name <n>] [--projects <path>...] [--port <p>] [--no-build] [--dry-run] | env <name> | stop <name> | remove <name> | list
+  test-server start [--name <n>] [--projects <path>...] [--port <p>] [--no-build] [--dry-run] [--real-home] | env <name> | stop <name> | remove <name> | list
                           a throwaway gxserver on its own GHOSTEX_HOME and port for agents to test against
                           (~/.local/share/agent-work/Ghostex/test-servers/<name>); prints the env lines for the ghostex CLI
 
