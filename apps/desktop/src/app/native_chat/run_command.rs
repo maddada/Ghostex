@@ -44,6 +44,31 @@ pub(super) fn run_button(
     })
 }
 
+/// Paste in terminal as an icon-only button (the fence header's look, its tooltip naming it): types
+/// `command` into a terminal without pressing Enter, as the inline span's hover bar does. `None`
+/// for a command of more than one line, which Paste never takes (gx-chat-core
+/// `transcript/actions.rs`).
+pub(super) fn paste_button(
+    id: impl Into<gpui::ElementId>,
+    command: &str,
+    chat: &WeakEntity<NativeChatView>,
+    p: &ChatAppearance,
+) -> Option<gpui::Stateful<gpui::Div>> {
+    // A `! ` before it is for the agent, never the shell (`transcript/run_command.rs`).
+    let command = ghostex_gx_chat_core::extras::needs_you_command::display_command(command);
+    if command.is_empty() || command.chars().any(char::is_control) {
+        return None;
+    }
+    let chat = chat.clone();
+    Some(super::code_block::action_button(
+        id,
+        RUN_ICON,
+        "Paste in terminal",
+        p,
+        move |cx| send(&chat, "pasteInTerminal", command.clone(), cx),
+    ))
+}
+
 /// The look an inline command span keeps once it is a link: the transcript's inline code chip, and
 /// the bar of Copy and Paste in terminal at its bottom right corner while the pointer is on it, in
 /// the chat right-click menu's look (`hover_bar_look`). `None` for any other link.

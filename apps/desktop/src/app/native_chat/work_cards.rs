@@ -3058,6 +3058,17 @@ impl NativeChatView {
     /// A Needs you to-do's command (`ghostex needs-you add --command`) under its title, as one
     /// quiet chip in the chat's monospace that copies it on a click; `None` for a row with none.
     /// Its own click target beside the row's, never over it (gx-chat-core `extras::needs_you`).
+    ///
+    /// CDXC:SessionChat 2026-11-27 DECISION: User, of a to-do added with `--command "curl -fsSL
+    /// https://opencode.ai/browse/install | bash"`: "when i hover on this i dont see the button i
+    /// can click to put it in terminal pls fix". Hovering the chip (or tabbing to the button) shows
+    /// the chat's own Paste in terminal beside it, the fence header's icon button with the inline
+    /// command's action (`run_command::paste_button`): the command typed into a terminal of the
+    /// Commands panel, or a new one in the chat's folder, with Enter left to the user, never run
+    /// (`session_chat/run_in_terminal.rs`). It stays in its place while hidden, so nothing moves
+    /// when it shows. A one-line command only, as Paste takes; the allowlisted Run it strip
+    /// (`needs_you_command_strip`) is unchanged. Every place this chip is drawn gets it: the dock's
+    /// rows, the card popup (`dock_ask_modal.rs`) and the web build.
     fn dock_command_chip(
         &self,
         key: &str,
@@ -3071,9 +3082,27 @@ impl NativeChatView {
         }
         let s = p.scale;
         let copied = command.to_string();
+        const CHIP_GROUP: &str = "needs-you-command-chip";
+        let paste = super::run_command::paste_button(
+            format!("dock-row-command-paste:{key}"),
+            command,
+            &cx.entity().downgrade(),
+            p,
+        )
+        .map(|button| {
+            button
+                .tab_index(0)
+                .flex_shrink_0()
+                .opacity(0.0)
+                .group_hover(CHIP_GROUP, |style| style.opacity(1.0))
+                .focus_visible(|style| style.opacity(1.0))
+        });
         Some(
             div()
+                .group(CHIP_GROUP)
                 .flex()
+                .items_center()
+                .gap(px(2.0 * s))
                 .min_w_0()
                 .child(
                     div()
@@ -3118,6 +3147,7 @@ impl NativeChatView {
                             );
                         })),
                 )
+                .children(paste)
                 .into_any_element(),
         )
     }

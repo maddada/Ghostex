@@ -54,6 +54,18 @@ pub(super) fn action(
     p: &ChatAppearance,
     click: impl Fn(&mut App) + 'static,
 ) -> AnyElement {
+    action_button(id, icon, label, p, click).into_any_element()
+}
+
+/// `action` before it is drawn, for a place that adds to it (a Needs you command chip's Paste in
+/// terminal, shown on hover and keyboard focus, `work_cards.rs`).
+pub(super) fn action_button(
+    id: impl Into<gpui::ElementId>,
+    icon: &'static str,
+    label: impl Into<gpui::SharedString>,
+    p: &ChatAppearance,
+    click: impl Fn(&mut App) + 'static,
+) -> gpui::Stateful<gpui::Div> {
     let s = p.scale;
     let label: gpui::SharedString = label.into();
     let tooltip = label.clone();
@@ -85,7 +97,6 @@ pub(super) fn action(
             cx.stop_propagation();
             click(cx)
         })
-        .into_any_element()
 }
 
 /// Which block a wrap choice belongs to: the message's own Markdown plus where the fence starts.
