@@ -99,6 +99,7 @@ ones gxserver's alerts use (`server/src/push/message.rs`). No request can put ot
 | `kind` | Words |
 | --- | --- |
 | `finished` | Finished |
+| `approval` | Waiting for approval |
 | `waiting` | Waiting for you |
 | `question` | Has a question |
 | `failed` | Ended with an error |

@@ -22,6 +22,7 @@ pub const ALERT_TITLE: &str = "Ghostex";
 /// Each event's fixed words, the ones gxserver's alerts use (`server/src/push/message.rs`, `AlertKind::words`).
 pub const ALERT_WORDS: &[(&str, &str)] = &[
     ("finished", "Finished"),
+    ("approval", "Waiting for approval"),
     ("waiting", "Waiting for you"),
     ("question", "Has a question"),
     ("failed", "Ended with an error"),
