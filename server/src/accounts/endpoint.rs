@@ -786,7 +786,7 @@ pub(crate) fn dispatch(
             params.get("allSessions").and_then(Value::as_bool) == Some(true),
         )?;
     }
-    // The Cursor, Gemini and Copilot accounts, which only show usage (accounts/usage_only/).
+    // The Cursor and Copilot accounts, which only show usage (accounts/usage_only/).
     // CDXC:Coordinators 2026-11-22 DECISION:
     // User: "coordinators must never burn all the user's usage and get stuck" after every Claude
     // account hit its weekly limit while Antigravity sat at 0% used. `roster` (`ghostex accounts`,

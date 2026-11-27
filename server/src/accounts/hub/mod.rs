@@ -1000,4 +1000,32 @@ mod tests {
         );
         assert!(normalize_url("ftp://x").is_err());
     }
+
+    /// CDXC:AgentProviders 2026-11-27: Antigravity offers other apps only ACP, so no usage reader
+    /// ever runs for an Antigravity account: a hub's Antigravity login is not listed and its usage
+    /// is never asked for (a local listener standing in for the hub sees no connection), and the
+    /// usage-only Antigravity entry has no reader at all.
+    #[test]
+    fn antigravity_accounts_never_reach_a_network_usage_reader() {
+        let hub = std::net::TcpListener::bind("127.0.0.1:0").expect("listener");
+        hub.set_nonblocking(true).expect("nonblocking");
+        let url = format!("http://{}", hub.local_addr().expect("address"));
+        for provider in ["antigravity", "Antigravity", "gemini"] {
+            let file = json!({
+                "auth_index": "ag-1",
+                "provider": provider,
+                "email": "someone@example.com",
+                "name": "antigravity-someone.json",
+            });
+            assert!(account_from_file(&file, Utc::now()).is_none());
+            assert!(matches!(client::usage(&url, "key", &file), Ok(None)));
+        }
+        assert!(
+            matches!(hub.accept(), Err(error) if error.kind() == std::io::ErrorKind::WouldBlock),
+            "an Antigravity usage read reached the hub"
+        );
+        use crate::accounts::usage_only::{reader, UsageProvider};
+        assert!(reader(UsageProvider::Antigravity).is_none());
+        assert!(reader(UsageProvider::Gemini).is_none());
+    }
 }

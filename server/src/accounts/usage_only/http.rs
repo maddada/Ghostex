@@ -30,8 +30,6 @@ pub(crate) fn agent() -> &'static ureq::Agent {
 pub(crate) enum Failure {
     /// The provider refused the sign-in for good: the user has to sign in again.
     SignInExpired,
-    /// The sign-in is not Ghostex's to renew (Antigravity's is agy's own): what to do about it.
-    NeedsSignIn(String),
     /// Anything time may fix (an outage, a timeout) or the provider's own explanation.
     Unavailable(String),
 }
@@ -40,7 +38,7 @@ impl Failure {
     pub(crate) fn message(&self) -> String {
         match self {
             Failure::SignInExpired => "Its sign-in stopped working. Sign in again.".to_string(),
-            Failure::NeedsSignIn(message) | Failure::Unavailable(message) => message.clone(),
+            Failure::Unavailable(message) => message.clone(),
         }
     }
 }

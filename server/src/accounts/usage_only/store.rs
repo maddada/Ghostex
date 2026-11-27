@@ -19,8 +19,7 @@ use crate::paths::GxserverPaths;
 
 const FILE_NAME: &str = "usage-accounts.json";
 
-/// A sign-in's tokens (none for Antigravity, whose sign-in is agy's own). `extra` holds what a
-/// provider needs besides them.
+/// A sign-in's tokens. `extra` holds what a provider needs besides them.
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct Credential {

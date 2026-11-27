@@ -307,7 +307,6 @@ fn other_property_spec(key: &str) -> Option<PropertySpec> {
         | "claude_accounts"
         | "codex_accounts"
         | "cursor_accounts"
-        | "antigravity_accounts"
         | "copilot_accounts" => PropertySpec::Enum(taxonomy::COUNT_BUCKETS),
         "claude_plans" => PropertySpec::EnumList(taxonomy::CLAUDE_PLANS),
         "codex_plans" => PropertySpec::EnumList(taxonomy::CODEX_PLANS),
@@ -701,7 +700,6 @@ pub fn snapshot_properties(
             ("claude", "claude_accounts"),
             ("codex", "codex_accounts"),
             ("cursor", "cursor_accounts"),
-            ("antigravity", "antigravity_accounts"),
             ("copilot", "copilot_accounts"),
         ] {
             let count = accounts.counts.get(provider).copied().unwrap_or(0);
