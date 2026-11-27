@@ -77,14 +77,14 @@ example `yay -S --noconfirm … ghostex-bin` for the AUR package, or a download
 plus `sudo apt install -y` for the .deb or `sudo dnf install -y` for the .rpm),
 with **Release page**, **Copy command** and **Run in terminal**. The command
 needs your password, so Ghostex never runs it itself: **Run in terminal** opens
-a new terminal in Main Hub with the command typed in, and you type your
+a new terminal in No project with the command typed in, and you type your
 password and press Enter there (any agent can check the command first). It
 answers every other question itself, and when the install finishes it ends with
 `ghostex app-update restart`, which quits Ghostex and opens the new version
 (only if Ghostex was open; terminals and agents keep running). Settings >
 Updates shows the same command on Ghostex's card, with Copy command, Run in
 terminal and a Release page link; another Linux computer's card shows its
-command the same way, and its Run in terminal opens that computer's Main Hub
+command the same way, and its Run in terminal opens that computer's No project
 terminal here. On the phone, the computer's Ghostex row in Machines has the same
 buttons. From a shell, `ghostex shown-command open linuxUpdate` opens that
 terminal too.
@@ -290,13 +290,13 @@ view from the strip.
   sessions keep running) and Merge All Panes, or drag it to move that session
   onto another pane's edge (a new split) or its middle (it takes that pane's
   place), and the pane it left closes. Each pane can show the raw terminal or
-  Session Chat. Cmd+N starts a new chat draft in the active project (or Main
-  Hub when no project is open), using your last-used agent for that project in
+  Session Chat. Cmd+N starts a new chat draft in the active project (or No
+  project when no project is open), using your last-used agent for that project in
   your default view (Chat or Terminal). In Chat View, the setup bar above the
   message box lets you change the project (Option+O), computer (Option+M),
   folder or worktree or Cloud Box (Option+W), branch or box (Option+B), agent
   (Option+A), and model and effort (Option+P), or toggle **No project** (moves
-  the draft to Main Hub) and **Coordinator** before sending the first message.
+  the draft to No project) and **Coordinator** before sending the first message.
   Cmd+Shift+T opens a new
   terminal, Cmd+T always opens a new browser tab, Cmd+Ctrl+Shift+F forks the
   focused session, and Cmd+D splits (from a session in a sidebar folder, the new
@@ -742,7 +742,7 @@ Settings > Extensions.
 
 The rail is a narrow column of icons at the window's left edge, left of the
 sidebar. It stays when you hide the sidebar. By default it holds Search,
-Main Hub, Agents Hub, All Automations, Hermes, Claude and Grok Bot (each only
+Ghostex AI, Agents Hub, All Automations, Hermes, Claude and Grok Bot (each only
 while its feature is on), then ⋯. The rail is for agents, hubs and your own links:
 its ⋯ menu, which opens right beside ⋯, lists those, Commands, Settings, Voice Call,
 Links, Layout (Add separator / Add separator at bottom, and Remove separators while
@@ -863,13 +863,15 @@ computer that can't connect shows its name and the problem over the list, with
 Reconnect and Remote Settings. Add project asks which computer when you have
 several. On the phone, the pencil at the top of the Sessions list (New session,
 next to the bell, in both the Unified and the Project layout) immediately
-starts a one-click chat draft in the open session's project (or Main Hub when
+starts a one-click chat draft in the open session's project (or No project when
 no session is open), using that project's remembered agent. Before you send the
 first message, the setup bar above the message box lets you change the project,
 computer, worktree, agent, or model, or toggle **No project** and
 **Coordinator** (an untouched draft is removed when you leave it). A project's
 "+" and the "+" on a project in the filter open that project's agent menu
-(New Coordinator…, its agents, Cloud Box where offered, and Terminal).
+(New Coordinator…, its agents, Cloud Box where offered, and Terminal). When a
+project sheet opens to pick where a new session starts, **New Chat** is its
+first row: a chat in No project, on the computer its chip shows.
 
 On the computer, both sidebars have a wide New session button in a row of its
 own under the top row: a plus and New session, with its shortcut (Cmd+N) shown
@@ -879,7 +881,7 @@ leaves that row and is only in the menu (Add Project is always the menu's first
 row). The button is there with several computers, while bots are showing and
 in the sidebar that slides in while the sidebar is hidden. Click it (or press
 Cmd+N) to start a one-click chat draft with your last-used agent in the active
-project (or Main Hub when no project is open). Before you send the first
+project (or No project when no project is open). Before you send the first
 message, the setup bar above the message box lets you switch the project
 (Option+O), computer (Option+M), folder or worktree or Cloud Box (Option+W),
 branch or box (Option+B), agent (Option+A), and model (Option+P), or toggle
@@ -2374,7 +2376,7 @@ when there is none) and opens it as a tab. From a shell:
 Run in terminal beside other commands Ghostex shows: where Ghostex asks you to
 run a command yourself because it needs your password, a sign-in or your
 answers, a **Run in terminal** button sits next to it. It opens a new terminal in
-Main Hub (your home folder) with the command typed in and never presses Enter,
+No project (in your home folder) with the command typed in and never presses Enter,
 so you check it, press Enter and type your password there. It is there for the
 Linux update and Go back commands (Settings > Updates), `gh auth login`,
 `glab auth login` and `gh auth refresh -s read:project` (Add Project, a failed
@@ -5195,30 +5197,34 @@ note list in one call, as the editors save), and `ghostex coordinator guide` (th
 coordinator's own playbook, ending with your playbook overrides). `ghostex coordinator --help` lists every flag. `ghostex orchestrator …`
 is an alias that runs the same commands.
 
-## Main Hub and Ask Ghostex AI
+## Ghostex AI and Ask Ghostex AI
 
-Main Hub is always on, and **Ask Ghostex AI** in it (called Chief of Staff
-before) is where to start in Ghostex. If you want it out of the way, collapse
-its header in the sidebar; Ghostex remembers whether it is collapsed.
+**Ghostex AI** (called Main Hub before, and Chief of Staff before that) is
+always on, and its agent is where to start in Ghostex. If you want it out of
+the way, collapse its header in the sidebar; Ghostex remembers whether it is
+collapsed.
 
-The project at your home folder (`~`, `C:\Users\<name>` on
-Windows) is **Main Hub**, with the Ghostex flower on its header: the home of
-Ask Ghostex AI, GBots (when enabled), Autopilot's supervisor sessions, and
-terminals and coordinators started there. Chats that don't belong to a project
-are in **No project** (below). If you already had a project there, it
-becomes Main Hub as it is, with its sessions, history and settings. Rest the
-pointer on its header and a card beside the sidebar says what it is.
+The project at your home folder (`~`, `C:\Users\<name>` on Windows) is
+**Ghostex AI**, with the Ghostex flower on its header: the home of each
+computer's Ghostex AI agent, GBots (when enabled) and Autopilot's supervisor
+sessions. Chats, terminals and coordinators started without a project are in
+**No project** (below). If you already had a project there, it becomes Ghostex
+AI as it is, with its settings and history. Rest the pointer on its header and
+a card beside the sidebar says what it is.
 
-**Ask Ghostex AI** (Ghostex AI for short; it was called Chief of Staff), pinned
-first under Main Hub, is one agent per computer you
-can ask about anything: any session, agent, project or computer, and Ghostex
-itself ("what's stuck?", "how do I pair my phone?").
+**Ask Ghostex AI** (Ghostex AI for short), pinned first under the Ghostex AI
+header, is one agent per computer you can ask about anything: any session,
+agent, project or computer, and Ghostex itself ("what's stuck?", "how do I pair
+my phone?"). Each computer's agent is its own row, named by the computer and
+drawn with its computer icon, this computer first.
 
-- **Main Hub's header**: click it to fold or unfold, like any project. Right-click
-  for Main Hub's settings (Show on All Spaces, Ask Before New Chat, the folders
+- **Ghostex AI's header**: click it to fold or unfold, like any project. Right-click
+  for Ghostex AI's settings (Show on All Spaces, Ask Before New Chat, the folders
   agents can't read) above the project's own menu (Move to Space, New Terminal
   and the rest). It sits at the top of the Space it is in, or of every Space with
-  **Show Main Hub on all Spaces** (Settings > Agents > Home folder).
+  **Show Ghostex AI on all Spaces** (Settings > Agents > Home folder).
+- **Autopilot**: Autopilot's supervisor chats are in their own Autopilot section
+  under Ghostex AI, folded until you open it.
 - **First open**: before Ghostex AI runs, its row says "Start here". Click it
   and Ghostex AI starts on your default agent (Settings > Agents, the one setup
   showed or you picked there) when it is installed, otherwise on the first
@@ -5264,9 +5270,9 @@ itself ("what's stuck?", "how do I pair my phone?").
   installing things stay yours.
 - **New Chat keeps your old chat**: right-click the Ask Ghostex AI row for New
   Chat (Ghostex asks first; tick Don't ask again to stop asking). The old chat
-  stays in Main Hub, asleep and named after the day it started; right-click the
-  row for **Earlier Chats…** to open one again (closed ones are in Main Hub's
-  History). Change Agent moves it to another agent the same way. A new chat's
+  stays under Ghostex AI, asleep and named after the day it started; right-click
+  the row for **Earlier Chats…** to open one again (closed ones are in Ghostex
+  AI's History). Change Agent moves it to another agent the same way. A new chat's
   first message waits for Start too. Closing Ask Ghostex AI's chat closes it
   like any session (it stays in History); the next time you open Ask Ghostex
   AI it starts a fresh chat that keeps its memory and threads. On the phone, a
@@ -5280,10 +5286,10 @@ itself ("what's stuck?", "how do I pair my phone?").
   not. Ghostex AI on Codex runs without asking, because Codex's sandbox would
   otherwise stop it reaching Ghostex; Codex still keeps it out of these folders.
 - **Several computers**: with computers combined, every computer's home is one
-  Main Hub, each computer's Ghostex AI pinned at the top and other
-  computers' chats marked with their computer's name.
+  Ghostex AI header with one row per computer, each named by its computer
+  (there is no "+N" fold for them; Autopilot's rows still fold).
 - **Ask Ghostex AI's chats** (when Ghostex AI isn't running to take the
-  question) are listed in Main Hub too. They run in Ghostex's settings folder,
+  question) are listed under Ghostex AI too. They run in Ghostex's settings folder,
   never in your home folder.
 
 `ghostex chief status`, `ghostex chief guide`, `ghostex chief new-chat`,
@@ -5298,12 +5304,22 @@ the others, that holds every chat that doesn't belong to a project. Its chats
 work in your home folder (`~`), with your secret folders kept out of reach as
 for every agent Ghostex starts there (Settings > Agents > Home folder). It is
 made by Ghostex in its own empty folder, so it has no Git, branches or
-worktrees. You can rename it like any project. When you update, the chats that
-were in Main Hub move into it once, with their history (a chat that was
-working then moves at a later start, once it is idle).
+worktrees. It is always in the list, even with no chats, and ends with a quiet
+**New Chat** row; its header's menu is New Chat and Hide (on the phone, New
+Chat). Terminals and coordinators started in your home folder go there too.
+When you update, the chats, terminals and coordinators that were under Main Hub
+move into it once, with their history (a session that is running then moves at
+a later start, once it is idle; a coordinator is never moved during a turn).
 
-**Move to project**: a chat in No project can move into one of your projects.
-It continues in that project's folder under a new session ref. Claude Code and
+A moved session's ref (`S90:P9ny1:G0ns9`) changes project and keeps its
+session id where it can (`S90:P5nmc:G0ns9`). The old ref keeps working: a
+coordinator's threads, linked work items, Grok Bot relays and anyone messaging
+it by the old ref still reach it, and `ghostex` commands find it by either ref.
+
+**Move to project**: a chat in No project can move into one of your projects
+on the same computer: right-click it in the sidebar (on the phone, long press)
+and pick **Move to project**, then the project. It moves at once, with no
+confirm, and opens in that project's folder under a new session ref. Claude Code and
 Codex take the conversation with them. Other agents get a handover: Ghostex
 writes the conversation (your messages and the agent's final replies, without
 tool calls) to a Markdown file, starts a new chat of the same agent in the
@@ -5658,26 +5674,26 @@ Setting: `botAutomationsHidden` (on by default, which keeps the feed hidden).
 
 ## GBots (beta, off by default)
 
-GBots (beta) are your own team of bots, led by Ghostex AI in Main Hub. Each GBot
+GBots (beta) are your own team of bots, led by Ghostex AI. Each GBot
 has a name, a role, standing instructions, an icon and a colour, and a memory
 it keeps in every chat; its chats run on your own Claude Code or Codex. Turn
 them on in Settings > Extensions, on the Experimental tab (for a connected
 computer, pick it at the top of that page first): they are off by
 default, and turning them on asks for your approval (Touch
 ID), so an agent can only ask. While GBots are off, nothing of
-GBots shows, on your computer or the phone: no GBots group in Main Hub, no GBot
+GBots shows, on your computer or the phone: no GBots group in Ghostex AI, no GBot
 menu items, cards or Settings rows beyond the switch. Their chats sleep and
 every `ghostex gbots` command stops; the bots and their memory stay for when
 you turn them back on.
 
-- **In the sidebar**: your GBots sit in Main Hub under Ghostex AI, in a
-  GBots group above Main Hub's other chats. Each GBot's row shows its icon in
+- **In the sidebar**: your GBots sit under Ghostex AI, in a
+  GBots group above its other rows. Each GBot's row shows its icon in
   its colour, its name and a dot while one of its chats works or waits for
   you; click it to fold its chats under it (a chat Ghostex AI opened says
   "Chief"). Right-click a GBot for New Chat, GBot Settings… and Remove GBot…,
-  and right-click the GBots heading (or press its +) or Main Hub for New
-  GBot…. On the phone, GBots show the same way in Main Hub; long-press a GBot
-  for the same choices, and the GBots heading or Main Hub for New GBot. A
+  and right-click the GBots heading (or press its +) or Ghostex AI's header for New
+  GBot…. On the phone, GBots show the same way under Ghostex AI; long-press a GBot
+  for the same choices, and the GBots heading or Ghostex AI's header for New GBot. A
   GBot's folder never shows as a project.
 - **GBot Settings**: its own window, opened from the GBot's row (GBot
   Settings…): Profile (name, role, description, icon and colour, the agent and
@@ -5796,7 +5812,7 @@ you turn them back on.
 - **Departments**: group GBots under a name, like Research or Writing. Every
   GBot in a department follows its shared instructions under its own, and a
   department can have one lead, marked with a small crown, who hands the
-  others work and may change their instructions (nothing else). In Main Hub a
+  others work and may change their instructions (nothing else). Under Ghostex AI a
   department is a small heading under GBots that folds its bots; right-click
   it for Department Settings… or Remove Department… (its GBots stay, in no
   department). Set a GBot's department, whether it leads, and the department's
@@ -5835,7 +5851,7 @@ you turn them back on.
   being reported for an hour and you get one notification. From a terminal:
   `ghostex gbots problem list|retry|rebrief|close`.
 - **Team files**: share a team of GBots with another Ghostex, or keep a copy,
-  as one JSON file. Right-click the GBots heading in Main Hub and choose Export
+  as one JSON file. Right-click the GBots heading under Ghostex AI and choose Export
   Team… (the whole team, a department, or one GBot as a preset; tick Include
   starter notes to add each GBot's memory and topic notes), then Save… or Copy;
   on the phone, long-press the GBots heading and choose Export Team to share the
@@ -6968,7 +6984,7 @@ agents, a connection from either side is enough.
   on its own while apart. Sidebar organization syncs by default: your Spaces
   (names, icons, colours, their order, which projects are in each and in which
   order), project groups, Project or Unified sidebar, Computers,
-  Merge copies of the same repository, Worktree sessions, the Spaces switch, Show Main Hub on all Spaces, Hide projects
+  Merge copies of the same repository, Worktree sessions, the Spaces switch, Show Ghostex AI on all Spaces, Hide projects
   without sessions, Group working sessions, session parking, Pinned order, the
   Unified sidebar's Moving section, Session order, Group by project and project order, and
   your Session Tags (the tags you made and the tag list's order). A change
@@ -8642,7 +8658,7 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   Reinstall and Uninstall buttons, and installing an agent that needs npm
   installs Node.js first on its own. When an install of Fast Computer &
   Browser Use, SpaceO, Hex or an agent CLI fails (in Settings, setup or on the
-  phone), Run in terminal opens a terminal in Main Hub with its install command
+  phone), Run in terminal opens a terminal in No project with its install command
   typed in, so you can run it yourself and answer what it asks (macOS and
   Linux).
   The Gemini API CLI row installs Google's `gemini-api` (from its GitHub
@@ -8658,7 +8674,7 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   Gemini voiceovers including two speakers, music, short video, and Deep
   Research jobs fetched later by id), then how to start: run
   `gemini-api configure` once to add your key (it stores the key itself; Run in
-  terminal types it into a Main Hub terminal), after which any agent can use it.
+  terminal types it into a No project terminal), after which any agent can use it.
   Ghostex lists a Gemini API CLI update only when its minor or major version
   goes up; patch releases are never listed, and install quietly when its Update
   automatically switch is on in Settings > Updates. Command:
