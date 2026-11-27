@@ -25,6 +25,7 @@ mod remembered_form;
 mod remote_machine;
 mod scope_editor;
 mod sections;
+mod staff_picks;
 mod view_editor;
 mod view_order;
 mod views_data;
@@ -128,6 +129,11 @@ pub(crate) struct ExtensionsTab {
     shown_machine: Option<String>,
     shown_machine_name: Option<String>,
     remote: remote_machine::RemoteExtensions,
+    /// Whether Boosts are on (gxserver's `/api/boosts`), for Staff picks' Boosts card; `None`
+    /// until read (staff_picks.rs).
+    pub(crate) boosts_on: Option<bool>,
+    /// Staff picks asked for `boosts_on` during this visit.
+    pub(crate) boosts_requested: bool,
 }
 
 impl SettingsPage for ExtensionsTab {
@@ -195,6 +201,8 @@ impl ExtensionsTab {
             shown_machine: None,
             shown_machine_name: None,
             remote: Default::default(),
+            boosts_on: None,
+            boosts_requested: false,
         };
         page.follow_machine(cx);
         page.request_plugin_status_if_missing(cx);
@@ -311,6 +319,8 @@ impl ExtensionsTab {
         self.was_active = active;
         if !active {
             self.forget_on_tab_cards();
+            // Read Boosts afresh next visit: Settings > Boosts may switch them meanwhile.
+            self.boosts_requested = false;
             self.targeted_view = None;
             self.targeted_scope = None;
             return;
@@ -410,13 +420,15 @@ impl ExtensionsTab {
                 self.store
                     .update(cx, |store, cx| store.set_search_query("git".into(), cx));
             }
-            "extensions-tab-views"
+            "extensions-tab-on"
+            | "extensions-tab-views"
             | "extensions-tab-panels"
             | "extensions-tab-installed"
             | "extensions-tab-community"
             | "extensions-experimental" => {
                 self.preview_applied = true;
                 let tab = match state.as_str() {
+                    "extensions-tab-on" => page_tabs::PageTab::On,
                     "extensions-tab-views" => page_tabs::PageTab::Views,
                     "extensions-tab-panels" => page_tabs::PageTab::PanelsMenus,
                     "extensions-tab-installed" => page_tabs::PageTab::Installed,
@@ -505,10 +517,12 @@ impl ExtensionsTab {
         }
     }
 
-    /// The open tab (the one saved last time; Built-in at first).
+    /// The open tab: the one saved last time (Q2044), Staff picks until one is picked
+    /// (CDXC:Extensions 2026-11-27 in staff_picks.rs: "First tab, opens there until you pick
+    /// another"). Only picking a tab saves one, so someone who already had a tab keeps landing on it.
     pub(crate) fn page_tab(&self, cx: &App) -> page_tabs::PageTab {
         page_tabs::PageTab::from_id(self.store.read(cx).extensions_tab())
-            .unwrap_or(page_tabs::PageTab::BuiltIn)
+            .unwrap_or(page_tabs::PageTab::StaffPicks)
     }
 
     pub(crate) fn set_page_tab(&mut self, tab: page_tabs::PageTab, cx: &mut Context<Self>) {
@@ -665,6 +679,10 @@ impl Render for ExtensionsTab {
                 |page: &mut Self, window, cx| page.clear_filter(window, cx),
                 cx,
             )));
+        }
+        if tab == page_tabs::PageTab::StaffPicks && !searching {
+            let section = self.render_staff_picks_section(&p, window, cx);
+            blocks.push(PageBlock::section("staffPicks", section));
         }
         if tab == page_tabs::PageTab::On && !searching {
             let section = self.render_on_section(&p, window, cx);

@@ -438,6 +438,8 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("appWide", J::Bool(true)),
         ("title", J::Str("Connectors")),
         ("settingsPages", J::Arr(&[J::Str("connectors")])),
+        // CDXC:Extensions 2026-11-27 DECISION: User, adding Connectors to Staff picks (Q5223): "it's working great, let's add it to staff picks just put beta pill on it".
+        ("badge", J::Str("Beta")),
     ]),
     J::Obj(&[
         ("description", J::Str("Make Ghostex your default editor, terminal-link handler and script runner, and check how this computer opens its files and links.")),

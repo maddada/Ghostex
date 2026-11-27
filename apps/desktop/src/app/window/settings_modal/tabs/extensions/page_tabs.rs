@@ -4,6 +4,9 @@
 /// One tab of the Extensions page, in the strip's order (Experimental last).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PageTab {
+    /// The extensions we would turn on first, grouped by what they are for (CDXC:Extensions
+    /// 2026-11-27 in staff_picks.rs). First, and where the page opens until you pick another tab.
+    StaffPicks,
     /// Everything that is on, from every other tab (CDXC:Extensions 2026-11-11 in sections.rs
     /// `render_on_section`).
     On,
@@ -16,7 +19,8 @@ pub(crate) enum PageTab {
 }
 
 impl PageTab {
-    pub(crate) const ALL: [PageTab; 7] = [
+    pub(crate) const ALL: [PageTab; 8] = [
+        PageTab::StaffPicks,
         PageTab::On,
         PageTab::BuiltIn,
         PageTab::Views,
@@ -29,6 +33,7 @@ impl PageTab {
     /// The id saved as `extensionsTab` in `settingsModalNavigation`.
     pub(crate) fn id(self) -> &'static str {
         match self {
+            PageTab::StaffPicks => "staffPicks",
             PageTab::On => "on",
             PageTab::BuiltIn => "builtIn",
             PageTab::Views => "views",
@@ -45,6 +50,7 @@ impl PageTab {
 
     pub(crate) fn label(self) -> &'static str {
         match self {
+            PageTab::StaffPicks => "Staff picks",
             PageTab::On => "On",
             PageTab::BuiltIn => "Built-in",
             PageTab::Views => "Views",
@@ -62,7 +68,7 @@ impl PageTab {
             PageTab::Views => &["project-websites", "code-and-files", "planning"],
             PageTab::PanelsMenus => &["header-buttons", "menus-and-panels"],
             PageTab::Experimental => &["experimental"],
-            PageTab::On | PageTab::Installed | PageTab::Community => &[],
+            PageTab::StaffPicks | PageTab::On | PageTab::Installed | PageTab::Community => &[],
         }
     }
 
