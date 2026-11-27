@@ -5927,15 +5927,10 @@ details?". Its short opening line says it can approve or deny what a session
 waits on. While the
 conversation is open it tells you when a session finishes its turn or starts
 waiting on a question or an approval, but not about a coordinator's threads
-(their approvals included; a call about the coordinator still hears those).
-That goes for a coordinator on a connected computer too; when that computer
-doesn't say within 2 seconds which of its sessions are threads, the threads
-it named before stay threads while they are open, its other sessions count as
-sessions of their own, and the agent is told (in the list when it has room, and
-always when it looks the sessions up) that it doesn't know which are
-threads there. So a thread on a connected computer can still be announced
-when it opened after that computer last said which sessions are threads, or
-before that computer ever did. A
+on this computer (their approvals included; a call about the coordinator still
+hears those). On a connected computer it can't tell threads from sessions: it
+lists a coordinator's threads there as sessions of their own and tells you
+about them like any session, approvals included. A
 session that finished its turn counts as waiting on a question only for the
 questions that turn asked: open questions from earlier turns, after you
 moved the session on, leave it idle (the sidebar's pink dot still shows them,
