@@ -222,6 +222,8 @@ pub(super) fn to_cli_session(
     insert_js(&mut map, "chiefEarlier", &[p("chiefEarlier")]);
     // CDXC:SessionChat 2026-11-25 SEE-ALSO: server/src/acp/host_mode_switching.rs raises it while the session switches between Native and Terminal-based; mobile_summary.rs forwards it to the phone, whose chat keeps its view and shows "Switching to Terminal-based" (apps/mobile/app NativeChatScreen.tsx). Absent when not switching.
     insert_js(&mut map, "switchingHostMode", &[p("switchingHostMode")]);
+    // CDXC:SessionSleep 2026-11-27 SEE-ALSO: a Native chat (server/src/session_native_release.rs); mobile_summary.rs forwards it so the phone offers no Sleep and shows no sleeping look for it, and the human list prints a released one as idle (human_list.rs).
+    insert_js(&mut map, "nonCliMode", &[p("nonCliMode")]);
     // A GBot chat's bot and who opened it; the phone folds it under its bot (apps/mobile/app GbotsRows).
     insert_js(&mut map, "gbotsChat", &[p("gbotsChat")]);
     insert_js(

@@ -118,7 +118,7 @@ fn format_compact_session_line(session: &Value, project_label: Option<&str>) -> 
     let details: Vec<String> = [
         js_string(session.get("agent")),
         format_compact_provider(session).unwrap_or_default(),
-        js_string(session.get("status")),
+        format_status(session),
         format_awaiting_approval(session.get("awaitingApproval")),
         if session.get("stuckSince").is_some_and(Value::is_string) {
             "not moving".to_string()
@@ -136,6 +136,19 @@ fn format_compact_session_line(session: &Value, project_label: Option<&str>) -> 
         return headline;
     }
     format!("{headline}\n    {}", details.join(" · "))
+}
+
+/// The session's status word. A Native chat whose agent Ghostex released while idle reads "idle":
+/// its next message starts the agent again, so it is not something the user puts to sleep.
+///
+/// CDXC:SessionSleep 2026-11-27 DECISION:
+/// User: "I really want users to not worry about "sleeping"". The JSON keeps `status: "sleep"` for tools; only this text hides it.
+fn format_status(session: &Value) -> String {
+    let status = js_string(session.get("status"));
+    if status == "sleep" && session.get("nonCliMode").and_then(Value::as_bool) == Some(true) {
+        return "idle".to_string();
+    }
+    status
 }
 
 /// The sidebar's red approval dot in words: the agent is stuck on a permission prompt.

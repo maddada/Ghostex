@@ -903,6 +903,8 @@ fn to_mobile_session_summary(session: &Value) -> Value {
     insert_js(&mut map, "chiefEarlier", &[s("chiefEarlier")]);
     // The same trap for the Native <-> Terminal-based switch flag (cli_session.rs).
     insert_js(&mut map, "switchingHostMode", &[s("switchingHostMode")]);
+    // The same trap for the Native chat flag (cli_session.rs).
+    insert_js(&mut map, "nonCliMode", &[s("nonCliMode")]);
     // The same trap for a GBot chat's bot and opener (server/src/gbots/presentation.rs).
     insert_js(&mut map, "gbotsChat", &[s("gbotsChat")]);
     insert_js(
