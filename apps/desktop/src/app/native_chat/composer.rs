@@ -551,10 +551,7 @@ impl NativeChatView {
                 self.with_transcript_width(this, p)
             })
             .when(maximized, |this| this.p_0().max_w_full().h_full().min_h_0());
-        // First in the stack, right above whatever else waits on the user (working_card.rs). With
-        // Status line in the chat on, the line is the transcript's last row instead
-        // (status_tail.rs), and the box keeps the lead-in it has with no card above it; an empty
-        // chat has no row to end with and keeps the card (gx-chat-core `inTranscript`).
+        // First in the stack, right above whatever else waits on the user (working_card.rs).
         // The card, or the dock's bar that carries its line, sets its lifted spark and track again
         // when it draws (indicator_overlay.rs).
         self.reset_working_lifts();
@@ -645,10 +642,7 @@ impl NativeChatView {
                 cx,
             )
         };
-        let working_card = if maximized
-            || dock.is_some()
-            || self.snapshot["workingCard"]["inTranscript"] == true
-        {
+        let working_card = if maximized || dock.is_some() {
             None
         } else {
             self.render_working_card(p, cx)
@@ -675,11 +669,7 @@ impl NativeChatView {
             if self.snapshot["prompt"]["kind"] == "question" {
                 // The question replaces the box and the dock, so the status keeps its own bar.
                 let working_card = match working_card {
-                    None if dock.is_some()
-                        && self.snapshot["workingCard"]["inTranscript"] != true =>
-                    {
-                        self.render_working_card(p, cx)
-                    }
+                    None if dock.is_some() => self.render_working_card(p, cx),
                     card => card,
                 };
                 return self

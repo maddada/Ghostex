@@ -1453,8 +1453,7 @@ impl NativeChatView {
                     .overflow_hidden()
                     .map(|status| match status_card.as_ref() {
                         Some(card) => status.child(self.working_line_in_bar(card, p, cx)),
-                        // "Status line in the chat" draws a working agent's line as the
-                        // transcript's last row; the bar never says Idle over it.
+                        // A working agent with no line to show yet: the bar never says Idle.
                         None if self.snapshot["workingCard"]["working"] == true => status,
                         None => status.child(super::working_card::idle_line_in_bar(p)),
                     }),

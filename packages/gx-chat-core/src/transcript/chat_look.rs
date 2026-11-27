@@ -9,7 +9,7 @@
 //! Your messages (`chatUserMessageStyle`) and Agent work (`chatAgentWorkStyle`) trimmed to fewer choices. User: "we want to reduce the options in each of the new switches. Your messages: default or band, the rest goes away." / "I want Default / Reduced / Quiet... but Reduced needs to be what grouped is... the current layout just has too much... even multiple tools calls are shown, it's worthless, it needs to be grouped together, all the tools, all the edited files." / "if we want to not see the agent work anymore in the chat, we can enable quiet for it to show next to the other buttons when the options float". So Your messages is Default (the bubble on the right) or Band (a soft full-width strip, which also left-aligns the chat whatever Message layout says, [`ChatLook::effective_layout`]); Agent work is Default (today's Worked for card), Reduced (one dim line per message of yours for all its tool calls and edited files, `transcript/grouped_work.rs`) or Quiet (nothing in the chat, the work button with the reply's hover buttons, `grouped_work::hide_work`). Reduced and Quiet turn the tool call cards off in the projection whatever Tool call cards says (`TranscriptViewState::effective_tool_cards`), and approvals, Workflow cards, artifacts and the read-image strip never fold into the work (sent-message cards, messages from other agents and answers fold into the row since 2026-11-10, `folded_cards.rs`, where that decision is). Supersedes the 2026-11-07 choices (Your messages' Left rule and Names, Agent work's Quiet lines, and Grouped and Hidden under their old names). Default stays today's look: "all of these things need to be advanced mode and if we don't enable anything then it should remain to look like it does now".
 //!
 //! CDXC:SessionChat 2026-11-07 DECISION:
-//! Superseded 2026-11-27 (CDXC:SessionChat DECISION in server/src/session_chat_read.rs): the user removed this setting, "remove this setting please i dont like it", so it is always off.
+//! Superseded 2026-11-27 (CDXC:SessionChat DECISION in server/src/session_chat_read.rs): the user removed this setting, "remove this setting please i dont like it". Its rendering is gone too; the core ignores `ChatLookSettings::status_in_transcript` (hosts still send false for older phones) and no longer publishes `statusInTranscript`.
 //! Status line in the chat (`chatStatusInTranscript`). User: "the line that has the status that shows at the top of the input bar, that I really enjoyed in Claude to be part of the messages". When it is on, a finished turn's fold keeps its own "Worked for" time and the card above the chat box never shows the worked line (`transcript::rows`, `extras::working_card`). Off by default: "all of these things need to be advanced mode and if we don't enable anything then it should remain to look like it does now".
 //!
 //! CDXC:SessionChat 2026-11-07 DECISION:
@@ -78,9 +78,6 @@ pub struct ChatLook {
     pub message_layout: MessageLayout,
     pub user_style: UserStyle,
     pub agent_work: AgentWork,
-    /// Status line in the chat (`chatStatusInTranscript`). Its setting is gone since 2026-11-27
-    /// (CDXC:SessionChat DECISION in server/src/session_chat_read.rs): hosts send false.
-    pub status_in_transcript: bool,
     /// Message spacing (`chatMessageSpacing`): published only at Compact, so a document whose look
     /// was published before this setting existed reads the same.
     #[serde(default, skip_serializing_if = "MessageSpacing::is_default")]
@@ -150,9 +147,6 @@ impl ChatLook {
                 .agent_work
                 .as_deref()
                 .map_or(self.agent_work, parse_agent_work),
-            status_in_transcript: settings
-                .status_in_transcript
-                .unwrap_or(self.status_in_transcript),
             spacing: settings
                 .spacing
                 .as_deref()

@@ -54,13 +54,11 @@ pub fn working_card(state: &ChatState, strip: &WorkingStrip, pills: &[ChatPill])
         (tool, running)
     };
     let activity = strip.presentation.clone().filter(Value::is_object);
-    // Status line in the chat: the finished turn's time stays on its fold, so the card never
-    // shows the worked line (`transcript/chat_look.rs`); nothing changes while the agent works.
     let worked = state
         .transcript_view
         .worked_line
         .clone()
-        .filter(|_| !working && !state.transcript_view.chat_look.status_in_transcript);
+        .filter(|_| !working);
     let (label, label_kind) = if let Some(activity) = &activity {
         (
             activity
@@ -79,10 +77,7 @@ pub fn working_card(state: &ChatState, strip: &WorkingStrip, pills: &[ChatPill])
     } else if let Some(label) = running {
         (Some(label), "tool")
     } else if working && reads_subagent_report(state) {
-        (
-            Some("Reading the subagent's report".to_string()),
-            "word",
-        )
+        (Some("Reading the subagent's report".to_string()), "word")
     } else if let Some(word) = &strip.label {
         (Some(word.clone()), "word")
     } else if working {
@@ -130,8 +125,6 @@ pub fn working_card(state: &ChatState, strip: &WorkingStrip, pills: &[ChatPill])
         pills: pill_ids,
         aria_label,
         label_parts,
-        in_transcript: state.transcript_view.chat_look.status_in_transcript
-            && !state.transcript_view.items.is_empty(),
         worked_at_ms: (phase == "worked")
             .then(|| {
                 state

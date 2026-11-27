@@ -224,7 +224,6 @@ impl Render for NativeChatView {
         crate::app::helpers::indicator_animation::render_indicator_frames_animation_only(
             cx.entity_id(),
         );
-        // Status line in the chat: the working line joins or leaves the rows before they are drawn.
         // A view shown another session holds no rows for the last one's sent messages
         // (send_watch.rs); a no-op otherwise, since the watch keeps the list in step itself.
         if self.sync_sent_rows()
@@ -232,7 +231,6 @@ impl Render for NativeChatView {
         {
             window.render_view_this_frame(host.entity_id());
         }
-        self.sync_status_tail(&p, window);
         // Where the rows' moving parts are drawn this frame, decided before the rows are.
         let rows_in_place = self.sync_motion_in_place(window);
         let transcript = self.render_transcript_host(window, cx);
@@ -242,7 +240,6 @@ impl Render for NativeChatView {
         let lifted = self.indicators_lifted(cx.entity_id());
         let overlay = self.indicator_overlay.clone();
         let body = if covered {
-            overlay.set(indicator_overlay::STATUS_TAIL_LEAD, None);
             overlay.set(indicator_overlay::ROW_MOTION, None);
             None
         } else {
@@ -256,10 +253,6 @@ impl Render for NativeChatView {
                 overlay.set(key, layer.clone().filter(|_| lift_rows));
                 layer.filter(|_| !lift_rows).map(|layer| layer())
             };
-            let status_tail_lead = in_place(
-                indicator_overlay::STATUS_TAIL_LEAD,
-                self.status_tail_lead_layer(&p),
-            );
             let row_motion = in_place(indicator_overlay::ROW_MOTION, self.row_motion_layer());
             Some(
                 div()
@@ -274,8 +267,6 @@ impl Render for NativeChatView {
                     .min_h_0()
                     .w_full()
                     .child(content)
-                    // After the rows, so it draws where the status row painted this frame.
-                    .children(status_tail_lead)
                     // The running tool calls' shimmer and spinner, over their rows (row_motion.rs).
                     .children(row_motion)
                     .children(jump_down)

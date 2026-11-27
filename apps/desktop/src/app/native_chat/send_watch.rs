@@ -260,9 +260,17 @@ impl NativeChatView {
             .filter(|send| send.rows.is_some())
     }
 
+    /// How many rows the transcript list holds: the transcript's rows and the messages just sent
+    /// that the core has not drawn yet (`sync_sent_rows`).
+    ///
+    /// CDXC:SessionChat 2026-11-07 WHY:
+    /// Rows are drawn inside the list's own layout, which holds the list's state borrowed, so a row asking the list itself (`ListState::item_count` and the like) panicked with "RefCell already mutably borrowed" and left every chat empty. Code that runs while rows draw takes the count from here.
+    pub(super) fn transcript_list_rows(&self) -> usize {
+        self.items.len() + self.sent_rows_listed
+    }
+
     /// Keeps the transcript list holding one row per message just sent, after the transcript's
-    /// own rows (and before the status row, status_tail.rs).
-    /// Answers whether the list changed.
+    /// own rows. Answers whether the list changed.
     pub(super) fn sync_sent_rows(&mut self) -> bool {
         let wanted = self.sent_rows().count();
         if wanted == self.sent_rows_listed {

@@ -17,7 +17,7 @@
 //! - Integers stay integers. A JSON `1` written back as `1.0` is a contract break.
 //! - `chatLook` (`transcript/chat_look.rs`) is absent while every chat look setting is Default,
 //!   which is today's chat; otherwise it is
-//!   `{"messageLayout":"default|left","userStyle":"default|band","agentWork":"default|reduced|quiet","statusInTranscript":bool,"spacing"?:"compact"}`,
+//!   `{"messageLayout":"default|left","userStyle":"default|band","agentWork":"default|reduced|quiet","spacing"?:"compact"}`,
 //!   and `messageLayout` is the effective layout (Left whenever `userStyle` is Band).
 //! - With `agentWork` Reduced or Quiet, the transcript carries `grouped-work` items
 //!   (`transcript/grouped_work.rs`) where it carried `completed-work`:

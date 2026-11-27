@@ -1,10 +1,10 @@
 //! A running tool call's shimmer and spinner, and Quiet View's loader on a running line or step
 //! (quiet_work.rs), drawn over the cached transcript rows rather than in them. The row keeps each animated part's place (the label laid out in clear text, the spinner's
 //! box empty) and records where it painted; the chat draws the moving part over that place after
-//! the transcript (`render_row_motion`), as the status row's spark does (status_tail.rs).
+//! the transcript (`render_row_motion`).
 //!
 //! CDXC:SessionChat 2026-11-10 WHY:
-//! Measured on the user's running app with agents working: 91% of the main thread's busy time was in display frames, and the transcript's rows were built, laid out and painted again on nearly every one of them, because the shimmer and spinner on a running tool call (tool_card.rs, tool_run.rs) animated inside the cached transcript view and notified it thirty times a second. That breaks the rule the 2026-10-18 WHY in working_card.rs and the 2026-11-07 WHY in status_tail.rs state: nothing in a transcript row may animate. Drawn here, a tick is one of the chat's animation-only frames (helpers/indicator_animation.rs), so only the label and the spinner are drawn again and the rows stay cached. The look and the thirty frames a second stay; the shimmer on running calls is the user's 2026-11-09 decision in gx-chat-core `transcript/tool_card.rs`.
+//! Measured on the user's running app with agents working: 91% of the main thread's busy time was in display frames, and the transcript's rows were built, laid out and painted again on nearly every one of them, because the shimmer and spinner on a running tool call (tool_card.rs, tool_run.rs) animated inside the cached transcript view and notified it thirty times a second. That breaks the rule the 2026-10-18 WHY in working_card.rs states: nothing in a transcript row may animate. Drawn here, a tick is one of the chat's animation-only frames (helpers/indicator_animation.rs), so only the label and the spinner are drawn again and the rows stay cached. The look and the thirty frames a second stay; the shimmer on running calls is the user's 2026-11-09 decision in gx-chat-core `transcript/tool_card.rs`.
 //! Each part follows its row's current place in the list (`ListState::bounds_for_item`), so scrolling, a fold or a row changing height moves it with the row, and it is clipped to what clipped its place in the row (the card, a fold opening, the transcript's visible area). A fade around the row (a call growing in, a fold opening, the transcript arriving) is applied through `opacity_scope`, since GPUI does not tell an element its ancestors' opacity. A row the main list does not hold (the subagent viewer's, which the chat draws itself) animates in place as before.
 
 use super::{
@@ -95,11 +95,6 @@ impl RowMotion {
     /// The rows draw their parts inside themselves (`in_row`), or leave them to a layer.
     pub(super) fn set_in_row(&self, in_row: bool) {
         self.in_row.set(in_row);
-    }
-
-    /// Whether the rows draw their parts inside themselves this frame.
-    pub(super) fn in_row(&self) -> bool {
-        self.in_row.get()
     }
 
     /// Registers `id` in the row being drawn and returns the element that records where its place

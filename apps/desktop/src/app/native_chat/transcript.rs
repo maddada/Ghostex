@@ -66,14 +66,9 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         // After the transcript's own rows: the messages just sent that the core has not drawn
-        // yet (send_watch.rs), then, with Status line in the chat, the working line
-        // (status_tail.rs).
+        // yet (send_watch.rs).
         if index >= self.items.len() {
-            let after = index - self.items.len();
-            if after < self.sent_rows_listed {
-                return self.sent_row(index, after, window, cx);
-            }
-            return self.status_tail_row(index, cx);
+            return self.sent_row(index, index - self.items.len(), window, cx);
         }
         let items = self.items.clone();
         // The running tool calls in the row draw their motion over it (row_motion.rs).
@@ -148,7 +143,7 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         self.in_subagent = !main;
-        // The main list's length, which holds the status row too while it shows (status_tail.rs).
+        // The main list's length (`transcript_list_rows`).
         let rows = if main {
             self.transcript_list_rows()
         } else {

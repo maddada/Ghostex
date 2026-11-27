@@ -2924,8 +2924,7 @@ fn dock_item_card(item: &Value, now_ms: i64, done_key: Option<String>) -> Value 
 /// User (the target page): under a reply "one quiet line ... Worked for 40s · Started <item>",
 /// not the turn's line and "Worked for" stacked as two.
 fn merged_turn(state: &ChatState, turns: &[Turn]) -> Option<usize> {
-    let shows = state.transcript_view.worked_line.is_some()
-        && !state.transcript_view.chat_look.status_in_transcript;
+    let shows = state.transcript_view.worked_line.is_some();
     shows.then(|| turns.len().checked_sub(1)).flatten()
 }
 
@@ -3355,7 +3354,6 @@ fn last_has_words(state: &ChatState) -> bool {
 /// Whether the newest turn's line rides on "Worked for" (`merged_turn`).
 fn worked(state: &ChatState) -> bool {
     state.transcript_view.worked_line.is_some()
-        && !state.transcript_view.chat_look.status_in_transcript
 }
 
 use crate::extras::work_source::work_of;

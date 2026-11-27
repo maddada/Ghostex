@@ -209,9 +209,6 @@ pub(crate) struct NativeChatView {
     pub(super) title_room: std::rc::Rc<std::cell::RefCell<std::collections::HashMap<String, f32>>>,
     /// What the working card measured at its last paint (`working_card.rs`).
     pub(super) working_card: super::working_card::WorkingCardCells,
-    /// The transcript list holds the status row after its last row (Status line in the chat,
-    /// status_tail.rs).
-    pub(super) status_tail: bool,
     /// The running tool calls' shimmer and spinner, drawn over the rows (row_motion.rs).
     pub(super) row_motion: super::row_motion::RowMotion,
     /// The repeating indicators the pane draws over the chat (indicator_overlay.rs).
@@ -220,7 +217,7 @@ pub(crate) struct NativeChatView {
     pub(super) final_ids:
         std::cell::RefCell<Option<(std::sync::Weak<Value>, std::collections::HashSet<String>)>>,
     /// How many rows the transcript list holds after the transcript's own for messages just
-    /// sent that the core has not drawn yet (send_watch.rs), before the status row.
+    /// sent that the core has not drawn yet (send_watch.rs).
     pub(super) sent_rows_listed: usize,
     /// The chat box's pill strip (pills_strip.rs).
     pub(super) pills_strip: super::pills_strip::PillsStripCells,
@@ -760,7 +757,6 @@ impl NativeChatView {
             stat_room: Default::default(),
             title_room: Default::default(),
             working_card: Default::default(),
-            status_tail: false,
             row_motion: Default::default(),
             indicator_overlay: Default::default(),
             final_ids: Default::default(),

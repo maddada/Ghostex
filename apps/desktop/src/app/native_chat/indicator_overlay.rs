@@ -26,8 +26,6 @@ pub(super) type Layer = Rc<dyn Fn() -> AnyElement>;
 pub(super) const WORKING_LEAD: &str = "working-lead";
 /// The working card's compaction track (working_card.rs).
 pub(super) const WORKING_TRACK: &str = "working-track";
-/// The status row's spark (status_tail.rs).
-pub(super) const STATUS_TAIL_LEAD: &str = "status-tail-lead";
 /// The running tool calls' shimmer and spinner (row_motion.rs).
 pub(super) const ROW_MOTION: &str = "row-motion";
 
@@ -355,7 +353,7 @@ impl NativeChatView {
 
 impl NativeChatView {
     /// Decides, before the rows are drawn, whether they draw their moving parts (a running call's
-    /// shimmer and spinner, the status row's spark) inside themselves this frame, as they did
+    /// shimmer and spinner) inside themselves this frame, as they did
     /// before those were drawn over the rows; true when they do.
     ///
     /// CDXC:SessionChat 2026-11-10 WHY:

@@ -110,7 +110,6 @@ mod side_chats;
 mod side_question;
 mod startup_delivery;
 mod status_rows;
-mod status_tail;
 mod strip_overflow;
 mod subagent_view;
 mod system_cards;
