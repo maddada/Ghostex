@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### 🔒 Security
+
+- **The built-in browser runs Chromium 158 (CEF 158.0.6, Chromium 158.0.8127.89),** which fixes the critical sandbox escape CVE-2026-134401 and the other security fixes in Chrome 158. Pages that still rely on XSLT stop working, as they do in Chrome 158.
+
 ## 12.4.0 - 2026-11-27
 
 **Ghostex 12.4.0 is out.** Live pages and question forms close the moment you press Send, the Live page window can stay open, the voice agent speaks the language you pick with its own turn words, Executor runs on your own Executor CLI, every text box gets Ghostex's own right-click menu, Antigravity takes Gemini's place in Accounts, and Ghostex keeps far less on your disk.
