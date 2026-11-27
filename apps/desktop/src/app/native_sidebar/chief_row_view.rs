@@ -23,8 +23,9 @@ use gpui_component::{h_flex, v_flex};
 /// sentence.
 pub(crate) const CHIEF_LABEL: &str = "Ask Ghostex AI";
 pub(crate) const CHIEF_NAME: &str = "Ghostex AI";
-/// The home project's name on its header and card: "Main Hub". The one place the desktop spells it.
-pub(crate) const HOME_LABEL: &str = "Main Hub";
+/// The home project's name on its header and card: "Ghostex AI" (Main Hub until 2026-11-27, renamed
+/// by the user's Q5286 note). The one place the desktop spells it.
+pub(crate) const HOME_LABEL: &str = "Ghostex AI";
 /// The Ghostex flower in one colour (Q1735): the app icon's silhouette, filled.
 ///
 /// CDXC:Chief 2026-11-21 DECISION:
@@ -241,7 +242,7 @@ pub(crate) fn main_hub_tooltip_content(scale: f32, foreground: Hsla, secondary: 
                 .text_size(px(10.5 * scale))
                 .text_color(secondary)
                 .child(hint("Click", "fold"))
-                .child(hint("Right-click", "Main Hub settings")),
+                .child(hint("Right-click", "Ghostex AI settings")),
         )
 }
 

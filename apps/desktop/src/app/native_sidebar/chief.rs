@@ -358,6 +358,12 @@ impl GhostexGpuiApp {
         }
         let scale = appearance.scale;
         let command = chief_command("open", &home.machine_id);
+        // CDXC:Chief 2026-11-27 DECISION: User (Q5287 B): under the Ghostex AI header each computer's
+        // row reads the computer's name, this one before its first open too.
+        let label = home.machine_label.clone();
+        let machine_icon = self
+            .sidebar_machine_icon_asset(&home.machine_id)
+            .unwrap_or("titlebar/device-desktop.svg");
         Some(
             gpui_component::h_flex()
                 .id(format!(
@@ -366,8 +372,8 @@ impl GhostexGpuiApp {
                 ))
                 .role(gpui::Role::Button)
                 .aria_label(format!(
-                    "{}: start here",
-                    super::chief_row_view::CHIEF_LABEL
+                    "{} on {label}: start here",
+                    super::chief_row_view::CHIEF_NAME
                 ))
                 .h(px(34.0 * scale))
                 .mx(px(3.0 * scale))
@@ -377,20 +383,18 @@ impl GhostexGpuiApp {
                 .rounded(px(5.0 * scale))
                 .cursor_pointer()
                 .hover(|row| row.bg(appearance.session_hover))
-                .child(
-                    gpui::svg()
-                        .path(super::chief_row_view::FLOWER_ICON)
-                        .size(px(14.0 * scale))
-                        .flex_shrink_0()
-                        .text_color(appearance.muted),
-                )
+                .child(titlebar_svg_icon(
+                    machine_icon,
+                    13.0 * scale,
+                    appearance.muted,
+                ))
                 .child(
                     div()
                         .flex_1()
                         .min_w_0()
                         .truncate()
                         .font_weight(gpui::FontWeight::LIGHT)
-                        .child(super::chief_row_view::CHIEF_LABEL),
+                        .child(label),
                 )
                 .child(
                     div()

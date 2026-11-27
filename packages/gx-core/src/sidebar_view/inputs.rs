@@ -107,8 +107,12 @@ impl SectionId {
     }
 }
 
-/// Which of a project's section headings are collapsed. Drafts, Working, Parked, and Snoozed start
-/// collapsed; Pinned, Autopilot (when collapsed), and Sessions are persisted.
+/// Which of a project's section headings are collapsed. Drafts, Working, Parked, Snoozed and
+/// Autopilot start collapsed; Pinned, Autopilot (when open) and Sessions are persisted.
+///
+/// CDXC:Chief 2026-11-27 DECISION:
+/// User (Q5289 A): Autopilot's supervisor keeps its own Autopilot section under the Ghostex AI rows,
+/// and "always collapse autopilot section by default".
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SectionCollapse {
     pub browser: bool,
@@ -126,7 +130,7 @@ impl Default for SectionCollapse {
         Self {
             browser: false,
             pinned: false,
-            autopilot: false,
+            autopilot: true,
             drafts: true,
             working: true,
             sessions: false,

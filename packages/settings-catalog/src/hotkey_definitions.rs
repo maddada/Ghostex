@@ -268,7 +268,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     HotkeyDefinition {
         id: "createAgentSession",
         title: "New Session",
-        description: "Start a new chat draft in the active project (or Main Hub).",
+        description: "Start a new chat draft in the active project (or No project).",
         default_key: "cmd+n",
         windows_linux_default_key: None,
         alternate_default_keys: &[],

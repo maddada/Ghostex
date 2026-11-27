@@ -78,7 +78,7 @@ fn status(state: &AppState) -> Value {
 pub(crate) fn switch_patch(id: &str, on: bool) -> Result<Map<String, Value>, DomainStateError> {
     if id == "chief" {
         return Err(DomainStateError::bad_request(
-            "Main Hub is always on and cannot be turned off.",
+            "Ghostex AI is always on and cannot be turned off.",
         ));
     }
     let id = built_in_extensions::COMPUTER_SWITCHES

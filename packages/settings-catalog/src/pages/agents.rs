@@ -42,13 +42,13 @@ pub(crate) fn home_folder() -> Section {
         vec![
             row(
                 "chiefShowOnAllSpaces",
-                "Show Main Hub on all Spaces",
-                "Show Main Hub and your home folder's sessions at the top of every Space. Off, they stay at the top of the Space you moved them to.",
+                "Show Ghostex AI on all Spaces",
+                "Show Ghostex AI at the top of every Space. Off, it stays at the top of the Space you moved them to.",
             ),
             row(
                 "chiefConfirmNewChat",
                 "Ask before New Chat",
-                "Ask before New Chat or Change Agent starts a new chat with Ghostex AI. Your earlier chats stay in Main Hub either way.",
+                "Ask before New Chat or Change Agent starts a new chat with Ghostex AI. Your earlier chats stay under Ghostex AI either way.",
             ),
             row(
                 "gbotsChiefAddsOnItsOwn",

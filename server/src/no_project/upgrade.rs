@@ -1,7 +1,7 @@
 //! The one-time move of Main Hub's chats into No project.
 //!
 //! CDXC:Projects 2026-11-27 WHY:
-//! The brief: Main Hub's existing chats (its Chats list) move into No project on upgrade, none lost. A chat is an agent session of the home project that is not Chief of Staff's (current or earlier), a coordinator, a coordinator's thread or a GBot's; terminals, coordinators and their threads stay in Main Hub. Each one keeps its session id, zmx daemon, conversation, folder (~) and every row Ghostex keeps about it: the move re-keys `projectId` in every table that pairs a project id with a session id (found from the schema, so a table added later is covered too), in one transaction with foreign keys checked at commit. Only its ref changes (S90:<No project>:<same id>). Hooks and the `ghostex` CLI find a session by its zmx name, so even so a running agent is never moved under its own feet: a chat running at the upgrade is skipped and moved at a later gxserver start once it is not, and chats made in Main Hub after the upgrade (an older phone's No project pill) stay there.
+//! The brief: Main Hub's existing chats (its Chats list) move into No project on upgrade, none lost. Then (Q5288 A) its terminals, coordinators and their threads too, so Ghostex AI (Main Hub renamed) holds only Ghostex's own agents. Every session of the home project moves except Ghostex AI's own chat (current or earlier) and GBot chats. Each one keeps its session id, zmx daemon, conversation, folder (~) and every row Ghostex keeps about it: the move re-keys `projectId` in every table that pairs a project id with a session id (found from the schema, so a table added later is covered too, a thread's coordinator columns included), in one transaction with foreign keys checked at commit. Only its ref changes (S90:<No project>:<same id>). Hooks and the `ghostex` CLI find a session by its zmx name, but a running session's threads and notes may quote its ref, so a session running at the upgrade is skipped and moved at a later gxserver start once it is not. Sessions made in Main Hub after the move started are moved too, since a create there now lands in No project (project.rs `is_home_create`) and only an older client can still make one.
 
 use std::collections::BTreeSet;
 
@@ -11,10 +11,9 @@ use serde_json::Value;
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::{schedule_presentation_project_delta, AppState};
 
-/// When the move first ran here; chats created later are not moved.
-const STARTED_KEY: &str = "noProjectMoveStartedAt";
-/// Set once no chat is left to move.
-const DONE_KEY: &str = "noProjectMoveDone";
+/// Set once no session is left to move. The second key: the first move (chats only) used
+/// `noProjectMoveDone`, so a computer that ran it moves its terminals and coordinators now.
+const DONE_KEY: &str = "noProjectMoveDone2";
 
 fn metadata(db: &Connection, key: &str) -> Option<String> {
     db.query_row("SELECT value FROM metadata WHERE key = ?1", [key], |row| {
@@ -49,19 +48,12 @@ fn in_table(db: &Connection, table: &str, project_id: &str, session_id: &str) ->
     .is_some()
 }
 
-/// Whether `session` of the home project is a chat that belongs in No project.
-fn is_main_hub_chat(db: &Connection, session: &Value) -> bool {
+/// Whether `session` of the home project belongs in No project: anything but Ghostex AI's own
+/// chat and a GBot chat.
+fn belongs_in_no_project(db: &Connection, session: &Value) -> bool {
     let (project_id, session_id) = (text(session, "projectId"), text(session, "sessionId"));
-    if text(session, "kind") != "agent" {
-        return false;
-    }
     let key = (project_id.to_string(), session_id.to_string());
     if crate::chief::read_record(db).is_some_and(|record| record.owns(&key)) {
-        return false;
-    }
-    if in_table(db, "coordinators", project_id, session_id)
-        || in_table(db, "coordinator_threads", project_id, session_id)
-    {
         return false;
     }
     let runtime = session.get("runtimeSettings").and_then(Value::as_object);
@@ -77,11 +69,6 @@ pub(super) fn move_main_hub_chats(
     if metadata(db, DONE_KEY).is_some() {
         return;
     }
-    let started_at = metadata(db, STARTED_KEY).unwrap_or_else(|| {
-        let now = crate::coordinators::now_iso();
-        write_metadata(db, STARTED_KEY, &now);
-        now
-    });
     let target = text(no_project, "projectId").to_string();
     let Ok(projects) = repository.list_projects() else {
         return;
@@ -98,11 +85,7 @@ pub(super) fn move_main_hub_chats(
             continue;
         };
         let mut chats = Vec::new();
-        for session in sessions.iter().filter(|s| is_main_hub_chat(db, s)) {
-            // ISO times in one format compare as text.
-            if text(session, "createdAt") > started_at.as_str() {
-                continue;
-            }
+        for session in sessions.iter().filter(|s| belongs_in_no_project(db, s)) {
             if text(session, "lifecycleState") == "running" {
                 deferred += 1;
                 continue;
@@ -112,7 +95,7 @@ pub(super) fn move_main_hub_chats(
         if chats.is_empty() {
             continue;
         }
-        // A chat whose id is taken in No project stays in Main Hub rather than change its id.
+        // A session whose id is taken in No project stays in Main Hub rather than change its id.
         let moves: Vec<(String, String)> = chats
             .iter()
             .filter(|id| !session_id_taken(db, &target, id))
@@ -124,7 +107,7 @@ pub(super) fn move_main_hub_chats(
         match rekey_sessions(db, &home, &target, &moves) {
             Ok(()) => {
                 eprintln!(
-                    "Ghostex moved {} of Main Hub's chats to No project.",
+                    "Ghostex moved {} of Main Hub's sessions to No project.",
                     moves.len()
                 );
                 let _ = schedule_presentation_project_delta(
@@ -144,7 +127,7 @@ pub(super) fn move_main_hub_chats(
             }
             Err(error) => {
                 eprintln!(
-                    "Ghostex could not move Main Hub's chats to No project: {}",
+                    "Ghostex could not move Main Hub's sessions to No project: {}",
                     error.message
                 );
                 return;

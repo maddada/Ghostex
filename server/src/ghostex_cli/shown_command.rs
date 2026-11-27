@@ -1,6 +1,6 @@
 //! `ghostex shown-command open <id>`: Run in terminal for a command Ghostex shows, from a shell or
 //! the phone (which reaches a computer only through this CLI). gxserver resolves the id, makes the
-//! Main Hub terminal and types the command there without Enter (server/src/shown_commands/).
+//! No project terminal and types the command there without Enter (server/src/shown_commands/).
 use serde_json::json;
 
 use crate::ghostex_cli::args::parse_args;
@@ -21,7 +21,7 @@ const ARG_FLAGS: [&str; 9] = [
 ];
 
 fn usage() -> String {
-    "Ghostex shown-command - open a Main Hub terminal with a command Ghostex shows typed in
+    "Ghostex shown-command - open a No project terminal with a command Ghostex shows typed in
 
 Usage:
   ghostex shown-command open <id> [--version <v>] [--workspace-id <id>] [--json]
@@ -77,7 +77,7 @@ pub fn shown_command_command(args: &[String]) -> CliResult<()> {
                 print_json(&result);
             } else {
                 println!(
-                    "Opened \"{}\" in Main Hub with the command typed in; press Enter there to run it.",
+                    "Opened \"{}\" in No project with the command typed in; press Enter there to run it.",
                     result["title"].as_str().unwrap_or("Terminal")
                 );
             }

@@ -200,6 +200,8 @@ pub const ENTRIES: &[SessionMenuEntry] = &[
     row("cleanUpWorktree", "Clean Up Worktree", "archive"),
     row("keepWorktree", "Keep Worktree", "x"),
     row("claudeAi", "claude.ai", "external-link"),
+    // A chat in No project (session.rs `move_to_project_item`, Q5262 B).
+    row("moveToProject", "Move to project", "folders"),
     row(
         "moveToGroup",
         "Move to Group",
@@ -326,6 +328,7 @@ fn spot_rows(spot: SessionMenuSpot) -> SpotRows {
                 "keepWorktree",
                 "snooze",
                 "park",
+                "moveToProject",
                 "box",
                 "claudeAi",
             ],

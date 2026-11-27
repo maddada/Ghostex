@@ -191,16 +191,20 @@ impl GhostexGpuiApp {
                     )
                     .children(group.sections.iter().enumerate().map(|(index, section)| {
                         let key = format!("section:{}:{}", group.group_id, section.id);
+                        // Ghostex AI's computer rows have no heading to unfold them by, so they
+                        // never stay folded (a fold saved before 2026-11-27 included).
+                        let collapsed =
+                            section.collapsed && !(group.is_home && section.id == "pinned");
                         let ids = self.native_sidebar.disclosures.section_ids(
                             &key,
                             &section.session_ids,
-                            section.collapsed,
+                            collapsed,
                         );
                         let append_new_chat_row = group.is_no_project && section.id == "sessions";
                         let body = self
                             .native_sidebar
                             .disclosures
-                            .present(&key, section.collapsed)
+                            .present(&key, collapsed)
                             .then(|| {
                                 let sessions = group
                                     .sessions
@@ -233,8 +237,13 @@ impl GhostexGpuiApp {
                                 };
                                 self.render_native_disclosure(key, section_content, cx)
                             });
+                        // CDXC:Chief 2026-11-27 DECISION: User (Q5287 B): the Ghostex AI header
+                        // is followed straight by one row per computer, with no "Pinned" heading
+                        // above them (they are pinned only to stay first).
+                        let hide_heading =
+                            hide_lone_sessions_heading || (group.is_home && section.id == "pinned");
                         // The gap of the 2026-11-21 spacing (sections.rs).
-                        let gap_above = if index > 0 && !hide_lone_sessions_heading {
+                        let gap_above = if index > 0 && !hide_heading {
                             super::sections::SECTION_GAP_ABOVE
                         } else {
                             0.0
@@ -243,14 +252,14 @@ impl GhostexGpuiApp {
                             .w_full()
                             .flex_shrink_0()
                             .mt(px(gap_above * scale))
-                            .when(!hide_lone_sessions_heading, |column| {
+                            .when(!hide_heading, |column| {
                                 column.child(
                                     self.render_native_section_header(
                                         group, section, appearance, cx,
                                     ),
                                 )
                             })
-                            .when(!hide_lone_sessions_heading && body.is_some(), |column| {
+                            .when(!hide_heading && body.is_some(), |column| {
                                 column.child(
                                     div().h(px(super::sections::SECTION_HEADING_GAP_BELOW * scale)),
                                 )

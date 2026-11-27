@@ -125,10 +125,10 @@ fn read_where(
         agent.as_deref(),
     );
     let worktree = environment["worktree"] == Value::Bool(true);
-    // Main Hub's sessions are named Main Hub (session_details/environment.rs).
+    // Main Hub's sessions are named Ghostex AI, its name since 2026-11-27 (session_details/environment.rs).
     let main_hub = environment["mainHub"] == Value::Bool(true);
     let project_name = if main_hub {
-        Some("Main Hub".to_string())
+        Some("Ghostex AI".to_string())
     } else {
         project.as_ref().and_then(|project| text(project, "/name"))
     };

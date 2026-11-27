@@ -58,7 +58,8 @@ pub(crate) fn read_environment(
     // details (gx-chat-core) so; an older gxserver sends neither.
     let main_hub = project.is_some_and(crate::chief::lists_under_main_hub);
     let project_name = if main_hub {
-        Some("Main Hub".to_string())
+        // Renamed Ghostex AI on 2026-11-27 (the user's Q5286 note).
+        Some("Ghostex AI".to_string())
     } else {
         project
             .and_then(|project| project.get("name"))

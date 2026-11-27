@@ -105,7 +105,8 @@ pub(crate) fn ensure_no_project_project(
 }
 
 /// A create that names No project by its alias (`projectId: "no-project"` or `noProject: true`)
-/// gets its real id, the project made first when it is missing.
+/// gets its real id, the project made first when it is missing. So does a create of a session in
+/// the home project ([`is_home_create`]).
 pub(crate) fn place_create_alias(
     state: &AppState,
     db: &Connection,
@@ -117,7 +118,7 @@ pub(crate) fn place_create_alias(
         .get("projectId")
         .and_then(Value::as_str)
         .is_some_and(|id| id.trim() == NO_PROJECT_ALIAS);
-    if !flagged && !aliased {
+    if !flagged && !aliased && !is_home_create(repository, params) {
         return Ok(());
     }
     let project = ensure_no_project_project(state, db, repository)?;
@@ -128,6 +129,28 @@ pub(crate) fn place_create_alias(
     params.insert("projectId".to_string(), project_id);
     params.remove("projectPath");
     Ok(())
+}
+
+/// Whether a create through `/api/createSession` or `/api/createAgentSession` targets the home
+/// project (Main Hub, now Ghostex AI): a terminal, coordinator or chat started there.
+///
+/// CDXC:Projects 2026-11-27 DECISION:
+/// User (Q5288 A): terminals and coordinators started at the home folder join No project, so the
+/// Ghostex AI group holds only Ghostex's own agents (each computer's Ghostex AI, its Autopilot
+/// supervisor, GBots). Ghostex AI's own chat, GBots and shown-command terminals are made by
+/// gxserver itself (chief/session.rs, gbots/session.rs, shown_commands/terminal.rs) and never pass
+/// here, so they stay; a GBot chat a client creates (`gbot`/`gbotHome` runtime settings) and a
+/// create into a session group of the home stay too.
+fn is_home_create(repository: &DomainRepository<'_>, params: &Map<String, Value>) -> bool {
+    if params.contains_key("sessionGroupProjectId") {
+        return false;
+    }
+    if crate::agents::is_gbot_chat(params.get("runtimeSettings").and_then(Value::as_object)) {
+        return false;
+    }
+    repository
+        .resolve_create_session_project(params)
+        .is_ok_and(|project| crate::chief::is_home_project(&project))
 }
 
 /// A create in No project without a folder of its own starts in the home folder. Set on the create

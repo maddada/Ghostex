@@ -161,7 +161,19 @@ impl GhostexGpuiApp {
         let dim_sleeping = sleeping
             && !buttons_shown
             && hud["settings"]["dimSleepingSessions"].as_bool() == Some(true);
-        let icon = if let Some((_, ref machine_id)) = machine_fold_child {
+        // CDXC:Chief 2026-11-27 DECISION: User (Q5287 B): each computer's Ghostex AI row under the
+        // Ghostex AI header reads that computer's name (gx-core `name_home_chief_rows`) and draws
+        // that computer's icon, like an unfolded other-computer row; the header keeps the flower.
+        let chief_machine = (machine_fold_child.is_none() && session.is_chief).then(|| {
+            ghostex_gx_core::SessionKey::parse_sidebar_session_id(&session_id)
+                .and_then(|key| key.machine.remote_id().map(str::to_string))
+                .unwrap_or_else(|| ghostex_gx_core::LOCAL_MACHINE_ID.to_string())
+        });
+        let icon_machine = machine_fold_child
+            .as_ref()
+            .map(|(_, machine_id)| machine_id.clone())
+            .or(chief_machine);
+        let icon = if let Some(ref machine_id) = icon_machine {
             let asset = self
                 .sidebar_machine_icon_asset(machine_id)
                 .unwrap_or("titlebar/device-desktop.svg");

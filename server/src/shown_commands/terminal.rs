@@ -87,8 +87,10 @@ async fn open(
     }))
 }
 
-/// A running plain terminal in Main Hub (the home project, added when missing), its shell started
-/// so the command reaches it whichever client opens it.
+/// A running plain terminal in No project (added when missing; it starts in the home folder), its
+/// shell started so the command reaches it whichever client opens it. In Main Hub until
+/// 2026-11-27, when terminals started at the home folder moved to No project (Q5288 A,
+/// no_project/project.rs `is_home_create`).
 fn create_started_terminal(
     state: &AppState,
     title: &str,
@@ -96,7 +98,7 @@ fn create_started_terminal(
     let db = open_gxserver_database(&state.paths)
         .map_err(|error| internal(format!("SQLite gxserver state error: {error}")))?;
     let repository = DomainRepository::new(&db, &state.metadata.server_id);
-    let project = crate::chief::home_project(state, &db, &repository)?;
+    let project = crate::no_project::ensure_no_project_project(state, &db, &repository)?;
     let project_id = text_of(&project, "projectId")?;
     let mut params = Map::new();
     params.insert("kind".into(), json!("terminal"));

@@ -157,7 +157,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     // CDXC:Chief 2026-11-24 DECISION: Main Hub is always on (cannot be turned off), so GBots no longer has `requiresExtension: chief`.
     J::Obj(&[
         ("appWide", J::Bool(true)),
-        ("description", J::Str("Your own team of bots under Ghostex AI in Main Hub, each with its own instructions and memory, running on your Claude Code or Codex.")),
+        ("description", J::Str("Your own team of bots under Ghostex AI, each with its own instructions and memory, running on your Claude Code or Codex.")),
         ("category", J::Str("experimental")),
         ("id", J::Str("gbots")),
         ("placement", J::Str("feature")),

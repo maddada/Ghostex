@@ -595,7 +595,7 @@ impl AutopilotTab {
             // User, on the old "It hasn't been needed yet" line: "why has this never been
             // needed??" It wakes only for what the rules can't settle, so the line says which.
             None => format!(
-                "Not started yet. It wakes only for what Autopilot's rules can't settle: a session still frozen after an interrupt and a reload, or (with Answer questions on) a question with no recommended choice (when it answers questions). Until then the rules handle everything. Once started, its chat shows under Autopilot in Main Hub.{}",
+                "Not started yet. It wakes only for what Autopilot's rules can't settle: a session still frozen after an interrupt and a reload, or (with Answer questions on) a question with no recommended choice (when it answers questions). Until then the rules handle everything. Once started, its chat shows under Autopilot in Ghostex AI.{}",
                 if question_choice(&config) == "wait" {
                     " Questions wait for you, so they stay with you."
                 } else {
@@ -615,7 +615,7 @@ impl AutopilotTab {
                     });
                 let comma = if label.contains(',') { "," } else { "" };
                 format!(
-                    "Runs on {label}{comma} under Autopilot in Main Hub. Woken {} time{}{}{}.",
+                    "Runs on {label}{comma} under Autopilot in Ghostex AI. Woken {} time{}{}{}.",
                     wakes,
                     if wakes == 1 { "" } else { "s" },
                     supervisor["lastWakeAt"]

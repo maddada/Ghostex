@@ -460,7 +460,7 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "shown-command open <id> [--version v] [--workspace-id id] [--json]",
-            "Open a new Main Hub terminal with a command Ghostex shows typed in but not run, so you only press Enter (ghostex shown-command help lists the ids: linuxUpdate, ghAuthLogin, sshServer and more)",
+            "Open a new No project terminal with a command Ghostex shows typed in but not run, so you only press Enter (ghostex shown-command help lists the ids: linuxUpdate, ghAuthLogin, sshServer and more)",
         ),
     ]
     .join("\n");
@@ -767,7 +767,7 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "chief --help",
-            "Ghostex AI, the Ghostex-wide coordinator pinned at the top of Main Hub: its status, its playbook, a new chat, its agent, and messaging another computer's Ghostex AI",
+            "Ghostex AI, the Ghostex-wide coordinator one row per computer under Ghostex AI in the sidebar: its status, its playbook, a new chat, its agent, and messaging another computer's Ghostex AI",
         ),
         format_help_command(
             "coordinator --help",

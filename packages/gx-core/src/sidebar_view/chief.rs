@@ -281,14 +281,15 @@ pub(crate) fn fold_home_machine_rows(
     if !is_home {
         return;
     }
-    fold_machine_kind(
-        sessions,
-        section_by_session,
-        SectionId::Pinned,
-        machine_fold_key(storage_id, "chief"),
-        expanded_machine_folds,
-        |row| row.is_chief,
-    );
+    // CDXC:Chief 2026-11-27 DECISION:
+    // User (Q5286 note, Q5287 B): "main hub needs to be renamed to Ghostex AI and it should show
+    // each machine's agent separate in a row", each row reading the computer's name only. So the
+    // Ghostex AI rows are no longer folded under a "+N": every computer's row shows, this
+    // computer's first ([`name_home_chief_rows`] names them). Supersedes the 2026-11-24 Part 1
+    // option A fold for these rows; Autopilot's supervisor rows keep it.
+    order_machine_kind(sessions, section_by_session, SectionId::Pinned, |row| {
+        row.is_chief
+    });
     fold_machine_kind(
         sessions,
         section_by_session,
@@ -306,6 +307,80 @@ fn subtree_end(sessions: &[SessionView], root_idx: usize) -> usize {
     }
     end
 }
+
+/// Puts this computer's matching row first among the matching rows of `section`, the others
+/// after it in their order, without folding any.
+fn order_machine_kind(
+    sessions: &mut Vec<SessionView>,
+    section_by_session: &mut Vec<SectionId>,
+    section: SectionId,
+    matches: impl Fn(&SessionRow) -> bool,
+) {
+    let indices: Vec<usize> = sessions
+        .iter()
+        .enumerate()
+        .filter(|(index, session)| {
+            section_by_session[*index] == section
+                && session.nesting.depth == 0
+                && matches(&session.row)
+        })
+        .map(|(index, _)| index)
+        .collect();
+    if indices.len() < 2 {
+        return;
+    }
+    let Some(local) = indices.iter().copied().find(|&index| {
+        sessions[index]
+            .row
+            .key
+            .as_ref()
+            .is_some_and(|key| key.machine.is_local())
+    }) else {
+        return;
+    };
+    let anchor = indices[0];
+    if local == anchor {
+        return;
+    }
+    let end = subtree_end(sessions, local);
+    let moved: Vec<SessionView> = sessions.drain(local..end).collect();
+    let moved_sections: Vec<SectionId> = section_by_session.drain(local..end).collect();
+    for (offset, (session, section)) in moved.into_iter().zip(moved_sections).enumerate() {
+        sessions.insert(anchor + offset, session);
+        section_by_session.insert(anchor + offset, section);
+    }
+}
+
+/// Each computer's Ghostex AI row in the home entry reads that computer's name (Q5287 B):
+/// "MacBook Pro", "Hetzner" under the Ghostex AI header. The row keeps its session's own title
+/// in its tooltip.
+pub(crate) fn name_home_chief_rows(plans: &mut [super::groups::GroupPlan], inputs: &SidebarInputs) {
+    for plan in plans.iter_mut().filter(|plan| {
+        plan.kind == super::groups::GroupKind::Project
+            && plan.project.as_ref().is_some_and(|project| project.is_home)
+    }) {
+        for row in plan.rows.iter_mut().filter(|row| row.row.is_chief) {
+            let machine_id = row
+                .row
+                .key
+                .as_ref()
+                .and_then(|key| key.machine.remote_id())
+                .unwrap_or(LOCAL_MACHINE_ID)
+                .to_string();
+            let label = machine_label(inputs, &machine_id);
+            if row.row.display_title == label {
+                continue;
+            }
+            let mut named = (*row.row).clone();
+            named.title_tooltip = format!("{} on {label}", CHIEF_TITLE);
+            named.display_title = label;
+            row.row = std::sync::Arc::new(named);
+        }
+    }
+}
+
+/// What the Ghostex AI rows are called together (the home entry's header) and in a tooltip.
+pub const CHIEF_TITLE: &str = "Ghostex AI";
 
 fn fold_machine_kind(
     sessions: &mut Vec<SessionView>,

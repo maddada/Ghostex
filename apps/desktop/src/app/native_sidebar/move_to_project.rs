@@ -32,29 +32,45 @@ impl GhostexGpuiApp {
         else {
             return;
         };
-        // Offered on this computer's No project only (gx-core `no_project_moves`).
-        if key.machine.remote_id().is_some() {
-            return;
-        }
+        // A connected computer's chat moves on that computer's gxserver.
+        let remote = match key.machine.remote_id() {
+            Some(machine_id) => match self.gpui_remote_gxserver_request_target(machine_id) {
+                Some(target) => Some(target),
+                None => {
+                    self.dispatch_gpui_workspace_action_toast(
+                        "error",
+                        "Couldn't move the chat",
+                        "That computer isn't connected.",
+                        cx,
+                    );
+                    return;
+                }
+            },
+            None => None,
+        };
+        let machine = key.machine.clone();
         let params = json!({
             "projectId": key.project_id,
             "sessionId": key.session_id,
             "targetProjectId": target_project_id,
         });
         cx.spawn(async move |this, cx| {
-            let result = gx_rpc(None, "/api/moveSessionToProject", params).await;
+            let result = gx_rpc(remote, "/api/moveSessionToProject", params).await;
             let moved = match result {
                 Ok(answer) => {
                     let body = answer.get("result").unwrap_or(&answer);
                     let session = &body["session"];
                     match (session["projectId"].as_str(), session["sessionId"].as_str()) {
-                        (Some(project_id), Some(session_id)) => {
-                            Ok(SessionKey::local(project_id, session_id))
-                        }
-                        _ => Ok(SessionKey::local(
-                            target_project_id.as_str(),
-                            key.session_id.as_str(),
-                        )),
+                        (Some(project_id), Some(session_id)) => Ok(SessionKey {
+                            machine: machine.clone(),
+                            project_id: project_id.to_string(),
+                            session_id: session_id.to_string(),
+                        }),
+                        _ => Ok(SessionKey {
+                            machine: machine.clone(),
+                            project_id: target_project_id.clone(),
+                            session_id: key.session_id.clone(),
+                        }),
                     }
                 }
                 Err(error) => Err(error.message),

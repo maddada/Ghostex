@@ -30,8 +30,7 @@ mod welcome;
 pub(crate) use endpoint::{handle_chief_http, CHIEF_ENDPOINT};
 pub(crate) use head::settle_principal;
 pub(crate) use home::{
-    home_project, is_help_home_project, is_home_folder, is_home_project, lists_under_main_hub,
-    presents_as_home,
+    is_help_home_project, is_home_folder, is_home_project, lists_under_main_hub, presents_as_home,
 };
 pub(crate) use model::{follow_agent_switch, remember_hand_pick};
 pub(crate) use presentation::{

@@ -481,7 +481,10 @@ fn move_to_project_item(
     stale: bool,
 ) -> Option<MenuItem> {
     let moves = moves.filter(|moves| !stale && !moves.projects.is_empty())?;
-    if row.session_kind.as_deref() == Some("terminal") {
+    // Rows draw agents and terminals alike as "terminal" (rows.rs `session_kind`); a chat is the
+    // one with an agent.
+    let is_chat = row.is_native_chat || row.agent_icon.is_some();
+    if !is_chat {
         return None;
     }
     let children = moves
@@ -495,7 +498,7 @@ fn move_to_project_item(
             )
         })
         .collect();
-    Some(MenuItem::submenu("Move to project", "folders", children).with_page())
+    Some(layout_submenu("moveToProject", children).with_page())
 }
 
 /// Move to New Group, or the Move to Group page once the project has a group to move to or
@@ -1049,13 +1052,11 @@ impl Places<'_, '_> {
                 .collect(),
             "makeCoordinator" => make_coordinator_rows(id, row, group, caps, in_box),
             "postponeBy" => postpone_rows(id, row, caps),
+            "moveToProject" => move_to_project_item(id, row, input.group_moves, group.is_stale)
+                .into_iter()
+                .collect(),
             "moveToGroup" if group.can_create_session_group => {
-                let mut rows: Vec<MenuItem> =
-                    move_to_project_item(id, row, input.group_moves, group.is_stale)
-                        .into_iter()
-                        .collect();
-                rows.push(move_to_group_item(id, input.group_moves, group.is_stale));
-                rows
+                vec![move_to_group_item(id, input.group_moves, group.is_stale)]
             }
             "sleepBelow" | "closeBelow" => below_rows(input.below, place),
             "close" if !self.in_strip(HoverAction::Close) => {

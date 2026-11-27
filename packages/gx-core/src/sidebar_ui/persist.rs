@@ -342,8 +342,9 @@ fn flag_map(keys: &BTreeSet<String>) -> Value {
     )
 }
 
-/// `normalizeProjectSessionSectionCollapseState`: Pinned, Sessions, and Autopilot (when
-/// collapsed) are stored; every other heading takes the default the sidebar starts with.
+/// `normalizeProjectSessionSectionCollapseState`: Pinned, Sessions, and Autopilot (when open)
+/// are stored; every other heading takes the default the sidebar starts with. Autopilot is
+/// collapsed unless stored open (Q5289, inputs.rs `SectionCollapse`).
 fn normalize_section_collapse(value: Option<&Value>) -> BTreeMap<String, SectionCollapse> {
     let Some(Value::Object(object)) = value else {
         return BTreeMap::new();
@@ -357,7 +358,7 @@ fn normalize_section_collapse(value: Option<&Value>) -> BTreeMap<String, Section
                 storage_id.clone(),
                 SectionCollapse {
                     pinned: flag("pinned"),
-                    autopilot: flag("autopilot"),
+                    autopilot: state.get("autopilot") != Some(&Value::Bool(false)),
                     sessions: flag("sessions"),
                     ..SectionCollapse::default()
                 },
@@ -367,12 +368,12 @@ fn normalize_section_collapse(value: Option<&Value>) -> BTreeMap<String, Section
 }
 
 /// Persists one group's section collapse flags: `pinned` and `sessions` always, plus `autopilot`
-/// only when collapsed so envelopes without a collapsed Autopilot heading stay byte-identical.
+/// only when open (it starts collapsed), so envelopes of groups without one stay byte-identical.
 pub(super) fn persisted_group_section_collapse(sections: &SectionCollapse) -> Value {
     let mut object = Map::new();
     object.insert("pinned".to_string(), Value::Bool(sections.pinned));
-    if sections.autopilot {
-        object.insert("autopilot".to_string(), Value::Bool(true));
+    if !sections.autopilot {
+        object.insert("autopilot".to_string(), Value::Bool(false));
     }
     object.insert("sessions".to_string(), Value::Bool(sections.sessions));
     Value::Object(object)
@@ -384,7 +385,10 @@ fn persisted_section_collapse(state: &BTreeMap<String, SectionCollapse>) -> Valu
         state
             .iter()
             .map(|(storage_id, sections)| {
-                (storage_id.clone(), persisted_group_section_collapse(sections))
+                (
+                    storage_id.clone(),
+                    persisted_group_section_collapse(sections),
+                )
             })
             .collect(),
     )

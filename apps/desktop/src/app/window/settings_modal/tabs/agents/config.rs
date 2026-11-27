@@ -372,8 +372,8 @@ impl AgentsTab {
                 self,
                 p,
                 SHOW_ON_ALL_SPACES,
-                RowSpec::new("Show Main Hub on all Spaces").description(
-                    "Show Main Hub and your home folder's sessions at the top of every Space. Off, they stay at the top of the Space you moved them to.",
+                RowSpec::new("Show Ghostex AI on all Spaces").description(
+                    "Show Ghostex AI at the top of every Space. Off, it stays at the top of the Space you moved them to.",
                 ),
                 values.bool(SHOW_ON_ALL_SPACES),
                 cx,
@@ -385,7 +385,7 @@ impl AgentsTab {
                 p,
                 CONFIRM_NEW_CHAT,
                 RowSpec::new("Ask before New Chat").description(
-                    "Ask before New Chat or Change Agent starts a new chat with Ghostex AI. Your earlier chats stay in Main Hub either way.",
+                    "Ask before New Chat or Change Agent starts a new chat with Ghostex AI. Your earlier chats stay under Ghostex AI either way.",
                 ),
                 values.bool(CONFIRM_NEW_CHAT),
                 cx,

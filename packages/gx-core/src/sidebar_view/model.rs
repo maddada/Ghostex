@@ -819,6 +819,9 @@ impl SidebarViewModel {
             merged_project_rows = outcome.rows;
         }
 
+        // Each computer's Ghostex AI row reads that computer's name (`chief.rs`).
+        super::chief::name_home_chief_rows(&mut plans, effective);
+
         // Every coordinator's threads, wherever they are drawn: a worktree thread is in its
         // worktree's group, not its coordinator's.
         let thread_tallies = tally_threads(

@@ -46,7 +46,7 @@ impl GpuiGbotTeamModalWindow {
                     &p,
                     format!("Imported {}", text_of(&answer, "name")),
                     Some(format!(
-                        "{} added under Ghostex AI in Main Hub.",
+                        "{} added under Ghostex AI.",
                         plural(bots.len(), "GBot", "GBots")
                     )),
                 )];

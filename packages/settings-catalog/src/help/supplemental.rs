@@ -333,7 +333,7 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         section: "official",
         section_title: "Built-in",
         title: "GBots",
-        subtitle: "Turn GBots on or off: your own team of bots under Ghostex AI in Main Hub, running on your Claude Code or Codex. Off by default.",
+        subtitle: "Turn GBots on or off: your own team of bots under Ghostex AI, running on your Claude Code or Codex. Off by default.",
         options: &[],
         user_only: false,
     },

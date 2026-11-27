@@ -22,7 +22,7 @@ pub(crate) const NEW_GBOT_MODAL_WIDTH: f32 = 540.0;
 pub(crate) const NEW_GBOT_MODAL_INITIAL_HEIGHT: f32 = 670.0;
 
 const TITLE: &str = "New GBot";
-const DESCRIPTION: &str = "A GBot keeps its name, instructions and memory in every chat. It runs on your own agent and sits under Ghostex AI in Main Hub.";
+const DESCRIPTION: &str = "A GBot keeps its name, instructions and memory in every chat. It runs on your own agent and sits under Ghostex AI.";
 const FIELD_NAME: &str = "Name";
 const NAME_PLACEHOLDER: &str = "e.g. Researcher";
 const FIELD_ROLE: &str = "Role";

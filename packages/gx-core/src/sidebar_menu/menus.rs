@@ -670,14 +670,26 @@ impl<'a> SidebarMenus<'a> {
         current: &GroupView,
         row: &SessionRow,
     ) -> Option<session::SessionGroupMoves> {
-        let project = row.key.as_ref()?.project_key();
+        // Move to project's list stands on its own: a No project row offers it even where Move to
+        // Group has nothing to offer.
+        let projects = self.no_project_moves(current);
+        let only_projects = |projects: Vec<(String, String)>| {
+            (!projects.is_empty()).then(|| session::SessionGroupMoves {
+                project_list_id: current.core.group_id.clone(),
+                groups: Vec::new(),
+                projects,
+            })
+        };
+        let Some(project) = row.key.as_ref().map(|key| key.project_key()) else {
+            return only_projects(projects);
+        };
         let project_list_id = project.to_sidebar_group_id();
         let current_id = current.core.group_id.as_str();
         let of_project = |group_id: &str| {
             parse_workspace_subgroup_id(group_id).is_some_and(|(owner, _)| owner == project)
         };
         if current_id != project_list_id && !of_project(current_id) {
-            return None;
+            return only_projects(projects);
         }
         let groups = self
             .view
@@ -693,28 +705,35 @@ impl<'a> SidebarMenus<'a> {
         Some(session::SessionGroupMoves {
             project_list_id,
             groups,
-            projects: self.no_project_moves(current),
+            projects,
         })
     }
 
-    /// Where Move to project can take a chat of `current`: this computer's own projects in the
-    /// list, without No project, Main Hub, Ghostex's system projects, bots and worktrees. Empty
-    /// unless `current` is this computer's No project.
+    /// Where Move to project can take a chat of `current`: the projects of the same computer in
+    /// the list, without No project, Ghostex AI (the home), bots, GBots and worktrees, as that
+    /// computer's own project ids. Empty unless `current` is a No project.
     fn no_project_moves(&self, current: &GroupView) -> Vec<(String, String)> {
-        let is_local_no_project = current.core.remote_machine.is_none()
-            && current
-                .core
-                .project_context
-                .as_ref()
-                .is_some_and(|project| project.is_no_project);
-        if !is_local_no_project {
+        let is_no_project = current
+            .core
+            .project_context
+            .as_ref()
+            .is_some_and(|project| project.is_no_project);
+        if !is_no_project {
             return Vec::new();
         }
+        let machine_of = |group: &GroupView| {
+            group
+                .core
+                .remote_machine
+                .as_ref()
+                .map(|remote| remote.machine_id.clone())
+        };
+        let machine = machine_of(current);
         let mut projects: Vec<(String, String)> = self
             .view
             .groups
             .iter()
-            .filter(|group| group.core.remote_machine.is_none())
+            .filter(|group| machine_of(group) == machine)
             .filter_map(|group| {
                 let project = group.core.project_context.as_ref()?;
                 let own = !project.is_no_project
@@ -722,7 +741,12 @@ impl<'a> SidebarMenus<'a> {
                     && project.bot_profile.is_none()
                     && project.gbot.is_none()
                     && project.worktree.is_none();
-                own.then(|| (project.project_id.clone(), group.core.title.clone()))
+                // A connected computer's project is named by its id on that computer.
+                let project_id = match &group.core.remote_machine {
+                    Some(remote) => remote.project_id.clone()?,
+                    None => project.project_id.clone(),
+                };
+                own.then(|| (project_id, group.core.title.clone()))
             })
             .collect();
         projects.dedup_by(|a, b| a.0 == b.0);
