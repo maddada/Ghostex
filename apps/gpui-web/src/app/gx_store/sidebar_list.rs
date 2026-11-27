@@ -117,6 +117,22 @@ impl SidebarList {
         } else if unavailable.since_ms.is_none() {
             unavailable.since_ms = Some(now_ms);
         }
+        // CDXC:Chief 2026-11-27 DECISION: User (Q5287 B): each Ghostex AI row reads the computer's
+        // name, never "Local". The page's one computer tab carries the serving computer's name from
+        // its handshake (host_name.rs), as the desktop's tab carries its own (remote_clients.rs).
+        let name = crate::host_name::local_computer_name();
+        let machines = &mut self.last_inputs.host.machines;
+        if !name.is_empty() && machines.first().is_none_or(|tab| tab.label != name) {
+            *machines = vec![ghostex_gx_core::MachineTabInput {
+                machine_id: ghostex_gx_core::LOCAL_MACHINE_ID.to_string(),
+                label: name,
+                short_name: String::new(),
+                state: ghostex_gx_core::MACHINE_STATE_CONNECTED.to_string(),
+                message: None,
+                fed: true,
+                this_computer: false,
+            }];
+        }
         // One list for every machine unless Separate by machine (gx-core `sidebar_view/merged.rs`);
         // the page has only this computer, so it merges the clones of one repository.
         self.last_inputs.host.merge_machines =
