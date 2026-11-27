@@ -78,6 +78,14 @@ pub(super) fn to_cli_session(
     insert_js(&mut map, "createdAt", &[p("createdAt"), s("createdAt")]);
     insert_js(&mut map, "isDraft", &[p("isDraft")]);
     insert_js(&mut map, "globalRef", &[s("globalRef")]);
+    // The refs it had before a move to another project, which a selector still names
+    // (server/src/no_project/moved_refs.rs).
+    if let Some(refs) = s("runtimeSettings")
+        .and_then(|runtime| runtime.get("movedFromRefs"))
+        .filter(|refs| refs.is_array())
+    {
+        map.insert("previousGlobalRefs".to_string(), refs.clone());
+    }
     insert_js(&mut map, "groupId", &[p("groupId")]);
     insert_js(&mut map, "displayTitle", &[display_title]);
     insert_js(

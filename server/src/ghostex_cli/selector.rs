@@ -242,6 +242,16 @@ fn id_rule_matches<'a>(selector: &str, sessions: &[&'a Value]) -> Option<Vec<&'a
     {
         return Some(vec![*exact_global_ref]);
     }
+    // A session moved to another project still answers to the ref it had before
+    // (server/src/no_project/moved_refs.rs).
+    if let Some(moved) = sessions.iter().find(|session| {
+        session
+            .get("previousGlobalRefs")
+            .and_then(Value::as_array)
+            .is_some_and(|refs| refs.iter().any(|old| old.as_str() == Some(selector)))
+    }) {
+        return Some(vec![*moved]);
+    }
     if let Some((project_id, session_id)) = selector.split_once(':') {
         let routed: Vec<&Value> = sessions
             .iter()

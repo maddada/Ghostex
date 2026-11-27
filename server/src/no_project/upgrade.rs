@@ -104,7 +104,7 @@ pub(super) fn move_main_hub_chats(
         if moves.is_empty() {
             continue;
         }
-        match rekey_sessions(db, &home, &target, &moves) {
+        match rekey_sessions(db, &state.metadata.server_id, &home, &target, &moves) {
             Ok(()) => {
                 eprintln!(
                     "Ghostex moved {} of Main Hub's sessions to No project.",
@@ -188,6 +188,7 @@ pub(super) fn session_id_taken(db: &Connection, project_id: &str, session_id: &s
 /// that are free in `to` ([`session_id_taken`]).
 pub(super) fn rekey_sessions(
     db: &Connection,
+    server_id: &str,
     from: &str,
     to: &str,
     moves: &[(String, String)],
@@ -216,7 +217,11 @@ pub(super) fn rekey_sessions(
         Ok(())
     })();
     match result {
-        Ok(()) => db.execute_batch("COMMIT;").map_err(error),
+        Ok(()) => {
+            db.execute_batch("COMMIT;").map_err(error)?;
+            super::moved_refs::record(db, server_id, from, to, moves);
+            Ok(())
+        }
         Err(failure) => {
             let _ = db.execute_batch("ROLLBACK;");
             Err(error(failure))

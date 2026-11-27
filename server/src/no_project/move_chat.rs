@@ -223,7 +223,13 @@ fn move_in_place(
             (old, new)
         })
         .collect();
-    rekey_sessions(&db, &plan.project_id, &target_id, &moves)?;
+    rekey_sessions(
+        &db,
+        &state.metadata.server_id,
+        &plan.project_id,
+        &target_id,
+        &moves,
+    )?;
     let new_session_id = moves[0].1.clone();
     for (index, (_, id)) in moves.iter().enumerate() {
         let Some(row) = repository.get_session(&target_id, id)? else {

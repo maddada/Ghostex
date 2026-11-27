@@ -539,6 +539,9 @@ async fn route_http_unboxed(
     };
     let mut body_json = body_json;
     drop_unrelayed_user_send(&caller, &parts.headers, &mut body_json);
+    // A session moved to another project keeps answering to its old project + session pair
+    // (no_project/moved_refs.rs).
+    crate::no_project::follow_moved_refs(&mut body_json);
 
     if endpoint.requires_protocol_version && token_extension_id.is_none() {
         let protocol_version = read_protocol_version(&parts.headers, &parts.uri, Some(&body_json));

@@ -939,6 +939,8 @@ fn to_mobile_session_summary(session: &Value) -> Value {
     // on other computers, which the phone's Unified list nests under it (cli_session.rs), each named
     // by the `globalRef` its own computer gives it, so that computer's summary carries it too.
     insert_js(&mut map, "globalRef", &[s("globalRef")]);
+    // A moved session's old refs, which the CLI's selector still matches (no_project/moved_refs.rs).
+    insert_js(&mut map, "previousGlobalRefs", &[s("previousGlobalRefs")]);
     insert_js(
         &mut map,
         "coordinatorRemoteThreads",
