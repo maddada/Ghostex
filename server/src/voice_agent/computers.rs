@@ -86,9 +86,13 @@ struct Listing {
     /// Its open sessions, waiting ones first, threads not marked.
     sessions: Vec<SessionInfo>,
     projects: Vec<ProjectInfo>,
-    /// Which sessions are threads, from its presentation snapshot (`hierarchy`): `None` until
-    /// asked, `Some(None)` when it did not come in time.
+    /// When its sessions and projects were asked.
+    read_at: Instant,
+    /// Which sessions are threads, from its presentation snapshot (`hierarchy`), of the sessions
+    /// above: `None` until asked, `Some(None)` when it did not come in time.
     threads: Option<Option<Roles>>,
+    /// When the answer in `threads` was asked.
+    threads_asked: Option<Instant>,
     /// Without an answer to that, what its last answer said of the sessions still open (`known`).
     last_known: Option<Roles>,
 }
@@ -190,7 +194,21 @@ fn cache() -> std::sync::MutexGuard<'static, Cache> {
 /// `FRESH_FOR` cache, whose entries are read again. A thread that opened since the last answer, or
 /// on a computer that never answered, cannot be told from a session of its own and is still
 /// listed and announced as one (Help says so).
-type Known = HashMap<(String, String), Roles>;
+///
+/// CDXC:VoiceMode 2026-11-27 WHY: two readers can ask the same computer at once, and a slow answer
+/// that still named a thread arrived after a newer one that confirmed its unlink, replaced it, and
+/// the next outage made that open session a thread again. Answers are ordered by when they were
+/// asked: an older one replaces neither this nor the cached answer, and a list read before the kept
+/// answer was asked does not trim it. An older gxserver ignores `onlySessions` and names closed
+/// pinned threads too (64 links kept for one open thread in the review's replay), so an answer is
+/// trimmed to the sessions its list holds open before it is kept.
+type Known = HashMap<(String, String), Remembered>;
+
+/// A computer's last threads answer, and when it was asked.
+struct Remembered {
+    asked: Instant,
+    roles: Roles,
+}
 
 fn known() -> std::sync::MutexGuard<'static, Known> {
     static KNOWN: LazyLock<Mutex<Known>> = LazyLock::new(Default::default);
@@ -274,24 +292,46 @@ async fn listing(
     let mut listing = outcome?;
     if threads == Threads::Wanted {
         if listing.threads.is_none() {
+            let asked = Instant::now();
             let snapshot = hierarchy(state, &listing.computer, &listing.sessions).await;
-            listing.threads =
-                Some(snapshot.map(|snapshot| Roles::of(&listing.computer, &snapshot)));
-            // Kept with the answers it is about, unless they were read again meanwhile.
+            listing.threads = Some(snapshot.map(|snapshot| {
+                let mut roles = Roles::of(&listing.computer, &snapshot);
+                roles.retain_open(&listing.sessions);
+                roles
+            }));
+            listing.threads_asked = Some(asked);
+            // Kept with the answers it is about, unless they were read again meanwhile or a
+            // newer threads answer is kept with them.
             if let Some((cached_at, Ok(cached))) = cache().get_mut(&key) {
-                if *cached_at == at {
+                if *cached_at == at
+                    && cached
+                        .threads_asked
+                        .map_or(true, |kept| kept < asked)
+                {
                     cached.threads = listing.threads.clone();
+                    cached.threads_asked = Some(asked);
                 }
             }
         }
-        match &listing.threads {
-            Some(Some(roles)) => {
-                known().insert(key, roles.clone());
+        match (&listing.threads, listing.threads_asked) {
+            (Some(Some(roles)), Some(asked)) => {
+                let mut known = known();
+                if known.get(&key).map_or(true, |kept| kept.asked < asked) {
+                    known.insert(
+                        key,
+                        Remembered {
+                            asked,
+                            roles: roles.clone(),
+                        },
+                    );
+                }
             }
             _ => {
-                if let Some(roles) = known().get_mut(&key) {
-                    roles.retain_open(&listing.sessions);
-                    listing.last_known = Some(roles.clone());
+                if let Some(kept) = known().get_mut(&key) {
+                    if listing.read_at > kept.asked {
+                        kept.roles.retain_open(&listing.sessions);
+                    }
+                    listing.last_known = Some(kept.roles.clone());
                 }
             }
         }
@@ -305,6 +345,7 @@ async fn read(state: &Arc<AppState>, computer: &ConnectedComputer) -> Result<Lis
         server_id: computer.server_id.clone(),
         name: computer.name.clone(),
     };
+    let read_at = Instant::now();
     let (rows, projects) = tokio::join!(
         call(
             state,
@@ -322,7 +363,10 @@ async fn read(state: &Arc<AppState>, computer: &ConnectedComputer) -> Result<Lis
         ),
     );
     match (rows, projects) {
-        (Ok(rows), Ok(projects)) => Ok(read_listing(&owner, &rows, &projects)),
+        (Ok(rows), Ok(projects)) => Ok(Listing {
+            read_at,
+            ..read_listing(&owner, &rows, &projects)
+        }),
         // This computer's relay did not answer in time: the tunnel to it hangs.
         (Err(error), _) | (_, Err(error)) if error.starts_with(loopback::NO_ANSWER) => {
             Err(format!("{} didn't answer in time.", computer.name))
@@ -369,7 +413,8 @@ async fn hierarchy(
 }
 
 /// Another computer's `listSessions` and `listProjects` answers as the voice agent's rows, each
-/// marked with `computer`, waiting ones first; which are threads is not asked yet.
+/// marked with `computer`, waiting ones first; which are threads is not asked yet. `read_at` is
+/// now; `read` sets when they were asked.
 fn read_listing(computer: &Computer, rows: &Value, projects: &Value) -> Listing {
     let projects: Vec<ProjectInfo> = projects
         .get("projects")
@@ -398,7 +443,9 @@ fn read_listing(computer: &Computer, rows: &Value, projects: &Value) -> Listing 
         computer: computer.clone(),
         sessions: sessions::sorted(rows),
         projects,
+        read_at: Instant::now(),
         threads: None,
+        threads_asked: None,
         last_known: None,
     }
 }
