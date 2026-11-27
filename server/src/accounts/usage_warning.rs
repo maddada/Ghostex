@@ -153,21 +153,39 @@ fn log(state: &AppState, level: LogLevel, event: &str, error: Option<String>, de
 
 /// The coordinator's card, when it has one showing (`resolve_session_chat_terminal_notice`).
 pub(crate) fn card(project_id: &str, session_id: &str) -> Option<SessionChatTerminalNotice> {
-    let key = (project_id.to_string(), session_id.to_string());
-    match simulated().lock().ok()?.get(&key).cloned() {
-        Some(Simulated::Warning(card)) => return Some(warning_notice(card)),
-        Some(Simulated::NoRoom(_)) => {
-            return Some(SessionChatTerminalNotice::new(
+    let card = cards()
+        .lock()
+        .ok()?
+        .get(&(project_id.to_string(), session_id.to_string()))?
+        .clone();
+    Some(warning_notice(card))
+}
+
+/// A simulated card (`simulate`), which takes its session's card over whatever else it would
+/// show: it exists only when a test asked for it, and a test server's agent has no login, so its
+/// own start-failure card would otherwise always win.
+pub(crate) fn simulated_card(
+    project_id: &str,
+    session_id: &str,
+) -> Option<SessionChatTerminalNotice> {
+    match simulated()
+        .lock()
+        .ok()?
+        .get(&(project_id.to_string(), session_id.to_string()))?
+        .clone()
+    {
+        Simulated::Warning(card) => Some(warning_notice(card)),
+        Simulated::NoRoom(wait) => {
+            let mut notice = SessionChatTerminalNotice::new(
                 crate::session_chat_notice::SESSION_CHAT_NOTICE_USAGE_LIMIT,
                 SessionChatTerminalNoticeSeverity::Warning,
                 SessionChatTerminalNoticeSource::Watchdog,
                 "You've hit your limit",
-            ))
+            );
+            notice.account_wait = Some(wait);
+            Some(notice)
         }
-        None => {}
     }
-    let card = cards().lock().ok()?.get(&key)?.clone();
-    Some(warning_notice(card))
 }
 
 fn warning_notice(card: Card) -> SessionChatTerminalNotice {
@@ -208,18 +226,6 @@ enum Simulated {
 fn simulated() -> &'static Mutex<HashMap<(String, String), Simulated>> {
     static SIMULATED: OnceLock<Mutex<HashMap<(String, String), Simulated>>> = OnceLock::new();
     SIMULATED.get_or_init(Default::default)
-}
-
-/// The simulated no-room card's `accountWait` (watchdog_store.rs, after `limit_wait::notice_wait`).
-pub(crate) fn simulated_wait(project_id: &str, session_id: &str) -> Option<Value> {
-    match simulated()
-        .lock()
-        .ok()?
-        .get(&(project_id.to_string(), session_id.to_string()))?
-    {
-        Simulated::NoRoom(wait) => Some(wait.clone()),
-        Simulated::Warning(_) => None,
-    }
 }
 
 /// Made-up Claude accounts: #1 (the session's) at `used`% of its week, #2 with room but manual

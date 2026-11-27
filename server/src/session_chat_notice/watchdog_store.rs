@@ -279,6 +279,10 @@ pub fn resolve_session_chat_terminal_notice(
         !session_chat_notice_hidden(project_id, session_id, notice)
             && crate::session_chat_notice_progress::visible(project_id, session_id, notice)
     };
+    if let Some(simulated) = crate::accounts::usage_warning::simulated_card(project_id, session_id)
+    {
+        return Some(simulated);
+    }
     let screen = screen.filter(visible);
     let failed_send = crate::session_chat_send_failure::send_failure_card(project_id, session_id);
     // A failed send is the card unless the agent's screen says something only it can answer (a
@@ -303,8 +307,7 @@ pub fn resolve_session_chat_terminal_notice(
     .or_else(|| crate::accounts::usage_warning::card(project_id, session_id).filter(visible))
     .map(|mut notice| {
         if notice.kind == SESSION_CHAT_NOTICE_USAGE_LIMIT {
-            notice.account_wait = crate::accounts::limit_wait::notice_wait(project_id, session_id)
-                .or_else(|| crate::accounts::usage_warning::simulated_wait(project_id, session_id));
+            notice.account_wait = crate::accounts::limit_wait::notice_wait(project_id, session_id);
             if notice.account_wait.is_none() {
                 crate::accounts::quota_wait::attach_to_notice(project_id, session_id, &mut notice);
             }
