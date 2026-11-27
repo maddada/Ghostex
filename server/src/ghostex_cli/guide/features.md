@@ -5219,9 +5219,14 @@ my phone?"). Each computer's agent is its own row, named by the computer and
 drawn with its computer icon, this computer first.
 
 - **Ghostex AI's header**: click it to fold or unfold, like any project. Right-click
-  for Ghostex AI's settings (Show on All Spaces, Ask Before New Chat, the folders
-  agents can't read) above the project's own menu (Move to Space, New Terminal
-  and the rest). It sits at the top of the Space it is in, or of every Space with
+  it, or use its ⋯ button, for Ghostex AI's settings (Show on All Spaces, Ask
+  Before New Chat, the folders agents can't read) above the project's own menu
+  (Move to Space, History and the rest). It has no New chat, Terminal or
+  Coordinator. A chat without a project starts from **New session** or No
+  project's **New Chat**, a coordinator from the sidebar's menu (New > Coordinator,
+  then No project in the draft's project choice), and a terminal in the home
+  folder with `ghostex create-session --no-project` (`ghostex create-agent
+  --no-project` starts a chat). It sits at the top of the Space it is in, or of every Space with
   **Show Ghostex AI on all Spaces** (Settings > Agents > Home folder).
 - **Autopilot**: Autopilot's supervisor chats are in their own Autopilot section
   under Ghostex AI, folded until you open it.

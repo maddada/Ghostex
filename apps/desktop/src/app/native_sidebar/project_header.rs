@@ -234,8 +234,28 @@ impl GhostexGpuiApp {
                 })
                 .into_any_element()
         };
-        // Borrowed, not copied: the buttons are drawn only while the header is hovered.
-        let actions = &group.header_actions;
+        // Borrowed, not copied: the buttons are drawn only while the header is hovered. Ghostex AI's
+        // header has only its ⋯ (gx-core sidebar_menu/header.rs, Q5299), which opens the same menu
+        // as a right click, Ghostex AI's own items first.
+        let home_actions;
+        let actions = match &home {
+            Some(_) if hovered => {
+                home_actions = group
+                    .header_actions
+                    .iter()
+                    .map(|item| match item.get("children") {
+                        Some(_) => {
+                            let mut item = item.clone();
+                            item["children"] = menu.as_ref().clone();
+                            item
+                        }
+                        None => item.clone(),
+                    })
+                    .collect::<Vec<Value>>();
+                &home_actions
+            }
+            _ => group.header_actions.as_ref(),
+        };
         // Where this header (or its pinned copy) was painted: its menus hang below it (menus.rs).
         let header_bounds = Rc::new(Cell::new(None::<gpui::Bounds<gpui::Pixels>>));
         // CDXC:Projects 2026-09-18 DECISION:

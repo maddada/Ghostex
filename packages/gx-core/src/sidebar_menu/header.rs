@@ -112,8 +112,8 @@ pub fn project_header_actions(
     }
     // CDXC:Projects 2026-11-27 DECISION:
     // User (Q5282 A): No project holds chats only, so its header has one New Chat button and no
-    // menu of other session kinds (terminals, coordinators and browsers start in a real project or
-    // in Main Hub).
+    // menu of other session kinds (terminals, coordinators and browsers start in a real project, or
+    // without one from New session and the CLI).
     if project.is_no_project {
         return vec![MenuItem::row(
             "New Chat",
@@ -126,6 +126,14 @@ pub fn project_header_actions(
             ),
         )
         .with_hotkey("createAgentSession")];
+    }
+    // CDXC:Chief 2026-11-27 DECISION:
+    // User (Q5299): the Ghostex AI header (the home project's) keeps only what belongs to Ghostex AI
+    // itself: no New chat, Terminal or Coordinator, nor any other row that starts work in the home
+    // folder (Browser, Add Worktree, a ticket, pinned Actions). No project's menu stays New Chat and
+    // Hide; it gets none of these either.
+    if project.is_home {
+        return Vec::new();
     }
     // Merged project header button: one split button with an outlined chat bubble icon.
     // Primary click starts a new chat draft in this project; the chevron opens the menu with
@@ -228,6 +236,18 @@ pub fn project_header_rows(
             new_chat: project_header_actions(group, settings, host)
                 .into_iter()
                 .next(),
+            ..ProjectHeaderRows::default()
+        };
+    }
+    // Ghostex AI's header starts no work in the home folder (Q5299, `project_header_actions`); the
+    // project's History stays.
+    if project.is_home {
+        return ProjectHeaderRows {
+            history: Some(entry_row(
+                "history",
+                false,
+                MenuCommand::project_action(group_id, "history", None),
+            )),
             ..ProjectHeaderRows::default()
         };
     }

@@ -114,7 +114,15 @@ impl GhostexGpuiApp {
                 message,
                 agent_id,
                 file_paths,
-            } => self.changes_merge_into_main(&project_key, message, agent_id, file_paths, cx),
+                repo_count,
+            } => self.changes_merge_into_main(
+                &project_key,
+                message,
+                agent_id,
+                file_paths,
+                repo_count,
+                cx,
+            ),
             ChangesRequest::Comment { text, pill, done } => {
                 let chat = self
                     .open_session
