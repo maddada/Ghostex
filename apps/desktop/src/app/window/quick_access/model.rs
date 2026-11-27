@@ -70,6 +70,15 @@ pub(crate) enum QuickAccessIcon {
     None,
 }
 
+/// A session row's matched chat words: whose, the one-line snippet, and the search words in it.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub(crate) struct QuickAccessChatMatch {
+    pub(crate) who: String,
+    pub(crate) text: String,
+    pub(crate) highlights: Vec<[usize; 2]>,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub(crate) enum QuickAccessRow {
@@ -119,6 +128,12 @@ pub(crate) enum QuickAccessRow {
         sleeping: bool,
         #[serde(default)]
         can_activate: bool,
+        /// Where the search words are in `title` (byte ranges).
+        #[serde(default)]
+        title_highlights: Vec<[usize; 2]>,
+        /// The chat words that matched the search (gx-core quick_access/sessions.rs).
+        #[serde(default)]
+        chat_match: Option<QuickAccessChatMatch>,
     },
     #[serde(rename_all = "camelCase")]
     Prompt {

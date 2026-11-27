@@ -194,6 +194,7 @@ impl GhostexGpuiApp {
             let mut items: Vec<Value> = Vec::new();
             let mut cursor: Option<String> = None;
             let mut projects: Vec<Value> = Vec::new();
+            let mut chat_matches: Vec<Value> = Vec::new();
             for scoped in &scoped {
                 let params = projects_lifted::gpui_previous_sessions_list_params(scoped);
                 let Some(result) = gx_rpc(None, "/api/listPreviousSessions", params).await.ok()
@@ -210,6 +211,9 @@ impl GhostexGpuiApp {
                             projects_lifted::gpui_gxserver_search_result_to_previous_session_item,
                         ),
                 );
+                chat_matches.extend(projects_lifted::gpui_chat_matches_from_result(
+                    &result, None,
+                ));
                 if cursor.is_none() {
                     cursor = result
                         .get("cursor")
@@ -233,6 +237,9 @@ impl GhostexGpuiApp {
                 items,
             );
             payload["projects"] = json!(projects);
+            if request.chat_search {
+                payload["chatMatches"] = json!(chat_matches);
+            }
             if !unreachable.is_empty() {
                 payload["unreachableMachineIds"] = json!(unreachable);
             }

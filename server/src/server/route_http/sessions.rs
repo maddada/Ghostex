@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 use crate::{
     agents::{apply_created_session_identity, create_agent_session_params_for_project},
     domain::{read_optional_project_id, read_project_id, read_session_id, DomainStateError},
-    presentation::{list_previous_sessions, list_session_fork_branches},
+    presentation::{list_previous_sessions_with_chat_matches, list_session_fork_branches},
     session_lifecycle,
 };
 
@@ -1083,7 +1083,17 @@ pub(super) async fn route_sessions_http(
                                 .and_then(Value::as_bool)
                                 == Some(true),
                         );
-                        list_previous_sessions(db, server_id, params)
+                        let chat_matches = crate::chat_search::matches_for_sessions_list(
+                            &worker_state,
+                            db,
+                            params,
+                        );
+                        list_previous_sessions_with_chat_matches(
+                            db,
+                            server_id,
+                            params,
+                            &chat_matches,
+                        )
                     },
                 )
             })

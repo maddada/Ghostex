@@ -90,11 +90,6 @@ const SIDEBAR_MESSAGE_COMMANDS: &[(&str, &str, &str)] = &[
         "All Automations",
     ),
     (
-        "searchByText",
-        "Search by Text Find Prompts previous sessions history gx f",
-        "Find Prompts",
-    ),
-    (
         "extensions",
         "Extensions store installed add-ons official built-in features components VS Code code-server CEF gxserver Beads bd runtimes",
         "Extension Store",
@@ -120,9 +115,6 @@ fn sidebar_message(command_id: &str) -> Value {
     match command_id {
         "quickBrowserTab" => json!({ "type": "openBrowserChat" }),
         "automations" => json!({ "type": "openAutomationsPage" }),
-        "searchByText" => {
-            json!({ "actionId": "openFindPrompts", "type": "runGhostexHotkeyAction" })
-        }
         "extensions" => json!({ "actionId": "openExtensions", "type": "runGhostexHotkeyAction" }),
         "openCurrentProjectInFinder" => json!({ "type": "openCurrentProjectInFinder" }),
         "setupGhostex" => json!({ "type": "openWorkspaceWelcome" }),
@@ -668,7 +660,6 @@ fn app_modal_icon(modal: &str) -> &'static str {
 /// `SidebarMessageCommandIcon`.
 fn sidebar_message_icon(command_id: &str) -> &'static str {
     match command_id {
-        "searchByText" => "search",
         "quickBrowserTab" => "browser",
         "automations" => "settings-automation",
         "extensions" => "puzzle",

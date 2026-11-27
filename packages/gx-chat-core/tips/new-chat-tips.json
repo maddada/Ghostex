@@ -222,8 +222,8 @@
       "id": "find-session-by-prompt-text",
       "first": 6,
       "icon": "file-search",
-      "title": "Find sessions by prompt",
-      "body": "The sidebar's menu > Tools > Search by Prompt searches every prompt you sent. Pick one to resume that session."
+      "title": "Find a chat by what was said",
+      "body": "Type words from a chat in Quick Access > Sessions to find it, even when its title doesn't say them."
     },
     {
       "id": "star-prompts-you-want-again",

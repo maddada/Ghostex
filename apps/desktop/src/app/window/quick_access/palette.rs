@@ -254,6 +254,25 @@ impl QuickAccessPalette {
         )
     }
 
+    /// The fill behind the search words in a session row's title and matched chat words.
+    pub(crate) fn search_hit(&self) -> Rgba {
+        if self.light {
+            gpui::Rgba {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 0.09,
+            }
+        } else {
+            gpui::Rgba {
+                r: 1.0,
+                g: 1.0,
+                b: 1.0,
+                a: 0.13,
+            }
+        }
+    }
+
     /// `bg-border/50`: the hairline the Commands list draws between groups.
     pub(crate) fn separator(&self) -> Rgba {
         rgba_of(self.hairline, self.hairline.a * 0.5)

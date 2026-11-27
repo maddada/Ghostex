@@ -414,11 +414,7 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
     more.push(MenuItem::separator());
 
     let mut tools = vec![
-        MenuItem::row(
-            "Search by Prompt",
-            "file-search",
-            MenuCommand::command(message::search_previous_sessions_by_text()),
-        ),
+        // Search by Prompt left Tools on 2026-11-27 (CDXC:Sessions in gx-core sidebar_rail.rs).
         intent("Import Sessions", "download", "importSessions"),
     ];
     if input.host.menu_panels {
@@ -468,7 +464,6 @@ pub fn more_menu_row_rail_key(row: &serde_json::Value) -> Option<&'static str> {
     let message = &command["message"];
     match message["type"].as_str()? {
         "openAutomationsPage" => Some("allAutomations"),
-        "searchPreviousSessionsByText" => Some("findPrompts"),
         MENU_PANEL_MESSAGE_TYPE if message["panel"] == MENU_PANEL_HELP => Some("mainHub"),
         _ => None,
     }

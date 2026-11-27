@@ -44,6 +44,16 @@ pub struct QuickAccessTab {
     pub hotkey: String,
 }
 
+/// A session row's matched chat words: whose they are (`You`, or the agent's name), a one-line
+/// snippet that starts near the match, and where the search words are in it (byte ranges).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuickAccessChatMatch {
+    pub who: String,
+    pub text: String,
+    pub highlights: Vec<[usize; 2]>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum QuickAccessRow {
@@ -79,6 +89,12 @@ pub enum QuickAccessRow {
         in_sidebar: bool,
         sleeping: bool,
         can_activate: bool,
+        /// Where the search words are in `title`, as byte ranges; empty without a query.
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        title_highlights: Vec<[usize; 2]>,
+        /// The chat words that matched the search, drawn as a second line under the title.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        chat_match: Option<QuickAccessChatMatch>,
     },
     #[serde(rename_all = "camelCase")]
     Prompt {

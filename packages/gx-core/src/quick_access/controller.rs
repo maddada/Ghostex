@@ -24,8 +24,8 @@ use super::prompts::{
     CURRENT_SESSION_VALUE, FAVORITE_TAG_ID, NO_TAG_VALUE, STASHED_PROMPT_TAG_COLORS,
 };
 use super::sessions::{
-    self, sessions_query_key, visible_items, ProjectOption, SessionItem, SessionScope,
-    SessionsTabState, SESSIONS_PAGE_SIZE, SESSIONS_VISIBLE_WINDOW_MS,
+    self, chat_match_key, sessions_query_key, visible_items, ProjectOption, SessionItem,
+    SessionScope, SessionsTabState, SESSIONS_PAGE_SIZE, SESSIONS_VISIBLE_WINDOW_MS,
     SESSION_TRANSCRIPT_SIZE_BATCH_SIZE,
 };
 use super::text::{collapse_runs, js_lower, QuickAccessClock};
@@ -268,6 +268,10 @@ impl QuickAccessController {
         let query = js_trim(&self.query);
         if !query.is_empty() {
             message["query"] = json!(query);
+            // CDXC:Sessions 2026-11-27: a search also matches what was said in each chat
+            // (gxserver's chat search, server/src/chat_search/); the answer's `chatMatches` and
+            // each closed row's `chatMatch` give the words under the row.
+            message["chatSearch"] = json!(true);
         }
         if !self.sessions.project_id.is_empty() {
             message["projectId"] = json!(self.sessions.project_id);
@@ -858,6 +862,7 @@ impl QuickAccessController {
                     }));
                 } else {
                     self.sessions.unreachable_machine_ids.clear();
+                    self.sessions.chat_matches.clear();
                     self.sessions.remote_sessions = Some(page);
                     self.sessions.resolved_query_key =
                         Some(self.sessions_request_query_key.clone());
@@ -865,6 +870,15 @@ impl QuickAccessController {
                     if self.sessions_request_query_key == default_key {
                         self.sessions.history_anchor_ms = context.clock.now_ms();
                         self.sessions.history_window_count = 1;
+                    }
+                }
+                for found in message["chatMatches"].as_array().into_iter().flatten() {
+                    if let (Some(project_id), Some(session_id)) =
+                        (found["projectId"].as_str(), found["sessionId"].as_str())
+                    {
+                        self.sessions
+                            .chat_matches
+                            .insert(chat_match_key(project_id, session_id), found.clone());
                     }
                 }
                 self.sessions.unreachable_machine_ids.extend(

@@ -26,7 +26,7 @@ const RESTORE_TIMEOUT_MS: u64 = 30_000;
 
 /// The row fields a client draws, matches and restores by; paths, commands and transcripts stay on
 /// the computer.
-const ROW_FIELDS: [&str; 19] = [
+const ROW_FIELDS: [&str; 20] = [
     "projectId",
     "sessionId",
     "projectTitle",
@@ -46,10 +46,12 @@ const ROW_FIELDS: [&str; 19] = [
     "restoreUnavailableReason",
     "externalSession",
     "forkBranchCount",
+    // With `--chat-search`: the chat words that matched (`snippet`, `source`, `quality`).
+    "chatMatch",
 ];
 
 fn list_usage() -> &'static str {
-    "Usage: ghostex previous-sessions [--query <text>] [--limit <n>] [--cursor <cursor>] [--project-id <id>] [--json]"
+    "Usage: ghostex previous-sessions [--query <text>] [--limit <n>] [--cursor <cursor>] [--project-id <id>] [--chat-search] [--json]"
 }
 
 fn restore_usage() -> &'static str {
@@ -91,6 +93,12 @@ pub fn previous_sessions_command(args: &[String]) -> CliResult<()> {
             params.insert(param.to_string(), Value::String(value));
         }
     }
+    // CDXC:Sessions 2026-11-27: `--chat-search` also matches the query against what was said in
+    // each chat (server/src/chat_search/), the way the desktop's Sessions search does; open
+    // sessions' matches come back as `chatMatches` for the phone to mark its own rows.
+    if flags.truthy("chatSearch") {
+        params.insert("chatSearch".to_string(), Value::Bool(true));
+    }
     let result = call_gxserver_rpc("/api/listPreviousSessions", &Value::Object(params), flags)?;
     if is_failed_cli_result(&result) {
         print_json(&result);
@@ -103,6 +111,12 @@ pub fn previous_sessions_command(args: &[String]) -> CliResult<()> {
         .map(|results| results.iter().filter_map(compact_row).collect())
         .unwrap_or_default();
     let mut answer = json!({ "ok": true, "results": rows });
+    if let Some(matches) = result
+        .get("chatMatches")
+        .filter(|matches| matches.is_array())
+    {
+        answer["chatMatches"] = matches.clone();
+    }
     if let Some(cursor) = result.get("cursor").filter(|cursor| cursor.is_string()) {
         answer["cursor"] = cursor.clone();
     }

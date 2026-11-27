@@ -210,6 +210,8 @@ pub(crate) struct GpuiPreviousSessionsRequest {
     pub(crate) project_ids: Vec<String>,
     pub(crate) external_only: bool,
     pub(crate) refresh_external_sessions: bool,
+    /// Also match the query against what was said in each chat (gxserver's chat search).
+    pub(crate) chat_search: bool,
 }
 
 #[derive(Default)]
@@ -217,6 +219,8 @@ pub(crate) struct GpuiPreviousSessionsPage {
     pub(crate) projects: Vec<serde_json::Value>,
     pub(crate) cursor: Option<String>,
     pub(crate) items: Vec<serde_json::Value>,
+    /// Chats whose words matched (`chatSearch`), open sessions' included.
+    pub(crate) chat_matches: Vec<serde_json::Value>,
 }
 
 pub(crate) fn gpui_list_previous_sessions_from_gxserver(
@@ -245,7 +249,47 @@ pub(crate) fn gpui_list_previous_sessions_from_gxserver(
             .iter()
             .filter_map(gpui_gxserver_search_result_to_previous_session_item)
             .collect(),
+        chat_matches: gpui_chat_matches_from_result(&result, None),
     })
+}
+
+/// The chat matches a `/api/listPreviousSessions` answer carries, reduced to what a row shows: the
+/// session it belongs to, the matched words and whose they are. Another computer's matches get
+/// that computer's project ids (`remote:<machine>:project:<id>`), like its rows.
+pub(crate) fn gpui_chat_matches_from_result(
+    result: &serde_json::Value,
+    remote_machine_id: Option<&str>,
+) -> Vec<serde_json::Value> {
+    result
+        .get("chatMatches")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|found| {
+            let project_id = found.get("projectId")?.as_str()?;
+            let mut fields = gpui_chat_match_fields(found)?;
+            fields["projectId"] = serde_json::json!(match remote_machine_id {
+                Some(machine) => format!("remote:{machine}:project:{project_id}"),
+                None => project_id.to_string(),
+            });
+            fields["sessionId"] = found.get("sessionId")?.clone();
+            Some(fields)
+        })
+        .collect()
+}
+
+/// A row's `chatMatch`: the one-line snippet, where the search words are in it (`highlights`, byte
+/// ranges), `source` (`user` or `assistant`) and match quality.
+pub(crate) fn gpui_chat_match_fields(found: &serde_json::Value) -> Option<serde_json::Value> {
+    let snippet = found.get("snippet")?.as_str()?;
+    let mut fields = serde_json::Map::new();
+    fields.insert("snippet".to_string(), serde_json::json!(snippet));
+    for key in ["highlights", "source", "quality", "hits", "messageAtMs"] {
+        if let Some(value) = found.get(key).filter(|value| !value.is_null()) {
+            fields.insert(key.to_string(), value.clone());
+        }
+    }
+    Some(serde_json::Value::Object(fields))
 }
 
 pub(crate) fn gpui_gxserver_search_result_to_previous_session_item(
@@ -327,6 +371,9 @@ pub(crate) fn gpui_gxserver_search_result_to_previous_session_item_with_options(
         "forkedFromSessionId",
         json_string_field(result, "forkedFromSessionId"),
     );
+    if let Some(chat_match) = result.get("chatMatch").and_then(gpui_chat_match_fields) {
+        item.insert("chatMatch".to_string(), chat_match);
+    }
     if let Some(fork_branch_count) = result
         .get("forkBranchCount")
         .and_then(|value| value.as_u64())

@@ -1234,7 +1234,7 @@
     {
       "key": "sidebarSpaceFollowActiveSession",
       "title": "Switch Space when opening a session from another Space",
-      "subtitle": "Switch the selected Space to the one that owns a session you open from outside it, such as through Back/Forward or Search by Prompt. Shown while Spaces is on.",
+      "subtitle": "Switch the selected Space to the one that owns a session you open from outside it, such as through Back/Forward or the Sessions search. Shown while Spaces is on.",
       "tab": "sidebar",
       "tabTitle": "Sidebar & Sessions",
       "section": "spaces",
@@ -15841,8 +15841,8 @@
     },
     {
       "id": "openFindPrompts",
-      "title": "Find Prompts",
-      "description": "Search every prompt you have sent to an agent, then resume or fork it.",
+      "title": "Search Chats",
+      "description": "Open Sessions search, which finds chats by their title or by what was said in them.",
       "defaultKey": "cmd+shift+f",
       "retiredDefaultKeys": [
         "alt+f"
@@ -15853,7 +15853,7 @@
     {
       "id": "searchProjectFiles",
       "title": "Search in Files",
-      "description": "While the Files view has focus, search the text of every file in the project, like VS Code's Search. Elsewhere the same keys open Find Prompts.",
+      "description": "While the Files view has focus, search the text of every file in the project, like VS Code's Search. Elsewhere the same keys open Search Chats.",
       "defaultKey": "cmd+shift+f",
       "noTerminalBinding": true
     },

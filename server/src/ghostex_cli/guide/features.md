@@ -313,7 +313,7 @@ view from the strip.
   and Ctrl+Shift+E split right and down, and Ghostex's own keys there are
   Ctrl+Shift+D for a new session, Ctrl+Shift+L for a browser tab, Ctrl+Shift+B for the sidebar,
   Ctrl+Shift+I for notifications, Ctrl+Alt+Shift+P to search sessions,
-  Ctrl+Shift+Y for files, Ctrl+Alt+H for Find Prompts and Ctrl+Alt+/ for
+  Ctrl+Shift+Y for files, Ctrl+Alt+H for Search Chats and Ctrl+Alt+/ for
   Hotkeys. A key you changed (or cleared) in the normal sections also applies
   in a terminal until you set that action's Terminal focused row. Every binding
   in either section can be changed or cleared on its own, and the same keys may
@@ -661,7 +661,7 @@ view from the strip.
   folds or unfolds every file, runs the search again, clears it, or goes back to
   the files list; your search stays there for next time. With text selected in
   the editor, Cmd+Shift+F searches for it. Outside Files, Cmd+Shift+F still opens
-  Find Prompts. To open an HTML, Markdown, or Excalidraw
+  Quick Access > Sessions to search chats. To open an HTML, Markdown, or Excalidraw
   file in your web browser, use the open-in-browser button in the file's header
   or Open Externally at the top right of the view: HTML pages open as they are,
   Markdown opens as a formatted page, and drawings open in an Excalidraw editor
@@ -1125,11 +1125,10 @@ for Updates, Restart Ghostex and the Quit rows); and Settings as the last row
 the folder button right of Search; it is the menu's first row only while the
 sidebar is too narrow for that button. On another computer's tab the menu also
 has Edit Machine. With the rail on, the menu leaves out what the rail already
-opens, pinned or under its ⋯: Commands, Agents Hub, All Automations, Ask Ghostex
-AI and Search by Prompt (use their rail icons, or the rail's ⋯). With the Classic
+opens, pinned or under its ⋯: Commands, Agents Hub, All Automations and Ask Ghostex
+AI (use their rail icons, or the rail's ⋯). With the Classic
 sidebar there is no rail, so the menu lists them too: Commands, Agents Hub and
-All Automations above Connect a Phone, Ask Ghostex AI above Join Discord, and
-Search by Prompt first in Tools.
+All Automations above Connect a Phone, and Ask Ghostex AI above Join Discord.
 **Links in the rail menu** (desktop app). Add link… under the Links heading in
 the rail's ⋯ menu (not in the sidebar's ☰ menu) saves any web page there, such
 as a local dashboard. The address can be a full address or just a host and port:
@@ -1382,7 +1381,7 @@ projects" to make a Space switch change only the sidebar filter
 (`sidebarSpaceSwitchBehavior`). "Switch Space when opening a session from another Space"
 (`sidebarSpaceFollowActiveSession`, off by default) switches the selected Space
 to the one that owns a session you open from outside it, for example through
-Back/Forward, Search by Prompt, a notification, or Previous Sessions; otherwise
+Back/Forward, a notification, or the Sessions search; otherwise
 the Space row only marks that Space with a dot.
 Switching projects by any route keeps the project's last view, its own width for the
 split between sessions and the view, and whether the view panel was open.
@@ -1919,23 +1918,38 @@ when you open it.
   and replies there do not reach the chat app. Other chat apps, cron, empty
   sessions, Discord threads only bots wrote in, and scripted one-shot runs
   (`hermes chat -q`) are left out.
-- Search by Prompt (By prompt in Quick Access > Sessions or Saved Prompts, Past prompts on a new chat, the sidebar rail's ⋯ menu, Tools in the sidebar's menu with the Classic sidebar, Actions (Cmd+K) in Quick Access > Sessions,
-  the `openFindPrompts` hotkey, default
-  `cmd+shift+f`, or `gx f` in a terminal) fuzzy-searches every prompt you ever
+- The Sessions search also finds a chat by what was said in it: type words from
+  a chat (yours or the agent's) in Quick Access > Sessions, and every open or
+  closed chat whose title or messages contain all the words is listed in one
+  list, best match first (title matches, then whole words, then word starts,
+  newest first among equals). A row matched by its messages shows the matched
+  words on a second line under its title, after "You:" or the agent's name. The
+  Search Chats hotkey (`openFindPrompts`, default `cmd+shift+f`, Ctrl+Shift+F on
+  Windows and Linux) opens Quick Access on Sessions with the cursor in the
+  search box. gxserver keeps a word index of every chat's messages in
+  `chat-search.sqlite3` in its data folder, built in the background at low
+  priority after it starts (a chat shows up once it has been read) and a few
+  seconds behind a running chat; it reads the agents' own transcripts and never
+  changes them. On the phone, the Sessions search matches chat words the same
+  way through the computer and shows the same matched-words line. From a
+  terminal, `ghostex sessions search <text> [--project-id <id>] [--limit <n>]
+  [--json]` searches the same index and prints each match's session, whose
+  words they are and a snippet; `ghostex previous-sessions --query <text>
+  --chat-search --json` adds each closed session's `chatMatch` and the open
+  sessions' `chatMatches`.
+- The Search by Prompt window was retired on 2026-11-27 (its rail item, menu
+  row and Quick Access button went with it); its hotkey opens the Sessions
+  search instead. `gx f` in a terminal still fuzzy-searches every prompt you
   sent to an agent; Enter resumes that session, and starred prompts stay on
-  top. Inside the picker the agent and project filters are dropdowns at the top
-  right (Ctrl+G and Ctrl+J open them), Grouping (Ctrl+D) toggles day headers,
-  and hovering any control shows its hotkey. On the phone, Search Prompts in
-  the menu at the top right searches the selected computer the same way: the agent,
-  project and Days buttons under the search field filter and group the results,
-  the star on a result stars it, pull down rebuilds the index, and tapping a
-  result shows the whole prompt with Resume, Fork, Copy and Star.
-  It lists prompts from Claude, Codex, Pi, OpenCode, Cursor, Grok, Empryo
-  (from every repository Empryo has run in), Antigravity, Hermes Agent
-  (every profile), Copilot CLI, Factory Droid, OMP and ZCode, and resuming
-  one reopens that agent's session, or focuses it when it is already open in
-  the sidebar. A prompt can
-  be forked into Claude, Codex, Pi, OpenCode, Cursor or Grok.
+  top. On the phone, Search Prompts in the menu at the top right searches the
+  selected computer the same way: the agent, project and Days buttons under the
+  search field filter and group the results, the star on a result stars it,
+  pull down rebuilds the index, and tapping a result shows the whole prompt
+  with Resume, Fork, Copy and Star. It lists prompts from Claude, Codex, Pi,
+  OpenCode, Cursor, Grok, Empryo (from every repository Empryo has run in),
+  Antigravity, Hermes Agent (every profile), Copilot CLI, Factory Droid, OMP
+  and ZCode, and a prompt can be forked into Claude, Codex, Pi, OpenCode,
+  Cursor or Grok.
 - Delayed Send opens Session Automations. Send Enter defaults to **When all
   agents finish**. It can also run after a delay, when this agent finishes, or
   **When a specific agent finishes**. Choose the specific agent from the Agent sessions
@@ -6455,9 +6469,12 @@ agents, a connection from either side is enough.
   exact text. Nothing is sent until you press Send. In the demo computer the
   route line reads "Sample, on this phone".
   To find a session on the phone, tap Search in the bar at the bottom of the
-  Sessions list (beside Voice, Web and Machines) and type part of its name or tag; it searches the open and
-  closed sessions of every connected computer, newest first, like the desktop's
-  Sessions search. Tapping an open session opens it; tapping a closed one (shown
+  Sessions list (beside Voice, Web and Machines) and type part of its name or tag, or words
+  said in the chat; it searches the open and closed sessions of every connected computer
+  like the desktop's Sessions search: newest first, and with words typed one list, best
+  match first, with the matched chat words under each chat after "You:" or the agent's
+  name (words said in chats are matched once that computer runs this release or later).
+  Tapping an open session opens it; tapping a closed one (shown
   with a hollow dot) brings it back on its computer and opens it. Closed
   sessions appear once that computer runs an up-to-date Ghostex.
   A phone that signs in over Tailscale, the local network or SSH (not Easy

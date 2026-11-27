@@ -19,9 +19,12 @@ use super::text::{
     relative_time, QuickAccessClock,
 };
 use super::wire::{
-    QuickAccessGroup, QuickAccessIcon, QuickAccessOption, QuickAccessRow, QuickAccessSelect,
+    QuickAccessChatMatch, QuickAccessGroup, QuickAccessIcon, QuickAccessOption, QuickAccessRow,
+    QuickAccessSelect,
 };
+use crate::keys::{MachineId, SessionKey};
 use crate::sidebar_menu::colored_agent_logo;
+use crate::sidebar_view::agents::agent_name_by_icon;
 use crate::sidebar_view::tags::{
     effective_tag, enabled_visible_tag_filters, matches_tag_filters, normalize_tag_list_items,
     tag_label, tag_list_item_filter, tag_presentation, TagCatalog,
@@ -104,6 +107,9 @@ pub(crate) struct SessionsTabState {
     /// The closed rows restored since Quick Access opened, by their one-row-per-project-and-title
     /// key: they leave the list at once, before gxserver's next page stops listing them.
     pub(crate) restored_keys: BTreeSet<String>,
+    /// The chats whose words matched the query of `resolved_query_key` (gxserver's chat search),
+    /// open sessions' included, by `chat_match_key`. Closed rows carry their own `chatMatch`.
+    pub(crate) chat_matches: BTreeMap<String, Value>,
 }
 
 impl SessionsTabState {
@@ -123,6 +129,7 @@ impl SessionsTabState {
             history_anchor_ms: now_ms,
             file_sizes_by_key: BTreeMap::new(),
             restored_keys: BTreeSet::new(),
+            chat_matches: BTreeMap::new(),
         }
     }
 
@@ -508,13 +515,16 @@ fn dedupe_key(session: &Value) -> String {
     format!("{scoped}\u{0}{title_key}{branch}")
 }
 
-/// `filterPreviousSessions(sessions, query, { sessionTags })`.
+/// `filterPreviousSessions(sessions, query, { sessionTags })`, each row with whether its title
+/// matched. With `chat_search`, a closed row whose chat words matched (its `chatMatch`) is kept
+/// too, even when a newer session of the same title stands for it.
 fn filter_previous<'a>(
     sessions: Vec<&'a Value>,
     query: &str,
     tag_filters: &[String],
     catalog: &TagCatalog,
-) -> Vec<&'a Value> {
+    chat_search: bool,
+) -> Vec<(&'a Value, bool)> {
     let filtered: Vec<&Value> = if tag_filters.is_empty() {
         sessions
     } else {
@@ -525,16 +535,192 @@ fn filter_previous<'a>(
             })
             .collect()
     };
+    let chat_matched: Vec<&Value> = if chat_search {
+        filtered
+            .iter()
+            .copied()
+            .filter(|session| session["chatMatch"].is_object())
+            .collect()
+    } else {
+        Vec::new()
+    };
     let deduped = dedupe_previous(filtered);
     if js_trim(query).is_empty() {
-        return deduped;
+        return deduped
+            .into_iter()
+            .map(|session| (session, false))
+            .collect();
     }
     let fields: Vec<&dyn SessionFields> =
         deduped.iter().map(|s| *s as &dyn SessionFields).collect();
-    filter_sessions(&fields, query, catalog)
+    let mut kept: Vec<(&Value, bool)> = filter_sessions(&fields, query, catalog)
         .into_iter()
-        .map(|index| deduped[index])
+        .map(|index| (deduped[index], true))
+        .collect();
+    for session in chat_matched {
+        if !kept
+            .iter()
+            .any(|(seen, _)| seen["historyId"] == session["historyId"])
+        {
+            kept.push((session, false));
+        }
+    }
+    kept
+}
+
+/// The key chat matches are found by: the session's project id (`remote:<machine>:project:<id>`
+/// for another computer's) and its gxserver session id.
+pub(crate) fn chat_match_key(project_id: &str, session_id: &str) -> String {
+    format!("{project_id}\u{0}{session_id}")
+}
+
+/// An open session's chat match, from its sidebar id.
+fn open_chat_match<'a>(state: &'a SessionsTabState, sidebar_id: &str) -> Option<&'a Value> {
+    let key = SessionKey::parse_sidebar_session_id(sidebar_id)?;
+    let project_id = match &key.machine {
+        MachineId::Local => key.project_id.clone(),
+        MachineId::Remote(machine) => format!("remote:{machine}:project:{}", key.project_id),
+    };
+    state
+        .chat_matches
+        .get(&chat_match_key(&project_id, &key.session_id))
+}
+
+/// Whether the chat matches held are for this query and filters (the answer for them came back).
+fn chat_matches_current(state: &SessionsTabState, query: &str) -> bool {
+    !js_trim(query).is_empty()
+        && state.resolved_query_key.as_deref() == Some(sessions_query_key(state, query).as_str())
+}
+
+/// How a row's title matched the query.
+#[derive(Clone, Copy, PartialEq)]
+enum TitleMatch {
+    None,
+    /// Only through the typo-tolerant match (`came` for `cafe`).
+    Fuzzy,
+    /// Every word is in the title as typed.
+    Exact,
+}
+
+/// Whether every query word is in the row's searchable title text as typed.
+fn title_match(
+    session: &dyn SessionFields,
+    query: &str,
+    catalog: &TagCatalog,
+    matched: bool,
+) -> TitleMatch {
+    if !matched || js_trim(query).is_empty() {
+        return TitleMatch::None;
+    }
+    let text = search_text(session, catalog);
+    let exact = normalize_search_value(Some(query))
+        .split(is_js_whitespace)
+        .filter(|token| !token.is_empty())
+        .all(|token| text.contains(token));
+    if exact {
+        TitleMatch::Exact
+    } else {
+        TitleMatch::Fuzzy
+    }
+}
+
+/// How well a row matches the query, best first: a title that holds the words beats any chat
+/// match; a chat match ranks by gxserver's quality (whole words 1.0, word starts 0.8, inside words
+/// 0.3, a phrase +0.25); a title that matched only as a typo ranks between word starts and inside
+/// words.
+fn match_score(title: TitleMatch, chat_match: Option<&Value>) -> f64 {
+    let chat = chat_match
+        .and_then(|found| found["quality"].as_f64())
+        .unwrap_or(0.0);
+    match title {
+        TitleMatch::Exact => 2.0 + chat,
+        TitleMatch::Fuzzy => chat.max(0.5),
+        TitleMatch::None => chat,
+    }
+}
+
+/// The query's words, lowercased, the way gxserver splits them.
+fn search_words(query: &str) -> Vec<String> {
+    query
+        .to_lowercase()
+        .replace(['\u{2018}', '\u{2019}'], "'")
+        .split_whitespace()
+        .map(str::to_string)
         .collect()
+}
+
+/// Where `words` are in `text`, ignoring case, as merged byte ranges of `text`.
+pub(crate) fn word_highlights(text: &str, words: &[String]) -> Vec<[usize; 2]> {
+    if words.is_empty() {
+        return Vec::new();
+    }
+    // Lowercased text with, for each of its bytes, the start and end of the character it came from.
+    let mut lower = String::new();
+    let mut origins: Vec<(usize, usize)> = Vec::new();
+    for (at, character) in text.char_indices() {
+        let end = at + character.len_utf8();
+        let folded = match character {
+            '\u{2018}' | '\u{2019}' => "'".to_string(),
+            _ => character.to_lowercase().collect(),
+        };
+        lower.push_str(&folded);
+        origins.extend(std::iter::repeat_n((at, end), folded.len()));
+    }
+    let mut ranges: Vec<[usize; 2]> = words
+        .iter()
+        .filter(|word| !word.is_empty())
+        .flat_map(|word| {
+            lower
+                .match_indices(word.as_str())
+                .map(|(at, found)| [origins[at].0, origins[at + found.len() - 1].1])
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    ranges.sort_unstable();
+    let mut merged: Vec<[usize; 2]> = Vec::new();
+    for range in ranges {
+        match merged.last_mut() {
+            Some(last) if range[0] <= last[1] => last[1] = last[1].max(range[1]),
+            _ => merged.push(range),
+        }
+    }
+    merged
+}
+
+/// A row's second line: whose words matched and where the search words are in them.
+fn chat_match_line(
+    found: &Value,
+    session: &dyn SessionFields,
+    words: &[String],
+) -> Option<QuickAccessChatMatch> {
+    let text = found["snippet"].as_str().filter(|text| !text.is_empty())?;
+    let who = if found["source"].as_str() == Some("user") {
+        "You".to_string()
+    } else {
+        session
+            .field("agentIcon")
+            .and_then(agent_name_by_icon)
+            .unwrap_or("Agent")
+            .to_string()
+    };
+    // gxserver marks the words the way its index folds them (`Café` for `cafe`); an older one
+    // sends no marks, so the words are found here, ignoring case only.
+    let highlights = match found["highlights"].as_array() {
+        Some(ranges) => ranges
+            .iter()
+            .filter_map(|range| {
+                let start = range.get(0)?.as_u64()? as usize;
+                let end = range.get(1)?.as_u64()? as usize;
+                (start < end && end <= text.len()).then_some([start, end])
+            })
+            .collect(),
+        None => word_highlights(text, words),
+    };
+    Some(QuickAccessChatMatch {
+        who,
+        text: text.to_string(),
+        highlights,
+    })
 }
 
 /// One row of the tab before it is drawn.
@@ -546,12 +732,17 @@ pub(crate) enum SessionItem<'a> {
         timestamp: i64,
         /// Its project's copy, while History spans a project's copies.
         copy: Option<&'a SessionProjectCopy>,
+        /// The chat words that matched the query, when they did.
+        chat_match: Option<&'a Value>,
+        score: f64,
     },
     Closed {
         key: String,
         session: &'a Value,
         timestamp: i64,
         copy: Option<&'a SessionProjectCopy>,
+        chat_match: Option<&'a Value>,
+        score: f64,
     },
 }
 
@@ -569,6 +760,16 @@ impl SessionItem<'_> {
     fn copy(&self) -> Option<&SessionProjectCopy> {
         match self {
             Self::Open { copy, .. } | Self::Closed { copy, .. } => *copy,
+        }
+    }
+    fn chat_match(&self) -> Option<&Value> {
+        match self {
+            Self::Open { chat_match, .. } | Self::Closed { chat_match, .. } => *chat_match,
+        }
+    }
+    fn score(&self) -> f64 {
+        match self {
+            Self::Open { score, .. } | Self::Closed { score, .. } => *score,
         }
     }
 }
@@ -591,7 +792,7 @@ pub(crate) fn merged_catalog(data: &QuickAccessData) -> TagCatalog {
     )
 }
 
-/// `visibleSessionItems`: open and closed rows, newest first.
+/// `visibleSessionItems`: open and closed rows, newest first; with a query, best match first.
 pub(crate) fn visible_items<'a>(
     state: &'a SessionsTabState,
     query: &str,
@@ -601,6 +802,7 @@ pub(crate) fn visible_items<'a>(
     let has_tag_filters = !state.tag_filters.is_empty();
     let external_only = state.scope == SessionScope::External;
     let closed_only = state.scope == SessionScope::Closed;
+    let chat_search = chat_matches_current(state, query);
     let mut items: Vec<SessionItem<'a>> = Vec::new();
     if !closed_only && !external_only {
         let open: Vec<(&QuickAccessStoreGroup, &QuickAccessSession)> = data
@@ -619,8 +821,22 @@ pub(crate) fn visible_items<'a>(
             .iter()
             .map(|(_, session)| *session as &dyn SessionFields)
             .collect();
-        for index in filter_sessions(&fields, query, &catalog) {
-            let (group, session) = open[index];
+        let title_matched: BTreeSet<usize> = filter_sessions(&fields, query, &catalog)
+            .into_iter()
+            .collect();
+        for (index, (group, session)) in open.iter().copied().enumerate() {
+            let chat_match = chat_search
+                .then(|| open_chat_match(state, &session.session_id))
+                .flatten();
+            let matched_by = title_match(
+                session as &dyn SessionFields,
+                query,
+                &catalog,
+                title_matched.contains(&index),
+            );
+            if !title_matched.contains(&index) && chat_match.is_none() {
+                continue;
+            }
             let project_id = group_project_id(group);
             if !state.matches_project(project_id.as_deref()) {
                 continue;
@@ -632,6 +848,8 @@ pub(crate) fn visible_items<'a>(
                 session,
                 timestamp: parse_timestamp(session.last_interaction_at.as_deref()).unwrap_or(0),
                 copy: state.copy_of(project_id.as_deref()),
+                chat_match,
+                score: match_score(matched_by, chat_match),
             });
         }
     }
@@ -647,8 +865,8 @@ pub(crate) fn visible_items<'a>(
                 && (!external_only || session["externalSession"].as_bool().unwrap_or(false))
         })
         .collect();
-    let mut closed = filter_previous(previous, query, &state.tag_filters, &catalog);
-    closed.sort_by(|left, right| {
+    let mut closed = filter_previous(previous, query, &state.tag_filters, &catalog, chat_search);
+    closed.sort_by(|(left, _), (right, _)| {
         timestamp_of(&right["closedAt"])
             .cmp(&timestamp_of(&left["closedAt"]))
             .then_with(|| {
@@ -660,8 +878,11 @@ pub(crate) fn visible_items<'a>(
     });
     let has_filters = has_tag_filters || !state.project_id.is_empty() || external_only;
     let cutoff = state.history_anchor_ms - state.history_window_count * SESSIONS_VISIBLE_WINDOW_MS;
-    for session in closed {
+    for (session, title_matched) in closed {
         let closed_at = timestamp_of(&session["closedAt"]);
+        let chat_match = chat_search
+            .then(|| session.get("chatMatch").filter(|found| found.is_object()))
+            .flatten();
         if js_trim(query).is_empty() && !has_filters && closed_at < cutoff {
             continue;
         }
@@ -670,12 +891,26 @@ pub(crate) fn visible_items<'a>(
             session,
             timestamp: closed_at,
             copy: state.copy_of(session["projectId"].as_str()),
+            chat_match,
+            score: match_score(
+                title_match(
+                    session as &dyn SessionFields,
+                    query,
+                    &catalog,
+                    title_matched,
+                ),
+                chat_match,
+            ),
         });
     }
+    // CDXC:Sessions 2026-11-27 DECISION: User chose one list, best match first, for a search: rows
+    // whose title matched, then rows matched by what was said in the chat, by how well the words
+    // match; newest first among equals. Without a query every score is 0, so it stays newest first.
     items.sort_by(|left, right| {
         right
-            .timestamp()
-            .cmp(&left.timestamp())
+            .score()
+            .total_cmp(&left.score())
+            .then_with(|| right.timestamp().cmp(&left.timestamp()))
             .then_with(|| locale_compare(left.key(), right.key()))
     });
     items
@@ -775,8 +1010,12 @@ pub(crate) fn session_groups(
     let catalog = merged_catalog(data);
     let now_ms = clock.now_ms();
     let mut groups: Vec<(String, Vec<QuickAccessRow>)> = Vec::new();
+    let words = search_words(js_trim(query));
     for item in visible_items(state, query, data) {
-        let heading = if item.timestamp() == 0 {
+        let heading = if !words.is_empty() {
+            // A search is one list in match order (see `visible_items`), so no day headings.
+            String::new()
+        } else if item.timestamp() == 0 {
             "Unknown day".to_string()
         } else {
             day_label(item.timestamp(), clock)
@@ -820,9 +1059,14 @@ pub(crate) fn session_groups(
             .map_or(QuickAccessIcon::None, |copy| {
                 QuickAccessIcon::asset(&copy.icon, None)
             });
+        let title = card_title(session);
         let row = QuickAccessRow::Session {
             key: item.key().to_string(),
-            title: card_title(session),
+            title_highlights: word_highlights(&title, &words),
+            chat_match: item
+                .chat_match()
+                .and_then(|found| chat_match_line(found, session, &words)),
+            title,
             icon: session_icon(session, &catalog),
             project_label,
             computer_icon,
@@ -848,7 +1092,11 @@ pub(crate) fn session_groups(
     groups
         .into_iter()
         .map(|(heading, rows)| QuickAccessGroup {
-            key: heading.clone(),
+            key: if heading.is_empty() {
+                "matches".to_string()
+            } else {
+                heading.clone()
+            },
             heading,
             separated: false,
             rows,

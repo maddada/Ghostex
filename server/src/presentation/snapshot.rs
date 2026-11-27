@@ -71,6 +71,18 @@ pub fn list_previous_sessions(
     server_id: &str,
     params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
+    list_previous_sessions_with_chat_matches(db, server_id, params, &[])
+}
+
+/// `list_previous_sessions` with the chats whose words match the query (`chatSearch`): closed
+/// ones join the list with their `chatMatch`, and every match, open sessions' included, is also
+/// sent as `chatMatches` for the client to mark its open rows.
+pub fn list_previous_sessions_with_chat_matches(
+    db: &Connection,
+    server_id: &str,
+    params: &Map<String, Value>,
+    chat_matches: &[Value],
+) -> Result<Value, DomainStateError> {
     let repository = DomainRepository::new(db, server_id);
     let projects = repository.list_projects()?;
     let sessions = repository.list_session_search_rows()?;
@@ -96,8 +108,26 @@ pub fn list_previous_sessions(
             })
         })
         .collect::<Vec<_>>();
-    let mut result = search_previous_sessions(projects, sessions, &previous_params)?;
+    let mut result = search_previous_sessions_with_chat_matches(
+        projects,
+        sessions,
+        &previous_params,
+        chat_matches,
+    )?;
     result["projects"] = json!(project_options);
+    if !chat_matches.is_empty() {
+        result["chatMatches"] = Value::Array(
+            chat_matches
+                .iter()
+                .map(|found| {
+                    let mut fields = chat_match_fields(found);
+                    fields["projectId"] = found["projectId"].clone();
+                    fields["sessionId"] = found["sessionId"].clone();
+                    fields
+                })
+                .collect(),
+        );
+    }
     Ok(result)
 }
 

@@ -50,7 +50,9 @@ pub(super) fn terms(query: &str) -> Vec<String> {
 
 struct Group {
     transcript_id: i64,
-    newest_rowid: i64,
+    /// The message that matches best (the newest of equals): the snippet comes from it.
+    best_rowid: i64,
+    best_quality: f64,
     latest_at: i64,
     hits: usize,
 }
@@ -70,7 +72,7 @@ pub(super) fn search(index: &Connection, domain: &Connection, query: &Query) -> 
     };
     let mut ranked: Vec<(f64, i64, Value)> = Vec::new();
     for group in groups {
-        if ranked.len() >= query.limit * 3 {
+        if ranked.len() >= query.limit {
             break;
         }
         let Some(session) = shown_session(index, domain, group.transcript_id, query) else {
@@ -79,7 +81,7 @@ pub(super) fn search(index: &Connection, domain: &Connection, query: &Query) -> 
         let Ok(Some((message_id, role, at_ms, text))) = index
             .query_row(
                 "SELECT messageId, role, atMs, text FROM messages WHERE rowid = ?1",
-                [group.newest_rowid],
+                [group.best_rowid],
                 |row| {
                     Ok((
                         row.get::<_, String>(0)?,
@@ -96,26 +98,21 @@ pub(super) fn search(index: &Connection, domain: &Connection, query: &Query) -> 
         let (quality, at) = match_quality(&text, &terms);
         let mut row = session;
         row["source"] = json!(if role == 0 { "user" } else { "assistant" });
-        row["snippet"] = json!(snippet(&text, at));
+        let shown = snippet(&text, at);
+        row["highlights"] = json!(highlights(&shown, &terms));
+        row["snippet"] = json!(shown);
         row["messageId"] = json!(message_id);
         row["messageAtMs"] = if at_ms > 0 { json!(at_ms) } else { Value::Null };
         row["hits"] = json!(group.hits);
         row["quality"] = json!(quality);
         ranked.push((quality, group.latest_at, row));
     }
-    ranked.sort_by(|a, b| {
-        b.0.partial_cmp(&a.0)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then(b.1.cmp(&a.1))
-    });
-    ranked
-        .into_iter()
-        .take(query.limit)
-        .map(|(_, _, row)| row)
-        .collect()
+    ranked.into_iter().map(|(_, _, row)| row).collect()
 }
 
-/// The newest hits, grouped by transcript, newest group first.
+/// The newest hits, grouped by transcript, best match first (each chat by its best message), then
+/// newest. Every hit is scored as it is checked, so an older chat that holds the whole word ranks
+/// above newer ones that hold it only inside other words.
 fn hit_groups(
     index: &Connection,
     terms: &[String],
@@ -170,6 +167,10 @@ fn hit_groups(
     let mut statement = index.prepare_cached(&sql)?;
     let mut groups: Vec<Group> = Vec::new();
     let mut by_transcript: HashMap<i64, usize> = HashMap::new();
+    // The best a message can score: a chat that has it needs no more of its hits scored. Past
+    // whole words (1.0) only the phrase bonus is left, which `contains` finds on its own.
+    let perfect = if terms.len() > 1 { 1.25 } else { 1.0 };
+    let phrase = terms.join(" ");
     let mut rows = statement.query(params_from_iter(args))?;
     while let Some(row) = rows.next()? {
         let rowid: i64 = row.get(0)?;
@@ -184,23 +185,40 @@ fn hit_groups(
             Some(&at) => {
                 let group = &mut groups[at];
                 group.hits += 1;
-                if at_ms > group.latest_at {
-                    group.latest_at = at_ms;
-                    group.newest_rowid = rowid;
+                group.latest_at = group.latest_at.max(at_ms);
+                // Hits arrive newest first, so a later one replaces the best only when better.
+                if group.best_quality < 1.0 {
+                    let (quality, _) = folded_quality(&folded.text, terms);
+                    if quality > group.best_quality {
+                        group.best_quality = quality;
+                        group.best_rowid = rowid;
+                    }
+                } else if group.best_quality < perfect && folded.text.contains(&phrase) {
+                    let (quality, _) = folded_quality(&folded.text, terms);
+                    if quality > group.best_quality {
+                        group.best_quality = quality;
+                        group.best_rowid = rowid;
+                    }
                 }
             }
             None => {
+                let (quality, _) = folded_quality(&folded.text, terms);
                 by_transcript.insert(transcript_id, groups.len());
                 groups.push(Group {
                     transcript_id,
-                    newest_rowid: rowid,
+                    best_rowid: rowid,
+                    best_quality: quality,
                     latest_at: at_ms,
                     hits: 1,
                 });
             }
         }
     }
-    groups.sort_by(|a, b| b.latest_at.cmp(&a.latest_at));
+    groups.sort_by(|a, b| {
+        b.best_quality
+            .total_cmp(&a.best_quality)
+            .then(b.latest_at.cmp(&a.latest_at))
+    });
     Ok(groups)
 }
 
@@ -269,7 +287,12 @@ fn shown_session(
 /// found (a byte offset in `text`).
 fn match_quality(text: &str, terms: &[String]) -> (f64, Option<usize>) {
     let folded = fold(text);
-    let lower = folded.text.as_str();
+    let (quality, first_at) = folded_quality(&folded.text, terms);
+    (quality, first_at.map(|at| folded.origin(at)))
+}
+
+/// [`match_quality`] on text already folded; the position is in the folded text.
+fn folded_quality(lower: &str, terms: &[String]) -> (f64, Option<usize>) {
     let mut quality = 1.0f64;
     let mut first_at = None;
     for (position, term) in terms.iter().enumerate() {
@@ -296,7 +319,7 @@ fn match_quality(text: &str, terms: &[String]) -> (f64, Option<usize>) {
         }
         quality = quality.min(best);
         if position == 0 {
-            first_at = found_at.map(|at| folded.origin(at));
+            first_at = found_at;
         }
     }
     if terms.len() > 1 && lower.contains(&terms.join(" ")) {
@@ -375,6 +398,37 @@ fn word_trigrams(term: &str) -> Vec<String> {
 
 /// Up to 240 characters starting a few words before the match at `at`, whitespace collapsed and
 /// emphasis and code marks dropped, with ellipses where the text was cut.
+/// Where the search words are in `text`, folded the way the index folds (`Café` holds `cafe`), as
+/// merged byte ranges of `text` for clients to mark.
+fn highlights(text: &str, terms: &[String]) -> Vec<[usize; 2]> {
+    let folded = fold(text);
+    let mut ranges: Vec<[usize; 2]> = terms
+        .iter()
+        .filter(|term| !term.is_empty())
+        .flat_map(|term| {
+            folded
+                .text
+                .match_indices(term.as_str())
+                .map(|(at, found)| {
+                    let start = folded.origin(at);
+                    let last = folded.origin(at + found.len() - 1);
+                    let end = last + text[last..].chars().next().map_or(0, char::len_utf8);
+                    [start, end]
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    ranges.sort_unstable();
+    let mut merged: Vec<[usize; 2]> = Vec::new();
+    for range in ranges {
+        match merged.last_mut() {
+            Some(last) if range[0] <= last[1] => last[1] = last[1].max(range[1]),
+            _ => merged.push(range),
+        }
+    }
+    merged
+}
+
 fn snippet(text: &str, at: Option<usize>) -> String {
     let at = at.unwrap_or(0).min(text.len());
     let mut start = at.saturating_sub(SNIPPET_LEAD);

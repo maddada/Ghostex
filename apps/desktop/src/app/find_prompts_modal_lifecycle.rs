@@ -6,9 +6,22 @@ use crate::app::window::*;
 use crate::*;
 
 impl GhostexGpuiApp {
-    /// Opens Search by Prompt in the app appearance and theme colours, like the other native modals,
-    /// in the app font.
+    /// CDXC:Sessions 2026-11-27 DECISION: User chose to retire the Search by Prompt window: every
+    /// way that opened it (the ⌘⇧F / Ctrl+Shift+F hotkey, old menu and Commands messages, links)
+    /// opens Quick Access on Sessions with the cursor in its search box, which finds chats by
+    /// what was said in them (gxserver's chat search). The window's code stays until its
+    /// removal is decided (`open_gpui_find_prompts_window`).
     pub(crate) fn open_gpui_find_prompts_modal(&mut self, cx: &mut gpui::Context<Self>) {
+        self.open_gpui_quick_access_modal(
+            GpuiAppModalKind::PreviousSessions,
+            &serde_json::json!({}),
+            cx,
+        );
+    }
+
+    /// The retired Search by Prompt window (see `open_gpui_find_prompts_modal`).
+    #[allow(dead_code)]
+    fn open_gpui_find_prompts_window(&mut self, cx: &mut gpui::Context<Self>) {
         let light = CHROME_LIGHT_APPEARANCE.load(std::sync::atomic::Ordering::Relaxed);
         let font_family = crate::app::window::find_prompts::palette::find_prompts_font_family();
         let glass = window_glass_active();

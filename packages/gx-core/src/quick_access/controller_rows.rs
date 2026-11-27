@@ -12,7 +12,6 @@ use super::commands::{command_groups, run_command_row, CommandRun};
 use super::controller::{
     QuickAccessContext, QuickAccessController, QuickAccessEffect, QuickAccessTab,
 };
-use super::hotkeys::normalize_hotkey_settings;
 use super::projects::{self, activate_message, find_project, project_menu_items, remove_message};
 use super::prompts::{
     self, editor_state, find_prompt, next_tag_ids, prompt_actions, Editing, PromptsScope,
@@ -397,16 +396,6 @@ impl QuickAccessController {
         self.prompts.save_error = None;
     }
 
-    fn find_prompts_hotkey(&self, context: &QuickAccessContext<'_>) -> String {
-        // `normalizeghostexHotkeySettings(settings.hotkeys)`.
-        let hotkeys =
-            normalize_hotkey_settings(&context.data.settings()["hotkeys"], context.data.platform());
-        match hotkeys.get("openFindPrompts").filter(|key| !key.is_empty()) {
-            Some(key) => format_hotkey_label(key, context.data.platform()),
-            None => String::new(),
-        }
-    }
-
     /// Everything the row at `key` can do, Return's action first. An empty key lists what the tab
     /// offers without a row.
     pub(crate) fn row_action_items(
@@ -456,16 +445,6 @@ impl QuickAccessController {
                     )),
                     None => {}
                 }
-                menu.push(separator());
-                menu.push(action_item(
-                    "findPrompts",
-                    "Search by Prompt",
-                    "file-search",
-                    Some(self.find_prompts_hotkey(context)),
-                    false,
-                    false,
-                    platform,
-                ));
                 menu.push(separator());
                 if matches!(found, Some(SessionItem::Closed { .. })) {
                     menu.push(action_item(
@@ -605,16 +584,6 @@ impl QuickAccessController {
         if id == "addPrompt" {
             self.start_add_prompt();
             return false;
-        }
-        if id == "findPrompts" {
-            // Close first: the desktop close removes whichever app-modal window is open, so opening
-            // Find before closing would take down its own window.
-            self.close(effects);
-            effects.push(QuickAccessEffect::Post(json!({
-                "actionId": "openFindPrompts",
-                "type": "runGhostexHotkeyAction",
-            })));
-            return true;
         }
         if id == "file:copyPath" {
             if let Some(path) = self.file_absolute_path(key, context.data) {

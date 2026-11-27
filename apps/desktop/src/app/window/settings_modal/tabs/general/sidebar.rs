@@ -522,7 +522,7 @@ fn spaces_section(
             s,
             "sidebarSpaceFollowActiveSession",
             "Switch Space when opening a session from another Space",
-            "Switch the selected Space to the one that owns a session you open from outside it, such as through Back/Forward, Search by Prompt, a notification, or Previous Sessions.",
+            "Switch the selected Space to the one that owns a session you open from outside it, such as through Back/Forward, a notification, or the Sessions search.",
             true,
             cx,
         ));

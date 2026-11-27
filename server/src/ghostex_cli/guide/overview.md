@@ -46,10 +46,10 @@ hotkeys Every shortcut and its default binding
   computers as one entry, unless Computers is set to A tab each), and the More Options menu under the three-lines button (☰) at
   the top right (Sort & Filter, Collapse All, then under a New heading Terminal, Coordinator and Browser, then
   Connect a Phone, Connect a Computer, Keep Awake, then Join Discord and Send Bug / Feedback, then the Tools and Ghostex submenus and
-  Settings; with the rail on, Commands, Agents Hub, All Automations, Ask Ghostex AI and Search by Prompt are the
+  Settings; with the rail on, Commands, Agents Hub, All Automations and Ask Ghostex AI are the
   rail's (pinned or under its ⋯), and with the Classic sidebar the menu lists them too; Ghostex holds New Window, Check for Updates, Restart Ghostex, Quit
   Ghostex, and Quit Ghostex & BG Service, which also stops the background
-  service and every session; Tools holds Search by Prompt, Import
+  service and every session; Tools holds Import
   Sessions, Extensions, Dev servers and Resources). The
   sidebar's top row holds Search, Add project, the Notifications bell and that
   menu button. Under it, the New session button (Cmd+N) starts a one-click chat
@@ -93,7 +93,7 @@ hotkeys Every shortcut and its default binding
   add-on pages (Workspaces, Cloud Boxes, Connectors, Actions, Open In, OS
   Integration and Debugging while each is shown), and one search box that finds rows on
   every page. Every page starts with its title and a one-line intro saying what the page is for.
-- **Dialogs** such as Quick Access, Settings, Search by Prompt and Add Project open
+- **Dialogs** such as Quick Access, Settings and Add Project open
   over the middle of the window and stay open when you click somewhere else. Close
   one with Escape or the round × in its top-right corner, which appears while the
   pointer is over the dialog.

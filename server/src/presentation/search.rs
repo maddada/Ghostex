@@ -75,11 +75,32 @@ pub(crate) fn normalize_session_tags(value: Option<&Value>) -> Result<Vec<&str>,
     }
 }
 
+#[cfg(test)]
 pub(crate) fn search_previous_sessions(
     projects: Vec<Value>,
     sessions: Vec<Value>,
     params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
+    search_previous_sessions_with_chat_matches(projects, sessions, params, &[])
+}
+
+/// `search_previous_sessions`, where a closed session whose chat words match the query
+/// (`chat_matches`, from server/src/chat_search/) is listed even when its title does not, with
+/// that match as its `chatMatch`.
+pub(crate) fn search_previous_sessions_with_chat_matches(
+    projects: Vec<Value>,
+    sessions: Vec<Value>,
+    params: &Map<String, Value>,
+    chat_matches: &[Value],
+) -> Result<Value, DomainStateError> {
+    let chat_match_of = |session: &Value| -> Option<&Value> {
+        let project_id = session.get("projectId").and_then(Value::as_str)?;
+        let session_id = session.get("sessionId").and_then(Value::as_str)?;
+        chat_matches.iter().find(|found| {
+            found.get("projectId").and_then(Value::as_str) == Some(project_id)
+                && found.get("sessionId").and_then(Value::as_str) == Some(session_id)
+        })
+    };
     /*
     CDXC:Sessions 2026-06-19-14:30:
     Rust listPreviousSessions must be the same previous-only restore surface as TypeScript: exclude active rows and command-pane sessions, keep pinned/favorite/tagged history, return closedAt, and rank by provider close time instead of last activity or metadata edits.
@@ -129,11 +150,31 @@ pub(crate) fn search_previous_sessions(
             let project = projects_by_id
                 .get(&session.get("projectId").and_then(Value::as_str))
                 .copied();
-            match_session(project, &session, &query).map(|matched| (session, matched))
+            match_session(project, &session, &query)
+                .or_else(|| chat_match_of(&session).map(|_| json!({ "field": "chat" })))
+                .map(|matched| (session, matched))
         })
         .collect::<Vec<_>>();
-    candidates.sort_by_cached_key(|(session, _)| {
+    // CDXC:Sessions 2026-11-27: with chat matches the list is best match first (a title match,
+    // then by how well the chat words match), newest closed first among equals, the way the
+    // Sessions search orders it; pages follow that order so the best matches come first.
+    candidates.sort_by_cached_key(|(session, matched)| {
+        let rank = if chat_matches.is_empty() {
+            0
+        } else {
+            let title = if matched.get("field").and_then(Value::as_str) == Some("chat") {
+                0.0
+            } else {
+                2.0
+            };
+            let chat = chat_match_of(session)
+                .and_then(|found| found.get("quality"))
+                .and_then(Value::as_f64)
+                .unwrap_or(0.0);
+            ((title + chat) * 1000.0) as i64
+        };
         (
+            std::cmp::Reverse(rank),
             std::cmp::Reverse(previous_session_closed_at(session)),
             string_field(session, "sessionId"),
         )
@@ -156,6 +197,9 @@ pub(crate) fn search_previous_sessions(
                 if let Some(session_id) = string_field(&session, "sessionId") {
                     families.insert_fork_fields(&session_id, output);
                 }
+                if let Some(found) = chat_match_of(&session) {
+                    output.insert("chatMatch".to_string(), chat_match_fields(found));
+                }
             }
             result
         })
@@ -169,6 +213,26 @@ pub(crate) fn search_previous_sessions(
     }
     output.insert("results".to_string(), Value::Array(page));
     Ok(Value::Object(output))
+}
+
+/// The part of a chat search result a row carries: the words, whose they are and how well they
+/// match.
+pub(crate) fn chat_match_fields(found: &Value) -> Value {
+    let mut fields = Map::new();
+    for key in [
+        "snippet",
+        "highlights",
+        "source",
+        "quality",
+        "hits",
+        "messageId",
+        "messageAtMs",
+    ] {
+        if let Some(value) = found.get(key).filter(|value| !value.is_null()) {
+            fields.insert(key.to_string(), value.clone());
+        }
+    }
+    Value::Object(fields)
 }
 
 pub(crate) fn is_previous_session_history_candidate(session: &Value) -> bool {

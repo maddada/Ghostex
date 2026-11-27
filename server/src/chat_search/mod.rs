@@ -29,14 +29,15 @@ use serde_json::{json, Map, Value};
 
 use crate::server::AppState;
 
-/// `/api/searchChats`: `ghostex sessions search` and, once wired, the Sessions search.
+/// `/api/searchChats`: `ghostex sessions search`. The Sessions search asks through
+/// `/api/listPreviousSessions` with `chatSearch` (`matches_for_sessions_list`).
 pub(crate) const SEARCH_ENDPOINT: &str = "/api/searchChats";
 
 /// CDXC:Sessions 2026-11-27 WHY:
-/// The index is built only once something searches: until the Sessions search uses it, no
-/// computer spends a backfill on a feature nobody can reach. Flip to start it with gxserver once
-/// the search is in the Sessions UI, so the first search finds everything.
-const START_WITH_GXSERVER: bool = false;
+/// The Sessions search (desktop and phone) matches what was said in each chat, so the index starts
+/// with gxserver and backfills in the background (throttled, low priority): the first search
+/// then finds every chat instead of waiting for a backfill to begin.
+const START_WITH_GXSERVER: bool = true;
 
 #[derive(Default)]
 struct Status {
@@ -159,6 +160,46 @@ pub(crate) fn search(
         "index": index_status(),
         "tookMs": started.elapsed().as_secs_f64() * 1000.0,
     })
+}
+
+/// The chats whose words match a Sessions list query, for `/api/listPreviousSessions` with
+/// `chatSearch: true` (clients that leave it out, such as older phones, get the list as before).
+/// Each entry is a `search` result: `projectId`, `sessionId`, `snippet`, `source`, `quality`...
+/// Blocking.
+pub(crate) fn matches_for_sessions_list(
+    state: &Arc<AppState>,
+    domain: &Connection,
+    params: &Map<String, Value>,
+) -> Vec<Value> {
+    if params.get("chatSearch").and_then(Value::as_bool) != Some(true) {
+        return Vec::new();
+    }
+    let text = params
+        .get("query")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    if text.is_empty() {
+        return Vec::new();
+    }
+    ensure_started(state);
+    let request = query::Query {
+        text,
+        project_id: params
+            .get("projectId")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string),
+        limit: query::MAX_LIMIT,
+    };
+    let Ok(slot) = reader(state).lock() else {
+        return Vec::new();
+    };
+    slot.as_ref()
+        .map(|index| query::search(index, domain, &request))
+        .unwrap_or_default()
 }
 
 /// How far the index is: `ready` once every chat has been read at least once.

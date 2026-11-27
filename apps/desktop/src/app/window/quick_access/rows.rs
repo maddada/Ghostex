@@ -1,22 +1,23 @@
 //! The five Quick Access row shapes: Commands, Projects, Sessions, Saved Prompts and Files.
 //!
 //! Every row is the same 40px line: a glyph, the title, a muted subtitle beside it, and
-//! right-aligned accessories (keycaps, counts, chips, time, the lifecycle dot). Rows carry no
+//! right-aligned accessories (keycaps, counts, chips, time, the lifecycle dot). A session row a
+//! search matched by its chat words adds a second line with those words. Rows carry no
 //! buttons of their own; what a row can do lives in its actions menu (right-click, or the footer's
 //! Actions panel), which the controller builds (packages/gx-core/src/quick_access/).
 use super::chrome::{
     asset_icon_path, quick_access_icon, quick_access_keycap, quick_access_tooltip,
 };
-use super::model::{QuickAccessIcon, QuickAccessPromptChip, QuickAccessRow};
+use super::model::{QuickAccessChatMatch, QuickAccessIcon, QuickAccessPromptChip, QuickAccessRow};
 use super::palette::{
     QUICK_ACCESS_META_FONT_SIZE, QUICK_ACCESS_ROW_FONT_SIZE, QUICK_ACCESS_ROW_HEIGHT,
     QUICK_ACCESS_ROW_PADDING_X, QUICK_ACCESS_ROW_RADIUS, QuickAccessPalette, hsla, parse_css_color,
 };
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, ClickEvent, Context, InteractiveElement as _, IntoElement, MouseButton,
-    MouseDownEvent, ParentElement as _, SharedString, Stateful, StatefulInteractiveElement as _,
-    Styled as _, Window, div, px, svg,
+    AnyElement, ClickEvent, Context, FontWeight, HighlightStyle, InteractiveElement as _,
+    IntoElement, MouseButton, MouseDownEvent, ParentElement as _, SharedString, Stateful,
+    StatefulInteractiveElement as _, Styled as _, StyledText, Window, div, px, svg,
 };
 use gpui_component::h_flex;
 
@@ -109,7 +110,90 @@ fn glyph_tile(p: &QuickAccessPalette, icon: &QuickAccessIcon) -> AnyElement {
 
 /// Title and muted subtitle on one baseline. The subtitle gives way first.
 fn row_text(p: &QuickAccessPalette, title: &str, subtitle: &str) -> gpui::Div {
-    row_text_marked(p, title, subtitle, &QuickAccessIcon::None)
+    row_text_marked(p, title, subtitle, &QuickAccessIcon::None, &[])
+}
+
+/// The search words' style: the hit fill, `color`, semibold.
+fn hit_style(p: &QuickAccessPalette, color: gpui::Rgba) -> HighlightStyle {
+    HighlightStyle {
+        color: Some(hsla(color)),
+        background_color: Some(hsla(p.search_hit())),
+        font_weight: Some(FontWeight::SEMIBOLD),
+        ..Default::default()
+    }
+}
+
+/// `ranges` (byte ranges from gx-core) that are whole characters of `text`, with `style`.
+fn styled_ranges(
+    text: &str,
+    ranges: &[[usize; 2]],
+    shift: usize,
+    style: HighlightStyle,
+) -> Vec<(std::ops::Range<usize>, HighlightStyle)> {
+    ranges
+        .iter()
+        .map(|[start, end]| (start + shift, end + shift))
+        .filter(|(start, end)| {
+            start < end
+                && *end <= text.len()
+                && text.is_char_boundary(*start)
+                && text.is_char_boundary(*end)
+        })
+        .map(|(start, end)| (start..end, style))
+        .collect()
+}
+
+/// `text` with the search words (`ranges`) marked.
+fn highlighted(
+    p: &QuickAccessPalette,
+    text: &str,
+    ranges: &[[usize; 2]],
+    color: gpui::Rgba,
+) -> StyledText {
+    StyledText::new(text.to_string()).with_highlights(styled_ranges(
+        text,
+        ranges,
+        0,
+        hit_style(p, color),
+    ))
+}
+
+/// The second line of a session row a search matched by its chat words: `You:` or the agent's
+/// name, then the words from near the match, cut with an ellipsis at the row's end.
+fn chat_match_line(p: &QuickAccessPalette, found: &QuickAccessChatMatch) -> gpui::Div {
+    let prefix = if found.who.is_empty() {
+        String::new()
+    } else {
+        format!("{}: ", found.who)
+    };
+    let text = format!("{prefix}{}", found.text);
+    let mut highlights = Vec::new();
+    if !prefix.is_empty() {
+        highlights.push((
+            0..prefix.len() - 1,
+            HighlightStyle {
+                color: Some(hsla(p.item)),
+                font_weight: Some(FontWeight::SEMIBOLD),
+                ..Default::default()
+            },
+        ));
+    }
+    highlights.extend(styled_ranges(
+        &text,
+        &found.highlights,
+        prefix.len(),
+        hit_style(p, p.foreground),
+    ));
+    div()
+        .w_full()
+        .min_w_0()
+        .overflow_hidden()
+        .whitespace_nowrap()
+        .text_ellipsis()
+        .text_size(px(QUICK_ACCESS_META_FONT_SIZE))
+        .line_height(px(17.0))
+        .text_color(hsla(p.muted))
+        .child(StyledText::new(text).with_highlights(highlights))
 }
 
 /// [`row_text`] with a glyph before the subtitle: a session row's computer while History lists a
@@ -119,6 +203,7 @@ fn row_text_marked(
     title: &str,
     subtitle: &str,
     subtitle_icon: &QuickAccessIcon,
+    title_highlights: &[[usize; 2]],
 ) -> gpui::Div {
     let marked = !matches!(subtitle_icon, QuickAccessIcon::None);
     h_flex()
@@ -136,7 +221,7 @@ fn row_text_marked(
                 .text_size(px(QUICK_ACCESS_ROW_FONT_SIZE))
                 .line_height(px(20.0))
                 .text_color(hsla(p.foreground))
-                .child(SharedString::from(title.to_string())),
+                .child(highlighted(p, title, title_highlights, p.foreground)),
         )
         .children((!subtitle.is_empty()).then(|| {
             let text = div()
@@ -312,6 +397,8 @@ pub(crate) fn quick_access_row<V: 'static>(
             in_sidebar,
             sleeping,
             can_activate,
+            title_highlights,
+            chat_match,
             ..
         } => row_shell(
             p,
@@ -322,8 +409,22 @@ pub(crate) fn quick_access_row<V: 'static>(
             callbacks,
             cx,
         )
+        // CDXC:Sessions 2026-11-27: a row the search matched by what was said in its chat shows
+        // those words on a second line, so the row grows to fit it.
+        .when(chat_match.is_some(), |this| this.h_auto().py(px(6.0)))
         .child(glyph_tile(p, icon))
-        .child(row_text_marked(p, title, project_label, computer_icon))
+        .child({
+            let line = row_text_marked(p, title, project_label, computer_icon, title_highlights);
+            match chat_match {
+                Some(found) => gpui_component::v_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .gap(px(1.0))
+                    .child(line.w_full())
+                    .child(chat_match_line(p, found)),
+                None => line,
+            }
+        })
         .child(
             accessories()
                 .children((!file_size.is_empty()).then(|| {

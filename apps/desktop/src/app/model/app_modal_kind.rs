@@ -691,7 +691,10 @@ pub(crate) fn gpui_app_modal_kind_for_hotkey_action_id(
         "openSettings" => Some(GpuiAppModalKind::Settings),
         "openHotkeys" => Some(GpuiAppModalKind::Hotkeys),
         "openCommandPalette" => Some(GpuiAppModalKind::CommandPalette),
-        "openFindPrompts" => Some(GpuiAppModalKind::FindPrompts),
+        // Search Chats (the retired Search by Prompt's id): Quick Access on Sessions, whose
+        // search finds chats by what was said in them (CDXC:Sessions 2026-11-27 in
+        // find_prompts_modal_lifecycle.rs).
+        "openFindPrompts" => Some(GpuiAppModalKind::PreviousSessions),
         "openSessionSearchPalette" => Some(GpuiAppModalKind::PreviousSessions),
         "openProjectSearchPalette" => Some(GpuiAppModalKind::RecentProjects),
         "openQuickAccessFiles" => Some(GpuiAppModalKind::QuickAccessFiles),

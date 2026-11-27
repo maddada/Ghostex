@@ -581,10 +581,6 @@ pub(crate) mod message {
         })
     }
 
-    pub(crate) fn search_previous_sessions_by_text() -> Value {
-        json!({ "type": "searchPreviousSessionsByText" })
-    }
-
     pub(crate) fn open_automations_page() -> Value {
         json!({ "type": "openAutomationsPage" })
     }

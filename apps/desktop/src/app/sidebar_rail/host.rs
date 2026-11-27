@@ -30,7 +30,7 @@ impl GhostexGpuiApp {
         match key {
             // Settings and the compact Theme editor are windows over the app, never a view on the
             // rail, so neither shows as on (CDXC:Sidebar 2026-11-25 on gx-core `RAIL_FOOT_ITEM`).
-            "search" | "findPrompts" | "commands" | "settings" | "theme" => state.available = true,
+            "search" | "commands" | "settings" | "theme" => state.available = true,
             // CDXC:Chief 2026-11-27 DECISION:
             // User: "icon in the rail for a Ask Ghostex AI shows red dot when it needs something lets not show dot on thhat rail icon pls". The rail's Ask Ghostex AI button draws no dot or badge in any state of its session (needs you or working); its sidebar row, notifications, Needs you and Inbox still show it.
             "mainHub" => {
@@ -185,7 +185,6 @@ impl GhostexGpuiApp {
         let sidebar_action = |action: &str| json!({"type": "sidebarAction", "action": action});
         match key {
             "search" => self.dispatch_native_sidebar_ui(sidebar_action("sessions"), cx),
-            "findPrompts" => self.open_gpui_find_prompts_modal(cx),
             "commands" => self
                 .dispatch_native_sidebar_ui(sidebar_action(ghostex_gx_core::COMMANDS_ACTION), cx),
             "mainHub" => self.handle_native_sidebar_action(

@@ -23,7 +23,7 @@ impl GhostexGpuiApp {
         let snapshot = self.native_sidebar.snapshot.as_ref();
         let mut state = RailItemState::default();
         match key {
-            "search" | "findPrompts" => state.available = true,
+            "search" => state.available = true,
             "mainHub" => {
                 state.available = true;
             }
@@ -47,7 +47,6 @@ impl GhostexGpuiApp {
                 json!({"type": "sidebarAction", "action": "sessions"}),
                 cx,
             ),
-            "findPrompts" => self.open_gpui_find_prompts_modal(cx),
             "mainHub" => self.handle_native_sidebar_action(
                 &crate::app::native_sidebar::actions::NativeSidebarAction {
                     command: json!({ "type": "chief", "op": "open" }),

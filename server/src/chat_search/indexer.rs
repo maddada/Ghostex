@@ -37,6 +37,8 @@ const FULL_INTERVAL: Duration = Duration::from_secs(60);
 const MAX_MESSAGE_BYTES: usize = 32 * 1024;
 /// Messages written per transaction.
 const COMMIT_EVERY: usize = 400;
+/// Session rows resolved per index commit (`Indexer::resolve_changed`).
+const RESOLVE_COMMIT_EVERY: usize = 200;
 /// Pauses that keep the backfill gentle on a busy computer, on top of the thread's background
 /// priority: after every commit, and after each transcript of a full pass as long as reading it
 /// took (at most [`MAX_FILE_PAUSE`]), so the backfill uses at most about half of one core.
@@ -145,8 +147,11 @@ impl Indexer {
         if full {
             self.forget_deleted(&seen);
         }
-        // Newest first (the domain list is ordered by updatedAt), resolving and reading each in
-        // turn, so recent chats are searchable first during the backfill.
+        let Some(changed_keys) = self.resolve_changed(&rows) else {
+            return;
+        };
+        // Newest first (the domain list is ordered by updatedAt), so recent chats are searchable
+        // first during the backfill.
         let mut done = HashSet::new();
         let total = rows.len();
         let mut last_live = Instant::now();
@@ -163,13 +168,7 @@ impl Indexer {
                 last_live = Instant::now();
             }
             let key = (row.project_id.clone(), row.session_id.clone());
-            let changed = self
-                .sessions
-                .get(&key)
-                .is_none_or(|known| known.updated_at != row.updated_at);
-            if changed {
-                self.resolve(row);
-            }
+            let changed = changed_keys.contains(&key);
             if !(full || changed || row.live) {
                 continue;
             }
@@ -232,18 +231,47 @@ impl Indexer {
         Some(rows)
     }
 
-    /// Reads a changed session's row and finds the transcript its chat reads.
-    fn resolve(&mut self, row: &SessionRow) {
-        let session = {
-            let Ok(domain) = open_gxserver_database(&self.state.paths) else {
-                return;
-            };
-            let repository = DomainRepository::new(&domain, self.state.metadata.server_id.as_str());
-            repository
-                .get_session(&row.project_id, &row.session_id)
-                .ok()
-                .flatten()
+    /// Resolves every row that is new or changed since the last sweep (`resolve`) and returns their
+    /// keys for the sweep to read. One gxserver connection serves them all, and the index writes
+    /// are committed [`RESOLVE_COMMIT_EVERY`] at a time: after a restart every row is new, and a
+    /// connection and a commit per row made that first pass crawl. `None` when gxserver is
+    /// shutting down.
+    fn resolve_changed(&mut self, rows: &[SessionRow]) -> Option<HashSet<(String, String)>> {
+        let changed: Vec<&SessionRow> = rows
+            .iter()
+            .filter(|row| {
+                self.sessions
+                    .get(&(row.project_id.clone(), row.session_id.clone()))
+                    .is_none_or(|known| known.updated_at != row.updated_at)
+            })
+            .collect();
+        let mut keys = HashSet::new();
+        if changed.is_empty() {
+            return Some(keys);
+        }
+        let Ok(domain) = open_gxserver_database(&self.state.paths) else {
+            return Some(keys);
         };
+        for batch in changed.chunks(RESOLVE_COMMIT_EVERY) {
+            if self.shutting_down() {
+                return None;
+            }
+            let _ = self.db.execute_batch("BEGIN");
+            for row in batch {
+                self.resolve(&domain, row);
+                keys.insert((row.project_id.clone(), row.session_id.clone()));
+            }
+            let _ = self.db.execute_batch("COMMIT");
+        }
+        Some(keys)
+    }
+
+    /// Reads a changed session's row and finds the transcript its chat reads.
+    fn resolve(&mut self, domain: &rusqlite::Connection, row: &SessionRow) {
+        let session = DomainRepository::new(domain, self.state.metadata.server_id.as_str())
+            .get_session(&row.project_id, &row.session_id)
+            .ok()
+            .flatten();
         let transcript = session
             .as_ref()
             .and_then(transcript_of)

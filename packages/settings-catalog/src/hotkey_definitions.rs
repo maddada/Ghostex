@@ -853,8 +853,12 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     // focused code-server editor keeps Cmd+Shift+F for search-in-files.
     HotkeyDefinition {
         id: "openFindPrompts",
-        title: "Find Prompts",
-        description: "Search every prompt you have sent to an agent, then resume or fork it.",
+        // CDXC:Sessions 2026-11-27 DECISION: User chose to retire the Search by Prompt window:
+        // this chord (and Ctrl+Shift+F on Windows and Linux) opens Quick Access on Sessions with
+        // the cursor in its search box, which finds chats by what was said in them. The id stays
+        // so a chord someone set keeps working.
+        title: "Search Chats",
+        description: "Open Sessions search, which finds chats by their title or by what was said in them.",
         default_key: "cmd+shift+f",
         windows_linux_default_key: None,
         alternate_default_keys: &[],
@@ -867,7 +871,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     HotkeyDefinition {
         id: "searchProjectFiles",
         title: "Search in Files",
-        description: "While the Files view has focus, search the text of every file in the project, like VS Code's Search. Elsewhere the same keys open Find Prompts.",
+        description: "While the Files view has focus, search the text of every file in the project, like VS Code's Search. Elsewhere the same keys open Search Chats.",
         default_key: "cmd+shift+f",
         windows_linux_default_key: None,
         alternate_default_keys: &[],

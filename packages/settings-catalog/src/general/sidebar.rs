@@ -33,7 +33,7 @@ pub(crate) fn spaces() -> Section {
             row("sidebarSpacesEnabled", "Spaces", "Group projects into Spaces and switch between them from a row of icons at the top of the sidebar, or by swiping. On by default; your saved Spaces are kept while it is off."),
             row("sidebarActiveProjects", "Show the Active projects star in the Spaces bar", "Add a star tab at the start of the Spaces bar that pulls together every project you are currently working on across all Spaces (any project with a busy or waiting session, or used in the last 8 hours), so you can switch between them without changing Spaces. Right-click the star to hide it."),
             row("sidebarSpaceSwitchBehavior", "When switching to a Space", "Reopen the session you last had open in a Space when you switch to it, in the view its project was in. Shown while Spaces is on.").options(SIDEBAR_SPACE_SWITCH_BEHAVIOR_OPTIONS),
-            row("sidebarSpaceFollowActiveSession", "Switch Space when opening a session from another Space", "Switch the selected Space to the one that owns a session you open from outside it, such as through Back/Forward or Search by Prompt. Shown while Spaces is on."),
+            row("sidebarSpaceFollowActiveSession", "Switch Space when opening a session from another Space", "Switch the selected Space to the one that owns a session you open from outside it, such as through Back/Forward or the Sessions search. Shown while Spaces is on."),
         ],
     )
 }

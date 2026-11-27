@@ -138,6 +138,10 @@ pub(crate) fn gpui_previous_sessions_request_from_command(
             .get("refreshExternalSessions")
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(false),
+        chat_search: command
+            .get("chatSearch")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false),
         cursor,
         limit,
         query,
@@ -161,6 +165,7 @@ pub(crate) fn gpui_previous_sessions_result_message(
     let mut projects = local_page.projects;
     let mut next_cursor = local_page.cursor;
     let mut previous_sessions = local_page.items;
+    let mut chat_matches = local_page.chat_matches;
     for remote_source in &remote_sources {
         let remote_page = gpui_list_previous_sessions_from_remote_gxserver(&request, remote_source)
             .unwrap_or_default();
@@ -169,6 +174,7 @@ pub(crate) fn gpui_previous_sessions_result_message(
         }
         projects.extend(remote_page.projects);
         previous_sessions.extend(remote_page.items);
+        chat_matches.extend(remote_page.chat_matches);
     }
     gpui_sort_previous_session_items_by_closed_time(&mut previous_sessions);
     let mut payload = gpui_previous_sessions_result_payload(
@@ -178,6 +184,9 @@ pub(crate) fn gpui_previous_sessions_result_message(
         previous_sessions,
     );
     payload["projects"] = serde_json::json!(projects);
+    if request.chat_search {
+        payload["chatMatches"] = serde_json::json!(chat_matches);
+    }
     payload
 }
 
@@ -193,6 +202,7 @@ fn gpui_project_copies_previous_sessions_result_message(
     let mut projects = Vec::new();
     let mut next_cursor: Option<String> = None;
     let mut previous_sessions = Vec::new();
+    let mut chat_matches = Vec::new();
     let mut unreachable: Vec<String> = Vec::new();
     for project_id in &request.project_ids {
         let mut scoped_request = request.clone();
@@ -218,6 +228,7 @@ fn gpui_project_copies_previous_sessions_result_message(
                 }
                 projects.extend(page.projects);
                 previous_sessions.extend(page.items);
+                chat_matches.extend(page.chat_matches);
             }
             Err(machine_id) => {
                 if !unreachable.contains(&machine_id) {
@@ -234,6 +245,9 @@ fn gpui_project_copies_previous_sessions_result_message(
         previous_sessions,
     );
     payload["projects"] = serde_json::json!(projects);
+    if request.chat_search {
+        payload["chatMatches"] = serde_json::json!(chat_matches);
+    }
     payload["unreachableMachineIds"] = serde_json::json!(unreachable);
     payload
 }
@@ -491,6 +505,10 @@ pub(crate) fn gpui_list_previous_sessions_from_remote_gxserver(
                 )
             })
             .collect(),
+        chat_matches: gpui_chat_matches_from_result(
+            &result,
+            Some(remote_source.remote_machine_id.as_str()),
+        ),
     })
 }
 
@@ -511,6 +529,9 @@ pub(crate) fn gpui_previous_sessions_list_params(
         "refreshExternalSessions".to_string(),
         serde_json::json!(request.refresh_external_sessions),
     );
+    if request.chat_search {
+        params.insert("chatSearch".to_string(), serde_json::Value::Bool(true));
+    }
     params.insert(
         "limit".to_string(),
         serde_json::Value::Number(serde_json::Number::from(request.limit as u64)),
