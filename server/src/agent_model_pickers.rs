@@ -1,5 +1,11 @@
 //! Reads an agent CLI's own `/model` picker in a hidden terminal, for the CLIs whose list command
-//! is missing or does not match what the picker shows (Claude Code, Cursor, Antigravity).
+//! is missing or does not match what the picker shows (Claude Code, Cursor).
+//!
+//! CDXC:AgentProviders 2026-11-27 DECISION:
+//! User (Q5210, "Once per version"): Antigravity's `/model` picker is no longer read. The read
+//! started a real agy session in a hidden terminal (and left a chat in the user's agy history);
+//! Ghostex now runs agy outside ACP for its model list only as one `agy models` per new agy
+//! version or Fetch latest models (agent_model_lineups.rs).
 //!
 //! CDXC:AgentProviders 2026-11-13 DECISION:
 //! User (Q2981, Q2983, Q2985, Q2986 on the live model lists page): Claude Code's model list is read
@@ -94,7 +100,6 @@ fn program_name(agent: &str) -> Option<&'static str> {
     match agent {
         "claude" => Some("claude"),
         "cursor" => Some("cursor-agent"),
-        "antigravity" => Some("agy"),
         _ => None,
     }
 }
@@ -111,7 +116,7 @@ pub(crate) fn picker_rows(
     fresh: bool,
 ) -> Option<Vec<PickerRow>> {
     let program = crate::agent_hooks::probing::resolve_probe_command(program_name(agent)?, home)?;
-    let version = cli_version(agent, &program, home)?;
+    let version = cli_version(&program, home)?;
     let cache_path = cache_dir.join("agent-model-pickers.json");
     let mut cache: BTreeMap<String, Value> = std::fs::read_to_string(&cache_path)
         .ok()
@@ -133,20 +138,9 @@ pub(crate) fn picker_rows(
     if !fresh && cached.is_some() {
         return cached;
     }
-    if agent == "antigravity" && skips_agy_picker_read() {
-        return cached;
-    }
     let scratch = cache_dir.join("model-picker-scratch");
     std::fs::create_dir_all(&scratch).ok()?;
-    // agy saves the scratch folder as trusted when the read answers its folder question: taken
-    // out again afterwards unless it was trusted already (agent_folder_trust/agy_trust.rs).
-    let agy_scratch = (agent == "antigravity")
-        .then(|| crate::agent_folder_trust::agy_folder_key(&scratch))
-        .filter(|key| !crate::agent_folder_trust::agy_trusts(home, key));
     let read = read_picker(agent, &program, &scratch);
-    if let Some(key) = agy_scratch.as_deref() {
-        crate::agent_folder_trust::agy_forget(home, key);
-    }
     let Some(rows) = read.filter(|rows| !rows.is_empty()) else {
         return cached;
     };
@@ -167,21 +161,8 @@ pub(crate) fn picker_rows(
     Some(rows)
 }
 
-/// CDXC:AgentProviders 2026-11-24 WHY: reading agy's picker runs a real agy session, which agy keeps
-/// as a chat (brain folder, conversation, summary row) in the user's own `~/.gemini`, and a read
-/// stopped midway leaves its scratch folder in agy's trusted list. A throwaway gxserver (its own
-/// `GHOSTEX_HOME`, as `cargo xtask test-server` starts) has an empty cache and read it on every
-/// start, so the user's agy history filled with "model-picker-scratch" chats from test servers.
-/// Such a server keeps the published catalog and `agy models` instead. Pointing `HOME` at a folder
-/// of the server's own was tried and must not come back: agy stays signed in there (the login is in
-/// the keyring) but a fresh agy home opens its first-run screens, one of them a data-sharing consent
-/// that comes ticked "Yes, I agree", which Ghostex must not answer for the user.
-fn skips_agy_picker_read() -> bool {
-    ghostex_paths::uses_separate_profile()
-}
-
 /// The CLI's `--version` line, which keys the cached read.
-fn cli_version(agent: &str, program: &str, home: &Path) -> Option<String> {
+fn cli_version(program: &str, home: &Path) -> Option<String> {
     let mut command = Command::new(program);
     command
         .arg("--version")
@@ -190,10 +171,6 @@ fn cli_version(agent: &str, program: &str, home: &Path) -> Option<String> {
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .env("NO_COLOR", "1");
-    if agent == "antigravity" {
-        let (key, value) = crate::agent_hooks::probing::AGY_BACKGROUND_AUTO_UPDATE_OFF;
-        command.env(key, value);
-    }
     let mut child = command.spawn().ok()?;
     let started = Instant::now();
     loop {
@@ -219,7 +196,6 @@ fn read_picker(agent: &str, program: &str, scratch: &Path) -> Option<Vec<PickerR
     match agent {
         "claude" => read_claude(program, scratch),
         "cursor" => read_cursor(program, scratch),
-        "antigravity" => read_antigravity(program, scratch),
         _ => None,
     }
 }
@@ -593,80 +569,6 @@ fn cursor_row_label(line: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Antigravity: "Switch Model", a search box, then every model on its own line (`>` on the focused
-// one, `(current)` after the model in use), then the focused row's Effort slider.
-// ---------------------------------------------------------------------------
-
-fn read_antigravity(program: &str, scratch: &Path) -> Option<Vec<PickerRow>> {
-    let (key, value) = crate::agent_hooks::probing::AGY_BACKGROUND_AUTO_UPDATE_OFF;
-    let cli = Hidden::spawn(program, &[], scratch, &[(key, value)])?;
-    loop {
-        if cli.out_of_time() {
-            return None;
-        }
-        let text = cli.text();
-        if text.contains("Yes, I trust this folder") {
-            cli.press(ENTER, 1500);
-            continue;
-        }
-        if text.contains("Sign in") && !text.contains("? for shortcuts") {
-            return None;
-        }
-        if text.contains("? for shortcuts") {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(200));
-    }
-    std::thread::sleep(Duration::from_millis(1000));
-    if cli.text().contains("esc to dismiss") {
-        cli.press(ESCAPE, 500);
-    }
-    cli.press(b"/model", 700);
-    cli.press(ENTER, 300);
-    let text = cli.wait_for(Duration::from_secs(10), |text| {
-        text.contains("Switch Model") && (text.contains("Keyboard:") || text.contains("Effort"))
-    })?;
-    cli.press(ESCAPE, 300);
-    cli.press(ESCAPE, 300);
-    let rows = parse_antigravity_picker(after(&text, "Switch Model"));
-    (!rows.is_empty()).then_some(rows)
-}
-
-fn parse_antigravity_picker(picker: &str) -> Vec<PickerRow> {
-    let mut rows = Vec::new();
-    let mut started = false;
-    for line in picker
-        .lines()
-        .skip_while(|line| !line.trim_start().starts_with("Search:"))
-        .skip(1)
-    {
-        let trimmed = line.trim();
-        if trimmed.starts_with('─') {
-            continue;
-        }
-        if trimmed.is_empty() {
-            if started {
-                break;
-            }
-            continue;
-        }
-        if trimmed.starts_with("Effort") || trimmed.starts_with("Keyboard:") {
-            break;
-        }
-        started = true;
-        let label = trimmed
-            .trim_start_matches('>')
-            .trim()
-            .trim_end_matches("(current)")
-            .trim();
-        if !label.is_empty() {
-            rows.push(PickerRow::named(label));
-        }
-    }
-    rows
-}
-
-// ---------------------------------------------------------------------------
 // Turning picker rows into catalog rows.
 // ---------------------------------------------------------------------------
 
@@ -728,10 +630,10 @@ fn claude_row_names(row: &PickerRow) -> Vec<String> {
 
 /// Puts a list command's lineup in the picker's order and adds the rows only the picker shows,
 /// described by the published catalog's row of the same name when it has one. Rows the picker does
-/// not show are dropped: the picker is what the user can pick from, except Antigravity's (below).
+/// not show are dropped: the picker is what the user can pick from.
 ///
 /// CDXC:AgentProviders 2026-11-20 WHY:
-/// Antigravity 1.5.10 folded its `Orchestrator (Carbon)` and `Orchestrator (Argon)` picker rows into one `Orchestrator` row with a Planner choice, while `agy models` and `/model` keep one id per planner (`gemini-pro-orchestrator-neon`, `Orchestrator (Neon)`). A picker row that names no listed row but heads listed rows `<row> (<choice>)` stands for those rows, so each keeps the id `/model` accepts; the made-up `orchestrator` id agy refuses is never served. `agy models` follows the account and the server, while the picker read is kept per CLI version, so for Antigravity a model the list names and the picker read did not show stays in, after the picker's rows: Gemini 4 Neon was listed before a picker read showed it.
+/// A picker row that names no listed row but heads listed rows `<row> (<choice>)` stands for those rows, so each keeps the id `/model` accepts and no made-up id is served (first seen when Antigravity 1.5.10 folded its `Orchestrator (Carbon)` and `Orchestrator (Argon)` rows into one; Antigravity's picker is no longer read since 2026-11-27).
 pub(crate) fn order_by_picker(
     agent: &str,
     mut entry: Value,
@@ -791,14 +693,6 @@ pub(crate) fn order_by_picker(
             .any(|known| known.get("value") == value.as_ref())
         {
             models.push(model);
-        }
-    }
-    if agent == "antigravity" && !models.is_empty() {
-        for listed in &listed {
-            let value = listed.get("value");
-            if !models.iter().any(|known| known.get("value") == value) {
-                models.push(listed.clone());
-            }
         }
     }
     if !models.is_empty() {

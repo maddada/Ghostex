@@ -801,6 +801,10 @@ async fn read_state_with(
                 .find(|line| !line.is_empty() && line.chars().any(|ch| ch.is_ascii_digit()))
             {
                 state["version"] = json!(line.chars().take(160).collect::<String>());
+                // A new agy version is when its model list is read again (Q5210).
+                if definition.agent_id == "antigravity" {
+                    crate::agent_model_catalog::note_agy_version(line);
+                }
             }
         }
         Err(reason) => state["versionError"] = json!(reason),

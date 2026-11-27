@@ -22,8 +22,8 @@ use std::{
 
 use serde_json::{json, Value};
 
-/// The agents whose lineup comes from their CLI. Claude Code's, Cursor's and Antigravity's also read
-/// the CLI's `/model` picker (`agent_model_pickers.rs`).
+/// The agents whose lineup comes from their CLI. Claude Code's and Cursor's also read the CLI's
+/// `/model` picker (`agent_model_pickers.rs`).
 pub(crate) const RUNTIME_AGENTS: [&str; 6] = [
     "antigravity",
     "claude",
@@ -32,6 +32,16 @@ pub(crate) const RUNTIME_AGENTS: [&str; 6] = [
     "grok",
     "opencode",
 ];
+
+/// The agents whose lineup gxserver's background pass reads again on a timer.
+///
+/// CDXC:AgentProviders 2026-11-27 DECISION:
+/// User (Q5210, "Once per version"): Antigravity is not on the timer. `agy models` asks Google on
+/// the user's account, and the pass ran it at boot, every 10 minutes and every 2 minutes while it
+/// failed (Fable review, finding 1). It is read once per new agy version and when the user clicks
+/// Fetch latest models; a read that fails waits for the next version or a Fetch
+/// (`agent_model_catalog::read_antigravity_lineup_once_per_version`).
+pub(crate) const TIMED_AGENTS: [&str; 5] = ["claude", "codex", "cursor", "grok", "opencode"];
 const READ_TIMEOUT: Duration = Duration::from_secs(45);
 /// Every effort the three CLIs name, lowest first.
 const EFFORT_RANK: [&str; 8] = [
@@ -83,9 +93,9 @@ pub(crate) fn read_lineup(agent: &str, cache_dir: &std::path::Path, fresh: bool)
         "grok" => grok_lineup(&output, &home),
         _ => cursor_lineup(&output),
     }?;
-    // Cursor's and Antigravity's lists differ from their pickers in order and rows (Q2983, Q2986).
+    // Cursor's list differs from its picker in order and rows (Q2983).
     let entry = match agent {
-        "cursor" | "antigravity" => {
+        "cursor" => {
             match crate::agent_model_pickers::picker_rows(agent, &home, cache_dir, fresh) {
                 Some(picker) => crate::agent_model_pickers::order_by_picker(
                     agent,
@@ -103,6 +113,18 @@ pub(crate) fn read_lineup(agent: &str, cache_dir: &std::path::Path, fresh: bool)
         .and_then(Value::as_array)
         .is_some_and(|models| !models.is_empty())
         .then_some(entry)
+}
+
+/// What `agy --version` prints on this computer (the switch that keeps agy from spawning its
+/// updater on), `None` when agy is missing or doesn't answer within 5 s. A local read: it asks no
+/// server.
+pub(crate) fn agy_version(home: &std::path::Path) -> Option<String> {
+    let executable = crate::accounts::helpers::probe_executable(home, "agy")?;
+    let mut command = crate::platform::process::background_command(executable);
+    command.arg("--version").current_dir(home);
+    let (key, value) = crate::agent_hooks::probing::AGY_BACKGROUND_AUTO_UPDATE_OFF;
+    command.env(key, value);
+    crate::agent_hooks::probing::run_command_stdout_with_timeout(command, Duration::from_secs(5))
 }
 
 /// The lineup read's command. `agy` also gets the switch that keeps it from spawning its updater

@@ -341,7 +341,9 @@ pub(crate) fn ensure_lineup(
     event_hub: &GxserverEventHub,
     server_id: &str,
 ) {
-    if !crate::agent_model_lineups::RUNTIME_AGENTS.contains(&agent) {
+    // Antigravity's lineup is read once per agy version, at boot or when Ghostex sees a new one,
+    // never because a chat opened (`read_antigravity_lineup_once_per_version`).
+    if !crate::agent_model_lineups::TIMED_AGENTS.contains(&agent) {
         return;
     }
     let known = state()
@@ -394,10 +396,81 @@ pub(crate) async fn handle_refresh_agent_model_lineup_http(
     }
 }
 
-/// Reads each CLI's lineup now and again every [`LINEUP_TTL`] for as long as the server runs,
-/// telling every client when one changed. A CLI that cannot answer keeps its last lineup.
+/// Where gxserver keeps the agy version whose lineup it last read (or tried to read).
+fn antigravity_lineup_version_path(paths: &GxserverPaths) -> PathBuf {
+    paths.app_cache_dir.join("agy-lineup-version.txt")
+}
+
+/// What the lineup thread needs to read Antigravity's lineup when another part of gxserver sees a
+/// new agy version (`note_agy_version`).
+static LINEUP_CONTEXT: OnceLock<(GxserverPaths, GxserverEventHub, String)> = OnceLock::new();
+
+/// Reads Antigravity's lineup (`agy models`) when `version_text` names an agy version it was not
+/// read on yet, and keeps that version first, so a read that fails is not tried again for it.
+///
+/// CDXC:AgentProviders 2026-11-27 DECISION:
+/// User (Q5210, "Once per version"): one `agy models` read per new agy version, plus Fetch latest
+/// models, no timer, and a failed read waits for the next version or a manual Fetch. The version
+/// comes from reads Ghostex already makes (`agy --version` once at boot, and Settings' agent
+/// version read), so nothing polls agy for it.
+pub(crate) fn read_antigravity_lineup_once_per_version(
+    version_text: &str,
+    paths: &GxserverPaths,
+    event_hub: &GxserverEventHub,
+    server_id: &str,
+) {
+    let Some(version) = crate::agent_cli::latest::version_in(version_text) else {
+        return;
+    };
+    let path = antigravity_lineup_version_path(paths);
+    {
+        static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _gate = ONE_AT_A_TIME
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let known = fs::read_to_string(&path).unwrap_or_default();
+        if known.trim() == version {
+            return;
+        }
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let _ = fs::write(&path, &version);
+    }
+    let _ = read_and_adopt_lineup("antigravity", false, paths, event_hub, server_id);
+}
+
+/// Another part of gxserver read agy's version (Settings' agent row): reads Antigravity's lineup
+/// on a thread of its own when that version is new (`read_antigravity_lineup_once_per_version`).
+pub(crate) fn note_agy_version(version_text: &str) {
+    let Some((paths, event_hub, server_id)) = LINEUP_CONTEXT.get().cloned() else {
+        return;
+    };
+    let version_text = version_text.to_string();
+    let _ = std::thread::Builder::new()
+        .name("agy-lineup".to_string())
+        .spawn(move || {
+            read_antigravity_lineup_once_per_version(
+                &version_text,
+                &paths,
+                &event_hub,
+                &server_id,
+            )
+        });
+}
+
+/// Reads each timed CLI's lineup ([`crate::agent_model_lineups::TIMED_AGENTS`]) now and again
+/// every [`LINEUP_TTL`] for as long as the server runs, telling every client when one changed. A
+/// CLI that cannot answer keeps its last lineup. Antigravity's is read once at boot, only when
+/// agy's version is new.
 fn refresh_lineups(paths: GxserverPaths, event_hub: GxserverEventHub, server_id: String) {
-    let agents = crate::agent_model_lineups::RUNTIME_AGENTS;
+    let _ = LINEUP_CONTEXT.set((paths.clone(), event_hub.clone(), server_id.clone()));
+    if let Some(version) =
+        crate::agent_model_lineups::agy_version(&crate::resume_lookup::home_dir())
+    {
+        note_agy_version(&version);
+    }
+    let agents = crate::agent_model_lineups::TIMED_AGENTS;
     let mut due = vec![Instant::now(); agents.len()];
     loop {
         for (index, agent) in agents.iter().enumerate() {
