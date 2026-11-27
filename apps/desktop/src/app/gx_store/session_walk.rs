@@ -116,6 +116,21 @@ fn unified_rendered_rows<'a>(
             }
         }
     }
+    // Group sessions by tags: Pinned's shelf, the groups (whose headings never fold), the unheaded
+    // cards.
+    if shelf_open(UnifiedShelf::Pinned, None) {
+        for card in &unified.pinned {
+            push(card, &mut rows);
+        }
+    }
+    for card in unified
+        .status_groups
+        .iter()
+        .flat_map(|group| group.all_cards())
+        .chain(&unified.ungrouped)
+    {
+        push(card, &mut rows);
+    }
     for card in &unified.list {
         push(card, &mut rows);
     }

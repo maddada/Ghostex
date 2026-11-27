@@ -5,10 +5,10 @@
 
 use crate::app_lifecycle::APP_LIFECYCLE_ACTIONS;
 use crate::sidebar_actions::{
-    GROUP_WORKING_SESSIONS_ACTION, HIDE_PROJECTS_WITHOUT_SESSIONS_ACTION,
-    PINNED_ORDER_MANUAL_ACTION, PINNED_ORDER_RECENT_ACTION, SESSION_ORDER_ALPHABETICAL_ACTION,
-    SESSION_ORDER_CREATED_ACTION, SESSION_ORDER_RECENT_ACTION, SWITCH_SIDEBAR_VIEW_ACTION,
-    UNIFIED_GROUP_BY_PROJECT_ACTION, UNIFIED_WORKING_SECTION_ACTION,
+    GROUP_SESSIONS_BY_TAGS_ACTION, GROUP_WORKING_SESSIONS_ACTION,
+    HIDE_PROJECTS_WITHOUT_SESSIONS_ACTION, PINNED_ORDER_MANUAL_ACTION, PINNED_ORDER_RECENT_ACTION,
+    SESSION_ORDER_ALPHABETICAL_ACTION, SESSION_ORDER_CREATED_ACTION, SESSION_ORDER_RECENT_ACTION,
+    SWITCH_SIDEBAR_VIEW_ACTION, UNIFIED_GROUP_BY_PROJECT_ACTION, UNIFIED_WORKING_SECTION_ACTION,
 };
 use crate::sidebar_view::tags::{
     normalize_tag_list_items, tag_list_item_filter, tag_list_item_label, tag_presentation,
@@ -132,9 +132,20 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
             .with_checked(input.settings.unified_group_by_project),
         );
         sort.push(
-            intent("Moving Section", "stack", UNIFIED_WORKING_SECTION_ACTION)
-                .with_checked(input.settings.unified_working_section),
+            intent(
+                "Group sessions by tags",
+                "tag",
+                GROUP_SESSIONS_BY_TAGS_ACTION,
+            )
+            .with_checked(input.settings.group_sessions_by_tags),
         );
+        // CDXC:Sidebar 2026-11-14 DECISION: User: while Group sessions by tags is on there is no Moving section, since its Working group already lists those sessions, and the Moving section's setting keeps its value in Settings. Its row leaves this menu while grouping is on, because a row here always changes what is on screen (the 2026-10-31 decision above, kept).
+        if !input.settings.group_sessions_by_tags {
+            sort.push(
+                intent("Moving Section", "stack", UNIFIED_WORKING_SECTION_ACTION)
+                    .with_checked(input.settings.unified_working_section),
+            );
+        }
         // Session order, three ticked choices like Pinned order (CDXC:Sidebar 2026-11-17 in
         // unified_sidebar/build.rs `unified_session_cmp`).
         let order = input.settings.unified_session_order;
@@ -206,7 +217,9 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
         for item in
             normalize_tag_list_items(&input.settings.tag_list_items, Some(input.filter_catalog))
         {
-            if !item.visible {
+            // The status entries (sidebar_view/status_tags.rs) follow the agent, so they are never
+            // a tag to filter by, whether or not Group sessions by tags is on.
+            if !item.visible || item.kind == TagListItemKind::Status {
                 continue;
             }
             if item.kind == TagListItemKind::Separator {
@@ -285,7 +298,9 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
     }
     if unified {
         // CDXC:Sidebar 2026-10-31 DECISION: User (issue #359): Collapse All mustn't act on a hidden list while Unified is on. It folds the project groups you can see, so it is only offered while Group by Project is on, and the flat list has nothing to fold. The host swaps the label for Expand All at the moment the menu opens, when every group is folded, because folding does not rebuild this menu.
-        if input.settings.unified_group_by_project {
+        // While Group sessions by tags is on, the project headings sit inside the status groups and
+        // neither of them folds (unified_sidebar/status_groups.rs), so there is nothing to collapse.
+        if input.settings.unified_group_by_project && !input.settings.group_sessions_by_tags {
             more.push(intent(
                 "Collapse All",
                 COLLAPSE_ALL_ICON,
@@ -504,6 +519,7 @@ mod tests {
                 "Switch to Project View",
                 "Show Hidden",
                 "Group by Project",
+                "Group sessions by tags",
                 "Moving Section",
                 "Session order",
                 "Recent activity",

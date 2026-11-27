@@ -59,8 +59,14 @@ impl GhostexGpuiApp {
         let Some(unified) = self.native_sidebar.unified.as_ref() else {
             return Vec::new();
         };
+        // Without project groups the pinned cards lead the list, or (Group sessions by tags on)
+        // sit in the Pinned shelf above the groups; one of the two is empty.
         let cards = if scope.is_empty() {
-            &unified.list
+            if unified.pinned.is_empty() {
+                &unified.list
+            } else {
+                &unified.pinned
+            }
         } else {
             match unified.groups.iter().find(|group| group.repo_key == scope) {
                 Some(group) => &group.cards,

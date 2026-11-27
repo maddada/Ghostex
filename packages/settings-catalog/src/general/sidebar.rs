@@ -49,8 +49,9 @@ pub(crate) fn sidebar() -> Section {
             row("sidebarSeparateByMachine", "Computers", "One list (the default): every connected computer in one list, where a project on several computers is one entry with the sessions of all of them, and Spaces and project groups are shared by all of them. A tab each: one computer at a time, each with its own tab, project list and Spaces."),
             // CDXC:RemoteMachines 2026-11-09 DECISION in gx-core sidebar_view/merged.rs: on by default.
             row("sidebarMergeRepositoryCopies", "Merge copies of the same repository", "Show two folders on this computer that are copies of the same repository (the same git remote, opened at the same folder inside it) as one project, with the sessions of both. Turn off to give each folder its own project with only its own sessions. Copies on different computers are one project either way. The phone follows this. Shown while Computers is set to One list."),
-            row("unifiedWorkingSection", "Group busy sessions in a Moving section", "In the Unified sidebar, move sessions whose agent is currently working (or running background tasks) into a collapsible Moving section at the bottom, so the top stays focused on sessions that need you. They jump back up when done or waiting for you. Shown while the Unified sidebar is selected."),
-            row("unifiedGroupByProject", "Group by project", "Put every machine's sessions of one repository under one header, with its Moving, Snoozed and Parked sections inside it. Drag the headers to arrange them. Drafts stay above the groups. Also in the sidebar's Sort & Filter menu. Shown while the Unified sidebar is selected."),
+            row("groupSessionsByTags", "Group sessions by tags", "Group the Unified sidebar by the Session Tags order: Needs you, Question, Error, Finished (not yet read), Working and Idle, across every project, with Drafts and Pinned above the groups and Snoozed and Parked below. Change the order in Session Tags, on a computer or on the phone. Also in the sidebar's Sort & Filter menu. Shown while the Unified sidebar is selected."),
+            row("unifiedWorkingSection", "Group busy sessions in a Moving section", "In the Unified sidebar, move sessions whose agent is currently working (or running background tasks) into a collapsible Moving section at the bottom, so the top stays focused on sessions that need you. They jump back up when done or waiting for you. Not shown while Group sessions by tags is on, which lists them in its Working group; the setting is kept. Shown while the Unified sidebar is selected."),
+            row("unifiedGroupByProject", "Group by project", "Put every machine's sessions of one repository under one header, with its Moving, Snoozed and Parked sections inside it. Drag the headers to arrange them. Drafts stay above the groups. While Group sessions by tags is on, each group lists its sessions under their projects' headings instead, and Pinned, Snoozed and Parked stay above and below the groups. Also in the sidebar's Sort & Filter menu. Shown while the Unified sidebar is selected."),
             // CDXC:Sidebar 2026-11-17 DECISION in gx-core unified_sidebar/build.rs `unified_session_cmp`: Recent activity by default.
             row("unifiedSessionOrder", "Session order", "Order the Unified sidebar's sessions by recent activity (a session moves to the top when you send it a message and when it finishes or needs you), alphabetically by title, or by when each was created, newest first. Alphabetical and Created never move a session when it works or finishes; turn off the Moving section too for a list that never moves. Pinned sessions follow Pinned order. Applies to the phone too. Also in the sidebar's Sort & Filter menu. Shown while the Unified sidebar is selected.").options(UNIFIED_SESSION_ORDER_OPTIONS),
             // CDXC:Settings 2026-10-29 DECISION (wording Q23): shown as the switch Remember sidebar per view; Same in every view is off, Remembered per view is on.
@@ -102,12 +103,13 @@ pub(crate) fn sidebar_tags() -> Section {
         "sidebarTags",
         "Session Tags",
         vec![
-            row("sidebarSessionTagListItems", "Tag filter list", "Add your own tags, then reorder, hide, disable, or delete tags and their separators for the sidebar and the Tag as menu.").option_list(tag_list_item_options()).options(&[opt("Hide tag", "hide"), opt("Disable tag", "disable"), opt("Reorder tags", "reorder")]),
+            row("sidebarSessionTagListItems", "Tag filter list", "Add your own tags, then reorder, hide, disable, or delete tags and their separators for the sidebar and the Tag as menu. While Group sessions by tags is on, the list also holds the six status entries (Needs you, Question, Error, Finished (not yet read), Working and Idle), which follow each agent and are never offered in Tag as; the first enabled entry that applies sets a session's group.").option_list(tag_list_item_options()).options(&[opt("Hide tag", "hide"), opt("Disable tag", "disable"), opt("Reorder tags", "reorder")]),
         ],
     )
 }
 
-/// `getSidebarSessionTagListItemLabel` over the default tag list: a tag's label, "No tag", or "Separator".
+/// `getSidebarSessionTagListItemLabel` over the default tag list: a status entry's or a tag's
+/// label, "No tag", or "Separator".
 fn tag_list_item_options() -> Vec<SettingOption> {
     DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS
         .as_array()
@@ -115,6 +117,10 @@ fn tag_list_item_options() -> Vec<SettingOption> {
         .map(|item| {
             let id = item.get("id").and_then(J::as_str).unwrap_or_default();
             let label = match item.get("type").and_then(J::as_str) {
+                Some("status") => SIDEBAR_SESSION_STATUS_OPTIONS
+                    .iter()
+                    .find(|option| option.value == id)
+                    .map_or(id, |option| option.label),
                 Some("tag") => {
                     let tag = item.get("tag").and_then(J::as_str).unwrap_or_default();
                     SIDEBAR_SESSION_TAG_OPTIONS

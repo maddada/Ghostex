@@ -1,9 +1,10 @@
 //! The Sidebar group of General: Sidebar, Spaces, Session Cards and Sidebar Tags.
 use super::super::super::catalog::{SettingOption, module, settings_catalog};
 use super::super::super::fields::{
-    Chip, HoverStripKind, PageAction, RowSpec, card_inset, chips_field, custom_note,
-    hover_actions_field, hover_buttons_are_default, normalize_hover_buttons, reset_key,
-    segmented_field, select_field, settings_section, tag_list_field, toggle_field_with,
+    Chip, HoverStripKind, PageAction, RowSpec, SettingsPage as _, card_inset, chips_field,
+    custom_note, hover_actions_field, hover_buttons_are_default, normalize_hover_buttons,
+    reset_key, segmented_field, select_field, settings_note_row, settings_section, tag_list_field,
+    toggle_field_with,
 };
 use super::super::super::page::PageBlock;
 use super::super::super::store::SettingsStore;
@@ -157,12 +158,43 @@ fn sidebar_section(
     // The Unified sidebar's own Working section switch, under the switch that selects it (CDXC:Sidebar
     // 2026-10-30 in gx-core unified_sidebar/build.rs `unified_shelf`).
     if g.values.string("sidebarView") == "unified" {
+        let grouping = g.values.bool("groupSessionsByTags");
+        // Turning grouping on also stores the Session Tags list with its status entries, ahead of
+        // the switch in one patch, as the Sort & Filter row does (gx-core
+        // `group_sessions_by_tags_list`, which leaves a list never changed here to sync).
+        if g.visible(s, "groupSessionsByTags") {
+            rows.push(toggle_field_with(
+                &g.p,
+                "groupSessionsByTags",
+                g.spec(
+                    "groupSessionsByTags",
+                    "Group sessions by tags",
+                    "Group Unified by the Session Tags order. Change the order in Session Tags.",
+                )
+                .dependent(),
+                grouping,
+                Some(reset_key::<GeneralTab>("groupSessionsByTags")),
+                |page: &mut GeneralTab, checked, _window, cx| {
+                    let store = page.settings_store().clone();
+                    let saved = store.read(cx).settings().clone();
+                    let mut patch = Map::new();
+                    patch.extend(ghostex_gx_core::group_sessions_by_tags_list(
+                        checked, &saved,
+                    ));
+                    patch.insert("groupSessionsByTags".to_string(), json!(checked));
+                    store.update(cx, |store, cx| {
+                        store.apply_patch(patch, "settings:control", cx)
+                    });
+                },
+                cx,
+            ));
+        }
         rows.extend(page.toggle(
             g,
             s,
             "unifiedGroupByProject",
             "Group by project",
-            "Put every machine's sessions of one repository under one header, with its Moving, Snoozed and Parked sections inside it. Drag the headers to arrange them. Drafts stay above the groups. Also in the sidebar's Sort & Filter menu. Shown while the Unified sidebar is selected.",
+            "Put every machine's sessions of one repository under one header, with its Moving, Snoozed and Parked sections inside it. Drag the headers to arrange them. Drafts stay above the groups. While Group sessions by tags is on, each group lists its sessions under their projects' headings instead, and Pinned, Snoozed and Parked stay above and below the groups. Also in the sidebar's Sort & Filter menu. Shown while the Unified sidebar is selected.",
             false,
             cx,
         ));
@@ -175,6 +207,13 @@ fn sidebar_section(
             true,
             cx,
         ));
+        // CDXC:Sidebar 2026-11-14 DECISION: User (the approved Settings screen): while grouping is on, a visible line under the Working section says that section is not shown and its setting is kept. It is a note row, not a row subtitle (CDXC:Settings 2026-09-09 in fields/row.rs keeps rows without subtitles).
+        if grouping && g.visible(s, "unifiedWorkingSection") {
+            rows.push(settings_note_row(
+                &g.p,
+                "The Moving section is not shown while grouping is on. Its setting is kept.",
+            ));
+        }
         // CDXC:Sidebar 2026-11-17 DECISION in gx-core unified_sidebar/build.rs
         // `unified_session_cmp` (Recent activity by default; the phone follows it).
         rows.extend(page.select(
@@ -730,12 +769,27 @@ fn sidebar_tags_section(
     let mut rows: Vec<AnyElement> = Vec::new();
     if g.visible("sidebarTags", "sidebarSessionTagListItems") {
         let value = g.values.value("sidebarSessionTagListItems");
+        let grouping =
+            g.values.string("sidebarView") == "unified" && g.values.bool("groupSessionsByTags");
+        // The approved Session Tags screen explains the handle, and while grouping is on the status
+        // entries, in visible lines above the list (note rows, as under the Working section).
+        rows.push(settings_note_row(
+            &g.p,
+            "Drag a handle to reorder, or tap it for Move Up and Move Down.",
+        ));
+        if grouping {
+            rows.push(settings_note_row(
+                &g.p,
+                "Status follows the agent. These entries are never offered in Tag As. The first enabled entry that applies sets the group.",
+            ));
+        }
         rows.push(card_inset(tag_list_field(
             page,
             &g.p,
             "Reorder, hide, or disable sidebar tag filters and separators.",
             &value,
             g.create_tag,
+            grouping,
             reset_key::<GeneralTab>("sidebarSessionTagListItems"),
             window,
             cx,

@@ -24,6 +24,7 @@ mod remote_thread_stall;
 mod renderer_and_titles;
 mod session_chat_agent_gone;
 mod settings_sync_appearance;
+mod settings_sync_session_tags;
 mod ssh_pairing_easy_connect;
 mod stall_subagent_output;
 mod voice_remote_sessions;

@@ -72,8 +72,16 @@ impl GhostexGpuiApp {
             shelf: ghostex_gx_core::unified_sidebar::UnifiedShelf::Drafts,
             cards: unified.drafts.clone(),
         });
-        let sessions_below =
-            !unified.groups.is_empty() || !unified.list.is_empty() || !unified.shelves.is_empty();
+        let pinned = (!unified.pinned.is_empty()).then(|| UnifiedShelfView {
+            shelf: ghostex_gx_core::unified_sidebar::UnifiedShelf::Pinned,
+            cards: unified.pinned.clone(),
+        });
+        let sessions_below = !unified.groups.is_empty()
+            || !unified.list.is_empty()
+            || !unified.shelves.is_empty()
+            || !unified.pinned.is_empty()
+            || !unified.status_groups.is_empty()
+            || !unified.ungrouped.is_empty();
         v_flex()
             .w_full()
             .children(empty)
@@ -97,6 +105,24 @@ impl GhostexGpuiApp {
                         div().h(px(10.0 * scale)).into_any_element()
                     })
             }))
+            // Group sessions by tags: Pinned above the groups with a heading of its own, the
+            // groups, then the cards no enabled entry applies to, unheaded.
+            .children(
+                pinned.map(|pinned| {
+                    self.render_native_unified_shelf(&pinned, None, hud, appearance, cx)
+                }),
+            )
+            .children(
+                unified.status_groups.iter().map(|group| {
+                    self.render_native_unified_status_group(group, hud, appearance, cx)
+                }),
+            )
+            .children(
+                unified
+                    .ungrouped
+                    .iter()
+                    .map(|card| self.render_native_unified_card(card, hud, appearance, cx)),
+            )
             .children(
                 unified
                     .groups

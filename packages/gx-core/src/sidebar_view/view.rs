@@ -912,6 +912,12 @@ pub struct SessionRow {
     /// gxserver's `quotaWaitState`: `"blocked"` (red dot + countdown) or `"waiting"` (calm amber
     /// clock + countdown after clicking Wait / Wait for reset or Dismiss).
     pub quota_wait_state: Option<String>,
+    /// While `activity` is `attention`: whether it is a finished turn or waits on the user's answer
+    /// (gxserver's `attention.kind`). `None` on a row without one and from a daemon too old to send
+    /// it. Read only by the Unified sidebar's groups (unified_sidebar/status_groups.rs).
+    pub attention_kind: Option<ghostex_gx_protocol::presentation::AttentionKind>,
+    /// The finished turn's handover has a Blocked or Needs you section (`attention.handoverNeedsYou`).
+    pub attention_handover_needs_you: bool,
     pub agent_icon: Option<String>,
     /// `terminal`, `browser`, or whatever else a newer daemon publishes.
     pub session_kind: Option<String>,

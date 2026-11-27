@@ -385,125 +385,10 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // First-run sidebar tag filter settings should show the default triage tags,
     // the No tag filter, and the default separators. Users opt out by hiding or
     // disabling individual rows from the collapsed Sidebar Tags settings area.
+    // CDXC:Sidebar 2026-11-14 WHY: the value is `DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS` itself (data/session_tags.rs), not a second copy, so the six status entries it starts with and the Settings editor's Reset to Default can never disagree with this default.
     (
         "sidebarSessionTagListItems",
-        J::Arr(&[
-            J::Obj(&[
-                ("enabled", J::Bool(true)),
-                ("id", J::Str("favorite")),
-                ("tag", J::Str("favorite")),
-                ("type", J::Str("tag")),
-                ("visible", J::Bool(true)),
-            ]),
-            J::Obj(&[
-                ("enabled", J::Bool(false)),
-                ("id", J::Str("high-priority")),
-                ("tag", J::Str("high-priority")),
-                ("type", J::Str("tag")),
-                ("visible", J::Bool(false)),
-            ]),
-            J::Obj(&[
-                ("enabled", J::Bool(false)),
-                ("id", J::Str("low-priority")),
-                ("tag", J::Str("low-priority")),
-                ("type", J::Str("tag")),
-                ("visible", J::Bool(false)),
-            ]),
-            J::Obj(&[
-                ("enabled", J::Bool(true)),
-                ("id", J::Str("separator-priority-progress")),
-                ("type", J::Str("separator")),
-                ("visible", J::Bool(true)),
-            ]),
-            J::Obj(&[
-                ("enabled", J::Bool(false)),
-                ("id", J::Str("todo")),
-                ("tag", J::Str("todo")),
-                ("type", J::Str("tag")),
-                ("visible", J::Bool(false)),
-            ]),
-            J::Obj(&[
-                ("enabled", J::Bool(true)),
-                ("id", J::Str("in-progress")),
-                ("tag", J::Str("in-progress")),
-                ("type", J::Str("tag")),
-                ("visible", J::Bool(true)),
-            ]),
-            J::Obj(&[
-                ("enabled", J::Bool(true)),
-                ("id", J::Str("testing")),
-                ("tag", J::Str("testing")),
-                ("type", J::Str("tag")),
-                ("visible", J::Bool(true)),
-            ]),
-            J::Obj(&[
-                ("enabled", J::Bool(true)),
-                ("id", J::Str("blocked")),
-                ("tag", J::Str("blocked")),
-                ("type", J::Str("tag")),
-                ("visible", J::Bool(true)),
-            ]),
-            J::Obj(&[
-                ("enabled", J::Bool(true)),
-                ("id", J::Str("on-hold")),
-                ("tag", J::Str("on-hold")),
-                ("type", J::Str("tag")),
-                ("visible", J::Bool(true)),
-            ]),
-            J::Obj(&[
-                ("enabled", J::Bool(true)),
-                ("id", J::Str("done")),
-                ("tag", J::Str("done")),
-                ("type", J::Str("tag")),
-                ("visible", J::Bool(true)),
-            ]),
-            J::Obj(&[
-                ("enabled", J::Bool(true)),
-                ("id", J::Str("separator-progress-type")),
-                ("type", J::Str("separator")),
-                ("visible", J::Bool(true)),
-            ]),
-            J::Obj(&[
-                ("enabled", J::Bool(true)),
-                ("id", J::Str("research")),
-                ("tag", J::Str("research")),
-                ("type", J::Str("tag")),
-                ("visible", J::Bool(true)),
-            ]),
-            J::Obj(&[
-                ("enabled", J::Bool(false)),
-                ("id", J::Str("bug")),
-                ("tag", J::Str("bug")),
-                ("type", J::Str("tag")),
-                ("visible", J::Bool(false)),
-            ]),
-            J::Obj(&[
-                ("enabled", J::Bool(false)),
-                ("id", J::Str("feature")),
-                ("tag", J::Str("feature")),
-                ("type", J::Str("tag")),
-                ("visible", J::Bool(false)),
-            ]),
-            J::Obj(&[
-                ("enabled", J::Bool(true)),
-                ("id", J::Str("design")),
-                ("tag", J::Str("design")),
-                ("type", J::Str("tag")),
-                ("visible", J::Bool(true)),
-            ]),
-            J::Obj(&[
-                ("enabled", J::Bool(true)),
-                ("id", J::Str("separator-type-untagged")),
-                ("type", J::Str("separator")),
-                ("visible", J::Bool(true)),
-            ]),
-            J::Obj(&[
-                ("enabled", J::Bool(true)),
-                ("id", J::Str("untagged")),
-                ("type", J::Str("untagged")),
-                ("visible", J::Bool(true)),
-            ]),
-        ]),
+        super::session_tags::DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS,
     ),
     // CDXC:SessionSleep 2026-09-13 DECISION:
     // User: keep Agent Auto Sleep off by default because remote Claude requires its terminal to remain running.
@@ -642,6 +527,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("unifiedWorkingSection", J::Bool(true)),
     ("unifiedGroupByProject", J::Bool(false)),
     ("unifiedSessionOrder", J::Str("recent")),
+    // Off by default, so people who use tags as they are see no change (gx-core unified_sidebar/status_groups.rs).
+    ("groupSessionsByTags", J::Bool(false)),
     // CDXC:Sidebar 2026-10-31 SEE-ALSO: gx-core unified_sidebar/grouping.rs; repository keys in the order the user dragged the project groups into. No Settings row: the drag is how it is set.
     ("unifiedProjectOrder", J::Arr(&[])),
     (
@@ -1207,3 +1094,14 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("commandsPanelAutoMinimize", J::Bool(true)),
     ("commandsPanelAutoMinimizeDelaySeconds", J::Num(60.0)),
 ];
+
+#[cfg(test)]
+mod group_sessions_by_tags_tests {
+    /// Off until someone turns it on, so people who use tags as they are see no change.
+    #[test]
+    fn group_sessions_by_tags_is_off_by_default() {
+        let default = crate::default_value("groupSessionsByTags")
+            .map(|value| crate::ToJson::to_json(value).to_value());
+        assert_eq!(default, Some(serde_json::json!(false)));
+    }
+}

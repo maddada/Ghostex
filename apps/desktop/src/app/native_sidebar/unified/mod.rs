@@ -12,4 +12,5 @@ mod list;
 pub(crate) mod model;
 pub(super) mod pinned_drag;
 mod shelves;
+pub(crate) mod status_groups;
 mod threads;

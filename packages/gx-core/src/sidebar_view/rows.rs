@@ -358,6 +358,14 @@ pub(crate) fn session_row(
         stuck,
         quota_resets_at: session.quota_resets_at.clone(),
         quota_wait_state: session.quota_wait_state.clone(),
+        attention_kind: session
+            .attention
+            .as_ref()
+            .and_then(|attention| attention.kind.clone()),
+        attention_handover_needs_you: session
+            .attention
+            .as_ref()
+            .is_some_and(|attention| attention.handover_needs_you),
         agent_icon: agent_icon.map(str::to_string),
         session_kind: Some(session_kind),
         lifecycle_state: lifecycle_state.to_string(),

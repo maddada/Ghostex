@@ -125,7 +125,7 @@ struct CachedCollectionMenu {
 struct CachedMoreMenu {
     /// The drawn project group ids, whether any of them is expanded, Show Hidden, and the ticked
     /// filters: everything it reads beyond the shared key.
-    identity: (u64, bool, bool, Vec<String>, (bool, bool, bool, bool)),
+    identity: (u64, bool, bool, Vec<String>, (bool, bool, bool, bool, bool)),
     menu: Value,
 }
 
@@ -480,6 +480,7 @@ fn more_menu(
             input.settings.unified_group_by_project,
             input.settings.unified_working_section,
             input.settings.hide_projects_without_sessions,
+            input.settings.group_sessions_by_tags,
         ),
     );
     if let Some(cached) = &cache.more_menu

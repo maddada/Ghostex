@@ -256,7 +256,10 @@ impl Engine<'_> {
             if !self.category_ready(prefix)? {
                 continue;
             }
-            let (current, defaults) = self.category_values(prefix)?;
+            let (mut current, defaults) = self.category_values(prefix)?;
+            if prefix == SIDEBAR_ORGANIZATION {
+                self.keep_status_entries_exported(&mut current);
+            }
             match self.store.value_baselines.get(prefix).cloned() {
                 None => {
                     for (key, value) in &current {

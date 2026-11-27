@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use ghostex_gx_core::SessionRow;
 use ghostex_gx_core::unified_sidebar::{
-    UnifiedBranchLine, UnifiedCrew, UnifiedFilter, UnifiedFilterOptions, UnifiedShelf,
-    UnifiedStatus,
+    UnifiedBranchLine, UnifiedCrew, UnifiedFilter, UnifiedFilterOptions, UnifiedGroupHead,
+    UnifiedShelf, UnifiedStatus,
 };
 
 use crate::app::native_sidebar::model::{NativeSidebarGroup, NativeSidebarSession};
@@ -73,6 +73,36 @@ pub(crate) struct UnifiedGroupView {
     pub(crate) machines: Vec<(String, String)>,
 }
 
+/// A project's heading inside a status group, while Group by Project is on: its tile, name, count
+/// and "+", never folded or dragged.
+#[derive(Clone, Debug)]
+pub(crate) struct UnifiedStatusProjectView {
+    pub(crate) repo_key: String,
+    pub(crate) label: String,
+    pub(crate) cards: Vec<UnifiedCard>,
+}
+
+/// One group of Group sessions by tags: its header and its cards, or its projects' headings with
+/// their cards while Group by Project is on.
+#[derive(Clone, Debug)]
+pub(crate) struct UnifiedStatusGroupView {
+    pub(crate) head: UnifiedGroupHead,
+    /// Top-level cards, one per coordinator tree, never its threads.
+    pub(crate) count: usize,
+    pub(crate) cards: Vec<UnifiedCard>,
+    pub(crate) projects: Vec<UnifiedStatusProjectView>,
+}
+
+impl UnifiedStatusGroupView {
+    pub(crate) fn all_cards(&self) -> impl Iterator<Item = &UnifiedCard> {
+        self.cards.iter().chain(
+            self.projects
+                .iter()
+                .flat_map(|project| project.cards.iter()),
+        )
+    }
+}
+
 /// The whole Unified sidebar.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct UnifiedSidebarSnapshot {
@@ -84,6 +114,12 @@ pub(crate) struct UnifiedSidebarSnapshot {
     pub(crate) shelves: Vec<UnifiedShelfView>,
     /// While Group by Project is on, the whole list; `list` and `shelves` are empty then.
     pub(crate) groups: Vec<UnifiedGroupView>,
+    /// While Group sessions by tags is on: the pinned cards above the groups, then
+    /// `status_groups`, then `ungrouped` (cards no enabled entry applies to, unheaded), then
+    /// `shelves` (Snoozed and Parked). `list` and `groups` are empty then.
+    pub(crate) pinned: Vec<UnifiedCard>,
+    pub(crate) status_groups: Vec<UnifiedStatusGroupView>,
+    pub(crate) ungrouped: Vec<UnifiedCard>,
     pub(crate) options: UnifiedFilterOptions,
     pub(crate) filter: UnifiedFilter,
     /// Sessions before the filter.
@@ -110,6 +146,9 @@ impl UnifiedSidebarSnapshot {
             && self.list.is_empty()
             && self.shelves.is_empty()
             && self.groups.is_empty()
+            && self.pinned.is_empty()
+            && self.status_groups.is_empty()
+            && self.ungrouped.is_empty()
     }
 
     /// Whether any card shows a running timer, so the list redraws once a second.
@@ -124,6 +163,13 @@ impl UnifiedSidebarSnapshot {
                     .iter()
                     .chain(group.shelves.iter().flat_map(|shelf| shelf.cards.iter()))
             }))
+            .chain(&self.pinned)
+            .chain(
+                self.status_groups
+                    .iter()
+                    .flat_map(UnifiedStatusGroupView::all_cards),
+            )
+            .chain(&self.ungrouped)
             .any(|card| {
                 card.status == Some(UnifiedStatus::Working)
                     || card.row.timing.quota_resets_at_ms.is_some()
