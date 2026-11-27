@@ -325,6 +325,12 @@ pub(super) fn summarize(view: &Value, roster: &Value, now: DateTime<Utc>) -> Val
             .map(|account| json!({ "account": account.name, "windows": account.windows }))
             .collect();
         let limit_resets_count: u64 = accounts.iter().map(|account| account.resets.count).sum();
+        // Automatic accounts this computer reads signed out: no room until the user signs one in.
+        let sign_in: Vec<Value> = accounts
+            .iter()
+            .filter(|account| account.automatic && account.state == "sign-in")
+            .map(|account| json!(account.name))
+            .collect();
         let account_details: Vec<Value> = accounts
             .iter()
             .map(|account| {
@@ -375,6 +381,7 @@ pub(super) fn summarize(view: &Value, roster: &Value, now: DateTime<Utc>) -> Val
             })),
             "freesAt": frees_at.map(|at| at.to_rfc3339()),
             "manualRoom": manual_room,
+            "signInNeeded": sign_in,
             "limitResetsCount": limit_resets_count,
             "accountDetails": account_details,
             "usedBy": { "coordinator": coordinator, "threads": threads },
@@ -422,6 +429,34 @@ fn users_text(agent: &Value) -> String {
         (true, 0) => "you".into(),
         (true, _) => format!("you and {threads_text}"),
         _ => threads_text,
+    }
+}
+
+/// " #4 and #5 are automatic but signed out on this computer: ..." for an agent whose automatic
+/// accounts include signed-out ones.
+///
+/// CDXC:Coordinators 2026-11-27 WHY:
+/// The user's coordinator and its threads all ran on Claude #1 while #4 and #5, its other
+/// automatic accounts, were signed out on this computer; #1 hit its weekly limit and everything
+/// stopped with no warning ("i want a warning when you're about to run out of usage on the
+/// coordinator and the account for it isn't logged in"). LOW and OUT counted only usable accounts
+/// and never said that a sign-in, not another agent, was the quickest way to keep going.
+fn sign_in_text(agent: &Value) -> String {
+    let names: Vec<&str> = agent["signInNeeded"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    match names.split_last() {
+        None => String::new(),
+        Some((only, [])) => format!(
+            " {only} is automatic but signed out on this computer: ask the user to sign in to it (Settings > Accounts), the quickest way to keep going."
+        ),
+        Some((last, rest)) => format!(
+            " {} and {last} are automatic but signed out on this computer: ask the user to sign in to one (Settings > Accounts), the quickest way to keep going.",
+            rest.join(", ")
+        ),
     }
 }
 
@@ -621,8 +656,9 @@ fn print_room(room: &Value, compact: bool) {
             Some("lastAccount") => {
                 // A note, never a held ask: one account of several left says nothing of its room.
                 println!(
-                    "Note: {}: only one usable account is left (no ask unless a LOW or OUT line follows).",
-                    agents::text(agent, "label")
+                    "Note: {}: only one usable account is left (no ask unless a LOW or OUT line follows).{}",
+                    agents::text(agent, "label"),
+                    sign_in_text(agent),
                 );
                 continue;
             }
@@ -643,19 +679,21 @@ fn print_room(room: &Value, compact: bool) {
         if compact {
             // Who runs on it and the manual-only room are on the agent's line above.
             println!(
-                "{}: {}: {why}.{frees} Raise the held ask: which other agent takes new work{reset_option} ({note}). Ghostex moves threads between accounts; you never do unless the user asks, and you never use a limit reset yourself.",
+                "{}: {}: {why}.{frees}{} Raise the held ask: which other agent takes new work{reset_option} ({note}). Ghostex moves threads between accounts; you never do unless the user asks, and you never use a limit reset yourself.",
                 if agent["flag"] == "out" { "OUT" } else { "LOW" },
                 agents::text(agent, "label"),
+                sign_in_text(agent),
             );
             continue;
         }
         println!(
-            "{}: {}, which {} run{} on: {why}.{frees}{} Raise the held ask now: which other agent takes new work{reset_option} ({note}). Ghostex moves threads between accounts; you never do unless the user asks, and you never use a limit reset yourself.",
+            "{}: {}, which {} run{} on: {why}.{frees}{}{} Raise the held ask now: which other agent takes new work{reset_option} ({note}). Ghostex moves threads between accounts; you never do unless the user asks, and you never use a limit reset yourself.",
             if agent["flag"] == "out" { "OUT" } else { "LOW" },
             agents::text(agent, "label"),
             users_text(agent),
             if agent["usedBy"]["coordinator"] == true || agent["usedBy"]["threads"].as_u64() != Some(1) { "" } else { "s" },
             manual_text(agent),
+            sign_in_text(agent),
         );
     }
     if !compact {
