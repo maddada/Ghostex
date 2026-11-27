@@ -70,27 +70,26 @@ pub fn check_claude_chrome_family(
     )))
 }
 
-/// Appends `--chrome` to a Terminal-mode Claude command when the session was explicitly created
-/// with `--chrome` and the installed `claude` CLI accepts it.
+/// Appends `--chrome` to a Claude command when the session was explicitly created with `--chrome`:
+/// a Terminal-mode command only when the installed `claude` CLI accepts it, an `acp-host` command
+/// always (its Native driver checks the CLI itself, `should_pass_chrome_flag`).
 pub(crate) fn with_claude_chrome_flag(
     family: Option<&str>,
     runtime_settings: Option<&Map<String, Value>>,
     command: &str,
 ) -> String {
-    if family != Some("claude") || !is_claude_chrome_session(runtime_settings) {
-        return command.to_string();
-    }
-    if command
-        .split_whitespace()
-        .any(|token| token == "--chrome" || token == "--no-chrome")
+    let trimmed = command.trim_end();
+    if family != Some("claude")
+        || trimmed.is_empty()
+        || !is_claude_chrome_session(runtime_settings)
+        || trimmed
+            .split_whitespace()
+            .any(|token| token == "--chrome" || token == "--no-chrome")
     {
         return command.to_string();
     }
-    if !claude_cli_supports_chrome(None) {
-        return command.to_string();
-    }
-    let trimmed = command.trim_end();
-    if trimmed.is_empty() {
+    if super::acp_family_from_launch_command(trimmed).is_none() && !claude_cli_supports_chrome(None)
+    {
         return command.to_string();
     }
     format!("{trimmed} --chrome")
@@ -145,36 +144,27 @@ fn resolve_claude_config_json_path(
     let env_config_dir = std::env::var_os("CLAUDE_CONFIG_DIR")
         .map(PathBuf::from)
         .filter(|path| !path.as_os_str().is_empty());
+    let home = crate::accounts::launch::home().ok()?;
 
-    let home = crate::accounts::launch::home().ok();
-
+    // `cswap run <slot>` starts the slot's own profile, except for the slot whose account is the
+    // default login, which cswap starts on the default login unless `CLAUDE_CONFIG_DIR` already
+    // names the slot's profile (default_login.rs). A slot Ghostex cannot read gives no answer
+    // rather than another account's file.
     if let Some(wrapper) = profile.account_wrapper.as_ref() {
-        if let Some(home) = home.as_deref() {
-            if let Ok(slot) = ClaudeSlot::read(home, &wrapper.slot) {
-                let session_dir = PathBuf::from(slot.session_dir());
-                if slot.names_default_login(home) {
-                    let forced_session_dir = env_config_dir
-                        .as_deref()
-                        .is_some_and(|dir| dir == session_dir.as_path())
-                        || crate::accounts::default_login::signed_out_default_config_dir(
-                            &wrapper.slot,
-                        )
-                        .is_some();
-                    if forced_session_dir {
-                        return Some(session_dir.join(".claude.json"));
-                    }
-                    return Some(ghostex_paths::agent_homes::claude_json_path(home));
-                }
-                return Some(session_dir.join(".claude.json"));
-            }
+        let slot = ClaudeSlot::read(&home, &wrapper.slot).ok()?;
+        let session_dir = PathBuf::from(slot.session_dir());
+        let on_default_login = slot.names_default_login(&home)
+            && env_config_dir.as_deref() != Some(session_dir.as_path());
+        if on_default_login {
+            return Some(ghostex_paths::agent_homes::claude_json_path(&home));
         }
+        return Some(session_dir.join(".claude.json"));
     }
 
-    if let Some(dir) = env_config_dir {
-        return Some(dir.join(".claude.json"));
-    }
-
-    home.map(|home| ghostex_paths::agent_homes::claude_json_path(&home))
+    Some(match env_config_dir {
+        Some(dir) => dir.join(".claude.json"),
+        None => ghostex_paths::agent_homes::claude_json_path(&home),
+    })
 }
 
 fn read_claude_in_chrome_default_enabled(path: &Path) -> bool {
