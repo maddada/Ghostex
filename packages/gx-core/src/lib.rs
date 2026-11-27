@@ -199,6 +199,7 @@ pub use crate::sidebar_actions::{
 };
 pub use crate::sidebar_actions::{
     open_remote_session_terminal, plan_generate_session_title, plan_group_sleep,
+    title_command_runs_agy, TITLE_COMMAND_AGY_REFUSAL,
     provider_transition_committed, running_local_session_ids, terminal_lifecycle_fallback_focus,
     titlebar_sleep_inactive_ids,
 };

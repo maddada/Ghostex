@@ -82,6 +82,13 @@ fn fork_session_with(
         .into());
     }
     crate::agentbox::refuse_for_agentbox_session(&source_session, "Fork")?;
+    // A fork runs On the source's hub (CDXC:AgentProviders 2026-11-27 in accounts/hub/mod.rs).
+    if let Some(reason) = crate::accounts::hub::session_hub_refusal(
+        &crate::paths::get_gxserver_paths(None),
+        &source_session,
+    ) {
+        return Err(DomainStateError::bad_request(reason).into());
+    }
     if side_chat_question.is_some() && crate::side_chats::parent_of(&source_session).is_some() {
         return Err(DomainStateError::bad_request(
             "A side chat can't start another side chat. Start it from the main session.",

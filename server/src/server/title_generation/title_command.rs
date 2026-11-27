@@ -49,6 +49,7 @@ pub(crate) async fn generate_first_prompt_session_title(
         read_runtime_text(session, "firstPromptTitleGenerationAgent").as_deref(),
     );
     let command = read_title_generation_command(session, &agent)?;
+    let (agent, command) = without_agy_title_command(agent, command);
     // The job names its own account; see `one_shot_command` in accounts/launch.rs.
     let command = crate::accounts::launch::one_shot_command(state, &agent, &command, Some(session));
     // See CDXC:SessionTitles 2026-10-17 on `title_generation_shell_command`.
@@ -106,19 +107,42 @@ pub(crate) async fn generate_first_prompt_session_title(
 /// SEE-ALSO: apps/desktop/src/app/window/settings_modal/tabs/agents/model.rs `title_generation_preview`, which must preview the same commands.
 pub(crate) fn normalize_title_generation_agent(value: Option<&str>) -> String {
     match value {
-        Some(
-            "codex" | "cursor" | "claude" | "grok" | "pi" | "empryo" | "custom",
-        ) => value.unwrap().to_string(),
+        Some(agent) if is_title_generation_agent(agent) => agent.to_string(),
         _ => "claude".to_string(),
     }
 }
 
+/// The agents that can generate a title (no Antigravity since 2026-11-27, Q5212).
+pub(crate) fn is_title_generation_agent(agent: &str) -> bool {
+    matches!(
+        agent,
+        "codex" | "cursor" | "claude" | "grok" | "pi" | "empryo" | "custom"
+    )
+}
+
+/// The title agent and command to run: Claude's when `command` runs agy (Q5229, "Refuse it":
+/// CDXC:AgentProviders 2026-11-27 in packages/gx-core/src/sidebar_actions/generate_title.rs).
+pub(crate) fn without_agy_title_command(agent: String, command: String) -> (String, String) {
+    if ghostex_gx_core::title_command_runs_agy(&command) {
+        ("claude".to_string(), "claude".to_string())
+    } else {
+        (agent, command)
+    }
+}
+
+/// CDXC:AgentProviders 2026-11-27 WHY: A session saved before Antigravity left the Title
+/// Generation Agents holds `antigravity` plus `agy`; the agent read as `claude` but the saved
+/// `agy` still ran with Claude's flags, outside ACP. The saved command is the binary of the saved
+/// agent, so it is used only when that agent is the one the job runs.
 pub(crate) fn read_title_generation_command(
     session: &Value,
     agent: &str,
 ) -> Result<String, String> {
-    if let Some(command) = read_runtime_text(session, "firstPromptTitleGenerationCommand") {
-        return Ok(command);
+    let saved_agent = read_runtime_text(session, "firstPromptTitleGenerationAgent");
+    if saved_agent.as_deref() == Some(agent) {
+        if let Some(command) = read_runtime_text(session, "firstPromptTitleGenerationCommand") {
+            return Ok(command);
+        }
     }
     match agent {
         "codex" => Ok("codex".to_string()),
@@ -380,5 +404,138 @@ mod agy_update_tests {
             "AGY_CLI_DISABLE_AUTO_UPDATE".to_string(),
             "true".to_string()
         )));
+    }
+}
+
+#[cfg(test)]
+mod saved_command_tests {
+    use super::{normalize_title_generation_agent, read_title_generation_command};
+    use crate::server::title_generation::manual_title_generator;
+    use serde_json::{json, Map, Value};
+
+    fn session(agent: &str, command: &str) -> Value {
+        json!({"runtimeSettings": {
+            "firstPromptTitleGenerationAgent": agent,
+            "firstPromptTitleGenerationCommand": command,
+        }})
+    }
+
+    fn job_command(session: &Value) -> Result<String, String> {
+        let agent = normalize_title_generation_agent(
+            session["runtimeSettings"]["firstPromptTitleGenerationAgent"].as_str(),
+        );
+        read_title_generation_command(session, &agent)
+    }
+
+    #[test]
+    fn saved_antigravity_agy_command_never_runs_for_titles() {
+        assert_eq!(job_command(&session("antigravity", "agy")).unwrap(), "claude");
+        assert_eq!(
+            job_command(&session("antigravity", "/opt/bin/agy --profile x")).unwrap(),
+            "claude"
+        );
+    }
+
+    #[test]
+    fn saved_command_of_the_saved_agent_is_kept() {
+        assert_eq!(
+            job_command(&session("claude", "claude-wrapper --profile work")).unwrap(),
+            "claude-wrapper --profile work"
+        );
+        assert_eq!(
+            job_command(&session("custom", "my-titler")).unwrap(),
+            "my-titler"
+        );
+        assert_eq!(job_command(&json!({})).unwrap(), "claude");
+    }
+
+    fn params(value: Value) -> Map<String, Value> {
+        value.as_object().cloned().unwrap()
+    }
+
+    #[test]
+    fn generate_name_drops_an_antigravity_request() {
+        assert_eq!(
+            manual_title_generator(&params(json!({"agentId": "antigravity", "command": "agy"}))),
+            (None, None)
+        );
+        assert_eq!(
+            manual_title_generator(&params(json!({"command": "agy"}))),
+            (None, None)
+        );
+        assert_eq!(
+            manual_title_generator(&params(json!({"agentId": "codex", "command": "codex"}))),
+            (Some("codex".to_string()), Some("codex".to_string()))
+        );
+    }
+}
+
+#[cfg(test)]
+mod summary_agent_tests {
+    use crate::session_chat_catch_up::summary_agent;
+    use serde_json::json;
+
+    #[test]
+    fn a_custom_command_that_runs_agy_titles_with_claude() {
+        for typed in ["agy -p", "/usr/local/bin/agy -p --model x", "sh -c 'agy -p'"] {
+            let settings = json!({
+                "sessionTitleGenerationAgent": "custom",
+                "customSessionTitleGenerationCommand": typed,
+            });
+            let (agent, command) = summary_agent(&settings, &json!({})).unwrap();
+            assert_eq!((agent.as_str(), command.as_str()), ("claude", "claude"), "{typed}");
+        }
+        let (agent, command) = super::without_agy_title_command(
+            "custom".to_string(),
+            "agy -p".to_string(),
+        );
+        assert_eq!((agent.as_str(), command.as_str()), ("claude", "claude"));
+    }
+
+    #[test]
+    fn custom_setting_runs_the_typed_command() {
+        let settings = json!({
+            "sessionTitleGenerationAgent": "custom",
+            "customSessionTitleGenerationCommand": "my-titler --short",
+        });
+        let (agent, command) = summary_agent(&settings, &json!({})).unwrap();
+        assert_eq!((agent.as_str(), command.as_str()), ("custom", "my-titler --short"));
+    }
+
+    #[test]
+    fn saved_antigravity_session_titles_with_claude() {
+        let session = json!({"runtimeSettings": {
+            "firstPromptTitleGenerationAgent": "antigravity",
+            "firstPromptTitleGenerationCommand": "agy",
+        }});
+        let (agent, command) = summary_agent(&json!({}), &session).unwrap();
+        assert_eq!((agent.as_str(), command.as_str()), ("claude", "claude"));
+    }
+}
+
+#[cfg(test)]
+mod agy_title_command_tests {
+    use ghostex_gx_core::title_command_runs_agy;
+
+    /// Q5229: a title command that runs agy anywhere in it is refused (the same table as
+    /// packages/gx-core/src/sidebar_actions/generate_title.rs).
+    #[test]
+    fn a_title_command_that_runs_agy_is_found() {
+        for command in [
+            "agy",
+            "agy -p --model x",
+            "/opt/homebrew/bin/agy -p",
+            "C:\\Users\\sam\\AppData\\Local\\agy\\bin\\agy.exe -p",
+            "& 'C:\\agy\\bin\\agy.cmd' -p",
+            "FOO=1 agy -p",
+            "env AGY_X=1 agy",
+            "sh -c 'agy -p'",
+            "cat | AGY -p",
+        ] {
+            assert!(title_command_runs_agy(command), "{command}");
+        }
+        for command in ["claude -p", "my-titler --short", "agyle", "python3 titles.py", ""] {
+            assert!(!title_command_runs_agy(command), "{command}");
+        }
     }
 }

@@ -12,6 +12,26 @@ explicitly), kills any composer draft with Ctrl+U before staging and restores
 it with Ctrl+Y after the submit, and applies the generated title with
 `titleSource: "generated"`.
 */
+/// The `agentId` and `command` a Generate Name request asks for, both dropped unless the agent can
+/// generate a title. CDXC:AgentProviders 2026-11-27 WHY: An older desktop or phone still sends
+/// `antigravity` plus `agy`; saving that command ran `agy -p` outside ACP.
+pub(crate) fn manual_title_generator(
+    params: &Map<String, Value>,
+) -> (Option<String>, Option<String>) {
+    let text = |key: &str| {
+        params
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    };
+    match text("agentId") {
+        Some(agent) if is_title_generation_agent(&agent) => (Some(agent), text("command")),
+        _ => (None, None),
+    }
+}
+
 pub(crate) async fn handle_generate_session_title_http(
     state: &AppState,
     endpoint_path: String,
@@ -50,18 +70,7 @@ pub(crate) async fn handle_generate_session_title_http(
             },
         );
     }
-    let generation_agent = params
-        .get("agentId")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string);
-    let generation_command = params
-        .get("command")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string);
+    let (generation_agent, generation_command) = manual_title_generator(&params);
     let attempt_id = Uuid::new_v4().to_string();
     {
         let db = match open_gxserver_database(&state.paths) {

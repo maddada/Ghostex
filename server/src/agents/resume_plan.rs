@@ -22,6 +22,10 @@ pub(crate) fn build_agent_resume_plan(
     if let Some(plan) = crate::agentbox::box_resume_plan(session) {
         return plan;
     }
+    let paths = crate::paths::get_gxserver_paths(None);
+    if let Some(reason) = crate::accounts::hub::session_hub_refusal(&paths, session) {
+        return hub_refused_resume_plan(read_text_value(session, "agentId"), &reason);
+    }
     let input = to_agent_resume_input(project, session, settings);
     // CDXC:Sessions 2026-09-08 WHY:
     // Detected conversations already have an exact transcript and provider home; resolving by title or the current account could open a different conversation.
@@ -118,6 +122,35 @@ pub(crate) fn build_agent_resume_plan(
             Value::String("none".to_string()),
         );
     }
+    Value::Object(plan)
+}
+
+/// The plan of a session On a hub that holds a Google login (`google_login_refusal`): its terminal
+/// only prints why, and it has no command to resume, fall back to or copy.
+///
+/// CDXC:AgentProviders 2026-11-27 WHY: The Fable re-review found resume skipped the hub refusal, so
+/// every existing On the hub session kept running on a hub with a Google login. Every resume
+/// (wake, restore, account switch, queue heal, automations) builds this plan, terminal and Native
+/// alike, so the refusal sits here.
+pub(crate) fn hub_refused_resume_plan(agent_id: Option<String>, reason: &str) -> Value {
+    #[cfg(windows)]
+    let notice = format!(
+        "$Host.UI.WriteLine({})",
+        crate::platform::shell::powershell_single_quote(reason)
+    );
+    #[cfg(not(windows))]
+    let notice = format!("printf '%s\\n' {}", quote_shell_arg(reason));
+    let mut plan = Map::new();
+    insert_optional_string(&mut plan, "agentId", agent_id);
+    plan.insert("hubRefusal".to_string(), Value::String(reason.to_string()));
+    plan.insert(
+        "startupText".to_string(),
+        Value::String(as_atuin_ignored_shell_input(&notice)),
+    );
+    plan.insert(
+        "startupTextDisposition".to_string(),
+        Value::String("queueAfterTerminalReady".to_string()),
+    );
     Value::Object(plan)
 }
 

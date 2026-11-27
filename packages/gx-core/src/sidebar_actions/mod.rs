@@ -72,7 +72,9 @@ pub use flags::{
 pub use fork::{
     apply_fork_answer, owns_fork_message, plan_fork_request, ForkFollowUp, ForkRequest,
 };
-pub use generate_title::plan_generate_session_title;
+pub use generate_title::{
+    plan_generate_session_title, title_command_runs_agy, TITLE_COMMAND_AGY_REFUSAL,
+};
 pub use group_sleep::plan_group_sleep;
 pub use group_working::{
     owns_group_working_sessions_command, plan_group_working_sessions,

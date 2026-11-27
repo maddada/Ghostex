@@ -90,6 +90,9 @@ fn commands(agent_id: &str) -> Option<SignInCommands> {
 
 /// A sign-in started from setup, by agent id.
 struct SignIn {
+    /// This sign-in's own number: the threads of a cancelled one see a new sign-in for the same
+    /// agent as not theirs.
+    id: u64,
     started: Instant,
     killer: Option<Box<dyn ChildKiller + Send + Sync>>,
     /// The sign-in page the CLI printed, for when the browser did not open.
@@ -99,6 +102,12 @@ struct SignIn {
 }
 
 static SIGN_INS: LazyLock<Mutex<HashMap<String, SignIn>>> = LazyLock::new(Default::default);
+
+static NEXT_SIGN_IN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+/// Held while an agent's status is read from its CLI, so two status calls at once (or one and the
+/// sign-in watcher) run it once: the second reuses the reading the first made.
+static STATUS_READ: Mutex<()> = Mutex::new(());
 
 /// The last status read of an agent whose status command asks its server, by agent id.
 #[derive(Clone, Default)]
@@ -174,6 +183,16 @@ fn sign_in_running(agent_id: &str) -> bool {
         .is_some_and(|sign_in| sign_in.finished.is_none())
 }
 
+/// Whether sign-in `id` is the agent's sign-in and still running (not cancelled, not replaced by
+/// a newer one, not finished).
+fn sign_in_current(agent_id: &str, id: u64) -> bool {
+    SIGN_INS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(agent_id)
+        .is_some_and(|sign_in| sign_in.id == id && sign_in.finished.is_none())
+}
+
 /// The agent's sign-in and update state, read now or reused.
 ///
 /// CDXC:AgentProviders 2026-11-27 DECISION:
@@ -182,7 +201,11 @@ fn sign_in_running(agent_id: &str) -> bool {
 /// for up to 15 minutes. Now the panel's read runs agy once when the panel opens (or the chosen
 /// agent changes), once when the login exits, and once per Check again; any other read within
 /// [`ACCOUNT_CHECK_FRESH_FOR`], and every read while the sign-in runs, reuses the last one. While
-/// it runs only the watcher checks, after 5, 10 and 20 s and then every 30 s.
+/// it runs only the watcher checks, after 5, 10 and 20 s and then every 30 s. The re-review found
+/// a cancelled sign-in's watcher kept running beside the next one's (each sign-in now has an id
+/// its threads compare), two status calls at once both ran agy (a lock now holds the read, and a
+/// call that waited reuses the reading made meanwhile), and nothing made the read at login exit
+/// (the exit now drops the kept reading unless it already says signed in).
 /// Claude Code, Codex and Cursor read a local status and are read every time, as before.
 fn reading(home: &Path, agent_id: &str, now: bool) -> Reading {
     let asks_account = commands(agent_id).is_some_and(|commands| commands.status_asks_account);
@@ -193,14 +216,18 @@ fn reading(home: &Path, agent_id: &str, now: bool) -> Reading {
             needs_update: update_needed(home, agent_id),
         };
     }
+    let asked = Instant::now();
+    let _read = STATUS_READ.lock().unwrap_or_else(|e| e.into_inner());
     let kept = READINGS
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .get(agent_id)
         .cloned();
     if let Some(kept) = kept.filter(|kept| {
-        !now && kept.at.is_some_and(|at| {
-            sign_in_running(agent_id) || at.elapsed() < ACCOUNT_CHECK_FRESH_FOR
+        kept.at.is_some_and(|at| {
+            at >= asked
+                || (!now
+                    && (sign_in_running(agent_id) || at.elapsed() < ACCOUNT_CHECK_FRESH_FOR))
         })
     }) {
         return kept;
@@ -436,9 +463,11 @@ fn start(home: &Path, agent_id: &str) -> Result<(), DomainStateError> {
         .spawn_command(command)
         .map_err(|error| bad(error.to_string()))?;
     drop(pair.slave);
+    let sign_in_id = NEXT_SIGN_IN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     SIGN_INS.lock().unwrap_or_else(|e| e.into_inner()).insert(
         agent_id.to_string(),
         SignIn {
+            id: sign_in_id,
             started: Instant::now(),
             killer: Some(child.clone_killer()),
             url: None,
@@ -469,6 +498,7 @@ fn start(home: &Path, agent_id: &str) -> Result<(), DomainStateError> {
                     .lock()
                     .unwrap_or_else(|e| e.into_inner())
                     .get_mut(&reader_id)
+                    .filter(|sign_in| sign_in.id == sign_in_id)
                 {
                     // A long link (Google's) can reach the screen over several reads: a longer
                     // one with the same start is the same link, more of it.
@@ -499,7 +529,7 @@ fn start(home: &Path, agent_id: &str) -> Result<(), DomainStateError> {
         let mut next_check = started + waits.next().unwrap_or(ACCOUNT_CHECK_FRESH_FOR);
         loop {
             std::thread::sleep(Duration::from_secs(1));
-            if !sign_in_running(&watched_id) {
+            if !sign_in_current(&watched_id, sign_in_id) {
                 return;
             }
             if started.elapsed() > SIGN_IN_LIMIT {
@@ -509,7 +539,10 @@ fn start(home: &Path, agent_id: &str) -> Result<(), DomainStateError> {
             if !stays_open || Instant::now() < next_check {
                 continue;
             }
-            let signed_in = read_signed_in(&watch_home, &watched_id);
+            let signed_in = {
+                let _read = STATUS_READ.lock().unwrap_or_else(|e| e.into_inner());
+                read_signed_in(&watch_home, &watched_id)
+            };
             if let Some(kept) = READINGS
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
@@ -528,13 +561,31 @@ fn start(home: &Path, agent_id: &str) -> Result<(), DomainStateError> {
     std::thread::spawn(move || {
         let succeeded = child.wait().is_ok_and(|exit| exit.success());
         drop(pair.master);
-        if let Some(sign_in) = SIGN_INS
+        let mine = match SIGN_INS
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .get_mut(&id)
+            .filter(|sign_in| sign_in.id == sign_in_id)
         {
-            sign_in.killer = None;
-            sign_in.finished = Some(succeeded);
+            Some(sign_in) => {
+                sign_in.killer = None;
+                sign_in.finished = Some(succeeded);
+                true
+            }
+            None => false,
+        };
+        // The panel's next status read asks the CLI once now that the login exited, unless the
+        // sign-in was cancelled or the watcher has just seen it signed in.
+        if !mine {
+            return;
+        }
+        if let Some(kept) = READINGS
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_mut(&id)
+            .filter(|kept| kept.signed_in != Some(true))
+        {
+            kept.at = None;
         }
     });
     Ok(())

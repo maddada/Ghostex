@@ -139,13 +139,17 @@ struct AgyVersion {
 }
 
 impl AgyVersion {
-    /// The first `digits.digits[.digits]` anywhere in `text`, wherever it stands: `1.5.0`,
+    /// The oldest `digits.digits[.digits]` anywhere in `text`, wherever it stands: `1.5.0`,
     /// `v1.5.0`, `V1.5.0`, `agy 1.5.0`, `agy-1.5.0`, `agy_acp_server_v1.5.0` and `1.5` all read.
     ///
     /// CDXC:AgentProviders 2026-11-27: the Fable review found the gate let `agy 1.5.0`, `V1.5.0`,
     /// `agy-1.5.0` and `1.5` through, because the parser only knew three prefixes and three
     /// parts. Reading the first version anywhere closes that, and the sign-in check uses the same
-    /// reader on `agy --version`.
+    /// reader on `agy --version`. The re-review found the first number pair let
+    /// `macos-15.1 agy 1.5.0` and `2026.11 agy 1.5.0` through, and only a `-` marked a
+    /// pre-release, so `1.5.1rc1`, `1.5.1_beta` and `1.5.1~rc1` read as the release: every
+    /// version in the text is read and the oldest one counts, and a letter, `_` or `~` right after
+    /// the numbers marks a pre-release too.
     fn read(text: &str) -> Option<Self> {
         let bytes = text.as_bytes();
         let digits_from = |at: usize| -> usize {
@@ -154,6 +158,7 @@ impl AgyVersion {
                 .position(|b| !b.is_ascii_digit())
                 .map_or(bytes.len(), |n| at + n)
         };
+        let mut oldest: Option<Self> = None;
         let mut at = 0;
         while at < bytes.len() {
             if !bytes[at].is_ascii_digit() || (at > 0 && bytes[at - 1].is_ascii_digit()) {
@@ -174,29 +179,50 @@ impl AgyVersion {
             let end = patch_end.unwrap_or(minor_end);
             let number = |from: usize, to: usize| text[from..to].parse::<u64>().ok();
             let numbers = [
-                number(at, major_end)?,
-                number(major_end + 1, minor_end)?,
+                number(at, major_end),
+                number(major_end + 1, minor_end),
                 match patch_end {
-                    Some(patch_end) => number(minor_end + 1, patch_end)?,
-                    None => 0,
+                    Some(patch_end) => number(minor_end + 1, patch_end),
+                    None => Some(0),
                 },
             ];
-            let prerelease = bytes.get(end) == Some(&b'-')
-                && bytes.get(end + 1).is_some_and(u8::is_ascii_alphanumeric);
-            let shown_end = if prerelease {
-                text[end + 1..]
-                    .find(|c: char| !(c.is_ascii_alphanumeric() || c == '.'))
-                    .map_or(text.len(), |n| end + 1 + n)
-            } else {
-                end
+            // A number too long to hold is no version Ghostex can compare: unreadable.
+            let [Some(major), Some(minor), Some(patch)] = numbers else {
+                return None;
             };
-            return Some(Self {
-                numbers,
-                prerelease,
+            // `-rc1`, `_beta` and `~rc1` name a pre-release, as does a letter right after the
+            // numbers (`1.5.1rc1`).
+            let suffix_from = match bytes.get(end) {
+                Some(b'-' | b'_' | b'~')
+                    if bytes.get(end + 1).is_some_and(u8::is_ascii_alphanumeric) =>
+                {
+                    Some(end + 1)
+                }
+                Some(b) if b.is_ascii_alphabetic() => Some(end),
+                _ => None,
+            };
+            let shown_end = match suffix_from {
+                Some(from) => text[from..]
+                    .find(|c: char| !(c.is_ascii_alphanumeric() || c == '.'))
+                    .map_or(text.len(), |n| from + n),
+                None => end,
+            };
+            let version = Self {
+                numbers: [major, minor, patch],
+                prerelease: suffix_from.is_some(),
                 shown: text[at..shown_end].to_string(),
-            });
+            };
+            if oldest.as_ref().is_none_or(|oldest| version.order() < oldest.order()) {
+                oldest = Some(version);
+            }
+            at = shown_end.max(end);
         }
-        None
+        oldest
+    }
+
+    /// A pre-release comes before the release of the same numbers.
+    fn order(&self) -> ([u64; 3], bool) {
+        (self.numbers, !self.prerelease)
     }
 
     fn too_old(&self) -> bool {
@@ -301,6 +327,14 @@ mod tests {
             "1.5.1-rc1",
             "0.9.9",
             "agy version 1.4.12 (darwin-arm64)",
+            "macos-15.1 agy 1.5.0",
+            "2026.11 agy 1.5.0",
+            "agy 1.5.0 (macos 15.1)",
+            "agy 2.0.0, acp server 1.5.0",
+            "1.5.1rc1",
+            "1.5.1_beta",
+            "1.5.1~rc1",
+            "agy 1.5.1beta2",
         ] {
             assert!(refused(text), "{text} should be refused");
         }
@@ -319,6 +353,11 @@ mod tests {
             "1.5.2-rc1",
             "1.5.1+build.7",
             "agy 1.5.13\n",
+            "macos-15.1 agy 1.5.1",
+            "2026.11 agy 1.5.2",
+            "agy 1.5.1 (go1.22.3, darwin-arm64)",
+            "1.5.2rc1",
+            "1.5.2_beta",
         ] {
             assert!(!refused(text), "{text} should be allowed");
         }
@@ -330,6 +369,10 @@ mod tests {
         assert!(message.contains("Antigravity CLI 1.5.0-rc1,"), "{message}");
         let message = antigravity_update_needed(Some("1.4")).unwrap();
         assert!(message.contains("Antigravity CLI 1.4,"), "{message}");
+        let message = antigravity_update_needed(Some("macos-15.1 agy 1.5.0")).unwrap();
+        assert!(message.contains("Antigravity CLI 1.5.0,"), "{message}");
+        let message = antigravity_update_needed(Some("agy 1.5.1~rc1")).unwrap();
+        assert!(message.contains("Antigravity CLI 1.5.1~rc1,"), "{message}");
     }
 
     #[test]

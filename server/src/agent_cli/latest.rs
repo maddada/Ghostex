@@ -50,6 +50,18 @@ pub(crate) async fn latest(definition: &'static Definition) -> Option<String> {
             return value;
         }
     }
+    // One agy manifest read at a time, and at most one an hour across gxserver restarts.
+    let _one_agy_read = match agy {
+        Some(_) => Some(AGY_READ.lock().await),
+        None => None,
+    };
+    let record = agy.map(|_| agy_record_path());
+    if let Some(value) = record.as_deref().and_then(recent_agy_read) {
+        if let Ok(mut cache) = CACHE.lock() {
+            cache.insert(definition.agent_id.clone(), (Instant::now(), value.clone()));
+        }
+        return value;
+    }
     let value = tokio::task::spawn_blocking(move || match agy {
         Some(target) => {
             let body = get(&url.replace(AGY_TARGET, &target.manifest_name()))?;
@@ -60,10 +72,53 @@ pub(crate) async fn latest(definition: &'static Definition) -> Option<String> {
     .await
     .ok()
     .flatten();
+    if let Some(record) = record.as_deref() {
+        save_agy_read(record, value.as_deref());
+    }
     if let Ok(mut cache) = CACHE.lock() {
         cache.insert(definition.agent_id.clone(), (Instant::now(), value.clone()));
     }
     value
+}
+
+/// CDXC:AgentProviders 2026-11-27 WHY: The Fable re-review found the hourly limit on the agy
+/// manifest read was kept in memory only, so every gxserver restart read it again and two reads at
+/// once both fetched. The last read's time and answer are kept on disk beside the lineup marker
+/// (`agy-lineup-version.txt`), and one read runs at a time.
+static AGY_READ: LazyLock<tokio::sync::Mutex<()>> = LazyLock::new(|| tokio::sync::Mutex::new(()));
+
+fn agy_record_path() -> std::path::PathBuf {
+    crate::paths::get_gxserver_paths(None)
+        .app_cache_dir
+        .join("agy-latest-read.json")
+}
+
+/// The answer of the last agy manifest read kept at `path`, when it was made within
+/// [`FOUND_TTL`]: `Some(None)` for a read that found no version.
+fn recent_agy_read(path: &std::path::Path) -> Option<Option<String>> {
+    let record: Value = serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()?;
+    let at = std::time::UNIX_EPOCH + Duration::from_secs(record.get("readAt")?.as_u64()?);
+    // A time ahead of the clock is not trusted to hold reads back.
+    let age = std::time::SystemTime::now().duration_since(at).ok()?;
+    (age < FOUND_TTL).then(|| {
+        record
+            .get("version")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    })
+}
+
+fn save_agy_read(path: &std::path::Path, version: Option<&str>) {
+    let at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| since.as_secs());
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(
+        path,
+        serde_json::json!({ "readAt": at, "version": version }).to_string(),
+    );
 }
 
 /// The version npm's `latest` tag names for `package`, from a blocking context, cached like
@@ -290,5 +345,41 @@ mod agy_manifest_tests {
             );
         }
         assert_eq!(MAC_ARM.version_in_manifest("not json"), None);
+    }
+}
+
+#[cfg(test)]
+mod agy_read_record_tests {
+    use super::{recent_agy_read, save_agy_read};
+
+    /// The hour between agy manifest reads holds across a gxserver restart: the last read is kept
+    /// on disk, a failed read too.
+    #[test]
+    fn the_last_agy_read_is_kept_on_disk() {
+        let temp = tempfile::tempdir().unwrap();
+        let record = temp.path().join("cache/agy-latest-read.json");
+        assert_eq!(recent_agy_read(&record), None);
+        save_agy_read(&record, Some("1.5.13"));
+        assert_eq!(recent_agy_read(&record), Some(Some("1.5.13".to_string())));
+        save_agy_read(&record, None);
+        assert_eq!(recent_agy_read(&record), Some(None));
+    }
+
+    #[test]
+    fn an_old_or_future_read_does_not_hold_reads_back() {
+        let temp = tempfile::tempdir().unwrap();
+        let record = temp.path().join("agy-latest-read.json");
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        for at in [now - 2 * 60 * 60, now + 24 * 60 * 60] {
+            std::fs::write(
+                &record,
+                serde_json::json!({ "readAt": at, "version": "1.5.13" }).to_string(),
+            )
+            .unwrap();
+            assert_eq!(recent_agy_read(&record), None, "{at}");
+        }
     }
 }

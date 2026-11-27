@@ -323,8 +323,17 @@ pub(crate) fn create_agent_session_params_for_project(
                 .clone()
                 .or_else(|| default_agent_command(&agent_id).map(str::to_string));
             // CDXC:AgentProviders 2026-11-19 WHY: a hub that is down, or refuses the key, is said at the start (security review of the hub work), not as a failed first message the user has to decode. A launch that only follows New sessions start on (the launchers send the rule's hub as the account; phones, automations, Chief, GBots and threads without --account send none) starts on the account Auto would pick and says so; only a hub named on purpose (--account, or a hub other than the rule's) refuses.
+            // CDXC:AgentProviders 2026-11-27: a hub that holds a Google login is treated like one
+            // that can't be reached (Q5230, "Start elsewhere"): a launch that only follows the rule
+            // starts elsewhere and the user is warned once per hub; a hub named on purpose refuses
+            // (`google_login_refusal`).
             let paths = crate::paths::get_gxserver_paths(None);
-            match crate::accounts::hub::launch::check_reachable(&paths, &hub_id) {
+            let google_login = crate::accounts::hub::google_login_refusal_for(&paths, &hub_id);
+            let ready = match &google_login {
+                Some(reason) => Err(DomainStateError::bad_request(reason.clone())),
+                None => crate::accounts::hub::launch::check_reachable(&paths, &hub_id),
+            };
+            match ready {
                 Ok(()) => Some(crate::accounts::hub::launch::apply(
                     &paths,
                     provider,
@@ -341,11 +350,18 @@ pub(crate) fn create_agent_session_params_for_project(
                     if !from_rule {
                         return Err(error);
                     }
+                    let why = if google_login.is_some() {
+                        crate::accounts::hub::warn_google_login_once(db, &paths, &hub_id);
+                        crate::accounts::hub::launch::NotOnHub::GoogleLogin
+                    } else {
+                        crate::accounts::hub::launch::NotOnHub::Unreachable
+                    };
                     crate::accounts::hub::launch::start_elsewhere(
                         &paths,
                         &registry,
                         provider,
                         &hub_id,
+                        why,
                         &mut runtime_settings,
                     );
                     configured_command

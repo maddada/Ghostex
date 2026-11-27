@@ -294,7 +294,10 @@ pub(crate) fn summary_agent(
     let runtime = if session_agent.as_deref() == Some(agent.as_str()) {
         session.clone()
     } else if let (true, Some(command)) = (agent == "custom", custom) {
-        json!({"runtimeSettings": {"firstPromptTitleGenerationCommand": command}})
+        json!({"runtimeSettings": {
+            "firstPromptTitleGenerationAgent": "custom",
+            "firstPromptTitleGenerationCommand": command,
+        }})
     } else {
         json!({})
     };
@@ -304,7 +307,9 @@ pub(crate) fn summary_agent(
             format!("{message} Set it under Settings > Agents > Title Generation Agent."),
         )
     })?;
-    Ok((agent, command))
+    Ok(crate::server::title_generation::without_agy_title_command(
+        agent, command,
+    ))
 }
 
 fn agent_label(agent: &str) -> String {

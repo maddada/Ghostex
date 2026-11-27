@@ -413,31 +413,46 @@ static LINEUP_CONTEXT: OnceLock<(GxserverPaths, GxserverEventHub, String)> = Onc
 /// models, no timer, and a failed read waits for the next version or a manual Fetch. The version
 /// comes from reads Ghostex already makes (`agy --version` once at boot, and Settings' agent
 /// version read), so nothing polls agy for it.
+/// CDXC:AgentProviders 2026-11-27 WHY: The Fable re-review found three ways this read ran more
+/// often than once per agy version: every gxserver with its own cache folder (a test server, a
+/// second profile) read at boot, so a separate profile never reads; a marker that could not be
+/// written was tried again on every Settings read and Updates pass, so an unwritten marker means no
+/// read; and an agy the 1.5.1 gate refuses was read too, so it is not.
 pub(crate) fn read_antigravity_lineup_once_per_version(
     version_text: &str,
     paths: &GxserverPaths,
     event_hub: &GxserverEventHub,
     server_id: &str,
 ) {
-    let Some(version) = crate::agent_cli::latest::version_in(version_text) else {
+    if ghostex_paths::uses_separate_profile() {
         return;
-    };
-    let path = antigravity_lineup_version_path(paths);
-    {
-        static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        let _gate = ONE_AT_A_TIME
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let known = fs::read_to_string(&path).unwrap_or_default();
-        if known.trim() == version {
-            return;
-        }
-        if let Some(parent) = path.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
-        let _ = fs::write(&path, &version);
     }
-    let _ = read_and_adopt_lineup("antigravity", false, paths, event_hub, server_id);
+    if lineup_marker_claimed(version_text, &antigravity_lineup_version_path(paths)) {
+        let _ = read_and_adopt_lineup("antigravity", false, paths, event_hub, server_id);
+    }
+}
+
+/// Whether `version_text` names an agy version the lineup was not read on yet, that the 1.5.1
+/// gate allows, and that is now written to the marker at `path` (one caller at a time).
+fn lineup_marker_claimed(version_text: &str, path: &std::path::Path) -> bool {
+    if crate::acp::startup_error::antigravity_update_needed(Some(version_text)).is_some() {
+        return false;
+    }
+    let Some(version) = crate::agent_cli::latest::version_in(version_text) else {
+        return false;
+    };
+    static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _gate = ONE_AT_A_TIME
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let known = fs::read_to_string(path).unwrap_or_default();
+    if known.trim() == version {
+        return false;
+    }
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    fs::write(path, &version).is_ok()
 }
 
 /// Another part of gxserver read agy's version (Settings' agent row): reads Antigravity's lineup
@@ -465,10 +480,14 @@ pub(crate) fn note_agy_version(version_text: &str) {
 /// agy's version is new.
 fn refresh_lineups(paths: GxserverPaths, event_hub: GxserverEventHub, server_id: String) {
     let _ = LINEUP_CONTEXT.set((paths.clone(), event_hub.clone(), server_id.clone()));
-    if let Some(version) =
-        crate::agent_model_lineups::agy_version(&crate::resume_lookup::home_dir())
-    {
-        note_agy_version(&version);
+    // A separate profile never reads the lineup (`read_antigravity_lineup_once_per_version`), so
+    // it does not ask agy its version for it either.
+    if !ghostex_paths::uses_separate_profile() {
+        if let Some(version) =
+            crate::agent_model_lineups::agy_version(&crate::resume_lookup::home_dir())
+        {
+            note_agy_version(&version);
+        }
     }
     let agents = crate::agent_model_lineups::TIMED_AGENTS;
     let mut due = vec![Instant::now(); agents.len()];
@@ -1320,4 +1339,41 @@ fn is_valid_catalog(catalog: &Value) -> bool {
             .get("agents")
             .and_then(Value::as_object)
             .is_some_and(|agents| agents.values().all(is_valid_agent))
+}
+
+#[cfg(test)]
+mod antigravity_lineup_marker_tests {
+    use super::lineup_marker_claimed;
+
+    #[test]
+    fn a_new_allowed_version_is_claimed_once() {
+        let temp = tempfile::tempdir().unwrap();
+        let marker = temp.path().join("cache/agy-lineup-version.txt");
+        assert!(lineup_marker_claimed("agy 1.5.3", &marker));
+        assert!(!lineup_marker_claimed("agy 1.5.3", &marker));
+        assert!(lineup_marker_claimed("agy 1.5.4", &marker));
+    }
+
+    /// No `agy models` read for an agy the 1.5.1 gate refuses.
+    #[test]
+    fn a_version_the_gate_refuses_is_not_read() {
+        let temp = tempfile::tempdir().unwrap();
+        let marker = temp.path().join("agy-lineup-version.txt");
+        for text in ["agy 1.5.0", "macos-15.1 agy 1.5.0", "1.5.1-rc1", "agy"] {
+            assert!(!lineup_marker_claimed(text, &marker), "{text}");
+        }
+        assert!(!marker.exists());
+    }
+
+    /// A marker that can't be written means no read, so a read-only cache folder doesn't read agy on
+    /// every Settings read and Updates pass.
+    #[test]
+    fn an_unwritable_marker_means_no_read() {
+        let temp = tempfile::tempdir().unwrap();
+        let file = temp.path().join("not-a-folder");
+        std::fs::write(&file, "").unwrap();
+        let marker = file.join("agy-lineup-version.txt");
+        assert!(!lineup_marker_claimed("agy 1.5.3", &marker));
+        assert!(!lineup_marker_claimed("agy 1.5.3", &marker));
+    }
 }

@@ -275,24 +275,74 @@ fn google_logins(files: &[Value]) -> Vec<String> {
     found
 }
 
-/// Why a session can't start On the hub `hub`, when the hub's credential list holds a Google
-/// login, or `None`. Reads the list Ghostex keeps for Settings, or, when it has none yet, the
-/// hub's list once with its management key; a hub without one can't be read and is let through.
+/// The Google logins the last full reading found, or a credential-list read made only for a
+/// launch check, with when they were read: a launch reads the list again once they are older than
+/// [`FRESH_FOR`] or the reading failed.
+fn checked_logins() -> &'static Mutex<HashMap<String, (Instant, Vec<String>)>> {
+    static CHECKED: OnceLock<Mutex<HashMap<String, (Instant, Vec<String>)>>> = OnceLock::new();
+    CHECKED.get_or_init(Default::default)
+}
+
+/// The Google logins `hub` holds now, or the last ones known when its list can't be read (none
+/// known: `None`).
+fn current_google_logins(paths: &GxserverPaths, hub: &store::Hub) -> Option<Vec<String>> {
+    let kept = reading(&hub.id);
+    if let Some(kept) = kept
+        .as_ref()
+        .filter(|kept| kept.error.is_none() && kept.fetched_at.elapsed() < FRESH_FOR)
+    {
+        return Some(kept.google_logins.clone());
+    }
+    let checked = checked_logins()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&hub.id)
+        .cloned();
+    if let Some((_, logins)) = checked.as_ref().filter(|(at, _)| at.elapsed() < FRESH_FOR) {
+        return Some(logins.clone());
+    }
+    let read = (!hub.management_key.is_empty())
+        .then(|| {
+            let key = store::open_key(paths, &hub.management_key).ok()?;
+            client::auth_files(&hub.url, &key).ok()
+        })
+        .flatten();
+    match read {
+        Some(files) => {
+            let logins = google_logins(&files);
+            checked_logins()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .insert(hub.id.clone(), (Instant::now(), logins.clone()));
+            Some(logins)
+        }
+        // Unreadable now: the newest list read before, so a hub once seen with a Google login
+        // stays refused.
+        None => {
+            let kept = kept.map(|kept| (kept.fetched_at, kept.google_logins));
+            match (kept, checked) {
+                (Some(a), Some(b)) => Some(if a.0 >= b.0 { a.1 } else { b.1 }),
+                (Some((_, logins)), None) | (None, Some((_, logins))) => Some(logins),
+                (None, None) => None,
+            }
+        }
+    }
+}
+
+/// Why a session can't start, resume or fork On the hub `hub`, when the hub's credential list holds
+/// a Google login, or `None`. Reads the list Ghostex keeps for Settings while it is fresh, or else
+/// the hub's list with its management key; a hub whose list can't be read and was never read is let
+/// through.
 ///
 /// CDXC:AgentProviders 2026-11-27 DECISION:
 /// The Fable review of the Antigravity work found a hub that holds an Antigravity or Gemini login
 /// can answer a Claude or Codex request from Ghostex through it, which Ghostex hides but can't
 /// stop on the hub's side. Ghostex talks to Antigravity only through agy over ACP, so it refuses to
-/// start sessions on such a hub and says which login to remove.
+/// start sessions on such a hub and says which login to remove. The re-review found resume and
+/// fork skipped it and a kept reading was trusted whatever its age, so both now check, and a
+/// reading older than `FRESH_FOR` or a failed one is read again.
 pub(crate) fn google_login_refusal(paths: &GxserverPaths, hub: &store::Hub) -> Option<String> {
-    let logins = match reading(&hub.id) {
-        Some(kept) => kept.google_logins,
-        None if !hub.management_key.is_empty() => {
-            let key = store::open_key(paths, &hub.management_key).ok()?;
-            google_logins(&client::auth_files(&hub.url, &key).ok()?)
-        }
-        None => return None,
-    };
+    let logins = current_google_logins(paths, hub)?;
     (!logins.is_empty()).then(|| {
         let name = if hub.label.trim().is_empty() {
             host(&hub.url)
@@ -304,6 +354,84 @@ pub(crate) fn google_login_refusal(paths: &GxserverPaths, hub: &store::Hub) -> O
             logins.join(", ")
         )
     })
+}
+
+/// [`google_login_refusal`] for a saved session that runs On the hub (its `cliproxyHubId`, or a
+/// picked `cliproxy:<hub id>` account), or `None` for any other session.
+pub(crate) fn session_hub_refusal(paths: &GxserverPaths, session: &Value) -> Option<String> {
+    let runtime = session.get("runtimeSettings")?.as_object()?;
+    let hub_id = runtime
+        .get(launch::RUNTIME_KEY)
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .or_else(|| launch::picked_hub(runtime))?;
+    let hub = store::find(paths, hub_id.trim())?;
+    google_login_refusal(paths, &hub)
+}
+
+/// [`google_login_refusal`] for saved hub `hub_id`; `None` when no hub has that id.
+pub(crate) fn google_login_refusal_for(paths: &GxserverPaths, hub_id: &str) -> Option<String> {
+    google_login_refusal(paths, &store::find(paths, hub_id)?)
+}
+
+/// The account id a hub's Google login warning carries in the bell (`cliproxy-google:<hub id>`):
+/// the desktop opens it as the dialog, and a click on the row opens Settings > Accounts.
+pub(crate) const GOOGLE_LOGIN_NOTICE_PREFIX: &str = "cliproxy-google:";
+
+/// The hubs whose Google login warning was given, kept beside the hub list.
+fn google_login_warned_path(paths: &GxserverPaths) -> std::path::PathBuf {
+    paths.auth_dir.join("cliproxyapi-google-login-warned.json")
+}
+
+/// Tells the user once per hub, in the bell (and through it the desktop's dialog and the phone),
+/// that Ghostex doesn't use a hub holding a Google login and started a session elsewhere.
+///
+/// CDXC:AgentProviders 2026-11-27 DECISION:
+/// User (Q5230, "Start elsewhere"): "please warn the user with a dialog saying that we don't
+/// support agy in cliproxyapi since it's not allowed by google." A launch that only follows New
+/// sessions start on a hub that holds a Google login starts on another account, as for a hub that
+/// can't be reached, and the user is warned once per hub, not on every launch. The row is a red
+/// account row like the pool-limit one, which the desktop and phones already draw and open on
+/// Settings > Accounts, where the hub is managed.
+pub(crate) fn warn_google_login_once(db: &rusqlite::Connection, paths: &GxserverPaths, hub_id: &str) {
+    static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
+    let _gate = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let path = google_login_warned_path(paths);
+    let mut warned: Vec<String> = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default();
+    if warned.iter().any(|id| id == hub_id) {
+        return;
+    }
+    let name = launch::pinned_label(paths, &format!("{}{hub_id}", launch::ACCOUNT_PREFIX))
+        .unwrap_or_else(|| "The hub".to_string());
+    let inserted = crate::notification_feed::store::insert_notification_feed_row(
+        db,
+        crate::notification_feed::store::NewNotificationFeedRow {
+            project_id: crate::notification_feed::store::ACCOUNT_NOTIFICATION_PROJECT_ID.into(),
+            session_id: crate::notification_feed::store::account_notification_session_id(&format!(
+                "{GOOGLE_LOGIN_NOTICE_PREFIX}{hub_id}"
+            )),
+            kind: crate::notification_feed::store::NOTIFICATION_FEED_KIND_FAILED,
+            title: "Google logins aren't supported on a CLIProxyAPI hub".to_string(),
+            subtitle: name.clone(),
+            body: format!(
+                "{name} holds an Antigravity or Gemini login. Ghostex doesn't support Antigravity (agy) or Gemini in CLIProxyAPI, since Google doesn't allow it, so new sessions start on another account. Remove that login from the hub to use it again."
+            ),
+            agent_name: None,
+            attention_event_id: None,
+        },
+    );
+    if inserted.is_err() {
+        return;
+    }
+    if let Some(state) = crate::collab_shim::sidecar::app_state() {
+        crate::notification_feed::broadcast_notification_feed_changed(&state);
+    }
+    warned.push(hub_id.to_string());
+    let _ = std::fs::create_dir_all(&paths.auth_dir);
+    let _ = std::fs::write(&path, serde_json::to_string(&warned).unwrap_or_default());
 }
 
 fn host(url: &str) -> String {
@@ -1078,6 +1206,100 @@ mod tests {
                 "{provider}"
             );
         }
+    }
+
+    fn kept(id: &str, logins: &[&str], age: Duration, error: Option<&str>) {
+        readings().lock().unwrap().insert(
+            id.to_string(),
+            Reading {
+                error: error.map(str::to_string),
+                accounts: Vec::new(),
+                session_affinity: None,
+                routing_strategy: None,
+                updated_at: None,
+                fetched_at: Instant::now() - age,
+                google_logins: logins.iter().map(|l| l.to_string()).collect(),
+            },
+        );
+    }
+
+    fn saved_hub(paths: &GxserverPaths, id: &str) {
+        let hub = store::Hub {
+            id: id.to_string(),
+            label: "Home hub".to_string(),
+            url: "http://127.0.0.1:9".to_string(),
+            client_key: String::new(),
+            management_key: String::new(),
+            hidden_in_sidebar: Default::default(),
+        };
+        let mut hubs = store::read(paths).unwrap_or_default();
+        hubs.push(hub);
+        store::write(paths, &hubs).unwrap();
+    }
+
+    /// CDXC:AgentProviders 2026-11-27: resume and fork refuse a session On a hub with a Google
+    /// login, by the `cliproxyHubId` a launch leaves or a picked `cliproxy:` account.
+    #[test]
+    fn a_hub_session_with_a_google_login_is_refused_on_resume() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = crate::paths::get_gxserver_paths(Some(temp.path().to_path_buf()));
+        saved_hub(&paths, "hub-resume-google");
+        saved_hub(&paths, "hub-resume-clean");
+        kept("hub-resume-google", &["antigravity"], Duration::ZERO, None);
+        kept("hub-resume-clean", &[], Duration::ZERO, None);
+        let on = |id: &str| json!({"runtimeSettings": {launch::RUNTIME_KEY: id}});
+        let reason = session_hub_refusal(&paths, &on("hub-resume-google")).unwrap();
+        assert!(reason.contains("Home hub") && reason.contains("antigravity"), "{reason}");
+        let picked = json!({"runtimeSettings": {"accountId": "cliproxy:hub-resume-google"}});
+        assert!(session_hub_refusal(&paths, &picked).is_some());
+        assert!(session_hub_refusal(&paths, &on("hub-resume-clean")).is_none());
+        assert!(session_hub_refusal(&paths, &json!({"runtimeSettings": {}})).is_none());
+
+        let plan = crate::agents::hub_refused_resume_plan(Some("claude".to_string()), &reason);
+        assert!(plan.get("primaryCommand").is_none());
+        assert!(plan.get("fallbackCommand").is_none());
+        assert_eq!(plan["hubRefusal"], json!(reason));
+        assert!(plan["startupText"].as_str().unwrap().contains("Google login"));
+    }
+
+    /// Q5230: the warning that a hub holds a Google login reaches the bell once per hub, as a red
+    /// account row the desktop shows as a dialog and a click opens on Settings > Accounts.
+    #[test]
+    fn a_hubs_google_login_is_warned_about_once() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = crate::paths::get_gxserver_paths(Some(temp.path().to_path_buf()));
+        saved_hub(&paths, "hub-warned");
+        crate::storage::initialize_gxserver_storage(&paths).unwrap();
+        let db = crate::storage::open_gxserver_database(&paths).unwrap();
+        warn_google_login_once(&db, &paths, "hub-warned");
+        warn_google_login_once(&db, &paths, "hub-warned");
+        let feed = crate::notification_feed::store::read_notification_feed_state(&db).unwrap();
+        let rows: Vec<&Value> = feed["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|row| row["accountId"] == json!("cliproxy-google:hub-warned"))
+            .collect();
+        assert_eq!(rows.len(), 1, "{feed}");
+        assert_eq!(rows[0]["kind"], json!("failed"));
+        assert!(rows[0]["body"].as_str().unwrap().contains("Home hub"));
+        assert!(rows[0]["body"].as_str().unwrap().contains("Google doesn't allow it"));
+    }
+
+    /// A reading older than `FRESH_FOR`, or a failed one, is read again; a hub whose list can't be
+    /// read then keeps the last logins seen, so a hub once seen with a Google login stays refused.
+    #[test]
+    fn a_stale_or_failed_reading_is_not_trusted_as_clean() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = crate::paths::get_gxserver_paths(Some(temp.path().to_path_buf()));
+        saved_hub(&paths, "hub-stale");
+        let hub = store::find(&paths, "hub-stale").unwrap();
+        kept("hub-stale", &["gemini"], FRESH_FOR * 2, None);
+        assert!(google_login_refusal(&paths, &hub).is_some());
+        kept("hub-stale", &["gemini"], Duration::ZERO, Some("down"));
+        assert!(google_login_refusal(&paths, &hub).is_some());
+        kept("hub-stale", &[], Duration::ZERO, None);
+        assert!(google_login_refusal(&paths, &hub).is_none());
     }
 
     /// CDXC:AgentProviders 2026-11-27: Antigravity offers other apps only ACP, so no usage reader

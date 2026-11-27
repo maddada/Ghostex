@@ -125,6 +125,34 @@ mod tests {
     /// (agent_cli/latest.rs).
     const ALLOWED: &str = "https://storage.googleapis.com/antigravity-public/antigravity-cli/";
 
+    /// The one Google host Ghostex fetches from for Antigravity: agy's own auto-updater, read for
+    /// this computer's update manifest (agent_cli/latest.rs). A changed or added address fails here.
+    const ALLOWED_FETCH_HOST: &str = "antigravity-cli-auto-updater-974169037036.us-central1.run.app";
+
+    /// CDXC:AgentProviders 2026-11-27 (Fable re-review, finding 9): the update check's address is
+    /// agy's updater host and nothing else, and no other host on Google's app hosting appears in
+    /// the sources (the word is split so this test doesn't find itself).
+    #[test]
+    fn the_agy_update_check_fetches_only_the_updater_host() {
+        let catalog = &crate::agent_cli::catalog::CATALOG;
+        let agy = catalog
+            .iter()
+            .find(|definition| definition.agent_id == "antigravity")
+            .expect("the Antigravity entry");
+        assert!(agy.npm_package.is_none());
+        let url = &agy.latest_version.as_ref().expect("its update check").url;
+        let host = url::Url::parse(&url.replace("{agyTarget}", "darwin_arm64"))
+            .expect("an address")
+            .host_str()
+            .map(str::to_string);
+        assert_eq!(host.as_deref(), Some(ALLOWED_FETCH_HOST), "{url}");
+        let app_hosting = ["run", ".app"].concat();
+        for source in SOURCES {
+            let without = source.replace(ALLOWED_FETCH_HOST, "");
+            assert!(!without.contains(&app_hosting), "another {app_hosting} host is named");
+        }
+    }
+
     /// CDXC:AgentProviders 2026-11-26: Ghostex never calls Google's internal services, never signs
     /// in with another app's OAuth client and never sends another app's user agent (the retired
     /// Gemini usage account did all three), and never runs agy's `/usage` (2026-11-27). The words

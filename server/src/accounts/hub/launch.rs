@@ -1195,15 +1195,30 @@ pub(crate) fn pinned_label(paths: &GxserverPaths, id: &str) -> Option<String> {
     })
 }
 
-/// A launch whose rule's hub can't be reached starts on the account Auto would pick instead (or,
-/// with none, on the computer's own login), and the session's switch card says so.
+/// Why a launch that follows New sessions start on doesn't start on the rule's hub.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum NotOnHub {
+    /// The hub is down or refuses the key.
+    Unreachable,
+    /// The hub holds a Google login (`google_login_refusal`, Q5230).
+    GoogleLogin,
+}
+
+/// A launch whose rule's hub can't be reached, or holds a Google login, starts on the account Auto
+/// would pick instead (or, with none, on the computer's own login), and the session's switch card
+/// says so.
 pub(crate) fn start_elsewhere(
     paths: &GxserverPaths,
     registry: &Registry,
     provider: Provider,
     hub_id: &str,
+    why: NotOnHub,
     runtime: &mut Map<String, Value>,
 ) {
+    let why = match why {
+        NotOnHub::Unreachable => "can't be reached",
+        NotOnHub::GoogleLogin => "holds a Google login, which Ghostex doesn't use through a hub",
+    };
     let snapshot = crate::accounts::runtime::current_snapshot();
     let account = crate::accounts::default_account::hub_fallback_accounts(registry, &snapshot)
         .remove(&provider)
@@ -1217,14 +1232,14 @@ pub(crate) fn start_elsewhere(
             runtime.insert("accountId".into(), json!(account.id));
             (
                 Some(account.id.clone()),
-                format!("{hub} can't be reached, so this started on the account below."),
+                format!("{hub} {why}, so this started on the account below."),
             )
         }
         None => {
             runtime.remove("accountId");
             (
                 None,
-                format!("{hub} can't be reached, so this started on this computer's own login."),
+                format!("{hub} {why}, so this started on this computer's own login."),
             )
         }
     };
