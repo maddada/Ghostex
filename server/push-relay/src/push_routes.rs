@@ -1,14 +1,18 @@
 //! The `/push/` routes: visible and background notifications, widget pushes, the token mailbox and the encrypted
-//! widget snapshot. They have their own limits, budget and counters, so nothing here takes from the Live Activity
-//! route; they share its Apple connection and its memory of tokens Apple dropped.
+//! widget snapshot. They have their own limits, budget, counters and memory of tokens Apple dropped, so nothing
+//! here changes what the Live Activity route does or reports; they share only its Apple connection.
+//!
+//! A mailbox or snapshot id is a capability, so it travels in the `Authorization` header (`Bearer <id>`), never in
+//! the URL, where a proxy's logs would keep it.
 
+use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use axum::body::Bytes;
-use axum::extract::{ConnectInfo, DefaultBodyLimit, Path, State};
+use axum::extract::{ConnectInfo, DefaultBodyLimit, State};
 use axum::http::{header, HeaderMap, HeaderValue};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -20,10 +24,11 @@ use tokio::sync::Semaphore;
 use crate::apns::PushType;
 use crate::limits::{LimitConfig, Limiter};
 use crate::native::{prepare_alert, prepare_widgets, AlertRequest, NativePush, WidgetsRequest};
-use crate::request::{valid_token, Refusal};
+use crate::request::{valid_token, Environment, Refusal};
 use crate::store::{PutRefusal, Shelf, Store};
 use crate::{
     answer, caller_key, rate_limited, refusal, token_digest, token_label, unix_now, Relay,
+    GONE_TOKEN_MEMORY,
 };
 
 /// The path prefix Caddy routes to the relay for these routes.
@@ -47,6 +52,9 @@ struct Counters {
     store_full: AtomicU64,
 }
 
+/// A token Apple dropped, for one environment and one topic.
+type GoneKey = (Environment, &'static str, [u8; 32]);
+
 pub struct PushRoutes {
     per_address: Limiter<IpAddr>,
     per_alert_token: Limiter<[u8; 32]>,
@@ -59,6 +67,8 @@ pub struct PushRoutes {
     per_mailbox_id: Limiter<[u8; 32]>,
     per_snapshot_id: Limiter<[u8; 32]>,
     store: Store,
+    gone: Mutex<HashMap<GoneKey, Instant>>,
+    max_gone: usize,
     counters: Counters,
 }
 
@@ -77,11 +87,13 @@ impl PushRoutes {
             per_mailbox_id: Limiter::with_max_keys(limits.per_mailbox_id, max_keys),
             per_snapshot_id: Limiter::with_max_keys(limits.per_snapshot_id, max_keys),
             store: Store::new(limits),
+            gone: Mutex::new(HashMap::new()),
+            max_gone: limits.push_max_gone_tokens.max(1),
             counters: Counters::default(),
         }
     }
 
-    /// Forgets idle buckets and expired entries.
+    /// Forgets idle buckets, expired entries and old gone tokens.
     pub fn prune(&self, now: Instant) {
         self.per_address.prune(now);
         self.per_alert_token.prune(now);
@@ -92,6 +104,33 @@ impl PushRoutes {
         self.per_mailbox_id.prune(now);
         self.per_snapshot_id.prune(now);
         self.store.prune(now);
+        self.gone
+            .lock()
+            .expect("gone lock")
+            .retain(|_, since| now.duration_since(*since) < GONE_TOKEN_MEMORY);
+    }
+
+    fn is_gone(&self, key: &GoneKey) -> bool {
+        self.gone.lock().expect("gone lock").contains_key(key)
+    }
+
+    /// Remembers a token Apple dropped. Full, it forgets expired ones first, then the oldest.
+    fn remember_gone(&self, key: GoneKey) {
+        let now = Instant::now();
+        let mut gone = self.gone.lock().expect("gone lock");
+        if !gone.contains_key(&key) && gone.len() >= self.max_gone {
+            gone.retain(|_, since| now.duration_since(*since) < GONE_TOKEN_MEMORY);
+            if gone.len() >= self.max_gone {
+                if let Some(oldest) = gone
+                    .iter()
+                    .min_by_key(|(_, since)| **since)
+                    .map(|(key, _)| *key)
+                {
+                    gone.remove(&oldest);
+                }
+            }
+        }
+        gone.insert(key, now);
     }
 }
 
@@ -102,11 +141,11 @@ pub fn router() -> Router<Arc<Relay>> {
         .route(&format!("{PUSH_PREFIX}/v1/alert"), post(alert))
         .route(&format!("{PUSH_PREFIX}/v1/widgets"), post(widgets))
         .route(
-            &format!("{PUSH_PREFIX}/v1/mailbox/{{id}}"),
-            get(mailbox_take).put(mailbox_put),
+            &format!("{PUSH_PREFIX}/v1/mailbox"),
+            get(mailbox_take).put(mailbox_put).head(mailbox_head),
         )
         .route(
-            &format!("{PUSH_PREFIX}/v1/snapshot/{{id}}"),
+            &format!("{PUSH_PREFIX}/v1/snapshot"),
             get(snapshot_get).put(snapshot_put),
         )
         .layer(DefaultBodyLimit::max(MAX_PUSH_BODY_BYTES))
@@ -115,7 +154,7 @@ pub fn router() -> Router<Arc<Relay>> {
 async fn health(State(relay): State<Arc<Relay>>) -> Response {
     let counters = &relay.push.counters;
     let held = relay.push.store.counts();
-    let gone_tokens = relay.gone.lock().expect("gone lock").len();
+    let gone_tokens = relay.push.gone.lock().expect("gone lock").len();
     answer(
         200,
         json!({
@@ -210,12 +249,8 @@ async fn push(
     let digest = token_digest(&push.token);
     let label = token_label(&digest);
     let (kind, environment) = (push.kind, push.environment.as_str());
-    if relay
-        .gone
-        .lock()
-        .expect("gone lock")
-        .contains_key(&(push.environment, digest))
-    {
+    let gone_key = (push.environment, push.push_type.topic(), digest);
+    if routes.is_gone(&gone_key) {
         counters.refused.fetch_add(1, Ordering::Relaxed);
         relay.log(&format!(
             "push refused reason=token-gone kind={kind} env={environment} token={label}"
@@ -271,7 +306,7 @@ async fn push(
                     "BadDeviceToken" | "DeviceTokenNotForTopic" | "Unregistered"
                 );
             if gone {
-                relay.remember_gone((push.environment, digest));
+                routes.remember_gone(gone_key);
                 return answer(
                     410,
                     json!({ "ok": false, "error": "token-gone", "detail": "Apple no longer takes this token.",
@@ -298,13 +333,24 @@ async fn push(
     }
 }
 
-/// The caller's store bucket, the id's form and the id's own bucket. The answer when one refuses.
+/// The id in `Authorization: Bearer <id>`: 64 hex characters.
+fn bearer_id(headers: &HeaderMap) -> Option<&str> {
+    let value = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
+    let (scheme, id) = value.split_once(' ')?;
+    let id = id.trim();
+    (scheme.eq_ignore_ascii_case("bearer")
+        && id.len() == ID_HEX_LEN
+        && id.bytes().all(|byte| byte.is_ascii_hexdigit()))
+    .then_some(id)
+}
+
+/// The caller's store bucket and the id from `Authorization`. The answer when either refuses. The id's own rate is
+/// counted by the store, and only for an id it holds or admits.
 fn admit_store_request(
     relay: &Relay,
     shelf: Shelf,
     peer: SocketAddr,
     headers: &HeaderMap,
-    id: &str,
     now: Instant,
 ) -> Result<(IpAddr, [u8; 32]), Box<Response>> {
     let routes = &relay.push;
@@ -316,27 +362,36 @@ fn admit_store_request(
         relay.log(&format!("{name} refused reason=rate-limited scope=address"));
         return Err(Box::new(rate_limited(wait)));
     }
-    if id.len() != ID_HEX_LEN || !id.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+    let Some(id) = bearer_id(headers) else {
         counters.refused.fetch_add(1, Ordering::Relaxed);
         relay.log(&format!("{name} refused reason=bad-request"));
         return Err(Box::new(refusal(&Refusal::bad(
-            "The id must be 256 bits in hex (64 characters).",
+            "The id goes in the Authorization header: Bearer and 256 bits in hex (64 characters).",
         ))));
-    }
+    };
     let key: [u8; 32] = Sha256::digest(id.to_ascii_lowercase().as_bytes()).into();
-    let bucket = match shelf {
+    Ok((caller, key))
+}
+
+fn id_limiter(routes: &PushRoutes, shelf: Shelf) -> &Limiter<[u8; 32]> {
+    match shelf {
         Shelf::Mailbox => &routes.per_mailbox_id,
         Shelf::Snapshot => &routes.per_snapshot_id,
-    };
-    if let Err(wait) = bucket.take(&key, now) {
-        counters.rate_limited.fetch_add(1, Ordering::Relaxed);
-        relay.log(&format!(
-            "{name} refused reason=rate-limited scope=id id={}",
-            token_label(&key)
-        ));
-        return Err(Box::new(rate_limited(wait)));
     }
-    Ok((caller, key))
+}
+
+fn id_rate_limited(relay: &Relay, shelf: Shelf, key: &[u8; 32], wait: Duration) -> Response {
+    relay
+        .push
+        .counters
+        .rate_limited
+        .fetch_add(1, Ordering::Relaxed);
+    relay.log(&format!(
+        "{} refused reason=rate-limited scope=id id={}",
+        shelf.as_str(),
+        token_label(key)
+    ));
+    rate_limited(wait)
 }
 
 fn too_large(detail: String) -> Response {
@@ -347,25 +402,32 @@ fn too_large(detail: String) -> Response {
     })
 }
 
-/// Stores `value` under `key`; a new id spends the caller's quota for new ids first.
+/// Stores the `len` bytes `make` builds under `key`, once the store admitted it (`Store::put` has the order).
 fn store_put(
     relay: &Relay,
     shelf: Shelf,
     caller: IpAddr,
     key: [u8; 32],
-    value: Vec<u8>,
+    len: usize,
     now: Instant,
+    make: impl FnOnce() -> Vec<u8>,
 ) -> Response {
     let routes = &relay.push;
     let counters = &routes.counters;
-    let (name, label, bytes) = (shelf.as_str(), token_label(&key), value.len());
-    let stored = routes.store.put(shelf, key, value, now, || {
-        routes.new_ids_per_address.take(&caller, now)
-    });
+    let (name, label) = (shelf.as_str(), token_label(&key));
+    let stored = routes.store.put(
+        shelf,
+        key,
+        len,
+        now,
+        || routes.new_ids_per_address.take(&caller, now),
+        || id_limiter(routes, shelf).take(&key, now),
+        make,
+    );
     match stored {
         Ok(()) => {
             counters.stored.fetch_add(1, Ordering::Relaxed);
-            relay.log(&format!("{name} stored id={label} bytes={bytes}"));
+            relay.log(&format!("{name} stored id={label} bytes={len}"));
             answer(200, json!({ "ok": true }))
         }
         Err(PutRefusal::Quota(wait)) => {
@@ -384,6 +446,7 @@ fn store_put(
             }
             response
         }
+        Err(PutRefusal::IdLimit(wait)) => id_rate_limited(relay, shelf, &key, wait),
         Err(PutRefusal::Full) => {
             counters.store_full.fetch_add(1, Ordering::Relaxed);
             relay.log(&format!("{name} refused reason=store-full id={label}"));
@@ -410,13 +473,11 @@ fn empty() -> Response {
 async fn mailbox_put(
     State(relay): State<Arc<Relay>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    Path(id): Path<String>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
     let now = Instant::now();
-    let (caller, key) = match admit_store_request(&relay, Shelf::Mailbox, peer, &headers, &id, now)
-    {
+    let (caller, key) = match admit_store_request(&relay, Shelf::Mailbox, peer, &headers, now) {
         Ok(admitted) => admitted,
         Err(response) => return *response,
     };
@@ -437,42 +498,64 @@ async fn mailbox_put(
             "The body must be a push token in hex (64 to 512 characters).",
         ));
     }
-    let value = token.to_ascii_lowercase().into_bytes();
-    store_put(&relay, Shelf::Mailbox, caller, key, value, now)
+    store_put(
+        &relay,
+        Shelf::Mailbox,
+        caller,
+        key,
+        token.len(),
+        now,
+        || token.to_ascii_lowercase().into_bytes(),
+    )
+}
+
+/// A HEAD must not take the token a GET hands out once, so the mailbox refuses it.
+async fn mailbox_head() -> Response {
+    let mut response = answer(
+        405,
+        json!({ "ok": false, "error": "method-not-allowed",
+            "detail": "The mailbox is read with GET, which takes the entry." }),
+    );
+    response
+        .headers_mut()
+        .insert(header::ALLOW, HeaderValue::from_static("GET, PUT"));
+    response
 }
 
 async fn mailbox_take(
     State(relay): State<Arc<Relay>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    Path(id): Path<String>,
     headers: HeaderMap,
 ) -> Response {
     let now = Instant::now();
-    let (_, key) = match admit_store_request(&relay, Shelf::Mailbox, peer, &headers, &id, now) {
+    let (_, key) = match admit_store_request(&relay, Shelf::Mailbox, peer, &headers, now) {
         Ok(admitted) => admitted,
         Err(response) => return *response,
     };
-    match relay.push.store.take_mailbox(&key, now) {
-        Some(value) => {
+    let routes = &relay.push;
+    match routes
+        .store
+        .take_mailbox(&key, now, || routes.per_mailbox_id.take(&key, now))
+    {
+        Ok(Some(value)) => {
             relay.log(&format!("mailbox taken id={}", token_label(&key)));
             // Stored only after `valid_token`, so it is ASCII hex.
             let token = String::from_utf8(value).unwrap_or_default();
             answer(200, json!({ "ok": true, "token": token }))
         }
-        None => empty(),
+        Ok(None) => empty(),
+        Err(wait) => id_rate_limited(&relay, Shelf::Mailbox, &key, wait),
     }
 }
 
 async fn snapshot_put(
     State(relay): State<Arc<Relay>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    Path(id): Path<String>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
     let now = Instant::now();
-    let (caller, key) = match admit_store_request(&relay, Shelf::Snapshot, peer, &headers, &id, now)
-    {
+    let (caller, key) = match admit_store_request(&relay, Shelf::Snapshot, peer, &headers, now) {
         Ok(admitted) => admitted,
         Err(response) => return *response,
     };
@@ -490,22 +573,33 @@ async fn snapshot_put(
         relay.log("snapshot refused reason=bad-request");
         return refusal(&Refusal::bad("The snapshot is empty."));
     }
-    store_put(&relay, Shelf::Snapshot, caller, key, body.to_vec(), now)
+    store_put(
+        &relay,
+        Shelf::Snapshot,
+        caller,
+        key,
+        body.len(),
+        now,
+        || body.to_vec(),
+    )
 }
 
 async fn snapshot_get(
     State(relay): State<Arc<Relay>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    Path(id): Path<String>,
     headers: HeaderMap,
 ) -> Response {
     let now = Instant::now();
-    let (_, key) = match admit_store_request(&relay, Shelf::Snapshot, peer, &headers, &id, now) {
+    let (_, key) = match admit_store_request(&relay, Shelf::Snapshot, peer, &headers, now) {
         Ok(admitted) => admitted,
         Err(response) => return *response,
     };
-    match relay.push.store.snapshot(&key, now) {
-        Some(value) => {
+    let routes = &relay.push;
+    match routes
+        .store
+        .snapshot(&key, now, || routes.per_snapshot_id.take(&key, now))
+    {
+        Ok(Some(value)) => {
             let mut response = value.into_response();
             let headers = response.headers_mut();
             headers.insert(
@@ -515,6 +609,7 @@ async fn snapshot_get(
             headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
             response
         }
-        None => empty(),
+        Ok(None) => empty(),
+        Err(wait) => id_rate_limited(&relay, Shelf::Snapshot, &key, wait),
     }
 }

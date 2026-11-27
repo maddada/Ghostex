@@ -2,13 +2,15 @@
 //!
 //! An alert's visible words are the relay's own: the caller names an event (`kind`) and the relay shows that
 //! event's fixed words from `ALERT_WORDS` under the fixed title `ALERT_TITLE`, so nobody can put their own words
-//! on a lock screen through the relay and no agent, project or session name reaches Apple readable. The names
-//! travel only inside `envelope`, encrypted on the computer for the phone's notification service extension; the
-//! relay checks its size and that it is base64, and nothing else. A widget push carries nothing at all.
+//! on a lock screen through the relay. The names travel only inside `envelope`, encrypted on the computer for the
+//! phone's notification service extension. What else reaches Apple readable is held to the form of identifiers:
+//! `threadId` is `<machineId>:<sessionId>` and `data` carries the identifiers a tap needs. The relay enforces form
+//! and size; that the envelope really is encrypted and that the identifiers carry no names only the computer that
+//! sends and the phone that receives can guarantee. A widget push carries nothing at all.
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Map};
 
 use crate::apns::{Outgoing, PushType};
@@ -31,10 +33,17 @@ pub const ALERT_WORDS: &[(&str, &str)] = &[
 ];
 /// The kind of a background push: no alert, only `content-available`.
 pub const BACKGROUND_KIND: &str = "background";
-/// The longest envelope, in base64 characters: leaves the fixed words, the thread id and Apple's keys room under
-/// Apple's 4 KB.
+/// The longest envelope, in base64 characters: leaves the fixed words, the thread id, `data` and Apple's keys room
+/// under Apple's 4 KB.
 pub const MAX_ENVELOPE_CHARS: usize = 3072;
-const THREAD_ID_MAX: usize = 128;
+/// The envelope's format version, its first byte once decoded; then a 12-byte nonce, then the ciphertext with its
+/// 16-byte tag.
+pub const ENVELOPE_VERSION: u8 = 1;
+const ENVELOPE_NONCE_BYTES: usize = 12;
+const ENVELOPE_TAG_BYTES: usize = 16;
+/// The phone's limits for the identifiers of a push (`src/notifications/pushMessage.ts` in the phone app).
+const IDENTIFIER_MAX: usize = 64;
+const NOTIFICATION_ID_MAX: usize = 128;
 /// How far the event's time may lie from the relay's clock, as for a Live Activity push.
 const TIMESTAMP_PAST_S: i64 = 3600;
 const TIMESTAMP_FUTURE_S: i64 = 300;
@@ -57,14 +66,31 @@ pub struct AlertRequest {
     /// The encrypted title and body for the phone, standard base64. Alerts only.
     #[serde(default)]
     pub envelope: Option<String>,
-    /// iOS stacks the alerts of one thread together. Alerts only.
+    /// iOS stacks the alerts of one thread together: `<machineId>:<sessionId>`. Alerts only.
     #[serde(default)]
     pub thread_id: Option<String>,
+    /// What a tap on the alert opens, as the phone reads it. Alerts only.
+    #[serde(default)]
+    pub data: Option<AlertData>,
     /// Whether the alert plays the default sound. Alerts only.
     #[serde(default)]
     pub sound: Option<bool>,
     /// Unix seconds of the event.
     pub timestamp: i64,
+}
+
+/// The identifiers a tap needs, as today's Expo push carries them in `data` and the phone reads them
+/// (`pushEventFromData` in the phone's `src/notifications/pushMessage.ts`). Identifiers only, never names or text.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct AlertData {
+    pub kind: String,
+    pub machine_id: String,
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notification_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worker: Option<bool>,
 }
 
 /// The body of `POST /push/v1/widgets`.
@@ -131,11 +157,34 @@ fn too_large(payload: &[u8]) -> Refusal {
     }
 }
 
+/// Printable ASCII without spaces, at most `max` characters: how the computer writes its identifiers and the phone
+/// reads them.
+fn identifier(value: &str, max: usize) -> bool {
+    (1..=max).contains(&value.len()) && value.bytes().all(|byte| (0x21..=0x7e).contains(&byte))
+}
+
+/// `<machineId>:<sessionId>`, each an identifier.
 fn valid_thread_id(thread_id: &str) -> bool {
-    (1..=THREAD_ID_MAX).contains(&thread_id.len())
-        && thread_id
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'-'))
+    thread_id.split_once(':').is_some_and(|(machine, session)| {
+        identifier(machine, IDENTIFIER_MAX) && identifier(session, IDENTIFIER_MAX)
+    })
+}
+
+fn valid_data(data: &AlertData) -> bool {
+    identifier(&data.kind, IDENTIFIER_MAX)
+        && identifier(&data.machine_id, IDENTIFIER_MAX)
+        && identifier(&data.session_id, IDENTIFIER_MAX)
+        && data
+            .notification_id
+            .as_deref()
+            .is_none_or(|id| identifier(id, NOTIFICATION_ID_MAX))
+}
+
+/// Standard base64 of version 1, a 12-byte nonce and a ciphertext of at least its 16-byte tag.
+fn valid_envelope(envelope: &str) -> bool {
+    STANDARD.decode(envelope.as_bytes()).is_ok_and(|bytes| {
+        bytes.len() >= 1 + ENVELOPE_NONCE_BYTES + ENVELOPE_TAG_BYTES && bytes[0] == ENVELOPE_VERSION
+    })
 }
 
 /// Checks an alert or background request at `now` (unix seconds) and builds Apple's payload.
@@ -147,9 +196,13 @@ pub fn prepare_alert(request: AlertRequest, now: i64) -> Result<NativePush, Refu
         ));
     }
     if request.kind == BACKGROUND_KIND {
-        if request.envelope.is_some() || request.thread_id.is_some() || request.sound.is_some() {
+        if request.envelope.is_some()
+            || request.thread_id.is_some()
+            || request.data.is_some()
+            || request.sound.is_some()
+        {
             return Err(Refusal::bad(
-                "A background push carries no envelope, threadId or sound.",
+                "A background push carries no envelope, threadId, data or sound.",
             ));
         }
         let payload = serde_json::to_vec(&json!({ "aps": { "content-available": 1 } }))
@@ -180,7 +233,7 @@ pub fn prepare_alert(request: AlertRequest, now: i64) -> Result<NativePush, Refu
     if let Some(thread_id) = request.thread_id {
         if !valid_thread_id(&thread_id) {
             return Err(Refusal::bad(
-                "threadId must be 1 to 128 letters, digits or . _ : -",
+                "threadId must be <machineId>:<sessionId>, each 1 to 64 printable characters without spaces.",
             ));
         }
         aps.insert("thread-id".into(), json!(thread_id));
@@ -201,10 +254,23 @@ pub fn prepare_alert(request: AlertRequest, now: i64) -> Result<NativePush, Refu
                 ),
             });
         }
-        if envelope.is_empty() || STANDARD.decode(envelope.as_bytes()).is_err() {
-            return Err(Refusal::bad("envelope must be standard base64."));
+        if !valid_envelope(&envelope) {
+            return Err(Refusal::bad(
+                "envelope must be standard base64 of version 1, a 12-byte nonce and the ciphertext with its 16-byte tag.",
+            ));
         }
         body.insert("envelope".into(), json!(envelope));
+    }
+    if let Some(data) = request.data {
+        if !valid_data(&data) {
+            return Err(Refusal::bad(
+                "data holds kind, machineId and sessionId (1 to 64 printable characters without spaces), optional notificationId (up to 128) and optional worker.",
+            ));
+        }
+        body.insert(
+            "data".into(),
+            serde_json::to_value(&data).expect("the data serializes"),
+        );
     }
     let payload = serde_json::to_vec(&body).expect("a JSON value serializes");
     if payload.len() > MAX_APNS_PAYLOAD_BYTES {

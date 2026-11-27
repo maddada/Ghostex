@@ -133,10 +133,6 @@ impl Credentials {
         })
     }
 
-    pub fn key_id(&self) -> &str {
-        &self.key_id
-    }
-
     /// A provider token issued at `issued_at` (unix seconds).
     pub fn provider_token(&self, issued_at: u64) -> String {
         let header =
@@ -234,10 +230,6 @@ impl Apple {
             credentials,
             provider: Mutex::new(None),
         })
-    }
-
-    pub fn key_id(&self) -> &str {
-        self.credentials.key_id()
     }
 
     /// The cached provider token, or a new one when it is 40 minutes old, or when `renew` and Apple allows a

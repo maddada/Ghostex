@@ -34,6 +34,8 @@ pub enum PutRefusal {
     Quota(Duration),
     /// The store is full even without its expired entries.
     Full,
+    /// The id's own rate: not before this long.
+    IdLimit(Duration),
 }
 
 struct Entry {
@@ -124,16 +126,21 @@ impl Store {
         }
     }
 
-    /// Files `value` under `key`, replacing what is there. Only an id the store does not hold calls `admit_new`
-    /// (the caller's quota for new ids), before anything is stored; a full store refuses a new id, and a
-    /// replacement that would grow it past its byte cap, after dropping expired entries.
+    /// Files the `len` bytes `make` builds under `key`, replacing what is there. In this order, under one lock and
+    /// before anything is allocated for the entry: an id the store does not hold spends the caller's quota for new
+    /// ids (`admit_new`) and must fit the caps (after dropping expired entries); only then is the id's own rate
+    /// (`admit_id`) counted, so a refused new id leaves no state behind; a held id is counted and may grow the store
+    /// only within the byte cap. `make` runs last, for an admitted entry only.
+    #[allow(clippy::too_many_arguments)]
     pub fn put(
         &self,
         shelf: Shelf,
         key: [u8; 32],
-        value: Vec<u8>,
+        len: usize,
         now: Instant,
         admit_new: impl FnOnce() -> Result<(), Duration>,
+        admit_id: impl FnOnce() -> Result<(), Duration>,
+        make: impl FnOnce() -> Vec<u8>,
     ) -> Result<(), PutRefusal> {
         let mut shelves = self.shelves.lock().expect("store lock");
         self.expire(&mut shelves, shelf, &key, now);
@@ -141,20 +148,30 @@ impl Store {
             .shelf(shelf)
             .get(&key)
             .map(|entry| entry.value.len());
-        if held.is_none() {
-            admit_new().map_err(PutRefusal::Quota)?;
-        }
         let fits = |shelves: &Shelves| {
             let entries = shelves.entries() + usize::from(held.is_none());
-            let bytes = shelves.bytes - held.unwrap_or(0) + value.len();
+            let bytes = shelves.bytes - held.unwrap_or(0) + len;
             entries <= self.max_entries && bytes <= self.max_bytes
         };
-        if !fits(&shelves) {
-            self.drop_expired(&mut shelves, now);
-            if !fits(&shelves) {
-                return Err(PutRefusal::Full);
+        let ensure_fits = |shelves: &mut Shelves| {
+            if !fits(shelves) {
+                self.drop_expired(shelves, now);
+                if !fits(shelves) {
+                    return Err(PutRefusal::Full);
+                }
             }
+            Ok(())
+        };
+        if held.is_none() {
+            admit_new().map_err(PutRefusal::Quota)?;
+            ensure_fits(&mut shelves)?;
+            admit_id().map_err(PutRefusal::IdLimit)?;
+        } else {
+            admit_id().map_err(PutRefusal::IdLimit)?;
+            ensure_fits(&mut shelves)?;
         }
+        let value = make();
+        debug_assert_eq!(value.len(), len);
         shelves.bytes = shelves.bytes - held.unwrap_or(0) + value.len();
         shelves
             .shelf(shelf)
@@ -162,20 +179,39 @@ impl Store {
         Ok(())
     }
 
-    /// The mailbox entry under `key`, removed as it is read.
-    pub fn take_mailbox(&self, key: &[u8; 32], now: Instant) -> Option<Vec<u8>> {
+    /// The mailbox entry under `key`, removed as it is read. Only a held id counts against its own rate
+    /// (`admit_id`); `Err` carries how long until it may be read.
+    pub fn take_mailbox(
+        &self,
+        key: &[u8; 32],
+        now: Instant,
+        admit_id: impl FnOnce() -> Result<(), Duration>,
+    ) -> Result<Option<Vec<u8>>, Duration> {
         let mut shelves = self.shelves.lock().expect("store lock");
         self.expire(&mut shelves, Shelf::Mailbox, key, now);
-        let entry = shelves.mailbox.remove(key)?;
+        if !shelves.mailbox.contains_key(key) {
+            return Ok(None);
+        }
+        admit_id()?;
+        let entry = shelves.mailbox.remove(key).expect("checked above");
         shelves.bytes -= entry.value.len();
-        Some(entry.value)
+        Ok(Some(entry.value))
     }
 
-    /// The snapshot under `key`, which stays.
-    pub fn snapshot(&self, key: &[u8; 32], now: Instant) -> Option<Vec<u8>> {
+    /// The snapshot under `key`, which stays. Only a held id counts against its own rate (`admit_id`).
+    pub fn snapshot(
+        &self,
+        key: &[u8; 32],
+        now: Instant,
+        admit_id: impl FnOnce() -> Result<(), Duration>,
+    ) -> Result<Option<Vec<u8>>, Duration> {
         let mut shelves = self.shelves.lock().expect("store lock");
         self.expire(&mut shelves, Shelf::Snapshot, key, now);
-        shelves.snapshots.get(key).map(|entry| entry.value.clone())
+        if !shelves.snapshots.contains_key(key) {
+            return Ok(None);
+        }
+        admit_id()?;
+        Ok(shelves.snapshots.get(key).map(|entry| entry.value.clone()))
     }
 
     /// Drops expired entries; run once a minute.

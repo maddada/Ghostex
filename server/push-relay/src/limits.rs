@@ -1,8 +1,9 @@
 //! Token buckets in memory: per caller address, per device token, per start token, and one for the whole relay;
 //! for the `/push/` routes also per alert, background and widget token, per mailbox and snapshot id, and per
-//! caller address for the ids it may create. A bucket holds `burst` requests and refills `per_minute` a minute;
-//! an idle bucket is forgotten after 10 minutes. Each table is bounded: when it is full of busy keys a new key is
-//! refused rather than growing it.
+//! caller address for the ids it may create. A bucket holds `burst` requests and refills `per_minute` a minute.
+//! An idle bucket of the Live Activity route is forgotten after 10 minutes; one of the `/push/` routes only once it
+//! would have refilled completely. Each table is bounded: when it is full of busy keys a new key is refused rather
+//! than growing it.
 
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -59,6 +60,8 @@ pub struct LimitConfig {
     /// Keys each table of the `/push/` routes' limits holds at most (the Live Activity route's tables keep
     /// theirs), so all of them together stay well inside the service's memory limit.
     pub push_max_keys: usize,
+    /// Tokens Apple dropped that the `/push/` routes remember, apart from the Live Activity route's.
+    pub push_max_gone_tokens: usize,
 }
 
 impl Default for LimitConfig {
@@ -124,6 +127,7 @@ impl Default for LimitConfig {
             mailbox_lifetime: Duration::from_secs(10 * 60),
             snapshot_lifetime: Duration::from_secs(24 * 3600),
             push_max_keys: 25_000,
+            push_max_gone_tokens: 25_000,
         }
     }
 }
@@ -140,19 +144,32 @@ struct Bucket {
 pub struct Limiter<K> {
     rate: Rate,
     max_keys: usize,
+    /// An idle bucket is forgotten after this long.
+    forget_after: Duration,
     buckets: Mutex<HashMap<K, Bucket>>,
 }
 
 impl<K: Eq + Hash + Clone> Limiter<K> {
+    /// The Live Activity route's limiter: 200,000 keys, an idle bucket forgotten after 10 minutes.
     pub fn new(rate: Rate) -> Self {
-        Self::with_max_keys(rate, MAX_KEYS)
+        Limiter {
+            rate,
+            max_keys: MAX_KEYS,
+            forget_after: IDLE_FORGET,
+            buckets: Mutex::new(HashMap::new()),
+        }
     }
 
-    /// A limiter whose table holds at most `max_keys` keys.
+    /// A limiter whose table holds at most `max_keys` keys and forgets an idle bucket only once it would have
+    /// refilled completely (10 minutes at least), so forgetting never hands out more than the rate allows: a quota
+    /// of 20 an hour stays 20 an hour across a pause.
     pub fn with_max_keys(rate: Rate, max_keys: usize) -> Self {
+        let refill = Duration::try_from_secs_f64((rate.burst / rate.per_minute * 60.0).ceil())
+            .unwrap_or(Duration::MAX);
         Limiter {
             rate,
             max_keys: max_keys.max(1),
+            forget_after: refill.max(IDLE_FORGET),
             buckets: Mutex::new(HashMap::new()),
         }
     }
@@ -161,7 +178,7 @@ impl<K: Eq + Hash + Clone> Limiter<K> {
     pub fn take(&self, key: &K, now: Instant) -> Result<(), Duration> {
         let mut buckets = self.buckets.lock().expect("limiter lock");
         if !buckets.contains_key(key) && buckets.len() >= self.max_keys {
-            prune(&mut buckets, now);
+            prune(&mut buckets, now, self.forget_after);
             if buckets.len() >= self.max_keys {
                 return Err(Duration::from_secs(60));
             }
@@ -184,10 +201,14 @@ impl<K: Eq + Hash + Clone> Limiter<K> {
     }
 
     pub fn prune(&self, now: Instant) {
-        prune(&mut self.buckets.lock().expect("limiter lock"), now);
+        prune(
+            &mut self.buckets.lock().expect("limiter lock"),
+            now,
+            self.forget_after,
+        );
     }
 }
 
-fn prune<K>(buckets: &mut HashMap<K, Bucket>, now: Instant) {
-    buckets.retain(|_, bucket| now.saturating_duration_since(bucket.at) < IDLE_FORGET);
+fn prune<K>(buckets: &mut HashMap<K, Bucket>, now: Instant, forget_after: Duration) {
+    buckets.retain(|_, bucket| now.saturating_duration_since(bucket.at) < forget_after);
 }
