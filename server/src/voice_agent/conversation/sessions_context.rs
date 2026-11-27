@@ -39,6 +39,14 @@
 //! not guess; when that changes, or a session becomes a thread or a thread a session, the whole
 //! list goes again, since that is neither an opened nor a closed session. A coordinator's changed
 //! number of sub-threads is a change the model hears.
+//!
+//! CDXC:VoiceMode 2026-11-27 WHY: room held for the notes in advance still pushed out a session
+//! at the byte edge: sixteen long rows of a connected computer waiting on an approval, listed
+//! first, left this computer's working session out once 32 computers were unreachable, though the
+//! list had room for it without the notes. The sessions now fill the bound first, only the line
+//! counting the rows left out kept free when some are, and the notes take what is left: in full,
+//! as a line that only counts the computers, or not at all (`model_notes`). The client frame
+//! still names every unreachable computer.
 
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
@@ -61,10 +69,8 @@ const TITLE_CHARS: usize = 60;
 const NAME_CHARS: usize = 40;
 /// Characters of why a computer could not be read.
 const REASON_CHARS: usize = 240;
-/// Room kept in `MODEL_BYTES` for the line that counts the rows left out.
+/// Room kept in `MODEL_BYTES` for the line that counts the rows left out, when some are.
 const LEFT_LINE_BYTES: usize = 100;
-/// Room kept in `MODEL_BYTES` for the line that counts the unreachable computers not named.
-const COUNTED_LINE_BYTES: usize = 100;
 /// Connected computers the model gets by name at most, among those that could not be read and
 /// among those that did not say which sessions are threads; the rest are counted.
 const COMPUTERS_NAMED: usize = 3;
@@ -414,8 +420,9 @@ impl SessionsContext {
 }
 
 /// The whole list for the model, at most `MODEL_ROWS` rows and `MODEL_BYTES` bytes in all, and
-/// what it tells. The sessions come first; the connected computers that could not be read are
-/// named after them, up to `COMPUTERS_NAMED` and as far as they fit, and counted past that.
+/// what it tells. The sessions come first and take the bytes they need, only the line that counts
+/// the rows left out kept free when some are; the notes on connected computers (`model_notes`)
+/// take what the sessions leave.
 fn model_list(
     rows: &[Row],
     unavailable: &[(String, String)],
@@ -426,62 +433,31 @@ fn model_list(
         "{SESSIONS_PREFIX} The user's open sessions, waiting ones first ({} in all; sub-threads are counted under their coordinator). This is context, not something to say.",
         rows.len()
     );
-    let unknown = threads_unknown_line(threads_unknown);
-    // Kept for the lines after the sessions that are always there: the unreachable computers
-    // counted, the computers whose threads are unknown, and the sessions left out.
-    let tail = LEFT_LINE_BYTES
-        + unknown.len()
-        + if unavailable.is_empty() {
-            0
-        } else {
-            COUNTED_LINE_BYTES
-        };
-    let room = MODEL_BYTES.saturating_sub(text.len() + tail);
-    let mut listed = Vec::new();
-    let mut used = 0;
-    for row in rows.iter().take(MODEL_ROWS) {
-        let line = row.line();
-        if used + line.len() > room {
-            break;
-        }
-        used += line.len();
-        text.push_str(&line);
-        listed.push(row.clone());
+    let room = MODEL_BYTES.saturating_sub(text.len());
+    let mut fitting = rows_within(rows, room);
+    if fitting < rows.len() {
+        fitting = rows_within(rows, room.saturating_sub(LEFT_LINE_BYTES));
     }
-    let mut named = 0;
-    for (computer, reason) in unavailable.iter().take(COMPUTERS_NAMED) {
-        let line = format!(
-            "\nNot listed: the sessions on {}. {}",
-            cut(computer, NAME_CHARS),
-            cut(reason, REASON_CHARS)
-        );
-        if text.len() + line.len() + tail > MODEL_BYTES {
-            break;
-        }
-        text.push_str(&line);
-        named += 1;
+    let listed: Vec<Row> = rows[..fitting].to_vec();
+    for row in &listed {
+        text.push_str(&row.line());
     }
-    let counted = unavailable.len() - named;
-    if counted > 0 {
-        text.push_str(&format!(
-            "\n{counted} {}computer{} unreachable; {} sessions are not listed.",
-            if named > 0 { "more " } else { "" },
-            if counted == 1 { "" } else { "s" },
-            if counted == 1 { "its" } else { "their" },
-        ));
-    }
-    text.push_str(&unknown);
     let left = &rows[listed.len()..];
     let sleeping = left
         .iter()
         .filter(|row| row.state == VoiceState::Sleeping)
         .count();
-    if !left.is_empty() {
-        text.push_str(&format!(
+    let left_line = if left.is_empty() {
+        String::new()
+    } else {
+        format!(
             "\n{} more not listed ({sleeping} of them sleeping); call list_sessions for them.",
             left.len()
-        ));
-    }
+        )
+    };
+    let room = MODEL_BYTES.saturating_sub(text.len() + left_line.len());
+    text.push_str(&model_notes(unavailable, threads_unknown, room));
+    text.push_str(&left_line);
     let told = Told {
         listed,
         counted: left.iter().map(|row| row.reference.clone()).collect(),
@@ -492,6 +468,94 @@ fn model_list(
         threads_unknown: threads_unknown.to_vec(),
     };
     (text, told)
+}
+
+/// How many of the first `MODEL_ROWS` rows fit in `room` bytes, in order.
+fn rows_within(rows: &[Row], room: usize) -> usize {
+    let mut used = 0;
+    let mut fitting = 0;
+    for row in rows.iter().take(MODEL_ROWS) {
+        used += row.line().len();
+        if used > room {
+            break;
+        }
+        fitting += 1;
+    }
+    fitting
+}
+
+/// The notes on connected computers, within `room` bytes: the ones that could not be read (up to
+/// `COMPUTERS_NAMED` named, the rest counted), then the ones that did not say which sessions are
+/// threads. Each shrinks to a line that only counts the computers when it does not fit in full,
+/// and is left out when not even that fits; the unreachable computers' count line comes first.
+fn model_notes(unavailable: &[(String, String)], threads_unknown: &[String], room: usize) -> String {
+    let unknown_full = threads_unknown_line(threads_unknown);
+    let unknown_counted = threads_unknown_counted(threads_unknown.len());
+    let unreachable_least = unreachable_counted(0, unavailable.len()).len();
+    // Room the threads-unknown note keeps for its count line while the unreachable computers are
+    // named, when both count lines fit.
+    let unknown_kept = if unreachable_least + unknown_counted.len() <= room {
+        unknown_counted.len()
+    } else {
+        0
+    };
+    let mut notes = unreachable_lines(unavailable, room.saturating_sub(unknown_kept));
+    if notes.len() + unknown_full.len() <= room {
+        notes.push_str(&unknown_full);
+    } else if notes.len() + unknown_counted.len() <= room {
+        notes.push_str(&unknown_counted);
+    }
+    notes
+}
+
+/// The lines on the connected computers that could not be read, within `room` bytes: up to
+/// `COMPUTERS_NAMED` named as far as they fit with the line that counts the rest, or only that
+/// line, or nothing.
+fn unreachable_lines(unavailable: &[(String, String)], room: usize) -> String {
+    let mut lines = String::new();
+    let mut named = 0;
+    for (computer, reason) in unavailable.iter().take(COMPUTERS_NAMED) {
+        let line = format!(
+            "\nNot listed: the sessions on {}. {}",
+            cut(computer, NAME_CHARS),
+            cut(reason, REASON_CHARS)
+        );
+        let rest = unreachable_counted(named + 1, unavailable.len() - named - 1);
+        if lines.len() + line.len() + rest.len() > room {
+            break;
+        }
+        lines.push_str(&line);
+        named += 1;
+    }
+    let rest = unreachable_counted(named, unavailable.len() - named);
+    if lines.len() + rest.len() <= room {
+        lines.push_str(&rest);
+    }
+    lines
+}
+
+/// The line that counts `counted` unreachable computers after `named` named ones, or nothing.
+fn unreachable_counted(named: usize, counted: usize) -> String {
+    if counted == 0 {
+        return String::new();
+    }
+    format!(
+        "\n{counted} {}computer{} unreachable; {} sessions are not listed.",
+        if named > 0 { "more " } else { "" },
+        if counted == 1 { "" } else { "s" },
+        if counted == 1 { "its" } else { "their" },
+    )
+}
+
+/// The threads-unknown note when it has no room to name the computers, or nothing.
+fn threads_unknown_counted(computers: usize) -> String {
+    if computers == 0 {
+        return String::new();
+    }
+    format!(
+        "\nNot known: which sessions on {computers} connected computer{} are sub-threads; don't guess which are.",
+        if computers == 1 { "" } else { "s" }
+    )
 }
 
 /// The line that names the connected computers that did not say which sessions are threads (up
@@ -517,7 +581,7 @@ fn threads_unknown_line(computers: &[String]) -> String {
         Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
         None => String::new(),
     };
-    format!("\nNot known: which sessions on {names} are sub-threads (no answer in time), so each is listed as a session of its own; don't guess which are sub-threads.")
+    format!("\nNot known: which sessions on {names} are sub-threads (no answer in time), so each not known as a sub-thread from an earlier answer is listed as a session of its own; don't guess which are sub-threads.")
 }
 
 /// What changed for the model between what it was told (`known`) and what a whole list would tell
