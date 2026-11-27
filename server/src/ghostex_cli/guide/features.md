@@ -2523,8 +2523,12 @@ shows a quota card with the reset countdown and **Wait for reset**, **Switch mod
 and countdown until you dismiss it or pick **Wait for reset** (which dismisses
 the red dot and automatically continues the session once right after reset); a
 coordinator hitting quota also sends one Grok Bot alert when Grok Bot is
-connected. When Antigravity isn't signed in, its chat shows Finish signing in:
-sign in through Terminal view, then send your message. Commands:
+connected. Ghostex has no Antigravity accounts to switch to: at a limit the chat
+waits for the reset, or you switch model, and Ghostex shows no Antigravity usage
+meter (Antigravity offers other apps only ACP, which has no usage yet; Ghostex
+never reads your Google account's Antigravity limits). When Antigravity isn't
+signed in, its chat shows Finish signing in: sign in through Terminal view, then
+send your message. Commands:
 `ghostex send-session-chat-message`,
 `ghostex answer-session-chat-prompt`,
 `ghostex select-session-chat-model <session> --mode default|accept-edits|auto|plan --defer`.
@@ -3630,7 +3634,7 @@ icon, when the chat box is narrow). Click (or tap) it to preview the draft, then
 choose Use draft to load it into your input, or Dismiss to keep what you have.
 
 Settings > Accounts saves Claude and Codex logins, and shows the usage of
-Cursor, Antigravity and Copilot accounts. The left side has one **Add account**
+Cursor and Copilot accounts. The left side has one **Add account**
 button over each provider's accounts, each with a usage bar (or "Sign in
 needed" when a login stopped working: its Reconnect is on the right), and the
 Claude and Codex rules. Within each provider, turned-off accounts (Disabled)
@@ -3691,20 +3695,15 @@ chat's Accounts & limits panel of a session on another computer opens Settings
 › Accounts on that computer. When that computer can't be reached, Accounts says
 so instead of offering a sign-in that can't work. The phone's accounts screen
 works the same way for each paired computer.
-**Cursor, Antigravity and Copilot** accounts only show usage: Ghostex never runs or
+**Cursor and Copilot** accounts only show usage: Ghostex never runs or
 switches a session on them. Cursor signs in in the browser; Copilot
-shows a code to type on GitHub's page; Antigravity needs no sign-in of its own:
-it reads the Antigravity CLI signed in on that computer (`agy -p "/usage"`, at
-most every 10 minutes), and asks you to run `agy` to sign in when it is signed out. Cursor and Copilot show their plan's use
+shows a code to type on GitHub's page. They show their plan's use
 of the billing month, labelled Mo (with Cursor's Auto and API split and extra
-usage spend, and Copilot's chat and premium requests, on the account's page);
-Antigravity shows the 5h and 7d limits agy's own `/usage` reports: the Gemini
-models' limits, and Claude/GPT 5h and 7d for the Claude and GPT models agy runs;
-the sidebar shows whichever is more used. Ghostex never calls Google itself for
-them: the Gemini account it used to offer, which read Google's quota service
-directly, is gone, and updating deleted its saved sign-in (the bell said so once).
-Ghostex shows what is used, agy's `/usage` what is left (74% used is agy's
-26.00%). Their usage shows in
+usage spend, and Copilot's chat and premium requests, on the account's page).
+Ghostex shows no Antigravity or Gemini usage: Antigravity offers other apps only
+ACP, which has no usage yet, and Ghostex never reads your Google account's
+limits any other way. Updating removed a saved Gemini account (with its sign-in)
+and the Antigravity meter (the bell said so once). Their usage shows in
 the sidebar, on the account's page, and under Other usage in a chat's Accounts &
 limits panel on the computer and the phone; clicking one in the sidebar opens
 Settings > Accounts. Their ⋯ menu holds Sign in again, Turn off and Remove….
@@ -4206,7 +4205,8 @@ before that message, the message returns to the chat box for editing, and files 
 they are. Native Antigravity chats do not offer it, because Antigravity has no way to go back.
 Native Antigravity chats need Antigravity CLI 1.5.1 or newer (older versions offer
 Claude and GPT only to some editors, and Ghostex always says it is Ghostex); on an
-older one the chat asks you to update it in Settings > Updates or switch to Terminal-based.
+older one the chat stops before it starts and asks you to update Antigravity to 1.5.1
+or newer (Settings > Updates) and try again, or switch to Terminal-based.
 A Native Codex chat's `/` list offers only `/compact`, `/btw` and `/mention`; the other
 Codex commands need Terminal-based mode.
 For a Native session, **Switch to Terminal-based** lives in the chat's
@@ -8145,7 +8145,7 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   limits, so the Fable limit is never hidden when it is running out; launcher
   and picker rows and the Accounts figures use the same two numbers. Each
   meter opens that login's live limits, reset times, and extra usage or rate
-  limit resets, with the Fable limit as a main bar for Claude. An Antigravity, Cursor
+  limit resets, with the Fable limit as a main bar for Claude. A Cursor
   or Copilot meter opens that provider's own popup: its name and logo, its
   limits and plan, and a cell that opens the account in Settings. Right-click a
   usage meter for Extensions and Accounts. Click the same
@@ -8594,7 +8594,8 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   it says Next when nothing needs a helper). A line checks the chosen agent is
   signed in (Claude Code, Codex, Antigravity and Cursor; a saved account in
   Settings > Accounts counts) with a Sign in button that opens the agent's own
-  sign-in in your browser (Google's for Antigravity) (starting an agent that needs a helper and was installed after
+  sign-in in your browser (Google's for Antigravity; an Antigravity CLI older than 1.5.1
+  asks you to update it to 1.5.1 or newer and try again instead) (starting an agent that needs a helper and was installed after
   setup asks once to connect it, and Not now there is remembered for that
   agent). Then the workspace: Files and VS Code, Spaces (on for a first run,
   the same switch as Settings > Sidebar & Sessions > Spaces), the Unified
@@ -9299,7 +9300,7 @@ for the full table):
   switch it and whether from Settings or Meet the rail's Switch, and the layout
   Meet the rail opened on and the one kept on Done; never your pinned icons or
   their order.
-- Accounts: bucketed counts of Claude, Codex, Cursor, Antigravity, and Copilot
+- Accounts: bucketed counts of Claude, Codex, Cursor, and Copilot
   accounts, and the plan tier Claude and Codex report for them (such as Pro,
   Max, Team, or Plus); never emails, account names, org names, or account ids.
 
