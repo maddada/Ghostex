@@ -34,10 +34,15 @@
 //! prompt, reset, custom Boosts: add/edit/delete/reorder, maybe turn Boosts on/off); the menu's
 //! edit actions open it". Supersedes the prompt editor that opened inside the chat box and the
 //! two-line hint inside it.
-//! CDXC:Boosts 2026-11-20 DECISION:
-//! User, on the built menu: "Computer use" is "Computer & Browser use" (Cua Driver: desktop apps,
-//! and Chrome or another browser), its prompt pointing at the cua-driver skill; "Browser use" is
-//! "Embedded Browser use" (Ghostex's own browser), its prompt pointing at `ghostex browser --help`.
+//! CDXC:Boosts 2026-11-27 DECISION:
+//! The user answered the OpenCode Browse page ("A. Point agents at it", "Let Browse's installer
+//! add itself", "Your everyday profile", leave Ghostex's own browser tools as they are). This
+//! supersedes the 2026-11-20 "Computer & Browser use" name: Browser use (`web-browser-use`) sends
+//! websites to OpenCode Browse's `browse` MCP tools in the user's own signed-in browser, Computer
+//! use stays on Cua Driver for desktop apps, and Embedded Browser use (`browser-use`) keeps
+//! Ghostex's own browser with its prompt pointing at `ghostex browser --help`. The user installs
+//! and pairs Browse themselves (Ghostex installs nothing and adds no MCP entry), so the Boost tells
+//! the agent to say so and point at Ghostex Help when Browse is missing or unpaired.
 //! CDXC:Boosts 2026-11-20 DECISION:
 //! The user answered the catalog review page (Q4305 to Q4311), for 11.12.0: every Boost stays
 //! ("steps should stay; it's distinct: multiple steps. Inbox it is for ANY ask"), except that Show
@@ -88,7 +93,7 @@ pub struct Boost {
     /// One line on what the agent does, for the menu, the picker and the callout.
     pub description: &'static str,
     /// What the little preview beside the menu draws (`page`, `chart`, `compare`, `map`,
-    /// `triage`, `triage-messages`, `form`, `app`, `browser`, `shots`, `second`, `workers`,
+    /// `triage`, `triage-messages`, `form`, `app`, `web`, `browser`, `shots`, `second`, `workers`,
     /// `worktree`, `ship`, `docs`, `steps`, `needs-you`, `inbox`, `schedule`, `notify`).
     pub preview: &'static str,
     /// What the agent is told, unless the user edited it.
@@ -106,7 +111,7 @@ pub const TABS: [(&str, &str); 4] = [
 ];
 
 /// Ghostex's Boosts, in the menu's order.
-pub const BOOSTS: [Boost; 20] = [
+pub const BOOSTS: [Boost; 21] = [
     Boost {
         id: "live-page",
         label: "Live page",
@@ -156,18 +161,27 @@ pub const BOOSTS: [Boost; 20] = [
         prompt: "Before you start, ask me what you need to know as a Ghostex form (a ```questions block) with your recommended pick marked on each question, instead of questions in your text. If you haven't in this conversation, run `ghostex visual guide forms` first and follow it.",
     },
     Boost {
+        id: "web-browser-use",
+        label: "Browser use",
+        icon: "titlebar/world.svg",
+        category: "do",
+        description: "The agent works on websites in your own Chrome with OpenCode Browse, signed in as you.",
+        preview: "web",
+        prompt: "Do this on the websites in my own browser with OpenCode Browse: its `browse` MCP tools open background tabs of their own in my signed-in Chrome (or another Chromium browser), with my logins. Call its `status` tool first. Then work through `execute`, which runs a script with a Playwright-style `page`, `snapshot()` (the page with refs to click, fill and wait for) and `browse.<tool>()`: `navigate` without a tab opens a new background tab and returns its id, and every later call passes that `tab`. Use `tabs` to list or close your tabs, and keep to the tabs you opened or I lent you. When a step needs me (a login, 2FA, a captcha you can't clear, a payment, or anything I should confirm before it happens), hand the tab back to me with `handoff()` and wait for my Continue; never type my passwords or 2FA codes. If you have no `browse` tools, or `status` says no browser is paired, don't switch to another tool: tell me OpenCode Browse isn't set up, that Ghostex Help explains how (`ghostex guide features`, OpenCode Browse), and stop. When you're done, show me what you did with a screenshot.",
+    },
+    Boost {
         id: "computer-use",
-        label: "Computer & Browser use",
+        label: "Computer use",
         icon: "titlebar/device-desktop.svg",
         category: "do",
-        description: "The agent drives your desktop apps and Chrome or another browser with Cua Driver, and shows what it did.",
+        description: "The agent drives your desktop apps with Cua Driver, and shows what it did.",
         preview: "app",
-        prompt: "Do this by driving the apps or the browser (Chrome or another one) on my computer yourself with Cua Driver. Read the cua-driver skill first and follow it (if it isn't installed, `ghostex computer-use install-skill` adds it), then show me what you did with a screenshot.",
+        prompt: "Do this by driving the desktop apps on my computer yourself with Cua Driver. Read the cua-driver skill first and follow it (if it isn't installed, `ghostex computer-use install-skill` adds it), then show me what you did with a screenshot.",
     },
     Boost {
         id: "browser-use",
         label: "Embedded Browser use",
-        icon: "titlebar/world.svg",
+        icon: "titlebar/browser.svg",
         category: "do",
         description: "The agent opens and drives pages in Ghostex's embedded browser: clicks, forms, screenshots.",
         preview: "browser",
