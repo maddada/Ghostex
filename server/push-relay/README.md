@@ -158,7 +158,8 @@ here and the computer collects it.
 - `PUT`: the body is the update token in hex (64 to 512 characters, at most 1 KB with whitespace around
   it). It replaces what the id holds. 200 `{"ok":true}`.
 - `GET`: 200 `{"ok":true,"token":"<hex>"}`, and the entry is gone; 404 `empty` when the id holds nothing.
-- `HEAD`: 405 `method-not-allowed`, and the entry stays: only a `GET` takes it.
+- `HEAD`: 405 with only the status and an `Allow: GET, PUT` header, no body; the entry stays: only a `GET`
+  takes it.
 - An entry lives at most 10 minutes.
 
 ## Widget snapshot: `PUT` and `GET /push/v1/snapshot`
@@ -179,7 +180,7 @@ Answers of both store routes (JSON unless a snapshot comes back):
 | 200 | | Stored, or here it is. |
 | 400 | `bad-request` | No `Authorization: Bearer` with 64 hex characters, the mailbox body is not a token in hex, or the snapshot is empty. |
 | 404 | `empty` | Nothing is held under this id (never stored, taken, or expired). |
-| 405 | `method-not-allowed` | `HEAD` on the mailbox. |
+| 405 | (no body) | `HEAD` on the mailbox: only the status and `Allow: GET, PUT`. |
 | 413 | `too-large` | A mailbox body over 1 KB or a snapshot over 8 KiB. |
 | 413 | (not JSON) | A body over 16 KB, refused by Caddy or the server before the relay's code runs. |
 | 429 | `rate-limited`, `too-many-new-ids` | `retryAfter` seconds (also `Retry-After`); `too-many-new-ids` when this address created its quota of new ids. Nothing was stored. |
@@ -234,21 +235,27 @@ The `/push/` routes have limits of their own, so their traffic never takes from 
   phone, so a home with several phones and computers needs a few an hour. Like every `/push/` bucket, an idle
   one is forgotten only once it would have refilled completely (here after an hour), so a pause never hands
   out a fresh quota early.
-- What the mailbox and the snapshot store hold together: at most 20,000 entries and 16 MiB of tokens and
-  snapshots. Before a new id is refused as `store-full`, expired entries are dropped; an id that already
-  holds something can still be read and replaced (a replacement only when it does not grow the store past
-  16 MiB). Nothing old is pushed out for something new, so a flood cannot evict real snapshots. The body of a
-  refused request is never copied into the store.
+- What the mailbox and the snapshot store hold together: at most 5,000 entries and 5 MiB of tokens and
+  snapshots. Assuming a widget snapshot of about 1 to 2 KiB (the phone's format is not fixed yet), 5 MiB holds
+  the snapshots of a few thousand phones, and mailbox entries live only minutes. Before a new id is refused as `store-full`,
+  expired entries are dropped; an id that already holds something can still be read and replaced (a
+  replacement only when it does not grow the store past 5 MiB). Nothing old is pushed out for something new,
+  so a flood cannot evict real snapshots. The body of a refused request is never copied into the store.
 - A token Apple called gone on a `/push/` route is remembered for 24 hours for that environment and topic, at
-  most 25,000 (the oldest goes first), apart from the Live Activity route's 100,000: the two never push each
+  most 7,000 (the oldest goes first), apart from the Live Activity route's 100,000: the two never push each
   other's entries out or show in each other's health check.
-- Memory: the service runs with `MemoryMax=128M`. The store holds at most 16 MiB of contents in 20,000
-  entries; each of the `/push/` routes' eight limit tables at most 25,000 keys; the Live Activity route's
-  tables at most 200,000 keys each and its gone tokens 100,000. A synthetic measurement on macOS with the store
-  and all tables filled to their caps came to about 113 MiB resident, so the margin to the limit is small,
-  not ample; the Live Activity route's tables are most of it. Only a flood from very many addresses fills
-  every table at once; if memory reaches the limit, systemd restarts the relay, which empties the mailbox and
-  the snapshots. A table full of busy keys refuses a new key with 429 rather than growing.
+- Each of the `/push/` routes' eight limit tables (per address, per token, per id, new ids per address) holds
+  at most 7,000 keys, each the tokens, ids or addresses active within that table's refill time. A table full of
+  busy keys refuses a new key with 429 rather than growing; when Ghostex has more phones than that active at
+  once, these numbers and the memory below have to grow together.
+- Memory: the service runs with `MemoryMax=128M`, and the relay is held to 75 % of it (96 MiB) with every
+  table and the store full at once. The `/push/` caps above (5,000 entries, 5 MiB, 7,000 keys per table,
+  7,000 gone tokens) were chosen for that; the Live Activity route's tables (200,000 keys each, 100,000 gone
+  tokens) are unchanged and take most of it. Measured on macOS by filling the real limiter and store types to
+  every cap in one process: 82 to 84 MiB resident with the Live Activity tables alone and 91 to 93 MiB with
+  everything (three runs). That process has no HTTP or TLS traffic; connections need a few MiB more. Only a
+  flood from very many addresses fills every table at once; if memory still reaches the limit, systemd
+  restarts the relay, which empties the mailbox and the snapshots.
 
 ## Who can call it, and what an attacker can do
 
@@ -317,8 +324,10 @@ compiles `ring`'s C code; `ZIG` picks the binary) and writes
 3. `install -d -o root -g ghostex-push-relay -m 0750 /etc/ghostex-push-relay`.
 4. `cp ghostex-push-relay.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now ghostex-push-relay`.
 5. Add the `Caddyfile` blocks (`handle /live-activity/*` with an 8 KB body limit and `handle /push/*` with
-   16 KB) inside the `share.ghostex.dev` site in `/etc/caddy/Caddyfile`, check it with
-   `caddy validate`, and `systemctl reload caddy` while no shared chat is connected (a reload closes
+   16 KB) inside the `share.ghostex.dev` site in `/etc/caddy/Caddyfile`, check the whole file with
+   `caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile` (without `--config`, Caddy checks a
+   `Caddyfile` in the current folder, which in the release folder is the bare fragment and fails), and
+   `systemctl reload caddy` while no shared chat is connected (a reload closes
    proxied WebSockets; check `ss -tn state established '( sport = :58800 )'`).
 6. Check: `curl -s https://share.ghostex.dev/live-activity/healthz` and
    `curl -s https://share.ghostex.dev/push/healthz`.

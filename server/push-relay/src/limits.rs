@@ -122,12 +122,12 @@ impl Default for LimitConfig {
                 burst: 20.0,
                 per_minute: 20.0,
             },
-            store_max_entries: 20_000,
-            store_max_bytes: 16 * 1024 * 1024,
+            store_max_entries: 5_000,
+            store_max_bytes: 5 * 1024 * 1024,
             mailbox_lifetime: Duration::from_secs(10 * 60),
             snapshot_lifetime: Duration::from_secs(24 * 3600),
-            push_max_keys: 25_000,
-            push_max_gone_tokens: 25_000,
+            push_max_keys: 7_000,
+            push_max_gone_tokens: 7_000,
         }
     }
 }
