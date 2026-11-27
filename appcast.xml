@@ -8,78 +8,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <link>https://github.com/maddada/Ghostex/releases</link>
         <description>Sparkle appcast for Ghostex macOS releases.</description>
         <item>
-            <title>12.4.0</title>
-            <pubDate>Fri, 27 Nov 2026 00:32:14 +0000</pubDate>
-            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v12.4.0</sparkle:fullReleaseNotesLink>
-            <sparkle:version>120400</sparkle:version>
-            <sparkle:shortVersionString>12.4.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[# Ghostex 12.4.0
-
-## 12.4.0 - 2026-11-27
-
-**Ghostex 12.4.0 is out.** Live pages and question forms close the moment you press Send, the Live page window can stay open, the voice agent speaks the language you pick with its own turn words, Executor runs on your own Executor CLI, every text box gets Ghostex's own right-click menu, Antigravity takes Gemini's place in Accounts, and Ghostex keeps far less on your disk.
-
-### 📄 Live pages and questions
-
-- **Send closes a Live page or a questions form at once,** and the question leaves Needs you, the Inbox and the pink dot on every computer and phone right away, instead of waiting until the agent reads your answers.
-- **Answers the agent couldn't be told are kept as a failed message card** with the reason and Retry, so nothing you answered is lost.
-- **The Live page window has a Keep open pin,** remembered for every page, so a click elsewhere in Ghostex no longer hides it.
-- **Export page in the page window's ⋯ menu saves the page again.**
-
-### 💬 Chat
-
-- **A chat you scrolled up in stays where you are while the agent works,** and your own message still takes you to the bottom (#781).
-- **The chat box and every other text box open Ghostex's own right-click menu** with Cut, Copy, Paste and Select All, plus Save as Boost while words are selected in the chat box and the Reply popover.
-
-### 🎙️ Voice agent
-
-- **The voice agent's language is a setting,** English by default or the language of the device that starts the call, and its turn words are set per language, on the computer and the phone. English keeps "reply", "over" and "go ahead". Thanks to @cagatay-io for both the computer (#780) and the phone (ghostex-mobile #68).
-
-### 🔌 Connectors
-
-- **Executor now uses your own Executor CLI with one sign-in for the whole computer,** and Settings > Connectors can install it and start its sign-in for you. Every Executor call follows your Ask, Allow and Never rules, and agents get no Executor tools until you sign in. Apps you added to the old built-in Executor need to be added again in Executor: Settings lists them once by name.
-
-### 👤 Accounts
-
-- **Antigravity takes Gemini's place in Settings > Accounts, the sidebar meter and its popup,** with usage read from the Antigravity CLI on your computer. Native Antigravity needs agy 1.5.1 or newer.
-
-### 🌐 Browser
-
-- **Open Externally takes the DevTools button's place in the Browser toolbar,** and Toggle DevTools moves into its ⋯ menu.
-
-### 🧭 Sidebar and rail
-
-- **The rail's ⋯ menu can remove every separator at once,** and right-click menus on the rail open again on macOS (#775).
-- **Quieter dots:** the rail's Ask Ghostex AI button shows none, and the Autopilot supervisor's row shows only red and pink ones.
-- **Pinned sessions linked under their lead can be dragged into a new order** (#725).
-
-### 📂 Files
-
-- **Close Others in a file tab's right-click menu** closes every open file but that one (#710).
-
-### 💾 Disk space
-
-- **Ghostex keeps far less on your disk:** the built-in browser's cache, agent event logs, visual check screenshots and old chat copies now have limits and a daily clean-up, and visual checks no longer leave Chrome running or temp folders behind.
-
-### 📱 On the phone
-
-- **Dictate sends your recording while you speak,** so the words come back about a second after Stop.
-- **A computer's SSH key can be removed or replaced from Advanced,** saving a computer no longer rewrites its stored key, and the iPhone signs in with the saved password when the computer refuses the key.
-- **The project header drops its computer icons,** which move into its ⋯ menu, and Back from a section of a computer's settings returns to that computer.
-
-### 🩹 Fixes and polish
-
-- **Windows: Terminal-based chats no longer ask "Did your message arrive?"** when a message has dashes, arrows or curly quotes (#711), and a WSL gxserver sees the app's settings (#732).
-- **A plain mouse wheel scrolls the Themes and Artwork rows in Settings sideways** (#776).
-- **Finished OpenCode sessions with a leftover shell read idle** (#721), and cleared linked workers keep reporting to their lead (#755).
-
-If anything goes wrong after updating, you can go back to the version you have now in Settings › Updates, or download any older version from [GitHub](https://github.com/maddada/Ghostex/releases).
-]]></description>
-            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v12.4.0/ghostex-12.4.0-arm64.dmg" length="70815326" type="application/octet-stream" sparkle:edSignature="uNDyOAqgm8KKNy7CI+4wUupFB0CA030s1ZLH8QGRTnQqtGGOnmYqq2a/mUTsSBINFepJ3avJUCrolGVoz0aODA=="/>
-        </item>
-        <item>
             <title>12.3.0</title>
             <pubDate>Thu, 26 Nov 2026 07:25:24 +0000</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v12.3.0</sparkle:fullReleaseNotesLink>
@@ -439,6 +367,44 @@ If anything goes wrong after updating, you can go back to the version you have n
             <enclosure url="https://github.com/maddada/Ghostex/releases/download/v12.0.0/ghostex-12.0.0-arm64.dmg" length="72861125" type="application/octet-stream" sparkle:edSignature="76PpvVb4g/ysm5f3Uz3kODef3kXmYgexiAnIEqxL4tX7OKs/9p955+f3rvv7q0JKS2ixPiJSv5Lhs2UnlBTiCg=="/>
         </item>
         <item>
+            <title>11.15.0</title>
+            <pubDate>Sun, 22 Nov 2026 19:23:42 +0000</pubDate>
+            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v11.15.0</sparkle:fullReleaseNotesLink>
+            <sparkle:version>111500</sparkle:version>
+            <sparkle:shortVersionString>11.15.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# Ghostex 11.15.0
+
+## 11.15.0 - 2026-11-22
+
+**Ghostex 11.15.0 is out.** Four approval levels for Non-CLI sessions on the chat box's Mode button, top and bottom pin groups with discoverable separators on the rail, a Windows wake-from-sleep crash fix, older open pages and forms kept in the dock and Work panel, a scrollable phone pill row, and blurred art behind Live pages on the phone.
+
+### 💬 Chat and approvals
+
+- **Approval levels for Non-CLI sessions:** pick Ask, Auto-edits, Auto or Full access directly from the chat box's Mode button, taking effect on the next permission request without restarting the session, with approval cards explaining why an action paused for review on desktop, web and phone.
+- **Only your own devices can raise approval levels:** agents can lower a session's approval level or turn off Agent approvals: accept all, never raise it or turn accept-all on.
+- **Older waiting pages and forms stay in the dock and Work panel:** unanswered Live pages and forms from earlier in a conversation remain in the dock above the chat box and in the Work panel instead of falling out once they scroll past the loaded rows.
+
+### 🧭 Rail
+
+- **Pin anything to the top or bottom of the rail:** drag any pinned icon, link or separator freely between the top and bottom groups, or use Move to top, Move to bottom and Pin to bottom from right-click menus.
+- **Discoverable rail separators:** add separators from the rail's ⋯ menu (Add separator, Add separator at bottom) or by right-clicking empty rail space, the ⋯ button, or any rail item, and unpinning from a right-click menu closes cleanly instead of morphing into the ⋯ menu.
+
+### 📱 On the phone
+
+- **Scrollable chat box pill row:** the project pill now sits inline as a normal pill in one horizontally scrollable row, so Boost, Links, Session details and the usage ring stay reachable on narrower screens without clipping.
+- **Blurred art behind Live pages:** Live page sheets on the phone now display a blurred backdrop of your theme's artwork, matching desktop.
+
+### 🩹 Fixes and polish
+
+- **Windows wake-from-sleep crash fixed:** Windows no longer crashes on sleep or wake when system power events arrive while a window is closing ([#712](https://github.com/maddada/Ghostex/issues/712)).
+
+If anything goes wrong after updating, you can go back to the version you have now in Settings › Updates, or download any older version from [GitHub](https://github.com/maddada/Ghostex/releases).
+]]></description>
+            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v11.15.0/ghostex-11.15.0-arm64.dmg" length="70151734" type="application/octet-stream" sparkle:edSignature="vQXm0QM+GFj6IeD8GQI3tXjv2N4pF5PwVB7SGlRFVc/PuBQJWw+8Bzff1Lh86X82OAFDXn4OpwaUXO6IYLWFDw=="/>
+        </item>
+        <item>
             <title>3.26.1</title>
             <pubDate>Mon, 01 Jun 2026 18:43:20 +0400</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v3.26.1</sparkle:fullReleaseNotesLink>
@@ -450,6 +416,6 @@ If anything goes wrong after updating, you can go back to the version you have n
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: 2b3t6nXfMPySjeGCWbhc4s3vvHUVvOLgshLksV434YcE6i5KYj9RbrgVGBwts3jZKAicN/8dwwIVSEAkGx6NDg==
-length: 37961
+edSignature: G2iWKeEJUAqaQChenCrh7jzP27QH23GyUMKtDqKDCrkl9jS5m2vY1YuGmYLZgTwI6CVVm0QTm+ogSGyg8Y4SBg==
+length: 36089
 -->

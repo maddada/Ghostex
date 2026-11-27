@@ -1093,15 +1093,13 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
             })
     };
     let body: AnyElement = match kind {
-        // `web` is Browser use: the user's own browser, with OpenCode Browse's agent tabs in it.
-        "page" | "app" | "web" | "browser" => div()
+        "page" | "app" | "browser" => div()
             .size_full()
             .flex()
             .flex_col()
             .child(bar(Some(match kind {
                 "app" => "Finder",
                 "browser" => "ghostex browser",
-                "web" => "your Chrome · agent tab",
                 _ => "onboarding.html",
             })))
             .child(
@@ -1130,10 +1128,9 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
                             .child(line(0.7, 5.0, soft))
                             .child(div().flex().gap(px(5.0 * s)).h(px(26.0 * s)).children(
                                 (0..3).map(|n| {
-                                    tile()
-                                        .when(n == 1 && matches!(kind, "browser" | "web"), |tile| {
-                                            tile.border(px(s)).border_color(tone)
-                                        })
+                                    tile().when(n == 1 && kind == "browser", |tile| {
+                                        tile.border(px(s)).border_color(tone)
+                                    })
                                 }),
                             )),
                     ),

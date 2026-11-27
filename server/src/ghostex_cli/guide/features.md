@@ -2658,10 +2658,9 @@ UI mockup, a comparison or a small interactive tool. Ask for them by name
 visuals"); agents still understand the older words Ghostex page, gx page,
 inline HTML, inline questions and inline graphs. **Boosts** ask for these, and more, in one click. The Boost pill at the right
 of the strip on top of the chat box opens one list of them in sections: Show (Live page; Chart it, a Live page of charts and tables;
-Side by side, Map it, Ask me in a form), Actions (Browser use, where the agent works on
-websites in your own signed-in Chrome with OpenCode Browse, which you install yourself (see
-OpenCode Browse below); Computer use, where it drives your desktop apps itself with Cua
-Driver; Embedded Browser use, where it drives pages in Ghostex's own browser; Fix and prove, where the agent reproduces
+Side by side, Map it, Ask me in a form), Actions (Computer & Browser use, where the agent
+drives your apps and Chrome or another browser itself with Cua Driver; Embedded Browser
+use, where it drives pages in Ghostex's own browser; Fix and prove, where the agent reproduces
 the problem first, then shows the same screenshot or test passing after its fix (it took the
 place of Show screenshots, whose pill still works); Second opinion, where an agent on another
 model checks the answer and, when code changed, reviews the diff), Work (Triage requests,
@@ -8387,44 +8386,6 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   The Embedded browser section holds the Chromium runtime (CEF); agents control
   Ghostex's browser panes with `ghostex browser` (`ghostex browser --help`).
   Commands: `ghostex spaceo guide`, `spaceo doctor`.
-- OpenCode Browse (websites in your own browser) lets agents use your real,
-  signed-in Chrome (or Edge, Brave, Arc, Helium, Vivaldi, Opera, Chromium, or
-  Firefox through `browse firefox`): they open background tabs of their own,
-  in a collapsed tab group, with the logins you already have, and leave your
-  other tabs alone unless you lend one with Browse's toolbar button. When a
-  person is needed (a login, 2FA, a payment), the agent hands the tab back:
-  a small card on the page waits for your Continue. It is free and open
-  source (MIT) from Anomaly, the makers of OpenCode, needs no account, and talks only to
-  your own computer. Ghostex does not install it and has no Settings row for
-  it; the Browser use Boost sends a website task to it, and Computer use stays
-  on Cua Driver for desktop apps. To set it up on a Mac or Linux, run `curl
-  -fsSL https://opencode.ai/browse/install | bash` in a terminal (Windows:
-  `irm https://opencode.ai/browse/install.ps1 | iex` in PowerShell; Browse's
-  Windows program is unsigned, so Smart App Control may block it). Its
-  installer asks which agents to add it to (Claude Code, Codex and the others
-  it finds start checked) and writes Browse into each one's own MCP settings,
-  so it works in those agents inside and outside Ghostex. It then opens the
-  Browse extension in the Chrome Web Store: add it to the Chrome profile you
-  use every day, and the installer pairs it by itself. If pairing didn't
-  happen, run `browse pair`, which prints a one-time code (good for 10
-  minutes): open Extensions, Browse, Options, click Pair with a code, enter
-  it and click Connect. Restart any agent that was already running so it
-  sees Browse, then try "open news.ycombinator.com and tell me the top
-  story". `browse status` shows whether a browser is paired. In your
-  everyday profile an agent acts as you: it can do what you can on any site
-  you are signed in to, a page it reads may try to steer it, and code it
-  runs in a page runs as you. Browse refuses clearing your data and closing
-  the browser, keeps agents to their own tabs and limits cookies to a tab's
-  own sites, and an agent can open a tab limited to Allowed sites, but that
-  is a guardrail, not a wall: ask for the sites you want and watch what it
-  does. Browse updates itself hourly from its release service; to choose
-  updates yourself, pick Tell me under updates on the extension's options
-  page, run `browse update --mode notify`, or set
-  `OPENCODE_BROWSER_AUTO_UPDATE=notify` in the environment you start agents
-  from. `browse uninstall` removes it from every agent it was added to;
-  remove the extension from your browser to finish. Install and pairing
-  steps: https://github.com/anomalyco/browse#install and
-  https://opencode.ai/product/browse.
 - Settings > Integrations > Tools lists the tools Ghostex can install for you
   when something you set up needs them: Node.js and npm, uv, Homebrew (Mac),
   System tools (curl, certificates, unzip and git on Linux), Beads, the
