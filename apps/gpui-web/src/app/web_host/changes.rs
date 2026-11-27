@@ -94,6 +94,7 @@ impl GhostexGpuiApp {
                 agent_id,
                 file_paths,
                 new_branch,
+                multi_repo,
             } => self.changes_commit(
                 &project_key,
                 action,
@@ -101,6 +102,7 @@ impl GhostexGpuiApp {
                 agent_id,
                 file_paths,
                 new_branch,
+                multi_repo,
                 cx,
             ),
             ChangesRequest::MultipleCommits {
