@@ -272,9 +272,8 @@ pub(super) fn session_info(
         false,
     );
     let open_questions = crate::session_chat_open_questions::open_question_count(session);
-    let latest_questions =
-        crate::session_chat_open_questions::latest_open_question_count(session)
-            .unwrap_or(open_questions);
+    let latest_questions = crate::session_chat_open_questions::latest_open_question_count(session)
+        .unwrap_or(open_questions);
     let mut older_open_questions = 0;
     let (state, waiting) = match thread {
         ThreadState::Working => (VoiceState::Working, None),

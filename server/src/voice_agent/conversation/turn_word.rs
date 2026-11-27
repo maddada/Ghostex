@@ -200,9 +200,9 @@ pub(super) fn intro_line(
 /// Whether `tools` can answer questions and approvals (`answer_prompt`).
 fn offers_answers(tools: &serde_json::Value) -> bool {
     tools.as_array().is_some_and(|tools| {
-        tools
-            .iter()
-            .any(|tool| tool.get("name").and_then(serde_json::Value::as_str) == Some("answer_prompt"))
+        tools.iter().any(|tool| {
+            tool.get("name").and_then(serde_json::Value::as_str) == Some("answer_prompt")
+        })
     })
 }
 

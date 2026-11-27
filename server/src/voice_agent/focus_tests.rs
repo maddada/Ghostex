@@ -522,7 +522,9 @@ async fn a_closed_session_is_said_once_and_the_call_goes_on() {
         .into_iter()
         .filter(|session| session.session_id != "T1")
         .collect();
-    call.tx.send(Input::Sessions(read(without.clone()))).unwrap();
+    call.tx
+        .send(Input::Sessions(read(without.clone())))
+        .unwrap();
     let focus = call.client_frame("focus").await;
     assert_eq!(focus["focus"]["closed"], true);
     let closed = call.client_frame("announcement").await;

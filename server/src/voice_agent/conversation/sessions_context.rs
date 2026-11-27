@@ -165,7 +165,11 @@ impl Row {
             state.push_str(&format!(
                 " ({} older open question{} in its chat)",
                 self.older_open_questions,
-                if self.older_open_questions == 1 { "" } else { "s" }
+                if self.older_open_questions == 1 {
+                    ""
+                } else {
+                    "s"
+                }
             ));
         }
         state
@@ -288,7 +292,8 @@ impl SessionsContext {
         }
         let present: HashSet<String> = rows.iter().map(|row| row.reference.clone()).collect();
         self.seen.retain(|reference, _| present.contains(reference));
-        self.settled.retain(|reference, _| present.contains(reference));
+        self.settled
+            .retain(|reference, _| present.contains(reference));
         self.rows = Some(rows);
         let mut unavailable: Vec<(String, String)> = read
             .unavailable
@@ -448,7 +453,10 @@ fn model_list(
         counted: left.iter().map(|row| row.reference.clone()).collect(),
         left: (left.len(), sleeping),
         unavailable: unavailable.to_vec(),
-        computers: rows.iter().filter_map(|row| row.server_id.clone()).collect(),
+        computers: rows
+            .iter()
+            .filter_map(|row| row.server_id.clone())
+            .collect(),
         threads: threads.clone(),
     };
     (text, told)
@@ -575,7 +583,11 @@ impl Conversation {
     /// A fresh session list for the call's own list (`SessionsContext`): a changed list goes to
     /// the client, and in a call about all sessions the model's message waits for a quiet moment.
     pub(super) fn follow_sessions(&mut self, read: &SessionsRead) {
-        if self.focus.as_ref().is_some_and(|scope| scope.gbot.is_some()) {
+        if self
+            .focus
+            .as_ref()
+            .is_some_and(|scope| scope.gbot.is_some())
+        {
             return;
         }
         let for_model = self.focus.is_none();
