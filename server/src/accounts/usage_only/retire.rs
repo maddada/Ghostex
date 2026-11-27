@@ -91,9 +91,11 @@ fn retire(paths: &crate::paths::GxserverPaths) -> Option<(String, bool)> {
 
 #[cfg(test)]
 mod tests {
-    /// Every source file of the usage-only accounts, the CLIProxyAPI hub readers, the ACP host and
-    /// the setup sign-in.
-    const SOURCES: [&str; 13] = [
+    /// Every source file of the usage-only accounts, the CLIProxyAPI hub readers, the ACP host, the
+    /// setup sign-in, and (since the Fable review's finding 9) the model lineups and pickers, the
+    /// agent update check, the title and Catch me up jobs, Ghostex AI's welcome card and the agent
+    /// CLI catalog.
+    const SOURCES: [&str; 22] = [
         include_str!("copilot.rs"),
         include_str!("cursor.rs"),
         include_str!("http.rs"),
@@ -107,7 +109,21 @@ mod tests {
         include_str!("../../acp/host.rs"),
         include_str!("../../acp/mod.rs"),
         include_str!("../../agent_sign_in.rs"),
+        include_str!("../hub/launch.rs"),
+        include_str!("../../agent_model_lineups.rs"),
+        include_str!("../../agent_model_pickers.rs"),
+        include_str!("../../agent_model_catalog.rs"),
+        include_str!("../../agent_cli/latest.rs"),
+        include_str!("../../server/title_generation/title_command.rs"),
+        include_str!("../../session_chat_catch_up.rs"),
+        include_str!("../../chief/welcome.rs"),
+        include_str!("../../../../packages/shared/agent-cli-catalog.json"),
     ];
+
+    /// The one Google address a source may name: the public download bucket agy's update manifest
+    /// points at, which the update check only compares a manifest's link with and never calls
+    /// (agent_cli/latest.rs).
+    const ALLOWED: &str = "https://storage.googleapis.com/antigravity-public/antigravity-cli/";
 
     /// CDXC:AgentProviders 2026-11-26: Ghostex never calls Google's internal services, never signs
     /// in with another app's OAuth client and never sends another app's user agent (the retired
@@ -130,9 +146,31 @@ mod tests {
             ["\"/", "usage\""].concat(),
         ];
         for source in SOURCES {
+            let source = source.replace(ALLOWED, "");
             for word in &banned {
                 assert!(!source.contains(word.as_str()), "{word} is back");
             }
         }
+    }
+
+    /// CDXC:AgentProviders 2026-11-27: nothing on a timer runs agy outside ACP (Fable review,
+    /// findings 1, 5 and 9). The lineup pass leaves Antigravity out (Q5210), the picker read has no
+    /// Antigravity branch, the title and Catch me up jobs don't offer it (Q5212), and Ghostex AI's
+    /// welcome card doesn't read its sign-in.
+    #[test]
+    fn no_background_loop_runs_agy() {
+        assert!(!crate::agent_model_lineups::TIMED_AGENTS.contains(&"antigravity"));
+        assert!(!include_str!("../../agent_model_pickers.rs").contains("\"antigravity\""));
+        let welcome = include_str!("../../chief/welcome.rs");
+        let sign_in_agents = welcome
+            .lines()
+            .find(|line| line.starts_with("const SIGN_IN_AGENTS"))
+            .expect("the welcome card's sign-in list");
+        assert!(!sign_in_agents.contains("antigravity"), "{sign_in_agents}");
+        use crate::server::{
+            argument_title_generation_command, normalize_title_generation_agent,
+        };
+        assert_eq!(normalize_title_generation_agent(Some("antigravity")), "claude");
+        assert_eq!(argument_title_generation_command("antigravity", "agy", "'x'"), None);
     }
 }

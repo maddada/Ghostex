@@ -81,7 +81,8 @@ static LOGOS: &[(&str, &str, &str)] = &[
         "#ff7a1a",
         include_str!("../../../core-ui/assets/factory-droid.svg"),
     ),
-    // Not an agent since Gemini CLI was dropped (2026-11-13): the Gemini usage account's logo.
+    // Not an agent since Gemini CLI was dropped (2026-11-13), and Ghostex shows no Gemini usage
+    // account since 2026-11-27 (accounts/usage_only/retire.rs): kept for rows that still name it.
     (
         "gemini",
         "#8b9aff",

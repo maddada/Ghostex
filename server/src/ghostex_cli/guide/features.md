@@ -1747,6 +1747,9 @@ longer text, or leave the box empty, and Generate name turns that text (or,
 when empty, the session's recent prompts) into a short name in the box, which
 you can still edit before pressing Rename. It uses the Title Generation Agent
 (`sessionTitleGenerationAgent`); the dialog's "Set it in settings" link opens it.
+Antigravity is not offered as the Title Generation Agent (titles and Catch Me Up),
+since `agy -p` would run outside a chat on your Google account; a saved
+Antigravity pick uses Claude.
 In a Hermes chat, `/rename <name>` is sent as Hermes' own `/title <name>`.
 A renamed agent session shows its new name right away, on the computer and the
 phone, while the agent saves it. If the agent has not taken the name within 8
@@ -3479,7 +3482,9 @@ once GPT 6.1 Sol is out, for example) sit under Legacy models at the bottom of
 the tab; click it (or reach it with the arrow keys and press Enter or Right) to show them. A starred legacy model also stands at the top of the list and stays in this list with its star lit. Codex,
 Cursor, Grok Build, Antigravity and OpenCode's lists come from the agent installed on that computer, so
 new models show up without a Ghostex update. Ghostex reads them again every ten
-minutes; to see a model the agent just added (after the agent updated itself,
+minutes, except Antigravity's: Ghostex asks `agy models` only once for each new
+Antigravity CLI version (and never on a timer, since each read asks Google on
+your account). To see a model the agent just added (after the agent updated itself,
 for example) right away, click the refresh button at the right end of the
 search field (Fetch latest models). The list updates in place and keeps your
 search text; on the tab of an agent whose list Ghostex keeps itself, the button
@@ -3738,7 +3743,10 @@ rules) and the hub balances its own accounts. `ghostex coordinator
 start-thread --account <hub name>` starts a thread on it. They run in a
 profile folder of their own (`~/.claude-profiles/ghostex-<hub>` or
 `~/.codex-profiles/ghostex-<hub>`), so they use their own login and are never
-switched to another account. When every hub account is out of room, the
+switched to another account. A hub whose account list also holds an
+Antigravity, Gemini, Vertex or AI Studio login starts no sessions On the hub:
+the launch says which login to remove from the hub (the hub could answer a
+Claude or Codex request through it). When every hub account is out of room, the
 session waits for the reset the hub names ("cooling down … reset after 1h10m")
 and continues by itself. `ghostex accounts hub add --address <url>
 --client-key-file <path|->` adds a hub from a terminal on the computer that
@@ -4205,8 +4213,9 @@ before that message, the message returns to the chat box for editing, and files 
 they are. Native Antigravity chats do not offer it, because Antigravity has no way to go back.
 Native Antigravity chats need Antigravity CLI 1.5.1 or newer (older versions offer
 Claude and GPT only to some editors, and Ghostex always says it is Ghostex); on an
-older one the chat stops before it starts and asks you to update Antigravity to 1.5.1
-or newer (Settings > Updates) and try again, or switch to Terminal-based.
+older one, or one whose version Ghostex can't read, the chat stops before it starts
+and asks you to update Antigravity to 1.5.1 or newer (Settings > Updates) and try
+again, or switch to Terminal-based.
 A Native Codex chat's `/` list offers only `/compact`, `/btw` and `/mention`; the other
 Codex commands need Terminal-based mode.
 For a Native session, **Switch to Terminal-based** lives in the chat's
@@ -8594,8 +8603,10 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   it says Next when nothing needs a helper). A line checks the chosen agent is
   signed in (Claude Code, Codex, Antigravity and Cursor; a saved account in
   Settings > Accounts counts) with a Sign in button that opens the agent's own
-  sign-in in your browser (Google's for Antigravity; an Antigravity CLI older than 1.5.1
-  asks you to update it to 1.5.1 or newer and try again instead) (starting an agent that needs a helper and was installed after
+  sign-in in your browser (Google's for Antigravity; an Antigravity CLI older than 1.5.1,
+  or one whose version can't be read, asks you to update it to 1.5.1 or newer and
+  try again instead; Antigravity's sign-in is checked when the panel opens, when
+  its sign-in ends and on Check again, and at most every 30 seconds meanwhile) (starting an agent that needs a helper and was installed after
   setup asks once to connect it, and Not now there is remembered for that
   agent). Then the workspace: Files and VS Code, Spaces (on for a first run,
   the same switch as Settings > Sidebar & Sessions > Spaces), the Unified
