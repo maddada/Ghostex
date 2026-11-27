@@ -158,11 +158,16 @@ impl NativeChatView {
                 ],
             )
         } else if has_draft && self.snapshot["queue"]["capabilities"]["canQueue"] == true {
+            // CDXC:SessionChat 2026-11-27 DECISION: User: "on pc we need to show the tab key for
+            // queue not hold" (pointing at "Hold" in this menu on a Mac). Tab queues on Mac,
+            // Windows and Linux alike (`composer_key_down` in keyboard.rs), so the row names Tab
+            // as a key chip like Send's Enter. Holding Send still queues; it is just not the one
+            // the menu teaches.
             (
                 "Send".into(),
                 chord("enter"),
                 vec![
-                    TooltipRow::new("Queue").hint("Hold"),
+                    TooltipRow::new("Queue").keys(chord("tab")),
                     TooltipRow::new("Compact & Send")
                         .hint(format!("{}-click or right-click", chord("alt"))),
                 ],
