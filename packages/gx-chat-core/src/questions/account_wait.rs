@@ -28,12 +28,12 @@ pub fn decorate(
     if object.get("kind").and_then(Value::as_str) != Some("usageLimit") {
         return;
     }
-    if let Some(quota_wait) = object
-        .get("quotaWait")
-        .and_then(Value::as_object)
-        .cloned()
-    {
-        if object.get("accountWait").and_then(Value::as_object).is_none() {
+    if let Some(quota_wait) = object.get("quotaWait").and_then(Value::as_object).cloned() {
+        if object
+            .get("accountWait")
+            .and_then(Value::as_object)
+            .is_none()
+        {
             decorate_quota_wait(object, &quota_wait, now_ms, utc_offset_minutes);
             return;
         }
@@ -98,7 +98,11 @@ pub fn decorate(
         .and_then(Value::as_array)
         .is_some_and(|actions| actions.iter().any(|action| action["id"] == "continueNow"));
     let paused = mode == Some("afterRestart");
-    let has_primary_action = words.action.as_ref().filter(|_| !(paused && own_continue)).is_some();
+    let has_primary_action = words
+        .action
+        .as_ref()
+        .filter(|_| !(paused && own_continue))
+        .is_some();
     if let Some(action) = words.action.filter(|_| !(paused && own_continue)) {
         let mut actions = object
             .get("actions")
@@ -261,12 +265,15 @@ fn wait_action_menu(words: &WaitWords, acknowledged: bool, reset: Option<&str>) 
             Some(action.answer.clone()),
         ));
     }
-    let (fixes_first, fixes_last): (Vec<&AccountFix>, Vec<&AccountFix>) = words
-        .fixes
-        .iter()
-        .partition(|fix| fix.kind != "accountUse");
+    let (fixes_first, fixes_last): (Vec<&AccountFix>, Vec<&AccountFix>) =
+        words.fixes.iter().partition(|fix| fix.kind != "accountUse");
     items.extend(fixes_first.into_iter().map(fix_item));
-    items.push(menu_item("pickAccount", "Pick an account", "pickAccount", None));
+    items.push(menu_item(
+        "pickAccount",
+        "Pick an account",
+        "pickAccount",
+        None,
+    ));
     items.extend(fixes_last.into_iter().map(fix_item));
     if !acknowledged {
         let label = match reset {
@@ -651,7 +658,9 @@ pub fn wait_words(
                 "Work continues automatically {}.",
                 local_time(at, now_ms, utc_offset_minutes)
             ),
-            (None, _, _) => "Work continues automatically as soon as an account has room.".to_string(),
+            (None, _, _) => {
+                "Work continues automatically as soon as an account has room.".to_string()
+            }
         };
         let (reasons, fixes) = blocked_reasons(wait, &name);
         let why = match reasons.as_slice() {
@@ -722,49 +731,93 @@ fn blocked_reasons(
     name: &impl Fn(&str) -> String,
 ) -> (Vec<String>, Vec<AccountFix>) {
     let mut fixes = Vec::new();
-    let reasons = wait
+    // (account, what is said of one account, of several): accounts with the same reason are
+    // named together ("#4 and #5 need to sign in again"), in the order they first appear.
+    let mut said: Vec<(Vec<String>, String, String)> = Vec::new();
+    for entry in wait
         .get("blocked")
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .filter_map(|entry| {
-            let account = name(entry.get("account")?.as_str()?.trim());
-            let id = entry
-                .get("accountId")
-                .and_then(Value::as_str)
-                .filter(|id| !id.is_empty());
-            let mut fix = |kind: &str, label: String| {
-                if let Some(id) = id {
-                    fixes.push(AccountFix {
-                        label,
-                        kind: kind.to_string(),
-                        account_id: id.to_string(),
-                    });
-                }
+    {
+        let Some(account) = entry
+            .get("account")
+            .and_then(Value::as_str)
+            .map(|account| name(account.trim()))
+        else {
+            continue;
+        };
+        let id = entry
+            .get("accountId")
+            .and_then(Value::as_str)
+            .filter(|id| !id.is_empty());
+        let mut fix = |kind: &str, label: String| {
+            if let Some(id) = id {
+                fixes.push(AccountFix {
+                    label,
+                    kind: kind.to_string(),
+                    account_id: id.to_string(),
+                });
+            }
+        };
+        let (one, many) = match entry.get("why").and_then(Value::as_str).unwrap_or_default() {
+            "manual" if entry.get("room").and_then(Value::as_bool) == Some(true) => {
+                fix("accountUse", format!("Use {account} for this session"));
+                (
+                    "has room but is manual only".to_string(),
+                    "have room but are manual only".to_string(),
+                )
+            }
+            "manual" => ("is manual only".to_string(), "are manual only".to_string()),
+            "off" => {
+                fix("accountTurnOn", format!("Turn on {account}"));
+                (
+                    "is turned off here".to_string(),
+                    "are turned off here".to_string(),
+                )
+            }
+            "signIn" if entry.get("here").and_then(Value::as_bool) == Some(false) => {
+                fix("accountSignIn", format!("Sign in {account}"));
+                (
+                    "isn\u{2019}t signed in on this computer".to_string(),
+                    "aren\u{2019}t signed in on this computer".to_string(),
+                )
+            }
+            "signIn" => {
+                fix("accountSignIn", format!("Sign in {account}"));
+                (
+                    "needs to sign in again".to_string(),
+                    "need to sign in again".to_string(),
+                )
+            }
+            "full" => match entry.get("limit").and_then(Value::as_str) {
+                Some(limit) => (
+                    format!("\u{2019}s {limit} limit is full"),
+                    format!("\u{2019}s {limit} limits are full"),
+                ),
+                None => ("is full".to_string(), "are full".to_string()),
+            },
+            _ => continue,
+        };
+        match said.iter_mut().find(|(_, said_one, _)| *said_one == one) {
+            Some((accounts, _, _)) => accounts.push(account),
+            None => said.push((vec![account], one, many)),
+        }
+    }
+    let reasons = said
+        .into_iter()
+        .map(|(accounts, one, many)| {
+            let tail = if accounts.len() == 1 { one } else { many };
+            let names = match accounts.split_last() {
+                Some((last, [])) => last.clone(),
+                Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
+                None => String::new(),
             };
-            match entry.get("why")?.as_str()? {
-                "manual" if entry.get("room").and_then(Value::as_bool) == Some(true) => {
-                    fix("accountUse", format!("Use {account} for this session"));
-                    Some(format!("{account} has room but is manual only"))
-                }
-                "manual" => Some(format!("{account} is manual only")),
-                "off" => {
-                    fix("accountTurnOn", format!("Turn on {account}"));
-                    Some(format!("{account} is turned off here"))
-                }
-                "signIn" if entry.get("here").and_then(Value::as_bool) == Some(false) => {
-                    fix("accountSignIn", format!("Sign in {account}"));
-                    Some(format!("{account} isn\u{2019}t signed in on this computer"))
-                }
-                "signIn" => {
-                    fix("accountSignIn", format!("Sign in {account}"));
-                    Some(format!("{account} needs to sign in again"))
-                }
-                "full" => Some(match entry.get("limit").and_then(Value::as_str) {
-                    Some(limit) => format!("{account}\u{2019}s {limit} limit is full"),
-                    None => format!("{account} is full"),
-                }),
-                _ => None,
+            // "#1's 7d limit is full" has no space before its apostrophe.
+            if tail.starts_with('\u{2019}') {
+                format!("{names}{tail}")
+            } else {
+                format!("{names} {tail}")
             }
         })
         .collect();
