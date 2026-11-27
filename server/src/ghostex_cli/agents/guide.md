@@ -122,6 +122,8 @@ step 7 below). Do not poll or sleep to watch it; end your turn and wait.
    for that agent. When the user names a model or an effort level, pass them
    through the flags the help documents. If a launch fails on a model or
    effort value, report the exact error; do not substitute another model.
+   Pass `--chrome` on `agents create claude` when the new Claude session needs
+   Claude in Chrome browser tools.
 3. **Hand over a self-contained task.** A new agent starts with none of your
    context. State the goal, the files it owns, what it must not touch, how to
    prove the work is done, and what to report back. Put anything long in a

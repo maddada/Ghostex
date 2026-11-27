@@ -93,6 +93,9 @@ pub(super) fn create(args: &Arguments) -> CliResult<Value> {
     if let Some(role) = &standing_role {
         payload["standingRole"] = json!(role);
     }
+    if args.chrome {
+        payload[crate::acp::claude_chrome::CLAUDE_CHROME_PARAM] = json!(true);
+    }
     // `--lead`: the link rules are checked before anything is created.
     let lead = args
         .lead

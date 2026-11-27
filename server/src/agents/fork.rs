@@ -297,6 +297,8 @@ fn acp_profile_from_plan(plan: &Value, fam: &str) -> crate::acp::spec::AcpLaunch
         gbot_computer_use_off: plan.get("acpGbotComputerUseOff").and_then(Value::as_bool)
             == Some(true),
         lean_worker: plan.get("acpLeanWorker").and_then(Value::as_bool) == Some(true),
+        claude_chrome: fam == "claude"
+            && plan.get("acpClaudeChrome").and_then(Value::as_bool) == Some(true),
         hermes_profile: None,
     }
 }
@@ -509,6 +511,8 @@ pub(crate) fn build_agent_fork_plan(
             gbot_api_chat: is_gbot_api_chat(source_runtime),
             gbot_computer_use_off: super::gbot_computer_use(source_runtime) == Some(false),
             lean_worker: super::is_lean_worker(source_runtime),
+            claude_chrome: fam == "claude"
+                && crate::acp::claude_chrome::is_claude_chrome_session(source_runtime),
             hermes_profile: None,
         }
     };
@@ -685,6 +689,9 @@ pub(crate) fn build_agent_fork_plan(
         if profile.lean_worker {
             plan.insert("acpLeanWorker".to_string(), json!(true));
         }
+        if profile.claude_chrome {
+            plan.insert("acpClaudeChrome".to_string(), json!(true));
+        }
     }
     if let Some(command) = primary_command {
         plan.insert(
@@ -842,6 +849,7 @@ pub(crate) fn create_agent_fork_session_params(
             "accountColor",
             crate::accounts::hub::launch::RUNTIME_KEY,
             "markedHandovers",
+            crate::acp::claude_chrome::CLAUDE_CHROME_KEY,
         ] {
             if let Some(value) = source_runtime.get(key).filter(|v| !v.is_null()) {
                 runtime.insert(key.to_string(), value.clone());

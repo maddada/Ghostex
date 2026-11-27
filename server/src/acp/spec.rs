@@ -269,6 +269,7 @@ pub struct AcpLaunchProfile {
     pub gbot_api_chat: bool,
     pub gbot_computer_use_off: bool,
     pub lean_worker: bool,
+    pub claude_chrome: bool,
     pub hermes_profile: Option<String>,
 }
 
@@ -428,6 +429,9 @@ fn build_acp_host_launch_command_for_platform(
     }
     if profile.lean_worker {
         parts.push("--lean-worker".to_string());
+    }
+    if family == "claude" && profile.claude_chrome {
+        parts.push("--chrome".to_string());
     }
     if let Some(hermes_profile) = profile
         .hermes_profile
@@ -1333,6 +1337,9 @@ pub fn build_cli_switch_argv_with_options(
         {
             inner_args.push("--append-system-prompt-file".to_string());
             inner_args.push(path);
+        }
+        if profile.claude_chrome && super::claude_chrome::claude_cli_supports_chrome(None) {
+            inner_args.push("--chrome".to_string());
         }
     } else if spec.family == "codex" {
         if let Some(m) = model {

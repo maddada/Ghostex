@@ -17,7 +17,7 @@ USAGE
                               [--agent <agent-id> [--allow-hidden]] [--model <m>] [--effort <e>]
                               [--account <number|email|hub> [--user-named]] [--worktree [--base-branch <branch>]]
                               [--project-id <id> | --path <folder>] [--computer <name>]
-                              [--read-only] [--coordinator <ref>] [--json]
+                              [--read-only] [--chrome] [--coordinator <ref>] [--json]
   ghostex coordinator link <session-ref> [--task <text>] [--coordinator <ref>]
   ghostex coordinator unlink <thread-ref> [--coordinator <ref>] [--json]
   ghostex coordinator rename-self "<title>" [--json]
@@ -213,6 +213,8 @@ THREADS
   leave the mode, that is an approval card for the user, never for you. An
   agent with no read-only mode is refused, and so is another computer whose
   Ghostex is too old to start one (nothing is left running there).
+  --chrome starts a Claude Code thread with `--chrome` so its Claude in Chrome
+  browser tools are connected (refused for non-Claude agents).
   A brief that holds code, backticks, $ or quotes goes in a quoted heredoc,
   --body-file - <<'EOF', never in --task "...": the shell runs a `command` or
   $(command) inside double quotes first, and start-thread waits for it.

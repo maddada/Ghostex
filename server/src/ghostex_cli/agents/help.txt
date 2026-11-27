@@ -7,7 +7,7 @@ USAGE
   ghostex agents types [--json]
   ghostex agents create <agent-id> [--title <name>] [--project-id <id> | --path <folder>]
                        [--task <text> | --body-file <path|->] [--model <m>] [--effort <e>]
-                       [--role <line>] [--lead <session-ref|self>] [--allow-hidden]
+                       [--chrome] [--role <line>] [--lead <session-ref|self>] [--allow-hidden]
                        [--standalone] [--computer <name>]
   ghostex agents list [--all] [--json]  Running agents in this project; --all lists every project
   ghostex agents send <session-ref> <text> [--interrupt | --queue | --with-next]
@@ -62,6 +62,11 @@ CHOOSE AND CREATE
   created by a coordinator, which keeps its --title (only a user's rename
   changes it). Copy globalRef from the result for follow-ups. Created does
   not mean the task has completed.
+
+  --chrome starts a Claude Code session with `--chrome` so its Claude in Chrome
+  browser tools are connected (useful when the work needs the browser and
+  Chrome is not on by default in Claude Code). Refused for non-Claude agents
+  and sandboxed boxes.
 
   --role sets a short standing role line (up to 600 characters) that Ghostex
   hands back to the session after /clear or compaction (SessionStart hook on

@@ -295,6 +295,7 @@ pub(crate) fn normalize_worktree_session_create_request(
     for key in [
         "markedHandovers",
         crate::coordinators::READ_ONLY_THREAD_PARAM,
+        crate::acp::claude_chrome::CLAUDE_CHROME_PARAM,
         crate::agents::codex_lean::COORDINATOR_THREAD_KEY,
         // `start-thread --account <n> --user-named` (accounts/launch.rs `requested_account`).
         "accountUserNamed",

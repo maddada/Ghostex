@@ -25,6 +25,7 @@ pub mod approval;
 pub(crate) mod approval_migration;
 pub(crate) mod channel;
 mod child_lifetime;
+pub(crate) mod claude_chrome;
 mod cli_default;
 mod driver_claude;
 mod driver_codex;

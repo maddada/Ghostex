@@ -201,6 +201,20 @@ pub(crate) fn create_agent_session_params_for_project(
     } else {
         None
     };
+    let claude_chrome = crate::acp::claude_chrome::claude_chrome_requested(params)
+        || crate::acp::claude_chrome::is_claude_chrome_session(Some(&runtime_settings));
+    if claude_chrome {
+        let family =
+            resume_agent_family_id(Some(agent_id.clone()), &agent_config, &launch_settings);
+        crate::acp::claude_chrome::check_claude_chrome_family(
+            family.as_deref(),
+            agentbox_provider.is_some(),
+        )?;
+        runtime_settings.insert(
+            crate::acp::claude_chrome::CLAUDE_CHROME_KEY.to_string(),
+            json!(true),
+        );
+    }
     // `coordinator start-thread` marks its thread, for Lean Codex workers (codex_lean.rs); only
     // that param sets the marker, so a copy of a thread is the user's own session. A lead's
     // session gets its own marker from its link, never from a create (lead_links `link`), so a
@@ -670,14 +684,18 @@ pub(crate) fn create_agent_session_params_for_project(
                             super::with_lean_codex_worker(
                                 family.as_deref(),
                                 Some(&runtime_settings),
-                                &super::with_gbot_computer_use(
+                                &crate::acp::claude_chrome::with_claude_chrome_flag(
                                     family.as_deref(),
                                     Some(&runtime_settings),
-                                    &with_home_secret_folders_denied(
+                                    &super::with_gbot_computer_use(
                                         family.as_deref(),
-                                        launch_cwd.as_deref(),
-                                        is_gbot_chat(Some(&runtime_settings)),
-                                        command,
+                                        Some(&runtime_settings),
+                                        &with_home_secret_folders_denied(
+                                            family.as_deref(),
+                                            launch_cwd.as_deref(),
+                                            is_gbot_chat(Some(&runtime_settings)),
+                                            command,
+                                        ),
                                     ),
                                 ),
                             ),
@@ -931,6 +949,7 @@ pub(crate) fn create_agent_session_params_for_project(
                                 &runtime_settings,
                             )) == Some(false),
                             lean_worker: super::is_lean_worker(Some(&runtime_settings)),
+                            claude_chrome: fam == "claude" && claude_chrome,
                             hermes_profile,
                         };
                         let acp_cmd = crate::acp::spec::build_acp_host_launch_command_with_profile(

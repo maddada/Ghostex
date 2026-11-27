@@ -503,6 +503,11 @@ pub(crate) fn to_agent_resume_input(
             session.get("runtimeSettings").and_then(Value::as_object),
             &command,
         );
+        let command = crate::acp::claude_chrome::with_claude_chrome_flag(
+            agent_id.as_deref(),
+            session.get("runtimeSettings").and_then(Value::as_object),
+            &command,
+        );
         super::with_lean_codex_worker(
             agent_id.as_deref(),
             session.get("runtimeSettings").and_then(Value::as_object),
@@ -672,6 +677,10 @@ pub(crate) fn to_agent_resume_input(
                     gbot_computer_use_off: super::gbot_computer_use(Some(&runtime_settings))
                         == Some(false),
                     lean_worker: super::is_lean_worker(Some(&runtime_settings)),
+                    claude_chrome: fam == "claude"
+                        && crate::acp::claude_chrome::is_claude_chrome_session(Some(
+                            &runtime_settings,
+                        )),
                     hermes_profile,
                 },
                 acp_model,

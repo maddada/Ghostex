@@ -239,6 +239,7 @@ fn parse_args(args: &[String]) -> Result<HostArgs, String> {
             "--gbot-api-chat" => profile.gbot_api_chat = true,
             "--gbot-computer-use-off" => profile.gbot_computer_use_off = true,
             "--lean-worker" => profile.lean_worker = true,
+            "--chrome" => profile.claude_chrome = true,
             "--hermes-profile" => {
                 i += 1;
                 if let Some(raw) = args

@@ -241,6 +241,10 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
     if read_only {
         create[crate::coordinators::READ_ONLY_THREAD_PARAM] = json!(true);
     }
+    let chrome = parsed.flags.truthy("chrome");
+    if chrome {
+        create[crate::acp::claude_chrome::CLAUDE_CHROME_PARAM] = json!(true);
+    }
     let worktree = parsed.flags.truthy("worktree");
     let (session_id, branch, worktree_path, created_project) = if worktree {
         if let Some(base) = flag_text(&parsed.flags, "baseBranch") {
@@ -412,6 +416,9 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
     if read_only {
         result["thread"]["readOnly"] = json!(true);
     }
+    if chrome {
+        result["thread"]["chrome"] = json!(true);
+    }
     if let Some(branch) = branch.filter(|branch| !branch.is_empty()) {
         result["thread"]["branch"] = json!(branch);
     }
@@ -430,7 +437,7 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
         let mut compact = json!({"status": status, "to": reference, "title": title,
             "agentId": agent_id, "req": brief_send_id, "sendRequestId": brief_send_id,
             "thread": {"globalRef": reference, "title": title, "agentId": agent_id}});
-        for key in ["readOnly", "branch", "worktreePath", "computer"] {
+        for key in ["readOnly", "chrome", "branch", "worktreePath", "computer"] {
             if let Some(value) = result["thread"].get(key) {
                 compact[key] = value.clone();
             }

@@ -974,6 +974,9 @@ fn spawn_and_init_claude(
         argv.push("--effort".to_string());
         argv.push(effort.to_string());
     }
+    if super::claude_chrome::should_pass_chrome_flag(&parsed.profile, &acp_envs, &prog) {
+        argv.push("--chrome".to_string());
+    }
     // Last: `--mcp-config` and `--allowedTools` each take several values.
     argv.extend(crate::connectors::native_connector_tool_args("claude"));
 

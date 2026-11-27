@@ -39,6 +39,8 @@ pub(super) struct Arguments {
     pub allow_hidden: bool,
     /// `--standalone`: an orchestrator's create leaves the new session unlinked (not its thread).
     pub standalone: bool,
+    /// `--chrome`: start a Claude Code session with `--chrome` (browser tools connected).
+    pub chrome: bool,
     /// `--account`: the account number, email or id switch-account moves the session to.
     pub account: Option<String>,
     /// `--force`: switch-account interrupts a running turn and sends "." after the switch.
@@ -90,6 +92,7 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
         all: false,
         allow_hidden: false,
         standalone: false,
+        chrome: false,
         account: None,
         force: false,
         user_named: false,
@@ -120,6 +123,7 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
             "--all" => parsed.all = true,
             "--allow-hidden" => parsed.allow_hidden = true,
             "--standalone" => parsed.standalone = true,
+            "--chrome" => parsed.chrome = true,
             "--main-coordinator" => parsed.main_coordinator = true,
             "--as-user" => parsed.as_user = true,
             "--if-none" => {
@@ -294,9 +298,11 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
                 .into(),
         ));
     }
-    if (parsed.model.is_some() || parsed.effort.is_some()) && parsed.command != "create" {
+    if (parsed.model.is_some() || parsed.effort.is_some() || parsed.chrome)
+        && parsed.command != "create"
+    {
         return Err(CliError::Other(
-            "--model and --effort are only available for create.".into(),
+            "--model, --effort and --chrome are only available for create.".into(),
         ));
     }
     match parsed.command.as_str() {

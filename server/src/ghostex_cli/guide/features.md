@@ -4337,6 +4337,7 @@ and asks you to update Antigravity to 1.5.1 or newer (Settings > Updates) and tr
 again, or switch to Terminal-based.
 A Native Codex chat's `/` list offers only `/compact`, `/btw` and `/mention`; the other
 Codex commands need Terminal-based mode.
+Native Claude Code sessions honor Claude Code's own "Enabled by default" Claude in Chrome setting (`claudeInChromeDefaultEnabled: true` in that account's `.claude.json`) by launching and resuming with `--chrome` when your installed `claude` CLI accepts it.
 For a Native session, **Switch to Terminal-based** lives in the chat's
 More actions (`•••`) menu instead of the composer toolbar; choosing it asks
 first and explains that switching is not instant and interrupts any active turn
@@ -4529,7 +4530,8 @@ Use `ghostex agents --help` to create, message, and close other agent sessions.
 `ghostex agents whoami --json` identifies the caller; `agents types` lists
 configured agent IDs; `agents create <agent-id> --task "<task>"` starts one in
 the caller's project (`--project-id` selects another; `--model` and `--effort`
-pick its model and effort as `create-agent` does; `--role "<line>"` registers a
+pick its model and effort as `create-agent` does; `--chrome` starts a Claude Code
+session with `--chrome` so its Claude in Chrome browser tools are connected; `--role "<line>"` registers a
 short standing role line, up to 600 characters, handed back after `/clear` or
 compaction). `agents role set "<line>" [--session <ref>]`, `agents role show
 [--session <ref>]`, and `agents role clear [--session <ref>]` (also `--role` on
@@ -5184,7 +5186,7 @@ file in place. From a terminal or another agent: `ghostex coordinator create --t
 promote <session> [--goal <text>] [--computer <name>]` (make an existing session a coordinator; in versions after 10.49.0 this works on a connected computer's session too, and so does the sidebar's More > Make Coordinator on its rows: that computer keeps the coordinator), `ghostex coordinator status`,
 `ghostex coordinator options` (the agents, models and efforts a coordinator can use),
 `ghostex coordinator start-thread --title <title> --task <brief> [--worktree]
-[--agent <id>] [--model <m>] [--effort <e>] [--account <number|email>] [--read-only]` (`--model` and `--effort` set the thread's model and effort for that session only; from 12.1.0 an OpenCode thread takes them too, `--model provider/model` and `--effort` one of that model's variants, without changing OpenCode's saved default; `--read-only`, from 11.6.0, starts a thread in its agent's read-only mode, with accept-all taken off its command: Codex in its read-only sandbox with approval on request, which refuses writes; Claude in Plan mode, which blocks its file edits but, as Claude Code designs Plan mode, can still run shell commands while it plans (ones Claude's auto-mode check or your own allow rules approve), so a command can still change files; it stays read-only whenever it is resumed, restarted, woken or started in a worktree, an agent without a read-only mode is refused before any session exists, and a thread on another computer whose Ghostex is too old to honour it is ended before its brief instead of running with full rights; `--path <folder>`, here and on `coordinator create` and `ghostex agents create`, adds that folder as a project, creating it if needed, and starts there; `--account`, in versions after 10.45.0, starts a Claude or Codex thread on that saved account instead of the Account for new sessions rule; one that needs signing in is refused), `ghostex coordinator resolve
+[--agent <id>] [--model <m>] [--effort <e>] [--account <number|email>] [--read-only] [--chrome]` (`--model` and `--effort` set the thread's model and effort for that session only; from 12.1.0 an OpenCode thread takes them too, `--model provider/model` and `--effort` one of that model's variants, without changing OpenCode's saved default; `--read-only`, from 11.6.0, starts a thread in its agent's read-only mode, with accept-all taken off its command: Codex in its read-only sandbox with approval on request, which refuses writes; Claude in Plan mode, which blocks its file edits but, as Claude Code designs Plan mode, can still run shell commands while it plans (ones Claude's auto-mode check or your own allow rules approve), so a command can still change files; it stays read-only whenever it is resumed, restarted, woken or started in a worktree, an agent without a read-only mode is refused before any session exists, and a thread on another computer whose Ghostex is too old to honour it is ended before its brief instead of running with full rights; `--chrome` starts a Claude Code thread with `--chrome` for Claude in Chrome browser tools; `--path <folder>`, here and on `coordinator create` and `ghostex agents create`, adds that folder as a project, creating it if needed, and starts there; `--account`, in versions after 10.45.0, starts a Claude or Codex thread on that saved account instead of the Account for new sessions rule; one that needs signing in is refused), `ghostex coordinator resolve
 <thread> [--keep-open]` (mark done and close its session), `ghostex coordinator
 reopen <thread>` (resume a closed thread), `ghostex coordinator unlink <thread>` (take a
 thread out of the coordinator's tree: it stays running as an ordinary session of its

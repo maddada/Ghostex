@@ -101,6 +101,7 @@ command there before ghostex starts, and your turn and the user's messages wait 
   "finish all, then report" or "report after the first and wait for me".
 - Threads that need the same files run one after another; use `--worktree` only when running them in
   parallel really matters.
+- For a Claude Code thread that needs Claude in Chrome browser tools, pass `--chrome`.
 - Work in another folder or repository: start the thread in your own project anyway, with that
   folder's absolute path in the brief, so it shows under you.
 - Another computer (the user names it, or the work needs its files, apps or hardware):
