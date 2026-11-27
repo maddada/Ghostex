@@ -341,7 +341,13 @@ fn spot_rows(spot: SessionMenuSpot) -> SpotRows {
         },
         SessionMenuSpot::PhoneRow => SpotRows {
             tiles: &["pin", "voiceCall"],
-            rows: &["cleanUpWorktree", "keepWorktree", "snooze", "park"],
+            rows: &[
+                "cleanUpWorktree",
+                "keepWorktree",
+                "snooze",
+                "park",
+                "moveToProject",
+            ],
             more: &[
                 "openTerminal",
                 "links",

@@ -180,8 +180,8 @@ pub(crate) const MAIN_HUB_TOOLTIP_WIDTH: f32 = 264.0;
 /// What the Main Hub card says under its title.
 pub(crate) fn main_hub_tooltip_lines() -> [&'static str; 2] {
     [
-        "The home for chats that don't belong to a project: quick questions, terminals and agents started in your home folder.",
-        "Ghostex AI, pinned at the top, is the agent that sees and steers every Ghostex agent on this computer, and talks to Ghostex AI on your other computers.",
+        "The agent that sees and steers every Ghostex agent on this computer, and talks to Ghostex AI on your other computers. Each computer has its own row.",
+        "Autopilot and GBots live here too. Chats, terminals and coordinators started without a project are under No project.",
     ]
 }
 

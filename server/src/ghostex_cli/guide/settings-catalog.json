@@ -768,7 +768,7 @@
     {
       "key": "sidebarLayout",
       "title": "Sidebar layout",
-      "subtitle": "Rail adds a narrow column of icons at the window's left edge for Search, Main Hub, Agents Hub, All Automations, Hermes, Claude and Grok Bot, with everything else under its ⋯ menu, where you pin, unpin and drag icons into your own order, Toggle sidebar at its top and the account usage switch at its foot. It stays when the sidebar is hidden. Classic is the sidebar without the rail, with Toggle sidebar, Search and the bell in its top row.",
+      "subtitle": "Rail adds a narrow column of icons at the window's left edge for Search, Ghostex AI, Agents Hub, All Automations, Hermes, Claude and Grok Bot, with everything else under its ⋯ menu, where you pin, unpin and drag icons into your own order, Toggle sidebar at its top and the account usage switch at its foot. It stays when the sidebar is hidden. Classic is the sidebar without the rail, with Toggle sidebar, Search and the bell in its top row.",
       "tab": "sidebar",
       "tabTitle": "Sidebar & Sessions",
       "section": "sidebar",
@@ -11464,8 +11464,8 @@
     },
     {
       "key": "chiefShowOnAllSpaces",
-      "title": "Show Main Hub on all Spaces",
-      "subtitle": "Show Main Hub and your home folder's sessions at the top of every Space. Off, they stay at the top of the Space you moved them to.",
+      "title": "Show Ghostex AI on all Spaces",
+      "subtitle": "Show Ghostex AI at the top of every Space. Off, it stays at the top of the Space you moved it to.",
       "tab": "agents",
       "tabTitle": "Agents",
       "section": "homeFolder",
@@ -11477,7 +11477,7 @@
     {
       "key": "chiefConfirmNewChat",
       "title": "Ask before New Chat",
-      "subtitle": "Ask before New Chat or Change Agent starts a new chat with Ghostex AI. Your earlier chats stay in Main Hub either way.",
+      "subtitle": "Ask before New Chat or Change Agent starts a new chat with Ghostex AI. Your earlier chats stay under Ghostex AI either way.",
       "tab": "agents",
       "tabTitle": "Agents",
       "section": "homeFolder",
@@ -12689,7 +12689,7 @@
     {
       "key": "gbots",
       "title": "GBots",
-      "subtitle": "Your own team of bots under Ghostex AI in Main Hub, each with its own instructions and memory, running on your Claude Code or Codex.",
+      "subtitle": "Your own team of bots under Ghostex AI, each with its own instructions and memory, running on your Claude Code or Codex.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -12888,7 +12888,7 @@
     {
       "key": "gbotsEnabled",
       "title": "GBots",
-      "subtitle": "Turn GBots on or off: your own team of bots under Ghostex AI in Main Hub, running on your Claude Code or Codex. Off by default.",
+      "subtitle": "Turn GBots on or off: your own team of bots under Ghostex AI, running on your Claude Code or Codex. Off by default.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -15434,7 +15434,7 @@
     {
       "id": "createAgentSession",
       "title": "New Session",
-      "description": "Start a new chat draft in the active project (or Main Hub).",
+      "description": "Start a new chat draft in the active project (or No project).",
       "defaultKey": "cmd+n",
       "retiredDefaultKeys": [
         "cmd+t",

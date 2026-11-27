@@ -373,7 +373,7 @@ impl AgentsTab {
                 p,
                 SHOW_ON_ALL_SPACES,
                 RowSpec::new("Show Ghostex AI on all Spaces").description(
-                    "Show Ghostex AI at the top of every Space. Off, it stays at the top of the Space you moved them to.",
+                    "Show Ghostex AI at the top of every Space. Off, it stays at the top of the Space you moved it to.",
                 ),
                 values.bool(SHOW_ON_ALL_SPACES),
                 cx,

@@ -43,7 +43,7 @@ pub(crate) fn home_folder() -> Section {
             row(
                 "chiefShowOnAllSpaces",
                 "Show Ghostex AI on all Spaces",
-                "Show Ghostex AI at the top of every Space. Off, it stays at the top of the Space you moved them to.",
+                "Show Ghostex AI at the top of every Space. Off, it stays at the top of the Space you moved it to.",
             ),
             row(
                 "chiefConfirmNewChat",

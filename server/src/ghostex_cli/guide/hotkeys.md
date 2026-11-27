@@ -31,7 +31,7 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | Dictate | `ctrl+alt+space` |  | none |  | Dictate into the chat box of the chat session you are in. Tap to start and tap again to stop, or hold it and it stops when you let go (Settings > Voice > Hotkey mode). | `toggleDictation` |
 | Read Last Reply Aloud | unassigned |  | none |  | Read the agent's newest reply in the chat you are looking at aloud, from the start. | `readAloudLastReply` |
 | Stop Reading | unassigned |  | unassigned |  | Stop Read aloud, whichever reply it is reading. | `readAloudStop` |
-| New Session | `cmd+n` |  | `cmd+n` | `cmd+shift+d` | Start a new chat draft in the active project (or Main Hub). | `createAgentSession` |
+| New Session | `cmd+n` |  | `cmd+n` | `cmd+shift+d` | Start a new chat draft in the active project (or No project). | `createAgentSession` |
 | New Terminal | `cmd+shift+t` |  | `cmd+shift+t` |  | Create a terminal session. | `createSession` |
 | Open Quick Access: Commands | `cmd+shift+p` |  | `cmd+shift+p` |  | Open Ghostex Quick Access on Commands. | `openCommandPalette` |
 | Open Quick Access: Recent Sessions | `cmd+p` |  | `cmd+p` | `cmd+alt+shift+p` | Open Ghostex Quick Access on Recent Sessions. | `openSessionSearchPalette` |
