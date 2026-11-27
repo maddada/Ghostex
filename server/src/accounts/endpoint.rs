@@ -71,6 +71,9 @@ pub(crate) fn dispatch(
     if operation == "readUsageNow" {
         return super::usage_screen::read_now(state, params);
     }
+    if operation == "usageWarningSimulate" {
+        return super::usage_warning::simulate(state, params);
+    }
     if operation == "resetWatch" {
         return super::reset_watch::endpoint(state, params);
     }

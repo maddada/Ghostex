@@ -153,11 +153,24 @@ fn log(state: &AppState, level: LogLevel, event: &str, error: Option<String>, de
 
 /// The coordinator's card, when it has one showing (`resolve_session_chat_terminal_notice`).
 pub(crate) fn card(project_id: &str, session_id: &str) -> Option<SessionChatTerminalNotice> {
-    let card = cards()
-        .lock()
-        .ok()?
-        .get(&(project_id.to_string(), session_id.to_string()))?
-        .clone();
+    let key = (project_id.to_string(), session_id.to_string());
+    match simulated().lock().ok()?.get(&key).cloned() {
+        Some(Simulated::Warning(card)) => return Some(warning_notice(card)),
+        Some(Simulated::NoRoom(_)) => {
+            return Some(SessionChatTerminalNotice::new(
+                crate::session_chat_notice::SESSION_CHAT_NOTICE_USAGE_LIMIT,
+                SessionChatTerminalNoticeSeverity::Warning,
+                SessionChatTerminalNoticeSource::Watchdog,
+                "You've hit your limit",
+            ))
+        }
+        None => {}
+    }
+    let card = cards().lock().ok()?.get(&key)?.clone();
+    Some(warning_notice(card))
+}
+
+fn warning_notice(card: Card) -> SessionChatTerminalNotice {
     let mut notice = SessionChatTerminalNotice::new(
         NOTICE_KIND,
         SessionChatTerminalNoticeSeverity::Warning,
@@ -173,7 +186,199 @@ pub(crate) fn card(project_id: &str, session_id: &str) -> Option<SessionChatTerm
     }])
     .with_input_blocking(false);
     notice.usage_warning = Some(card.facts);
-    Some(notice)
+    notice
+}
+
+/// A card a test server shows on any session without a single real account
+/// (`/api/agentAccounts` `usageWarningSimulate`), in memory only, until `clear` or a restart.
+///
+/// CDXC:AgentProviders 2026-11-27 WHY: both account cards need account readings, and a test
+/// server has no logins (it runs with a HOME of its own), so neither could be checked or
+/// screenshotted outside the user's own app. Like `resetWatch`'s `simulate`, this builds made-up
+/// accounts (#1 at its limit or close to it, #2 with room but manual only, #4 and #5 signed out)
+/// and runs the real wording on them: `warning_card` for the early warning and
+/// `limit_wait::describe_in_pool` for the no-room card. It never reads or changes a saved
+/// account, a session's account or any login.
+#[derive(Clone)]
+enum Simulated {
+    Warning(Card),
+    NoRoom(Value),
+}
+
+fn simulated() -> &'static Mutex<HashMap<(String, String), Simulated>> {
+    static SIMULATED: OnceLock<Mutex<HashMap<(String, String), Simulated>>> = OnceLock::new();
+    SIMULATED.get_or_init(Default::default)
+}
+
+/// The simulated no-room card's `accountWait` (watchdog_store.rs, after `limit_wait::notice_wait`).
+pub(crate) fn simulated_wait(project_id: &str, session_id: &str) -> Option<Value> {
+    match simulated()
+        .lock()
+        .ok()?
+        .get(&(project_id.to_string(), session_id.to_string()))?
+    {
+        Simulated::NoRoom(wait) => Some(wait.clone()),
+        Simulated::Warning(_) => None,
+    }
+}
+
+/// Made-up Claude accounts: #1 (the session's) at `used`% of its week, #2 with room but manual
+/// only, #4 and #5 signed out on this computer.
+fn made_up_accounts(used: f64, now: DateTime<Utc>) -> (Registry, Snapshot, String) {
+    let window = |id: &str, label: &str, used: f64, hours: i64| UsageWindow {
+        id: id.to_string(),
+        label: label.to_string(),
+        used_percent: used,
+        limit_window_seconds: None,
+        resets_at: Some((now + chrono::Duration::hours(hours)).to_rfc3339()),
+        model: None,
+    };
+    let made_up = [
+        (
+            "1",
+            "ready",
+            true,
+            vec![window("7d", "7d", used, 52), window("5h", "5h", 35.0, 3)],
+        ),
+        (
+            "2",
+            "ready",
+            false,
+            vec![window("7d", "7d", 22.0, 90), window("5h", "5h", 4.0, 4)],
+        ),
+        ("4", "loginRequired", true, Vec::new()),
+        ("5", "loginRequired", true, Vec::new()),
+    ];
+    let mut registry = Registry::default();
+    let mut snapshot = Snapshot {
+        fetched_at: Some(std::time::Instant::now()),
+        ..Snapshot::default()
+    };
+    for (number, status, eligible, usage) in made_up {
+        let found = DiscoveredAccount {
+            provider: Provider::Claude,
+            selector: number.to_string(),
+            identity: format!("simulated-account-{number}"),
+            name: format!("#{number}"),
+            email: String::new(),
+            status: status.to_string(),
+            shared_history: false,
+            usage,
+            reset_credits: None,
+            reset_credit_details: None,
+            reset_credits_error: None,
+            usage_updated_at: Some(now.to_rfc3339()),
+            usage_error: None,
+            usage_stale: false,
+            plan: None,
+        };
+        let saved = serde_json::from_value::<SavedAccount>(json!({
+            "id": endpoint::account_id(&found),
+            "provider": "claude",
+            "selector": number,
+            "identity": found.identity,
+            "name": format!("#{number}"),
+            "color": "",
+            "eligible": eligible,
+            "sharedHistory": false,
+        }));
+        if let Ok(saved) = saved {
+            registry.accounts.push(saved);
+        }
+        snapshot.accounts.push(found);
+    }
+    let current = snapshot
+        .accounts
+        .first()
+        .map(endpoint::account_id)
+        .unwrap_or_default();
+    (registry, snapshot, current)
+}
+
+/// `/api/agentAccounts` `usageWarningSimulate`: `projectId`, `sessionId`, `card` (`warning`,
+/// `noRoom` or `clear`) and, for `warning`, an optional `usedPercent` (87 by default).
+pub(crate) fn simulate(
+    state: &AppState,
+    params: &serde_json::Map<String, Value>,
+) -> Result<Value, DomainStateError> {
+    let text = |key: &str| {
+        params
+            .get(key)
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+            .ok_or_else(|| DomainStateError::bad_request(format!("{key} is required.")))
+    };
+    let key = (text("projectId")?, text("sessionId")?);
+    let kind = text("card")?;
+    let now = Utc::now();
+    let used = params
+        .get("usedPercent")
+        .and_then(Value::as_f64)
+        .unwrap_or(87.0)
+        .clamp(70.0, 99.0);
+    let (registry, snapshot, current) = made_up_accounts(used, now);
+    let next = match kind.as_str() {
+        "warning" => {
+            let reading = snapshot
+                .accounts
+                .first()
+                .ok_or_else(|| DomainStateError::bad_request("No made-up account was built."))?;
+            let low = low(reading, now)
+                .ok_or_else(|| DomainStateError::bad_request("usedPercent is under 70."))?;
+            Some(Simulated::Warning(warning_card(
+                &registry,
+                &snapshot,
+                Provider::Claude,
+                &current,
+                (true, 2),
+                &low,
+                None,
+                now,
+            )))
+        }
+        "noRoom" => {
+            let (registry, snapshot, current) = made_up_accounts(100.0, now);
+            let mut wait = super::limit_wait::describe_in_pool(
+                &registry,
+                &snapshot,
+                Provider::Claude,
+                Some(&current),
+                "",
+                None,
+                None,
+                None,
+                now,
+            );
+            wait["since"] = json!(now.to_rfc3339());
+            Some(Simulated::NoRoom(wait))
+        }
+        "clear" => None,
+        _ => {
+            return Err(DomainStateError::bad_request(
+                "card is warning, noRoom or clear.",
+            ))
+        }
+    };
+    let shown = match &next {
+        Some(Simulated::Warning(card)) => {
+            json!({ "title": card.title, "detail": card.detail, "facts": card.facts })
+        }
+        Some(Simulated::NoRoom(wait)) => json!({ "accountWait": wait }),
+        None => json!({ "cleared": true }),
+    };
+    if let Ok(mut simulated) = simulated().lock() {
+        match next {
+            Some(card) => {
+                simulated.insert(key.clone(), card);
+            }
+            None => {
+                simulated.remove(&key);
+            }
+        }
+    }
+    crate::server::republish_session_chat(state, &key.0, &key.1);
+    Ok(shown)
 }
 
 /// The card's Not now: hidden until the account passes its next threshold.
@@ -189,6 +394,16 @@ pub(crate) async fn answer_dismiss(
             .to_string()
     };
     let (project_id, session_id) = (text("projectId"), text("sessionId"));
+    let simulated_card = simulated().lock().ok().and_then(|mut simulated| {
+        let key = (project_id.clone(), session_id.clone());
+        matches!(simulated.get(&key), Some(Simulated::Warning(_)))
+            .then(|| simulated.remove(&key))
+            .flatten()
+    });
+    if simulated_card.is_some() {
+        crate::server::republish_session_chat(state, &project_id, &session_id);
+        return Ok(());
+    }
     let Some(card) = cards()
         .lock()
         .ok()
@@ -471,6 +686,64 @@ fn out_of_usage(session: &Value) -> Option<&Value> {
         .then_some(wait)
 }
 
+/// The warning card for `id`: its title, its sentence and the facts the dropdown is built from.
+#[allow(clippy::too_many_arguments)]
+fn warning_card(
+    registry: &Registry,
+    snapshot: &Snapshot,
+    provider: Provider,
+    id: &str,
+    (on_it, threads_on_it): (bool, usize),
+    low: &Low,
+    pool: Option<&[String]>,
+    now: DateTime<Utc>,
+) -> Card {
+    let episode = format!(
+        "{id}|{}|{}",
+        low.window_id,
+        low.resets_at.map(|at| at.to_rfc3339()).unwrap_or_default()
+    );
+    let account = number(registry, id);
+    let blocked = blocked_facts(registry, snapshot, provider, id, pool, now);
+    let title = format!(
+        "{} {account} is at {}% of its {}",
+        provider_label(provider),
+        low.percent.floor(),
+        low.window_words
+    );
+    let who = match (on_it, threads_on_it) {
+        (true, 0) => "This coordinator runs".to_string(),
+        (true, 1) => "This coordinator and 1 thread run".to_string(),
+        (true, n) => format!("This coordinator and {n} threads run"),
+        (false, 1) => "1 of its threads runs".to_string(),
+        (false, n) => format!("{n} of its threads run"),
+    };
+    let until = low
+        .resets_at
+        .map(|at| format!(" until {}", local_clock(at)))
+        .unwrap_or_default();
+    let detail = format!(
+        "{who} on {account}. {}, so when {account} runs out they stop{until}.",
+        blocked_sentence(&blocked)
+    );
+    Card {
+        episode,
+        threshold: low.threshold,
+        title,
+        detail,
+        facts: json!({
+            "provider": provider.id(),
+            "accountId": id,
+            "account": account,
+            "usedPercent": low.percent,
+            "threshold": low.threshold,
+            "resetsAt": low.resets_at.map(|at| at.to_rfc3339()),
+            "coordinator": on_it,
+            "blocked": blocked,
+        }),
+    }
+}
+
 /// What a coordinator's Needs you line should say now, if anything: (about, title, detail).
 type Wanted = Option<(String, String, String)>;
 
@@ -599,34 +872,23 @@ fn pass(state: &AppState) -> Result<(), DomainStateError> {
             })
             .max_by(|a, b| a.4.percent.total_cmp(&b.4.percent));
         if let Some((id, provider, on_it, threads_on_it, low)) = warning {
-            let episode_key = format!(
-                "{id}|{}|{}",
-                low.window_id,
-                low.resets_at.map(|at| at.to_rfc3339()).unwrap_or_default()
+            let card = warning_card(
+                &registry,
+                &snapshot,
+                provider,
+                &id,
+                (on_it, threads_on_it),
+                &low,
+                pool.as_deref(),
+                now,
             );
-            let account = number(&registry, &id);
-            let blocked = blocked_facts(&registry, &snapshot, provider, &id, pool.as_deref(), now);
+            let (episode_key, title, detail) = (
+                card.episode.clone(),
+                card.title.clone(),
+                card.detail.clone(),
+            );
             let label = provider_label(provider);
-            let title = format!(
-                "{label} {account} is at {}% of its {}",
-                low.percent.floor(),
-                low.window_words
-            );
-            let who = match (on_it, threads_on_it) {
-                (true, 0) => "This coordinator runs".to_string(),
-                (true, 1) => "This coordinator and 1 thread run".to_string(),
-                (true, n) => format!("This coordinator and {n} threads run"),
-                (false, 1) => "1 of its threads runs".to_string(),
-                (false, n) => format!("{n} of its threads run"),
-            };
-            let until = low
-                .resets_at
-                .map(|at| format!(" until {}", local_clock(at)))
-                .unwrap_or_default();
-            let detail = format!(
-                "{who} on {account}. {}, so when {account} runs out they stop{until}.",
-                blocked_sentence(&blocked)
-            );
+            let account = number(&registry, &id);
             let episode = saved.episodes.entry(episode_key.clone()).or_default();
             episode.resets_at = low.resets_at.map(|at| at.to_rfc3339());
             if low.threshold > episode.announced {
@@ -639,25 +901,7 @@ fn pass(state: &AppState) -> Result<(), DomainStateError> {
                 ));
             }
             if low.threshold > episode.dismissed {
-                next_cards.insert(
-                    key.clone(),
-                    Card {
-                        episode: episode_key.clone(),
-                        threshold: low.threshold,
-                        title: title.clone(),
-                        detail: detail.clone(),
-                        facts: json!({
-                            "provider": provider.id(),
-                            "accountId": id,
-                            "account": account,
-                            "usedPercent": low.percent,
-                            "threshold": low.threshold,
-                            "resetsAt": low.resets_at.map(|at| at.to_rfc3339()),
-                            "coordinator": on_it,
-                            "blocked": blocked,
-                        }),
-                    },
-                );
+                next_cards.insert(key.clone(), card);
             }
             if wanted.is_none() {
                 wanted = Some((
