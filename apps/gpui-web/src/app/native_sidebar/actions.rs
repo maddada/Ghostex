@@ -11,6 +11,11 @@ impl GhostexGpuiApp {
         command: Value,
         cx: &mut gpui::Context<Self>,
     ) {
+        // Move to project on a chat in No project, as on the desktop (move_to_project.rs).
+        if command["type"] == "command" && command["message"]["type"] == "moveSessionToProject" {
+            self.move_native_sidebar_session_to_project(&command["message"], cx);
+            return;
+        }
         self.web_run_sidebar_command(command, cx);
     }
 }
