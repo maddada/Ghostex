@@ -60,7 +60,7 @@ pub(super) fn wmx_session_owning_agent_in(
 
 /// The session name a wmx pane host was started with. Any other wmx (an `attach` client, a
 /// `start` that has not handed off yet) yields nothing.
-pub(super) fn wmx_host_session_name(command_line: &str) -> Option<String> {
+pub(crate) fn wmx_host_session_name(command_line: &str) -> Option<String> {
     let line = command_line.trim_start();
     let arguments = match line.strip_prefix('"') {
         Some(quoted) => &quoted[quoted.find('"')? + 1..],
@@ -171,7 +171,7 @@ impl Process {
         (!handle.is_null()).then_some(Self(handle))
     }
 
-    fn running(&self) -> bool {
+    pub(crate) fn running(&self) -> bool {
         const STILL_ACTIVE: u32 = 259;
         let mut code = 0u32;
         let ok =

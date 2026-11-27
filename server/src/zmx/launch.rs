@@ -50,10 +50,24 @@ const ZMX_START_COMMAND_TIMEOUT_MS: u64 = 25_000;
 
 #[cfg(not(target_os = "macos"))]
 pub(crate) fn run_zmx_start_command(
-    _session_name: &str,
+    session_name: &str,
     _zmx_executable_path: &str,
     script: String,
 ) -> ZmxEndpointResult<ZmxStartOutcome> {
+    let gate = zmx_start_gate(session_name);
+    let (_start_guard, _waited) = match gate.try_lock() {
+        Ok(guard) => (guard, false),
+        Err(_) => (
+            gate.lock().unwrap_or_else(|poisoned| poisoned.into_inner()),
+            true,
+        ),
+    };
+    if matches!(
+        super::session_daemon_alive_fallback(session_name),
+        Ok(Some(_))
+    ) {
+        return Ok(zmx_start_observed_success());
+    }
     /*
     CDXC:Zmx 2026-09-01:
     Linux's start is a plain detached `zmx run`, so a zero exit means the
@@ -94,7 +108,7 @@ pub(crate) fn run_zmx_start_command(
     zmx_executable_path: &str,
     script: String,
 ) -> ZmxEndpointResult<ZmxStartOutcome> {
-    let gate = macos_zmx_start_gate(session_name);
+    let gate = zmx_start_gate(session_name);
     let (_start_guard, waited) = match gate.try_lock() {
         Ok(guard) => (guard, false),
         Err(_) => (
@@ -102,7 +116,12 @@ pub(crate) fn run_zmx_start_command(
             true,
         ),
     };
-    if waited && macos_zmx_session_exists(session_name, zmx_executable_path) {
+    if (waited && macos_zmx_session_exists(session_name, zmx_executable_path))
+        || matches!(
+            super::session_daemon_alive_fallback(session_name),
+            Ok(Some(_))
+        )
+    {
         return Ok(zmx_start_observed_success());
     }
     let job = MacosZmxLaunchdJob::new(session_name)?;
@@ -197,8 +216,7 @@ pub(crate) fn run_zmx_start_command(
 }
 
 /// CDXC:Zmx 2026-09-21 WHY: One session's launchd job shares a single script, plist, and label, and the script deletes itself on its first line. Two overlapping starts for the same session (a sidebar attach racing a chat wake) let one attempt's `rm` or cleanup remove the script the other's kickstart was about to exec, so launchd logged `/bin/zsh: can't open input file`, the session never registered, and the attach waited out the 5 s deadline and surfaced as HTTP 503 "Session attach unavailable". Starts for one session therefore run one at a time; a caller that had to wait first checks whether the winner already brought the session up.
-#[cfg(target_os = "macos")]
-fn macos_zmx_start_gate(session_name: &str) -> Arc<std::sync::Mutex<()>> {
+fn zmx_start_gate(session_name: &str) -> Arc<std::sync::Mutex<()>> {
     static GATES: std::sync::LazyLock<
         std::sync::Mutex<std::collections::HashMap<String, Arc<std::sync::Mutex<()>>>>,
     > = std::sync::LazyLock::new(Default::default);
@@ -231,9 +249,8 @@ fn macos_zmx_session_exists(session_name: &str, zmx_executable_path: &str) -> bo
     .unwrap_or(false)
 }
 
-/// A successful start whose session this call SAW in `zmx list`, so the caller
-/// may reuse that observation instead of probing again.
-#[cfg(target_os = "macos")]
+/// A successful start whose session this call SAW in `zmx list` or in the process list/lock,
+/// so the caller may reuse that observation instead of probing again.
 fn zmx_start_observed_success() -> ZmxStartOutcome {
     ZmxStartOutcome {
         observed_alive: true,

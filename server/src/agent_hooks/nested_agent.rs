@@ -196,7 +196,7 @@ impl ProcessTable {
     }
 
     /// Every process whose executable is `<stem>.exe`, ignoring case.
-    pub(super) fn pids_named<'a>(&'a self, stem: &'a str) -> impl Iterator<Item = u32> + 'a {
+    pub(crate) fn pids_named<'a>(&'a self, stem: &'a str) -> impl Iterator<Item = u32> + 'a {
         self.rows.iter().filter_map(move |(pid, (_, exe))| {
             let exe = exe.to_ascii_lowercase();
             (exe.strip_suffix(".exe").unwrap_or(&exe) == stem).then_some(*pid)

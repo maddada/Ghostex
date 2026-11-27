@@ -35,6 +35,7 @@ mod driver_pi;
 mod elicitation;
 pub(crate) mod hermes;
 pub mod host;
+pub(crate) mod host_lock;
 pub(crate) mod host_mode_switching;
 pub(crate) mod ignored_flags;
 mod omp_elicitation;
@@ -64,16 +65,94 @@ pub use child_lifetime::run_watcher_command;
 /// per-agent dismissals of the chat strip's "Switch to Native" offer (`Q4770`).
 pub const NATIVE_SWITCH_OFFER_DISMISSED_KEY: &str = "nativeSwitchOfferDismissedAgents";
 
-/// Whether a live `ghostex acp-host` child process is running inside `zmx_name`.
-/// Excludes `tree.root` (the `zmx` daemon itself) because its argv can retain the original
-/// startup command containing `"acp-host"` even after the host exited back to the shell.
-/// Unreadable process trees count as running so transient read errors never trigger a restart.
+/// Whether `command` invokes `ghostex acp-host` (or `gxserver acp-host`).
+pub(crate) fn is_acp_host_command(command: &str) -> bool {
+    let mut parts = command.split_whitespace();
+    if let Some(exe) = parts.next() {
+        let stem = exe.rsplit(['/', '\\']).next().unwrap_or(exe);
+        if matches!(
+            stem,
+            "ghostex" | "ghostex.exe" | "gxserver" | "gxserver.exe"
+        ) && parts.next() == Some("acp-host")
+        {
+            return true;
+        }
+    }
+    command.split_whitespace().any(|token| token == "acp-host")
+        && (command.contains("ghostex") || command.contains("gxserver"))
+}
+
+/// Look up a live `acp-host` for `(project_id, session_id)` via its per-session kernel lock,
+/// the session's `zmx`/`wmx` process tree, and (on Unix) the system process list.
+/// Returns `Ok(Some(pid))` (`0` when a lock is held without a readable PID) if a host is alive,
+/// `Ok(None)` when none is found, and `Err(())` when the process table could not be read.
+pub(crate) fn find_running_host_pid(
+    paths: &GxserverPaths,
+    server_id: &str,
+    project_id: &str,
+    session_id: &str,
+    zmx_name: &str,
+) -> Result<Option<u32>, ()> {
+    if let Some(pid) = host_lock::is_host_lock_held(paths, project_id, session_id) {
+        return Ok(Some(pid));
+    }
+    match crate::zmx::read_zmx_session_tree(zmx_name) {
+        Ok(Some(tree)) => {
+            if let Some(process) = tree
+                .processes
+                .iter()
+                .find(|process| process.pid != tree.root && is_acp_host_command(&process.command))
+            {
+                return Ok(Some(u32::try_from(process.pid).unwrap_or(0)));
+            }
+        }
+        Ok(None) => {}
+        Err(()) => return Err(()),
+    }
+    let session_ref = format!("{server_id}:{project_id}:{session_id}");
+    #[cfg(target_os = "macos")]
+    {
+        Ok(crate::zmx::process_table_macos::acp_host_pid_for_session(
+            &session_ref,
+            zmx_name,
+        ))
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        crate::zmx::linux_acp_host_pid(&session_ref, zmx_name)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = session_ref;
+        Ok(None)
+    }
+}
+
+/// Whether a live `ghostex acp-host` is running for `zmx_name` (via the session's lock file,
+/// `zmx`/`wmx` tree, or process list). Unreadable process tables count as running so transient
+/// read errors never trigger a restart.
 pub(crate) fn host_process_running(zmx_name: &str) -> bool {
+    let mut parts = zmx_name.split('-');
+    if let (Some(server_id), Some(project_id), Some(session_id), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    {
+        if crate::ids::is_gxserver_server_id(server_id)
+            && crate::ids::is_gxserver_project_id(project_id)
+            && crate::ids::is_gxserver_session_id(session_id)
+        {
+            let paths = crate::paths::get_gxserver_paths(None);
+            return match find_running_host_pid(&paths, server_id, project_id, session_id, zmx_name)
+            {
+                Ok(Some(_)) | Err(()) => true,
+                Ok(None) => false,
+            };
+        }
+    }
     match crate::zmx::read_zmx_session_tree(zmx_name) {
         Ok(Some(tree)) => tree
             .processes
             .iter()
-            .any(|process| process.pid != tree.root && process.command.contains("acp-host")),
+            .any(|process| process.pid != tree.root && is_acp_host_command(&process.command)),
         Ok(None) => false,
         Err(()) => true,
     }

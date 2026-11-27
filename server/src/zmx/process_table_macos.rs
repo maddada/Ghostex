@@ -76,6 +76,7 @@ pub(crate) fn process_group_and_foreground(pid: i64) -> Option<(i64, i64)> {
 /// The pid of the `zmx run <name>` daemon of `session_name`. Only processes the kernel names `zmx`
 /// have their argv read, so a machine full of sessions costs one pass of short records.
 pub(crate) fn zmx_daemon_pid(session_name: &str) -> Option<i64> {
+    const MACOS_SZOMB: u32 = 5;
     let mut arguments = ProcArgs::new();
     all_pids().into_iter().find_map(|pid| {
         let short = short_info(pid)?;
@@ -83,8 +84,41 @@ pub(crate) fn zmx_daemon_pid(session_name: &str) -> Option<i64> {
             return None;
         }
         let command = arguments.read(pid)?;
-        (super::process_identity::zmx_daemon_session_name(&command)? == session_name)
-            .then_some(i64::from(pid))
+        if super::process_identity::zmx_daemon_session_name(&command)? != session_name {
+            return None;
+        }
+        if bsd_info(pid).is_some_and(|info| info.pbi_status == MACOS_SZOMB) {
+            return None;
+        }
+        Some(i64::from(pid))
+    })
+}
+
+/// The pid of any live `ghostex acp-host` process matching `session_ref` or `zmx_name` in the
+/// kernel process table.
+pub(crate) fn acp_host_pid_for_session(session_ref: &str, zmx_name: &str) -> Option<u32> {
+    const MACOS_SZOMB: u32 = 5;
+    let mut arguments = ProcArgs::new();
+    all_pids().into_iter().find_map(|pid| {
+        let short = short_info(pid)?;
+        let comm = c_name(&short.pbsi_comm);
+        if !(comm.starts_with("ghostex") || comm.starts_with("gxserver")) {
+            return None;
+        }
+        let command = arguments.read(pid)?;
+        if !crate::acp::is_acp_host_command(&command) {
+            return None;
+        }
+        if bsd_info(pid).is_some_and(|info| info.pbi_status == MACOS_SZOMB) {
+            return None;
+        }
+        let matches_ref = process_environment_value(i64::from(pid), "GHOSTEX_GLOBAL_SESSION_REF")
+            .is_some_and(|val| val.trim() == session_ref);
+        let matches_zmx = process_environment_value(i64::from(pid), "GHOSTEX_SESSION_ID")
+            .is_some_and(|val| val.trim() == zmx_name);
+        (matches_ref || matches_zmx)
+            .then(|| u32::try_from(pid).ok())
+            .flatten()
     })
 }
 

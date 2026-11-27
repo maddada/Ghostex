@@ -148,6 +148,32 @@ pub(crate) fn zmx_session_daemon_socket_present(session_name: &str) -> Option<bo
     )
 }
 
+#[cfg(unix)]
+pub(crate) fn zmx_socket_accepts_connection(session_name: &str) -> bool {
+    match std::os::unix::net::UnixStream::connect(zmx_session_socket_path(session_name)) {
+        Ok(_) => true,
+        Err(error) => !matches!(
+            error.kind(),
+            std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused
+        ),
+    }
+}
+
+#[cfg(windows)]
+pub(crate) fn wmx_lock_held(session_name: &str) -> bool {
+    use sha2::{Digest, Sha256};
+    let key = hex::encode(Sha256::digest(session_name.as_bytes()));
+    let path = std::path::Path::new(&super::session_directory()).join(format!("{key}.lock"));
+    let Ok(file) = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&path)
+    else {
+        return false;
+    };
+    matches!(file.try_lock(), Err(std::fs::TryLockError::WouldBlock))
+}
+
 #[cfg(windows)]
 pub(crate) fn zmx_session_daemon_socket_present(session_name: &str) -> Option<bool> {
     let zmx = require_zmx().ok()?;

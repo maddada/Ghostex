@@ -73,9 +73,144 @@ fn heal_candidate(session: &Value) -> Option<(SessionKey, String)> {
     Some(((project_id, session_id), zmx_name))
 }
 
+struct LiveHostEvidence {
+    reason: &'static str,
+    source: &'static str,
+    pid: Option<i64>,
+}
+
+/// Checks whether a live `acp-host` is still running for `(key, zmx_name)` via its channel,
+/// kernel lock file, or OS process list.
+fn live_acp_host_evidence(
+    state: &AppState,
+    key: &SessionKey,
+    zmx_name: &str,
+) -> Option<LiveHostEvidence> {
+    if crate::acp::channel::live(&key.0, &key.1, "send").is_some() {
+        return Some(LiveHostEvidence {
+            reason: "acpChannel",
+            source: "channel",
+            pid: None,
+        });
+    }
+    if let Some(pid) = crate::acp::host_lock::is_host_lock_held(&state.paths, &key.0, &key.1) {
+        return Some(LiveHostEvidence {
+            reason: "acpHostLock",
+            source: "lock",
+            pid: (pid > 0).then_some(i64::from(pid)),
+        });
+    }
+    match crate::acp::find_running_host_pid(
+        &state.paths,
+        state.metadata.server_id.as_str(),
+        &key.0,
+        &key.1,
+        zmx_name,
+    ) {
+        Ok(Some(pid)) => Some(LiveHostEvidence {
+            reason: "acpHostProcess",
+            source: "processList",
+            pid: (pid > 0).then_some(i64::from(pid)),
+        }),
+        Ok(None) => None,
+        Err(()) => Some(LiveHostEvidence {
+            reason: "processTableUnreadable",
+            source: "processList",
+            pid: None,
+        }),
+    }
+}
+
+/// Checks whether any host for `(key, zmx_name)` (`zmx`/`wmx` daemon or `acp-host`) is still alive
+/// in the process list, socket, or lock file even when `zmx list --short` dropped the session.
+fn live_session_host_evidence(
+    state: &AppState,
+    session: &Value,
+    key: &SessionKey,
+    zmx_name: &str,
+) -> Option<LiveHostEvidence> {
+    match crate::zmx::session_daemon_process_id(zmx_name) {
+        Ok(Some(pid)) => {
+            return Some(LiveHostEvidence {
+                reason: "daemonProcess",
+                source: "processList",
+                pid: Some(pid),
+            });
+        }
+        Ok(None) => {}
+        Err(()) => {
+            return Some(LiveHostEvidence {
+                reason: "processTableUnreadable",
+                source: "processList",
+                pid: None,
+            });
+        }
+    }
+    #[cfg(unix)]
+    if crate::zmx::zmx_session_daemon_socket_present(zmx_name) == Some(true)
+        && crate::zmx::zmx_socket_accepts_connection(zmx_name)
+    {
+        return Some(LiveHostEvidence {
+            reason: "zmxSocket",
+            source: "socket",
+            pid: None,
+        });
+    }
+    #[cfg(windows)]
+    {
+        if crate::zmx::wmx_lock_held(zmx_name) {
+            return Some(LiveHostEvidence {
+                reason: "wmxLock",
+                source: "lock",
+                pid: None,
+            });
+        }
+        if crate::zmx::zmx_session_daemon_socket_present(zmx_name) == Some(true) {
+            return Some(LiveHostEvidence {
+                reason: "wmxEndpoint",
+                source: "endpoint",
+                pid: None,
+            });
+        }
+    }
+    if crate::acp::session_is_acp(session) {
+        return live_acp_host_evidence(state, key, zmx_name);
+    }
+    None
+}
+
+fn log_skipped_live_host(
+    state: &AppState,
+    key: &SessionKey,
+    zmx_name: &str,
+    stage: &str,
+    in_zmx_list: bool,
+    evidence: &LiveHostEvidence,
+) {
+    log(
+        state,
+        "sessionSelfHealSkippedLiveHost",
+        LogLevel::Warn,
+        key,
+        json!({
+            "providerSessionId": zmx_name,
+            "stage": stage,
+            "inZmxList": in_zmx_list,
+            "reason": evidence.reason,
+            "source": evidence.source,
+            "hostPid": evidence.pid,
+        }),
+    );
+}
+
 /// Whether a running Native (`acp-host`) session's host process exited inside a still-live zmx
 /// daemon (not during an intentional account switch or Native<->Terminal mode switch).
-fn acp_host_exited_in_live_daemon(session: &Value, key: &SessionKey, zmx_name: &str) -> bool {
+fn acp_host_exited_in_live_daemon(
+    state: &AppState,
+    session: &Value,
+    key: &SessionKey,
+    zmx_name: &str,
+) -> bool {
     if !crate::acp::session_is_acp(session) {
         return false;
     }
@@ -90,10 +225,7 @@ fn acp_host_exited_in_live_daemon(session: &Value, key: &SessionKey, zmx_name: &
     if crate::acp::pending_switch::is_in_flight(&key.0, &key.1) {
         return false;
     }
-    if crate::acp::channel::live(&key.0, &key.1, "send").is_some() {
-        return false;
-    }
-    !crate::acp::host_process_running(zmx_name)
+    live_acp_host_evidence(state, key, zmx_name).is_none()
 }
 
 /// Immediately clears a stale `"working"` activity claim when a Native host died mid-turn so the
@@ -204,7 +336,7 @@ fn tick(state: &AppState) -> Vec<HealDue> {
                         key,
                     };
                 }
-                if acp_host_exited_in_live_daemon(session, &key, &zmx_name) {
+                if acp_host_exited_in_live_daemon(state, session, &key, &zmx_name) {
                     clear_dead_acp_working_activity(state, session, &key);
                     return Sighting {
                         daemon_alive: false,
@@ -421,10 +553,19 @@ fn still_dead(state: &AppState, key: &SessionKey) -> Option<(Value, bool)> {
     // The authoritative list, not the cached one: this decides a restart.
     let live = crate::zmx::read_zmx_existing_session_names().ok()?;
     if !live.contains(&zmx_name) {
+        if let Some(evidence) = live_session_host_evidence(state, &session, key, &zmx_name) {
+            log_skipped_live_host(state, key, &zmx_name, "stillDead", false, &evidence);
+            return None;
+        }
         return Some((session, false));
     }
-    if acp_host_exited_in_live_daemon(&session, key, &zmx_name) {
+    if acp_host_exited_in_live_daemon(state, &session, key, &zmx_name) {
         return Some((session, true));
+    }
+    if crate::acp::session_is_acp(&session) {
+        if let Some(evidence) = live_acp_host_evidence(state, key, &zmx_name) {
+            log_skipped_live_host(state, key, &zmx_name, "stillDead", true, &evidence);
+        }
     }
     None
 }
@@ -505,13 +646,37 @@ async fn run_heal(state: &Arc<AppState>, due: &HealDue) -> HealOutcome {
     if needs_sleep {
         // When `acp-host` exited back to the shell inside a live zmx daemon, tear down the empty
         // shell daemon first so `/api/wakeSession` launches a fresh `acp-host` on the conversation.
-        let _ = super::zmx_http::handle_zmx_lifecycle_http(
+        let slept = super::zmx_http::handle_zmx_lifecycle_http(
             state,
             "/api/sleepSession".to_string(),
             Uuid::new_v4().to_string(),
             &body,
         )
         .await;
+        let sleep_ok = slept.response.status().is_success();
+        let sleep_bytes = axum::body::to_bytes(slept.response.into_body(), 256 * 1024)
+            .await
+            .unwrap_or_default();
+        let sleep_answer = serde_json::from_slice::<Value>(&sleep_bytes).unwrap_or(Value::Null);
+        if !sleep_ok {
+            let message = sleep_answer
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or("the live session could not be stopped before restart")
+                .chars()
+                .take(300)
+                .collect();
+            return HealOutcome::Failed(message);
+        }
+        if sleep_answer
+            .pointer("/result/kill/killed")
+            .and_then(Value::as_bool)
+            == Some(false)
+        {
+            return HealOutcome::Failed(
+                "the live session daemon did not stop before restart".to_string(),
+            );
+        }
     }
     if crate::acp::session_is_acp(&session) {
         // Ensure the dead Native host's agent child process group is completely gone before
@@ -526,6 +691,34 @@ async fn run_heal(state: &Arc<AppState>, due: &HealDue) -> HealOutcome {
         .unwrap_or_else(|err| Err(format!("Native child cleanup task failed: {err}")));
         if let Err(message) = cleanup_res {
             return HealOutcome::Failed(message);
+        }
+    }
+    if let Some((_, zmx_name)) = heal_candidate(&session) {
+        let check_state = state.clone();
+        let check_session = session.clone();
+        let check_key = key.clone();
+        let check_zmx = zmx_name.clone();
+        let found_live = tokio::task::spawn_blocking(move || {
+            if let Some(evidence) =
+                live_session_host_evidence(&check_state, &check_session, &check_key, &check_zmx)
+            {
+                log_skipped_live_host(
+                    &check_state,
+                    &check_key,
+                    &check_zmx,
+                    "beforeWake",
+                    false,
+                    &evidence,
+                );
+                true
+            } else {
+                false
+            }
+        })
+        .await
+        .unwrap_or(true);
+        if found_live {
+            return HealOutcome::Cancelled;
         }
     }
     let routed = super::zmx_http::handle_zmx_lifecycle_http(

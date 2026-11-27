@@ -1940,6 +1940,39 @@ pub fn run(args: &[String]) -> i32 {
         return 2;
     };
     let gx_paths = crate::paths::get_gxserver_paths(None);
+    let _host_lock = match super::host_lock::acquire_for_current_session(&gx_paths) {
+        super::host_lock::AcquireResult::NotApplicable => None,
+        super::host_lock::AcquireResult::Acquired(lock) => Some(lock),
+        super::host_lock::AcquireResult::AlreadyHeld {
+            session_ref,
+            owner_pid,
+        } => {
+            if let Some(secret_file) = parsed
+                .channel_secret_file
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                let _ = super::channel::read_and_remove_channel_secret_file(Path::new(secret_file));
+            }
+            if let Some(pid) = owner_pid.filter(|p| *p > 0) {
+                eprintln!(
+                    "Ghostex Native Host · {} · Another host (pid {pid}) is already running for {session_ref}; exiting.",
+                    spec.display_name
+                );
+            } else {
+                eprintln!(
+                    "Ghostex Native Host · {} · Another host is already running for {session_ref}; exiting.",
+                    spec.display_name
+                );
+            }
+            return 1;
+        }
+        super::host_lock::AcquireResult::Unavailable { session_ref, error } => {
+            eprintln!("[Native] Warning: could not acquire host lock for {session_ref}: {error}");
+            None
+        }
+    };
     crate::agent_model_catalog::adopt_cached_copy(&gx_paths);
     if spec.family == "claude" {
         return super::driver_claude::run(spec, parsed);

@@ -682,6 +682,48 @@ fn observed_provider_probe(session_name: &str, lifecycle_state: &str) -> Provide
     }
 }
 
+pub(crate) fn session_daemon_process_id(zmx_name: &str) -> Result<Option<i64>, ()> {
+    #[cfg(target_os = "macos")]
+    {
+        Ok(super::process_table_macos::zmx_daemon_pid(zmx_name))
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        super::session_tree::linux_zmx_daemon_pid(zmx_name)
+    }
+    #[cfg(windows)]
+    {
+        Ok(super::session_tree::windows_wmx_daemon_pid(zmx_name))
+    }
+}
+
+/// Secondary liveness signal when `zmx list --short` / `wmx exists` did not find a session:
+/// checks the OS process list and the daemon's socket/lock so a busy daemon that dropped off
+/// `zmx list --short` is not mistaken for dead.
+pub(crate) fn session_daemon_alive_fallback(zmx_name: &str) -> Result<Option<&'static str>, ()> {
+    if session_daemon_process_id(zmx_name)?.is_some() {
+        return Ok(Some("process"));
+    }
+    #[cfg(unix)]
+    {
+        if zmx_session_daemon_socket_present(zmx_name) == Some(true)
+            && zmx_socket_accepts_connection(zmx_name)
+        {
+            return Ok(Some("socket"));
+        }
+    }
+    #[cfg(windows)]
+    {
+        if wmx_lock_held(zmx_name) {
+            return Ok(Some("lock"));
+        }
+        if zmx_session_daemon_socket_present(zmx_name) == Some(true) {
+            return Ok(Some("endpoint"));
+        }
+    }
+    Ok(None)
+}
+
 fn probe_zmx_session(session_name: &str, zmx_executable_path: &str) -> ProviderProbe {
     let probed_at = now_iso();
     let result = run_zmx_probe_script(
@@ -699,15 +741,24 @@ fn probe_zmx_session(session_name: &str, zmx_executable_path: &str) -> ProviderP
             };
         }
     };
+    let mut fallback_error: Option<String> = None;
     let lifecycle_state = if result.exit_code == 0 {
         "exists"
     } else if result.exit_code == 1 {
-        "missing"
+        match session_daemon_alive_fallback(session_name) {
+            Ok(Some(_)) => "exists",
+            Ok(None) => "missing",
+            Err(()) => {
+                fallback_error = Some("Could not inspect session daemon process list.".to_string());
+                "unknown"
+            }
+        }
     } else {
         "unknown"
     };
     ProviderProbe {
-        error: (lifecycle_state == "unknown").then(|| zmx_probe_exit_error_message(&result)),
+        error: (lifecycle_state == "unknown")
+            .then(|| fallback_error.unwrap_or_else(|| zmx_probe_exit_error_message(&result))),
         lifecycle_state: lifecycle_state.to_string(),
         probed_at,
         zmx_name: session_name.to_string(),

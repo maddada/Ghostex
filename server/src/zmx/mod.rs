@@ -39,6 +39,8 @@ pub(crate) use lost_folder_access::{
     ACTION_RESTART as LOST_FOLDER_ACCESS_ACTION_RESTART,
     NOTICE_KIND as LOST_FOLDER_ACCESS_NOTICE_KIND,
 };
+#[cfg(all(unix, not(target_os = "macos")))]
+pub(crate) use session_tree::linux_acp_host_pid;
 pub(crate) use session_tree::{read_zmx_session_tree, SessionTree};
 mod session_host;
 #[cfg(target_os = "macos")]

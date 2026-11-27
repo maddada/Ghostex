@@ -74,7 +74,13 @@ pub(crate) fn read_zmx_session_tree(zmx_name: &str) -> Result<Option<SessionTree
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
-pub(crate) use platform::process_tree_rows as linux_process_tree_rows;
+pub(crate) use platform::{
+    acp_host_pid_for_session as linux_acp_host_pid, process_tree_rows as linux_process_tree_rows,
+    zmx_daemon_pid as linux_zmx_daemon_pid,
+};
+
+#[cfg(windows)]
+pub(crate) use platform::wmx_daemon_pid as windows_wmx_daemon_pid;
 
 #[cfg(target_os = "macos")]
 mod platform {
@@ -117,23 +123,67 @@ mod platform {
 
     struct Stat {
         name: String,
+        state: char,
         ppid: i64,
         group: i64,
         terminal_device: i64,
         foreground_group: i64,
     }
 
-    pub(super) fn read(zmx_name: &str) -> Result<Option<SessionTree>, ()> {
+    pub(crate) fn zmx_daemon_pid(zmx_name: &str) -> Result<Option<i64>, ()> {
         let stats = all_stats().ok_or(())?;
-        let Some(root) = stats
+        Ok(find_zmx_daemon_pid(&stats, zmx_name))
+    }
+
+    fn find_zmx_daemon_pid(stats: &HashMap<i64, Stat>, zmx_name: &str) -> Option<i64> {
+        stats
             .iter()
-            .filter(|(_, stat)| stat.name == "zmx")
+            .filter(|(_, stat)| stat.name == "zmx" && !matches!(stat.state, 'Z' | 'X' | 'x'))
             .find_map(|(pid, _)| {
                 let command = command_line(*pid)?;
                 (crate::zmx::process_identity::zmx_daemon_session_name(&command)? == zmx_name)
                     .then_some(*pid)
             })
-        else {
+    }
+
+    pub(crate) fn acp_host_pid_for_session(
+        session_ref: &str,
+        zmx_name: &str,
+    ) -> Result<Option<u32>, ()> {
+        let stats = all_stats().ok_or(())?;
+        Ok(stats
+            .iter()
+            .filter(|(_, stat)| {
+                !matches!(stat.state, 'Z' | 'X' | 'x')
+                    && (stat.name.starts_with("ghostex") || stat.name.starts_with("gxserver"))
+            })
+            .find_map(|(pid, _)| {
+                let command = command_line(*pid)?;
+                if !crate::acp::is_acp_host_command(&command) {
+                    return None;
+                }
+                let matches_ref = environ_value(*pid, "GHOSTEX_GLOBAL_SESSION_REF")
+                    .is_some_and(|val| val.trim() == session_ref);
+                let matches_zmx = environ_value(*pid, "GHOSTEX_SESSION_ID")
+                    .is_some_and(|val| val.trim() == zmx_name);
+                (matches_ref || matches_zmx)
+                    .then(|| u32::try_from(*pid).ok())
+                    .flatten()
+            }))
+    }
+
+    fn environ_value(pid: i64, name: &str) -> Option<String> {
+        let bytes = std::fs::read(format!("/proc/{pid}/environ")).ok()?;
+        let prefix = format!("{name}=");
+        bytes
+            .split(|byte| *byte == 0)
+            .find_map(|entry| entry.strip_prefix(prefix.as_bytes()))
+            .map(|value| String::from_utf8_lossy(value).into_owned())
+    }
+
+    pub(super) fn read(zmx_name: &str) -> Result<Option<SessionTree>, ()> {
+        let stats = all_stats().ok_or(())?;
+        let Some(root) = find_zmx_daemon_pid(&stats, zmx_name) else {
             return Ok(None);
         };
         Ok(Some(SessionTree {
@@ -234,9 +284,11 @@ mod platform {
             .get(close + 1..)?
             .split_whitespace()
             .collect::<Vec<_>>();
+        let state = fields.first()?.chars().next()?;
         let number = |index: usize| fields.get(index)?.parse::<i64>().ok();
         Some(Stat {
             name,
+            state,
             ppid: number(1)?,
             group: number(2)?,
             terminal_device: number(4)?,
@@ -306,9 +358,30 @@ mod platform {
 mod platform {
     use super::*;
     use crate::agent_hooks::nested_agent::ProcessTable;
-    use crate::agent_hooks::wmx_pane::Process;
+    use crate::agent_hooks::wmx_pane::{wmx_host_session_name, Process};
     use sha2::{Digest, Sha256};
     use std::collections::{HashSet, VecDeque};
+
+    pub(crate) fn wmx_daemon_pid(zmx_name: &str) -> Option<i64> {
+        let table = ProcessTable::read();
+        for stem in ["wmx", "ghostex-session-host"] {
+            for pid in table.pids_named(stem) {
+                let Some(process) = Process::open(pid) else {
+                    continue;
+                };
+                if !process.running() {
+                    continue;
+                }
+                let Some(command) = process.command_line() else {
+                    continue;
+                };
+                if wmx_host_session_name(&command).as_deref() == Some(zmx_name) {
+                    return Some(i64::from(pid));
+                }
+            }
+        }
+        None
+    }
 
     pub(super) fn read(zmx_name: &str) -> Result<Option<SessionTree>, ()> {
         // `protocol::endpoint` in wmx: `<directory>\<sha256(name)>.json`.
