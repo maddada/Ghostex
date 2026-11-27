@@ -255,7 +255,7 @@ pub(crate) fn drawing_file_for_name(name: &str) -> Result<String, &'static str> 
 
 /// The `.ghostex/.gitignore` line that puts `file` in git.
 fn git_include_line(file: &str) -> String {
-    // A leading `!` re-includes; `\` keeps a name that starts with `#` or `!` literal.
+    // The leading `!` re-includes; `\` keeps `*`, `?`, `[` and `\` in a name literal.
     let escaped: String = file
         .chars()
         .flat_map(|c| match c {
@@ -267,6 +267,9 @@ fn git_include_line(file: &str) -> String {
 }
 
 const GIT_INCLUDE_DIRECTORY_LINE: &str = "!drawings/";
+/// While any drawing is in git, the ignore file goes with it, so a clone keeps the rest of the
+/// folder out of git too.
+const GIT_INCLUDE_IGNORE_FILE_LINE: &str = "!.gitignore";
 
 /// Whether `file` is included in git (its line is in `.ghostex/.gitignore`).
 pub(crate) fn drawing_included_in_git(project: &CanvasProject, file: &str) -> bool {
@@ -280,9 +283,10 @@ pub(crate) fn drawing_included_in_git(project: &CanvasProject, file: &str) -> bo
 /// CDXC:Canvas 2026-11-27 DECISION:
 /// User (Q5281 A, "have include in git part of the menu in the switcher pls"): each drawing's ⋯
 /// in the switcher has an "Include in git" check, off by default. On, `.ghostex/.gitignore` gets
-/// `!drawings/` (so git looks inside the folder) and `!drawings/<file>`; `*` still ignores the rest
-/// of the folder, so only that drawing shows in git status. Off removes its line, and `!drawings/`
-/// goes when no drawing is included.
+/// `!drawings/` (so git looks inside the folder), `!.gitignore` (so a clone keeps the rest of the
+/// folder out of git too) and `!drawings/<file>`; `*` still ignores the rest of the folder, so only
+/// that drawing and the ignore file show in git status. Off removes its line, and the other two go
+/// when no drawing is included.
 fn set_drawing_included_in_git(
     project: &CanvasProject,
     file: &str,
@@ -301,17 +305,19 @@ fn set_drawing_included_in_git(
         if !lines.iter().any(|existing| existing.trim_end() == "*") {
             lines.push("*".to_string());
         }
-        if !lines
-            .iter()
-            .any(|existing| existing.trim_end() == GIT_INCLUDE_DIRECTORY_LINE)
-        {
-            lines.push(GIT_INCLUDE_DIRECTORY_LINE.to_string());
+        for shared in [GIT_INCLUDE_IGNORE_FILE_LINE, GIT_INCLUDE_DIRECTORY_LINE] {
+            if !lines.iter().any(|existing| existing.trim_end() == shared) {
+                lines.push(shared.to_string());
+            }
         }
         lines.push(line);
     } else if !lines.iter().any(|existing| {
-        existing.starts_with("!drawings/") && existing != GIT_INCLUDE_DIRECTORY_LINE
+        existing.starts_with("!drawings/") && existing.trim_end() != GIT_INCLUDE_DIRECTORY_LINE
     }) {
-        lines.retain(|existing| existing.trim_end() != GIT_INCLUDE_DIRECTORY_LINE);
+        lines.retain(|existing| {
+            let existing = existing.trim_end();
+            existing != GIT_INCLUDE_DIRECTORY_LINE && existing != GIT_INCLUDE_IGNORE_FILE_LINE
+        });
     }
     let mut text = lines.join("\n");
     text.push('\n');

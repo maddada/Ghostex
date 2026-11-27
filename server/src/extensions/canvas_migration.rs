@@ -345,7 +345,7 @@ fn read_boards(
 /// Creates `<project>/.ghostex/` and its `.gitignore` (`*`, so git never sees the folder and the
 /// repo's own `.gitignore` is never touched), then `drawings/` inside it.
 ///
-/// SEE-ALSO: apps/desktop/src/app/canvas/folder.rs makes the same folder the same way.
+/// SEE-ALSO: apps/desktop/src/app/canvas/mod.rs `ensure_drawings_folder` makes the same folder the same way.
 pub(crate) fn ensure_drawings_folder(project: &Path) -> std::io::Result<PathBuf> {
     let ghostex = project.join(GHOSTEX_PROJECT_FOLDER);
     fs::create_dir_all(&ghostex)?;
