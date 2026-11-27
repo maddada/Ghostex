@@ -482,7 +482,7 @@ impl AccountsTab {
                     .text_size(px(12.0))
                     .line_height(px(18.0))
                     .text_color(hsla(p.foreground))
-                    .child("1. Do not add Antigravity to CLIProxyAPI. Antigravity is known for banning accounts used through third-party proxies. Ghostex supports Claude and Codex hubs only."),
+                    .child("1. Do not add Antigravity to CLIProxyAPI. Antigravity is known for banning accounts used through third-party proxies. Ghostex supports Claude and Codex hubs only, and won't start sessions on a hub that holds an Antigravity, Gemini, Vertex or AI Studio login."),
             )
             .child(
                 div()

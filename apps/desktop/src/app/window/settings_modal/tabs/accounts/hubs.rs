@@ -501,7 +501,7 @@ impl AccountsTab {
                     .child(guide_btn),
             )
             .child(muted(p, "Point Ghostex at a CLIProxyAPI instance running on your always-on machine. With a management key, Ghostex enables session affinity by default (for prompt caching) and lets you sign in, check status/cooldowns, and remove Claude and Codex accounts here."))
-            .child(muted(p, "Only add a hub you run yourself. Do not add Antigravity to CLIProxyAPI (account bans), and using 2 accounts of the same provider on the same PC is not recommended."))
+            .child(muted(p, "Only add a hub you run yourself. Do not add Antigravity to CLIProxyAPI (account bans): Ghostex won't start sessions on a hub that holds a Google login. Using 2 accounts of the same provider on the same PC is not recommended."))
             .child(v_flex().w_full().children(rows))
             .child(h_flex().child(add))
             .into_any_element()

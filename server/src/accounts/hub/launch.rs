@@ -1063,6 +1063,9 @@ pub(crate) fn apply(
             "That hub was removed. Pick another place to start the session.",
         )
     })?;
+    if let Some(reason) = super::google_login_refusal(paths, &hub) {
+        return Err(DomainStateError::bad_request(reason));
+    }
     let base = configured_command
         .map(str::trim)
         .filter(|command| !command.is_empty())

@@ -77,6 +77,9 @@ struct Reading {
     routing_strategy: Option<String>,
     updated_at: Option<String>,
     fetched_at: Instant,
+    /// The Google logins the hub holds (`antigravity`, `gemini`, `vertex`, `aistudio`), which
+    /// Ghostex never shows: a hub with any refuses sessions On the hub (`google_login_refusal`).
+    google_logins: Vec<String>,
 }
 
 fn readings() -> &'static Mutex<HashMap<String, Reading>> {
@@ -217,6 +220,7 @@ fn refresh(paths: &GxserverPaths, hub: &store::Hub) {
                     routing_strategy: routing.strategy.clone(),
                     updated_at: updated_at.clone(),
                     fetched_at: Instant::now(),
+                    google_logins: google_logins(&files),
                 });
             });
             store_reading(Reading {
@@ -226,6 +230,7 @@ fn refresh(paths: &GxserverPaths, hub: &store::Hub) {
                 routing_strategy: routing.strategy,
                 updated_at,
                 fetched_at: Instant::now(),
+                google_logins: google_logins(&files),
             });
         }
         Err(error) => store_reading(Reading {
@@ -236,14 +241,69 @@ fn refresh(paths: &GxserverPaths, hub: &store::Hub) {
                 .unwrap_or_default(),
             session_affinity: previous.as_ref().and_then(|p| p.session_affinity),
             routing_strategy: previous.as_ref().and_then(|p| p.routing_strategy.clone()),
-            updated_at: previous.and_then(|p| p.updated_at),
+            updated_at: previous.as_ref().and_then(|p| p.updated_at.clone()),
             fetched_at: Instant::now(),
+            google_logins: previous.map(|p| p.google_logins).unwrap_or_default(),
         }),
     }
     reading_now()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .remove(&hub.id);
+}
+
+/// The providers of the hub's Google logins in its credential list: any whose provider names
+/// Antigravity, Gemini, Vertex or AI Studio (`gemini-cli` too).
+fn google_logins(files: &[Value]) -> Vec<String> {
+    let mut found: Vec<String> = files
+        .iter()
+        .filter_map(|file| {
+            let provider = file
+                .get("provider")
+                .or_else(|| file.get("type"))
+                .and_then(Value::as_str)?
+                .trim()
+                .to_ascii_lowercase();
+            ["antigravity", "gemini", "vertex", "aistudio", "ai-studio", "ai_studio"]
+                .iter()
+                .any(|google| provider.contains(google))
+                .then_some(provider)
+        })
+        .collect();
+    found.sort();
+    found.dedup();
+    found
+}
+
+/// Why a session can't start On the hub `hub`, when the hub's credential list holds a Google
+/// login, or `None`. Reads the list Ghostex keeps for Settings, or, when it has none yet, the
+/// hub's list once with its management key; a hub without one can't be read and is let through.
+///
+/// CDXC:AgentProviders 2026-11-27 DECISION:
+/// The Fable review of the Antigravity work found a hub that holds an Antigravity or Gemini login
+/// can answer a Claude or Codex request from Ghostex through it, which Ghostex hides but can't
+/// stop on the hub's side. Ghostex talks to Antigravity only through agy over ACP, so it refuses to
+/// start sessions on such a hub and says which login to remove.
+pub(crate) fn google_login_refusal(paths: &GxserverPaths, hub: &store::Hub) -> Option<String> {
+    let logins = match reading(&hub.id) {
+        Some(kept) => kept.google_logins,
+        None if !hub.management_key.is_empty() => {
+            let key = store::open_key(paths, &hub.management_key).ok()?;
+            google_logins(&client::auth_files(&hub.url, &key).ok()?)
+        }
+        None => return None,
+    };
+    (!logins.is_empty()).then(|| {
+        let name = if hub.label.trim().is_empty() {
+            host(&hub.url)
+        } else {
+            hub.label.trim().to_string()
+        };
+        format!(
+            "{name} also holds a Google login ({}), and the hub could answer this session through it. Ghostex uses Antigravity and Gemini only through their own CLI, so it doesn't start sessions on this hub. Remove that login from the hub, or start the session on another account.",
+            logins.join(", ")
+        )
+    })
 }
 
 fn host(url: &str) -> String {
@@ -964,6 +1024,7 @@ pub(super) fn refresh_after_sign_in(paths: &GxserverPaths, hub: &store::Hub) {
                     fetched_at: Instant::now(),
                     session_affinity: previous.as_ref().and_then(|p| p.session_affinity),
                     routing_strategy: previous.and_then(|p| p.routing_strategy),
+                    google_logins: google_logins(&files),
                 },
             );
         }
@@ -999,6 +1060,24 @@ mod tests {
             "http://localhost:8317"
         );
         assert!(normalize_url("ftp://x").is_err());
+    }
+
+    #[test]
+    fn a_hub_with_a_google_login_is_found_by_its_credential_list() {
+        let files = vec![
+            json!({ "auth_index": "1", "provider": "claude" }),
+            json!({ "auth_index": "2", "type": "codex" }),
+        ];
+        assert!(google_logins(&files).is_empty());
+        for provider in ["antigravity", "Gemini", "gemini-cli", "vertex", "aistudio"] {
+            let mut with = files.clone();
+            with.push(json!({ "auth_index": "3", "provider": provider }));
+            assert_eq!(
+                google_logins(&with),
+                vec![provider.to_ascii_lowercase()],
+                "{provider}"
+            );
+        }
     }
 
     /// CDXC:AgentProviders 2026-11-27: Antigravity offers other apps only ACP, so no usage reader
