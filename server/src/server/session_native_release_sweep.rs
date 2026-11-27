@@ -6,14 +6,17 @@
 //! Each stop is marked `sleepTrigger: nativeIdle`, so the daemon's automatic-sleep declines (a
 //! queued message, a question card, background work, a coordinator's active threads, a thread that
 //! owes work, a Claude chat waiting for idle compaction) still apply; only the keep-awake lease of
-//! a client that shows the chat is weighed here instead, as a longer idle time.
+//! a client that shows the chat is weighed here instead, as a longer idle time. Background work its
+//! transcript shows (`session_details::session_has_running_background_work`: background commands,
+//! subagents and jobs, or a tool call still waiting for its result) keeps it running for at most
+//! 4 hours after its last activity (`session_native_release::busy_pin_expired`).
 //!
 //! SEE-ALSO: server/src/session_native_release.rs, server/src/server/session_auto_sleep_sweep.rs.
 
 use super::*;
 
 use crate::session_native_release::{
-    idle_since_ms, is_native_chat, release_due, row_allows_release,
+    busy_pin_expired, idle_since_ms, is_native_chat, release_due, row_allows_release,
 };
 
 /// How often the sweep runs.
@@ -139,12 +142,14 @@ fn select_targets(state: &AppState) -> Vec<(String, String)> {
         if !release_due(idle_since, shown, memory_pressure, now_ms) {
             continue;
         }
-        if crate::session_details::session_has_running_background_work(
-            state,
-            &project_id,
-            &session_id,
-            &session,
-        ) {
+        if !busy_pin_expired(idle_since, now_ms)
+            && crate::session_details::session_has_running_background_work(
+                state,
+                &project_id,
+                &session_id,
+                &session,
+            )
+        {
             continue;
         }
         targets.push(key);

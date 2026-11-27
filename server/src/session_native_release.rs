@@ -22,6 +22,12 @@ const SHOWN_IDLE_MINUTES: i64 = 30;
 const HIDDEN_IDLE_MINUTES_UNDER_PRESSURE: i64 = 2;
 const SHOWN_IDLE_MINUTES_UNDER_PRESSURE: i64 = 10;
 
+/// Hours an idle Native chat's background work (a background command, subagent or job, or a tool
+/// call still waiting for its result) keeps it running before it is released anyway.
+///
+/// CDXC:SessionSleep 2026-11-27 DECISION: Coordinator follow-up: "keep the 4-hour cap like the other GUI so stuck "busy" never holds forever". Counted from the chat's last activity, so a turn or a thread report restarts it. It covers only the work read from the transcript: a turn the agent reports running, a question card or a queued message still keeps the chat running.
+const MAX_BUSY_PIN_HOURS: i64 = 4;
+
 /// How long a Native chat must have been idle before it is released.
 pub fn idle_minutes(shown: bool, memory_pressure: bool) -> i64 {
     match (shown, memory_pressure) {
@@ -122,6 +128,12 @@ pub fn idle_since_ms(
 /// Whether a chat idle since `idle_since_ms` is due for release now.
 pub fn release_due(idle_since_ms: i64, shown: bool, memory_pressure: bool, now_ms: i64) -> bool {
     now_ms - idle_since_ms >= idle_minutes(shown, memory_pressure) * MINUTE_MS
+}
+
+/// Whether a chat idle since `idle_since_ms` has been held by background work long enough that it
+/// is released anyway.
+pub fn busy_pin_expired(idle_since_ms: i64, now_ms: i64) -> bool {
+    now_ms - idle_since_ms >= MAX_BUSY_PIN_HOURS * 60 * MINUTE_MS
 }
 
 fn timestamp_ms(value: Option<&str>) -> Option<i64> {

@@ -3,7 +3,7 @@
 //! CDXC:SessionDetails 2026-10-25 WHY:
 //! Claude Code 2.1.x writes its context inputs into the transcript as `attachment` records: `deferred_tools_delta` (every tool, MCP ones named `mcp__<server>__<tool>`, plus `pendingMcpServers` / `failedMcpServers`), `mcp_instructions_delta` (servers by their real names), `instructions` and `nested_memory` (the CLAUDE.md / AGENTS.md files), `skill_listing` and `invoked_skills`. That is the live process's own record, so it is what the panel lists; nothing has to be started to read it. The deltas run on across a resume (a resumed process announces only what changed), and a compaction re-announces everything, so the sets reset at `compact_boundary` and nowhere else. Lines are tested for their markers before being parsed, so a long transcript's tail costs a substring search per line.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -82,17 +82,27 @@ pub(super) struct TranscriptFacts {
     background: HashMap<String, BackgroundRun>,
     background_order: Vec<String>,
     pending_launches: HashMap<String, Launch>,
+    /// Subagents started with `run_in_background` whose task notification has not arrived, by
+    /// Claude's agent id, and the `Agent`/`Task` calls that asked for one and have no result yet.
+    /// Kept apart from `background` so the panel's Background tasks list is unchanged.
+    running_agents: HashSet<String>,
+    pending_agent_launches: HashSet<String>,
     last_at: i64,
     /// How far the process starts Ghostex recorded for this conversation are applied.
     starts: crate::hookless_activity::ProcessStartCursor,
 }
 
 impl TranscriptFacts {
-    /// A background command or monitor the session started is still running.
+    /// A background command, monitor or subagent the session started is still running.
+    ///
+    /// CDXC:SessionSleep 2026-11-27 DECISION: Coordinator follow-up: "a Native chat must never be released while Claude subagents started with run_in_background (or background Bash/Monitor) are still running". A background subagent's result says `isAsync`/`async_launched` with its `agentId`, and its end is the `<task-notification>` naming that id, like a background shell's.
     pub(super) fn has_running_background(&self) -> bool {
-        self.background
-            .values()
-            .any(|run| run.ended_at_ms.is_none())
+        !self.running_agents.is_empty()
+            || !self.pending_agent_launches.is_empty()
+            || self
+                .background
+                .values()
+                .any(|run| run.ended_at_ms.is_none())
     }
 
     /// Finished background commands, newest first.
@@ -340,6 +350,7 @@ impl TranscriptFacts {
             if !terminal_status(status) {
                 continue;
             }
+            self.running_agents.remove(id);
             if let Some(run) = self.background.get_mut(id) {
                 if run.ended_at_ms.is_none() {
                     run.ended_at_ms = Some(self.last_at);
@@ -357,6 +368,19 @@ impl TranscriptFacts {
         for block in blocks {
             match block.get("type").and_then(Value::as_str) {
                 Some("tool_use") => {
+                    if matches!(
+                        block.get("name").and_then(Value::as_str),
+                        Some("Agent" | "Task")
+                    ) {
+                        let background =
+                            block.pointer("/input/run_in_background") == Some(&Value::Bool(true));
+                        if let (true, Some(id)) =
+                            (background, block.get("id").and_then(Value::as_str))
+                        {
+                            self.pending_agent_launches.insert(id.to_string());
+                        }
+                        continue;
+                    }
                     let kind = match block.get("name").and_then(Value::as_str) {
                         Some("Bash" | "PowerShell") => "shell",
                         Some("Monitor") => "monitor",
@@ -399,6 +423,24 @@ impl TranscriptFacts {
                     );
                 }
                 Some("tool_result") => {
+                    if let Some(id) = block.get("tool_use_id").and_then(Value::as_str) {
+                        if self.pending_agent_launches.remove(id) {
+                            let launched = record.pointer("/toolUseResult/isAsync")
+                                == Some(&Value::Bool(true))
+                                || record
+                                    .pointer("/toolUseResult/status")
+                                    .and_then(Value::as_str)
+                                    == Some("async_launched");
+                            let agent_id = record
+                                .pointer("/toolUseResult/agentId")
+                                .and_then(Value::as_str)
+                                .filter(|id| !id.is_empty());
+                            if let (true, Some(agent_id)) = (launched, agent_id) {
+                                self.running_agents.insert(agent_id.to_string());
+                            }
+                            continue;
+                        }
+                    }
                     let Some(launch) = block
                         .get("tool_use_id")
                         .and_then(Value::as_str)
@@ -438,6 +480,8 @@ impl TranscriptFacts {
     /// A new or resumed Claude process starts with no shells: the old process's died with it.
     fn forget_unfinished_background(&mut self) {
         self.pending_launches.clear();
+        self.pending_agent_launches.clear();
+        self.running_agents.clear();
         let unfinished: Vec<String> = self
             .background
             .iter()
@@ -500,6 +544,8 @@ impl TranscriptFacts {
             "\"Monitor\"",
             "backgroundTaskId",
             "\"taskId\"",
+            "async_launched",
+            "\"isAsync\"",
             "<task-notification>",
         ];
         if !wanted.iter().any(|marker| text.contains(marker)) {
