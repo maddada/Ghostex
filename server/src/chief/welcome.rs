@@ -20,9 +20,13 @@ use crate::paths::GxserverPaths;
 const FRESH_FOR: Duration = Duration::from_secs(5);
 /// How long one reading of the agents' sign-in is reused.
 const SIGN_IN_FRESH_FOR: Duration = Duration::from_secs(5 * 60);
-/// The agents whose own login counts for "Sign in to Claude or Codex" (Antigravity too, since
-/// onboarding offers it beside them).
-const SIGN_IN_AGENTS: &[&str] = &["claude", "codex", "antigravity"];
+/// The agents whose own login counts for "Sign in to Claude or Codex".
+///
+/// CDXC:AgentProviders 2026-11-27 DECISION: Antigravity is not read here. Its only sign-in read is
+/// `agy models`, a call to Google on the user's account, and this card read it every 5 minutes
+/// in the background (Fable review, finding 5). Ghostex runs agy outside a chat only when the user
+/// asks (setup's sign-in, Check again).
+const SIGN_IN_AGENTS: &[&str] = &["claude", "codex"];
 /// The prompts of the card the user sent to Ask Ghostex AI, in gxserver's `metadata`.
 const ASKED_KEY: &str = "chiefWelcomeAsked";
 

@@ -14,7 +14,10 @@ use gpui::{AnyElement, Context, IntoElement, ParentElement as _, Styled as _, di
 use serde_json::Value;
 use std::time::{Duration, Instant};
 
-/// How often a sign-in in the browser is asked about while it runs.
+/// How often a sign-in in the browser is asked about while it runs. gxserver answers these from
+/// its last reading for Antigravity, whose status read asks Google (`agy models`): it runs agy
+/// only once the login exits, on Check again, and from its own watcher, which backs off to every
+/// 30 s (server/src/agent_sign_in.rs `reading`).
 const SIGN_IN_POLL: Duration = Duration::from_secs(2);
 
 /// What the panel knows about the chosen agent's sign-in.
@@ -150,6 +153,15 @@ impl GpuiOnboardingWindow {
         self.start_sign_in(cx);
     }
 
+    /// Check again: gxserver reads the CLI now instead of answering from its last reading.
+    fn check_sign_in_again(&mut self, cx: &mut Context<Self>) {
+        let agent_id = self.sign_in.agent_id.clone();
+        if !agent_id.is_empty() {
+            self.ask_sign_in(agent_id, "check", cx);
+            cx.notify();
+        }
+    }
+
     fn cancel_sign_in(&mut self, cx: &mut Context<Self>) {
         let agent_id = self.sign_in.agent_id.clone();
         self.sign_in.signing_in = false;
@@ -194,18 +206,12 @@ impl GpuiOnboardingWindow {
                         interact::Ring::new(0.0, 0.0),
                         interact::Keys::EnterSpace,
                         cx,
-                        |this, _, cx| {
-                            let agent_id = this.sign_in.agent_id.clone();
-                            if !agent_id.is_empty() {
-                                this.ask_sign_in(agent_id, "status", cx);
-                                cx.notify();
-                            }
-                        },
+                        |this, _, cx| this.check_sign_in_again(cx),
                     )
                     .into_any_element(),
                 ],
             ),
-            Some((_, name)) if state.signing_in => {
+            Some((agent_id, name)) if state.signing_in => {
                 let mut actions = Vec::new();
                 if let Some(url) = state.url.clone() {
                     actions.push(
@@ -219,6 +225,22 @@ impl GpuiOnboardingWindow {
                             move |this, _, cx| {
                                 this.send(OnboardingCommand::OpenExternalUrl(url.clone()), cx)
                             },
+                        )
+                        .into_any_element(),
+                    );
+                }
+                // Antigravity's sign-in is checked every 30 s at most (gxserver), so the user who
+                // finished in the browser can ask now.
+                if agent_id == "antigravity" {
+                    actions.push(
+                        self.control(
+                            s,
+                            ghost(s, "sign-in-recheck", "Check again", 14.5, false),
+                            "sign-in-recheck",
+                            interact::Ring::new(0.0, 0.0),
+                            interact::Keys::EnterSpace,
+                            cx,
+                            |this, _, cx| this.check_sign_in_again(cx),
                         )
                         .into_any_element(),
                     );

@@ -25,6 +25,12 @@ use crate::server::AppState;
 const STATUS_LIMIT: Duration = Duration::from_secs(12);
 /// How long a sign-in waits for the browser before it is stopped.
 const SIGN_IN_LIMIT: Duration = Duration::from_secs(15 * 60);
+/// How long a status read that asks the agent's server (`agy models`) is reused before the panel
+/// may run it again, and the longest wait between two of the sign-in watcher's checks.
+const ACCOUNT_CHECK_FRESH_FOR: Duration = Duration::from_secs(30);
+/// The sign-in watcher's waits before each check while an agy sign-in runs, in seconds; every one
+/// after these waits [`ACCOUNT_CHECK_FRESH_FOR`].
+const WATCH_BACKOFF: [u64; 3] = [5, 10, 20];
 
 /// The agents whose CLI can say whether it is signed in, with the executable, its status
 /// arguments and its login arguments.
@@ -38,6 +44,9 @@ struct SignInCommands {
     /// The login goes on into the agent itself once signed in instead of exiting, so it is stopped
     /// as soon as the status read says signed in.
     stays_open: bool,
+    /// The status command asks the agent's own server on the user's account (`agy models`), so
+    /// it runs as little as it can: see [`reading`].
+    status_asks_account: bool,
 }
 
 fn commands(agent_id: &str) -> Option<SignInCommands> {
@@ -48,6 +57,7 @@ fn commands(agent_id: &str) -> Option<SignInCommands> {
             login: &["auth", "login"],
             confirm_menu: None,
             stays_open: false,
+            status_asks_account: false,
         },
         "codex" => SignInCommands {
             executable: "codex",
@@ -55,6 +65,7 @@ fn commands(agent_id: &str) -> Option<SignInCommands> {
             login: &["login"],
             confirm_menu: None,
             stays_open: false,
+            status_asks_account: false,
         },
         "cursor" => SignInCommands {
             executable: "cursor-agent",
@@ -62,6 +73,7 @@ fn commands(agent_id: &str) -> Option<SignInCommands> {
             login: &["login"],
             confirm_menu: None,
             stays_open: false,
+            status_asks_account: false,
         },
         // CDXC:Onboarding 2026-11-21 DECISION: User: Antigravity is "one of the fully supported options in the onboarding". `agy` has no status or login command: `agy models` lists the models only when signed in ("Please sign in to view available models" otherwise, exit 1; agy 1.5.13), and a plain `agy` signs in: it asks for a login method (Enter picks Google OAuth), opens the browser on accounts.google.com, and then goes on into the agent.
         "antigravity" => SignInCommands {
@@ -70,6 +82,7 @@ fn commands(agent_id: &str) -> Option<SignInCommands> {
             login: &[],
             confirm_menu: Some("Select login method"),
             stays_open: true,
+            status_asks_account: true,
         },
         _ => return None,
     })
@@ -87,11 +100,22 @@ struct SignIn {
 
 static SIGN_INS: LazyLock<Mutex<HashMap<String, SignIn>>> = LazyLock::new(Default::default);
 
+/// The last status read of an agent whose status command asks its server, by agent id.
+#[derive(Clone, Default)]
+struct Reading {
+    at: Option<Instant>,
+    signed_in: Option<bool>,
+    needs_update: Option<String>,
+}
+
+static READINGS: LazyLock<Mutex<HashMap<String, Reading>>> = LazyLock::new(Default::default);
+
 fn bad(message: impl Into<String>) -> DomainStateError {
     DomainStateError::bad_request(message.into())
 }
 
-/// `/api/agentSignIn` with `operation` `status`, `start` or `cancel` and an `agentId`.
+/// `/api/agentSignIn` with `operation` `status`, `check` (the panel's Check again: read now),
+/// `start` or `cancel` and an `agentId`.
 pub(crate) fn dispatch(
     state: &AppState,
     params: &Map<String, Value>,
@@ -105,25 +129,26 @@ pub(crate) fn dispatch(
         .to_string();
     let home = state.paths.home_dir.clone();
     match params.get("operation").and_then(Value::as_str) {
-        Some("status") => Ok(status(state, &home, &agent_id)),
+        Some("status") => Ok(status(state, &home, &agent_id, false)),
+        Some("check") => Ok(status(state, &home, &agent_id, true)),
         Some("start") => {
             // An agy older than 1.5.1 is not signed in to: the answer says to update it instead.
-            if update_needed(&home, &agent_id).is_none() {
+            if reading(&home, &agent_id, false).needs_update.is_none() {
                 start(&home, &agent_id)?;
             }
-            Ok(status(state, &home, &agent_id))
+            Ok(status(state, &home, &agent_id, false))
         }
         Some("cancel") => {
             stop(&agent_id);
-            Ok(status(state, &home, &agent_id))
+            Ok(status(state, &home, &agent_id, false))
         }
         _ => Err(bad("Unknown agent sign-in operation.")),
     }
 }
 
-/// What the agent's CLI needs before Ghostex can use it: for Antigravity older than 1.5.1, the
-/// update instruction a Native chat also shows (acp/startup_error.rs), `None` otherwise and when
-/// the version can't be read.
+/// What the agent's CLI needs before Ghostex can use it: for an installed Antigravity older than
+/// 1.5.1, or whose version `agy --version` doesn't tell within 5 s (Q5211, "Refuse": see
+/// acp/startup_error.rs), the update instruction a Native chat also shows; `None` otherwise.
 ///
 /// CDXC:AgentProviders 2026-11-27 DECISION:
 /// User: after `initialize`, an agy older than 1.5.1 fails cleanly with "update Antigravity to
@@ -134,24 +159,89 @@ fn update_needed(home: &Path, agent_id: &str) -> Option<String> {
     if agent_id != "antigravity" {
         return None;
     }
-    let executable = crate::accounts::helpers::probe_executable(home, "agy")?;
-    let mut command = crate::platform::process::background_command(executable);
-    command.arg("--version").current_dir(home);
-    let (key, value) = crate::agent_hooks::probing::AGY_BACKGROUND_AUTO_UPDATE_OFF;
-    command.env(key, value);
-    let text = crate::agent_hooks::probing::run_command_stdout_with_timeout(
-        command,
-        Duration::from_secs(5),
-    )?;
-    let version = crate::agent_cli::latest::version_in(&text)?;
-    crate::acp::startup_error::antigravity_update_needed(&version)
+    crate::accounts::helpers::probe_executable(home, "agy")?;
+    let text = crate::agent_model_lineups::agy_version(home);
+    // The same reader as the Native chat's gate: the first `major.minor[.patch]` in the text.
+    crate::acp::startup_error::antigravity_update_needed(text.as_deref())
+}
+
+/// Whether a sign-in started here is still running for the agent.
+fn sign_in_running(agent_id: &str) -> bool {
+    SIGN_INS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(agent_id)
+        .is_some_and(|sign_in| sign_in.finished.is_none())
+}
+
+/// The agent's sign-in and update state, read now or reused.
+///
+/// CDXC:AgentProviders 2026-11-27 DECISION:
+/// The Fable review of the Antigravity work found setup's sign-in ran `agy models` (a call to
+/// Google on the user's account) every 2 s from the panel and every 5 s from the sign-in watcher,
+/// for up to 15 minutes. Now the panel's read runs agy once when the panel opens (or the chosen
+/// agent changes), once when the login exits, and once per Check again; any other read within
+/// [`ACCOUNT_CHECK_FRESH_FOR`], and every read while the sign-in runs, reuses the last one. While
+/// it runs only the watcher checks, after 5, 10 and 20 s and then every 30 s.
+/// Claude Code, Codex and Cursor read a local status and are read every time, as before.
+fn reading(home: &Path, agent_id: &str, now: bool) -> Reading {
+    let asks_account = commands(agent_id).is_some_and(|commands| commands.status_asks_account);
+    if !asks_account {
+        return Reading {
+            at: Some(Instant::now()),
+            signed_in: read_signed_in(home, agent_id),
+            needs_update: update_needed(home, agent_id),
+        };
+    }
+    let kept = READINGS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(agent_id)
+        .cloned();
+    if let Some(kept) = kept.filter(|kept| {
+        !now && kept.at.is_some_and(|at| {
+            sign_in_running(agent_id) || at.elapsed() < ACCOUNT_CHECK_FRESH_FOR
+        })
+    }) {
+        return kept;
+    }
+    let needs_update = update_needed(home, agent_id);
+    // An agy too old for Ghostex is not asked whether it is signed in.
+    let signed_in = if needs_update.is_some() {
+        None
+    } else {
+        read_signed_in(home, agent_id)
+    };
+    let fresh = Reading {
+        at: Some(Instant::now()),
+        signed_in,
+        needs_update,
+    };
+    READINGS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(agent_id.to_string(), fresh.clone());
+    fresh
 }
 
 /// The agent's sign-in state: `signedIn` true, false or null (cannot tell), while a sign-in
 /// started here is running, `signingIn` with the page it opened, and `needsUpdate` with the update
-/// instruction when the CLI is too old for Ghostex (`update_needed`).
-fn status(state: &AppState, home: &Path, agent_id: &str) -> Value {
-    let needs_update = update_needed(home, agent_id);
+/// instruction when the CLI is too old for Ghostex (`update_needed`). `now` reads the CLI even
+/// when the last read is recent (Check again).
+fn status(state: &AppState, home: &Path, agent_id: &str, now: bool) -> Value {
+    let saved_account = has_saved_account(state, agent_id);
+    let Reading {
+        signed_in,
+        needs_update,
+        ..
+    } = if saved_account {
+        Reading {
+            signed_in: Some(true),
+            ..Reading::default()
+        }
+    } else {
+        reading(home, agent_id, now)
+    };
     if needs_update.is_some() {
         stop(agent_id);
     }
@@ -169,11 +259,6 @@ fn status(state: &AppState, home: &Path, agent_id: &str) -> Value {
             .get(agent_id)
             .filter(|sign_in| sign_in.finished.is_none())
             .map(|sign_in| sign_in.url.clone())
-    };
-    let signed_in = if has_saved_account(state, agent_id) {
-        Some(true)
-    } else {
-        read_signed_in(home, agent_id)
     };
     if signed_in == Some(true)
         && running.is_some()
@@ -399,29 +484,45 @@ fn start(home: &Path, agent_id: &str) -> Result<(), DomainStateError> {
     });
     // A login that goes on into the agent once signed in (agy) is stopped here, not only when the
     // panel next asks: closing setup mid-sign-in must not leave it running. Every login is held
-    // to the time limit the same way.
+    // to the time limit the same way. The checks back off (`reading`'s decision): after 5, 10 and
+    // 20 s, then every 30 s, each kept as the panel's reading.
     let stays_open = commands.stays_open;
     let watched_id = id.clone();
     let mut watched_killer = child.clone_killer();
     let watch_home = home.to_path_buf();
     std::thread::spawn(move || {
         let started = Instant::now();
+        let mut waits = WATCH_BACKOFF
+            .into_iter()
+            .map(Duration::from_secs)
+            .chain(std::iter::repeat(ACCOUNT_CHECK_FRESH_FOR));
+        let mut next_check = started + waits.next().unwrap_or(ACCOUNT_CHECK_FRESH_FOR);
         loop {
-            std::thread::sleep(Duration::from_secs(5));
-            let running = SIGN_INS
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .get(&watched_id)
-                .is_some_and(|sign_in| sign_in.finished.is_none());
-            if !running {
+            std::thread::sleep(Duration::from_secs(1));
+            if !sign_in_running(&watched_id) {
                 return;
             }
-            let done = started.elapsed() > SIGN_IN_LIMIT
-                || (stays_open && read_signed_in(&watch_home, &watched_id) == Some(true));
-            if done {
+            if started.elapsed() > SIGN_IN_LIMIT {
                 let _ = watched_killer.kill();
                 return;
             }
+            if !stays_open || Instant::now() < next_check {
+                continue;
+            }
+            let signed_in = read_signed_in(&watch_home, &watched_id);
+            if let Some(kept) = READINGS
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get_mut(&watched_id)
+            {
+                kept.at = Some(Instant::now());
+                kept.signed_in = signed_in;
+            }
+            if signed_in == Some(true) {
+                let _ = watched_killer.kill();
+                return;
+            }
+            next_check = Instant::now() + waits.next().unwrap_or(ACCOUNT_CHECK_FRESH_FOR);
         }
     });
     std::thread::spawn(move || {
@@ -478,4 +579,24 @@ fn sign_in_url(output: &str) -> Option<String> {
         .any(|maker| host == *maker || host.ends_with(&format!(".{maker}")))
         .then(|| candidate.to_string())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// CDXC:AgentProviders 2026-11-27: the sign-in watcher's checks of `agy models` back off to
+    /// one every 30 s at most (Fable review, finding 5).
+    #[test]
+    fn the_agy_sign_in_checks_back_off_to_every_30_seconds() {
+        assert_eq!(ACCOUNT_CHECK_FRESH_FOR, Duration::from_secs(30));
+        assert!(WATCH_BACKOFF.windows(2).all(|pair| pair[0] < pair[1]));
+        assert!(WATCH_BACKOFF
+            .iter()
+            .all(|wait| Duration::from_secs(*wait) <= ACCOUNT_CHECK_FRESH_FOR));
+        assert!(commands("antigravity").is_some_and(|commands| commands.status_asks_account));
+        for agent in ["claude", "codex", "cursor"] {
+            assert!(commands(agent).is_some_and(|commands| !commands.status_asks_account));
+        }
+    }
 }
