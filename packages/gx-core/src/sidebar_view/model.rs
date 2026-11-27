@@ -955,7 +955,8 @@ impl SidebarViewModel {
             &state.focus,
             &row_context,
         );
-        state.view.machines_with_home = super::chief::machines_with_home(store, &state.view.chiefs);
+        state.view.machines_with_home =
+            super::chief::machines_with_home(store, effective, &state.view.chiefs);
         state.view.project_copies = project_copies;
         state.view.merged_project_rows = merged_project_rows;
         // A project leaves Active projects once its 8 hours are up, with no store change.

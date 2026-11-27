@@ -111,26 +111,53 @@ pub(crate) fn home_headers(
         .collect()
 }
 
-/// The machines (of `chiefs`) that have a home project, drawn or not: their Chief is a home
-/// header, never the row under the Spaces bar.
+/// The machines that have a home project, drawn or not: their Chief is a home header, never the
+/// row under the Spaces bar. Every machine the sidebar is fed counts, not only those whose Chief
+/// was opened.
+///
+/// CDXC:Chief 2026-11-27 DECISION:
+/// User (Q5286, answering the web build's extra "Ask Ghostex AI · Start here" row above the
+/// Ghostex AI header): every computer's agent is a row under Ghostex AI, named by the computer.
+/// This list was read from `chiefs`, which has no entry for a computer whose Chief was never
+/// opened, so before the first open that computer drew the old row under the Spaces bar as well
+/// as the "Start here" row under its home header.
 pub(crate) fn machines_with_home(
     store: &PresentationStore,
+    inputs: &SidebarInputs,
     chiefs: &[ChiefRowView],
 ) -> Vec<String> {
-    chiefs
-        .iter()
-        .filter(|chief| {
-            let machine = if chief.is_local {
-                MachineId::Local
-            } else {
-                MachineId::Remote(chief.machine_id.clone())
-            };
+    let mut machines: Vec<(MachineId, String)> =
+        vec![(MachineId::Local, LOCAL_MACHINE_ID.to_string())];
+    machines.extend(
+        inputs
+            .host
+            .machines
+            .iter()
+            .filter(|tab| !tab.is_local() && tab.fed && !tab.this_computer)
+            .map(|tab| {
+                (
+                    MachineId::Remote(tab.machine_id.clone()),
+                    tab.machine_id.clone(),
+                )
+            }),
+    );
+    for chief in chiefs.iter().filter(|chief| !chief.is_local) {
+        if !machines.iter().any(|(_, id)| *id == chief.machine_id) {
+            machines.push((
+                MachineId::Remote(chief.machine_id.clone()),
+                chief.machine_id.clone(),
+            ));
+        }
+    }
+    machines
+        .into_iter()
+        .filter(|(machine, _)| {
             store
-                .machine(&machine)
+                .machine(machine)
                 .and_then(|entry| entry.loaded())
                 .is_some_and(|loaded| loaded.projects().iter().any(|project| project.is_home))
         })
-        .map(|chief| chief.machine_id.clone())
+        .map(|(_, machine_id)| machine_id)
         .collect()
 }
 
