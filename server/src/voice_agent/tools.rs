@@ -38,7 +38,7 @@ fn all_definitions() -> Value {
         {
             "type": "function",
             "name": "list_sessions",
-            "description": "List the user's open agent sessions with title, project, agent and state (working, waiting on a question, waiting on an approval, idle, sleeping). Waiting sessions come first. A coordinator (orchestrator true) is followed by its sub-threads, the sessions it runs for the user: each has subThreadOf (its coordinator's title) and is not a top-level session. A session on another computer the user connected has computer (that computer's name); unavailableComputers names connected computers whose sessions could not be read, and why. An idle session with olderOpenQuestions still has that many open questions from earlier turns in its chat; it is not waiting on the user, so mention them only when the user asks about open questions.",
+            "description": "List the user's open agent sessions with title, project, agent and state (working, waiting on a question, waiting on an approval, idle, sleeping). Waiting sessions come first. A coordinator (orchestrator true) is followed by its sub-threads, the sessions it runs for the user: each has subThreadOf (its coordinator's title) and is not a top-level session. A session on another computer the user connected has computer (that computer's name); unavailableComputers names connected computers whose sessions could not be read, and why; threadsUnknown names connected computers that did not say which of their sessions are sub-threads, so their sessions come without subThreadOf or orchestrator: don't guess which of them are sub-threads. An idle session with olderOpenQuestions still has that many open questions from earlier turns in its chat; it is not waiting on the user, so mention them only when the user asks about open questions.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -562,7 +562,16 @@ pub(super) async fn resolve_session(
     if query.is_empty() && scope.is_none() {
         return Err("Say which session.".to_string());
     }
-    let (all, unavailable) = sessions::list_everywhere_async(state).await?;
+    // A focused call names its session or that session's threads, all on this computer, so it
+    // does not wait for which sessions are threads on a connected one; matching words among all
+    // sessions does, since a top-level session wins over a thread of the same name.
+    let (all, unavailable) = match &scope {
+        Some(_) => (sessions::list_sessions_async(state).await?, Vec::new()),
+        None => {
+            let read = sessions::list_everywhere_async(state).await?;
+            (read.sessions, read.unavailable)
+        }
+    };
     let session = match &scope {
         None => named_session(memory, &all, &query, &all)
             .map_err(|error| computers::with_unreachable(error, &unavailable))?,
@@ -639,7 +648,11 @@ pub(super) const NO_MATCH: &str = "No open session matches";
 
 /// CDXC:VoiceMode 2026-11-10 WHY: User: "When the user says something like "tell Big Chungus" about an issue, the assistant searched for a project named Big Chungus first, found nothing, and told the user "no Big Chungus sessions came up under that name", even though Big Chungus is a session title". The model guessed the kind and passed the title as `project`, and this tool answered "No project matches" after one kind of search. A `project` that names no project is now matched against session and coordinator titles too before anything is reported missing (the voice agent's own tool; the app's session and project search is unchanged), and the prompt tells the model to look across all kinds (prompt.rs).
 async fn list_sessions(state: &Arc<AppState>, args: &Value) -> Result<Value, String> {
-    let (mut all, unavailable) = sessions::list_everywhere_async(state).await?;
+    let sessions::SessionsRead {
+        sessions: mut all,
+        unavailable,
+        threads_unknown,
+    } = sessions::list_everywhere_async(state).await?;
     let project = arg_text(args, "project");
     let mut matched_as: Option<Value> = None;
     if !project.is_empty() {
@@ -705,6 +718,9 @@ async fn list_sessions(state: &Arc<AppState>, args: &Value) -> Result<Value, Str
             .iter()
             .map(computers::Unavailable::to_tool_value)
             .collect::<Vec<_>>());
+    }
+    if !threads_unknown.is_empty() {
+        result["threadsUnknown"] = json!(threads_unknown);
     }
     Ok(result)
 }

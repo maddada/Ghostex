@@ -70,10 +70,10 @@ pub(super) fn ensure_running(state: &Arc<AppState>) {
                 }
                 call_mode = Some(push_to_talk);
             }
-            if let Ok((rows, unavailable)) = sessions::list_everywhere_async(&state).await {
+            if let Ok(read) = sessions::list_everywhere_async(&state).await {
                 let mut lines: Vec<Announcement> = Vec::new();
                 let mut present: HashSet<String> = HashSet::new();
-                for row in &rows {
+                for row in &read.sessions {
                     let key = row.reference();
                     present.insert(key.clone());
                     let known = turn_events.contains_key(&key);
@@ -142,12 +142,10 @@ pub(super) fn ensure_running(state: &Arc<AppState>) {
                 seeded = true;
                 // Each call keeps its own scope: a focused one learns from the list whether its
                 // session was renamed or closed, and drops the announcements it does not want. The
-                // computers that could not be read go with it, so their sessions are not taken for
-                // closed (conversation/sessions_context.rs).
-                let read = Arc::new(sessions::SessionsRead {
-                    sessions: rows,
-                    unavailable,
-                });
+                // computers that could not be read, or did not say which sessions are threads, go
+                // with it, so their sessions are not taken for closed or opened
+                // (conversation/sessions_context.rs).
+                let read = Arc::new(read);
                 for tx in registry::senders() {
                     let _ = tx.send(Input::Sessions(read.clone()));
                     if !lines.is_empty() {

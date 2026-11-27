@@ -501,11 +501,12 @@ async fn an_orchestrator_call_hears_its_threads_questions_but_not_their_finished
     call.end();
 }
 
-/// The watcher's read of `sessions`, every connected computer answering.
+/// The watcher's read of `sessions`, every connected computer answering and saying which sessions
+/// are threads.
 pub(super) fn read(sessions: Vec<SessionInfo>) -> Arc<SessionsRead> {
     Arc::new(SessionsRead {
         sessions,
-        unavailable: Vec::new(),
+        ..SessionsRead::default()
     })
 }
 

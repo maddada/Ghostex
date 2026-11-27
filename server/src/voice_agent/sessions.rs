@@ -496,26 +496,43 @@ pub(super) struct SessionsRead {
     pub(super) sessions: Vec<SessionInfo>,
     /// The connected computers that could not be read: their sessions are missing, not closed.
     pub(super) unavailable: Vec<Unavailable>,
+    /// The connected computers, by name, that did not say in time which of their sessions are
+    /// threads (`computers::THREADS_TIMEOUT`): their sessions are listed as they are, a thread
+    /// among them not marked.
+    pub(super) threads_unknown: Vec<String>,
 }
 
 /// Every open session on this computer and on the connected computers that answered, waiting ones
-/// first.
+/// first, for a lookup by ref: a connected computer's threads are marked only when they were read
+/// already (`computers::Threads::NotNeeded`).
 pub(super) async fn list_sessions_async(state: &Arc<AppState>) -> Result<Vec<SessionInfo>, String> {
-    Ok(list_everywhere_async(state).await?.0)
+    Ok(read_everywhere(state, computers::Threads::NotNeeded)
+        .await?
+        .sessions)
 }
 
-/// Every open session here and on the connected computers, and the computers that could not be
-/// read (Agent access off, or not answering), with why.
-pub(super) async fn list_everywhere_async(
+/// Every open session here and on the connected computers with each coordinator's threads after
+/// it, the computers that could not be read (Agent access off, or not answering) with why, and
+/// those that did not say which of their sessions are threads.
+pub(super) async fn list_everywhere_async(state: &Arc<AppState>) -> Result<SessionsRead, String> {
+    read_everywhere(state, computers::Threads::Wanted).await
+}
+
+async fn read_everywhere(
     state: &Arc<AppState>,
-) -> Result<(Vec<SessionInfo>, Vec<Unavailable>), String> {
+    threads: computers::Threads,
+) -> Result<SessionsRead, String> {
     let local_state = state.clone();
     let (local, elsewhere) = tokio::join!(
         tokio::task::spawn_blocking(move || list_sessions(&local_state)),
-        computers::other_computers(state),
+        computers::other_computers(state, threads),
     );
     let local = local.map_err(|error| error.to_string())??;
-    Ok((merge(local, elsewhere.sessions), elsewhere.unavailable))
+    Ok(SessionsRead {
+        sessions: merge(local, elsewhere.sessions),
+        unavailable: elsewhere.unavailable,
+        threads_unknown: elsewhere.threads_unknown,
+    })
 }
 
 /// This computer's projects, then the connected computers'.
@@ -523,7 +540,7 @@ pub(super) async fn list_projects_async(state: &Arc<AppState>) -> Result<Vec<Pro
     let local_state = state.clone();
     let (local, elsewhere) = tokio::join!(
         tokio::task::spawn_blocking(move || list_projects(&local_state)),
-        computers::other_computers(state),
+        computers::other_computers(state, computers::Threads::NotNeeded),
     );
     let mut projects = local.map_err(|error| error.to_string())??;
     projects.extend(elsewhere.projects);

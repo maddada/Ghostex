@@ -19,6 +19,10 @@ use crate::server::AppState;
 
 /// A list request waits at most this long for another computer.
 const LIST_TIMEOUT: Duration = Duration::from_secs(6);
+/// Which of another computer's sessions are threads (`hierarchy`) is waited for at most this long
+/// once its sessions and projects came; without an answer by then its sessions come as they are,
+/// with their threads unknown (`Elsewhere::threads_unknown`).
+pub(super) const THREADS_TIMEOUT: Duration = Duration::from_secs(2);
 /// A computer's lists are reused this long, so a tool call right after the two-second
 /// announcement poll does not ask again.
 const FRESH_FOR: Duration = Duration::from_millis(1_500);
@@ -46,18 +50,58 @@ impl Unavailable {
     }
 }
 
+/// What a reader needs to know of another computer's sessions besides the rows.
+///
+/// CDXC:VoiceMode 2026-11-27 WHY: which sessions are threads takes one more request per computer
+/// (`hierarchy`), and a computer slow to answer it held up every reader of the shared list for up
+/// to `LIST_TIMEOUT` more, a project lookup or a focused call's start included, though their
+/// sessions and projects had come. Only the readers that tell threads apart ask it, and only for
+/// `THREADS_TIMEOUT`; the others take what came, threads too when they came already.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Threads {
+    /// Which are a coordinator's threads: the call's list, the announcements, `list_sessions`,
+    /// and matching the user's words (a top-level session wins over a thread of the same name).
+    Wanted,
+    /// Nothing more: projects, and the lookups by ref of a focused call, a GBot and the active
+    /// session.
+    NotNeeded,
+}
+
 /// What the other computers hold.
 #[derive(Default)]
 pub(super) struct Elsewhere {
     pub(super) sessions: Vec<SessionInfo>,
     pub(super) projects: Vec<ProjectInfo>,
     pub(super) unavailable: Vec<Unavailable>,
+    /// With `Threads::Wanted`, the computers, by name, whose sessions came without which of them
+    /// are threads: each is listed as a session of its own, a thread or not.
+    pub(super) threads_unknown: Vec<String>,
 }
 
+/// One computer's answers.
 #[derive(Clone)]
 struct Listing {
+    computer: Computer,
+    /// Its open sessions, waiting ones first, threads not marked.
     sessions: Vec<SessionInfo>,
     projects: Vec<ProjectInfo>,
+    /// Its presentation snapshot (`hierarchy`): `None` until asked, `Some(None)` when it did not
+    /// come in time.
+    threads: Option<Option<Value>>,
+}
+
+impl Listing {
+    /// Its sessions, each coordinator's threads marked and right after it when its snapshot came.
+    fn sessions(&self) -> Vec<SessionInfo> {
+        match &self.threads {
+            Some(Some(snapshot)) => with_threads(&self.computer, self.sessions.clone(), snapshot),
+            _ => self.sessions.clone(),
+        }
+    }
+
+    fn threads_known(&self) -> bool {
+        matches!(self.threads, Some(Some(_)))
+    }
 }
 
 /// Each computer's last answer, by this gxserver's and that computer's server ids.
@@ -78,9 +122,11 @@ pub(super) fn forget(state: &AppState, server_id: &str) {
 
 /// The open sessions and projects of every connected computer, read in parallel. One that
 /// cannot be read is named in `unavailable` and leaves the rest alone.
-pub(super) async fn other_computers(state: &Arc<AppState>) -> Elsewhere {
+pub(super) async fn other_computers(state: &Arc<AppState>, threads: Threads) -> Elsewhere {
     let computers = crate::connected_computers::list();
-    let reads = computers.iter().map(|computer| listing(state, computer));
+    let reads = computers
+        .iter()
+        .map(|computer| listing(state, computer, threads));
     let mut elsewhere = Elsewhere::default();
     for (computer, outcome) in computers
         .iter()
@@ -88,7 +134,10 @@ pub(super) async fn other_computers(state: &Arc<AppState>) -> Elsewhere {
     {
         match outcome {
             Ok(listing) => {
-                elsewhere.sessions.extend(listing.sessions);
+                if threads == Threads::Wanted && !listing.threads_known() {
+                    elsewhere.threads_unknown.push(computer.name.clone());
+                }
+                elsewhere.sessions.extend(listing.sessions());
                 elsewhere.projects.extend(listing.projects);
             }
             Err(reason) => elsewhere.unavailable.push(Unavailable {
@@ -98,11 +147,15 @@ pub(super) async fn other_computers(state: &Arc<AppState>) -> Elsewhere {
         }
     }
     // Each computer's rows come waiting first with its threads under their orchestrator
-    // (`read_listing`); `sessions::merge` sorts them in with this computer's.
+    // (`Listing::sessions`); `sessions::merge` sorts them in with this computer's.
     elsewhere
 }
 
-async fn listing(state: &Arc<AppState>, computer: &ConnectedComputer) -> Result<Listing, String> {
+async fn listing(
+    state: &Arc<AppState>,
+    computer: &ConnectedComputer,
+    threads: Threads,
+) -> Result<Listing, String> {
     if let Some(waiting) = computer.waiting_message() {
         return Err(waiting);
     }
@@ -110,16 +163,38 @@ async fn listing(state: &Arc<AppState>, computer: &ConnectedComputer) -> Result<
         return Err(crate::connected_computers::access_off_message(computer));
     }
     let key = (state.metadata.server_id.clone(), computer.server_id.clone());
-    if let Some((at, outcome)) = cache().get(&key) {
+    let cached = cache().get(&key).and_then(|(at, outcome)| {
         let keep = if outcome.is_ok() {
             FRESH_FOR
         } else {
             FAILED_FOR
         };
-        if at.elapsed() < keep {
-            return outcome.clone();
+        (at.elapsed() < keep).then(|| (*at, outcome.clone()))
+    });
+    let (at, outcome) = match cached {
+        Some(cached) => cached,
+        None => {
+            let outcome = read(state, computer).await;
+            let at = Instant::now();
+            cache().insert(key.clone(), (at, outcome.clone()));
+            (at, outcome)
+        }
+    };
+    let mut listing = outcome?;
+    if threads == Threads::Wanted && listing.threads.is_none() {
+        listing.threads = Some(hierarchy(state, &listing.computer, &listing.sessions).await);
+        // Kept with the answers it is about, unless they were read again meanwhile.
+        if let Some((cached_at, Ok(cached))) = cache().get_mut(&key) {
+            if *cached_at == at {
+                cached.threads = listing.threads.clone();
+            }
         }
     }
+    Ok(listing)
+}
+
+/// Another computer's sessions and projects, without which sessions are threads.
+async fn read(state: &Arc<AppState>, computer: &ConnectedComputer) -> Result<Listing, String> {
     let owner = Computer {
         server_id: computer.server_id.clone(),
         name: computer.name.clone(),
@@ -140,24 +215,20 @@ async fn listing(state: &Arc<AppState>, computer: &ConnectedComputer) -> Result<
             LIST_TIMEOUT
         ),
     );
-    let outcome = match (rows, projects) {
-        (Ok(rows), Ok(projects)) => {
-            let hierarchy = hierarchy(state, &owner, &rows).await;
-            Ok(read_listing(&owner, &rows, &projects, hierarchy.as_ref()))
-        }
+    match (rows, projects) {
+        (Ok(rows), Ok(projects)) => Ok(read_listing(&owner, &rows, &projects)),
         // This computer's relay did not answer in time: the tunnel to it hangs.
         (Err(error), _) | (_, Err(error)) if error.starts_with(loopback::NO_ANSWER) => {
             Err(format!("{} didn't answer in time.", computer.name))
         }
         (Err(error), _) | (_, Err(error)) => Err(error),
-    };
-    cache().insert(key, (Instant::now(), outcome.clone()));
-    outcome
+    }
 }
 
 /// Which of another computer's open sessions are coordinators and which are their threads: the
-/// coordinator fields of its presentation snapshot for just those sessions (`onlySessions`).
-/// `None` when it did not answer; its threads then stay top-level.
+/// coordinator fields of its presentation snapshot for just those sessions (`onlySessions`),
+/// waited for at most `THREADS_TIMEOUT`. `None` when it did not answer in time; its threads then
+/// stay top-level, and the readers that want them say so (`Elsewhere::threads_unknown`).
 ///
 /// CDXC:VoiceMode 2026-11-26 WHY: the voice agent left a coordinator's threads out of the call's
 /// session list and its announcements only on this computer, because which sessions are threads
@@ -166,42 +237,33 @@ async fn listing(state: &Arc<AppState>, computer: &ConnectedComputer) -> Result<
 /// (coordinators/presentation.rs), on an endpoint other computers may already read
 /// (`PEER_ALLOWED_ENDPOINTS`); `onlySessions` keeps the answer to the listed sessions, as the
 /// remote coordinator runtime asks it (server/coordinator_remote_runtime.rs).
-async fn hierarchy(state: &Arc<AppState>, computer: &Computer, rows: &Value) -> Option<Value> {
-    let keys: Vec<Value> = rows
-        .get("sessions")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|row| {
-            Some(json!({
-                "projectId": row.get("projectId")?.as_str()?,
-                "sessionId": row.get("sessionId")?.as_str()?,
-            }))
-        })
-        .collect();
-    if keys.is_empty() {
-        return None;
+async fn hierarchy(
+    state: &Arc<AppState>,
+    computer: &Computer,
+    sessions: &[SessionInfo],
+) -> Option<Value> {
+    if sessions.is_empty() {
+        // No session, so no thread: nothing to ask.
+        return Some(Value::Null);
     }
+    let keys: Vec<Value> = sessions
+        .iter()
+        .map(|session| json!({"projectId": session.project_id, "sessionId": session.session_id}))
+        .collect();
     call(
         state,
         Some(computer),
         "/api/readPresentationSnapshot",
         json!({ "onlySessions": keys }),
-        LIST_TIMEOUT,
+        THREADS_TIMEOUT,
     )
     .await
     .ok()
 }
 
 /// Another computer's `listSessions` and `listProjects` answers as the voice agent's rows, each
-/// marked with `computer`, waiting ones first, with each coordinator's threads marked and right
-/// after it as `snapshot` (its `readPresentationSnapshot` answer, `hierarchy`) names them.
-fn read_listing(
-    computer: &Computer,
-    rows: &Value,
-    projects: &Value,
-    snapshot: Option<&Value>,
-) -> Listing {
+/// marked with `computer`, waiting ones first; which are threads is not asked yet.
+fn read_listing(computer: &Computer, rows: &Value, projects: &Value) -> Listing {
     let projects: Vec<ProjectInfo> = projects
         .get("projects")
         .and_then(Value::as_array)
@@ -225,13 +287,28 @@ fn read_listing(
             session
         })
         .collect();
+    Listing {
+        computer: computer.clone(),
+        sessions: sessions::sorted(rows),
+        projects,
+        threads: None,
+    }
+}
+
+/// `sessions` of `computer` with each coordinator's threads marked and right after it, as
+/// `snapshot` (its `readPresentationSnapshot` answer, `hierarchy`) names them.
+fn with_threads(
+    computer: &Computer,
+    sessions: Vec<SessionInfo>,
+    snapshot: &Value,
+) -> Vec<SessionInfo> {
     // Each session's coordinator fields, by its global ref (the one `SessionInfo::reference`
     // gives a session on another computer).
     let global = |project_id: &str, session_id: &str| {
         crate::ids::create_global_session_ref(&computer.server_id, project_id, session_id)
     };
     let roles: HashMap<String, &Value> = snapshot
-        .and_then(|snapshot| snapshot.pointer("/snapshot/sessions"))
+        .pointer("/snapshot/sessions")
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
@@ -252,8 +329,8 @@ fn read_listing(
             .and_then(Value::as_str)
             .map(str::to_string)
     };
-    let sessions = sessions::nest(
-        sessions::sorted(rows),
+    sessions::nest(
+        sessions,
         |reference| {
             let project_id = field(reference, "coordinatorProjectId")?;
             let session_id = field(reference, "coordinatorSessionId")?;
@@ -261,8 +338,7 @@ fn read_listing(
             Some((global(&project_id, &session_id), done))
         },
         |reference| field(reference, "coordinatorRole").as_deref() == Some("coordinator"),
-    );
-    Listing { sessions, projects }
+    )
 }
 
 /// `error` (no session matched the user's words) with the connected computers that could not be
@@ -324,6 +400,6 @@ pub(super) fn read_listing_for_tests(
     rows: &Value,
     projects: &Value,
 ) -> (Vec<SessionInfo>, Vec<ProjectInfo>) {
-    let listing = read_listing(computer, rows, projects, None);
+    let listing = read_listing(computer, rows, projects);
     (listing.sessions, listing.projects)
 }

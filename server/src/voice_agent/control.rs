@@ -76,9 +76,9 @@ pub(super) async fn stop_session(
         if query.is_empty() {
             return Err("Say which session.".to_string());
         }
-        let (all, unavailable) = sessions::list_everywhere_async(state).await?;
-        stop_target(memory, &all, &query)
-            .map_err(|error| computers::with_unreachable(error, &unavailable))?
+        let read = sessions::list_everywhere_async(state).await?;
+        stop_target(memory, &read.sessions, &query)
+            .map_err(|error| computers::with_unreachable(error, &read.unavailable))?
     };
     let session = match target {
         StopTarget::Sure(session) => session,

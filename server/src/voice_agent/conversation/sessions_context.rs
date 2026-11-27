@@ -492,13 +492,7 @@ impl Conversation {
         }
         let (state, tx) = (self.state.clone(), self.tx.clone());
         tokio::spawn(async move {
-            if let Ok((sessions, unavailable)) =
-                super::super::sessions::list_everywhere_async(&state).await
-            {
-                let read = SessionsRead {
-                    sessions,
-                    unavailable,
-                };
+            if let Ok(read) = super::super::sessions::list_everywhere_async(&state).await {
                 let _ = tx.send(super::Input::Sessions(std::sync::Arc::new(read)));
             }
         });
