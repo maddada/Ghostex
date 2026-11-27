@@ -129,18 +129,18 @@ impl Area {
 const CHAT_BOX: Area = Area {
     id: "chatBox",
     label: "Chat box",
-    description: "Chill: the field, the model, the effort, •••, attach, the mic and Send. Regular adds the mode and Maximize chat box. Advanced adds the terminal button and the context ring.",
+    description: "Chill: the field, the model, the effort, •••, attach, the mic and Send. Regular adds the mode and Maximize chat box. Advanced adds the terminal button and the context ring (on the phone).",
     words: [
         "Just the field, the model, the effort, •••, attach, the mic and Send. Sessions run in Auto.",
         "Adds the mode picker and Maximize chat box. The terminal stays in •••.",
-        "Adds the terminal button and the context ring.",
+        "Adds the terminal button and the context ring (on the phone).",
     ],
     always: &["Field", "Model", "Effort", "•••", "Attach", "Mic", "Send"],
     controls: &[
         Control { key: COMPOSER_MODE_PICKER_KEY, label: "Mode picker", hint: "Off, sessions run in Auto, or in Full permissions while Agent approvals is set to Full permissions.", shown_when: true },
         Control { key: COMPOSER_MAXIMIZE_KEY, label: "Maximize chat box", hint: "The button that makes the chat box fill the chat.", shown_when: true },
         Control { key: COMPOSER_TERMINAL_BUTTON_KEY, label: "Terminal button", hint: "Off, Terminal View is in the ••• menu.", shown_when: true },
-        Control { key: COMPOSER_CONTEXT_RING_KEY, label: "Context ring", hint: "Off, it stays in ••• › More › Context window.", shown_when: true },
+        Control { key: COMPOSER_CONTEXT_RING_KEY, label: "Context ring", hint: "On the phone. Off, it stays in ••• › More. On the computer the Session Details button at the top shows it.", shown_when: true },
     ],
     presets: [
         &[

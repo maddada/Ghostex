@@ -2,14 +2,13 @@ use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text}
 use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Bounds, Context, InteractiveElement as _, IntoElement, ParentElement as _,
+    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _,
     StatefulInteractiveElement as _, Styled as _, canvas, div, point, px,
 };
 use serde_json::{Value, json};
 use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
-    rc::Rc,
 };
 
 /// CDXC:SessionChat 2026-09-23 DECISION:
@@ -44,9 +43,6 @@ pub(super) const STATUS_LINE_ROW_HEIGHT: f32 = 16.0;
 
 /// The hover group of the status line, which reveals its edit pen.
 const CONTEXT_STATUS_GROUP: &str = "context-status";
-
-/// The context meter's toggle key in `menu_toggle.rs`.
-const CONTEXT_METER_TRIGGER: &str = "chat-context-meter";
 
 thread_local! {
     /// CDXC:SessionChat 2026-09-19 WHY:
@@ -102,86 +98,6 @@ pub(super) fn remembered_status_line_reservation(session: &str) -> bool {
     REMEMBERED_STATUS_LINES
         .with_borrow(|sessions| sessions.get(session).copied())
         .unwrap_or_else(last_status_line_reservation)
-}
-
-/// The context meter's tokens as "250k / 1m" (used and window, from the same `contextUsage` the
-/// ring and the Session Details Context card read), the used tokens alone when the agent reports
-/// no window, or nothing before any are reported.
-fn context_tokens_label(context: &Value) -> Option<String> {
-    use ghostex_gx_chat_core::menus::context::usage::format_context_tokens;
-    let number = |key: &str| context[key].as_f64().filter(|value| value.is_finite());
-    let used = number("usedTokens")?;
-    Some(match number("windowSize").filter(|window| *window > 0.0) {
-        Some(window) => format!(
-            "{} / {}",
-            format_context_tokens(Some(used)),
-            format_context_tokens(Some(window))
-        ),
-        None => format!("{} used", format_context_tokens(Some(used))),
-    })
-}
-
-pub(super) fn ring(percentage: f32, appearance: &ChatAppearance) -> AnyElement {
-    let scale = appearance.scale;
-    let mut muted = gpui::Rgba::from(appearance.muted);
-    if appearance.light {
-        muted.r *= 0.75;
-        muted.g *= 0.75;
-        muted.b *= 0.75;
-    }
-    let muted = gpui::Hsla::from(muted).opacity(0.24);
-    let ink = gpui::rgb(if appearance.light { 0x8b8b8b } else { 0xb9b9b9 });
-    canvas(
-        |_, _, _| {},
-        move |bounds, _, window, _| {
-            let center = bounds.center();
-            let radius = 6.5 * scale;
-            for (fraction, color) in [
-                (1.0, muted),
-                ((percentage / 100.0).clamp(0.0, 1.0), ink.into()),
-            ] {
-                if fraction <= 0.0 {
-                    continue;
-                }
-                let mut path = gpui::PathBuilder::stroke(px(2.0 * scale));
-                let steps = (fraction * 96.0).ceil() as usize;
-                for step in 0..=steps {
-                    let angle = -std::f32::consts::FRAC_PI_2
-                        + std::f32::consts::TAU * fraction * step as f32 / steps as f32;
-                    let point = center + point(px(angle.cos() * radius), px(angle.sin() * radius));
-                    if step == 0 {
-                        path.move_to(point);
-                    } else {
-                        path.line_to(point);
-                    }
-                }
-                if let Ok(path) = path.build() {
-                    window.paint_path(path, color);
-                }
-                if fraction < 1.0 {
-                    for angle in [
-                        -std::f32::consts::FRAC_PI_2,
-                        -std::f32::consts::FRAC_PI_2 + std::f32::consts::TAU * fraction,
-                    ] {
-                        let tip =
-                            center + point(px(angle.cos() * radius), px(angle.sin() * radius));
-                        window.paint_quad(
-                            gpui::fill(
-                                gpui::Bounds::new(
-                                    tip - point(px(scale), px(scale)),
-                                    gpui::size(px(2.0 * scale), px(2.0 * scale)),
-                                ),
-                                color,
-                            )
-                            .corner_radii(px(scale)),
-                        );
-                    }
-                }
-            }
-        },
-    )
-    .size(px(16.0 * scale))
-    .into_any_element()
 }
 
 impl NativeChatView {
@@ -244,79 +160,6 @@ impl NativeChatView {
 
     pub(super) fn context_menu_rows(&self) -> Vec<Value> {
         vec![json!({"context":self.snapshot["contextMeter"]})]
-    }
-
-    /// CDXC:SessionChat 2026-09-24 DECISION: The user asked for the context window button's tooltip to say only "Statusline Config" instead of the usage summary.
-    pub(super) fn render_context_meter(
-        &self,
-        appearance: &ChatAppearance,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let context = &self.snapshot["contextMeter"];
-        let bounds = Rc::new(Cell::new(Bounds::default()));
-        let measured = bounds.clone();
-        let percentage = context["usedPercentage"].as_f64().unwrap_or(0.0) as f32;
-        div()
-            .id("chat-context-meter")
-            .role(gpui::Role::Button)
-            .aria_label(text(context, "label"))
-            .relative()
-            .ml(px(6.0 * appearance.scale))
-            .size(px(24.0 * appearance.scale))
-            .flex_shrink_0()
-            .flex()
-            .items_center()
-            .justify_center()
-            .rounded_full()
-            .chat_cursor_pointer()
-            .when(self.chat_menu_is_open(CONTEXT_METER_TRIGGER), |this| {
-                this.bg(appearance.border)
-            })
-            .hover(|style| style.bg(appearance.border))
-            .tooltip({
-                let label = if self.session_details_available() {
-                    "Session Details"
-                } else {
-                    "Statusline Config"
-                };
-                // CDXC:SessionChat 2026-11-27 DECISION: User: "when i hover this please let's show
-                // the context like 250k/1m". The tooltip adds the tokens the ring draws, in the
-                // Session Details Context card's own form; nothing reported yet shows the label alone.
-                let label: gpui::SharedString = match context_tokens_label(context) {
-                    Some(tokens) => format!("{label} · {tokens}").into(),
-                    None => label.into(),
-                };
-                move |window, cx| {
-                    gpui_component::tooltip::Tooltip::new(label.clone()).build(window, cx)
-                }
-            })
-            .child(ring(percentage, appearance))
-            .on_click(cx.listener(move |chat, _, window, cx| {
-                // CDXC:SessionDetails 2026-11-12 DECISION: the user picked option A (Q2763): where the
-                // chat has the Session details panel, the ring opens it on its first tab at the Context
-                // card, and this Context window popover is only for a chat without one.
-                if chat.show_session_details_for_context(cx) {
-                    return;
-                }
-                if chat.chat_menu_toggled_shut(CONTEXT_METER_TRIGGER, cx) {
-                    return;
-                }
-                let width = if chat.snapshot["contextMeter"]["details"].is_array() {
-                    380.0
-                } else {
-                    300.0
-                };
-                // "Statusline Config": its menu lines up with the ring's left edge.
-                chat.menu_side = Some(super::option_menu::MenuSide::Left);
-                chat.show_chat_menu(chat.context_menu_rows(), bounds.get(), width, window, cx);
-            }))
-            // The ring's own box, pinned with insets like the option pills' (option_pills.rs).
-            .child(
-                canvas(move |bounds, _, _| measured.set(bounds), |_, _, _, _| {})
-                    .absolute()
-                    .inset(px(0.0)),
-            )
-            .into_any_element()
     }
 
     /// The pen at the status line's right end, outside the values it scrolls, which opens Context

@@ -197,7 +197,6 @@ pub(crate) fn official_icon(id: &str) -> &'static str {
         // They drew the globe below until 2026-11-09 (User, Q2037: their own icons).
         "voiceAgent" => "titlebar/headset.svg",
         "readAloud" => "titlebar/volume.svg",
-        "sessionDetailsPanel" => "titlebar/panel-right.svg",
         "sessionNotes" => "modals/settings/note.svg",
         "chatStatusLine" => "titlebar/info-circle.svg",
         "catchMeUp" => "titlebar/history.svg",

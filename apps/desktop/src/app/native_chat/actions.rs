@@ -596,13 +596,13 @@ impl NativeChatView {
     /// Context window and the option settings, when they overflow the chat box.
     fn folded_option_rows(&self) -> Vec<Value> {
         let mut rows = Vec::new();
-        let ring_off_row = self.snapshot["composerRow"]["hideContextRing"] == true;
-        if self.snapshot["composerOverflow"]["optionsOverflowed"] != true && !ring_off_row {
-            return rows;
-        }
         // CDXC:SessionDetails 2026-11-12 DECISION: where the chat has the Session details panel, its first
         // tab's Context card and its second tab carry this (Q2763, option A); the row stays for a chat
         // without one.
+        // CDXC:SessionDetails 2026-11-27 DECISION: User: "we have this twice btw, we have it in the
+        // chat box also, which i think we need to remove the circle from the chat box for desktop".
+        // The computer's chat box draws no context ring (`chatComposerContextRing` is the phone's
+        // now), so for a chat without the panel this row is always where the Context window is.
         if self.snapshot["contextMeter"].is_object() && !self.session_details_available() {
             rows.push(json!({"label":"Context window","iconPath":"titlebar/circle-half.svg","detail":self.snapshot["contextMeter"]["percentage"],"openOnHover":false,"children":self.context_menu_rows()}));
         }

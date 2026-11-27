@@ -60,7 +60,8 @@ pub struct CoreState {
     pub catch_up_enabled: bool,
     /// The chat box row switches (Settings > Experience), from the host; all on by default.
     pub composer_row: crate::composer::row::ComposerRowSettings,
-    /// The Session details panel built-in extension is on (`sessionDetailsPanelHidden` false).
+    /// The Session details panel applies (always true since 2026-11-27, when it stopped being an
+    /// extension; kept for hosts that still send it).
     pub session_details_enabled: bool,
     /// The Send when you pick an answer setting (`chatSendOnPick`), from the chat settings or the
     /// latest read; off by default.

@@ -308,19 +308,8 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("settingKeys", J::Arr(&[J::Str("readAloudVoice"), J::Str("readAloudRate"), J::Str("readAloudUnavailable")])),
         ("hotkeys", J::Arr(&[J::Str("readAloudLastReply"), J::Str("readAloudStop")])),
     ]),
-    // CDXC:SessionDetails 2026-10-25 DECISION:
-    // User: "please make the Session detail panel extension enabled by default". This supersedes Q18's "so i enable it and test it but others dont get it": the panel stays a whole-feature entry like Read aloud with its own key (`sessionDetailsPanelHidden`, now default false), still marked beta in its description as Q18 asked, and on for everyone who has not turned it off. Off hides the header's context ring, the panel and the Claude task list row, and gives Claude sessions no task-list variable. Not behind Enable Experimental Features.
-    // SEE-ALSO: server/src/session_details/ (the data and the gate), packages/gx-chat-core/src/extras/session_details/, apps/desktop/src/app/native_chat/session_details/.
-    J::Obj(&[
-        ("description", J::Str("Beta. A panel beside each Claude chat, opened from the context ring at the top right of the window: where the session runs, how full its context is with Claude's own breakdown, its connectors, skills and memory files, its changes, background commands and task list.")),
-        ("category", J::Str("features")),
-        ("id", J::Str("sessionDetailsPanel")),
-        ("placement", J::Str("feature")),
-        ("settingsKey", J::Str("sessionDetailsPanelHidden")),
-        ("appWide", J::Bool(true)),
-        ("title", J::Str("Session details panel")),
-        ("settingKeys", J::Arr(&[J::Str("sessionDetailsClaudeTaskTools")])),
-    ]),
+    // CDXC:SessionDetails 2026-11-27 DECISION:
+    // User: "this isn't an extension really.. this is a ui element that can be hidden from the top bar", "so we can't disable session details panel and it's no longer shown in extensions, but it can be removed from the top if someone wants". The Session details panel is no longer a built-in extension and cannot be turned off; `sessionDetailsPanelHidden` is retired, and read once only as the default of the header's Session Details pin (render/workarea_header/header_pins.rs), so someone who had it off finds the button in the header's ⋯ menu instead of the header. Supersedes the 2026-10-25 Session details panel extension entry.
     // CDXC:SessionNotes 2026-10-30 DECISION:
     // User: "please make session notes a built in extension in the extensions page so i can toggle it on and off and if it's off then hide it from the sessions context menu and from the more actions menu in the chat composer and everywhere (should be disabled by default)". A whole-feature entry with a new key (`sessionNotesHidden`, default on = hidden), so it starts off for new and existing users. Off removes the Note row of a session's menu and its hover button, the note dot and the note line in the card's tooltip, the Session note row of the chat's and the terminal bar's More actions, the note dialog, the Session Note hotkey and its Quick Access row, and `ghostex session-note`; the phone follows through `builtInFeaturesOff`. Saved notes are kept and come back when it is turned on.
     // SEE-ALSO: packages/gx-core/src/sidebar_view/inputs.rs (`session_notes_enabled`), apps/desktop/src/app/session_notes.rs, apps/gpui-web/src/app/session_notes.rs, apps/mobile/app/src/sessions/sessionNotesSwitch.ts.

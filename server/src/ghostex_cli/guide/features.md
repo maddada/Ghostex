@@ -3355,11 +3355,14 @@ button again closes it. Nothing is sent to the session's own agent. If the
 Title Generation Agent is not installed, the card says so; pick another one in
 Settings > Agents. Setting: `chatCatchMeUp`.
 
-Session details panel (beta): a built-in extension, on by default; turn it off
-in Settings > Extensions. While it is on, a Claude chat shows a small
-context ring with its percentage at the top right of the window, next to the ⋯
-menu; click it to show or hide the panel of the chat you are in (one switch for
-the whole app, remembered across restarts). It opens in the same spot as the
+Session details panel: always on, for every agent chat. The Session Details
+button at the top right of the window, next to the ⋯ menu, is a small context
+ring with its percentage; point at it to see the context's tokens ("250k / 1m"),
+and click it to show or hide the panel of the chat you are in (one switch for
+the whole app, remembered across restarts). To take the button off the header,
+right-click it and pick Unpin from header: it moves into the header's ⋯ menu
+(under This chat), which still opens the panel, and the pin on its row puts it
+back. It opens in the same spot as the
 Work panel, at the same width: when the chat is wide enough the panel sits on
 its right as its own column and the conversation moves over to make room; when
 it is too narrow the panel opens as a floating card under the ring, and a click
@@ -3369,9 +3372,10 @@ header and opens the cards as a sheet (Changes opens the phone's Changes view).
 The panel has two parts, Overview and then Limits. On the computer they are two
 areas one under the other, both open at first; click an area's title to fold or
 unfold it, and Ghostex remembers each one for the whole app, so the panel opens
-the way you left it in any chat. On the phone they are two tabs. The chat box's
-context ring opens the panel too, at the Context card, so there is no separate
-Context window popover any more (a chat without the panel keeps it).
+the way you left it in any chat. On the phone they are two tabs. On the computer
+the chat box has no context ring (the header's button is where the context use
+shows); on the phone the chat box's ring opens the panel at the Context card. A
+chat without the panel has Context window in More actions > More.
 
 Overview holds Environment (the computer, by its icon and name, or the
 box the session runs in, its folder and account, the agent's version, and how much memory
@@ -3395,11 +3399,11 @@ the panel at this card, and the pill hides while the panel shows); and Agent
 (the agent's other settings). Limits holds Plan limits (each limit with when it
 resets), Cost and time and Cache, each showing every row the agent reports, and
 a Customize session details button, which picks what the Chat Status Line pins. A card's title folds
-it, except Context. Claude task list (Settings > Agents > Defaults, shown while
-the extension is on, on by default) starts Claude with its task list tools, which
+it, except Context. Claude task list (Settings > Agents > Defaults, on by
+default) starts Claude with its task list tools, which
 recent Claude models only get when Ghostex asks; it applies to Claude sessions
 started or woken afterwards. Claude only for now. Settings:
-`sessionDetailsPanelHidden`, `sessionDetailsClaudeTaskTools`. Command:
+`sessionDetailsClaudeTaskTools`, `workareaHeaderPins` (the header's pins). Command:
 `ghostex read-session-details <selector> [--refresh] --json`.
 
 Idle compaction (Claude Code) and compact before sending: Claude Code compacts a long chat that has
@@ -3486,14 +3490,13 @@ maximizes the chat box with your text in it, and pressing it again restores it.
 As space gets tighter, toolbar buttons move into More actions one at a time:
 Note, Attach, Maximize chat box, then Terminal View. The microphone never moves:
 it always stays right next to Send.
-If the context ring still does not fit beside the model, it moves into More
-actions > More as Session Details (or Context window in a chat without the
-panel); the model pill shortens instead of moving.
+If the options still do not fit beside the model, they move into More
+actions > More; the model pill shortens instead of moving.
 Controls return as space opens up; More actions, Dictate and Send or Stop stay visible.
 On the phone, More actions > More > Stash Prompt with an empty chat box opens
 Saved prompts for this project: tap one to put it in the chat box, or delete it
 with its trash button. Tags and editing stay on the computer.
-Click the model pill or the context meter to open it; hovering does not open either control.
+Click the model pill (or, on the phone, the context ring) to open it; hovering does not open either control.
 Hover the model pill to see the configured Model & Effort Picker shortcut
 (Option+P by default on macOS). Hover the context circle to read the agent's
 terminal status line.
@@ -8110,11 +8113,11 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   Built-in holds whole parts of Ghostex you can switch off to keep the app
   simple: Actions (off by default), Open In (on by default), Spaces (off by
   default), Cloud Boxes (on by default), Workspaces (off by default; it brings workspaces and the team's
-  Slack flow), and the Session details panel (beta, on by default). Turning one off removes it everywhere at once (its header button,
+  Slack flow). Turning one off removes it everywhere at once (its header button,
   Settings pages and rows, hotkeys, Quick Access rows and menus) and turning it
   back on restores everything you had set up. Settings: `actionsHidden`,
   `openInTitlebarButtonHidden`, `sidebarSpacesEnabled`, `cloudBoxesEnabled`,
-  `workspacesHidden`, `sessionDetailsPanelHidden`; Experimental: `gbotsEnabled`, `readAloudHidden`, `connectorsHidden`, `osIntegrationHidden`,
+  `workspacesHidden`; Experimental: `gbotsEnabled`, `readAloudHidden`, `connectorsHidden`, `osIntegrationHidden`,
   `keepAwakeEnabled`, `allAutomationsEnabled`, `terminalShadersEnabled`, `fasterRendering`,
   `chatToolCallLines`, `securityLogsEnabled`.
   **Sidebar extensions** (such as Workbench) put their own content in the
@@ -8894,8 +8897,8 @@ View the turn that is running stays one line that counts its time ("Working ·
 1m 12s") and each line names only its reports. Regular adds the mode picker
 (and Maximize chat box on the computer); the terminal is a Terminal View row in
 the ••• menu. Advanced is for people who use terminals more: the terminal
-button and the context ring in the chat box, and last-active times in the
-sessions list. The sessions list uses the Sidebar's presets (Chill is Minimal,
+button and (on the phone) the context ring in the chat box, and last-active
+times in the sessions list. The sessions list uses the Sidebar's presets (Chill is Minimal,
 Regular is Recommended, Advanced is Detailed).
 On the computer the page opens with a small preview of Ghostex (the sessions
 list, a chat and its chat box). Click Chill, Regular or Advanced for the whole

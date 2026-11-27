@@ -36,18 +36,6 @@ fn text_param(params: &Map<String, Value>, key: &str) -> String {
         .to_string()
 }
 
-fn require_enabled(state: &AppState) -> Result<(), DomainStateError> {
-    if super::session_details_enabled(&state.paths) {
-        return Ok(());
-    }
-    Err(failure(
-        "disabled",
-        ghostex_settings_catalog::built_in_extensions::turned_off_message(
-            ghostex_settings_catalog::built_in_extensions::SESSION_DETAILS,
-        ),
-    ))
-}
-
 fn read_session(
     state: &AppState,
     project_id: &str,
@@ -90,7 +78,6 @@ pub(crate) async fn handle_read_session_details_http(
                 "readSessionDetails requires projectId and sessionId.",
             ));
         }
-        require_enabled(state)?;
         let mode = match text_param(&params, "breakdown").as_str() {
             "refresh" => ProbeMode::Refresh,
             _ => ProbeMode::Auto,
@@ -533,7 +520,6 @@ pub(crate) async fn handle_stop_session_background_task_http(
                 "That isn't a background command id.",
             ));
         }
-        require_enabled(state)?;
         let (session, project) = read_session(state, &project_id, &session_id)?;
         if crate::session_chat_follower::session_chat_display_agent_for_session(&session).as_deref()
             == Some("opencode")

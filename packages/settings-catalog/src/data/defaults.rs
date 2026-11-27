@@ -173,8 +173,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("workspacesHidden", J::Bool(true)),
     // CDXC:VoiceMode 2026-10-21 DECISION: Read aloud is off by default (official_extensions.rs).
     ("readAloudHidden", J::Bool(true)),
-    // CDXC:SessionDetails 2026-10-25 DECISION: the Session details panel is a beta built-in extension, on by default (official_extensions.rs).
-    ("sessionDetailsPanelHidden", J::Bool(false)),
+    // CDXC:SessionDetails 2026-11-27 DECISION: User: "we can't disable session details panel and it's no longer shown in extensions". `sessionDetailsPanelHidden` is retired (official_extensions.rs); a saved `true` only starts the header's Session Details button unpinned.
     // CDXC:SessionNotes 2026-10-30 DECISION: Session notes is off by default (official_extensions.rs).
     ("sessionNotesHidden", J::Bool(true)),
     // CDXC:SessionChat 2026-11-22 DECISION: the Chat Status Line is off by default, for existing users too (official_extensions.rs).

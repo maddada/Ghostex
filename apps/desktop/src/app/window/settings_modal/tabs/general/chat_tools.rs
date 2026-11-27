@@ -201,7 +201,7 @@ fn chat_section(
     rows.extend(page.toggle(g, s, "chatVariedWorkingWords", "Varied thinking words", "While the agent works, show a different playful word each turn (Pondering, Brewing and the like) instead of Thinking.", false, cx));
     rows.extend(page.toggle(g, s, "chatComposerModePicker", "Mode in the chat box", "Show the mode picker (Auto, Plan, Full permissions and the like) in the chat box. Off, sessions run in Auto, or in Full permissions while Agent approvals is set to Full permissions. The phone has its own switch.", false, cx));
     rows.extend(page.toggle(g, s, "chatComposerTerminalButton", "Terminal button in the chat box", "Show the Terminal View button in the chat box. Off, Terminal View is in the ••• menu, and the ••• button turns red with the reason when the terminal has a problem.", false, cx));
-    rows.extend(page.toggle(g, s, "chatComposerContextRing", "Context ring in the chat box", "Show how full the agent's context is as a ring in the chat box. Off, it stays in ••• › More › Context window.", false, cx));
+    // CDXC:SessionDetails 2026-11-27 DECISION: User: "remove the circle from the chat box for desktop". The computer's chat box draws no context ring, so its switch (`chatComposerContextRing`, which the phone keeps for its own chat box) has no row here; the header's Session Details button shows the context use.
     rows.extend(page.toggle(
         g,
         s,

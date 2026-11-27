@@ -239,26 +239,32 @@ impl GhostexGpuiApp {
     /// (`render/workarea_header/session_details_button.rs`): the open chat's context ring, which
     /// shows and hides that chat's Session details panel.
     fn render_web_session_details_button(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        // The page has no settings file; the handshake says what is on (`builtInFeatures`).
-        if !crate::app::read_aloud::computer_feature_on(
-            ghostex_settings_catalog::built_in_extensions::SESSION_DETAILS,
-        ) {
-            return None;
-        }
         let session = self.open_session.as_ref()?;
         if self.web_shows_terminal(session) {
             return None;
         }
-        let (percent, label) = {
+        let (percent, label, tokens) = {
             let view = self.native_chats.get(session)?.1.read(cx);
             if !view.session_details_available() {
                 return None;
             }
-            view.session_details_ring()
+            let (percent, label) = view.session_details_ring();
+            (percent, label, view.context_tokens_label())
         };
         let open = self
             .session_details_choices
             .is_open(&session.to_sidebar_session_id());
+        // The context's tokens, as the desktop header's hover says them (CDXC:SessionDetails
+        // 2026-11-27 on `context_tokens_label`).
+        let action = if open {
+            "Hide session details"
+        } else {
+            "Show session details"
+        };
+        let tooltip: gpui::SharedString = match tokens {
+            Some(tokens) => format!("{action} \u{b7} {tokens}").into(),
+            None => action.into(),
+        };
         let key = session.to_sidebar_session_id();
         let bounds = self.session_details_button_bounds.clone();
         let text = titlebar_active_text_color();
@@ -289,12 +295,7 @@ impl GhostexGpuiApp {
                     ),
                 )
                 .tooltip(move |window, cx| {
-                    gpui_component::tooltip::Tooltip::new(if open {
-                        "Hide session details"
-                    } else {
-                        "Show session details"
-                    })
-                    .build(window, cx)
+                    gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
                 })
                 .on_click(cx.listener(move |app, _, _, cx| {
                     // The click that just closed the floating card does not reopen it.

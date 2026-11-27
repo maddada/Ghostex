@@ -2,7 +2,7 @@
 //! opens and closes that chat's Session details panel.
 //!
 //! CDXC:SessionDetails 2026-10-25 DECISION:
-//! User (Q4): the button is "a small context ring with the %", so the context use shows even with the panel closed. It shows only while the Session details panel extension is on and the focused session is a chat, of any agent since Q555 (it was Claude's alone before); it sits before the ⋯ menu so a narrow column never scrolls it away.
+//! User (Q4): the button is "a small context ring with the %", so the context use shows even with the panel closed. It shows while the focused session is a chat, of any agent since Q555 (it was Claude's alone before), and the button is pinned (header_pins.rs; the panel is no longer an extension that can be off, 2026-11-27); it sits before the ⋯ menu so a narrow column never scrolls it away. Its hover adds the context's tokens ("250k / 1m") since the chat box's ring left the computer (2026-11-27).
 //! SEE-ALSO: apps/desktop/src/app/session_chat/session_details.rs (the switch), apps/gpui-web/src/shell.rs (the web header's copy).
 
 use gpui::prelude::FluentBuilder as _;
@@ -21,20 +21,27 @@ impl GhostexGpuiApp {
         &self,
         cx: &mut gpui::Context<Self>,
     ) -> Option<AnyElement> {
-        if !self.built_in_extension_enabled(
-            ghostex_settings_catalog::built_in_extensions::SESSION_DETAILS,
-        ) {
-            return None;
-        }
         let chat = self.session_details_target_chat()?;
-        let (percent, label) = {
+        let open = self.session_details_target_open();
+        let (percent, label, tokens) = {
             let chat = chat.read(cx);
             if !chat.session_details_available() {
                 return None;
             }
-            chat.session_details_ring()
+            let (percent, label) = chat.session_details_ring();
+            (percent, label, chat.context_tokens_label())
         };
-        let open = self.session_details_target_open();
+        let action = if open {
+            "Hide session details"
+        } else {
+            "Show session details"
+        };
+        // The context's tokens, which the chat box's ring showed on hover before it left the
+        // computer's chat box (CDXC:SessionDetails 2026-11-27 on `context_tokens_label`).
+        let tooltip: gpui::SharedString = match tokens {
+            Some(tokens) => format!("{action} \u{b7} {tokens}").into(),
+            None => action.into(),
+        };
         let bounds = self.session_details.button_bounds.clone();
         let text = titlebar_active_text_color();
         Some(
@@ -69,12 +76,7 @@ impl GhostexGpuiApp {
                 )
                 .child(session_details_ring_label(label, text))
                 .tooltip(move |window, cx| {
-                    gpui_component::tooltip::Tooltip::new(if open {
-                        "Hide session details"
-                    } else {
-                        "Show session details"
-                    })
-                    .build(window, cx)
+                    gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
                 })
                 .on_mouse_down(
                     MouseButton::Right,

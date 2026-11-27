@@ -459,17 +459,6 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         user_only: false,
     },
     Supplemental {
-        key: "sessionDetailsPanelHidden",
-        tab: EXTENSIONS,
-        group: None,
-        section: "official",
-        section_title: "Built-in",
-        title: "Turn off the Session details panel",
-        subtitle: "Turn off the Session details panel (beta): the context ring at the top right of the window, the panel beside Claude chats, and the Claude task list row on Settings > Agents. On by default.",
-        options: &[],
-        user_only: false,
-    },
-    Supplemental {
         key: "sessionNotesHidden",
         tab: EXTENSIONS,
         group: None,

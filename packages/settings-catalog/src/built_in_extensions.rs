@@ -54,9 +54,6 @@ pub const GROK_BOT: &str = "grokBot";
 /// Connectors (Settings > Connectors, the `ghostex connectors` verbs and routes). Experimental, off
 /// by default.
 pub const CONNECTORS: &str = "connectors";
-/// The Session details panel (the panel beside a Claude chat, its context ring in the header, its
-/// Claude task-list row on Settings > Agents). Beta, off by default.
-pub const SESSION_DETAILS: &str = "sessionDetailsPanel";
 /// Session notes (a session's Note menu row and hover button, its card's note dot and tooltip
 /// line, the chat's Session note row, the note dialog, its hotkey, `ghostex session-note`). Off by
 /// default; the phone learns it from `builtInFeaturesOff`. Saved notes are kept while it is off.

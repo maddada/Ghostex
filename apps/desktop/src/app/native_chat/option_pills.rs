@@ -380,9 +380,6 @@ impl NativeChatView {
             width += text_width(name)
                 + (AGENT_CHIP_PADDING * 2.0 + AGENT_TILE + AGENT_CHIP_GAP + 2.0) * scale;
         }
-        if self.snapshot["contextMeter"].is_object() {
-            width += 32.0 * scale;
-        }
         if values["showOptions"] == true && !merged {
             width += measure("options") + 2.0 * scale;
         }
@@ -492,12 +489,6 @@ impl NativeChatView {
                         None,
                     ))
                 },
-            )
-            .when(
-                self.snapshot["contextMeter"].is_object()
-                    && self.snapshot["composerOverflow"]["optionsOverflowed"] != true
-                    && self.snapshot["composerRow"]["hideContextRing"] != true,
-                |item| item.child(self.render_context_meter(appearance, cx)),
             )
             .into_any_element()
     }

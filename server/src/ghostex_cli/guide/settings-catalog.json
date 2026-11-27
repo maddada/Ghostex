@@ -382,8 +382,8 @@
     },
     {
       "key": "chatComposerContextRing",
-      "title": "Context ring in the chat box",
-      "subtitle": "Show how full the agent's context is as a ring in the chat box. Off, it stays in ••• › More › Context window.",
+      "title": "Context ring in the phone's chat box",
+      "subtitle": "Show how full the agent's context is as a ring in the phone's chat box. Off, it stays in ••• › More. On the computer the Session Details button at the top of the window shows it.",
       "tab": "chat",
       "tabTitle": "Chat",
       "section": "chat",
@@ -11259,7 +11259,7 @@
     {
       "key": "sessionDetailsClaudeTaskTools",
       "title": "Claude task list",
-      "subtitle": "Turn on Claude's task list tools, so Claude can keep a checklist that the Session details panel shows. Recent Claude models only get them when Ghostex asks. Applies to Claude sessions started or woken after you change it. Shown while the Session details panel extension is on.",
+      "subtitle": "Turn on Claude's task list tools, so Claude can keep a checklist that the Session details panel shows. Recent Claude models only get them when Ghostex asks. Applies to Claude sessions started or woken after you change it.",
       "tab": "agents",
       "tabTitle": "Agents",
       "section": "config",
@@ -12929,18 +12929,6 @@
       "sectionTitle": "Built-in",
       "type": "boolean",
       "default": true,
-      "agentWritable": true
-    },
-    {
-      "key": "sessionDetailsPanelHidden",
-      "title": "Turn off the Session details panel",
-      "subtitle": "Turn off the Session details panel (beta): the context ring at the top right of the window, the panel beside Claude chats, and the Claude task list row on Settings > Agents. On by default.",
-      "tab": "extensions",
-      "tabTitle": "Extensions",
-      "section": "official",
-      "sectionTitle": "Built-in",
-      "type": "boolean",
-      "default": false,
       "agentWritable": true
     },
     {

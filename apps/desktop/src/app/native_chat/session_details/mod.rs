@@ -111,6 +111,27 @@ impl NativeChatView {
         self.snapshot["sessionDetails"]["enabled"] == true
     }
 
+    /// This chat's context use as "250k / 1m" (used tokens and window, from the same
+    /// `contextMeter` the ring and the Context card read), the used tokens alone when the agent
+    /// reports no window, or nothing before any are reported.
+    ///
+    /// CDXC:SessionDetails 2026-11-27 DECISION:
+    /// User: "we have this twice btw, we have it in the chat box also, which i think we need to remove the circle from the chat box for desktop". The chat box's ring is gone on the computer, so the tokens its hover showed (CDXC:SessionChat 2026-11-27, "when i hover this please let's show the context like 250k/1m") move to the hover of the header's Session Details button, whose ring and percentage stay.
+    pub(crate) fn context_tokens_label(&self) -> Option<String> {
+        use ghostex_gx_chat_core::menus::context::usage::format_context_tokens;
+        let context = &self.snapshot["contextMeter"];
+        let number = |key: &str| context[key].as_f64().filter(|value| value.is_finite());
+        let used = number("usedTokens")?;
+        Some(match number("windowSize").filter(|window| *window > 0.0) {
+            Some(window) => format!(
+                "{} / {}",
+                format_context_tokens(Some(used)),
+                format_context_tokens(Some(window))
+            ),
+            None => format!("{} used", format_context_tokens(Some(used))),
+        })
+    }
+
     /// The header ring's percentage and label, from this chat's context use.
     pub(crate) fn session_details_ring(&self) -> (Option<f64>, String) {
         let ring = &self.snapshot["sessionDetails"]["ring"];
@@ -135,21 +156,6 @@ impl NativeChatView {
             return false;
         }
         self.host("showSessionDetails", json!({}), cx);
-        true
-    }
-
-    /// The chat box's context ring, where the panel can go: the panel opens (or, open, comes back)
-    /// at the Context card, in place of the Context window popover it replaces.
-    /// False leaves the click to the popover, for a chat with no panel.
-    pub(super) fn show_session_details_for_context(&mut self, cx: &mut Context<Self>) -> bool {
-        if !self.session_details_placeable() {
-            return false;
-        }
-        self.session_details.to_card = Some("context");
-        if !self.session_details.wanted {
-            self.host("showSessionDetails", json!({}), cx);
-        }
-        cx.notify();
         true
     }
 

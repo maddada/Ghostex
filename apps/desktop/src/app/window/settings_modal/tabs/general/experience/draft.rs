@@ -22,7 +22,6 @@ const SHRINK: Duration = Duration::from_millis(400);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(super) enum Part {
     ModePicker,
-    ContextRing,
     Maximize,
     TerminalButton,
     /// The folded line between the first message and its reply.
@@ -59,7 +58,6 @@ fn parts(value: &dyn Fn(&str) -> Value) -> Vec<(Part, bool)> {
     let running_folded = quiet && !calm && !last_open && !detailed;
     vec![
         (Part::ModePicker, on(experience::COMPOSER_MODE_PICKER_KEY)),
-        (Part::ContextRing, on(experience::COMPOSER_CONTEXT_RING_KEY)),
         (Part::Maximize, on(experience::COMPOSER_MAXIMIZE_KEY)),
         (
             Part::TerminalButton,

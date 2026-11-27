@@ -756,41 +756,7 @@ fn button(path: &'static str, ink: &Ink) -> gpui::Div {
         .child(icon(path, 17.0, ink.muted))
 }
 
-/// The context ring, a quarter full, as `native_chat/context_meter.rs` draws it.
-fn context_ring(ink: &Ink) -> AnyElement {
-    let track = hsla(css_fade(ink.muted, 0.3));
-    let fill = hsla(ink.muted);
-    gpui::canvas(
-        |_, _, _| {},
-        move |bounds, _, window, _| {
-            let center = bounds.center();
-            let radius = 6.5 * SCALE;
-            for (fraction, color) in [(1.0_f32, track), (0.3, fill)] {
-                let mut path = gpui::PathBuilder::stroke(px(2.0 * SCALE));
-                let steps = (fraction * 96.0).ceil() as usize;
-                for step in 0..=steps {
-                    let angle = -std::f32::consts::FRAC_PI_2
-                        + std::f32::consts::TAU * fraction * step as f32 / steps as f32;
-                    let point =
-                        center + gpui::point(px(angle.cos() * radius), px(angle.sin() * radius));
-                    if step == 0 {
-                        path.move_to(point);
-                    } else {
-                        path.line_to(point);
-                    }
-                }
-                if let Ok(path) = path.build() {
-                    window.paint_path(path, color);
-                }
-            }
-        },
-    )
-    .size(z(17.0))
-    .into_any_element()
-}
-
 fn chat_box(ink: &Ink, state: &PreviewState) -> gpui::Div {
-    let ring = context_ring(ink);
     let row = h_flex()
         .h(z(40.0))
         .px(z(10.0))
@@ -810,13 +776,6 @@ fn chat_box(ink: &Ink, state: &PreviewState) -> gpui::Div {
             6.0,
             ink,
             icon("titlebar/mode-advance.svg", 16.0, ink.mode),
-        ))
-        .child(inline_part(
-            state.look(Part::ContextRing),
-            28.0,
-            6.0,
-            ink,
-            ring,
         ))
         .child(div().flex_1())
         .child(button("titlebar/dots.svg", ink))

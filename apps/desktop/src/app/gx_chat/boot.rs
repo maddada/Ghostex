@@ -132,13 +132,9 @@ pub(super) fn chat_settings() -> ChatSettings {
         title: None,
         // CDXC:CatchMeUp 2026-10-12 WHY: only a settings object that names `chatCatchMeUp` speaks for it. The web page has no settings file, and an unset key is the default anyway, so otherwise gxserver's `catchUp` on the chat read decides; answering `false` here hid the button on the web while the switch was on.
         catch_up: object.get("chatCatchMeUp").and_then(Value::as_bool),
-        // An empty object is a web page whose settings have not arrived yet: it says nothing.
-        session_details: (!object.is_empty()).then(|| {
-            ghostex_settings_catalog::built_in_extensions::enabled(
-                object,
-                ghostex_settings_catalog::built_in_extensions::SESSION_DETAILS,
-            )
-        }),
+        // The Session details panel is always on (CDXC:SessionDetails 2026-11-27 in
+        // packages/settings-catalog/src/data/official_extensions.rs).
+        session_details: Some(true),
         send_on_pick: object.get("chatSendOnPick").and_then(Value::as_bool),
         answers_wait_for_idle: object
             .get("chatAnswersWaitForIdle")

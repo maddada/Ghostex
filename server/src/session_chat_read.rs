@@ -663,12 +663,9 @@ pub(crate) async fn handle_read_session_chat_http(
     // The chat's view pick rides every read, so each device opens the chat in the view picked last
     // on any of them (session_chat_view.rs).
     crate::session_chat_view::insert_into(&mut result, &state.paths, &project_id, &session_id);
-    result.insert(
-        "sessionDetails".to_string(),
-        json!(crate::session_details::session_details_enabled(
-            &state.paths
-        )),
-    );
+    // The Session details panel is always on since 2026-11-27 (no longer an extension); the key
+    // stays because older phones and chat cores read it.
+    result.insert("sessionDetails".to_string(), json!(true));
     // The Send when you pick an answer switch rides every read too, so the phone follows the computer's value.
     result.insert(
         "sendOnPick".to_string(),

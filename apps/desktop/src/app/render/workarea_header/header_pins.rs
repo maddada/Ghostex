@@ -40,13 +40,27 @@ pub(crate) use crate::app::helpers::{
 /// default (`HeaderSlot::pinned_by_default`).
 pub(crate) const WORKAREA_HEADER_PINS_SETTINGS_KEY: &str = "workareaHeaderPins";
 
+/// The retired switch of the Session details panel extension (CDXC:SessionDetails 2026-11-27 in
+/// packages/settings-catalog/src/data/official_extensions.rs).
+const RETIRED_SESSION_DETAILS_HIDDEN_KEY: &str = "sessionDetailsPanelHidden";
+
 /// Whether `slot` is pinned in `settings` (the shared settings object).
+///
+/// CDXC:SessionDetails 2026-11-27 DECISION:
+/// User: "we can't disable session details panel and it's no longer shown in extensions, but it can be removed from the top if someone wants". Someone who had turned the Session details panel extension off (`sessionDetailsPanelHidden` true) and never pinned or unpinned the button starts with it unpinned: off the header, still in its ⋯ menu.
 pub(crate) fn header_slot_pinned_in(settings: &Map<String, Value>, slot: HeaderSlot) -> bool {
     settings
         .get(WORKAREA_HEADER_PINS_SETTINGS_KEY)
         .and_then(|pins| pins.get(slot.key()))
         .and_then(Value::as_bool)
-        .unwrap_or_else(|| slot.pinned_by_default())
+        .unwrap_or_else(|| {
+            if slot == HeaderSlot::SessionDetails
+                && settings.get(RETIRED_SESSION_DETAILS_HIDDEN_KEY) == Some(&Value::Bool(true))
+            {
+                return false;
+            }
+            slot.pinned_by_default()
+        })
 }
 
 /// `settings` with `slot` pinned or not.
@@ -150,9 +164,6 @@ impl GhostexGpuiApp {
             }
             HeaderSlot::SessionDetails => {
                 if shown(HeaderControl::SessionDetails)
-                    && self.built_in_extension_enabled(
-                        ghostex_settings_catalog::built_in_extensions::SESSION_DETAILS,
-                    )
                     && let Some(chat) = self.session_details_target_chat()
                 {
                     let chat = chat.read(cx);

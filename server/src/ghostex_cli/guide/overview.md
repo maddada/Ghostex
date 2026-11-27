@@ -22,9 +22,9 @@ hotkeys Every shortcut and its default binding
   **Start**, **Open** and **Commit** buttons in one outline (Quick Actions, Open In and Git
   actions, each with an arrow for its menu; Start and Open show only while the
   Actions and Open In extensions are on, and Actions is off by default), the chat's
-  **Work** button and context ring, a **⋯** button, and the command terminal and view
+  **Work** button and **Session Details** button (the context ring), a **⋯** button, and the command terminal and view
   panel toggles. The ⋯ menu holds the header's other controls, grouped under This chat
-  (Share, Popout), Project, Agents (Claude, Grok Bot, Voice Call) and Panels,
+  (Share, Popout, and Work or Session Details once unpinned), Project, Agents (Claude, Grok Bot, Voice Call) and Panels,
   each row saying what it is doing now (On, Live, In a call). Point at a row and click
   its pin to put that control back in the header. Right-click a control in the header
   to unpin it into ⋯ (for Start, Open, Commit and the Voice headset, Unpin from header
