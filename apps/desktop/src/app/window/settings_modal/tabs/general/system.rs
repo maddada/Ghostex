@@ -105,8 +105,8 @@ fn auto_sleep_section(
         ),
         (
             "autoSleepAgentIdleMinutes",
-            "Agents sleep after",
-            "Choose when eligible agent terminals sleep, or turn Auto Sleep off.",
+            "Terminal-based agents sleep after",
+            "Choose when idle Terminal-based agent chats sleep, or turn Auto Sleep off. Native chats don't use this: Ghostex stops their idle agents by itself and starts them again when you send a message.",
         ),
     ] {
         rows.extend(page.number_select(
@@ -155,8 +155,8 @@ fn auto_sleep_section(
             g,
             s,
             "autoSleepRequireAgentResumeCommand",
-            "Only sleep agents that can be resumed",
-            "Only auto-sleep agent sessions Ghostex can wake with a resume command.",
+            "Only sleep Terminal-based agents that can be resumed",
+            "Only auto-sleep Terminal-based agent chats Ghostex can wake with a resume command.",
             true,
             cx,
         ));
@@ -164,8 +164,8 @@ fn auto_sleep_section(
             g,
             s,
             "autoSleepFavoriteAgentSessions",
-            "Sleep favourite sessions too",
-            "Allow favorite agent sessions to auto-sleep.",
+            "Sleep favourite Terminal-based chats too",
+            "Allow favorite Terminal-based agent chats to auto-sleep.",
             true,
             cx,
         ));

@@ -3535,8 +3535,8 @@
     },
     {
       "key": "autoSleepAgentIdleMinutes",
-      "title": "Agents sleep after",
-      "subtitle": "Choose when eligible agent terminals sleep, or turn Auto Sleep off.",
+      "title": "Terminal-based agents sleep after",
+      "subtitle": "Choose when idle Terminal-based agent chats sleep, or turn Auto Sleep off. Native chats don't use this: Ghostex stops their idle agents by itself and starts them again when you send a message.",
       "tab": "system",
       "tabTitle": "Power & Sleep",
       "section": "autoSleep",
@@ -3581,8 +3581,8 @@
     },
     {
       "key": "autoSleepRequireAgentResumeCommand",
-      "title": "Only sleep agents that can be resumed",
-      "subtitle": "Only auto-sleep agent sessions Ghostex can wake with a resume command.",
+      "title": "Only sleep Terminal-based agents that can be resumed",
+      "subtitle": "Only auto-sleep Terminal-based agent chats Ghostex can wake with a resume command.",
       "tab": "system",
       "tabTitle": "Power & Sleep",
       "section": "autoSleep",
@@ -3594,8 +3594,8 @@
     },
     {
       "key": "autoSleepFavoriteAgentSessions",
-      "title": "Sleep favourite sessions too",
-      "subtitle": "Allow favorite agent sessions to auto-sleep.",
+      "title": "Sleep favourite Terminal-based chats too",
+      "subtitle": "Allow favorite Terminal-based agent chats to auto-sleep.",
       "tab": "system",
       "tabTitle": "Power & Sleep",
       "section": "autoSleep",

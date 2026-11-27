@@ -1800,7 +1800,8 @@ lists every session that shares the earlier history, including the thread you
 forked away from, and switches to the one you pick; a stopped branch is resumed
 when you open it.
 
-- Sleeping frees RAM; Auto Sleep does it after idle minutes. Auto Sleep runs
+- Sleeping frees RAM; Auto Sleep does it for Terminal-based agent chats after idle minutes
+  (Native chats manage themselves, see below). Auto Sleep runs
   on the computer that hosts the sessions, so it keeps working while the app
   window is closed, and it never sleeps a session a Ghostex window or the phone
   app is showing, or one with an unanswered question card, form or page.
@@ -1838,6 +1839,17 @@ when you open it.
   selected: the click then opens the session with its Resume button, and it
   wakes only when you click the pane or press a key
   (`wakeSleepingSessionsOnSelect`).
+- Native chats have no Sleep. Ghostex stops the agent of an idle Native chat by itself to free
+  its memory: after 10 minutes with nothing to do, or 30 minutes while a Ghostex window or the
+  phone shows it (2 and 10 minutes when the Mac is low on memory). A chat with a turn running, a
+  question or permission card, a queued or delayed message, a background command or monitor, a
+  coordinator's active threads, or a switch between Native and Terminal in progress is left
+  running. Nothing marks a stopped chat: it looks like any idle chat, opening it shows its
+  conversation without starting the agent, and the agent starts again with its conversation
+  when you send it a message (also from the phone or `ghostex agents send`). The Auto Sleep
+  settings, Sleep menu items and bulk Sleep, Wake and Sleep Inactive actions apply to
+  Terminal-based chats only. In `ghostex sessions --json` a stopped Native chat still reads
+  `sleep`, so `ghostex wake` and coordinator tools work as before.
 - Drag pinned sessions to reorder them within their project. Rows stay in place
   while an icon-and-title ghost follows just below and right of the pointer; the
   insertion line marks where the session moves when you drop it, and no line
@@ -3382,8 +3394,8 @@ started or woken afterwards. Claude only for now. Settings:
 
 Idle compaction (Claude Code) and compact before sending: Claude Code compacts a long chat that has
 sat idle for about 54 minutes, just before its 1-hour prompt cache expires, so your next message
-doesn't re-read the whole chat uncached. Agent Auto Sleep waits for a qualifying Claude chat's idle
-compaction to finish (or until its 1-hour cache ends) before sleeping it, while smaller chats,
+doesn't re-read the whole chat uncached. Agent Auto Sleep (and Ghostex's own idle stop of a Native chat)
+waits for a qualifying Claude chat's idle compaction to finish (or until its 1-hour cache ends) before sleeping it, while smaller chats,
 already-compacted chats and other agents sleep on the normal schedule. Expand Claude Code's row in
 Settings > Agents: its Context group has Compact idle chats before the prompt cache expires (on by
 default), Compact chats above (the smallest chat it compacts and the threshold Ghostex uses before
