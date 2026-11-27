@@ -22,7 +22,7 @@ use super::paragraphs;
 use super::prompt;
 use super::provider::{Provider, ProviderSocket, BYTES_PER_MS};
 use super::registry;
-use super::sessions::SessionInfo;
+use super::sessions::{SessionInfo, SessionsRead};
 use super::talk::{Cancel, Press, Release, Talk};
 use super::tool_runs::ToolRuns;
 use super::tools::{self, ToolOutcome};
@@ -30,6 +30,7 @@ use crate::server::AppState;
 
 mod announcement;
 mod card;
+mod sessions_context;
 mod turn_word;
 
 pub(super) use announcement::Announcement;
@@ -116,8 +117,9 @@ pub(super) enum Input {
     Announce(Vec<Announcement>),
     /// A focused session's finished turn, with the reply the model retells (`model_text`).
     AnnounceReady(Announcement),
-    /// The announcement watcher's fresh session list (a focused call follows its session in it).
-    Sessions(Arc<Vec<SessionInfo>>),
+    /// The announcement watcher's fresh session list (a focused call follows its session in it),
+    /// with the connected computers it could not read.
+    Sessions(Arc<SessionsRead>),
     /// The client asked to move the call to a session (`Some(ref)`) or to all sessions (`None`).
     Focus(Option<String>),
     /// A move the client asked for, looked up: the new scope and its briefing, or the ref that
@@ -280,6 +282,11 @@ pub(super) struct Conversation {
     dropped_items: HashSet<String>,
     /// When the user last said something that did not end with the turn word.
     words_waiting_since: Option<Instant>,
+    /// The call's own session list, for the model and the client (`sessions_context.rs`).
+    sessions_context: sessions_context::SessionsContext,
+    /// A call about all sessions says its intro once the model has the session list, or at this
+    /// moment without it (`open_with_sessions`).
+    intro_waits_until: Option<Instant>,
 }
 
 /// How long after a reply ends gxserver waits for the provider to answer a turn spoken during it
@@ -397,6 +404,8 @@ impl Conversation {
             dropped_responses: HashSet::new(),
             dropped_items: HashSet::new(),
             words_waiting_since: None,
+            sessions_context: Default::default(),
+            intro_waits_until: None,
             diagnostics: CallDiagnostics {
                 client: "unknown".to_string(),
                 client_remote,
@@ -563,10 +572,14 @@ impl Conversation {
                     })));
                     let _ = previous.send(ClientFrame::Close);
                 }
+                // A call that continued the remembered conversation shows it on every attach; one
+                // that did not offers it only as `memory::offered_at_start` says.
                 let memory = if self.started_focused {
                     Value::Null
-                } else {
+                } else if self.call_log.continued() {
                     memory::client_view(&self.state.paths)
+                } else {
+                    memory::offered_at_start(&self.state.paths)
                 };
                 let _ = out.send(ClientFrame::Json(self.ready_frame(resumed, memory)));
                 if resumed {
@@ -577,6 +590,9 @@ impl Conversation {
                 let _ = out.send(ClientFrame::Json(
                     json!({"type": "state", "state": self.client_state}),
                 ));
+                if let Some(frame) = self.sessions_context.last_frame() {
+                    let _ = out.send(ClientFrame::Json(frame));
+                }
                 self.client = Some((attach_id, out));
                 self.detached_since = None;
                 self.talk.attached();
@@ -584,11 +600,21 @@ impl Conversation {
                 self.diagnostics.audio_at = None;
                 self.diagnostics.gap_reported = false;
                 if std::mem::take(&mut self.intro_pending) && !resumed {
-                    self.say_intro().await?;
+                    if self.focus.is_none() {
+                        self.intro_waits_until =
+                            Some(Instant::now() + sessions_context::START_LIST_WAIT);
+                    } else {
+                        self.say_intro().await?;
+                    }
                 }
                 if std::mem::take(&mut self.briefing_pending) {
                     self.read_briefing();
                 }
+                if self.diagnostics.attaches == 1 {
+                    self.read_sessions();
+                }
+                // The watcher's list may be here already.
+                self.open_with_sessions(Instant::now()).await?;
                 // Each client reports its own playback rate after `ready`.
                 self.playback_rate = 1.0;
                 registry::set_attached(&self.id, true);
@@ -717,10 +743,12 @@ impl Conversation {
             }
             Input::Announce(announcements) => {
                 for announcement in announcements {
-                    if let Some(scope) = &self.focus {
-                        if !scope.wants(&announcement) {
-                            continue;
-                        }
+                    let wanted = match &self.focus {
+                        Some(scope) => scope.wants(&announcement),
+                        None => announcement.reaches_all_sessions_call(),
+                    };
+                    if !wanted {
+                        continue;
                     }
                     let finished_focus = announcement.kind == "turnFinished"
                         && announcement.server_id.is_none()
@@ -754,7 +782,11 @@ impl Conversation {
                 }
                 self.announcements.push(announcement);
             }
-            Input::Sessions(sessions) => self.follow_focus(&sessions),
+            Input::Sessions(read) => {
+                self.follow_focus(&read.sessions);
+                self.follow_sessions(&read);
+                self.open_with_sessions(Instant::now()).await?;
+            }
             // A call with a GBot stays with it (gbot_call/): no widening, no moving.
             Input::Focus(_)
                 if self
@@ -1026,6 +1058,8 @@ impl Conversation {
     async fn on_tick(&mut self) -> Result<(), Ended> {
         let now = Instant::now();
         self.watch_client_audio(now);
+        self.give_sessions_context().await?;
+        self.open_with_sessions(now).await?;
         if self.talk.wants_silence(now) {
             // A muted Regular call's hold ended: the provider hears the quiet it needs to end the turn.
             let silence = vec![0u8; TICK.as_millis() as usize * BYTES_PER_MS];
@@ -1529,6 +1563,7 @@ impl Conversation {
                 project_id: scope.project_id.clone(),
                 session_id: scope.session_id.clone(),
                 server_id: None,
+                sub_thread: false,
                 model_text: Some(focus::closed_message(&scope.title)),
             });
         }
@@ -1578,6 +1613,13 @@ impl Conversation {
         let view = focus::client_view(self.focus.as_ref());
         registry::set_focus(&self.id, view.clone());
         self.scope_changes += 1;
+        // A call about all sessions again gets the whole session list; one about a session hears
+        // no more of it.
+        if self.focus.is_none() {
+            self.sessions_context.model_restart(Instant::now());
+        } else {
+            self.sessions_context.model_stop();
+        }
         let mut update = self.session_update.clone();
         // The new scope's instructions keep the call's language and, while the call waits for the
         // turn words, what the model is told about them (as the call started, socket.rs).
@@ -1598,6 +1640,9 @@ impl Conversation {
         }
         self.provider_send(update).await?;
         self.to_client(json!({"type": "focus", "focus": view}));
+        // A call widened while nothing goes on gets the list ahead of the reply to widening; one
+        // widened mid-reply or mid-tool gets it once the call is quiet (`give_sessions_context`).
+        self.give_sessions_context().await?;
         self.add_scope_message(message, respond).await
     }
 

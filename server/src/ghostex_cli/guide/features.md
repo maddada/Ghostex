@@ -6087,9 +6087,36 @@ question cards and approvals, stop them, show them and start agents and
 coordinators in that computer's projects. Drafting into a chat on another
 computer and answering Ghostex forms there are not available; it says so. A
 computer whose Agent access is off (in Settings > Remote > Computers this machine connects to, on
-either computer) stays out of reach, and the agent tells you why. While the
+either computer) stays out of reach, and the agent tells you why. A call
+about all your sessions reads them when it starts (up to 25, waiting ones
+first, each with its title, project, computer and state, a coordinator's
+threads counted under it; it looks up the rest when you ask), and its opening
+line waits at most 3 seconds for that list. Usually the list is there first,
+so after the opening line you can give it an instruction right away. When
+reading takes longer (a connected computer slow to answer), the opening line
+comes without it and the agent gets the list a moment later, silently; until
+then it knows your sessions only by looking them up. It keeps that list
+current during the call (sessions that open, close or are renamed, changed
+states, and how many threads a coordinator runs) without saying anything
+about it. What a waiting session asks isn't in that list; the agent reads it
+when you ask. A connected computer that can't be read is named in the list
+as out of reach (up to three such computers, as far as the sessions leave
+room; past that the list only counts them, and a full list may only count
+them or leave the note out), and its sessions are not taken for closed. The
+sessions always come first: such notes never push one out of the list. It answers the point
+without preamble or filler and doesn't end with offers like "Want the
+details?". Its short opening line says it can approve or deny what a session
+waits on. While the
 conversation is open it tells you when a session finishes its turn or starts
-waiting on a question or an approval. The conversation keeps going while you
+waiting on a question or an approval, but not about a coordinator's threads
+on this computer (their approvals included; a call about the coordinator still
+hears those). On a connected computer it can't tell threads from sessions: it
+lists a coordinator's threads there as sessions of their own and tells you
+about them like any session, approvals included. A
+session that finished its turn counts as waiting on a question only for the
+questions that turn asked: open questions from earlier turns, after you
+moved the session on, leave it idle (the sidebar's pink dot still shows them,
+and the agent mentions them when you ask about open questions). The conversation keeps going while you
 switch projects and chats. A small panel under the header shows what it is
 doing, live captions of both sides and the tools it runs, with a microphone
 button (mutes you), a speaker button (mutes the agent's voice for this call: its
@@ -6177,14 +6204,14 @@ the voice screen shows "Only about <title> (<project>)" with an All sessions
 button.
 
 It remembers your last conversation as a short summary, kept on your computer
-until the next conversation replaces it. When you start a new conversation, the
-panel shows a "Last conversation" card: press Continue and the agent says in a
-sentence where things stood and carries on from there, or press Start fresh (or
-just start talking) to begin a new topic. You can also say "pick up where we
-left off" at any time. Once it continues, the panel shows "Remembering last
-conversation"; click it to read the whole summary. Forget on the card, or the
-Forget button in Settings > Voice Agent > Memory, deletes the summary for the
-desktop and the phone. The summary is written by a small text model of the same
+until the next conversation replaces it. A new call doesn't offer it: say
+"pick up where we left off" (or ask what you talked about last time) and the
+agent says in a sentence where things stood and carries on from there. Once it
+has, the panel shows "Remembering last conversation"; click it to read the
+whole summary. Forget there, or the Forget button in Settings > Voice Agent >
+Memory, deletes the summary for the desktop and the phone. A computer with an
+older Ghostex still shows a "Last conversation" card with Continue and Start
+fresh when a call starts. The summary is written by a small text model of the same
 provider, with the same key, right after a conversation ends.
 
 It needs an API key: pick xAI Grok Voice (the default) or OpenAI GPT Realtime
@@ -6239,6 +6266,19 @@ through the phone's speaker, or a Bluetooth headset or car hands-free link
 (CarPlay on an iPhone) when one is connected, and pauses while a call or a
 navigation prompt plays; on an iPhone a phone call coming in offers to hold
 the conversation (it goes on when the call ends) or end it.
+In a call about all sessions, an updated phone app shows a line above the captions: "All sessions"
+with how many of the listed sessions wait on you and work, and its Sessions button lists the
+call's sessions (up to 40, waiting ones first, a coordinator with its number
+of threads): each row has its status dot, its title, and its project and
+state. When the list is cut at 40, or a connected computer can't be reached,
+the line says so ("40 of 41 listed", "1 computer unreachable") and the list
+names that computer. Tap one of the computer's sessions and the call is about that session
+from then on, as if you had started it there (the line becomes "Only about
+<title>" with All sessions to go back); the list closes and can't be opened
+while the call moves. Sessions of another connected computer
+are listed dimmed and can't be tapped, because a call about one session runs
+on that session's computer. A computer with an older Ghostex sends no list, so
+the line and the button don't show.
 The phone's voice screen has the same voice picker (tap the voice name under
 the computer's name) and a small speed button beside it that opens the list of
 speeds, the same gear for the call mode, and the same talk button between
@@ -6258,8 +6298,10 @@ Regular call with the switch on, the call's spoken introduction names them); the
 app shows that earlier switch only for a computer without the language settings, which still
 ends a turn on those three words only in a Regular call with that switch on.
 They save the computer's settings, so the desktop and the phone talk
-with the same voice at the same speed and in the same mode. It shows
-the same "Last conversation" card with Continue, Start fresh and Forget.
+with the same voice at the same speed and in the same mode. Once a call
+recalled the last conversation, it shows "Remembering last conversation" with
+Forget (a computer with an older Ghostex still offers the "Last conversation"
+card with Continue, Start fresh and Forget).
 
 The voice agent is a built-in extension, on by default; its settings are
 Settings > Voice Agent, under App in the Settings sidebar right below Dictation.

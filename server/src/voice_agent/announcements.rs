@@ -70,10 +70,10 @@ pub(super) fn ensure_running(state: &Arc<AppState>) {
                 }
                 call_mode = Some(push_to_talk);
             }
-            if let Ok(rows) = sessions::list_sessions_async(&state).await {
+            if let Ok(read) = sessions::list_everywhere_async(&state).await {
                 let mut lines: Vec<Announcement> = Vec::new();
                 let mut present: HashSet<String> = HashSet::new();
-                for row in &rows {
+                for row in &read.sessions {
                     let key = row.reference();
                     present.insert(key.clone());
                     let known = turn_events.contains_key(&key);
@@ -94,6 +94,7 @@ pub(super) fn ensure_running(state: &Arc<AppState>) {
                             project_id: row.project_id.clone(),
                             session_id: row.session_id.clone(),
                             server_id: row.computer.as_ref().map(|c| c.server_id.clone()),
+                            sub_thread: row.thread_of.is_some(),
                             model_text: None,
                         });
                         continue;
@@ -131,6 +132,7 @@ pub(super) fn ensure_running(state: &Arc<AppState>) {
                         project_id: row.project_id.clone(),
                         session_id: row.session_id.clone(),
                         server_id: row.computer.as_ref().map(|c| c.server_id.clone()),
+                        sub_thread: row.thread_of.is_some(),
                         model_text: None,
                     });
                 }
@@ -139,10 +141,12 @@ pub(super) fn ensure_running(state: &Arc<AppState>) {
                 seen.retain(|key, _| present.contains(key));
                 seeded = true;
                 // Each call keeps its own scope: a focused one learns from the list whether its
-                // session was renamed or closed, and drops the announcements it does not want.
-                let rows = Arc::new(rows);
+                // session was renamed or closed, and drops the announcements it does not want. The
+                // computers that could not be read go with it, so their sessions are not taken for
+                // closed (conversation/sessions_context.rs).
+                let read = Arc::new(read);
                 for tx in registry::senders() {
-                    let _ = tx.send(Input::Sessions(rows.clone()));
+                    let _ = tx.send(Input::Sessions(read.clone()));
                     if !lines.is_empty() {
                         let _ = tx.send(Input::Announce(lines.clone()));
                     }

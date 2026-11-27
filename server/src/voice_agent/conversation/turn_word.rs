@@ -152,16 +152,34 @@ fn said_words(words: &[String]) -> String {
 
 /// The line the agent opens the call with: that it is connected, what it can do in this call, and
 /// with `wait_for_reply` (a Regular call with the setting on), to say one of `words` when finished.
+/// `tools` are the tools the call gave the provider (its `session.update`).
+///
+/// CDXC:VoiceMode 2026-11-26 WHY: the user did not know the voice agent can approve or deny what a
+/// session waits on. The opening line now says so once, and only when `tools` hold `answer_prompt`,
+/// so it never claims more than the call can do. "Read you their replies" left the line to keep it
+/// short.
+///
+/// CDXC:VoiceMode 2026-11-26 WHY: a call with a GBot has `answer_prompt` too, but keeps its own
+/// opening without the line, whatever its tools: the GBot answers its chat's permission prompts only
+/// after asking the user aloud, and a Ghostex approval (Touch ID) can't be given by voice at all
+/// (gbot_call/prompt.rs), so "approve or deny what it waits on" would promise more than it does.
 pub(super) fn intro_line(
     focus: Option<&FocusScope>,
+    tools: &serde_json::Value,
     wait_for_reply: bool,
     words: &[String],
 ) -> String {
+    let answers = offers_answers(tools);
     let can_do = match focus {
-        None => "I can tell you what your sessions are doing, read you their replies, send them prompts and answer their questions.".to_string(),
+        None if answers => "I can tell you what your sessions are doing, send them prompts, answer their questions, and approve or deny what they wait on.".to_string(),
+        None => "I can tell you what your sessions are doing and send them prompts.".to_string(),
         Some(scope) if scope.gbot.is_some() => String::new(),
+        Some(scope) if answers => format!(
+            "I can tell you what {} is doing, send it prompts, answer its questions, and approve or deny what it waits on.",
+            scope.title
+        ),
         Some(scope) => format!(
-            "I can tell you what {} is doing, read you its replies, send it prompts and answer its questions.",
+            "I can tell you what {} is doing and send it prompts.",
             scope.title
         ),
     };
@@ -177,6 +195,15 @@ pub(super) fn intro_line(
         ));
     }
     line
+}
+
+/// Whether `tools` can answer questions and approvals (`answer_prompt`).
+fn offers_answers(tools: &serde_json::Value) -> bool {
+    tools.as_array().is_some_and(|tools| {
+        tools
+            .iter()
+            .any(|tool| tool.get("name").and_then(serde_json::Value::as_str) == Some("answer_prompt"))
+    })
 }
 
 /// The message that asks the model to open the call with `line`: word for word in English, and
@@ -291,6 +318,7 @@ impl Conversation {
     pub(super) async fn say_intro(&mut self) -> Result<(), Ended> {
         let line = intro_line(
             self.focus.as_ref(),
+            &self.session_update["session"]["tools"],
             self.waits_for_word(),
             &self.call_language.turn_words,
         );

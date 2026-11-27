@@ -16,7 +16,7 @@ use tokio_tungstenite::tungstenite::Message as WsMessage;
 use super::conversation::{Announcement, ClientFrame, Conversation, Input};
 use super::focus::FocusScope;
 use super::provider::Provider;
-use super::sessions::{SessionInfo, ThreadParent, VoiceState};
+use super::sessions::{SessionInfo, SessionsRead, ThreadParent, VoiceState};
 use super::tools::{self, ToolMemory, ToolOutcome};
 use super::{memory, prompt, registry};
 use crate::server::AppState;
@@ -135,6 +135,7 @@ fn session(project: &str, id: &str, title: &str) -> SessionInfo {
         thread_of: None,
         threads: None,
         computer: None,
+        older_open_questions: 0,
     }
 }
 
@@ -337,6 +338,7 @@ fn announcement(reference: &str, kind: &'static str, text: &str) -> Announcement
         project_id: project_id.to_string(),
         session_id: session_id.to_string(),
         server_id: None,
+        sub_thread: false,
         model_text: None,
     }
 }
@@ -499,22 +501,28 @@ async fn an_orchestrator_call_hears_its_threads_questions_but_not_their_finished
     call.end();
 }
 
+/// The watcher's read of `sessions`, every connected computer answering.
+pub(super) fn read(sessions: Vec<SessionInfo>) -> Arc<SessionsRead> {
+    Arc::new(SessionsRead {
+        sessions,
+        ..SessionsRead::default()
+    })
+}
+
 #[tokio::test]
 async fn a_closed_session_is_said_once_and_the_call_goes_on() {
     let mut call = Call::start(Some(scope("P1:T1")), false).await;
     call.client_frame("ready").await;
     let mut renamed = sessions();
     renamed[1].title = "Voice mode fixes".to_string();
-    call.tx.send(Input::Sessions(Arc::new(renamed))).unwrap();
+    call.tx.send(Input::Sessions(read(renamed))).unwrap();
     let focus = call.client_frame("focus").await;
     assert_eq!(focus["focus"]["title"], "Voice mode fixes");
     let without: Vec<SessionInfo> = sessions()
         .into_iter()
         .filter(|session| session.session_id != "T1")
         .collect();
-    call.tx
-        .send(Input::Sessions(Arc::new(without.clone())))
-        .unwrap();
+    call.tx.send(Input::Sessions(read(without.clone()))).unwrap();
     let focus = call.client_frame("focus").await;
     assert_eq!(focus["focus"]["closed"], true);
     let closed = call.client_frame("announcement").await;
@@ -522,7 +530,7 @@ async fn a_closed_session_is_said_once_and_the_call_goes_on() {
     let told = call.model_message("was closed").await;
     assert!(told.contains("\"Voice mode fixes\" was closed."));
     // Still closed on the next poll: nothing new.
-    call.tx.send(Input::Sessions(Arc::new(without))).unwrap();
+    call.tx.send(Input::Sessions(read(without))).unwrap();
     assert!(call
         .client_frames("focus", Duration::from_millis(400))
         .await

@@ -9,6 +9,7 @@
 //! User's answers (voice agent memory): continuing is offered by a Continue / Start fresh card inside the live call, and saying "pick up where we left off" does the same; on Continue the agent says a one-sentence recap; the summary is made by a small text model on the same provider and key the call used; only one summary is kept, "until replaced" (no expiry); it can be forgotten from the voice panel and from Settings. If the text model call fails (for example a key limited to voice) no summary is kept and the reason is logged.
 //! CDXC:VoiceMode 2026-10-20 WHY:
 //! The summary is made from gxserver's own captions after the call, not by the voice model before hang-up: it works the same after Hang up, the idle hang-up, a dropped provider connection or a restart (the pending file waits on disk), costs a fraction of a cent instead of voice-rate audio tokens, and xAI documents no silent text reply.
+//! CDXC:VoiceMode 2026-11-26 SEE-ALSO: the card is no longer offered at the start of a call; that DECISION, which supersedes the card part above, is on `offered_at_start`.
 
 use std::fs;
 use std::io::Write as _;
@@ -241,6 +242,20 @@ pub(super) fn client_view(paths: &GxserverPaths) -> Value {
     read(paths).map_or(Value::Null, |memory| memory.to_client())
 }
 
+/// The remembered conversation a call that has not continued it offers when a client attaches
+/// (`ready.memory`, which clients turn into the Continue / Start fresh card): none.
+///
+/// CDXC:VoiceMode 2026-11-26 DECISION: User: the start of a call no longer offers the notes of
+/// the last conversation; recalling it stays available on request ("pick up where we left off",
+/// `recall_last_conversation`), and a call that recalled it still shows "Remembering last
+/// conversation" with Forget. Supersedes, in part, the 2026-10-20 DECISION at the top of this
+/// file that "continuing is offered by a Continue / Start fresh card inside the live call".
+/// Because the offer is gxserver's `ready.memory`, every client stops offering it, older phones
+/// and the desktop included. To offer the card again, return `client_view(paths)` here.
+pub(super) fn offered_at_start(_paths: &GxserverPaths) -> Value {
+    Value::Null
+}
+
 fn pending_files(paths: &GxserverPaths) -> Vec<PathBuf> {
     fs::read_dir(pending_dir(paths))
         .map(|entries| {
@@ -298,7 +313,7 @@ fn ago(ended_at: chrono::DateTime<chrono::Utc>) -> String {
 /// The message Continue adds to the conversation.
 pub(super) fn continue_message(memory: &Memory) -> String {
     format!(
-        "{MEMORY_PREFIX} The user wants to continue your previous voice conversation, which ended {}. Your notes from it: {}\nIn one short sentence, say where things stood, then ask what they want to do next. Sessions may have changed since then, so check with your tools before saying what a session is doing now.",
+        "{MEMORY_PREFIX} The user wants to continue your previous voice conversation, which ended {}. Your notes from it: {}\nSay in one short sentence where things stood, then wait for the user. Sessions may have changed since then, so check with your tools before saying what a session is doing now.",
         ago(memory.ended_at),
         memory.summary
     )

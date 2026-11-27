@@ -784,6 +784,7 @@ pub(crate) async fn autopilot_answer_recommended(
         thread_of: None,
         threads: None,
         computer: None,
+        older_open_questions: 0,
     };
     // A page that asks nothing but waits to be marked seen (`awaitsSeen`, visual_pages/publish.rs)
     // counts in the session's open questions, yet has no question to answer: Autopilot tried to
@@ -864,6 +865,7 @@ pub(crate) async fn autopilot_answer_with(
         thread_of: None,
         threads: None,
         computer: None,
+        older_open_questions: 0,
     };
     let asked = collect_async(state, &session).await;
     let questions: Vec<&Question> = asked.iter().flat_map(|asked| &asked.questions).collect();

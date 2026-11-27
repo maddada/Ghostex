@@ -152,8 +152,9 @@ async fn listing(state: &Arc<AppState>, computer: &ConnectedComputer) -> Result<
 }
 
 /// Another computer's `listSessions` and `listProjects` answers as the voice agent's rows, each
-/// marked with `computer`. Its threads stay top-level: which sessions are threads is in that
-/// computer's database, which no endpoint another computer may use reads.
+/// marked with `computer`. Its threads stay top-level.
+///
+/// CDXC:VoiceMode 2026-11-27 DECISION: User accepted the recommendation to leave which of a connected computer's sessions are threads out of the voice call, so it does not ask that computer: there the call cannot tell threads from sessions and lists and announces them like sessions, approvals included (Help says so).
 fn read_listing(computer: &Computer, rows: &Value, projects: &Value) -> Listing {
     let projects: Vec<ProjectInfo> = projects
         .get("projects")

@@ -66,7 +66,7 @@ pub(crate) fn memory() -> Section {
         "memory",
         "Memory",
         vec![
-            row("voiceAgentMemory", "Last conversation", "A short summary of your last voice conversation, kept on this computer until the next conversation replaces it. Press Continue in the voice panel, or say \"pick up where we left off\", to carry on from it. Forget deletes it."),
+            row("voiceAgentMemory", "Last conversation", "A short summary of your last voice conversation, kept on this computer until the next conversation replaces it. Say \"pick up where we left off\" in a call to carry on from it. Forget deletes it."),
         ],
     )
 }

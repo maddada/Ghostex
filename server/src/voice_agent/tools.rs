@@ -38,7 +38,7 @@ fn all_definitions() -> Value {
         {
             "type": "function",
             "name": "list_sessions",
-            "description": "List the user's open agent sessions with title, project, agent and state (working, waiting on a question, waiting on an approval, idle, sleeping). Waiting sessions come first. A coordinator (orchestrator true) is followed by its sub-threads, the sessions it runs for the user: each has subThreadOf (its coordinator's title) and is not a top-level session. A session on another computer the user connected has computer (that computer's name); unavailableComputers names connected computers whose sessions could not be read, and why.",
+            "description": "List the user's open agent sessions with title, project, agent and state (working, waiting on a question, waiting on an approval, idle, sleeping). Waiting sessions come first. A coordinator (orchestrator true) is followed by its sub-threads, the sessions it runs for the user: each has subThreadOf (its coordinator's title) and is not a top-level session. A session on another computer the user connected has computer (that computer's name); unavailableComputers names connected computers whose sessions could not be read, and why. An idle session with olderOpenQuestions still has that many open questions from earlier turns in its chat; it is not waiting on the user, so mention them only when the user asks about open questions.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -598,7 +598,10 @@ pub(super) async fn resolve_session(
     if query.is_empty() && scope.is_none() {
         return Err("Say which session.".to_string());
     }
-    let (all, unavailable) = sessions::list_everywhere_async(state).await?;
+    let sessions::SessionsRead {
+        sessions: all,
+        unavailable,
+    } = sessions::list_everywhere_async(state).await?;
     let session = match &scope {
         None => named_session(memory, &all, &query, &all)
             .map_err(|error| computers::with_unreachable(error, &unavailable))?,
@@ -606,9 +609,11 @@ pub(super) async fn resolve_session(
             let reference = scope.reference();
             let focused = all.iter().find(|session| session.reference() == reference);
             if query.is_empty() || query == reference || query.eq_ignore_ascii_case(&scope.title) {
+                // A fact, not an offer: the call's instructions forbid unasked offers, and the
+                // user heard that it closed (`focus::closed_message`).
                 focused.cloned().ok_or_else(|| {
                     format!(
-                        "\"{}\" was closed, so it can't be reached anymore. Offer to talk about all sessions.",
+                        "\"{}\" was closed, so it can't be reached anymore.",
                         scope.title
                     )
                 })?
@@ -673,7 +678,10 @@ pub(super) const NO_MATCH: &str = "No open session matches";
 
 /// CDXC:VoiceMode 2026-11-10 WHY: User: "When the user says something like "tell Big Chungus" about an issue, the assistant searched for a project named Big Chungus first, found nothing, and told the user "no Big Chungus sessions came up under that name", even though Big Chungus is a session title". The model guessed the kind and passed the title as `project`, and this tool answered "No project matches" after one kind of search. A `project` that names no project is now matched against session and coordinator titles too before anything is reported missing (the voice agent's own tool; the app's session and project search is unchanged), and the prompt tells the model to look across all kinds (prompt.rs).
 async fn list_sessions(state: &Arc<AppState>, args: &Value) -> Result<Value, String> {
-    let (mut all, unavailable) = sessions::list_everywhere_async(state).await?;
+    let sessions::SessionsRead {
+        sessions: mut all,
+        unavailable,
+    } = sessions::list_everywhere_async(state).await?;
     let project = arg_text(args, "project");
     let mut matched_as: Option<Value> = None;
     if !project.is_empty() {
