@@ -697,11 +697,46 @@ pub(crate) fn session_daemon_process_id(zmx_name: &str) -> Result<Option<i64>, (
     }
 }
 
+/// How long a daemon process that no longer answers for its name may take to exit before it
+/// counts as alive. zmx unlinks its socket first and then gives the shell up to 500 ms (SIGHUP,
+/// then SIGKILL) before it exits, and `zmx kill` can return before that ends.
+const DYING_DAEMON_EXIT_WAIT: std::time::Duration = std::time::Duration::from_millis(1_500);
+const DYING_DAEMON_POLL: std::time::Duration = std::time::Duration::from_millis(50);
+
+/// `session_daemon_process_id`, except that a daemon that is only shutting down does not count.
+///
+/// CDXC:Zmx 2026-11-27 WHY (GitHub #786 review):
+/// Restart, wake-after-sleep and self-heal all `zmx kill` a session and start it again right away.
+/// A zmx daemon removes its socket before it tears down and exits, so for a moment the process is
+/// still in the table while its name is already free; taking that as a live daemon made the start
+/// skip launching and the session stayed dead. A daemon that still has its socket is alive. One
+/// without it is waited for briefly: a dying one exits, while one whose socket was removed under
+/// it (an orphan of a busy server, the #786 duplicate's origin) is still there and counts as alive.
+pub(crate) fn settled_session_daemon_process_id(zmx_name: &str) -> Result<Option<i64>, ()> {
+    let Some(pid) = session_daemon_process_id(zmx_name)? else {
+        return Ok(None);
+    };
+    #[cfg(unix)]
+    if zmx_session_daemon_socket_present(zmx_name) == Some(true) {
+        return Ok(Some(pid));
+    }
+    let deadline = std::time::Instant::now() + DYING_DAEMON_EXIT_WAIT;
+    let mut pid = pid;
+    while std::time::Instant::now() < deadline {
+        std::thread::sleep(DYING_DAEMON_POLL);
+        match session_daemon_process_id(zmx_name)? {
+            Some(current) => pid = current,
+            None => return Ok(None),
+        }
+    }
+    Ok(Some(pid))
+}
+
 /// Secondary liveness signal when `zmx list --short` / `wmx exists` did not find a session:
 /// checks the OS process list and the daemon's socket/lock so a busy daemon that dropped off
 /// `zmx list --short` is not mistaken for dead.
 pub(crate) fn session_daemon_alive_fallback(zmx_name: &str) -> Result<Option<&'static str>, ()> {
-    if session_daemon_process_id(zmx_name)?.is_some() {
+    if settled_session_daemon_process_id(zmx_name)?.is_some() {
         return Ok(Some("process"));
     }
     #[cfg(unix)]

@@ -93,7 +93,7 @@ fn live_acp_host_evidence(
             pid: None,
         });
     }
-    if let Some(pid) = crate::acp::host_lock::is_host_lock_held(&state.paths, &key.0, &key.1) {
+    if let Some(pid) = crate::acp::host_lock::is_host_lock_held(&state.paths, zmx_name) {
         return Some(LiveHostEvidence {
             reason: "acpHostLock",
             source: "lock",
@@ -129,7 +129,8 @@ fn live_session_host_evidence(
     key: &SessionKey,
     zmx_name: &str,
 ) -> Option<LiveHostEvidence> {
-    match crate::zmx::session_daemon_process_id(zmx_name) {
+    // Settled, so the daemon `run_heal` just stopped for a restart does not cancel that restart.
+    match crate::zmx::settled_session_daemon_process_id(zmx_name) {
         Ok(Some(pid)) => {
             return Some(LiveHostEvidence {
                 reason: "daemonProcess",

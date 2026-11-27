@@ -82,8 +82,8 @@ pub(crate) fn is_acp_host_command(command: &str) -> bool {
         && (command.contains("ghostex") || command.contains("gxserver"))
 }
 
-/// Look up a live `acp-host` for `(project_id, session_id)` via its per-session kernel lock,
-/// the session's `zmx`/`wmx` process tree, and (on Unix) the system process list.
+/// Look up a live `acp-host` for `(project_id, session_id)` via its per-session kernel lock (keyed
+/// by `zmx_name`), the session's `zmx`/`wmx` process tree, and (on Unix) the system process list.
 /// Returns `Ok(Some(pid))` (`0` when a lock is held without a readable PID) if a host is alive,
 /// `Ok(None)` when none is found, and `Err(())` when the process table could not be read.
 pub(crate) fn find_running_host_pid(
@@ -93,7 +93,7 @@ pub(crate) fn find_running_host_pid(
     session_id: &str,
     zmx_name: &str,
 ) -> Result<Option<u32>, ()> {
-    if let Some(pid) = host_lock::is_host_lock_held(paths, project_id, session_id) {
+    if let Some(pid) = host_lock::is_host_lock_held(paths, zmx_name) {
         return Ok(Some(pid));
     }
     match crate::zmx::read_zmx_session_tree(zmx_name) {
