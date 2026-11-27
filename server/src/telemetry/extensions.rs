@@ -102,8 +102,21 @@ fn valid_store_id(id: &str) -> bool {
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
 }
 
+/// Store ids that left the Store for a built-in view keeping the same id, so a view-opened event
+/// still names them as before.
+///
+/// CDXC:Canvas 2026-11-27 DECISION:
+/// The built-in Canvas view keeps the Community Canvas extension's view id (`extension:canvas`),
+/// so the desktop sends `canvas` as before and it is reported as that Store id even though the
+/// Store no longer lists it: the "canvas" numbers stay one series across the switch. It names a
+/// view, never anything a user typed.
+const RETIRED_STORE_IDS_STILL_REPORTED: &[&str] = &["canvas"];
+
 /// Whether `id` is listed in the official Store catalog this process has read.
 pub fn is_official_store_id(id: &str) -> bool {
+    if RETIRED_STORE_IDS_STILL_REPORTED.contains(&id) {
+        return true;
+    }
     let ids = match official_store_ids().read() {
         Ok(ids) => ids,
         Err(poisoned) => poisoned.into_inner(),

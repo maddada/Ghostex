@@ -66,6 +66,12 @@ fn fill_source_urls(catalog: &mut super::ExtensionCatalog, url: &str) {
 /// header badge and popup go with it), so nobody who had one sees an error. The usage meters a
 /// Claude or Codex sign-in gives (Settings > Accounts, the sidebar meter, the usage popup) are
 /// Ghostex's own and stay.
+///
+/// CDXC:Canvas 2026-11-27 DECISION:
+/// User (canvas page Q1 A): "a built-in Canvas view" replaces the Community Canvas extension,
+/// which "leaves the catalog, the way Storybook did". It is not in this list: an installed copy
+/// is removed only after its boards are written out as drawings (canvas_migration.rs), and keeps
+/// working until then. The Store and installs drop it through `is_canvas_extension`.
 pub(crate) const RETIRED_OFFICIAL_EXTENSIONS: [&str; 4] =
     ["storybook", "git", "claude-usage", "codex-usage"];
 
@@ -255,6 +261,10 @@ fn parse_catalog(bytes: &[u8]) -> ExtensionResult<ExtensionCatalog> {
     }
     catalog.extensions.retain(|entry| {
         !is_retired_official_extension(&entry.manifest.name, &entry.manifest.author)
+            && !super::canvas_migration::is_canvas_extension(
+                &entry.manifest.name,
+                &entry.manifest.author,
+            )
     });
     Ok(catalog)
 }

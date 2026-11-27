@@ -382,6 +382,12 @@ pub async fn run_gxserver_foreground(
         zmx_title_observers: Arc::new(Mutex::new(HashMap::new())),
     });
     crate::audit::install_notifier(state.clone());
+    // Canvas boards become drawings before the Community Canvas extension is removed
+    // (extensions/canvas_migration.rs). Off the startup path: it may read many boards.
+    {
+        let state = state.clone();
+        std::thread::spawn(move || crate::extensions::canvas_migration::run(&state));
+    }
     /*
     CDXC:Build 2026-06-24-20:22:
     The JSON RPC catch-all needs the raw Request so server can preserve the

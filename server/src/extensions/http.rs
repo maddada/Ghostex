@@ -150,8 +150,17 @@ fn dispatch_extension_operation(
             let mut extensions = registry.list()?;
             if let Some(id) = token_extension_id {
                 extensions.retain(|extension| extension.id == id);
+                return Ok(json!({ "extensions": extensions }));
             }
-            Ok(json!({ "extensions": extensions }))
+            // The one-time note after Canvas's boards became drawings (canvas_migration.rs): the
+            // app reads it here and says it showed it with `canvasMovedNoteShown`.
+            if params.get("canvasMovedNoteShown").and_then(Value::as_bool) == Some(true) {
+                super::canvas_migration::mark_note_shown(registry.extensions_dir()).map_err(
+                    |error| ExtensionError::internal(format!("Could not save the note: {error}")),
+                )?;
+            }
+            let canvas_moved = super::canvas_migration::pending_note(registry.extensions_dir());
+            Ok(json!({ "extensions": extensions, "canvasMoved": canvas_moved }))
         }
         "/api/extensionsCatalog" => serde_json::to_value(registry.catalog()?).map_err(|error| {
             ExtensionError::internal(format!("Could not encode catalog: {error}"))

@@ -499,6 +499,11 @@ impl ExtensionRegistry {
                 "Storybook is now a built-in view. Open it from the project view picker.",
             ));
         }
+        if super::canvas_migration::is_canvas_extension(&id, &manifest.author) {
+            return Err(ExtensionError::bad_request(
+                "Canvas is built into Ghostex now. Open it from Open a view.",
+            ));
+        }
         if super::is_retired_official_extension(&id, &manifest.author) {
             return Err(ExtensionError::bad_request(format!(
                 "The {id} extension was retired and can no longer be installed."
@@ -610,6 +615,10 @@ impl ExtensionRegistry {
             });
         }
         Ok(installed)
+    }
+
+    pub(crate) fn extensions_dir(&self) -> &Path {
+        &self.extensions_dir
     }
 
     pub(super) fn installed_dir(&self) -> PathBuf {
