@@ -746,6 +746,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:SessionChat 2026-10-16 DECISION: User: "please add a setting to enable the behavior ... but keep it disabled by default" and "make it an advanced setting". Picking an answer sends a one-question card only while this is on.
     ("chatSendOnPick", J::Bool(false)),
     ("chatAnswersWaitForIdle", J::Bool(false)),
+    ("chatCopyOnSelect", J::Bool(false)),
     ("chatPageOpenTarget", J::Str("popup")),
     // CDXC:SessionChat 2026-11-26 SEE-ALSO: the Live page window's Keep open pin, remembered for
     // every page window after it and synced to all the user's computers; the user decision is on

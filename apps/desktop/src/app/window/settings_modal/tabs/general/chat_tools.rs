@@ -243,6 +243,7 @@ fn chat_section(
     }
     rows.extend(page.toggle(g, s, "chatSendOnPick", "Send when you pick an answer", "When a question card asks one question, picking an answer sends it right away, without Send answers. Cards with several questions, multiple-choice questions, Other and text answers still wait for Send.", false, cx));
     rows.extend(page.bool_choice(g, s, "chatAnswersWaitForIdle", "Send form answers", "Right away: answers from Ghostex forms and Live pages go like a normal chat message, which the agent can read after its current tool call finishes. After the turn: they wait until the agent finishes its turn.", [("Right away", false), ("After the turn", true)], false, cx));
+    rows.extend(page.toggle(g, s, "chatCopyOnSelect", "Copy on select", "Selecting text in a chat message copies it to the clipboard, as Copy on select does in the terminal. The chat box is not affected.", false, cx));
     if g.visible(s, "chatPageOpenTarget") {
         let spec = g.spec(
             "chatPageOpenTarget",

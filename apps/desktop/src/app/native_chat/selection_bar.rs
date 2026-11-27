@@ -143,6 +143,19 @@ impl NativeChatView {
         if selection.is_empty() {
             return;
         }
+        // Copy on select (`chatCopyOnSelect`): the chat's twin of the terminal's
+        // `terminalCopyOnSelect`, for transcript selections only, never the chat box.
+        if crate::shared_settings::shared_sidebar_settings_snapshot()
+            .object()
+            .get("chatCopyOnSelect")
+            .and_then(Value::as_bool)
+            == Some(true)
+        {
+            crate::app::helpers::gpui_copy_to_clipboard(
+                gpui::ClipboardItem::new_string(selection.clone()),
+                cx,
+            );
+        }
         // The composer hides behind a question card, which is when Add to Chat and Reply are off.
         let question_active = self.snapshot["questionCard"]["visible"] == true
             && self.snapshot["prompt"]["kind"] == "question";

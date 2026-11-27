@@ -2003,7 +2003,10 @@ your own message, tool output or code) and a small bar of buttons shows by
 where you let go: Copy, Add to Chat (puts the text in the chat box as a quote)
 and Reply (opens a small box for your answer, which goes in under the quote).
 The bar goes away when you click elsewhere, scroll or press Escape. The same
-three are in the right-click menu. On the computer, pointing at a command in a
+three are in the right-click menu. With Copy on select on (`chatCopyOnSelect`,
+off by default, Settings > Chat, Advanced), the selected text is also copied
+to the clipboard right away, as in the terminal; the chat box is not affected.
+On the computer, pointing at a command in a
 reply shows Copy and Paste in terminal at the command's bottom right.
 **Tips on new chats**: a new chat shows a card of tips under "What should we
 build with …?", one tip at a time: first how to report a bug (Send Bug /
