@@ -23,6 +23,7 @@ mod inventory;
 mod js_values;
 mod mobile_summary;
 mod persisted;
+mod search;
 mod summary_memo;
 
 pub use attach_metadata::*;

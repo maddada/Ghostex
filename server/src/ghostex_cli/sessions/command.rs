@@ -12,6 +12,9 @@ use super::*;
 // ---------------------------------------------------------------------------
 
 pub fn sessions_command(args: &[String]) -> CliResult<()> {
+    if args.first().map(String::as_str) == Some("search") {
+        return super::search::sessions_search_command(&args[1..]);
+    }
     let parsed = parse_args(args);
     let flags = &parsed.flags;
     if flags.contains("projectIcons") {

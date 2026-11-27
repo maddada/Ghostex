@@ -881,6 +881,26 @@ impl SessionChatIncrementalState {
         }
     }
 
+    /// A reader that starts at `offset`, the start of a line (where an earlier reader's
+    /// `resume_offset` stopped).
+    pub(crate) fn starting_at(offset: u64) -> Self {
+        Self {
+            offset,
+            pending_start: offset,
+            ..Self::new()
+        }
+    }
+
+    /// Where a later reader must start to miss nothing: the start of the line still being
+    /// written, or the end of what was read.
+    pub(crate) fn resume_offset(&self) -> u64 {
+        if self.pending_bytes > 0 || !self.pending_chunks.is_empty() {
+            self.pending_start
+        } else {
+            self.offset
+        }
+    }
+
     pub fn reset(&mut self) {
         self.codex_stats = Default::default();
         self.offset = 0;

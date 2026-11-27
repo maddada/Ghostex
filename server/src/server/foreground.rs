@@ -687,6 +687,7 @@ pub async fn run_gxserver_foreground(
         crate::session_chat_async_questions::spawn_async_question_status_task(&state);
     crate::session_chat_mention_paths::install(&state.paths, &state.metadata.server_id);
     crate::chat_message_numbers::install(&state);
+    crate::chat_search::start_with_gxserver(&state);
     let session_chat_open_questions_task =
         crate::session_chat_open_questions::spawn_open_questions_task(&state);
     let freebuff_activity_task = crate::freebuff_activity::spawn_freebuff_activity_task(&state);

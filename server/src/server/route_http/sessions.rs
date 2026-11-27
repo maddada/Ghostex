@@ -675,6 +675,17 @@ pub(super) async fn route_sessions_http(
                 },
             )
         }
+        // `ghostex sessions search`: every chat's messages (chat_search/).
+        crate::chat_search::SEARCH_ENDPOINT => {
+            let search_state = state.clone();
+            handle_domain_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+                move |_, db, params, _| Ok(crate::chat_search::search(&search_state, db, params)),
+            )
+        }
         // `ghostex message show` and `list`: the user's numbered messages (chat_message_numbers.rs).
         crate::chat_message_numbers::CHAT_MESSAGES_ENDPOINT => {
             crate::chat_message_numbers::handle_chat_messages_http(

@@ -31,6 +31,7 @@ pub(crate) mod browser_agent_limits;
 pub(crate) mod carry_on_compaction;
 pub(crate) mod chat_item_quotes;
 pub(crate) mod chat_message_numbers;
+pub(crate) mod chat_search;
 pub(crate) mod chief;
 pub(crate) mod claude_cloud;
 pub mod cli;

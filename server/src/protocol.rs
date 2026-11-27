@@ -1032,6 +1032,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         // The user's numbered messages, read by the `ghostex message` an agent runs on this
         // computer (chat_message_numbers.rs).
         crate::chat_message_numbers::CHAT_MESSAGES_ENDPOINT => full_local(path),
+        // Search of every chat's messages, read by `ghostex sessions search` on this computer
+        // (chat_search/); snippets carry chat words, so other computers do not reach it yet.
+        crate::chat_search::SEARCH_ENDPOINT => full_local(path),
         // One question by its tag, read by the `ghostex question show` an agent runs on this
         // computer (chat_item_quotes/).
         crate::chat_item_quotes::CHAT_QUESTIONS_ENDPOINT => full_local(path),
