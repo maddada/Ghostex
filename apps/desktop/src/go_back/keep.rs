@@ -47,9 +47,8 @@ fn kept_app_location() -> Option<PathBuf> {
     }
 }
 
-/// The folder an AppImage update moves its snapshot of the old install copy to. Gated like
-/// `linux_updater` (main.rs), which test builds compile on every platform.
-#[cfg(any(target_os = "linux", test))]
+/// The folder an AppImage update moves its snapshot of the old install copy to.
+#[cfg(target_os = "linux")]
 pub(crate) fn kept_appimage_location() -> PathBuf {
     kept_dir().join("appimage")
 }

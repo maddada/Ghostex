@@ -255,7 +255,7 @@ fn gpui_is_executable_file(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{fs, os::unix::fs::PermissionsExt, time::Duration};
+    use std::{fs, time::Duration};
 
     fn scratch(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
@@ -270,7 +270,13 @@ mod tests {
     fn write_command(dir: &Path, name: &str, mode: u32) {
         let path = dir.join(name);
         fs::write(&path, "#!/bin/sh\nexit 0\n").unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(mode)).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&path, fs::Permissions::from_mode(mode)).unwrap();
+        }
+        #[cfg(not(unix))]
+        let _ = mode;
     }
 
     #[test]
@@ -300,6 +306,7 @@ mod tests {
         let _ = fs::remove_dir_all(&bin);
     }
 
+    #[cfg(unix)]
     #[test]
     fn skips_files_that_are_not_executable_and_relative_entries() {
         let bin = scratch("skips");

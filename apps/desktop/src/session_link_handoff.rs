@@ -80,7 +80,7 @@ fn link_socket_path() -> std::path::PathBuf {
         .join("desktop-links.sock")
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", all(unix, test)))]
 fn hand_off_over_socket(path: &std::path::Path, links: &[String]) -> bool {
     use std::io::Write as _;
     // A socket left by a Ghostex that crashed refuses the connection.
@@ -90,7 +90,7 @@ fn hand_off_over_socket(path: &std::path::Path, links: &[String]) -> bool {
     socket.write_all(&encode_links(links)).is_ok()
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", all(unix, test)))]
 fn serve_socket(
     path: &std::path::Path,
     mut deliver: impl FnMut(String) + Send + 'static,
@@ -158,6 +158,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn a_running_app_takes_a_second_launchs_links_over_its_socket() {
         let folder = std::env::temp_dir().join(format!("gx-link-{}", std::process::id()));

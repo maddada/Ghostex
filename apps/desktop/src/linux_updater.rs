@@ -8,7 +8,9 @@
 //! SEE-ALSO: apps/desktop/src/app/os_integration/updater.rs (the check loop and the dialog actions), apps/desktop/src/app/os_integration/linux_update_command.rs (the package installs' dialog), apps/desktop/src/app/window/update_available_modal.rs (the `Notify` state), tooling/release-gpui/windows.ps1 (cuts the CHANGELOG.md section into the feed's `NotesMarkdown`), tooling/release-gpui/linux-appimage.sh (signs the AppImage).
 #![cfg_attr(not(target_os = "linux"), allow(dead_code))]
 
-use std::io::{Read as _, Write as _};
+use std::io::Read as _;
+#[cfg(target_os = "linux")]
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -207,6 +209,7 @@ fn enough_space(free: u64, download: u64, install: u64) -> bool {
         .saturating_add(SPACE_MARGIN_BYTES)
 }
 
+#[cfg(target_os = "linux")]
 fn free_bytes(directory: &Path) -> Option<u64> {
     use std::os::unix::ffi::OsStrExt as _;
     let path = std::ffi::CString::new(directory.as_os_str().as_bytes()).ok()?;
@@ -237,6 +240,7 @@ fn megabytes(bytes: u64) -> u64 {
 /// Downloads and verifies the update's AppImage, reporting progress in percent. Returns the
 /// verified file, ready for `apply_appimage_update_after_exit`. Blocking: call it off the main
 /// thread. Errors are plain sentences for the user.
+#[cfg(target_os = "linux")]
 pub(crate) fn download_appimage_update(
     update: &LinuxUpdate,
     progress: std::sync::mpsc::Sender<i16>,
@@ -353,6 +357,7 @@ pub(crate) fn download_appimage_update(
 
 /// Swaps in a verified AppImage once this process has quit, then starts it: the caller quits right
 /// after this returns. See `SWAP_SCRIPT` for what happens, and when it is undone.
+#[cfg(target_os = "linux")]
 pub(crate) fn apply_appimage_update_after_exit(appimage: &Path) -> Result<(), String> {
     use std::os::unix::process::CommandExt as _;
     let install = appimage_install()
@@ -421,6 +426,7 @@ pub(crate) fn prepare_relaunch_environment(command: &mut std::process::Command) 
 /// disk, a missing FUSE, a copy that failed), the snapshot goes back and the previous version
 /// starts again. A writable original AppImage file is replaced by the new one, under the new
 /// version's name when it had a release name.
+#[cfg(target_os = "linux")]
 const SWAP_SCRIPT: &str = r#"
 set -u
 pid=$1 new=$2 install=$3 source=$4 log=$5 lock=$6 kept=$7 old_version=$8
