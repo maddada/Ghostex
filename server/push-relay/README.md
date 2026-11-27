@@ -245,9 +245,12 @@ The `/push/` routes have limits of their own, so their traffic never takes from 
   most 7,000 (the oldest goes first), apart from the Live Activity route's 100,000: the two never push each
   other's entries out or show in each other's health check.
 - Each of the `/push/` routes' eight limit tables (per address, per token, per id, new ids per address) holds
-  at most 7,000 keys, each the tokens, ids or addresses active within that table's refill time. A table full of
-  busy keys refuses a new key with 429 rather than growing; when Ghostex has more phones than that active at
-  once, these numbers and the memory below have to grow together.
+  at most 7,000 keys. A key stays in its table from its last attempt until its quota would have refilled
+  completely, and never less than 10 minutes: 10 minutes for alert tokens, mailbox and snapshot ids and the
+  push and store address tables, 40 minutes for widget tokens, and 60 minutes for background tokens and new
+  ids per address. So size by the keys seen within those times, not per minute. A table full of such keys
+  refuses a new key with 429 rather than growing; when Ghostex has more phones than that active at once,
+  these numbers and the memory below have to grow together.
 - Memory: the service runs with `MemoryMax=128M`, and the relay is held to 75 % of it (96 MiB) with every
   table and the store full at once. The `/push/` caps above (5,000 entries, 5 MiB, 7,000 keys per table,
   7,000 gone tokens) were chosen for that; the Live Activity route's tables (200,000 keys each, 100,000 gone
