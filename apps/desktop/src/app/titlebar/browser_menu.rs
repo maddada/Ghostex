@@ -43,6 +43,7 @@ impl GhostexGpuiApp {
     ) -> AnyElement {
         let trigger_bounds = Rc::new(Cell::new(None));
         let open = self.titlebar_popup_menu_open(GpuiTitlebarPopupKind::BrowserActions(pane_id));
+        let app = cx.entity().downgrade();
         div()
             .id(format!(
                 "ghostex-gpui-browser-{}-overflow-{}",
@@ -78,7 +79,19 @@ impl GhostexGpuiApp {
             })
             .on_prepaint({
                 let trigger_bounds = trigger_bounds.clone();
-                move |bounds, _, _| trigger_bounds.set(Some(bounds))
+                move |bounds, window, cx| {
+                    trigger_bounds.set(Some(bounds));
+                    // The menu's Page Size row opens the page-size menu under this button.
+                    if in_toolbar {
+                        GhostexGpuiApp::open_pending_titlebar_popup(
+                            app.clone(),
+                            &[GpuiTitlebarPopupKind::BrowserDeviceView(pane_id)],
+                            bounds,
+                            window,
+                            cx,
+                        );
+                    }
+                }
             })
             .child(self.render_browser_tab_overflow_icon())
             .into_any_element()
@@ -92,9 +105,43 @@ impl GhostexGpuiApp {
         max_height: f32,
         scrollable: bool,
     ) -> PopupMenu {
+        /*
+        CDXC:Browser 2026-11-27 DECISION:
+        User (of the toolbar's History and Mobile buttons): "also please put history and mobile under the 3 dots". History opens the same History window, and Page Size opens the same page-size menu the Mobile button did, under the ⋯ button; its row is checked and names the size while a phone or tablet size (or the mobile user agent) is on, the state the button used to show by staying lit.
+        */
+        let device_view = self.browser_device_view_for_pane(pane_id);
+        let previewing = !device_view.is_default();
+        let page_size_label = if previewing {
+            format!("Page Size: {}", device_view.size.label())
+        } else {
+            "Page Size".to_string()
+        };
         let mut menu =
             titlebar_popup_menu_with_scroll_behavior(menu, width, max_height, scrollable)
                 .check_side(Side::Right)
+                .menu_element(
+                    Box::new(OpenBrowserPaneHistory { pane_id: pane_id.0 }),
+                    |_, _| {
+                        titlebar_popup_standard_menu_row(
+                            BROWSER_ICON_HISTORY,
+                            TITLEBAR_POPUP_MENU_ROW_ICON_SIZE,
+                            "History".to_string(),
+                            false,
+                        )
+                    },
+                )
+                .menu_element_with_check(
+                    previewing,
+                    Box::new(ShowBrowserPageSizeMenu { pane_id: pane_id.0 }),
+                    move |_, _| {
+                        titlebar_popup_standard_menu_row(
+                            super::browser_device_menu::BROWSER_ICON_DEVICE_MOBILE,
+                            TITLEBAR_POPUP_MENU_ROW_ICON_SIZE,
+                            page_size_label.clone(),
+                            false,
+                        )
+                    },
+                )
                 .menu_element(
                     Box::new(ToggleBrowserDevTools { pane_id: pane_id.0 }),
                     |_, _| {
@@ -133,6 +180,8 @@ impl GhostexGpuiApp {
 
     pub(crate) fn browser_actions_popup_content_height(&self) -> f32 {
         let mut rows = vec![
+            TITLEBAR_POPUP_MENU_ROW_HEIGHT,
+            TITLEBAR_POPUP_MENU_ROW_HEIGHT,
             TITLEBAR_POPUP_MENU_ROW_HEIGHT,
             TITLEBAR_POPUP_MENU_SEPARATOR_HEIGHT,
             TITLEBAR_POPUP_MENU_MIN_ITEM_HEIGHT,

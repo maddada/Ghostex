@@ -474,7 +474,6 @@ impl GhostexGpuiApp {
                 | BrowserToolbarAction::FeedbackTool
                 | BrowserToolbarAction::ResetZoom
                 | BrowserToolbarAction::ResetMediaPermissions
-                | BrowserToolbarAction::HistoryMenu
                 | BrowserToolbarAction::ProfileMenu
                 | BrowserToolbarAction::OpenExternally => {}
             });

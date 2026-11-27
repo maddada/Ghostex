@@ -802,7 +802,8 @@ pub(crate) const BROWSER_ICON_WORLD: &str = "titlebar/world.svg";
 
 pub(crate) const BROWSER_ICON_TOOLS: &str = "titlebar/tools.svg";
 
-pub(crate) const BROWSER_ICON_POINTER: &str = "titlebar/pointer.svg";
+/// Annotate (Agentation): a pen (CDXC:Browser 2026-11-27, titlebar/icon_button_and_browser_toolbar.rs).
+pub(crate) const BROWSER_ICON_ANNOTATE: &str = "titlebar/pencil.svg";
 
 pub(crate) const BROWSER_ICON_USER_CIRCLE: &str = "titlebar/user-circle.svg";
 

@@ -1,12 +1,9 @@
-//! The Browser toolbar's page-size menu (phone and tablet preview) and the handler that applies a
+//! The Browser toolbar ⋯ menu's page-size menu (phone and tablet preview) and the handler that applies a
 //! tab's choice.
 
-use std::{cell::Cell, rc::Rc};
-
 use gpui_component::{
-    ElementExt as _, Side,
+    Side,
     menu::{PopupMenu, PopupMenuItem},
-    tooltip::{ManagedTooltipExt as _, ManagedTooltipPlacement},
 };
 
 use super::popup_menu_builders::titlebar_popup_menu_with_scroll_behavior;
@@ -14,7 +11,7 @@ use crate::app::helpers::*;
 use crate::*;
 
 /// The `modals/settings` copy is the same Tabler icon; it is embedded with the other Ghostex assets.
-const BROWSER_ICON_DEVICE_MOBILE: &str = "modals/settings/device-mobile.svg";
+pub(super) const BROWSER_ICON_DEVICE_MOBILE: &str = "modals/settings/device-mobile.svg";
 
 impl GhostexGpuiApp {
     pub(crate) fn browser_device_view_for_pane(&self, pane_id: BrowserPaneId) -> BrowserDeviceView {
@@ -58,81 +55,6 @@ impl GhostexGpuiApp {
         }
         self.persist_shell_layout_state();
         cx.notify();
-    }
-
-    pub(crate) fn render_browser_device_view_button(
-        &self,
-        pane_id: BrowserPaneId,
-        cx: &mut gpui::Context<Self>,
-    ) -> AnyElement {
-        let kind = GpuiTitlebarPopupKind::BrowserDeviceView(pane_id);
-        let open = self.titlebar_popup_menu_open(kind);
-        let device_view = self.browser_device_view_for_pane(pane_id);
-        let previewing = !device_view.is_default();
-        let tooltip: gpui::SharedString = format!(
-            "Page Size: {}{}",
-            device_view.size.label(),
-            if device_view.mobile_user_agent {
-                ", mobile user agent"
-            } else {
-                ""
-            }
-        )
-        .into();
-        let trigger_bounds = Rc::new(Cell::new(None));
-        div()
-            .id(format!(
-                "ghostex-gpui-browser-toolbar-button-{}-device-view",
-                pane_id.0
-            ))
-            .flex()
-            .flex_shrink_0()
-            .h(px(TITLEBAR_CONTROL_HEIGHT))
-            .w(px(BROWSER_TOOLBAR_BUTTON_WIDTH))
-            .items_center()
-            .justify_center()
-            .rounded(px(TITLEBAR_BUTTON_RADIUS))
-            .cursor_default()
-            .when(open || previewing, |this| {
-                this.bg(titlebar_active_segment_color())
-            })
-            .hover(|this| this.bg(titlebar_button_hover_color()))
-            .on_prepaint({
-                let trigger_bounds = trigger_bounds.clone();
-                move |bounds, _, _| trigger_bounds.set(Some(bounds))
-            })
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |this, _: &MouseDownEvent, window, cx| {
-                    window.prevent_default();
-                    cx.stop_propagation();
-                    if pane_id != crate::app::custom_links::CUSTOM_LINK_PAGE_PANE
-                        && this.browser_tabs.find_leaf(pane_id).is_none()
-                    {
-                        return;
-                    }
-                    this.set_gpui_titlebar_popup_open(
-                        kind,
-                        !this.titlebar_popup_menu_open(kind),
-                        trigger_bounds.get(),
-                        window,
-                        cx,
-                    );
-                }),
-            )
-            .child(titlebar_svg_icon(
-                BROWSER_ICON_DEVICE_MOBILE,
-                BROWSER_TOOLBAR_BUTTON_ICON_SIZE,
-                if previewing {
-                    titlebar_icon_hover_color()
-                } else {
-                    titlebar_icon_color()
-                },
-            ))
-            .managed_tooltip_with_placement(ManagedTooltipPlacement::Left, move |window, cx| {
-                titlebar_tooltip(tooltip.clone(), window, cx)
-            })
-            .into_any_element()
     }
 
     pub(crate) fn build_gpui_browser_device_view_popup_menu(

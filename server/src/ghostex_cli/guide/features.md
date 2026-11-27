@@ -413,14 +413,16 @@ view from the strip.
   pages, Delete closes the shown one and Enter goes back to the page. Closing the
   Browser tab hides the Browser and puts its pages to sleep; they come back the
   next time it opens.
-  **Open Externally** in the Browser toolbar (the box with an arrow) opens the
-  page in your system browser, and the toolbar's ⋯ menu has **Toggle DevTools**
-  and the page appearance (System, Light or Dark).
+  **Open Externally** in the Browser toolbar (the box with an arrow, right after
+  the address) opens the page in your system browser, and the toolbar's ⋯ menu
+  has **History**, **Page Size**, **Toggle DevTools** and the page appearance
+  (System, Light or Dark).
   Right-click a link or image in a page to open it in a new tab, save it
   (Save link as / Save image as ask where to save), copy its address, or copy
   the image itself; any page download also asks where to save.
-  To see how a site looks on a phone or tablet, click the phone button in the
-  Browser toolbar and pick a size (iPhone 15 / 16, iPhone 15 / 16 Pro Max,
+  To see how a site looks on a phone or tablet, open the Browser toolbar's ⋯
+  menu, choose **Page Size** (checked while a phone or tablet size is on) and
+  pick a size (iPhone 15 / 16, iPhone 15 / 16 Pro Max,
   iPhone SE, Android, Small Android, iPad mini, iPad) or Full width; the page
   shows at that size in the middle of the pane. In the same menu, Landscape
   turns the device sideways and Mobile user agent makes the page load as that
@@ -452,7 +454,7 @@ view from the strip.
   it the next time Ghostex starts (Keep installed undoes that until then); on
   Windows a Reinstall while it runs is done at the next start too.
   Annotate the current page
-  with Agentation in the Browser toolbar; GitHub pages disallow that tool.
+  with Agentation (the pen) in the Browser toolbar; GitHub pages disallow that tool.
   Each element, text or area you pick is captured as a picture along with
   its note, shown in the note box while you write. Send (the paper plane in
   the Annotate toolbar) puts the notes and their pictures into the agent
@@ -1133,10 +1135,10 @@ icon from the searchable icon grid in the Add/Edit link dialog or from a pinned
 link's right-click **Change icon…** menu. Clicking a link opens its page in the
 sessions column's place, the way Grok Bot opens, under the side panel Browser's
 own toolbar, which stays on top: Back, Forward, Reload, Home (the link's own
-address), the address (type another and press Enter to go there), Page Size
-(phone and tablet preview), Annotate, History, Profile (the links' own profile,
-or one of the Browser's profiles), Open Externally, the ⋯ menu (which has Toggle
-DevTools), and Close. Each row
+address), the address (type another and press Enter to go there), Open
+Externally, Annotate (the pen), Profile (the links' own profile, or one of the
+Browser's profiles), the ⋯ menu (which has History, Page Size for the phone and
+tablet preview, and Toggle DevTools), and Close. Each row
 shows its chosen icon or the site's icon once the page has been opened, and its
 ⋯ (or a right-click) has Edit…, Change icon…, Pin to rail (or Unpin from rail)
 and Remove. A link also pins to the rail like any rail item from the pin button

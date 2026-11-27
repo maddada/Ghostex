@@ -468,7 +468,11 @@ impl GhostexGpuiApp {
 
     fn render_storybook_controls(&self, cx: &mut gpui::Context<Self>) -> Vec<AnyElement> {
         [
-            ("annotate", BROWSER_ICON_POINTER, "Annotate with Agentation"),
+            (
+                "annotate",
+                BROWSER_ICON_ANNOTATE,
+                "Annotate with Agentation",
+            ),
             ("rebuild", BROWSER_ICON_RELOAD, "Rebuild Storybook"),
         ]
         .into_iter()

@@ -236,9 +236,6 @@ impl GhostexGpuiApp {
                             BrowserToolbarAction::ResetMediaPermissions => {
                                 this.reset_browser_media_permissions_for_pane(pane_id, cx);
                             }
-                            BrowserToolbarAction::HistoryMenu => {
-                                this.show_browser_history_popup(pane_id, window, cx);
-                            }
                             BrowserToolbarAction::ProfileMenu => {
                                 if let Some(trigger_bounds) = trigger_bounds.get() {
                                     this.show_browser_profile_menu(

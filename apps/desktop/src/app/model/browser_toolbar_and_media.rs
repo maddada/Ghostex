@@ -15,7 +15,6 @@ pub(crate) enum BrowserToolbarAction {
     FeedbackTool,
     ResetZoom,
     ResetMediaPermissions,
-    HistoryMenu,
     ProfileMenu,
     OpenExternally,
 }

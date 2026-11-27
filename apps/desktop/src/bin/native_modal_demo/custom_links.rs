@@ -622,11 +622,9 @@ impl CustomLinksDemo {
                 h_flex()
                     .items_center()
                     .gap(px(BROWSER_TOOLBAR_ITEM_GAP))
-                    .child(button("modals/settings/device-mobile.svg", true))
-                    .child(button("titlebar/pointer.svg", true))
-                    .child(button("titlebar/history.svg", true))
-                    .child(button("titlebar/user-circle.svg", true))
                     .child(button("titlebar/external-link.svg", true))
+                    .child(button("titlebar/pencil.svg", true))
+                    .child(button("titlebar/user-circle.svg", true))
                     .child(overflow)
                     .child(button("titlebar/x.svg", true)),
             )

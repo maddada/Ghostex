@@ -236,6 +236,19 @@ impl GhostexGpuiApp {
                 h_flex()
                     .items_center()
                     .gap(px(BROWSER_TOOLBAR_ITEM_GAP))
+                    // CDXC:Browser 2026-11-27 DECISION:
+                    // User: "replace this button with the open page externally button please" (of the toolbar's DevTools button) and "move devtools inside the 3 dots pls". Open Externally takes that spot and leaves the view tab strip for the Browser, so it is not shown twice; DevTools is a row of the ⋯ menu (browser_menu.rs). Asked whether the ⋯ menu's Open in External Browser row should go too, the user picked "Remove the menu row": this button is the only Open Externally in the toolbar and its menu.
+                    // CDXC:Browser 2026-11-27 DECISION:
+                    // User (of Open Externally): "move this here pls", the first spot after the address bar; "also change cursor icon for annotating to a pen please"; "also please put history and mobile under the 3 dots" (titlebar/browser_menu.rs). The row reads Open Externally, the page's zoom and media resets while they apply, Annotate, Profile, ⋯.
+                    .child(self.render_browser_toolbar_button(
+                        "open-externally",
+                        TITLEBAR_ICON_EXTERNAL_LINK,
+                        can_open_externally,
+                        Some(open_externally_tooltip),
+                        BrowserToolbarAction::OpenExternally,
+                        pane_id,
+                        cx,
+                    ))
                     .when(is_page_zoomed, |this| {
                         this.child(self.render_browser_toolbar_button(
                             "reset-zoom",
@@ -258,22 +271,12 @@ impl GhostexGpuiApp {
                             cx,
                         ))
                     })
-                    .child(self.render_browser_device_view_button(pane_id, cx))
                     .child(self.render_browser_toolbar_button(
                         "agentation",
-                        BROWSER_ICON_POINTER,
+                        BROWSER_ICON_ANNOTATE,
                         !feedback_tool_unavailable,
                         Some(feedback_tooltip),
                         BrowserToolbarAction::FeedbackTool,
-                        pane_id,
-                        cx,
-                    ))
-                    .child(self.render_browser_toolbar_button(
-                        "history",
-                        BROWSER_ICON_HISTORY,
-                        true,
-                        Some("History".into()),
-                        BrowserToolbarAction::HistoryMenu,
                         pane_id,
                         cx,
                     ))
@@ -283,17 +286,6 @@ impl GhostexGpuiApp {
                         true,
                         Some("Browser Profile".into()),
                         BrowserToolbarAction::ProfileMenu,
-                        pane_id,
-                        cx,
-                    ))
-                    // CDXC:Browser 2026-11-27 DECISION:
-                    // User: "replace this button with the open page externally button please" (of the toolbar's DevTools button) and "move devtools inside the 3 dots pls". Open Externally takes that spot and leaves the view tab strip for the Browser, so it is not shown twice; DevTools is a row of the ⋯ menu (browser_menu.rs). Asked whether the ⋯ menu's Open in External Browser row should go too, the user picked "Remove the menu row": this button is the only Open Externally in the toolbar and its menu.
-                    .child(self.render_browser_toolbar_button(
-                        "open-externally",
-                        TITLEBAR_ICON_EXTERNAL_LINK,
-                        can_open_externally,
-                        Some(open_externally_tooltip),
-                        BrowserToolbarAction::OpenExternally,
                         pane_id,
                         cx,
                     ))

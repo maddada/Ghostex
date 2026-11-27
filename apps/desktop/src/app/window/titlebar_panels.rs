@@ -272,6 +272,18 @@ impl Render for GpuiTitlebarPopupWindow {
                     });
                 }),
             )
+            .on_action(cx.listener(|this, action: &OpenBrowserPaneHistory, _window, cx| {
+                this.update_main_window(cx, |_, window, cx| {
+                    window.dispatch_action(Box::new(*action), cx);
+                });
+            }))
+            .on_action(
+                cx.listener(|this, action: &ShowBrowserPageSizeMenu, _window, cx| {
+                    this.update_main_window(cx, |_, window, cx| {
+                        window.dispatch_action(Box::new(*action), cx);
+                    });
+                }),
+            )
             .on_action(
                 cx.listener(|this, action: &SetBrowserDeviceView, _window, cx| {
                     this.update_main_window(cx, |_, window, cx| {

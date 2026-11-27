@@ -1273,6 +1273,22 @@ impl Render for GhostexGpuiApp {
                     );
                 }),
             )
+            .on_action(cx.listener(|this, action: &OpenBrowserPaneHistory, window, cx| {
+                this.show_browser_history_popup(BrowserPaneId(action.pane_id), window, cx);
+            }))
+            .on_action(
+                cx.listener(|this, action: &ShowBrowserPageSizeMenu, window, cx| {
+                    // No trigger bounds: the ⋯ button's prepaint opens it under itself
+                    // (render_browser_pane_actions_button).
+                    this.set_gpui_titlebar_popup_open(
+                        GpuiTitlebarPopupKind::BrowserDeviceView(BrowserPaneId(action.pane_id)),
+                        true,
+                        None,
+                        window,
+                        cx,
+                    );
+                }),
+            )
             .on_action(
                 cx.listener(|this, action: &SelectClaudeWebAccount, _window, cx| {
                     this.select_claude_web_account(&action.account_id, cx);

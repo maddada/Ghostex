@@ -379,6 +379,20 @@ pub(crate) struct ToggleBrowserDevTools {
     pub(crate) pane_id: u64,
 }
 
+/// The Browser toolbar ⋯ menu's History row (titlebar/browser_menu.rs).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct OpenBrowserPaneHistory {
+    pub(crate) pane_id: u64,
+}
+
+/// The Browser toolbar ⋯ menu's Page Size row: opens the page-size menu under the ⋯ button.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct ShowBrowserPageSizeMenu {
+    pub(crate) pane_id: u64,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct ResetBrowserZoom;
