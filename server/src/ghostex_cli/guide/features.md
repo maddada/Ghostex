@@ -5906,15 +5906,20 @@ coordinators in that computer's projects. Drafting into a chat on another
 computer and answering Ghostex forms there are not available; it says so. A
 computer whose Agent access is off (in Settings > Remote > Computers this machine connects to, on
 either computer) stays out of reach, and the agent tells you why. A call
-about all your sessions knows them before it says its opening line (up to 25,
-waiting ones first, each with its title, project, computer and state, a
-coordinator's threads counted under it; it looks up the rest when you ask),
-so you can give it an instruction right away, and it keeps that list current
-during the call (sessions that open, close or are renamed, and changed
-states) without saying anything about it. What a waiting session asks isn't
-in that list; the agent reads it when you ask. A connected computer that
-can't be read is named in the list as out of reach, and its sessions are not
-taken for closed. It answers the point
+about all your sessions reads them when it starts (up to 25, waiting ones
+first, each with its title, project, computer and state, a coordinator's
+threads counted under it; it looks up the rest when you ask), and its opening
+line waits at most 3 seconds for that list. Usually the list is there first,
+so after the opening line you can give it an instruction right away. When
+reading takes longer (a connected computer slow to answer), the opening line
+comes without it and the agent gets the list a moment later, silently; until
+then it knows your sessions only by looking them up. It keeps that list
+current during the call (sessions that open, close or are renamed, changed
+states, and how many threads a coordinator runs) without saying anything
+about it. What a waiting session asks isn't in that list; the agent reads it
+when you ask. A connected computer that can't be read is named in the list
+as out of reach (past three such computers, the list only counts them), and
+its sessions are not taken for closed. It answers the point
 without preamble or filler and doesn't end with offers like "Want the
 details?". Its short opening line says it can approve or deny what a session
 waits on. While the
@@ -5922,8 +5927,9 @@ conversation is open it tells you when a session finishes its turn or starts
 waiting on a question or an approval, but not about a coordinator's threads
 (their approvals included; a call about the coordinator still hears those).
 That goes for a coordinator on a connected computer too; when that computer
-doesn't say which of its sessions are threads, they count as sessions of
-their own. A
+doesn't say within 2 seconds which of its sessions are threads, they count as
+sessions of their own, and the agent is told that it doesn't know which are
+threads there. A
 session that finished its turn counts as waiting on a question only for the
 questions that turn asked: open questions from earlier turns, after you
 moved the session on, leave it idle (the sidebar's pink dot still shows them,
