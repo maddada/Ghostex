@@ -497,8 +497,8 @@ pub(super) struct SessionsRead {
     /// The connected computers that could not be read: their sessions are missing, not closed.
     pub(super) unavailable: Vec<Unavailable>,
     /// The connected computers, by name, that did not say in time which of their sessions are
-    /// threads (`computers::THREADS_TIMEOUT`): their sessions are listed as they are, a thread
-    /// among them not marked.
+    /// threads (`computers::THREADS_TIMEOUT`): a thread their last answer named stays marked while
+    /// it is open; a thread among the others is not marked.
     pub(super) threads_unknown: Vec<String>,
 }
 

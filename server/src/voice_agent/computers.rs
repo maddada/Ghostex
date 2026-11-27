@@ -6,8 +6,8 @@
 //! Voice mode read sessions from this computer's database only, so a call knew nothing of the sessions the Unified sidebar shows from other computers ("it only seems aware of local sessions"). Their rows come from that computer's own `/api/listSessions` and `/api/listProjects`, and every request goes through `/api/computers/<serverId>/relay`, the path `ghostex --computer` takes, so each computer's Agent access switch and `PEER_ALLOWED_ENDPOINTS` decide exactly as they do for agents. A tool that needs an endpoint outside that list (chat drafts, question forms, coordinator threads) says so in a sentence instead of trying.
 //! SEE-ALSO: server/src/connected_computers/ (registry, relay, scope), apps/desktop/src/app/voice_agent/focus.rs (shows a session of another computer a tool named), apps/desktop/src/app/gx_store/renderer_commands/perform.rs (`readFocusedSession` names another computer's session).
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
@@ -74,7 +74,8 @@ pub(super) struct Elsewhere {
     pub(super) projects: Vec<ProjectInfo>,
     pub(super) unavailable: Vec<Unavailable>,
     /// With `Threads::Wanted`, the computers, by name, whose sessions came without which of them
-    /// are threads: each is listed as a session of its own, a thread or not.
+    /// are threads: a session known as a thread from that computer's last answer stays one while
+    /// it is open (`known`); any other is listed as a session of its own, a thread or not.
     pub(super) threads_unknown: Vec<String>,
 }
 
@@ -85,22 +86,85 @@ struct Listing {
     /// Its open sessions, waiting ones first, threads not marked.
     sessions: Vec<SessionInfo>,
     projects: Vec<ProjectInfo>,
-    /// Its presentation snapshot (`hierarchy`): `None` until asked, `Some(None)` when it did not
-    /// come in time.
-    threads: Option<Option<Value>>,
+    /// Which sessions are threads, from its presentation snapshot (`hierarchy`): `None` until
+    /// asked, `Some(None)` when it did not come in time.
+    threads: Option<Option<Roles>>,
+    /// Without an answer to that, what its last answer said of the sessions still open (`known`).
+    last_known: Option<Roles>,
 }
 
 impl Listing {
-    /// Its sessions, each coordinator's threads marked and right after it when its snapshot came.
+    /// Its sessions, each coordinator's threads marked and right after it: as its snapshot says,
+    /// or as its last one said when this one did not come.
     fn sessions(&self) -> Vec<SessionInfo> {
-        match &self.threads {
-            Some(Some(snapshot)) => with_threads(&self.computer, self.sessions.clone(), snapshot),
+        match (&self.threads, &self.last_known) {
+            (Some(Some(roles)), _) | (_, Some(roles)) => roles.nest(self.sessions.clone()),
             _ => self.sessions.clone(),
         }
     }
 
     fn threads_known(&self) -> bool {
         matches!(self.threads, Some(Some(_)))
+    }
+}
+
+/// Which of a computer's sessions are coordinators and which are their threads, by global ref.
+#[derive(Clone, Debug, Default)]
+struct Roles {
+    /// Each thread's coordinator, and whether the coordinator marked it done.
+    parents: HashMap<String, (String, bool)>,
+    coordinators: HashSet<String>,
+}
+
+impl Roles {
+    /// The coordinator fields of `computer`'s presentation snapshot (`hierarchy`).
+    fn of(computer: &Computer, snapshot: &Value) -> Self {
+        let global = |project_id: &str, session_id: &str| {
+            crate::ids::create_global_session_ref(&computer.server_id, project_id, session_id)
+        };
+        let mut roles = Self::default();
+        for session in snapshot
+            .pointer("/snapshot/sessions")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let field = |key: &str| session.get(key).and_then(Value::as_str);
+            let (Some(project_id), Some(session_id)) = (field("projectId"), field("sessionId"))
+            else {
+                continue;
+            };
+            let reference = global(project_id, session_id);
+            if let (Some(project_id), Some(session_id)) =
+                (field("coordinatorProjectId"), field("coordinatorSessionId"))
+            {
+                let done = field("coordinatorThreadState") == Some("done");
+                roles
+                    .parents
+                    .insert(reference.clone(), (global(project_id, session_id), done));
+            }
+            if field("coordinatorRole") == Some("coordinator") {
+                roles.coordinators.insert(reference);
+            }
+        }
+        roles
+    }
+
+    /// `sessions` with each coordinator's threads marked and right after it (`sessions::nest`: a
+    /// thread whose coordinator is not open is a session of its own).
+    fn nest(&self, sessions: Vec<SessionInfo>) -> Vec<SessionInfo> {
+        sessions::nest(
+            sessions,
+            |reference| self.parents.get(reference).cloned(),
+            |reference| self.coordinators.contains(reference),
+        )
+    }
+
+    /// Only what it says of `open` sessions.
+    fn retain_open(&mut self, open: &[SessionInfo]) {
+        let open: HashSet<String> = open.iter().map(SessionInfo::reference).collect();
+        self.parents.retain(|reference, _| open.contains(reference));
+        self.coordinators.retain(|reference| open.contains(reference));
     }
 }
 
@@ -115,6 +179,26 @@ fn cache() -> std::sync::MutexGuard<'static, Cache> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
+/// Which sessions are threads as each computer last said it, by the same key as `cache`, kept for
+/// its sessions that are still open.
+///
+/// CDXC:VoiceMode 2026-11-27 WHY: when a connected computer did not say which sessions are threads
+/// (a slow or failed `readPresentationSnapshot`), its sessions came flat, so a thread it had named
+/// before reached a call about all sessions as a session of its own: its next turn end was
+/// announced, though threads are never announced there. A session it named as a thread stays one
+/// while it and its coordinator are open, until an answer says otherwise; this outlives the
+/// `FRESH_FOR` cache, whose entries are read again. A thread that opened since the last answer, or
+/// on a computer that never answered, cannot be told from a session of its own and is still
+/// listed and announced as one (Help says so).
+type Known = HashMap<(String, String), Roles>;
+
+fn known() -> std::sync::MutexGuard<'static, Known> {
+    static KNOWN: LazyLock<Mutex<Known>> = LazyLock::new(Default::default);
+    KNOWN
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 /// Drops what was read of `server_id`, after a tool changed its sessions (a new agent there).
 pub(super) fn forget(state: &AppState, server_id: &str) {
     cache().remove(&(state.metadata.server_id.clone(), server_id.to_string()));
@@ -124,6 +208,13 @@ pub(super) fn forget(state: &AppState, server_id: &str) {
 /// cannot be read is named in `unavailable` and leaves the rest alone.
 pub(super) async fn other_computers(state: &Arc<AppState>, threads: Threads) -> Elsewhere {
     let computers = crate::connected_computers::list();
+    if threads == Threads::Wanted {
+        // A computer no longer connected has no sessions to keep roles for.
+        known().retain(|(here, there), _| {
+            *here != state.metadata.server_id
+                || computers.iter().any(|computer| computer.server_id == *there)
+        });
+    }
     let reads = computers
         .iter()
         .map(|computer| listing(state, computer, threads));
@@ -181,12 +272,27 @@ async fn listing(
         }
     };
     let mut listing = outcome?;
-    if threads == Threads::Wanted && listing.threads.is_none() {
-        listing.threads = Some(hierarchy(state, &listing.computer, &listing.sessions).await);
-        // Kept with the answers it is about, unless they were read again meanwhile.
-        if let Some((cached_at, Ok(cached))) = cache().get_mut(&key) {
-            if *cached_at == at {
-                cached.threads = listing.threads.clone();
+    if threads == Threads::Wanted {
+        if listing.threads.is_none() {
+            let snapshot = hierarchy(state, &listing.computer, &listing.sessions).await;
+            listing.threads =
+                Some(snapshot.map(|snapshot| Roles::of(&listing.computer, &snapshot)));
+            // Kept with the answers it is about, unless they were read again meanwhile.
+            if let Some((cached_at, Ok(cached))) = cache().get_mut(&key) {
+                if *cached_at == at {
+                    cached.threads = listing.threads.clone();
+                }
+            }
+        }
+        match &listing.threads {
+            Some(Some(roles)) => {
+                known().insert(key, roles.clone());
+            }
+            _ => {
+                if let Some(roles) = known().get_mut(&key) {
+                    roles.retain_open(&listing.sessions);
+                    listing.last_known = Some(roles.clone());
+                }
             }
         }
     }
@@ -228,7 +334,8 @@ async fn read(state: &Arc<AppState>, computer: &ConnectedComputer) -> Result<Lis
 /// Which of another computer's open sessions are coordinators and which are their threads: the
 /// coordinator fields of its presentation snapshot for just those sessions (`onlySessions`),
 /// waited for at most `THREADS_TIMEOUT`. `None` when it did not answer in time; its threads then
-/// stay top-level, and the readers that want them say so (`Elsewhere::threads_unknown`).
+/// stay top-level, except those its last answer named (`known`), and the readers that want them
+/// say so (`Elsewhere::threads_unknown`).
 ///
 /// CDXC:VoiceMode 2026-11-26 WHY: the voice agent left a coordinator's threads out of the call's
 /// session list and its announcements only on this computer, because which sessions are threads
@@ -292,53 +399,8 @@ fn read_listing(computer: &Computer, rows: &Value, projects: &Value) -> Listing 
         sessions: sessions::sorted(rows),
         projects,
         threads: None,
+        last_known: None,
     }
-}
-
-/// `sessions` of `computer` with each coordinator's threads marked and right after it, as
-/// `snapshot` (its `readPresentationSnapshot` answer, `hierarchy`) names them.
-fn with_threads(
-    computer: &Computer,
-    sessions: Vec<SessionInfo>,
-    snapshot: &Value,
-) -> Vec<SessionInfo> {
-    // Each session's coordinator fields, by its global ref (the one `SessionInfo::reference`
-    // gives a session on another computer).
-    let global = |project_id: &str, session_id: &str| {
-        crate::ids::create_global_session_ref(&computer.server_id, project_id, session_id)
-    };
-    let roles: HashMap<String, &Value> = snapshot
-        .pointer("/snapshot/sessions")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|session| {
-            Some((
-                global(
-                    session.get("projectId")?.as_str()?,
-                    session.get("sessionId")?.as_str()?,
-                ),
-                session,
-            ))
-        })
-        .collect();
-    let field = |reference: &str, key: &str| {
-        roles
-            .get(reference)
-            .and_then(|session| session.get(key))
-            .and_then(Value::as_str)
-            .map(str::to_string)
-    };
-    sessions::nest(
-        sessions,
-        |reference| {
-            let project_id = field(reference, "coordinatorProjectId")?;
-            let session_id = field(reference, "coordinatorSessionId")?;
-            let done = field(reference, "coordinatorThreadState").as_deref() == Some("done");
-            Some((global(&project_id, &session_id), done))
-        },
-        |reference| field(reference, "coordinatorRole").as_deref() == Some("coordinator"),
-    )
 }
 
 /// `error` (no session matched the user's words) with the connected computers that could not be
@@ -392,6 +454,7 @@ pub(super) async fn call(
 #[cfg(test)]
 pub(super) fn reset_for_tests() {
     cache().clear();
+    known().clear();
 }
 
 #[cfg(test)]
