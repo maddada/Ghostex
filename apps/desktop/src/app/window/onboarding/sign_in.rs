@@ -29,6 +29,9 @@ pub(crate) struct SignInState {
     pub(crate) signing_in: bool,
     pub(crate) url: Option<String>,
     pub(crate) failed: bool,
+    /// The CLI is too old for Ghostex: what to update it to (gxserver's `needsUpdate`, an
+    /// Antigravity CLI older than 1.5.1). Shown instead of a sign-in.
+    pub(crate) needs_update: Option<String>,
     pub(crate) next_poll: Option<Instant>,
 }
 
@@ -115,10 +118,15 @@ impl GpuiOnboardingWindow {
                 if state.signed_in == Some(true) {
                     state.failed = false;
                 }
+                state.needs_update = answer
+                    .get("needsUpdate")
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
             }
             None => {
                 state.signed_in = None;
                 state.signing_in = false;
+                state.needs_update = None;
             }
         }
         state.next_poll = state.signing_in.then(|| Instant::now() + SIGN_IN_POLL);
@@ -172,6 +180,30 @@ impl GpuiOnboardingWindow {
                 spinner(s, 16.0, 1.8, self.opened_at, now).into_any_element(),
                 format!("Checking that {name} is signed in…"),
                 Vec::new(),
+            ),
+            // CDXC:AgentProviders 2026-11-27: an Antigravity CLI older than 1.5.1 gets the update
+            // instruction a Native chat shows, not a sign-in that would end on the same refusal.
+            Some(_) if state.needs_update.is_some() => (
+                icon(s, "x", 18.0, 1.6, hex(0xffc46b)).into_any_element(),
+                state.needs_update.clone().unwrap_or_default(),
+                vec![
+                    self.control(
+                        s,
+                        ghost(s, "sign-in-recheck", "Check again", 14.5, false),
+                        "sign-in-recheck",
+                        interact::Ring::new(0.0, 0.0),
+                        interact::Keys::EnterSpace,
+                        cx,
+                        |this, _, cx| {
+                            let agent_id = this.sign_in.agent_id.clone();
+                            if !agent_id.is_empty() {
+                                this.ask_sign_in(agent_id, "status", cx);
+                                cx.notify();
+                            }
+                        },
+                    )
+                    .into_any_element(),
+                ],
             ),
             Some((_, name)) if state.signing_in => {
                 let mut actions = Vec::new();

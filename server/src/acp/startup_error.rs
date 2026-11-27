@@ -84,26 +84,37 @@ pub(crate) fn looks_like_auth_error(message: &str) -> bool {
 
 /// The first agy release that offers every model to every ACP client (`agy acp`).
 const ANTIGRAVITY_OPEN_MODELS: [u64; 3] = [1, 5, 1];
-/// What the refusal of an older agy says; `startup_error_notice` shows it as the card's text.
-const ANTIGRAVITY_TOO_OLD_TAIL: &str =
-    "Update it in Settings > Updates, or switch this chat to Terminal.";
+/// What the refusal of an older agy in a Native chat ends with; `startup_error_notice` shows it as
+/// the card's text, with Switch to Terminal and Try again.
+const ANTIGRAVITY_TOO_OLD_TAIL: &str = "Or switch this chat to Terminal.";
 
 /// Why a Native Antigravity chat won't run on the agy that answered `initialize`, or `None`.
 ///
 /// CDXC:AgentProviders 2026-11-26 DECISION:
 /// User, on the Antigravity compliance page (Q5149, "Refuse Native"): agy 1.5.0 and older offer
 /// Claude and GPT over ACP only to allowlisted editors, and Ghostex never poses as one, so a
-/// Native chat refuses those versions and asks for 1.5.1 or newer; Terminal chats run agy's own
-/// screen and still work. A version Ghostex can't read is let through.
+/// Native chat refuses those versions before `session/new` and asks for 1.5.1 or newer; Terminal
+/// chats run agy's own screen and still work. A version Ghostex can't read (no `agentInfo`, or
+/// one that names no `major.minor.patch`) is let through, as another agent GUI's merged fix does:
+/// Ghostex sends its own name either way, so nothing is spoofed, and refusing would block every
+/// agy that stops reporting its version.
+/// CDXC:AgentProviders 2026-11-27: the card says to update Antigravity to 1.5.1 or newer and try
+/// again, in the same words as setup's sign-in check (`antigravity_update_needed`).
 pub(crate) fn antigravity_too_old(initialize: &serde_json::Value) -> Option<String> {
     let version = initialize
         .pointer("/agentInfo/version")
-        .and_then(serde_json::Value::as_str)?
-        .trim();
-    let parsed = parse_agy_version(version)?;
+        .and_then(serde_json::Value::as_str)?;
+    antigravity_update_needed(version).map(|message| format!("{message} {ANTIGRAVITY_TOO_OLD_TAIL}"))
+}
+
+/// The update instruction for an agy older than 1.5.1 (`version` as ACP's `agentInfo` names it:
+/// `1.5.0`, `v1.5.0` or `agy_acp_server_1.5.0`), or `None` for 1.5.1 and newer and for a version
+/// Ghostex can't read.
+pub(crate) fn antigravity_update_needed(version: &str) -> Option<String> {
+    let parsed = parse_agy_version(version.trim())?;
     (parsed < ANTIGRAVITY_OPEN_MODELS).then(|| {
         format!(
-            "This computer has Antigravity CLI {}.{}.{}, and Native chats need 1.5.1 or newer. {ANTIGRAVITY_TOO_OLD_TAIL}",
+            "This computer has Antigravity CLI {}.{}.{}, and Ghostex needs 1.5.1 or newer. Update Antigravity to 1.5.1 or newer (Settings > Updates), then try again.",
             parsed[0], parsed[1], parsed[2]
         )
     })

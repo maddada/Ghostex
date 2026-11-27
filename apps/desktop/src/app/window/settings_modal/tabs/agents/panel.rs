@@ -422,9 +422,13 @@ impl AgentsTab {
                 let session_mode_row = setting_row(
                     p,
                     SharedString::from(format!("agent-session-mode-row-{agent_id}")),
-                    RowSpec::new("Session mode").description(
-                        "Choose Native (faster, with live approvals; the default) or Terminal-based (the agent's own app in a terminal, with instant switching between Chat and Terminal). Applies to new or resumed sessions.",
-                    ),
+                    RowSpec::new("Session mode").description(if family == "antigravity" {
+                        // CDXC:AgentProviders 2026-11-27: Native Antigravity refuses agy older
+                        // than 1.5.1 (server/src/acp/startup_error.rs), so its row says so.
+                        "Choose Native (faster, with live approvals; the default; needs Antigravity CLI 1.5.1 or newer) or Terminal-based (the agent's own app in a terminal, with instant switching between Chat and Terminal). Applies to new or resumed sessions."
+                    } else {
+                        "Choose Native (faster, with live approvals; the default) or Terminal-based (the agent's own app in a terminal, with instant switching between Chat and Terminal). Applies to new or resumed sessions."
+                    }),
                     None,
                     control,
                     cx,

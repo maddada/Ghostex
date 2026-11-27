@@ -107,7 +107,10 @@ pub(crate) fn dispatch(
     match params.get("operation").and_then(Value::as_str) {
         Some("status") => Ok(status(state, &home, &agent_id)),
         Some("start") => {
-            start(&home, &agent_id)?;
+            // An agy older than 1.5.1 is not signed in to: the answer says to update it instead.
+            if update_needed(&home, &agent_id).is_none() {
+                start(&home, &agent_id)?;
+            }
             Ok(status(state, &home, &agent_id))
         }
         Some("cancel") => {
@@ -118,9 +121,40 @@ pub(crate) fn dispatch(
     }
 }
 
-/// The agent's sign-in state: `signedIn` true, false or null (cannot tell), and while a sign-in
-/// started here is running, `signingIn` with the page it opened.
+/// What the agent's CLI needs before Ghostex can use it: for Antigravity older than 1.5.1, the
+/// update instruction a Native chat also shows (acp/startup_error.rs), `None` otherwise and when
+/// the version can't be read.
+///
+/// CDXC:AgentProviders 2026-11-27 DECISION:
+/// User: after `initialize`, an agy older than 1.5.1 fails cleanly with "update Antigravity to
+/// 1.5.1 or newer and try again", and setup's sign-in shows the same message instead of a
+/// generic sign-in failure. The version comes from `agy --version` on this computer; setup offers
+/// no Sign in for that agy, since a sign-in would only end on the refusal.
+fn update_needed(home: &Path, agent_id: &str) -> Option<String> {
+    if agent_id != "antigravity" {
+        return None;
+    }
+    let executable = crate::accounts::helpers::probe_executable(home, "agy")?;
+    let mut command = crate::platform::process::background_command(executable);
+    command.arg("--version").current_dir(home);
+    let (key, value) = crate::agent_hooks::probing::AGY_BACKGROUND_AUTO_UPDATE_OFF;
+    command.env(key, value);
+    let text = crate::agent_hooks::probing::run_command_stdout_with_timeout(
+        command,
+        Duration::from_secs(5),
+    )?;
+    let version = crate::agent_cli::latest::version_in(&text)?;
+    crate::acp::startup_error::antigravity_update_needed(&version)
+}
+
+/// The agent's sign-in state: `signedIn` true, false or null (cannot tell), while a sign-in
+/// started here is running, `signingIn` with the page it opened, and `needsUpdate` with the update
+/// instruction when the CLI is too old for Ghostex (`update_needed`).
 fn status(state: &AppState, home: &Path, agent_id: &str) -> Value {
+    let needs_update = update_needed(home, agent_id);
+    if needs_update.is_some() {
+        stop(agent_id);
+    }
     let running = {
         let mut sign_ins = SIGN_INS.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(sign_in) = sign_ins.get_mut(agent_id) {
@@ -152,6 +186,7 @@ fn status(state: &AppState, home: &Path, agent_id: &str) -> Value {
             "signingIn": false,
             "signInUrl": null,
             "signInFailed": false,
+            "needsUpdate": needs_update,
         });
     }
     let failed = {
@@ -171,6 +206,7 @@ fn status(state: &AppState, home: &Path, agent_id: &str) -> Value {
         "signingIn": running.is_some() && signed_in != Some(true),
         "signInUrl": running.flatten(),
         "signInFailed": failed,
+        "needsUpdate": needs_update,
     })
 }
 
