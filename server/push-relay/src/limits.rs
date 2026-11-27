@@ -1,6 +1,8 @@
-//! Token buckets in memory: per caller address, per device token, per start token, and one for the whole relay.
-//! A bucket holds `burst` requests and refills `per_minute` a minute; an idle bucket is forgotten after 10
-//! minutes. Each table is bounded: when it is full of busy keys a new key is refused rather than growing it.
+//! Token buckets in memory: per caller address, per device token, per start token, and one for the whole relay;
+//! for the `/push/` routes also per alert, background and widget token, per mailbox and snapshot id, and per
+//! caller address for the ids it may create. A bucket holds `burst` requests and refills `per_minute` a minute;
+//! an idle bucket is forgotten after 10 minutes. Each table is bounded: when it is full of busy keys a new key is
+//! refused rather than growing it.
 
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -25,6 +27,38 @@ pub struct LimitConfig {
     /// Tokens Apple dropped that the relay remembers (refusing them without asking Apple); past this the oldest is
     /// forgotten, so random tokens cannot grow the relay's memory without end.
     pub max_gone_tokens: usize,
+    /// The `/push/` routes: every request from one caller address (its own bucket, so this traffic never takes
+    /// from the Live Activity route's).
+    pub push_per_address: Rate,
+    /// Per device token: visible notifications.
+    pub alert_per_token: Rate,
+    /// Per device token: background pushes.
+    pub background_per_token: Rate,
+    /// Per widget push token.
+    pub widgets_per_token: Rate,
+    /// Every push of the `/push/` routes that is about to go to Apple, relay-wide.
+    pub push_global: Rate,
+    /// Requests of the `/push/` routes to Apple in flight at once.
+    pub push_in_flight: usize,
+    /// Mailbox and snapshot requests from one caller address.
+    pub store_per_address: Rate,
+    /// Ids one caller address may create in the mailbox and the snapshot store together (replacing what an
+    /// existing id holds does not count).
+    pub new_ids_per_address: Rate,
+    /// Requests per mailbox id and per snapshot id.
+    pub per_mailbox_id: Rate,
+    pub per_snapshot_id: Rate,
+    /// Mailbox entries and snapshots held at once, together.
+    pub store_max_entries: usize,
+    /// Bytes of mailbox tokens and snapshots held at once, together.
+    pub store_max_bytes: usize,
+    /// How long a mailbox entry waits to be taken.
+    pub mailbox_lifetime: Duration,
+    /// How long a snapshot is kept when nothing replaces it.
+    pub snapshot_lifetime: Duration,
+    /// Keys each table of the `/push/` routes' limits holds at most (the Live Activity route's tables keep
+    /// theirs), so all of them together stay well inside the service's memory limit.
+    pub push_max_keys: usize,
 }
 
 impl Default for LimitConfig {
@@ -48,6 +82,48 @@ impl Default for LimitConfig {
             },
             in_flight: 64,
             max_gone_tokens: 100_000,
+            push_per_address: Rate {
+                burst: 60.0,
+                per_minute: 60.0,
+            },
+            alert_per_token: Rate {
+                burst: 10.0,
+                per_minute: 10.0,
+            },
+            background_per_token: Rate {
+                burst: 3.0,
+                per_minute: 3.0 / 60.0,
+            },
+            widgets_per_token: Rate {
+                burst: 4.0,
+                per_minute: 6.0 / 60.0,
+            },
+            push_global: Rate {
+                burst: 300.0,
+                per_minute: 3000.0,
+            },
+            push_in_flight: 64,
+            store_per_address: Rate {
+                burst: 60.0,
+                per_minute: 60.0,
+            },
+            new_ids_per_address: Rate {
+                burst: 20.0,
+                per_minute: 20.0 / 60.0,
+            },
+            per_mailbox_id: Rate {
+                burst: 20.0,
+                per_minute: 20.0,
+            },
+            per_snapshot_id: Rate {
+                burst: 20.0,
+                per_minute: 20.0,
+            },
+            store_max_entries: 20_000,
+            store_max_bytes: 16 * 1024 * 1024,
+            mailbox_lifetime: Duration::from_secs(10 * 60),
+            snapshot_lifetime: Duration::from_secs(24 * 3600),
+            push_max_keys: 25_000,
         }
     }
 }
@@ -63,13 +139,20 @@ struct Bucket {
 
 pub struct Limiter<K> {
     rate: Rate,
+    max_keys: usize,
     buckets: Mutex<HashMap<K, Bucket>>,
 }
 
 impl<K: Eq + Hash + Clone> Limiter<K> {
     pub fn new(rate: Rate) -> Self {
+        Self::with_max_keys(rate, MAX_KEYS)
+    }
+
+    /// A limiter whose table holds at most `max_keys` keys.
+    pub fn with_max_keys(rate: Rate, max_keys: usize) -> Self {
         Limiter {
             rate,
+            max_keys: max_keys.max(1),
             buckets: Mutex::new(HashMap::new()),
         }
     }
@@ -77,9 +160,9 @@ impl<K: Eq + Hash + Clone> Limiter<K> {
     /// Takes one request for `key` at `now`; `Err` carries how long until one is free.
     pub fn take(&self, key: &K, now: Instant) -> Result<(), Duration> {
         let mut buckets = self.buckets.lock().expect("limiter lock");
-        if !buckets.contains_key(key) && buckets.len() >= MAX_KEYS {
+        if !buckets.contains_key(key) && buckets.len() >= self.max_keys {
             prune(&mut buckets, now);
-            if buckets.len() >= MAX_KEYS {
+            if buckets.len() >= self.max_keys {
                 return Err(Duration::from_secs(60));
             }
         }

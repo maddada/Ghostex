@@ -1,17 +1,21 @@
-//! Ghostex's Live Activity push relay.
+//! Ghostex's push relay.
 //!
 //! A user's computer (gxserver) keeps the iPhone's Live Activity current while the phone is locked by asking
 //! this relay to send Apple a Live Activity push: an update, an end, or a start (iOS 17.2+). Only the relay
 //! holds the Apple push key; a computer never sees it. Expo's push service, which carries Ghostex's
 //! notifications, does not carry Live Activity pushes, and the key cannot go on users' computers.
 //!
-//! The relay sends Live Activity pushes for one topic and nothing else: the topic, the push type and Apple's
-//! host (production or sandbox) are fixed here, and a request naming any of them is refused. Like Expo's push
-//! service it is open: the device token is what lets someone push to a phone, and only the computers that
-//! phone paired with receive it. What someone else can do with the relay is in `README.md`.
+//! The `/push/` routes (`push_routes.rs`) send the app's own notifications and background pushes and its widget
+//! pushes the same way, and hold, in memory only, a mailbox for an activity's new update token and one encrypted
+//! widget snapshot per id. An alert shows fixed words per event; the names travel only encrypted.
 //!
-//! It logs counts, Apple's status and reason, and an 8-hex hash of a token; never a token, a content state or
-//! anything from the key's files.
+//! Every push type, its topic and Apple's host (production or sandbox) are fixed here, and a request naming any
+//! of them is refused. Like Expo's push service it is open: the device token is what lets someone push to a
+//! phone, and only the computers that phone paired with receive it. What someone else can do with the relay is
+//! in `README.md`.
+//!
+//! It logs counts, Apple's status and reason, and an 8-hex hash of a token or id; never a token, an id, a
+//! content state, an envelope, a snapshot or anything from the key's files.
 //!
 //! CDXC:Notifications 2026-11-11 DECISION: User, on keeping the Lock Screen banner current: "yes sure do it
 //! now but can we have it on same vps we have already???". The relay runs on relay-eu.ghostex.dev beside the
@@ -19,7 +23,10 @@
 
 pub mod apns;
 pub mod limits;
+pub mod native;
+pub mod push_routes;
 pub mod request;
+pub mod store;
 
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
@@ -39,10 +46,15 @@ use tokio::sync::Semaphore;
 
 use crate::apns::Apple;
 use crate::limits::{LimitConfig, Limiter};
+use crate::push_routes::PushRoutes;
 use crate::request::{Environment, Event, Refusal, SendRequest};
 
-/// The iPhone app's bundle id with Apple's Live Activity suffix: the only topic the relay sends to.
+/// The iPhone app's bundle id with Apple's Live Activity suffix: the only topic the Live Activity route sends to.
 pub const TOPIC: &str = "com.maddada.ghostex.ios.push-type.liveactivity";
+/// The iPhone app's bundle id: the topic of its notifications and background pushes.
+pub const APP_TOPIC: &str = "com.maddada.ghostex.ios";
+/// The iPhone app's bundle id with Apple's widget suffix: the topic of widget pushes.
+pub const WIDGETS_TOPIC: &str = "com.maddada.ghostex.ios.push-type.widgets";
 /// Apple's limit for a Live Activity push.
 pub const MAX_APNS_PAYLOAD_BYTES: usize = 4096;
 /// A request body: the content state plus a few fields.
@@ -83,6 +95,8 @@ pub struct Relay {
     gone: Mutex<HashMap<(Environment, [u8; 32]), Instant>>,
     max_gone: usize,
     counters: Counters,
+    /// The `/push/` routes' limits, store and counters.
+    push: PushRoutes,
 }
 
 fn token_digest(token: &str) -> [u8; 32] {
@@ -144,6 +158,7 @@ impl Relay {
             gone: Mutex::new(HashMap::new()),
             max_gone: limits.max_gone_tokens.max(1),
             counters: Counters::default(),
+            push: PushRoutes::new(&limits),
         })
     }
 
@@ -157,6 +172,7 @@ impl Relay {
             .route(&format!("{PREFIX}/healthz"), get(health))
             .route(&format!("{PREFIX}/v1/send"), post(send))
             .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
+            .merge(push_routes::router())
             .with_state(self.clone())
     }
 
@@ -166,6 +182,7 @@ impl Relay {
         self.per_address.prune(now);
         self.per_token.prune(now);
         self.per_start_token.prune(now);
+        self.push.prune(now);
         self.gone
             .lock()
             .expect("gone lock")
@@ -199,7 +216,7 @@ impl Relay {
                 .filter_map(|value| value.to_str().ok())
                 .flat_map(|value| value.split(','))
                 .filter_map(|entry| entry.trim().parse::<IpAddr>().ok())
-                .last();
+                .next_back();
             if let Some(address) = forwarded {
                 return address;
             }
@@ -338,7 +355,7 @@ async fn send(
         return rate_limited(Duration::from_secs(5));
     };
     let started = Instant::now();
-    let result = apple.send(&push).await;
+    let result = apple.send(&push.outgoing()).await;
     let ms = started.elapsed().as_millis();
     match result {
         Ok(apple_answer) => {
