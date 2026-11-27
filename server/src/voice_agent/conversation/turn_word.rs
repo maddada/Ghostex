@@ -9,6 +9,8 @@
 //! User: the turn words are set per language, several for each ("mehrere Wörter festlegen können pro Sprache"); English defaults to "reply", "over" and "go ahead", German to "fertig" and "antworte", and a language without its own words uses the English ones (`call_language.rs`). The intro now names the call's own words, so its request reads "Please say "reply", "over" or "go ahead" after you finish speaking so I can reply to you." with the defaults, and a call in another language says the intro in that language, keeping the words as they are.
 //!
 //! CDXC:VoiceMode 2026-11-25 WHY: the intro's fixed text stays English and the model says it in the call's language, rather than a translation table here: a table would need a reviewed translation for each of the 15 languages, and the model already answers in the call's language.
+//!
+//! CDXC:VoiceMode 2026-11-27 WHY: a call in another language gets the intro line without double quotes around it, so only the turn words stand in quotes. With the whole line quoted, "say this in <language>" and "keep the words in double quotes exactly as they are" asked for opposite things; a German call that opened with the English intro and read the German turn words inside it points to that.
 
 use std::time::Instant;
 
@@ -179,15 +181,17 @@ pub(super) fn intro_line(
 
 /// The message that asks the model to open the call with `line`: word for word in English, and
 /// said in the call's language otherwise, with names and the quoted turn words kept as they are.
+/// Only English quotes the whole line; in another language only the turn words that `intro_line`
+/// quotes stand in double quotes.
 pub(super) fn intro_message(line: &str, language: &str) -> String {
     if language == "en" {
         return format!(
             "[Ghostex call start] Open the call by saying exactly this, and nothing else: \"{line}\""
         );
     }
+    let language = call_language::label(language);
     format!(
-        "[Ghostex call start] Open the call by saying this in {}, and nothing else. Keep names and the words in double quotes exactly as they are: \"{line}\"",
-        call_language::label(language)
+        "[Ghostex call start] Open the call by saying the line below in {language}, and nothing else. Keep names and the words in double quotes exactly as they are, and say everything else in {language}.\n\n{line}"
     )
 }
 
