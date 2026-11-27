@@ -854,6 +854,47 @@ fn screen_fix(notice: &SessionChatTerminalNotice, thread_ref: &str) -> Option<St
                 "Wait for its quota to reset, or switch models in that thread.".to_string(),
             );
         }
+        // CDXC:Coordinators 2026-11-27 WHY:
+        // The user's coordinator relayed "It moves to another automatic account by itself" for
+        // five threads while no other account could take them (#4 and #5 were signed out on this
+        // computer), and nobody told the user to sign in. When recovery is waiting with no
+        // account to move to (`accountWait` with a provider and no mode, limit_wait.rs), the
+        // report says why in the card's own words and, when a sign-in or turning an account on
+        // would fix it, that only the user can do that.
+        if let Some(wait) = notice
+            .account_wait
+            .as_ref()
+            .and_then(Value::as_object)
+            .filter(|wait| {
+                wait.get("provider")
+                    .and_then(Value::as_str)
+                    .is_some_and(|provider| !provider.is_empty())
+                    && wait.get("mode").is_none_or(Value::is_null)
+            })
+        {
+            let offset = chrono::Local::now().offset().local_minus_utc() / 60;
+            let words = ghostex_gx_chat_core::questions::account_wait::wait_words(
+                wait,
+                false,
+                chrono::Utc::now().timestamp_millis() as f64,
+                offset,
+            );
+            let user_fix = wait
+                .get("blocked")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .any(|entry| matches!(entry["why"].as_str(), Some("signIn" | "off")));
+            let ask = if user_fix {
+                " Tell the user now, in one line, which account to sign in to or turn on (Settings > Accounts): only they can, and the thread stays stopped until then or the reset."
+            } else {
+                ""
+            };
+            return Some(format!(
+                "Ghostex can't move it to another account right now. {}{ask} {switch}.",
+                words.detail.trim()
+            ));
+        }
         return Some(format!("It moves to another automatic account by itself or continues when the limit resets. {switch}."));
     }
     // A start that failed fails the same way on a reload; when its saved chat came back empty after a crash, nothing brings that conversation back.
