@@ -31,7 +31,7 @@ pub(crate) fn chat() -> Section {
             row("chatComposerMaximize", "Maximize chat box button", "Show the Maximize chat box button, which makes the chat box fill the chat."),
             row("sessionChatKeepComposerExpanded", "While scrolling, the chat box", "Shrinks: the desktop chat box gets smaller as you scroll up the chat and grows back at the end. Stays full size: it keeps its full size while you scroll."),
             row("sessionChatConfirmEscapeInterrupt", "Interrupt with", "While the agent is working, One Escape interrupts it at once. Two Escapes: the first Escape asks you to press Escape again within 2 seconds before it interrupts."),
-            row("chatCatchMeUp", "Catch Me Up button", "Show a Catch Me Up button at the top right of the chat box while it is empty. It has your Title Generation Agent (a small, cheap model) read the session's last 30 agent messages and shows where the session stands: what needs you, what is done, in progress or untested."),
+            // CDXC:CatchMeUp 2026-11-27 SEE-ALSO: Catch Me Up moved to Settings > Extensions (the catchMeUp entry in data/official_extensions.rs has the user's words).
             row("newChatTips", "Tips on new chats", "Show a card of short tips about Ghostex under a new chat's headline. Got it on a tip hides that tip for good; Hide tips on the card turns this off."),
             row("newChatTipsReset", "Show tips again", "Bring back every tip you marked Got it, so the new chat card shows them again."),
             row("chatSendOnPick", "Send when you pick an answer", "When a question card asks one question, picking an answer sends it right away, without Send answers. Cards with several questions, multiple-choice questions, Other and text answers still wait for Send."),

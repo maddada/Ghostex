@@ -266,7 +266,7 @@
       "id": "catch-me-up",
       "icon": "history",
       "title": "Catch up on a session",
-      "body": "Turn on Settings > Chat > Catch me up button, then click it in an empty chat box for a summary."
+      "body": "Turn on Catch Me Up in Settings > Extensions, then click it in an empty chat box for a summary."
     },
     {
       "id": "read-replies-aloud",

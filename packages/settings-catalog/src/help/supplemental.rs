@@ -491,6 +491,19 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         options: &[],
         user_only: false,
     },
+    // CDXC:CatchMeUp 2026-11-27 SEE-ALSO: the user's "move it to extensions" decision is on the
+    // catchMeUp entry in data/official_extensions.rs.
+    Supplemental {
+        key: "chatCatchMeUp",
+        tab: EXTENSIONS,
+        group: None,
+        section: "official",
+        section_title: "Built-in",
+        title: "Catch Me Up",
+        subtitle: "Turn Catch Me Up on or off: a button at the top right of the chat box while it is empty, on the computer and on the phone. It has your Title Generation Agent (a small, cheap model) read the session's last 30 agent messages and shows where the session stands: what needs you, what is done, in progress or untested. Off by default.",
+        options: &[],
+        user_only: false,
+    },
     Supplemental {
         key: "ghostexAppsEnabled",
         tab: EXTENSIONS,

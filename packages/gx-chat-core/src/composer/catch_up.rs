@@ -7,7 +7,7 @@
 //! summary; Refresh asks again with the card open.
 //!
 //! CDXC:CatchMeUp 2026-10-11 DECISION:
-//! User: a "Catch me up" button in the composer itself, at its top right, that has a smaller, cheaper agent read the session's last messages and shows a popup explaining where the session is, in the coloured marked-handover format, so they can continue quickly after reading it. Off by default; Settings > Chat turns it on (`chatCatchMeUp`), and the button shows only while it is on.
+//! User: a "Catch me up" button in the composer itself, at its top right, that has a smaller, cheaper agent read the session's last messages and shows a popup explaining where the session is, in the coloured marked-handover format, so they can continue quickly after reading it. Off by default; its built-in extension on Settings > Extensions turns it on (`chatCatchMeUp`; it was a Settings > Chat row until 2026-11-27), and the button shows only while it is on.
 //! CDXC:CatchMeUp 2026-10-12 DECISION:
 //! User: "make catch me up only appear when the composer is empty please! otherwise when i type it should go away (also make it fade in/out when appearing/ disappearing)". The button (`button`) shows only while the chat box has no text and no picture still attaching, and the renderers fade it in and out; an open card stays open while the user types.
 //! CDXC:CatchMeUp 2026-10-11 WHY:
@@ -143,9 +143,11 @@ pub fn settle(state: &mut ChatState, request_id: u64, outcome: &RpcOutcome) -> O
                     result.get("agentMessages").and_then(Value::as_u64),
                     result.get("rows").and_then(Value::as_u64),
                 ) {
-                    (Some(count), _) if count > 0 => {
-                        Some(ghostex_gx_protocol::plural(count, "agent message", "agent messages"))
-                    }
+                    (Some(count), _) if count > 0 => Some(ghostex_gx_protocol::plural(
+                        count,
+                        "agent message",
+                        "agent messages",
+                    )),
                     (None, Some(rows)) if rows > 0 => {
                         Some(ghostex_gx_protocol::plural(rows, "message", "messages"))
                     }

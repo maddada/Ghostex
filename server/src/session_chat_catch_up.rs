@@ -2,7 +2,7 @@
 //! by the small agent Ghostex already uses for session titles.
 //!
 //! CDXC:CatchMeUp 2026-10-11 DECISION:
-//! User: a "Catch me up" button at the composer's top right; clicking it has a smaller, cheaper agent read the last messages of the session and shows where the session is, in the marked handovers format (❓ Needs you, ✅ Done, ⚠️ Read this, 🛫 Kicked off, 🔄 In progress, 🧪 Untested, 🚀 Shipped, 🛑 Blocked, each title on its own line with bullets below), so the user can continue quickly after reading it. Off by default behind Settings > Chat (`chatCatchMeUp`): "disable this feature by default. add a toggle to enable it under chat".
+//! User: a "Catch me up" button at the composer's top right; clicking it has a smaller, cheaper agent read the last messages of the session and shows where the session is, in the marked handovers format (❓ Needs you, ✅ Done, ⚠️ Read this, 🛫 Kicked off, 🔄 In progress, 🧪 Untested, 🚀 Shipped, 🛑 Blocked, each title on its own line with bullets below), so the user can continue quickly after reading it. Off by default behind Settings > Chat (`chatCatchMeUp`): "disable this feature by default. add a toggle to enable it under chat". Since 2026-11-27 that switch is the Catch Me Up card on Settings > Extensions (User: "move it to extensions"; packages/settings-catalog/src/data/official_extensions.rs).
 //! CDXC:CatchMeUp 2026-11-05 DECISION:
 //! The catch-up follows the Marked handovers order (agents/marked_handovers.rs): status sections first (✅ 🚀 📣 🛫 🔄 ⏸️ 📦 🧪), then the ones the user must act on (⚠️ 🛑 💡 ❓), with ❓ Needs you last, and only sections that have something.
 //! CDXC:CatchMeUp 2026-10-12 DECISION:

@@ -63,6 +63,9 @@ pub const SESSION_DETAILS: &str = "sessionDetailsPanel";
 pub const SESSION_NOTES: &str = "sessionNotes";
 /// The Chat Status Line (the line of pinned details under the chat box). Off by default.
 pub const CHAT_STATUS_LINE: &str = "chatStatusLine";
+/// Catch Me Up (the button at the top right of an empty chat box and its summary card); its switch
+/// is `chatCatchMeUp`. Off by default; the phone learns it from the chat read's `catchUp`.
+pub const CATCH_ME_UP: &str = "catchMeUp";
 /// Ghostex Apps (HTML apps an agent builds with `ghostex app show`, opened like a Live page and
 /// installable as their own small app; Settings > Installed apps). Beta, off by default; gxserver
 /// refuses `/api/*GhostexApp*`, `/app/<id>` and `ghostex app` while it is off

@@ -200,6 +200,7 @@ pub(crate) fn official_icon(id: &str) -> &'static str {
         "sessionDetailsPanel" => "titlebar/panel-right.svg",
         "sessionNotes" => "modals/settings/note.svg",
         "chatStatusLine" => "titlebar/info-circle.svg",
+        "catchMeUp" => "titlebar/history.svg",
         "ghostexApps" => "titlebar/device-desktop.svg",
         "keepAwake" => "titlebar/coffee.svg",
         "allAutomations" => "modals/settings/bolt.svg",

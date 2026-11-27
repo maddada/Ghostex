@@ -3341,8 +3341,8 @@ waits for its answer instead of starting another chat, and a Ghostex Help chat
 never asks Ghostex Help itself. Setting: `agentGhostexNote`; CLI: `ghostex
 agent-guide`, `ghostex help ask "<question>" [--new]`.
 
-Catch Me Up: turn on Catch Me Up button (Settings > Chat, off by default) and
-the chat box shows a Catch Me Up button at its top right while it is empty, on
+Catch Me Up: a built-in extension, off by default; turn it on in Settings >
+Extensions (Built-in tab, or Staff picks) and the chat box shows a Catch Me Up button at its top right while it is empty, on
 the computer and on the phone; it fades out as you start typing and back in
 when the box is empty again. Clicking it has your Title Generation Agent
 (Settings > Agents, a small, cheap model such as Claude Haiku or Codex's mini

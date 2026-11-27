@@ -347,6 +347,19 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("appWide", J::Bool(true)),
         ("title", J::Str("Chat Status Line")),
     ]),
+    // CDXC:CatchMeUp 2026-11-27 DECISION:
+    // User, of the Catch Me Up button's row on Settings > Chat: "move it to extensions", and to people who already turned it on (Q5228): "Keep it on". Catch Me Up is a built-in extension card (Built-in tab and Staff picks) whose switch is the same `chatCatchMeUp` key the Chat row wrote, so nothing is migrated and anyone who had it on keeps it on; the row leaves Settings > Chat. Off by default, as since it shipped (data/defaults.rs). gxserver still tells the phone through the chat read's `catchUp`, so the phone follows the same switch.
+    // SEE-ALSO: server/src/session_chat_catch_up.rs (the summary and `catchUp`), packages/gx-chat-core/src/composer/catch_up.rs (the button).
+    J::Obj(&[
+        ("description", J::Str("A button at the top right of the empty chat box that sums up where the session stands: what needs you, what is done, in progress or untested.")),
+        ("category", J::Str("features")),
+        ("id", J::Str("catchMeUp")),
+        ("placement", J::Str("feature")),
+        ("settingsKey", J::Str("chatCatchMeUp")),
+        ("settingsKeyEnables", J::Bool(true)),
+        ("appWide", J::Bool(true)),
+        ("title", J::Str("Catch Me Up")),
+    ]),
     // CDXC:GhostexApps 2026-11-25 DECISION:
     // User: "this whole thing needs to be an extension called Ghostex Apps, disabled by default. put beta tag on its card in settings under extensions." Agents build HTML apps (dashboards, trackers, presentations) with `ghostex app show`, which open like Live pages and can be installed as their own small app. A whole-feature entry with a key that enables (`ghostexAppsEnabled`, default false), so a settings file from before it reads off. Off, nothing of it shows anywhere: no menu rows, no Settings page, no agent instructions, no CLI help beyond a one-line hint, and gxserver refuses its routes. Installed apps and their data are kept while it is off.
     // SEE-ALSO: server/src/ghostex_apps/ (store, routes, bridge, the gate), server/src/ghostex_cli/ghostex_app.rs (the verb and its hint).

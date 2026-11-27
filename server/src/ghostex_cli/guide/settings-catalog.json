@@ -433,18 +433,6 @@
       "agentWritable": true
     },
     {
-      "key": "chatCatchMeUp",
-      "title": "Catch Me Up button",
-      "subtitle": "Show a Catch Me Up button at the top right of the chat box while it is empty. It has your Title Generation Agent (a small, cheap model) read the session's last 30 agent messages and shows where the session stands: what needs you, what is done, in progress or untested.",
-      "tab": "chat",
-      "tabTitle": "Chat",
-      "section": "chat",
-      "sectionTitle": "Chat",
-      "type": "boolean",
-      "default": false,
-      "agentWritable": true
-    },
-    {
       "key": "newChatTips",
       "title": "Tips on new chats",
       "subtitle": "Show a card of short tips about Ghostex under a new chat's headline. Got it on a tip hides that tip for good; Hide tips on the card turns this off.",
@@ -12971,6 +12959,18 @@
       "key": "chatStatusLineEnabled",
       "title": "Chat Status Line",
       "subtitle": "Turn the Chat Status Line on or off: the line under the chat box with the details you pin to it, such as your plan limits, context or account. Off by default; the details you pinned are kept while it is off.",
+      "tab": "extensions",
+      "tabTitle": "Extensions",
+      "section": "official",
+      "sectionTitle": "Built-in",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "chatCatchMeUp",
+      "title": "Catch Me Up",
+      "subtitle": "Turn Catch Me Up on or off: a button at the top right of the chat box while it is empty, on the computer and on the phone. It has your Title Generation Agent (a small, cheap model) read the session's last 30 agent messages and shows where the session stands: what needs you, what is done, in progress or untested. Off by default.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
