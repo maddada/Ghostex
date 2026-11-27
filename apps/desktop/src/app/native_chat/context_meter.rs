@@ -104,6 +104,23 @@ pub(super) fn remembered_status_line_reservation(session: &str) -> bool {
         .unwrap_or_else(last_status_line_reservation)
 }
 
+/// The context meter's tokens as "250k / 1m" (used and window, from the same `contextUsage` the
+/// ring and the Session Details Context card read), the used tokens alone when the agent reports
+/// no window, or nothing before any are reported.
+fn context_tokens_label(context: &Value) -> Option<String> {
+    use ghostex_gx_chat_core::menus::context::usage::format_context_tokens;
+    let number = |key: &str| context[key].as_f64().filter(|value| value.is_finite());
+    let used = number("usedTokens")?;
+    Some(match number("windowSize").filter(|window| *window > 0.0) {
+        Some(window) => format!(
+            "{} / {}",
+            format_context_tokens(Some(used)),
+            format_context_tokens(Some(window))
+        ),
+        None => format!("{} used", format_context_tokens(Some(used))),
+    })
+}
+
 pub(super) fn ring(percentage: f32, appearance: &ChatAppearance) -> AnyElement {
     let scale = appearance.scale;
     let mut muted = gpui::Rgba::from(appearance.muted);
@@ -262,7 +279,16 @@ impl NativeChatView {
                 } else {
                     "Statusline Config"
                 };
-                move |window, cx| gpui_component::tooltip::Tooltip::new(label).build(window, cx)
+                // CDXC:SessionChat 2026-11-27 DECISION: User: "when i hover this please let's show
+                // the context like 250k/1m". The tooltip adds the tokens the ring draws, in the
+                // Session Details Context card's own form; nothing reported yet shows the label alone.
+                let label: gpui::SharedString = match context_tokens_label(context) {
+                    Some(tokens) => format!("{label} · {tokens}").into(),
+                    None => label.into(),
+                };
+                move |window, cx| {
+                    gpui_component::tooltip::Tooltip::new(label.clone()).build(window, cx)
+                }
             })
             .child(ring(percentage, appearance))
             .on_click(cx.listener(move |chat, _, window, cx| {
