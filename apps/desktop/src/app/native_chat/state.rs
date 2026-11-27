@@ -1249,6 +1249,12 @@ impl NativeChatView {
     pub(crate) fn invoke(&mut self, action: Value, cx: &mut Context<Self>) {
         // A pick in the dock ask panel's ⋯ menu closes the panel as it goes (dock_ask_modal.rs).
         let action = self.unwrap_dock_ask_command(action, cx);
+        // Picked in an account card's dropdown (notice.rs `notice_action_menu_rows`): the app's own
+        // Settings, never the chat core.
+        if action.get("type").and_then(Value::as_str) == Some("openAccountsSettings") {
+            self.open_accounts_settings(action["reconnectAccountId"].as_str(), cx);
+            return;
+        }
         if action
             .get("type")
             .and_then(Value::as_str)

@@ -126,7 +126,10 @@ pub fn phase_label(kind: &str) -> &'static str {
         "approval" => "Needs your approval",
         "question" => "Waiting for an answer",
         "signIn" => "Sign in required",
-        "usageLimit" => "Paused on usage limit",
+        // CDXC:Coordinators 2026-11-27 DECISION: User, on the account-switch page (Q5297 A): a
+        // thread stopped at its account's limit reads "Out of usage" on its row; the coordinator
+        // says why once, in one Needs you line, and the threads get no message.
+        "usageLimit" => "Out of usage",
         "waitingReset" => "Waiting for reset",
         "untested" => "Untested",
         "delivered" => "Delivered",

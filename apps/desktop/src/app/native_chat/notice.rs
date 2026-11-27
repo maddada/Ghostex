@@ -452,142 +452,191 @@ impl NativeChatView {
                 body.push(tail.into_any_element());
             }
         }
-        // CDXC:AgentProviders 2026-11-13 DECISION: User picked the main button (Q2978 A): an action
-        // the chat core marks `primary` ("Continue with Opus 5.5 on ST", questions/account_wait.rs)
-        // leads the footer filled, and Switch account sits beside it as a secondary button.
-        let lead = (!collapsed)
-            .then(|| {
-                notice["actions"]
-                    .as_array()
-                    .and_then(|list| list.iter().find(|action| action["primary"] == true))
-                    .cloned()
-            })
-            .flatten();
-        if let Some(action) = lead.as_ref() {
-            if action["kind"] == "openModelPicker" {
-                actions.push(
-                    self.tone_button(
-                        gpui::SharedString::from(format!("notice-action:{}", text(action, "id"))),
-                        &text(action, "label"),
-                        Some("titlebar/switch-horizontal.svg"),
-                        ToneButton::Primary,
-                        None,
-                        held,
-                        p,
-                    )
-                    .when(!held, |button| {
-                        button.on_click(cx.listener(|this, _, window, cx| {
-                            this.toggle_model_menu(None, window, cx)
-                        }))
-                    })
-                    .into_any_element(),
-                );
-            } else {
-                let answer = json!({"type":"answer","answer":action["answer"].clone()});
-                actions.push(
-                    self.tone_button(
-                        gpui::SharedString::from(format!("notice-action:{}", text(action, "id"))),
-                        &text(action, "label"),
-                        None,
-                        ToneButton::Primary,
-                        None,
-                        held,
-                        p,
-                    )
-                    .when(!held, |button| {
-                        button.on_click(
-                            cx.listener(move |this, _, _, cx| this.invoke(answer.clone(), cx)),
+        // One dropdown in place of every button on the account cards (`actionMenu`, gx-chat-core
+        // questions/account_wait.rs `wait_action_menu`).
+        let action_menu = !collapsed
+            && notice["actionMenu"]["items"]
+                .as_array()
+                .is_some_and(|items| !items.is_empty());
+        if action_menu {
+            actions.push(self.notice_action_menu(notice, &snapshot, held, p, cx));
+        } else {
+            // CDXC:AgentProviders 2026-11-13 DECISION: User picked the main button (Q2978 A): an action
+            // the chat core marks `primary` ("Continue with Opus 5.5 on ST", questions/account_wait.rs)
+            // leads the footer filled, and Switch account sits beside it as a secondary button.
+            let lead = (!collapsed)
+                .then(|| {
+                    notice["actions"]
+                        .as_array()
+                        .and_then(|list| list.iter().find(|action| action["primary"] == true))
+                        .cloned()
+                })
+                .flatten();
+            if let Some(action) = lead.as_ref() {
+                if action["kind"] == "openModelPicker" {
+                    actions.push(
+                        self.tone_button(
+                            gpui::SharedString::from(format!(
+                                "notice-action:{}",
+                                text(action, "id")
+                            )),
+                            &text(action, "label"),
+                            Some("titlebar/switch-horizontal.svg"),
+                            ToneButton::Primary,
+                            None,
+                            held,
+                            p,
                         )
-                    })
-                    .into_any_element(),
-                );
+                        .when(!held, |button| {
+                            button.on_click(cx.listener(|this, _, window, cx| {
+                                this.toggle_model_menu(None, window, cx)
+                            }))
+                        })
+                        .into_any_element(),
+                    );
+                } else {
+                    let answer = json!({"type":"answer","answer":action["answer"].clone()});
+                    actions.push(
+                        self.tone_button(
+                            gpui::SharedString::from(format!(
+                                "notice-action:{}",
+                                text(action, "id")
+                            )),
+                            &text(action, "label"),
+                            None,
+                            ToneButton::Primary,
+                            None,
+                            held,
+                            p,
+                        )
+                        .when(!held, |button| {
+                            button.on_click(
+                                cx.listener(move |this, _, _, cx| this.invoke(answer.clone(), cx)),
+                            )
+                        })
+                        .into_any_element(),
+                    );
+                }
             }
-        }
-        // CDXC:AgentProviders 2026-09-13 DECISION: User approved restricting Switch account to relevant notices after it appeared on a queued reply. Only sign-in and usage-limit notices offer the existing account picker beside Open terminal, superseding the September 12 rule for all terminal notices.
-        if !collapsed
-            && snapshot["accountPanel"].is_object()
-            && matches!(notice["kind"].as_str(), Some("loginExpired" | "usageLimit"))
-        {
-            actions.push(
-                self.tone_button(
-                    "notice-switch-account",
-                    "Switch account",
-                    Some("titlebar/switch-horizontal.svg"),
-                    if lead.is_some() {
-                        ToneButton::Secondary
-                    } else {
-                        ToneButton::Primary
-                    },
-                    None,
-                    false,
-                    p,
-                )
-                .on_click(cx.listener(|this, event: &gpui::ClickEvent, window, cx| {
-                    this.show_account_panel(event.position(), window, cx)
-                }))
-                .into_any_element(),
-            );
-        }
-        // Trust and Remember stays reachable on a collapsed picker, as on
-        // the React card: the collapsed rows are the prompt's own Yes/No.
-        for action in notice["actions"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter(|action| !collapsed || action["kind"] == "trustAndRemember")
-            .filter(|action| action["primary"] != true)
-        {
-            if action["kind"] == "switchToTerminal" {
+            // CDXC:AgentProviders 2026-09-13 DECISION: User approved restricting Switch account to relevant notices after it appeared on a queued reply. Only sign-in and usage-limit notices offer the existing account picker beside Open terminal, superseding the September 12 rule for all terminal notices.
+            if !collapsed
+                && snapshot["accountPanel"].is_object()
+                && matches!(notice["kind"].as_str(), Some("loginExpired" | "usageLimit"))
+            {
                 actions.push(
                     self.tone_button(
-                        "notice-terminal-view",
-                        "Terminal view",
-                        Some("titlebar/terminal-2.svg"),
-                        ToneButton::Secondary,
+                        "notice-switch-account",
+                        "Switch account",
+                        Some("titlebar/switch-horizontal.svg"),
+                        if lead.is_some() {
+                            ToneButton::Secondary
+                        } else {
+                            ToneButton::Primary
+                        },
                         None,
                         false,
                         p,
                     )
                     .on_click(cx.listener(|this, event: &gpui::ClickEvent, window, cx| {
-                        this.perform_composer_action("terminalView", event.position(), window, cx)
+                        this.show_account_panel(event.position(), window, cx)
                     }))
                     .into_any_element(),
                 );
-            } else if action["kind"] == "openModelPicker" {
-                actions.push(
-                    self.tone_button(
-                        gpui::SharedString::from(format!("notice-action:{}", text(action, "id"))),
-                        &text(action, "label"),
-                        Some("titlebar/switch-horizontal.svg"),
-                        ToneButton::Secondary,
-                        None,
-                        held,
-                        p,
-                    )
-                    .when(!held, |button| {
-                        button.on_click(cx.listener(|this, _, window, cx| {
-                            this.toggle_model_menu(None, window, cx)
+            }
+            // Trust and Remember stays reachable on a collapsed picker, as on
+            // the React card: the collapsed rows are the prompt's own Yes/No.
+            for action in notice["actions"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|action| !collapsed || action["kind"] == "trustAndRemember")
+                .filter(|action| action["primary"] != true)
+            {
+                if action["kind"] == "switchToTerminal" {
+                    actions.push(
+                        self.tone_button(
+                            "notice-terminal-view",
+                            "Terminal view",
+                            Some("titlebar/terminal-2.svg"),
+                            ToneButton::Secondary,
+                            None,
+                            false,
+                            p,
+                        )
+                        .on_click(cx.listener(|this, event: &gpui::ClickEvent, window, cx| {
+                            this.perform_composer_action(
+                                "terminalView",
+                                event.position(),
+                                window,
+                                cx,
+                            )
                         }))
-                    })
-                    .into_any_element(),
-                );
-            } else {
-                // The first action the chat can answer itself is the card's one filled button
-                // when no account switch already took that place.
-                let kind = if actions.is_empty() {
-                    ToneButton::Primary
+                        .into_any_element(),
+                    );
+                } else if action["kind"] == "openModelPicker" {
+                    actions.push(
+                        self.tone_button(
+                            gpui::SharedString::from(format!(
+                                "notice-action:{}",
+                                text(action, "id")
+                            )),
+                            &text(action, "label"),
+                            Some("titlebar/switch-horizontal.svg"),
+                            ToneButton::Secondary,
+                            None,
+                            held,
+                            p,
+                        )
+                        .when(!held, |button| {
+                            button.on_click(cx.listener(|this, _, window, cx| {
+                                this.toggle_model_menu(None, window, cx)
+                            }))
+                        })
+                        .into_any_element(),
+                    );
                 } else {
-                    ToneButton::Secondary
-                };
-                let answer = json!({"type":"answer","answer":action["answer"].clone()});
-                // The every-account-full card's "Sign in …" (gx-chat-core
-                // questions/account_wait.rs): Settings > Accounts on that account's sign-in, as
-                // the Accounts & limits panel's Reconnect does.
-                if action["kind"] == "accountSignIn" {
-                    let command = json!({
-                        "type": "openAccountsSettings",
-                        "reconnectAccountId": action["accountId"].clone(),
-                    });
+                    // The first action the chat can answer itself is the card's one filled button
+                    // when no account switch already took that place.
+                    let kind = if actions.is_empty() {
+                        ToneButton::Primary
+                    } else {
+                        ToneButton::Secondary
+                    };
+                    let answer = json!({"type":"answer","answer":action["answer"].clone()});
+                    // The every-account-full card's "Sign in …" (gx-chat-core
+                    // questions/account_wait.rs): Settings > Accounts on that account's sign-in, as
+                    // the Accounts & limits panel's Reconnect does.
+                    if action["kind"] == "accountSignIn" {
+                        let command = json!({
+                            "type": "openAccountsSettings",
+                            "reconnectAccountId": action["accountId"].clone(),
+                        });
+                        actions.push(
+                            self.tone_button(
+                                gpui::SharedString::from(format!(
+                                    "notice-action:{}",
+                                    text(action, "id")
+                                )),
+                                &text(action, "label"),
+                                None,
+                                kind,
+                                None,
+                                false,
+                                p,
+                            )
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                this.handle_action(
+                                    &super::actions::NativeChatAction {
+                                        command: command.clone(),
+                                    },
+                                    window,
+                                    cx,
+                                )
+                            }))
+                            .into_any_element(),
+                        );
+                        continue;
+                    }
                     actions.push(
                         self.tone_button(
                             gpui::SharedString::from(format!(
@@ -598,57 +647,35 @@ impl NativeChatView {
                             None,
                             kind,
                             None,
-                            false,
+                            held,
                             p,
                         )
-                        .on_click(cx.listener(move |this, _, window, cx| {
-                            this.handle_action(
-                                &super::actions::NativeChatAction {
-                                    command: command.clone(),
-                                },
-                                window,
-                                cx,
+                        .when(!held, |button| {
+                            button.on_click(
+                                cx.listener(move |this, _, _, cx| this.invoke(answer.clone(), cx)),
                             )
-                        }))
+                        })
                         .into_any_element(),
                     );
-                    continue;
                 }
-                actions.push(
+            }
+            if notice_offers_dismiss(notice, &snapshot) {
+                footer_end.push(
                     self.tone_button(
-                        gpui::SharedString::from(format!("notice-action:{}", text(action, "id"))),
-                        &text(action, "label"),
+                        "dismiss-notice",
+                        "Dismiss",
                         None,
-                        kind,
+                        ToneButton::Secondary,
                         None,
-                        held,
+                        false,
                         p,
                     )
-                    .when(!held, |button| {
-                        button.on_click(
-                            cx.listener(move |this, _, _, cx| this.invoke(answer.clone(), cx)),
-                        )
-                    })
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.invoke(json!({"type":"dismissNotice"}), cx)
+                    }))
                     .into_any_element(),
                 );
             }
-        }
-        if notice_offers_dismiss(notice, &snapshot) {
-            footer_end.push(
-                self.tone_button(
-                    "dismiss-notice",
-                    "Dismiss",
-                    None,
-                    ToneButton::Secondary,
-                    None,
-                    false,
-                    p,
-                )
-                .on_click(
-                    cx.listener(|this, _, _, cx| this.invoke(json!({"type":"dismissNotice"}), cx)),
-                )
-                .into_any_element(),
-            );
         }
         if let Some(error) = snapshot["noticeError"].as_str() {
             body.push(
@@ -735,6 +762,68 @@ impl NativeChatView {
 }
 
 impl NativeChatView {
+    /// The account cards' one dropdown (`actionMenu`): a neutral button with its label and a
+    /// chevron that opens the chat's menu, one row per choice, each whole.
+    ///
+    /// CDXC:AgentProviders 2026-11-27 DECISION:
+    /// User, on the account-switch page: "I want the options there shown as one dropdown under
+    /// choices, not as individual buttons, if you get my point, so we can fit this even if the
+    /// screen is narrower." The card's Sign in, Pick an account, Use, Wait and Stop buttons became
+    /// rows of one menu; Pick an account opens the account panel as its submenu.
+    /// SEE-ALSO: packages/gx-chat-core/src/questions/account_wait.rs (the items),
+    /// apps/mobile/app/src/chat/native/cards/NoticeCard.tsx (the phone's menu).
+    fn notice_action_menu(
+        &self,
+        notice: &Value,
+        snapshot: &Value,
+        held: bool,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let rows = notice_action_menu_rows(notice, snapshot);
+        let label = Some(text(&notice["actionMenu"], "label"))
+            .filter(|label| !label.is_empty())
+            .unwrap_or_else(|| {
+                ghostex_gx_chat_core::questions::account_wait::ACTION_MENU_LABEL.to_string()
+            });
+        let locked = held || rows.is_empty();
+        self.tone_button(
+            "notice-action-menu",
+            &label,
+            None,
+            ToneButton::Secondary,
+            None,
+            locked,
+            p,
+        )
+        .aria_label(format!(
+            "{label}, {}",
+            ghostex_gx_protocol::plural(rows.len(), "choice", "choices")
+        ))
+        .child(
+            svg()
+                .path("titlebar/chevron-down.svg")
+                .size(px(14.0 * p.scale))
+                .flex_shrink_0()
+                .text_color(p.foreground),
+        )
+        .when(!locked, |button| {
+            button.on_click(
+                cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                    cx.stop_propagation();
+                    this.show_chat_menu_at(
+                        rows.clone(),
+                        event.position(),
+                        NOTICE_ACTION_MENU_WIDTH,
+                        window,
+                        cx,
+                    );
+                }),
+            )
+        })
+        .into_any_element()
+    }
+
     /// A notice's checkbox row: the box, its label, and an (i) with the `hint` tooltip.
     fn notice_checkbox(
         &mut self,
@@ -849,4 +938,49 @@ fn notice_offers_dismiss(notice: &Value, snapshot: &Value) -> bool {
     (notice["choices"].is_null() && notice["dialog"].is_null())
         || snapshot["noticeError"].is_string()
         || unacknowledged_pool_wait
+}
+
+/// The widest the account cards' dropdown grows, so a long "Continue with ..." row stays whole.
+const NOTICE_ACTION_MENU_WIDTH: f32 = 420.0;
+
+/// The chat menu's rows for a card's `actionMenu`: Settings > Accounts for a sign-in, the account
+/// panel as Pick an account's submenu, the card's Dismiss, and every other item's own answer.
+fn notice_action_menu_rows(notice: &Value, snapshot: &Value) -> Vec<Value> {
+    notice["actionMenu"]["items"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|item| {
+            let label = text(item, "label");
+            match item["kind"].as_str().unwrap_or_default() {
+                "accountSignIn" => Some(json!({
+                    "label": label,
+                    "command": {
+                        "type": "openAccountsSettings",
+                        "reconnectAccountId": item["accountId"].clone(),
+                    },
+                })),
+                "openAccountsSettings" => Some(json!({
+                    "label": label,
+                    "command": { "type": "openAccountsSettings" },
+                })),
+                "pickAccount" => snapshot["accountPanel"].is_object().then(|| {
+                    json!({
+                        "label": label,
+                        "children": [{ "accounts": snapshot["accountPanel"].clone() }],
+                    })
+                }),
+                "dismiss" => Some(json!({
+                    "label": label,
+                    "command": { "type": "dismissNotice" },
+                })),
+                _ => item["answer"].is_object().then(|| {
+                    json!({
+                        "label": label,
+                        "command": { "type": "answer", "answer": item["answer"].clone() },
+                    })
+                }),
+            }
+        })
+        .collect()
 }

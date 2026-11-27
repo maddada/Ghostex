@@ -21,6 +21,10 @@ pub fn decorate(
     now_ms: f64,
     utc_offset_minutes: i32,
 ) {
+    if object.get("kind").and_then(Value::as_str) == Some(USAGE_WARNING_KIND) {
+        decorate_usage_warning(object, hide_account_emails);
+        return;
+    }
     if object.get("kind").and_then(Value::as_str) != Some("usageLimit") {
         return;
     }
@@ -42,6 +46,28 @@ pub fn decorate(
         return;
     };
     let words = wait_words(&wait, hide_account_emails, now_ms, utc_offset_minutes);
+    // The no-room card's one dropdown (`actionMenu`), built before `words` is taken apart below.
+    let no_room = wait
+        .get("provider")
+        .and_then(Value::as_str)
+        .is_some_and(|value| !value.trim().is_empty())
+        && wait.get("mode").and_then(Value::as_str).is_none();
+    if no_room {
+        let acknowledged = wait
+            .get("acknowledgedAt")
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.trim().is_empty());
+        let reset = wait
+            .get("resetsAt")
+            .and_then(Value::as_str)
+            .and_then(|at| parse_iso_millis(at, utc_offset_minutes))
+            .filter(|at| *at > now_ms)
+            .map(|at| local_clock_short(at, now_ms, utc_offset_minutes));
+        object.insert(
+            "actionMenu".to_string(),
+            wait_action_menu(&words, acknowledged, reset.as_deref()),
+        );
+    }
     object.insert("title".to_string(), json!(words.title));
     object.insert("detail".to_string(), json!(words.detail));
     let has_provider = wait
@@ -180,6 +206,162 @@ pub fn decorate(
 /// Decorates an Antigravity (or other non-account-switched) `usageLimit` notice carrying
 /// `quotaWait` with plain wording, reset countdown, Wait for reset, Switch model, Terminal view,
 /// and Stop / Dismiss.
+/// The notice kind of the early warning before an account runs out (server/src/accounts/usage_warning.rs).
+pub const USAGE_WARNING_KIND: &str = "usageWarning";
+
+/// The words on the one dropdown an account card folds its choices into.
+pub const ACTION_MENU_LABEL: &str = "Choose what to do";
+
+/// CDXC:AgentProviders 2026-11-27 DECISION:
+/// User, answering the account-switch page (Q5296 A, the full card that says why, and the note on
+/// every choice): "I want the options there shown as one dropdown under choices, not as individual
+/// buttons ... so we can fit this even if the screen is narrower." The no-room limit card and the
+/// early-warning card keep their sentence on why, then carry `actionMenu`: `{ label, items }`, one
+/// control that opens every choice. Each item has `id`, `label`, `kind` and, for the ones the chat
+/// answers, `answer`. The renderers handle four kinds themselves: `accountSignIn` (Settings >
+/// Accounts on `accountId`'s sign-in), `openAccountsSettings` (Settings > Accounts), `pickAccount`
+/// (the chat's account panel) and `dismiss` (the card's own Dismiss); every other item sends its
+/// `answer` as the card's buttons did. A renderer that draws the menu draws no other buttons on
+/// the card, so the card fits a narrow chat column and the phone.
+/// SEE-ALSO: apps/desktop/src/app/native_chat/notice.rs (`notice_action_menu`),
+/// apps/mobile/app/src/chat/native/cards/NoticeCard.tsx.
+fn menu_item(id: &str, label: &str, kind: &str, answer: Option<Value>) -> Value {
+    let mut item = json!({ "id": id, "label": label, "kind": kind });
+    if let Some(answer) = answer {
+        item["answer"] = answer;
+    }
+    item
+}
+
+fn fix_item(fix: &AccountFix) -> Value {
+    let mut item = menu_item(
+        &format!("{}:{}", fix.kind, fix.account_id),
+        &fix.label,
+        &fix.kind,
+        Some(fix.answer()),
+    );
+    item["accountId"] = json!(fix.account_id);
+    item
+}
+
+/// The no-room limit card's dropdown: a model with room first, the sign-ins and turn-ons, the
+/// account panel, an account the user may pick by hand, then waiting and stopping.
+fn wait_action_menu(words: &WaitWords, acknowledged: bool, reset: Option<&str>) -> Value {
+    let mut items = Vec::new();
+    if let Some(action) = words.action.as_ref() {
+        let kind = action
+            .answer
+            .get("kind")
+            .and_then(Value::as_str)
+            .unwrap_or("continueWithModel");
+        items.push(menu_item(
+            kind,
+            &action.label,
+            kind,
+            Some(action.answer.clone()),
+        ));
+    }
+    let (fixes_first, fixes_last): (Vec<&AccountFix>, Vec<&AccountFix>) = words
+        .fixes
+        .iter()
+        .partition(|fix| fix.kind != "accountUse");
+    items.extend(fixes_first.into_iter().map(fix_item));
+    items.push(menu_item("pickAccount", "Pick an account", "pickAccount", None));
+    items.extend(fixes_last.into_iter().map(fix_item));
+    if !acknowledged {
+        let label = match reset {
+            Some(at) => format!("Wait until {at}"),
+            None => "Wait for an account with room".to_string(),
+        };
+        items.push(menu_item(
+            "acknowledgeLimitWait",
+            &label,
+            "acknowledgeLimitWait",
+            Some(json!({ "kind": "acknowledgeLimitWait" })),
+        ));
+    }
+    items.push(menu_item(
+        "stopRecovery",
+        "Stop, I'll continue it myself",
+        "stopRecovery",
+        Some(json!({ "kind": "stopRecovery" })),
+    ));
+    if acknowledged {
+        items.push(menu_item("dismiss", "Not now", "dismiss", None));
+    }
+    json!({ "label": ACTION_MENU_LABEL, "items": items })
+}
+
+/// The early warning before an account runs out (`usageWarning`, server/src/accounts/usage_warning.rs):
+/// gxserver writes the title and the sentence; the chat adds the dropdown from its facts
+/// (`blocked`, the same reasons the no-room card names, and `coordinator`).
+///
+/// CDXC:AgentProviders 2026-11-27 DECISION:
+/// User: "i want a warning when you're about to run out of usage on the coordinator and the account
+/// for it isn't logged in". From the account-switch page: the card in the coordinator's chat is one
+/// of four places it shows (Q5294), and an account with room that is manual only is offered as
+/// "Use #2 for this coordinator", which never happens on its own (Q5298).
+fn decorate_usage_warning(object: &mut Map<String, Value>, hide_account_emails: bool) {
+    let Some(facts) = object
+        .get("usageWarning")
+        .and_then(Value::as_object)
+        .cloned()
+    else {
+        return;
+    };
+    let name = |value: &str| {
+        if hide_account_emails {
+            mask_account_text(value)
+        } else {
+            value.to_string()
+        }
+    };
+    let (_, fixes) = blocked_reasons(&facts, &name);
+    let coordinator = facts.get("coordinator").and_then(Value::as_bool) == Some(true);
+    let mut items: Vec<Value> = fixes
+        .iter()
+        .filter(|fix| fix.kind != "accountUse")
+        .map(fix_item)
+        .collect();
+    items.push(menu_item(
+        "openAccountsSettings",
+        "Open Accounts settings",
+        "openAccountsSettings",
+        None,
+    ));
+    for fix in fixes.iter().filter(|fix| fix.kind == "accountUse") {
+        let mut item = fix_item(fix);
+        if coordinator {
+            let account = facts
+                .get("blocked")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .find(|entry| {
+                    entry.get("accountId").and_then(Value::as_str) == Some(fix.account_id.as_str())
+                })
+                .and_then(|entry| entry.get("account").and_then(Value::as_str))
+                .map(|account| name(account.trim()))
+                .unwrap_or_default();
+            if !account.is_empty() {
+                item["label"] = json!(format!("Use {account} for this coordinator"));
+            }
+        }
+        items.push(item);
+    }
+    items.push(menu_item(
+        "dismissUsageWarning",
+        "Not now",
+        "restartAgent",
+        Some(json!({ "kind": "restartAgent", "actionId": "dismissUsageWarning" })),
+    ));
+    object.insert("tone".to_string(), json!("warning"));
+    object.insert(
+        "actionMenu".to_string(),
+        json!({ "label": ACTION_MENU_LABEL, "items": items }),
+    );
+}
+
 fn decorate_quota_wait(
     object: &mut Map<String, Value>,
     wait: &Map<String, Value>,
