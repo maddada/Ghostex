@@ -576,6 +576,14 @@ pub(crate) fn kill_and_cache_session_provider(
     let zmx = require_zmx()?;
     let zmx_name = provider_zmx_session_name(&session)?;
     let mut kill = kill_zmx_session(&zmx_name, &zmx.executable_path);
+    // `zmx kill` cannot reach a daemon that lost its socket and reports success for it, which left
+    // that daemon's agent running behind a closed or sleeping session (GitHub #786 follow-up).
+    #[cfg(unix)]
+    if let Err(message) = stop_orphaned_session_daemons(&zmx_name) {
+        kill.killed = false;
+        kill.error = Some(message.clone());
+        kill.stderr = message;
+    }
     // CDXC:SessionSleep 2026-09-27 WHY:
     // A daemon that already exited makes `kill` fail (wmx: "cannot find the file specified"), and
     // keeping the old lifecycle left a dead session "running" that no Close could retire. Only a
@@ -730,6 +738,99 @@ pub(crate) fn settled_session_daemon_process_id(zmx_name: &str) -> Result<Option
         }
     }
     Ok(Some(pid))
+}
+
+/// How long an orphaned daemon gets to shut down on SIGTERM before it is sent SIGKILL. zmx's own
+/// shutdown gives the shell 500 ms before its SIGKILL, so this leaves room for that.
+#[cfg(unix)]
+const ORPHAN_TERM_GRACE: std::time::Duration = std::time::Duration::from_millis(2_500);
+#[cfg(unix)]
+const ORPHAN_KILL_GRACE: std::time::Duration = std::time::Duration::from_millis(1_500);
+
+/// Waits up to `grace` for daemon `pid` of `zmx_name` to leave the process table. Matching on the
+/// session name as well as the pid means a reused pid never reads as the daemon still running.
+#[cfg(unix)]
+fn wait_for_daemon_exit(zmx_name: &str, pid: i64, grace: std::time::Duration) -> bool {
+    let deadline = std::time::Instant::now() + grace;
+    loop {
+        if !matches!(session_daemon_process_id(zmx_name), Ok(Some(current)) if current == pid) {
+            return true;
+        }
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(DYING_DAEMON_POLL);
+    }
+}
+
+/// Stops the daemons of `zmx_name` that are still running without their socket, by pid, and
+/// returns the pids it stopped. A daemon that has its socket is never touched.
+///
+/// CDXC:Zmx 2026-11-27 WHY (GitHub #786 follow-up):
+/// A daemon whose socket was removed under it (a busy server's `zmx run`/`kill --force` took it for
+/// stale) keeps running its agent but can never be attached, listed or killed by name: `zmx kill
+/// --force` finds no socket and reports success. Self-heal leaves such a daemon alone so it never
+/// starts a duplicate beside it, so the session's own close, sleep and wake must end it, or the
+/// user can neither stop that agent nor get the session back. SIGTERM is zmx's clean shutdown (it
+/// hangs up its shell, then SIGKILLs it); SIGKILL follows only if that does not end it. The caller
+/// starts nothing until this returns: a shutting-down daemon deletes the socket file of its name,
+/// which would orphan a new daemon that had already claimed it.
+#[cfg(unix)]
+pub(crate) fn stop_orphaned_session_daemons(zmx_name: &str) -> Result<Vec<i64>, String> {
+    let mut stopped = Vec::new();
+    // More than one orphan of one name is possible (each one was a restart's start); stop a few.
+    for _ in 0..4 {
+        if zmx_session_daemon_socket_present(zmx_name) == Some(true) {
+            break;
+        }
+        let pid = match settled_session_daemon_process_id(zmx_name) {
+            Ok(Some(pid)) => pid,
+            Ok(None) => break,
+            Err(()) => return Err("Could not read the process list.".to_string()),
+        };
+        if zmx_session_daemon_socket_present(zmx_name) == Some(true) {
+            break;
+        }
+        let Ok(raw_pid) = libc::pid_t::try_from(pid) else {
+            break;
+        };
+        unsafe {
+            libc::kill(raw_pid, libc::SIGTERM);
+        }
+        if !wait_for_daemon_exit(zmx_name, pid, ORPHAN_TERM_GRACE) {
+            unsafe {
+                libc::kill(raw_pid, libc::SIGKILL);
+            }
+            if !wait_for_daemon_exit(zmx_name, pid, ORPHAN_KILL_GRACE) {
+                log_orphaned_daemon(zmx_name, "sessionOrphanDaemonStopFailed", &[pid]);
+                return Err(format!(
+                    "The session's earlier terminal (pid {pid}) is still running and could not be stopped."
+                ));
+            }
+        }
+        stopped.push(pid);
+    }
+    if !stopped.is_empty() {
+        log_orphaned_daemon(zmx_name, "sessionOrphanDaemonStopped", &stopped);
+    }
+    Ok(stopped)
+}
+
+#[cfg(unix)]
+fn log_orphaned_daemon(zmx_name: &str, event: &str, pids: &[i64]) {
+    use crate::logging::{GxserverLogInput, GxserverLogger, LogLevel};
+    static LOGGER: std::sync::OnceLock<GxserverLogger> = std::sync::OnceLock::new();
+    let logger = LOGGER.get_or_init(|| GxserverLogger::new(crate::paths::get_gxserver_paths(None)));
+    let _ = logger.log(GxserverLogInput {
+        level: LogLevel::Warn,
+        event: event.to_string(),
+        server_id: None,
+        request_id: None,
+        client: None,
+        duration_ms: None,
+        error: None,
+        details: Some(json!({ "providerSessionId": zmx_name, "daemonPids": pids })),
+    });
 }
 
 /// Secondary liveness signal when `zmx list --short` / `wmx exists` did not find a session:

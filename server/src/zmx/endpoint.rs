@@ -378,6 +378,14 @@ pub fn dispatch_zmx_lifecycle_endpoint(
             })
         }
         "/api/attachSessionMetadata" | "/api/wakeSession" => {
+            // A wake asks for a working session. A daemon that lost its socket reads as alive to
+            // the probe but can never be attached, so the wake stops it first and then finds the
+            // session missing and starts it fresh (GitHub #786 follow-up). Self-heal's own wake
+            // never gets here with one: it backs off while such a daemon runs.
+            #[cfg(unix)]
+            if endpoint_path == "/api/wakeSession" {
+                stop_orphaned_daemon_before_wake(repository, params)?;
+            }
             let mut attach =
                 match create_attach_session_metadata(repository, params, context, agent_settings) {
                     Ok(attach) => attach,
@@ -748,6 +756,28 @@ pub fn dispatch_zmx_lifecycle_endpoint(
         result,
         presentation_session,
     })
+}
+
+/// Stops a woken session's daemon that runs without its socket (`stop_orphaned_session_daemons`).
+/// A request it cannot read is left to the wake's own checks to refuse.
+#[cfg(unix)]
+fn stop_orphaned_daemon_before_wake(
+    repository: &DomainRepository<'_>,
+    params: &Map<String, Value>,
+) -> ZmxEndpointResult<()> {
+    let Ok(lifecycle) = read_lifecycle_params(params) else {
+        return Ok(());
+    };
+    let Ok(Some(session)) = repository.get_session(&lifecycle.project_id, &lifecycle.session_id)
+    else {
+        return Ok(());
+    };
+    let Ok(zmx_name) = provider_zmx_session_name(&session) else {
+        return Ok(());
+    };
+    stop_orphaned_session_daemons(&zmx_name)
+        .map(|_| ())
+        .map_err(ZmxEndpointError::DependencyUnavailable)
 }
 
 /// Screen-state read for one session, by repository identity.
