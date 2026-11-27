@@ -110,9 +110,9 @@ pub(crate) fn manage_file_git_baseline(
     Ok(manage_git_baseline_payload(path.root, &target, &path.inner))
 }
 
-/// The Files view's listing: one folder's children, every file type, without the folders
-/// `ghostex_docs::project::SKIPPED_DIRECTORY_NAMES` names. `path` "" lists the project root plus
-/// the configured Docs directory's mount.
+/// The Files view's listing: one folder's children, every file type, without what
+/// `ghostex_docs::project::is_hidden_entry` hides (the skipped folders, and all of `.ghostex` but
+/// its `drawings`). `path` "" lists the project root plus the configured Docs directory's mount.
 ///
 /// CDXC:Docs 2026-09-27 SEE-ALSO: `list_project_directory` in `server/src/project_docs/project_scope.rs` answers the same request for a remote project; `packages/project-docs/src/project.rs` holds the skip list both use.
 pub(crate) fn manage_list_project_directory(
@@ -129,6 +129,7 @@ pub(crate) fn manage_list_project_directory(
             &mut entries,
             &context.roots.project,
             &context.roots.project,
+            "",
             "",
             "",
             0,
@@ -157,6 +158,7 @@ pub(crate) fn manage_list_project_directory(
             &mut entries,
             path.root,
             &directory,
+            &path.inner,
             &path.outer,
             &display_prefix,
             depth,
@@ -180,6 +182,7 @@ fn manage_append_project_scope_children(
     entries: &mut Vec<Value>,
     root: &Path,
     directory: &Path,
+    parent: &str,
     outer_prefix: &str,
     display_prefix: &str,
     depth: usize,
@@ -211,9 +214,7 @@ fn manage_append_project_scope_children(
             continue;
         };
         let is_directory = metadata.is_dir();
-        if (is_directory && ghostex_docs::project::is_skipped_directory(&name))
-            || ghostex_docs::project::is_skipped_file(&name)
-        {
+        if ghostex_docs::project::is_hidden_entry(root, parent, &name, is_directory) {
             continue;
         }
         if child.file_type().is_ok_and(|kind| kind.is_symlink())

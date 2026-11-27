@@ -33,6 +33,7 @@ pub(super) fn list_project_directory(
             &context.roots.project,
             "",
             "",
+            "",
             0,
         )?;
         if let Some(mount) = &context.roots.extra {
@@ -54,6 +55,7 @@ pub(super) fn list_project_directory(
             &mut entries,
             path.root,
             &directory,
+            &path.inner,
             &path.outer,
             &display_prefix,
             depth,
@@ -77,6 +79,7 @@ fn append_children(
     entries: &mut Vec<Value>,
     root: &Path,
     directory: &Path,
+    parent: &str,
     outer_prefix: &str,
     display_prefix: &str,
     depth: usize,
@@ -108,9 +111,7 @@ fn append_children(
             continue;
         };
         let is_directory = metadata.is_dir();
-        if (is_directory && ghostex_docs::project::is_skipped_directory(&name))
-            || ghostex_docs::project::is_skipped_file(&name)
-        {
+        if ghostex_docs::project::is_hidden_entry(root, parent, &name, is_directory) {
             continue;
         }
         if child.file_type().is_ok_and(|kind| kind.is_symlink())

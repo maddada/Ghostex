@@ -50,6 +50,29 @@ pub fn is_skipped_file(name: &str) -> bool {
     SKIPPED_FILE_NAMES.contains(&name)
 }
 
+/// The project's own Ghostex folder and the Canvas drawings inside it.
+pub const GHOSTEX_FOLDER_NAME: &str = ".ghostex";
+pub const DRAWINGS_FOLDER_NAME: &str = "drawings";
+
+/// Whether the Files list and its search leave out `name`, a child of the folder at `parent`
+/// (relative to the listed `root`, `/`-separated, "" for the root itself).
+///
+/// CDXC:Canvas 2026-11-27 DECISION:
+/// User (Q5293): "Show drawings". Files on the desktop, the browser build and the phone shows the `.ghostex/drawings` folder, and only that, so drawings can be opened, dragged or attached from Files and the phone; the rest of `.ghostex` stays hidden and the drawings stay out of git (`.ghostex/.gitignore` holds `*`). The root `.ghostex` is listed only while it holds a `drawings` folder, so a project without drawings shows nothing new. A `.ghostex` folder deeper in the project stays hidden.
+pub fn is_hidden_entry(root: &Path, parent: &str, name: &str, is_directory: bool) -> bool {
+    let parent = parent.trim_matches('/');
+    if parent == GHOSTEX_FOLDER_NAME {
+        return !(is_directory && name == DRAWINGS_FOLDER_NAME);
+    }
+    if is_directory && name == GHOSTEX_FOLDER_NAME && parent.is_empty() {
+        return !root
+            .join(GHOSTEX_FOLDER_NAME)
+            .join(DRAWINGS_FOLDER_NAME)
+            .is_dir();
+    }
+    (is_directory && is_skipped_directory(name)) || is_skipped_file(name)
+}
+
 pub struct SearchMatch {
     /// Relative to the searched root, `/`-separated.
     pub relative_path: String,
@@ -112,7 +135,7 @@ fn index(root: &Path, max_scanned: usize) -> Arc<Index> {
     index
 }
 
-/// Walks `root` breadth-first, nearest folders first, skipping `SKIPPED_DIRECTORY_NAMES` and
+/// Walks `root` breadth-first, nearest folders first, leaving out what `is_hidden_entry` hides and
 /// never following a symlinked folder.
 fn walk(root: &Path, max_scanned: usize) -> Index {
     let mut entries = Vec::new();
@@ -135,7 +158,7 @@ fn walk(root: &Path, max_scanned: usize) -> Index {
                 continue;
             };
             let is_directory = file_type.is_dir();
-            if (is_directory && is_skipped_directory(&name)) || is_skipped_file(&name) {
+            if is_hidden_entry(root, &relative_directory, &name, is_directory) {
                 continue;
             }
             let relative_path = if relative_directory.is_empty() {
