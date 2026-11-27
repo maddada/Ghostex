@@ -188,6 +188,9 @@ fn log_skipped_live_host(
     in_zmx_list: bool,
     evidence: &LiveHostEvidence,
 ) {
+    let Some(repeats) = skipped_live_host_log_due(key, evidence.reason, now_ms()) else {
+        return;
+    };
     log(
         state,
         "sessionSelfHealSkippedLiveHost",
@@ -200,8 +203,47 @@ fn log_skipped_live_host(
             "reason": evidence.reason,
             "source": evidence.source,
             "hostPid": evidence.pid,
+            "skippedSinceLastLog": repeats,
         }),
     );
+}
+
+/// How often one session's `sessionSelfHealSkippedLiveHost` is written while it repeats.
+const SKIPPED_LIVE_HOST_LOG_EVERY_MS: i64 = 5 * 60_000;
+
+/// Per session: when the skip was last logged, for which reason, and how many skips since.
+static SKIPPED_LIVE_HOST_LOGGED: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashMap<SessionKey, (i64, &'static str, u64)>>,
+> = std::sync::LazyLock::new(Default::default);
+
+/// Whether this skip should be logged now, with the number of skips left unlogged since the last.
+///
+/// CDXC:SessionSelfHeal 2026-11-27 WHY (GitHub #786 follow-up): a session whose daemon lost its
+/// socket stays "gone" to `zmx list` while its daemon lives, so self-heal finds it due and skips it
+/// again about every 9 seconds for as long as that daemon runs; one warning per skip buried the log.
+/// The first skip, a changed reason, and then one line per 5 minutes (with the count) remain.
+fn skipped_live_host_log_due(key: &SessionKey, reason: &'static str, now: i64) -> Option<u64> {
+    let mut logged = SKIPPED_LIVE_HOST_LOGGED
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    logged.retain(|_, (at, _, _)| now - *at < 2 * SKIPPED_LIVE_HOST_LOG_EVERY_MS);
+    match logged.get_mut(key) {
+        Some((at, last_reason, repeats))
+            if *last_reason == reason && now - *at < SKIPPED_LIVE_HOST_LOG_EVERY_MS =>
+        {
+            *repeats += 1;
+            None
+        }
+        Some(entry) => {
+            let repeats = entry.2;
+            *entry = (now, reason, 0);
+            Some(repeats)
+        }
+        None => {
+            logged.insert(key.clone(), (now, reason, 0));
+            Some(0)
+        }
+    }
 }
 
 /// Whether a running Native (`acp-host`) session's host process exited inside a still-live zmx
