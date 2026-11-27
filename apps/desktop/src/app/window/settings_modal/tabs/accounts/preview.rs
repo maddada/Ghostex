@@ -66,7 +66,6 @@ impl AccountsTab {
         };
         match state {
             "accounts-editor" => self.pane = Some(Pane::Account("claude-1".into())),
-            "accounts-antigravity" => self.pane = Some(Pane::Account("antigravity-1".into())),
             "accounts-hubs" => self.pane = Some(Pane::Hub("hub-preview".into())),
             "accounts-hub-add-account" => {
                 self.pane = Some(Pane::Hub("hub-preview".into()));

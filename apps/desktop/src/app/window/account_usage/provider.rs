@@ -7,8 +7,6 @@
 //! history" section that never loaded. Each provider now names itself. The usage-only providers
 //! (server/src/accounts/usage_only/) show the windows gxserver lists, their plan and details, and
 //! no history section, because gxserver keeps conversation history only for Claude and Codex.
-//! Antigravity has no header links: no Google page shows these quotas (user, 2026-11-11); since
-//! 2026-11-26 they come from agy's own /usage, not a Gemini account.
 use super::data::text;
 use serde_json::Value;
 use std::sync::Arc;
@@ -17,7 +15,6 @@ use std::sync::Arc;
 pub(super) enum UsageProvider {
     Claude,
     Codex,
-    Antigravity,
     Cursor,
     Copilot,
 }
@@ -26,7 +23,6 @@ impl UsageProvider {
     pub(super) fn of(account: &Value) -> Self {
         match text(account, "provider") {
             "codex" => Self::Codex,
-            "antigravity" => Self::Antigravity,
             "cursor" => Self::Cursor,
             "copilot" => Self::Copilot,
             _ => Self::Claude,
@@ -37,15 +33,14 @@ impl UsageProvider {
         match self {
             Self::Claude => "Claude",
             Self::Codex => "Codex",
-            Self::Antigravity => "Antigravity",
             Self::Cursor => "Cursor",
             Self::Copilot => "Copilot",
         }
     }
 
-    /// Cursor, Antigravity and Copilot only show usage: no resets, Extra usage or shared history.
+    /// Cursor and Copilot only show usage: no resets, Extra usage or shared history.
     pub(super) fn usage_only(self) -> bool {
-        matches!(self, Self::Antigravity | Self::Cursor | Self::Copilot)
+        matches!(self, Self::Cursor | Self::Copilot)
     }
 
     /// The header's Status and Dashboard pages.
@@ -64,7 +59,6 @@ impl UsageProvider {
                 "https://www.githubstatus.com",
                 "https://github.com/settings/copilot",
             ]),
-            Self::Antigravity => None,
         }
     }
 
@@ -74,7 +68,6 @@ impl UsageProvider {
         match self {
             Self::Claude => Some((0xd97757, 0x9c4328)),
             Self::Codex => Some((0x8cbbe8, 0x285b8c)),
-            Self::Antigravity => Some((0x749bff, 0x2f5bd3)),
             Self::Cursor | Self::Copilot => None,
         }
     }
@@ -89,7 +82,6 @@ impl UsageProvider {
             }
             other => {
                 return crate::app::titlebar::account_usage::usage_only_icon(match other {
-                    Self::Antigravity => "antigravity",
                     Self::Cursor => "cursor",
                     _ => "copilot",
                 });

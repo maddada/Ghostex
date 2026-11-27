@@ -102,7 +102,7 @@ pub(crate) struct AccountsTab {
     pending_reconnect: Option<String>,
     /// The ⋯ menu that is open (`menus.rs`), by its key.
     pub(crate) open_menu: Option<String>,
-    /// The Cursor, Antigravity or Copilot sign-in under way (`usage_flow.rs`).
+    /// The Cursor or Copilot sign-in under way (`usage_flow.rs`).
     pub(crate) usage_sign_in: Option<usage_flow::UsageSignIn>,
     /// The Add a hub form and the saved hubs' fields being edited (`hubs.rs`), by hub id (`new`
     /// for Add a hub).
@@ -144,7 +144,7 @@ pub(crate) enum Pane {
     Add(&'static str),
     /// Add account's provider picker.
     AddPick,
-    /// A Cursor, Antigravity or Copilot sign-in.
+    /// A Cursor or Copilot sign-in.
     AddUsage(&'static str),
     /// Add a CLIProxyAPI hub.
     AddHub,
@@ -289,7 +289,7 @@ impl AccountsTab {
             .find(|account| account.id() == *id && account.needs_sign_in());
         self.pending_reconnect = None;
         match account {
-            // A Cursor, Antigravity or Copilot account signs in through its own flow (its Sign in again).
+            // A Cursor or Copilot account signs in through its own flow (its Sign in again).
             Some(account) if account.usage_only() => {
                 self.start_usage_sign_in(&account.provider(), Some(account.id()), cx)
             }

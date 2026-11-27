@@ -53,7 +53,6 @@ pub(crate) fn account_logo(p: &SettingsPalette, provider: &str, size: f32) -> An
         "codex" => ("agent-icons/codex.svg", ink),
         "cursor" => ("agent-icons/cursor-cli.svg", ink),
         "copilot" => ("agent-icons/copilot.svg", ink),
-        "antigravity" => ("agent-icons/antigravity-cli.svg", gpui::rgb(0x749bff)),
         _ => ("agent-icons/claude.svg", gpui::rgb(0xd97757)),
     };
     svg()

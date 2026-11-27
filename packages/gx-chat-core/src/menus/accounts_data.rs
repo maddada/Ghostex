@@ -156,7 +156,7 @@ pub struct AccountRecovery {
 pub struct AccountsState {
     pub accounts: Vec<Account>,
     pub session: Option<AccountSession>,
-    /// `usageAccounts`: the Cursor, Antigravity and Copilot accounts Ghostex only shows the usage of
+    /// `usageAccounts`: the Cursor and Copilot accounts Ghostex only shows the usage of
     /// (server/src/accounts/usage_only/). They never run or switch a session.
     pub usage_accounts: Vec<Account>,
 }

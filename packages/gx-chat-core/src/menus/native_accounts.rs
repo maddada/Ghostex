@@ -398,7 +398,7 @@ pub struct PanelBody {
     pub error: Option<String>,
     pub message: Option<String>,
     pub session: Option<PanelSession>,
-    /// The Cursor, Antigravity and Copilot accounts' usage, under the session's own accounts.
+    /// The Cursor and Copilot accounts' usage, under the session's own accounts.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub other_usage: Vec<PanelOtherUsage>,
 }
@@ -414,7 +414,7 @@ pub struct PanelOtherUsage {
     pub identity: AccountIdentity,
     pub id: Option<String>,
     pub name: String,
-    /// "Cursor", "Antigravity" or "Copilot".
+    /// "Cursor" or "Copilot".
     pub provider_label: String,
     pub usage_error: Option<String>,
     pub usage: Vec<PanelUsageBar>,
@@ -423,7 +423,6 @@ pub struct PanelOtherUsage {
 fn usage_provider_label(provider: Option<&str>) -> &'static str {
     match provider {
         Some("cursor") => "Cursor",
-        Some("antigravity") => "Antigravity",
         Some("copilot") => "Copilot",
         _ => "",
     }

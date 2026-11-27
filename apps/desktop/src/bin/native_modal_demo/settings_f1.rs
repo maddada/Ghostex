@@ -303,31 +303,6 @@ fn accounts_rpc(state: &str, params: &Value) -> Answer {
             account["status"] = json!("disabled");
         }
     }
-    // The Antigravity entry (agy's own /usage): its Claude/GPT windows beside its Gemini 5h and 7d.
-    if state == "accounts-antigravity"
-        && let Some(accounts) = data["accounts"].as_array_mut()
-    {
-        let window = |id: &str, label: &str, seconds: i64, model: Option<&str>| {
-            let minutes = if seconds == 18_000 { 299 } else { 7_000 };
-            let at = chrono::Utc::now() + chrono::Duration::minutes(minutes);
-            json!({
-                "id": id, "label": label, "usedPercent": 0, "limitWindowSeconds": seconds,
-                "resetsAt": at.to_rfc3339(), "model": model,
-            })
-        };
-        accounts.push(json!({
-            "id": "antigravity-1", "provider": "antigravity", "usageOnly": true,
-            "name": "Antigravity", "email": "",
-            "registered": true, "status": "ready",
-            "showInTitlebar": true, "selector": "", "color": "neutral", "eligible": false,
-            "usage": [
-                window("fiveHour", "5h", 18_000, None),
-                window("sevenDay", "7d", 604_800, None),
-                window("3p-5h", "Claude/GPT 5h", 18_000, Some("Claude/GPT")),
-                window("3p-weekly", "Claude/GPT 7d", 604_800, Some("Claude/GPT")),
-            ],
-        }));
-    }
     // A CLIProxyAPI hub (the extension on) with two Claude accounts and a Codex one cooling down.
     if state.starts_with("accounts-hub") {
         let window = |id: &str, label: &str, used: f64, seconds: i64, minutes: i64| {

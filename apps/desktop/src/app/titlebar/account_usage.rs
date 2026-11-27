@@ -180,7 +180,6 @@ fn provider_label(provider: &str) -> &'static str {
     match provider {
         "codex" => "Codex",
         "cursor" => "Cursor",
-        "antigravity" => "Antigravity",
         "copilot" => "Copilot",
         _ => "Claude",
     }
@@ -379,9 +378,11 @@ pub(crate) fn account_logo_svg(codex: bool) -> &'static str {
     }
 }
 
-/// The Cursor, Antigravity and Copilot accounts only show usage (server/src/accounts/usage_only/).
+/// The Cursor and Copilot accounts only show usage (server/src/accounts/usage_only/). Ghostex reads
+/// no Antigravity usage (server/src/accounts/usage_only/retire.rs), so an Antigravity meter from an
+/// older gxserver on another computer is not shown.
 fn usage_only_provider(provider: &str) -> bool {
-    matches!(provider, "cursor" | "antigravity" | "copilot")
+    matches!(provider, "cursor" | "copilot")
 }
 
 /// A usage-only provider's agent logo, in the chrome's ink where the artwork is plain white.
@@ -397,17 +398,12 @@ pub(crate) fn usage_only_icon(provider: &str) -> Arc<gpui::Image> {
     icons
         .entry((provider.to_string(), light))
         .or_insert_with(|| {
-            let key = match provider {
-                "cursor" => "cursor-cli",
-                "antigravity" => "antigravity-cli",
-                other => other,
+            let key = if provider == "cursor" {
+                "cursor-cli"
+            } else {
+                provider
             };
-            // Antigravity's logo keeps its brand blue, as in Settings > Accounts.
-            let ink = match (key, light) {
-                ("antigravity-cli", _) => "#749bff",
-                (_, true) => "#333333",
-                _ => "#edecec",
-            };
+            let ink = if light { "#333333" } else { "#edecec" };
             let svg = ghostex_gx_core::agent_logo_svg(key)
                 .unwrap_or_default()
                 .replace("currentColor", ink)
@@ -512,7 +508,7 @@ fn badge_lines(account: &Value) -> Vec<String> {
         // CDXC:AgentProviders 2026-11-07 DECISION:
         // User, with a screenshot of the sidebar's usage meters (Claude and Codex stacked "74%" over "0%", Gemini packed as "0/0%"): "pls make the gemini one 2 lines like the others". A usage-only provider draws one stacked "N%" line per window, in the order gxserver lists them (Gemini's 5h then 7d); Cursor's and Copilot's single Mo window stays one line. The tile has no tooltip (2026-09-21), so the window labels stay in the usage popup.
         // CDXC:AgentProviders 2026-11-08 DECISION:
-        // Gemini now also lists Antigravity's Claude/GPT group as model-scoped 5h and 7d windows; since 2026-11-26 the same windows come from the Antigravity entry, read from agy's own /usage (server/src/accounts/usage_only/antigravity.rs). The tile keeps one line per main window, and each line shows the most used window of that length across every group, so the limit agy hits first is the one on the tile; the settings pane and the chat's accounts panel list each group.
+        // Gemini also listed Antigravity's Claude/GPT group as model-scoped 5h and 7d windows (both are retired since 2026-11-27, server/src/accounts/usage_only/retire.rs). The tile keeps one line per main window, and each line shows the most used window of that length across every group, so the limit agy hits first is the one on the tile; the settings pane and the chat's accounts panel list each group.
         return windows
             .iter()
             .filter(|w| w["model"].is_null())
@@ -618,7 +614,7 @@ pub(crate) fn claude_headline_windows(windows: &[Value]) -> Vec<&Value> {
 pub(crate) struct GpuiAccountUsageMeter {
     pub(crate) id: ExtensionId,
     pub(crate) codex: bool,
-    /// `claude`, `codex`, or a usage-only provider (`cursor`, `gemini`, `copilot`).
+    /// `claude`, `codex`, or a usage-only provider (`cursor`, `copilot`).
     pub(crate) provider: String,
     pub(crate) indicator: Option<String>,
     pub(crate) badge_lines: Vec<String>,
@@ -788,7 +784,7 @@ impl GhostexGpuiApp {
         }
         if !matches!(
             text(account, "provider"),
-            "claude" | "codex" | "cursor" | "antigravity" | "copilot"
+            "claude" | "codex" | "cursor" | "copilot"
         ) || account["registered"] != true
         {
             return;
@@ -917,11 +913,12 @@ impl GhostexGpuiApp {
                                     cx.notify();
                                 }
                                 this.titlebar_accounts.retain(|a| text(a, "titlebarMachine") != machine);
-                                // The usage-only accounts (Cursor, Gemini, Copilot) and the CLIProxyAPI hub
+                                // The usage-only accounts (Cursor, Copilot) and the CLIProxyAPI hub
                                 // accounts (server/src/accounts/hub/sidebar.rs) come under their own keys.
                                 for account in ["accounts", "usageAccounts", "hubAccounts"].into_iter()
                                     .flat_map(|key| result[key].as_array().into_iter().flatten())
-                                    .filter(|a| a["registered"] == true && a["showInTitlebar"] == true) {
+                                    .filter(|a| a["registered"] == true && a["showInTitlebar"] == true)
+                                    .filter(|a| a["usageOnly"] != true || usage_only_provider(text(a, "provider"))) {
                                     let mut entry = titlebar_entry(account, &machine);
                                     // A hub account's usage history is the hub's, which Ghostex doesn't keep.
                                     entry["usageHistory"] = result.get("usageHistory")
@@ -1465,7 +1462,7 @@ mod tests {
     #[test]
     fn a_computer_that_did_not_answer_fades_and_explains() {
         let stale = with(
-            account("local", "antigravity", "antigravity-1", "G"),
+            account("local", "cursor", "cursor-1", "G"),
             "machineUnreachable",
             json!(true),
         );
@@ -1475,7 +1472,7 @@ mod tests {
         assert_eq!(
             tooltip,
             Some(format!(
-                "ST · Antigravity\n{}: can't reach it, showing its last reading",
+                "ST · Cursor\n{}: can't reach it, showing its last reading",
                 crate::host_name::local_computer_name()
             ))
         );
