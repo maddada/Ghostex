@@ -288,6 +288,13 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
                         if crate::chief::presents_as_home(project) {
                             project_map.insert("isHome".to_string(), json!(true));
                         }
+                        // The No project project (server/src/no_project/project.rs): additive, so an
+                        // older phone lists it as a plain project named "No project".
+                        if project.get("isNoProject").and_then(Value::as_bool) == Some(true)
+                            || crate::no_project::is_no_project_project(project)
+                        {
+                            project_map.insert("isNoProject".to_string(), json!(true));
+                        }
                         // A GBot's project: its look while GBots are on, and always the mark that keeps it out of the projects list (server/src/gbots/presentation.rs).
                         insert_present(&mut project_map, "gbotsBot", project.get("gbotsBot"));
                         insert_present(

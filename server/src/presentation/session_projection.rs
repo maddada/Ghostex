@@ -83,6 +83,11 @@ pub(crate) fn project_presentation_project(project: &Value) -> Value {
     if crate::chief::is_help_home_project(project) {
         output.insert("isHelpHome".to_string(), Value::Bool(true));
     }
+    // The No project project, which holds every chat without a project (no_project/project.rs).
+    // Present only when true; an older client shows it as a plain project named "No project".
+    if crate::no_project::is_no_project_project(project) {
+        output.insert("isNoProject".to_string(), Value::Bool(true));
+    }
     insert_optional_value(&mut output, "path", project.get("path").cloned());
     // Whether the folder is there and why not, for the header's mark and its popover, read without
     // waking a sleeping disk or waiting on a dead share (project_folder_problem.rs).

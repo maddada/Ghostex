@@ -549,6 +549,8 @@ pub async fn run_gxserver_foreground(
     session_auto_sleep_sweep::start_session_auto_sleep_sweep(state.clone());
     session_native_release_sweep::start_session_native_release_sweep(state.clone());
     crate::chief::start_chief_sweep(state.clone());
+    // The No project project and the one-time move of Main Hub's chats into it.
+    crate::no_project::start_no_project_pass(state.clone());
     storage_cleanup_sweep::start_storage_cleanup_sweep(state.clone());
     sidebar_spaces_switch::start_sidebar_spaces_switch_watch(state.clone());
     shared_settings_watch::start_shared_settings_watch(state.clone());

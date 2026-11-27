@@ -71,6 +71,10 @@ pub(super) fn create(args: &Arguments) -> CliResult<Value> {
     if let (None, Some(folder)) = (&args.project_id, &args.path) {
         payload = json!({"projectPath": folder, "agentId": agent_id});
     }
+    // `--no-project`: the No project project, its chat in the home folder (no_project/project.rs).
+    if args.project_id.is_none() && args.flags.truthy("noProject") {
+        payload = json!({"noProject": true, "agentId": agent_id});
+    }
     if let Some(title) = &args.title {
         payload["title"] = json!(title);
         // CDXC:SessionTitles 2026-11-26 FIX: GitHub #755: Native Antigravity names its conversation

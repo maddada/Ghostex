@@ -511,6 +511,7 @@ fn is_known_command(name: &str) -> bool {
         "resolve-agent-prompt-launch",
         "read-session-chat",
         "switch-draft-agent",
+        "move-session-to-project",
         "send-session-chat-key",
         "select-session-chat-model",
         "read-session-chat-skills",
@@ -1023,6 +1024,12 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "read-session-chat" => {
             run_bridge_action("readSessionChat", Parser::SessionChatRead, plain, args)
         }
+        "move-session-to-project" => run_bridge_action(
+            "moveSessionToProject",
+            Parser::MoveSessionToProject,
+            fail_on_not_ok,
+            args,
+        ),
         "switch-draft-agent" => run_bridge_action(
             "switchDraftAgent",
             Parser::SessionChatDraftAgent,

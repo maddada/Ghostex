@@ -76,6 +76,10 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
             let params = with_resolved_gxserver_session_params(payload, flags)?;
             rpc::call_gxserver_rpc("/api/forkSession", &params, flags)
         }
+        "moveSessionToProject" => {
+            let params = with_resolved_gxserver_session_params(payload, flags)?;
+            rpc::call_gxserver_rpc("/api/moveSessionToProject", &params, flags)
+        }
         "switchDraftAgent" => {
             let params = with_resolved_gxserver_session_params(payload, flags)?;
             rpc::call_gxserver_rpc("/api/switchDraftAgent", &params, flags)

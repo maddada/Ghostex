@@ -718,6 +718,8 @@ fn with_codex_moved_cwd(family: Option<&str>, session: &Value, command: String) 
             crate::domain::repository::project::RELOCATED_PROJECT_SESSION_RUNTIME_KEY,
             // `ghostex move-project-folder` (project_folder_move/record.rs, risk 1 of its plan).
             crate::project_folder_move::MOVED_FOLDER_SESSION_RUNTIME_KEY,
+            // A chat moved out of No project into a project (no_project/move_chat.rs).
+            crate::no_project::MOVED_FROM_NO_PROJECT_KEY,
         ]
         .iter()
         .all(|key| {

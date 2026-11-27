@@ -56,6 +56,16 @@ fn resolve_create_target(
     flags: &Flags,
     command_name: &str,
 ) -> CliResult<(String, Option<String>)> {
+    // `--no-project`: the No project project, which gxserver finds by this alias (its chats
+    // start in the home folder; server/src/no_project/project.rs).
+    if flags.truthy("noProject") {
+        if flags.0.contains_key("projectId") || flags.0.contains_key("groupId") {
+            return Err(CliError::Other(format!(
+                "{command_name} --no-project can't be used with --project-id or --group-id."
+            )));
+        }
+        return Ok((crate::no_project::NO_PROJECT_ALIAS.to_string(), None));
+    }
     let project_id_value = payload
         .get("projectId")
         .filter(|value| !value.is_null())

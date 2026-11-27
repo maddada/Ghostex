@@ -455,6 +455,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/createWorkspaceTerminal"
         | "/api/createAgentSession"
         | "/api/relocateProject"
+        // Move to project takes a chat out of No project (no_project/move_chat.rs): project and session ids and the target project's id.
+        | "/api/moveSessionToProject"
         | "/api/forkSession"
         // Side chats are forks (above) and read and send like chat; they carry project and session ids and the question text.
         | "/api/startSideChat"

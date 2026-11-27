@@ -160,7 +160,18 @@ impl<'a> DomainRepository<'a> {
         from a real terminal or agent session name.
         */
         if read_optional_text(normalized_params.get("cwd")).is_none() {
-            if let Some(project_path) = read_optional_text(project.get("path")) {
+            // A chat in No project starts in the home folder, not in its project's empty managed
+            // folder (CDXC:Projects 2026-11-27 in no_project/project.rs).
+            if crate::no_project::is_no_project_project(project) {
+                normalized_params.insert(
+                    "cwd".to_string(),
+                    Value::String(
+                        crate::resume_lookup::home_dir()
+                            .to_string_lossy()
+                            .to_string(),
+                    ),
+                );
+            } else if let Some(project_path) = read_optional_text(project.get("path")) {
                 normalized_params.insert("cwd".to_string(), Value::String(project_path));
             }
         }

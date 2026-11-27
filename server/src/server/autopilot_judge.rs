@@ -123,7 +123,7 @@ pub(crate) fn supervisor_key(paths: &crate::paths::GxserverPaths) -> Option<Sess
 }
 
 /// A gxserver call made from inside gxserver, through the same route and checks a client's goes.
-pub(super) async fn internal_rpc(
+pub(crate) async fn internal_rpc(
     state: &Arc<AppState>,
     path: &str,
     params: Value,

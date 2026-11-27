@@ -38,6 +38,8 @@ pub(super) async fn route_sessions_http(
                     caller.is_user_device(),
                     true,
                 )?;
+                // `noProject: true` or `projectId: "no-project"` names No project (no_project/project.rs).
+                crate::no_project::place_create_alias(&state, db, repository, &mut params)?;
                 // A session whose folder is missing never starts (the provider refuses it, and it does
                 // not expand `~`), so a new session's own `cwd` is stored as the folder it checked on
                 // this computer; a restore keeps its source's.
@@ -53,11 +55,10 @@ pub(super) async fn route_sessions_http(
                         crate::domain::normalize_existing_directory_path(Some(cwd), "cwd")?;
                     params.insert("cwd".to_string(), Value::String(folder));
                 }
+                let target = repository.resolve_create_session_project(&params)?;
+                crate::no_project::place_home_cwd(&target, &mut params);
                 let params = &params;
-                crate::gbots::refuse_bot_project_create(
-                    &repository.resolve_create_session_project(params)?,
-                    params,
-                )?;
+                crate::gbots::refuse_bot_project_create(&target, params)?;
                 let created_session = repository.create_session(params, false)?;
                 let session = apply_created_session_identity(repository, &created_session, params)?;
                 let project_id = value_text(&session, "projectId")?;
@@ -86,6 +87,8 @@ pub(super) async fn route_sessions_http(
                     false,
                 )?;
                 crate::gbots::add_create_project_path(&state, db, repository, &mut placed)?;
+                // `noProject: true` or `projectId: "no-project"` names No project (no_project/project.rs).
+                crate::no_project::place_create_alias(&state, db, repository, &mut placed)?;
                 // Who the first request is from: the user's message `agents send --as-user`
                 // starts it with, labelled, or an agent's, signed (session_chat_send/sender_mark.rs).
                 let as_user_log =
@@ -126,6 +129,8 @@ pub(super) async fn route_sessions_http(
                     state.accounts.refresh(&state.paths.home_dir, false);
                 }
                 let mut params = coordinator_runtime::prepare_coordinator_create_params(params)?;
+                // A chat in No project starts in the home folder (no_project/project.rs).
+                crate::no_project::place_home_cwd(&project, &mut params);
                 // A new coordinator starts on the model and effort its agent's last coordinator
                 // was switched to (CDXC:Coordinators 2026-11-18 in agent_model_pins.rs).
                 let family = crate::agents::requested_agent_family_id(db, &project, &params);
@@ -270,6 +275,16 @@ pub(super) async fn route_sessions_http(
                 Ok(json!({ "sessions": repository.resource_session_owners(&names)? }))
             },
         ),
+        // Move to project: a chat leaves No project for one of the user's projects.
+        "/api/moveSessionToProject" => {
+            crate::no_project::handle_move_session_to_project(
+                state.clone(),
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
+        }
         "/api/listSessions" => handle_domain_http(
             &state,
             endpoint.path,

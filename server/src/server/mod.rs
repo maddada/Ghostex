@@ -124,6 +124,8 @@ mod autopilot_answers;
 mod autopilot_checkup;
 mod autopilot_http;
 mod autopilot_judge;
+/// An in-process call of a gxserver endpoint as gxserver itself (no_project/move_chat.rs uses it).
+pub(crate) use autopilot_judge::internal_rpc;
 mod autopilot_runtime;
 mod autopilot_supervisor_menu;
 pub mod background_tasks;

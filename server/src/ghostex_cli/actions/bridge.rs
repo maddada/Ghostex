@@ -62,6 +62,8 @@ pub enum Parser {
     SessionChatRead,
     /// session selector plus the project agent id for a draft-agent switch.
     SessionChatDraftAgent,
+    /// session selector plus `--to <project>`: Move to project for a chat in No project.
+    MoveSessionToProject,
     /// session selector plus one serialized Session Chat key name.
     SessionChatKey,
     SessionChatModel,

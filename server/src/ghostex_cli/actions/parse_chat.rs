@@ -53,6 +53,7 @@ pub(super) fn evaluate_parser(parser: Parser, rest: &[String], flags: &Flags) ->
         Parser::CustomSessionTagsState => parse_custom_session_tags_state(rest, flags)?,
         Parser::SessionChatRead => parse_session_chat_read(rest, flags),
         Parser::SessionChatDraftAgent => parse_session_chat_draft_agent(rest, flags)?,
+        Parser::MoveSessionToProject => parse_move_session_to_project(rest, flags)?,
         Parser::SessionChatKey => parse_session_chat_key(rest, flags)?,
         Parser::SessionChatModel => {
             super::session_chat_model::parse(parse_session_selector(rest, flags), flags)?
@@ -252,6 +253,17 @@ fn parse_session_chat_draft_agent(rest: &[String], flags: &Flags) -> CliResult<V
         ));
     };
     map.insert("agentId".to_string(), Value::String(agent_id));
+    Ok(Value::Object(map))
+}
+
+fn parse_move_session_to_project(rest: &[String], flags: &Flags) -> CliResult<Value> {
+    let mut map = parse_session_selector(rest, flags);
+    let Some(target) = flags.text("to").filter(|value| !value.trim().is_empty()) else {
+        return Err(CliError::Other(
+            "move-session-to-project needs --to <project id, name or folder>.".to_string(),
+        ));
+    };
+    map.insert("targetProjectId".to_string(), Value::String(target));
     Ok(Value::Object(map))
 }
 

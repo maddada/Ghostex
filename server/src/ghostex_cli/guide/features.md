@@ -5176,9 +5176,10 @@ before) is where to start in Ghostex. If you want it out of the way, collapse
 its header in the sidebar; Ghostex remembers whether it is collapsed.
 
 The project at your home folder (`~`, `C:\Users\<name>` on
-Windows) is **Main Hub**, with the Ghostex flower on its header: the home
-for chats that don't belong to a project, along with Ask Ghostex AI, GBots
-(when enabled), and Autopilot's supervisor sessions. If you already had a project there, it
+Windows) is **Main Hub**, with the Ghostex flower on its header: the home of
+Ask Ghostex AI, GBots (when enabled), Autopilot's supervisor sessions, and
+terminals and coordinators started there. Chats that don't belong to a project
+are in **No project** (below). If you already had a project there, it
 becomes Main Hub as it is, with its sessions, history and settings. Rest the
 pointer on its header and a card beside the sidebar says what it is.
 
@@ -5263,6 +5264,33 @@ itself ("what's stuck?", "how do I pair my phone?").
 `ghostex chief set-agent <agent-id>`, `ghostex chief send [--computer <name>]
 "<text>"`. Settings: `chiefShowOnAllSpaces`, `chiefConfirmNewChat`,
 `homeSecretFolders`.
+
+## No project (chats without a project)
+
+**No project** is one more project in your list, sorted, moved and hidden like
+the others, that holds every chat that doesn't belong to a project. Its chats
+work in your home folder (`~`), with your secret folders kept out of reach as
+for every agent Ghostex starts there (Settings > Agents > Home folder). It is
+made by Ghostex in its own empty folder, so it has no Git, branches or
+worktrees. You can rename it like any project. When you update, the chats that
+were in Main Hub move into it once, with their history (a chat that was
+working then moves at a later start, once it is idle).
+
+**Move to project**: a chat in No project can move into one of your projects.
+It continues in that project's folder under a new session ref. Claude Code and
+Codex take the conversation with them. Other agents get a handover: Ghostex
+writes the conversation (your messages and the agent's final replies, without
+tool calls) to a Markdown file, starts a new chat of the same agent in the
+project with that file's link in its message box, and closes the old chat (it
+stays in No project's History). Files the chat made stay where they are in
+your home folder; nothing is copied.
+
+From the command line: `ghostex create-agent <agent> --no-project` starts a
+chat in No project, `ghostex create-session --no-project` a terminal there,
+`ghostex agents create <agent> --no-project` and `ghostex coordinator
+start-thread --no-project` an agent or a coordinator's thread there, and
+`ghostex move-session-to-project <session> --to <project id, name or folder>`
+moves a chat out of No project.
 
 ## Autopilot (keep sessions going while you are away)
 

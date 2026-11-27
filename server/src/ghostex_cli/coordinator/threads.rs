@@ -192,6 +192,11 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
     let folder = flag_text(&parsed.flags, "path");
     let project_id = match (flag_text(&parsed.flags, "projectId"), &remote_server_id) {
         (Some(project_id), _) => project_id,
+        // `--no-project`: the thread starts in No project, in the home folder
+        // (server/src/no_project/project.rs resolves the alias).
+        (None, _) if parsed.flags.truthy("noProject") => {
+            crate::no_project::NO_PROJECT_ALIAS.to_string()
+        }
         (None, _) if folder.is_some() => String::new(),
         (None, None) => agents::text(coordinator, "projectId").to_string(),
         (None, Some(_)) => remote_project_like(&coordinator_row, &flags)?,
