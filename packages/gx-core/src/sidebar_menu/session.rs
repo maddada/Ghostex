@@ -69,6 +69,9 @@ pub struct SessionMenuInput<'a> {
 pub struct SessionGroupMoves {
     pub project_list_id: String,
     pub groups: Vec<SessionGroupTarget>,
+    /// For a chat in No project: the projects Move to project can take it to (this computer's
+    /// own projects, without Ghostex's), as `(project id, name)`. Empty for every other row.
+    pub projects: Vec<(String, String)>,
 }
 
 /// One of the project's user-made groups.
@@ -430,6 +433,38 @@ fn set_session_tag_value(message: &serde_json::Value) -> Option<Option<String>> 
             .and_then(serde_json::Value::as_str)
             .map(str::to_string),
     )
+}
+
+/// Move to project, on a chat in No project: a page of this computer's projects.
+///
+/// CDXC:Projects 2026-11-27 DECISION:
+/// User (Q5262 B, Q5284 A): a chat in No project moves to an existing project from its menu, at
+/// once with no confirm. gxserver's `/api/moveSessionToProject` (server/src/no_project/move_chat.rs)
+/// resumes a Claude or Codex chat in the project's folder and starts any other agent there from a
+/// handover of the chat; the desktop then opens the moved chat (native_sidebar/move_to_project.rs).
+/// Terminals are not offered: a shell has no conversation to carry.
+fn move_to_project_item(
+    id: &str,
+    row: &SessionRow,
+    moves: Option<&SessionGroupMoves>,
+    stale: bool,
+) -> Option<MenuItem> {
+    let moves = moves.filter(|moves| !stale && !moves.projects.is_empty())?;
+    if row.session_kind.as_deref() == Some("terminal") {
+        return None;
+    }
+    let children = moves
+        .projects
+        .iter()
+        .map(|(project_id, name)| {
+            MenuItem::row(
+                name,
+                "folder",
+                MenuCommand::command(message::move_session_to_project(id, project_id)),
+            )
+        })
+        .collect();
+    Some(MenuItem::submenu("Move to project", "folders", children).with_page())
 }
 
 /// Move to New Group, or the Move to Group page once the project has a group to move to or
@@ -983,7 +1018,12 @@ impl Places<'_, '_> {
             "makeCoordinator" => make_coordinator_rows(id, row, group, caps, in_box),
             "postponeBy" => postpone_rows(id, row, caps),
             "moveToGroup" if group.can_create_session_group => {
-                vec![move_to_group_item(id, input.group_moves, group.is_stale)]
+                let mut rows: Vec<MenuItem> =
+                    move_to_project_item(id, row, input.group_moves, group.is_stale)
+                        .into_iter()
+                        .collect();
+                rows.push(move_to_group_item(id, input.group_moves, group.is_stale));
+                rows
             }
             "sleepBelow" | "closeBelow" => below_rows(input.below, place),
             "close" if !self.in_strip(HoverAction::Close) => {

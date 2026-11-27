@@ -17,7 +17,7 @@ use crate::paths::GxserverPaths;
 use crate::server::{schedule_presentation_project_delta, AppState};
 
 /// The name the project is created with.
-pub(crate) const NO_PROJECT_NAME: &str = "No project";
+pub(crate) const NO_PROJECT_NAME: &str = ghostex_gx_core::NO_PROJECT_NAME;
 
 /// What a create may pass as `projectId` (or `noProject: true`) to start in No project without
 /// knowing its id: `ghostex create-agent --no-project`, a coordinator's `start-thread

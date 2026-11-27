@@ -60,6 +60,9 @@ pub(crate) struct ProjectContextInput {
     /// Ask Ghostex AI's project (`PresentationProject::is_help_home`): its chats are listed in
     /// Main Hub (`chief.rs` `lift_into_home`) and its own group is never drawn empty.
     pub(crate) is_help_home: bool,
+    /// The No project project (`PresentationProject::is_no_project`): drawn even when empty, with
+    /// its New Chat row, and its menu offers only New Chat, New Coordinator and Hide.
+    pub(crate) is_no_project: bool,
     /// Autopilot's supervisor system project (`PresentationProject::autopilot_supervisor_project`):
     /// its sessions are listed under Autopilot in Main Hub while Main Hub is on, and its own
     /// project group is never drawn.
@@ -301,6 +304,7 @@ fn project_context_view(project: &ProjectContextInput) -> ProjectContextView {
         work_github: project.work_github,
         work_tracker_github: project.work_tracker_github,
         is_home: project.is_home,
+        is_no_project: project.is_no_project,
         gbot: project.gbot.clone(),
         folder_problem: project.folder_problem.clone(),
     }

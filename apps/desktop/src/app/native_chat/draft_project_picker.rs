@@ -309,7 +309,7 @@ impl NativeChatView {
         }
     }
 
-    /// Whether this draft is currently aimed at a computer's Main Hub ("No project" mode).
+    /// Whether this draft is currently aimed at a computer's No project ("No project" mode).
     pub(super) fn draft_is_no_project(&self, cx: &Context<Self>) -> bool {
         if let Some(target) = self.pending_draft_target.as_ref() {
             return target.is_main_hub;
@@ -318,7 +318,7 @@ impl NativeChatView {
             return false;
         };
         app.read(cx)
-            .gx_store_is_main_hub_project(&self.config.machine_id, &self.config.project_id)
+            .gx_store_is_no_project_target(&self.config.machine_id, &self.config.project_id)
     }
 
     /// Applies a new pending target destination on this draft without moving the session, switching
@@ -488,7 +488,7 @@ impl NativeChatView {
         true
     }
 
-    /// Toggles "No project" on this draft instantaneously in place: aims the draft at Main Hub
+    /// Toggles "No project" on this draft instantaneously in place: aims the draft at No project
     /// when off, or back at its previous/default project when on, with zero Space/Workspace jump.
     pub(super) fn toggle_draft_no_project(&mut self, cx: &mut Context<Self>) {
         if self.pending_target_move_in_flight {
@@ -533,7 +533,7 @@ impl NativeChatView {
                 label: current_label,
                 is_main_hub: false,
             });
-            let Some(home_choice) = app.read(cx).gx_store_main_hub_choice(&eff_machine_id) else {
+            let Some(home_choice) = app.read(cx).gx_store_no_project_choice(&eff_machine_id) else {
                 return;
             };
             let Some(target) = home_choice
@@ -564,7 +564,7 @@ impl NativeChatView {
         let choices = app.read(cx).gx_store_project_choices();
         let saved_target = self.no_project_return.take().filter(|saved| {
             !app.read(cx)
-                .gx_store_is_main_hub_project(&saved.machine_id, &saved.project_id)
+                .gx_store_is_no_project_target(&saved.machine_id, &saved.project_id)
                 && choices.iter().any(|choice| {
                     choice.machines.iter().any(|machine| {
                         machine.connected
@@ -579,7 +579,7 @@ impl NativeChatView {
                     let machine = choice.selected_machine().filter(|machine| {
                         machine.connected
                             && (!require_same_machine || machine.machine_id == eff_machine_id)
-                            && !app.read(cx).gx_store_is_main_hub_project(
+                            && !app.read(cx).gx_store_is_no_project_target(
                                 &machine.machine_id,
                                 &machine.project_id,
                             )
@@ -605,7 +605,7 @@ impl NativeChatView {
         let app = self.config.app.as_ref()?.upgrade()?;
         let (machine_id, project_id) = self.effective_draft_target();
         if self.draft_is_no_project(cx) {
-            return app.read(cx).gx_store_main_hub_choice(machine_id);
+            return app.read(cx).gx_store_no_project_choice(machine_id);
         }
         let choices = app.read(cx).gx_store_project_choices();
         let mut choice = choices.into_iter().find(|choice| {
@@ -959,7 +959,7 @@ impl NativeChatView {
         if same {
             return;
         }
-        let is_main_hub = row.repo_key == "main-hub"
+        let is_main_hub = row.repo_key == "no-project"
             || self
                 .config
                 .app
@@ -967,7 +967,7 @@ impl NativeChatView {
                 .and_then(|app| app.upgrade())
                 .is_some_and(|app| {
                     app.read(cx)
-                        .gx_store_is_main_hub_project(&machine.machine_id, &machine.project_id)
+                        .gx_store_is_no_project_target(&machine.machine_id, &machine.project_id)
                 });
         self.set_pending_draft_target(
             super::state::PendingDraftTarget {

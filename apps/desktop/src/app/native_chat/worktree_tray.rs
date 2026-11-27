@@ -136,7 +136,7 @@ fn fallback_agent_label(raw: &str) -> String {
 
 impl NativeChatView {
     /// Whether this chat is an unsent draft whose setup bar should be visible even before
-    /// `/api/draftWorktree` answers (e.g. Main Hub or a slow remote computer).
+    /// `/api/draftWorktree` answers (e.g. No project or a slow remote computer).
     fn draft_setup_bar_fallback_active(&self) -> bool {
         self.snapshot["availableAgents"].is_array()
             && !self.snapshot["firstMessageCard"].is_object()

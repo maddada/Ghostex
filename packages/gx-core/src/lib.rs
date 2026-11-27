@@ -147,7 +147,7 @@ pub use crate::quick_access::{
 };
 pub use crate::renderer_commands::*;
 pub use crate::selectors::{
-    Loadable, TabDirection, TabSession, DEFAULT_TERMINAL_SESSION_TITLE,
+    Loadable, TabDirection, TabSession, DEFAULT_TERMINAL_SESSION_TITLE, NO_PROJECT_NAME,
     QUICK_AUTOMATIONS_PROJECT_ID, TAB_SESSION_TITLE_MAX_UTF16,
 };
 pub use crate::session_create::*;
@@ -199,9 +199,8 @@ pub use crate::sidebar_actions::{
 };
 pub use crate::sidebar_actions::{
     open_remote_session_terminal, plan_generate_session_title, plan_group_sleep,
-    title_command_runs_agy, TITLE_COMMAND_AGY_REFUSAL,
     provider_transition_committed, running_local_session_ids, terminal_lifecycle_fallback_focus,
-    titlebar_sleep_inactive_ids,
+    title_command_runs_agy, titlebar_sleep_inactive_ids, TITLE_COMMAND_AGY_REFUSAL,
 };
 pub use crate::sidebar_actions::{
     plan_remote_project_open, RemoteProjectOpen, ToastButton, REMOTE_SSH_OPEN_TARGET_IDS,
@@ -228,8 +227,8 @@ pub use crate::sidebar_drag::{
 };
 pub use crate::sidebar_menu::{
     agent_launcher_items, agent_launcher_items_with_accounts, agent_logo_color, agent_logo_icons,
-    agent_logo_svg, colored_agent_logo, hover_slots, more_menu_row_rail_key, hover_strip, machine_workspace_menu,
-    menu_to_json, project_header_actions, unified_default_hover_buttons,
+    agent_logo_svg, colored_agent_logo, hover_slots, hover_strip, machine_workspace_menu,
+    menu_to_json, more_menu_row_rail_key, project_header_actions, unified_default_hover_buttons,
     unified_delete_worktree_menu, unified_hover_buttons, without_project_rename, workspace_menu,
     workspace_switch_target, HeaderCommand, HoverAction, HoverSlot, HoverStrip, LauncherAgent,
     MenuCommand, MenuGroup, MenuHost, MenuItem, MenuOpenTarget, MenuSecondary, MenuSplit,

@@ -71,8 +71,8 @@ pub(in crate::app) fn with_moved_draft_text(
 impl GhostexGpuiApp {
     /// The project a one-click New session (button or Cmd+N) lands in: the open session's project
     /// when there is one (ignoring Quick Automations and hidden system projects drawn under Main
-    /// Hub), else this computer's Main Hub (`is_home && !is_help_home`), else the active project
-    /// or the first non-hidden local project.
+    /// Hub), else this computer's No project ([`no_project_row`]), else the active project or the
+    /// first non-hidden local project.
     pub(crate) fn gx_store_new_session_default_group_id(&self) -> Option<String> {
         let presentation = self.gx_store.core.presentation();
         let is_hidden_system_project = |project: &ProjectKey| {
@@ -94,11 +94,7 @@ impl GhostexGpuiApp {
             }
         }
         if let Some(local) = presentation.loaded(&MachineId::Local) {
-            if let Some(home) = local
-                .projects()
-                .iter()
-                .find(|project| project.is_home && !project.is_help_home)
-            {
+            if let Some(home) = no_project_row(local.projects()) {
                 return Some(ProjectKey::local(home.project_id.clone()).to_sidebar_group_id());
             }
         }
@@ -436,8 +432,9 @@ impl GhostexGpuiApp {
         Some(ghostex_gx_core::menu_to_json(&items))
     }
 
-    /// Whether `(machine_id, project_id)` is a computer's Main Hub project (`is_home && !is_help_home`).
-    pub(crate) fn gx_store_is_main_hub_project(&self, machine_id: &str, project_id: &str) -> bool {
+    /// Whether `(machine_id, project_id)` is the project a computer's "No project" drafts go to
+    /// ([`no_project_row`]).
+    pub(crate) fn gx_store_is_no_project_target(&self, machine_id: &str, project_id: &str) -> bool {
         let machine = if machine_id == LOCAL_MACHINE_ID {
             MachineId::Local
         } else {
@@ -447,13 +444,13 @@ impl GhostexGpuiApp {
             .core
             .presentation()
             .loaded(&machine)
-            .and_then(|loaded| loaded.project(project_id))
-            .is_some_and(|project| project.is_home && !project.is_help_home)
+            .and_then(|loaded| no_project_row(loaded.projects()))
+            .is_some_and(|project| project.project_id == project_id)
     }
 
-    /// Every computer's Main Hub project grouped as one choice, for the "No project" mode's
-    /// computer picker (even when different computers have different home folder paths).
-    pub(crate) fn gx_store_main_hub_choice(
+    /// Every computer's No project grouped as one choice, for the "No project" mode's computer
+    /// picker (each computer has its own No project, with its own id).
+    pub(crate) fn gx_store_no_project_choice(
         &self,
         preferred_machine_id: &str,
     ) -> Option<UnifiedProjectChoice> {
@@ -482,11 +479,7 @@ impl GhostexGpuiApp {
             let Some(loaded) = store.loaded(&machine) else {
                 continue;
             };
-            let Some(home) = loaded
-                .projects()
-                .iter()
-                .find(|project| project.is_home && !project.is_help_home)
-            else {
+            let Some(home) = no_project_row(loaded.projects()) else {
                 continue;
             };
             machines.push(ghostex_gx_core::unified_sidebar::UnifiedChoiceMachine {
@@ -504,8 +497,8 @@ impl GhostexGpuiApp {
             .position(|machine| machine.machine_id == preferred_machine_id)
             .unwrap_or(0);
         Some(UnifiedProjectChoice {
-            repo_key: "main-hub".to_string(),
-            label: "Main Hub".to_string(),
+            repo_key: "no-project".to_string(),
+            label: ghostex_gx_core::NO_PROJECT_NAME.to_string(),
             has_sessions: true,
             recent: false,
             detail: None,
@@ -514,7 +507,7 @@ impl GhostexGpuiApp {
         })
     }
 
-    /// Toggles a draft between "No project" (Main Hub) and its previous/default project.
+    /// Toggles a draft between "No project" and its previous/default project.
     pub(crate) fn gx_store_toggle_draft_no_project(
         &mut self,
         draft: PendingDraftMove,
@@ -536,7 +529,7 @@ impl GhostexGpuiApp {
                     project_id: draft.from_project_id.clone(),
                 });
             }
-            let Some(home_choice) = self.gx_store_main_hub_choice(&draft.from_machine_id) else {
+            let Some(home_choice) = self.gx_store_no_project_choice(&draft.from_machine_id) else {
                 return;
             };
             let Some(target) = home_choice
@@ -571,7 +564,7 @@ impl GhostexGpuiApp {
             .no_project_return
             .take()
             .filter(|saved| {
-                !self.gx_store_is_main_hub_project(&saved.machine_id, &saved.project_id)
+                !self.gx_store_is_no_project_target(&saved.machine_id, &saved.project_id)
                     && choices.iter().any(|choice| {
                         choice.machines.iter().any(|machine| {
                             machine.connected
@@ -588,7 +581,7 @@ impl GhostexGpuiApp {
                         machine.connected
                             && (!require_same_machine
                                 || machine.machine_id == draft.from_machine_id)
-                            && !self.gx_store_is_main_hub_project(
+                            && !self.gx_store_is_no_project_target(
                                 &machine.machine_id,
                                 &machine.project_id,
                             )
@@ -802,7 +795,7 @@ impl GhostexGpuiApp {
         host.persist();
     }
 
-    /// Commits a draft's pending target destination ("No project" / Main Hub or another project or
+    /// Commits a draft's pending target destination ("No project" or another project or
     /// computer) at the moment the user presses Send (Q4849 `"follow"` + Q4850 `"keep-space"`).
     /// Runs the server move/create while the current view stays up showing the 0ms optimistic sent
     /// message, then transfers the live `NativeChatView` into the target project in a single frame
@@ -1249,4 +1242,24 @@ mod tests {
         assert!(!code.contains(concat!("project_", "activation")));
         assert!(!code.contains(concat!("activate_", "project")));
     }
+}
+
+/// The project a computer's "No project" drafts and Cmd+N go to: its No project (gxserver
+/// `isNoProject`), or its Main Hub on a computer whose gxserver predates No project.
+///
+/// CDXC:Projects 2026-11-27 DECISION:
+/// User (Q5260 C, Q5285 A): chats without a project start in No project, and the draft pill
+/// keeps reading "No project". Before, the pill and Cmd+N aimed at Main Hub (the project at ~);
+/// a connected computer on an older gxserver has no No project, so it keeps that.
+pub(crate) fn no_project_row(
+    projects: &[ghostex_gx_protocol::PresentationProject],
+) -> Option<&ghostex_gx_protocol::PresentationProject> {
+    projects
+        .iter()
+        .find(|project| project.is_no_project)
+        .or_else(|| {
+            projects
+                .iter()
+                .find(|project| project.is_home && !project.is_help_home)
+        })
 }

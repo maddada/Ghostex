@@ -291,6 +291,13 @@ impl GhostexGpuiApp {
                             .flex_shrink_0()
                             .text_color(appearance.muted)
                             .into_any_element(),
+                        // CDXC:Projects 2026-11-27 DECISION: User approved the option C mockup: No project's header draws the outlined chat bubble (message.svg), not a letter tile.
+                        _ if group.is_no_project => gpui::svg()
+                            .path("titlebar/message.svg")
+                            .size(px(16.0 * scale))
+                            .flex_shrink_0()
+                            .text_color(appearance.muted)
+                            .into_any_element(),
                         _ if folder_icon => gpui::svg()
                             .path("titlebar/folder.svg")
                             .size(px(16.0 * scale))

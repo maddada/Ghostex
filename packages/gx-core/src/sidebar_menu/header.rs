@@ -110,6 +110,23 @@ pub fn project_header_actions(
         ));
         return pinned;
     }
+    // CDXC:Projects 2026-11-27 DECISION:
+    // User (Q5282 A): No project holds chats only, so its header has one New Chat button and no
+    // menu of other session kinds (terminals, coordinators and browsers start in a real project or
+    // in Main Hub).
+    if project.is_no_project {
+        return vec![MenuItem::row(
+            "New Chat",
+            "message",
+            MenuCommand::project_action(
+                group_id,
+                "agent",
+                host.primary_agent_at(&group.agent_place)
+                    .map(|agent| agent.agent_id.as_str()),
+            ),
+        )
+        .with_hotkey("createAgentSession")];
+    }
     // Merged project header button: one split button with an outlined chat bubble icon.
     // Primary click starts a new chat draft in this project; the chevron opens the menu with
     // New chat, Terminal, Coordinator, Browser, Run in a Box, the configured agents, and Configure.
@@ -150,6 +167,8 @@ pub struct ProjectHeaderRows {
     pub new_tab: Option<MenuItem>,
     pub new_terminal: Option<MenuItem>,
     pub pinned_actions: Vec<MenuItem>,
+    /// No project's New Chat, the first row of its short menu (project.rs).
+    pub new_chat: Option<MenuItem>,
 }
 
 impl ProjectHeaderRows {
@@ -203,6 +222,14 @@ pub fn project_header_rows(
     };
     if project.bot_profile.is_some() {
         return ProjectHeaderRows::default();
+    }
+    if project.is_no_project {
+        return ProjectHeaderRows {
+            new_chat: project_header_actions(group, settings, host)
+                .into_iter()
+                .next(),
+            ..ProjectHeaderRows::default()
+        };
     }
     let worktree = if project.worktree.is_some() {
         MenuItem::row(
@@ -262,6 +289,7 @@ pub fn project_header_rows(
         new_tab,
         new_terminal: Some(new_terminal),
         pinned_actions: pinned_actions(group_id, project, settings, host),
+        new_chat: None,
     }
 }
 

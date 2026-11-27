@@ -692,7 +692,40 @@ impl<'a> SidebarMenus<'a> {
         Some(session::SessionGroupMoves {
             project_list_id,
             groups,
+            projects: self.no_project_moves(current),
         })
+    }
+
+    /// Where Move to project can take a chat of `current`: this computer's own projects in the
+    /// list, without No project, Main Hub, Ghostex's system projects, bots and worktrees. Empty
+    /// unless `current` is this computer's No project.
+    fn no_project_moves(&self, current: &GroupView) -> Vec<(String, String)> {
+        let is_local_no_project = current.core.remote_machine.is_none()
+            && current
+                .core
+                .project_context
+                .as_ref()
+                .is_some_and(|project| project.is_no_project);
+        if !is_local_no_project {
+            return Vec::new();
+        }
+        let mut projects: Vec<(String, String)> = self
+            .view
+            .groups
+            .iter()
+            .filter(|group| group.core.remote_machine.is_none())
+            .filter_map(|group| {
+                let project = group.core.project_context.as_ref()?;
+                let own = !project.is_no_project
+                    && !project.is_home
+                    && project.bot_profile.is_none()
+                    && project.gbot.is_none()
+                    && project.worktree.is_none();
+                own.then(|| (project.project_id.clone(), group.core.title.clone()))
+            })
+            .collect();
+        projects.dedup_by(|a, b| a.0 == b.0);
+        projects
     }
 
     fn find_row(&self, sidebar_session_id: &str) -> Option<(&'a GroupView, &'a SessionView)> {

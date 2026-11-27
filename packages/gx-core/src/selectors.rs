@@ -56,6 +56,10 @@ pub enum TabDirection {
 
 /// Synthetic project id of the Quick Automations overview row; never a workspace tab.
 pub const QUICK_AUTOMATIONS_PROJECT_ID: &str = "quick-automations";
+/// The name of the project that holds every chat, terminal and coordinator started without a
+/// project (gxserver `no_project/`), shown on the sidebar group, the draft pill and the phone.
+/// One constant so a rename is one line (the user is choosing a name, 2026-11-27).
+pub const NO_PROJECT_NAME: &str = "No project";
 /// Title of a session that has none.
 pub const DEFAULT_TERMINAL_SESSION_TITLE: &str = "Terminal Session";
 /// Upper bound of a tab title, in UTF-16 code units like the JavaScript it replaces.

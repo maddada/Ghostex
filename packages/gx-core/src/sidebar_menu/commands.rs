@@ -411,6 +411,15 @@ pub(crate) mod message {
 
     /// The drag's own `moveSessionToGroup` (sidebar_drag/order_write.rs): a user-made group's id
     /// moves the row into it, the project's own group id takes it out of every user-made group.
+    /// Move to project on a chat in No project (native_sidebar/move_to_project.rs on the desktop).
+    pub(crate) fn move_session_to_project(session_id: &str, target_project_id: &str) -> Value {
+        json!({
+            "type": "moveSessionToProject",
+            "sessionId": session_id,
+            "targetProjectId": target_project_id,
+        })
+    }
+
     pub(crate) fn move_session_to_group(session_id: &str, group_id: &str) -> Value {
         json!({ "type": "moveSessionToGroup", "sessionId": session_id, "groupId": group_id })
     }

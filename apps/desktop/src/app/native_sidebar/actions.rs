@@ -165,6 +165,12 @@ impl GhostexGpuiApp {
             }
             return;
         }
+        // Move to project on a chat in No project (move_to_project.rs): a gxserver call of its
+        // own, then the moved chat opens.
+        if command["type"] == "command" && command["message"]["type"] == "moveSessionToProject" {
+            self.move_native_sidebar_session_to_project(&command["message"], cx);
+            return;
+        }
         // A pin call that carries a place in Pinned (a pinned drop in either sidebar, gx-core
         // sidebar_drag/pinned_order.rs) moves the local row first, on whichever machine the
         // session is, so the row lands under the pointer before gxserver answers.

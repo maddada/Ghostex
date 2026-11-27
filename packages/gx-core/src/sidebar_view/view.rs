@@ -423,6 +423,8 @@ pub struct ProjectContextView {
     pub work_tracker_github: bool,
     /// The home project: its header is Main Hub's row (`SidebarView::home_headers`).
     pub is_home: bool,
+    /// The No project project (server/src/no_project/): every chat without a project.
+    pub is_no_project: bool,
     /// The GBot whose folder this project is: the group is drawn as that bot's row in Main Hub's
     /// GBots section (`SidebarView::gbots`), never as a project.
     pub gbot: Option<ghostex_gx_protocol::presentation::PresentationGbotsBot>,

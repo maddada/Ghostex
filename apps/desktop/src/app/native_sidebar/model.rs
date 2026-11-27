@@ -75,6 +75,10 @@ pub(crate) struct NativeSidebarGroup {
     /// "New chat" row.
     #[serde(default)]
     pub(crate) is_home: bool,
+    /// No project (gxserver `isNoProject`): its "Sessions" section reads "Chats", it always
+    /// shows, and its list ends with the quiet "New Chat" row.
+    #[serde(default)]
+    pub(crate) is_no_project: bool,
     #[serde(default)]
     pub(crate) is_stale: bool,
     /// The project a user-made session group belongs to (gx-core `owner_project_group_id`); the

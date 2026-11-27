@@ -1334,6 +1334,7 @@ pub(super) fn project_context(
         work_tracker_github: project.work_tracker.as_deref() == Some("github"),
         is_home: project.is_home,
         is_help_home: project.is_help_home,
+        is_no_project: project.is_no_project,
         is_autopilot: project.autopilot_supervisor_project,
         gbot: project.gbots_bot.clone(),
         folder_problem: super::folder_problem::FolderProblemView::new(

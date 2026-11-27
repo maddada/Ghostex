@@ -636,13 +636,14 @@ impl NativeChatView {
         vec![
             make_pill(
                 "chat-draft-no-project",
-                "No project",
-                crate::app::native_sidebar::chief_row_view::FLOWER_ICON,
+                ghostex_gx_core::NO_PROJECT_NAME,
+                // No project's own icon (its sidebar header), now that the pill aims there and not at Main Hub.
+                "titlebar/message.svg",
                 no_project,
                 if no_project {
-                    "No project is on (saved in Main Hub). Click to pick a project"
+                    "No project is on. Click to pick a project"
                 } else {
-                    "No project: move this draft to Main Hub"
+                    "No project: start this chat without a project"
                 },
             )
             .on_click(cx.listener(|this, _, _, cx| {

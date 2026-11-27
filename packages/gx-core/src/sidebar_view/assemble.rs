@@ -442,10 +442,15 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
         {
             continue;
         }
-        // The home group is Main Hub's row: it stays with no loose sessions.
+        // The home group is Main Hub's row: it stays with no loose sessions. So does No project,
+        // which always shows with its New Chat row (Q5283 A, server/src/no_project/project.rs).
         if hiding_on
             && plan.project.is_some()
             && !home_groups.contains(plan.group_id.as_str())
+            && !plan
+                .project
+                .as_ref()
+                .is_some_and(|project| project.is_no_project)
             && !build.core.is_active
             && !projects_with_sessions.contains(&plan.group_id)
         {

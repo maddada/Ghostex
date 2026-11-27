@@ -33,15 +33,20 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// Main Hub's quiet "New chat" row at the end of Chats. Clicking it starts a new chat in
-    /// Main Hub through the shared `start_new_agent_session_in_group` entry point.
+    /// No project's quiet "New Chat" row at the end of Chats. Clicking it starts a new chat in
+    /// No project through the shared `start_new_agent_session_in_group` entry point.
+    ///
+    /// CDXC:Projects 2026-11-27 DECISION:
+    /// User (Q5260 C, Q5263 A, Q5283 A): the row moved with the chats from Main Hub to No
+    /// project, reads "New Chat" like the phone's sheet entry, and shows even while No project
+    /// has no chats (it stands in for the empty project's "New Session" row).
     ///
     /// CDXC:Chief 2026-11-26 DECISION:
     /// User picked Part 2 option A (2026-11-24): rename Main Hub's "Sessions" section to "Chats"
     /// and end it with a quiet "New chat" row (chat-bubble outline icon, muted text). User
     /// (2026-11-26): remove the "Anything, no project needed" line that sat under it, so the row
     /// is one line.
-    fn render_native_home_new_chat_row(
+    fn render_native_no_project_new_chat_row(
         &self,
         group: &NativeSidebarGroup,
         appearance: &SidebarAppearance,
@@ -50,9 +55,9 @@ impl GhostexGpuiApp {
         let scale = appearance.scale;
         let group_id = group.group_id.clone();
         h_flex()
-            .id(format!("native-home-new-chat-{}", group.group_id))
+            .id(format!("native-no-project-new-chat-{}", group.group_id))
             .role(gpui::Role::Button)
-            .aria_label("New chat in Main Hub")
+            .aria_label("New Chat in No project")
             .h(px(super::session_list::SESSION_HEIGHT * scale))
             .flex_shrink_0()
             .mx(px(super::session_list::SESSION_INSET_X * scale))
@@ -81,7 +86,7 @@ impl GhostexGpuiApp {
                     .min_w_0()
                     .truncate()
                     .text_color(appearance.muted)
-                    .child("New chat"),
+                    .child("New Chat"),
             )
             .on_click(cx.listener(move |app, _, _, cx| {
                 cx.stop_propagation();
@@ -90,7 +95,7 @@ impl GhostexGpuiApp {
             .map(|row| {
                 self.sidebar_focus_stop(
                     row,
-                    format!("home-new-chat:{}", group.group_id),
+                    format!("no-project-new-chat:{}", group.group_id),
                     super::focus_order::SidebarStopPlace::List,
                     appearance,
                     cx,
@@ -146,6 +151,7 @@ impl GhostexGpuiApp {
                     })
                     .when(
                         !group.is_home
+                            && !group.is_no_project
                             && group.sessions.is_empty()
                             && group.project_context.is_some(),
                         |column| {
@@ -190,43 +196,43 @@ impl GhostexGpuiApp {
                             &section.session_ids,
                             section.collapsed,
                         );
-                        let append_home_new_chat = group.is_home && section.id == "sessions";
-                        let body =
-                            self.native_sidebar
-                                .disclosures
-                                .present(&key, section.collapsed)
-                                .then(|| {
-                                    let sessions = group
-                                        .sessions
-                                        .iter()
-                                        .map(|session| (session.session_id.as_str(), session))
-                                        .collect::<std::collections::HashMap<_, _>>();
-                                    let rows = self.render_native_session_rows(
-                                        group,
-                                        ids.iter()
-                                            .filter_map(|id| {
-                                                sessions
-                                                    .get(id.as_str())
-                                                    .map(|session| (*session).clone())
-                                            })
-                                            .collect(),
-                                        appearance,
-                                        cx,
-                                    );
-                                    let section_content = if append_home_new_chat {
-                                        v_flex()
-                                            .w_full()
-                                            .flex_shrink_0()
-                                            .child(rows)
-                                            .child(self.render_native_home_new_chat_row(
-                                                group, appearance, cx,
-                                            ))
-                                            .into_any_element()
-                                    } else {
-                                        rows
-                                    };
-                                    self.render_native_disclosure(key, section_content, cx)
-                                });
+                        let append_new_chat_row = group.is_no_project && section.id == "sessions";
+                        let body = self
+                            .native_sidebar
+                            .disclosures
+                            .present(&key, section.collapsed)
+                            .then(|| {
+                                let sessions = group
+                                    .sessions
+                                    .iter()
+                                    .map(|session| (session.session_id.as_str(), session))
+                                    .collect::<std::collections::HashMap<_, _>>();
+                                let rows = self.render_native_session_rows(
+                                    group,
+                                    ids.iter()
+                                        .filter_map(|id| {
+                                            sessions
+                                                .get(id.as_str())
+                                                .map(|session| (*session).clone())
+                                        })
+                                        .collect(),
+                                    appearance,
+                                    cx,
+                                );
+                                let section_content = if append_new_chat_row {
+                                    v_flex()
+                                        .w_full()
+                                        .flex_shrink_0()
+                                        .child(rows)
+                                        .child(self.render_native_no_project_new_chat_row(
+                                            group, appearance, cx,
+                                        ))
+                                        .into_any_element()
+                                } else {
+                                    rows
+                                };
+                                self.render_native_disclosure(key, section_content, cx)
+                            });
                         // The gap of the 2026-11-21 spacing (sections.rs).
                         let gap_above = if index > 0 && !hide_lone_sessions_heading {
                             super::sections::SECTION_GAP_ABOVE
@@ -255,13 +261,15 @@ impl GhostexGpuiApp {
                             })
                             .into_any_element()
                     }))
-                    .when(group.is_home && !has_sessions_section, |column| {
+                    .when(group.is_no_project && !has_sessions_section, |column| {
                         column
                             .when(!group.sections.is_empty(), |column| {
                                 column
                                     .child(div().h(px(super::sections::SECTION_GAP_ABOVE * scale)))
                             })
-                            .child(self.render_native_home_new_chat_row(group, appearance, cx))
+                            .child(
+                                self.render_native_no_project_new_chat_row(group, appearance, cx),
+                            )
                     });
                 self.render_native_project_fold(
                     key,

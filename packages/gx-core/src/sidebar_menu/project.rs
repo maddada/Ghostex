@@ -116,6 +116,22 @@ pub fn project_menu(input: &ProjectMenuInput<'_>) -> Vec<MenuItem> {
         return menu;
     };
 
+    if project.is_no_project {
+        // CDXC:Projects 2026-11-27 DECISION:
+        // User (Q5282 A): No project's menu has New Chat and Hide only. It is a Ghostex-made
+        // project with an empty folder, so the folder, rename, Space and close rows have nothing
+        // to act on; it can still be hidden like any project.
+        let mut menu: Vec<MenuItem> = input.header.new_chat.iter().cloned().collect();
+        if !menu.is_empty() {
+            menu.push(MenuItem::separator());
+        }
+        menu.push(entry_row(
+            "hide",
+            input.hidden_group,
+            MenuCommand::project_membership(group_id, "hide", None),
+        ));
+        return menu;
+    }
     if project.worktree.is_some() {
         // A worktree's own short menu (unchanged by Q4313): the header buttons, then its rows.
         let mut menu = input.header.in_order();

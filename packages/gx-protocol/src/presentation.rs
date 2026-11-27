@@ -268,6 +268,10 @@ pub struct PresentationProject {
     /// every other project and from an older daemon.
     #[serde(default, skip_serializing_if = "is_false")]
     pub is_help_home: bool,
+    /// The No project project, which holds every chat without a project
+    /// (server/src/no_project/project.rs). Absent for every other project and from an older daemon.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub is_no_project: bool,
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
     pub title: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]

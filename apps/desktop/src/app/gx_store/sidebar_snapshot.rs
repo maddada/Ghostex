@@ -546,6 +546,10 @@ fn native_group(
             .project_context
             .as_ref()
             .is_some_and(|project| project.is_home),
+        is_no_project: core
+            .project_context
+            .as_ref()
+            .is_some_and(|project| project.is_no_project),
         is_stale: core.is_stale,
         owner_group_id: ghostex_gx_core::owner_project_group_id(&core.group_id),
         machine_names: core

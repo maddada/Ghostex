@@ -40,10 +40,11 @@ pub(super) const SECTION_HEADING_GAP_BELOW: f32 = 2.0;
 /// Above a heading under another section, open or folded.
 pub(super) const SECTION_GAP_ABOVE: f32 = 6.0;
 
-/// A section's heading text: its id in sentence case ("pinned" → "Pinned"), except Main Hub's
-/// "sessions" section which reads "Chats" (2026-11-24 Main Hub Part 2 option A).
-pub(super) fn section_heading_title(id: &str, is_home: bool) -> String {
-    if is_home && id == "sessions" {
+/// A section's heading text: its id in sentence case ("pinned" → "Pinned"), except No project's
+/// "sessions" section which reads "Chats" (2026-11-24 Main Hub Part 2 option A, moved with the
+/// chats to No project on 2026-11-27, Q5260 C).
+pub(super) fn section_heading_title(id: &str, is_no_project: bool) -> String {
+    if is_no_project && id == "sessions" {
         return "Chats".to_string();
     }
     let mut chars = id.chars();
@@ -95,7 +96,7 @@ impl GhostexGpuiApp {
         let owner = super::menus::MenuOwner::default();
         let menu_owner = owner.clone();
         let stop_key = format!("section:{key}");
-        let title = section_heading_title(&section.id, group.is_home);
+        let title = section_heading_title(&section.id, group.is_no_project);
         h_flex()
             .id(format!("native-sidebar-section-{key}"))
             .on_prepaint(super::menus::record_menu_owner(&owner))
