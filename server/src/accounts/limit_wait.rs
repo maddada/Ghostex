@@ -246,6 +246,28 @@ pub(super) fn describe_in_pool(
                     "here": !a.selector.is_empty(),
                 }));
             }
+            // CDXC:AgentProviders 2026-11-27 WHY:
+            // The user, after their coordinator and five threads stopped at account #1's weekly
+            // limit: "the app didn't show me a card saying why it failed to switch to another
+            // account (it was cuz ST and MS accounts were not logged in on this pc)". Accounts
+            // #4 and #5 read Needs sign-in to cswap (`relogin_required`), but only a login a
+            // session reported expired (`login_expired_at`) was named here, so both fell through
+            // every branch and the card and bell said "Every automatic account is full" with no
+            // Sign in button. An account this computer reads signed out is named as such.
+            if let Some(found) = snapshot.accounts.iter().find(|d| {
+                endpoint::account_id(d) == a.id
+                    && matches!(d.status.as_str(), "loginRequired" | "identityChanged")
+            }) {
+                let never_here = found.provider == Provider::Claude
+                    && super::restore::last_plan(&a.selector)
+                        == Some(super::restore::Plan::NoSavedLogin);
+                return Some(json!({
+                    "account": a.name,
+                    "accountId": a.id,
+                    "why": "signIn",
+                    "here": !never_here,
+                }));
+            }
             let read = reading(&a.id);
             let windows = read.map(full).unwrap_or_default();
             if let Some(window) = windows
@@ -899,6 +921,35 @@ fn pool_subtitle(wait: &Value) -> String {
 }
 
 fn pool_body(wait: &Value) -> String {
+    // Signed-out accounts first: they are why the pool reads at its limit while one of them may
+    // have room, and signing one in keeps work going before the reset (see `describe_in_pool`).
+    let signed_out: Vec<&str> = wait["blocked"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|entry| entry["why"] == "signIn")
+        .filter_map(|entry| entry["account"].as_str())
+        .collect();
+    if let Some((last, rest)) = signed_out.split_last() {
+        let names = if rest.is_empty() {
+            format!("{last} isn't")
+        } else {
+            format!("{} and {last} aren't", rest.join(", "))
+        };
+        let when = match wait["resetsAt"]
+            .as_str()
+            .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
+        {
+            Some(at) => format!(
+                "Otherwise work waits until {}.",
+                local_clock_short(at.with_timezone(&Utc))
+            ),
+            None => "Otherwise work waits until an account has room.".to_string(),
+        };
+        return format!(
+            "Couldn't move to another account: {names} signed in on this computer. Sign in to keep going now. {when}"
+        );
+    }
     match (
         wait["resetsAt"]
             .as_str()
