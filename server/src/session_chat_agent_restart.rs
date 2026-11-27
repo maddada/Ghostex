@@ -65,6 +65,9 @@ pub(crate) async fn restart(
         Some(crate::coordinators::DISMISS_STOPPED_THREADS) => {
             return crate::coordinators::answer_stopped_threads(state, params, false).await
         }
+        Some(crate::accounts::usage_warning::ACTION_DISMISS) => {
+            return crate::accounts::usage_warning::answer_dismiss(state, params).await
+        }
         Some(crate::session_chat_notice::SESSION_CHAT_NOTICE_ACTION_RECONNECT) => {
             return crate::session_chat_account_sign_in::reconnect(state, params).await
         }

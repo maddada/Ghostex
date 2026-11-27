@@ -885,10 +885,13 @@ fn screen_fix(notice: &SessionChatTerminalNotice, thread_ref: &str) -> Option<St
                 .into_iter()
                 .flatten()
                 .any(|entry| matches!(entry["why"].as_str(), Some("signIn" | "off")));
+            // CDXC:AgentProviders 2026-11-27 DECISION (Q5297): one Needs you line from the
+            // coordinator says why, and nothing is sent to the stopped threads. Ghostex keeps that
+            // line itself (server/src/accounts/usage_warning.rs), so the coordinator only points at it.
             let ask = if user_fix {
-                " Tell the user now, in one line, which account to sign in to or turn on (Settings > Accounts): only they can, and the thread stays stopped until then or the reset."
+                " Ghostex already put one line in the user's Needs you saying which account to sign in to or turn on (Settings > Accounts): only they can, and the thread stays stopped until then or the reset. Mention it once in your reply; don't add another Needs you item and don't message the stopped threads."
             } else {
-                ""
+                " Don't message the stopped threads: they carry on by themselves."
             };
             return Some(format!(
                 "Ghostex can't move it to another account right now. {}{ask} {switch}.",

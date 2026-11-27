@@ -298,6 +298,9 @@ pub fn resolve_session_chat_terminal_notice(
     // A coordinator whose threads a restart cut off, when nothing else needs the card
     // (CDXC:Coordinators 2026-11-14 in server/src/coordinators/stopped_by_restart.rs).
     .or_else(|| crate::coordinators::stopped_threads_card(project_id, session_id).filter(visible))
+    // The early warning before the account a coordinator runs on runs out
+    // (CDXC:AgentProviders 2026-11-27 in server/src/accounts/usage_warning.rs).
+    .or_else(|| crate::accounts::usage_warning::card(project_id, session_id).filter(visible))
     .map(|mut notice| {
         if notice.kind == SESSION_CHAT_NOTICE_USAGE_LIMIT {
             notice.account_wait = crate::accounts::limit_wait::notice_wait(project_id, session_id);

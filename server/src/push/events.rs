@@ -168,6 +168,31 @@ pub(crate) fn announce_pool_blocked(
     });
 }
 
+/// One push per account and threshold when an account a coordinator runs on is close to its limit
+/// and no other account can take over here (server/src/accounts/usage_warning.rs). The title names
+/// the account by its number only; a tap opens the coordinator, where the card is.
+pub(crate) fn announce_usage_low(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    notification_id: &str,
+    title: &str,
+) {
+    state.push.enqueue_alert(AlertEvent {
+        kind: AlertKind::UsageLow,
+        project_id: project_id.to_string(),
+        session_id: session_id.to_string(),
+        notification_id: notification_id.to_string(),
+        agent_name: title.to_string(),
+        project_name: String::new(),
+        session_title: String::new(),
+        occurred_at_ms: chrono::Utc::now().timestamp_millis(),
+        worker: false,
+        open_session_id: None,
+        url: None,
+    });
+}
+
 impl BlockedWhy {
     pub(crate) fn kind(self) -> AlertKind {
         match self {

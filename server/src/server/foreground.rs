@@ -550,6 +550,7 @@ pub async fn run_gxserver_foreground(
     crate::collab_shim::migrate_at_start(&paths);
     crate::accounts::recovery::start(state.clone());
     crate::accounts::reset_watch::start(state.clone());
+    crate::accounts::usage_warning::start(state.clone());
     crate::accounts::claude_swap_switch::start(state.clone());
     crate::accounts::usage_only::retire_usage_accounts(&state);
     session_auto_sleep_sweep::start_session_auto_sleep_sweep(state.clone());

@@ -306,6 +306,10 @@ pub struct SessionChatTerminalNotice {
     /// waiting-for-reset state plus parsed `resetsAt` (`accounts/quota_wait.rs`). Additive so older
     /// phones ignore it and still render the plain usage-limit notice cleanly.
     pub quota_wait: Option<Value>,
+    /// The early warning before an account runs out (`usageWarning`, accounts/usage_warning.rs):
+    /// the facts the chat core builds its dropdown from (`blocked`, `coordinator`). Never
+    /// classified from the screen.
+    pub usage_warning: Option<Value>,
     /// A checkbox the card draws above its buttons (`checkbox`: `label`, `checked`, `hint` for its
     /// (i) tooltip, and the `answer` a click sends), for a card Ghostex makes itself; never
     /// classified from the screen (CDXC:AgentProviders 2026-11-14 in server/src/carry_on_compaction.rs).
@@ -354,6 +358,7 @@ impl SessionChatTerminalNotice {
             auto_trust: false,
             account_wait: None,
             quota_wait: None,
+            usage_warning: None,
             checkbox: None,
             checkboxes: None,
             checkboxes_detail: None,
@@ -496,6 +501,7 @@ impl SessionChatTerminalNotice {
             && other.is_some_and(|other| {
                 self.account_wait == other.account_wait
                     && self.quota_wait == other.quota_wait
+                    && self.usage_warning == other.usage_warning
                     && self.checkbox == other.checkbox
                     && self.checkboxes == other.checkboxes
                     && self.checkboxes_detail == other.checkboxes_detail
@@ -700,6 +706,9 @@ impl SessionChatTerminalNotice {
         }
         if let Some(wait) = self.quota_wait.as_ref() {
             map.insert("quotaWait".to_string(), wait.clone());
+        }
+        if let Some(warning) = self.usage_warning.as_ref() {
+            map.insert("usageWarning".to_string(), warning.clone());
         }
         if let Some(checkbox) = self.checkbox.as_ref() {
             map.insert("checkbox".to_string(), checkbox.clone());

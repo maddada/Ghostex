@@ -77,7 +77,9 @@ impl GhostexGpuiApp {
                     && item
                         .account_id
                         .as_deref()
-                        .is_some_and(|id| id.starts_with("pool:"));
+                        // `low:` is the early warning before an account runs out with no other
+                        // account to move to (server/src/accounts/usage_warning.rs).
+                        .is_some_and(|id| id.starts_with("pool:") || id.starts_with("low:"));
                 if !is_reset && !is_pool {
                     continue;
                 }

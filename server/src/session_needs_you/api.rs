@@ -433,6 +433,71 @@ pub(crate) fn handle_needs_you_request(
     }
 }
 
+/// A to-do Ghostex itself keeps on a session (accounts/usage_warning.rs: an account about to run
+/// out, threads out of usage): its own words, so none of the checks an agent's `needs-you add`
+/// gets. Returns its tag.
+pub(crate) fn add_ghostex_item(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+    session_id: &str,
+    title: &str,
+    detail: &str,
+) -> Result<String, DomainStateError> {
+    crate::session_chat_open_questions::read_up_to_date(
+        state, db, repository, project_id, session_id,
+    );
+    let _lock = store::write_lock();
+    let session = session_of(repository, project_id, session_id)?;
+    let mut record = NeedsYouRecord::of(&session);
+    let floor = tag_floor(db, project_id, session_id);
+    let item = store::add(
+        &mut record,
+        NewItem {
+            title: title.to_string(),
+            detail: detail.to_string(),
+            command: String::new(),
+            answers: Vec::new(),
+        },
+        floor,
+        &crate::coordinators::now_iso(),
+    )?;
+    store::write(db, project_id, session_id, &record)?;
+    changed(state, db, repository, project_id, session_id, &record);
+    Ok(item.tag)
+}
+
+/// Whether the to-do `tag` is still open on the session (the user has not pressed Done).
+pub(crate) fn ghostex_item_open(session: &Value, tag: &str) -> bool {
+    NeedsYouRecord::of(session)
+        .open
+        .iter()
+        .any(|item| item.tag.eq_ignore_ascii_case(tag))
+}
+
+/// Takes a to-do [`add_ghostex_item`] made out again once what it asked is no longer needed.
+pub(crate) fn drop_ghostex_item(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+    session_id: &str,
+    tag: &str,
+) -> Result<(), DomainStateError> {
+    let _lock = store::write_lock();
+    let session = session_of(repository, project_id, session_id)?;
+    let mut record = NeedsYouRecord::of(&session);
+    if record
+        .settle(tag, "dropped", "", &crate::coordinators::now_iso())
+        .is_some()
+    {
+        store::write(db, project_id, session_id, &record)?;
+        changed(state, db, repository, project_id, session_id, &record);
+    }
+    Ok(())
+}
+
 /// After a write: the frames' copy, the chat on every client, and the sidebar row's count.
 fn changed(
     state: &AppState,
