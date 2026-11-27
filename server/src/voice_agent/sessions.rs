@@ -330,29 +330,18 @@ pub(super) fn session_info(
     })
 }
 
-/// This computer's sessions and the connected computers' (each list with an orchestrator's threads
-/// right after it, `nest`), in one waiting-first list. An orchestrator keeps its threads right
-/// after it.
+/// This computer's sessions (each orchestrator followed by its threads) and another computer's,
+/// in one waiting-first list. An orchestrator keeps its threads right after it.
 pub(super) fn merge(local: Vec<SessionInfo>, remote: Vec<SessionInfo>) -> Vec<SessionInfo> {
     let mut groups: Vec<Vec<SessionInfo>> = Vec::new();
-    // Each row's group, by ref: a thread joins its orchestrator's (refs name the computer too).
-    let mut group_of: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-    for row in local.into_iter().chain(remote) {
-        let parent = row
-            .thread_of
-            .as_ref()
-            .and_then(|parent| group_of.get(&parent.reference).copied());
-        let group = match parent {
-            Some(group) => group,
-            None => {
-                groups.push(Vec::new());
-                groups.len() - 1
-            }
-        };
-        group_of.insert(row.reference(), group);
-        groups[group].push(row);
+    for row in local {
+        match groups.last_mut() {
+            Some(group) if row.thread_of.is_some() => group.push(row),
+            _ => groups.push(vec![row]),
+        }
     }
-    // Stable: each computer's rows keep their order among equals.
+    groups.extend(remote.into_iter().map(|row| vec![row]));
+    // Stable: this computer's rows keep their order among equals.
     groups.sort_by(|a, b| {
         a[0].state
             .order()
@@ -362,41 +351,13 @@ pub(super) fn merge(local: Vec<SessionInfo>, remote: Vec<SessionInfo>) -> Vec<Se
     groups.into_iter().flatten().collect()
 }
 
-/// Marks each open thread of an open orchestrator of this computer and moves it right after that
-/// orchestrator (`nest`).
+/// Marks each open thread of an open orchestrator and moves it right after that orchestrator,
+/// keeping the waiting-first order among the threads. A thread whose orchestrator is not open
+/// stays a top-level session, as in the sidebar.
 fn nest_threads(
     rows: Vec<SessionInfo>,
     links: &[crate::coordinators::ThreadRecord],
     orchestrators: &std::collections::HashSet<String>,
-) -> Vec<SessionInfo> {
-    nest(
-        rows,
-        |reference| {
-            links
-                .iter()
-                .find(|link| format!("{}:{}", link.project_id, link.session_id) == reference)
-                .map(|link| {
-                    (
-                        format!(
-                            "{}:{}",
-                            link.coordinator_project_id, link.coordinator_session_id
-                        ),
-                        link.is_resolved(),
-                    )
-                })
-        },
-        |reference| orchestrators.contains(reference),
-    )
-}
-
-/// Marks each open thread of an open orchestrator and moves it right after that orchestrator,
-/// keeping the waiting-first order among the threads. A thread whose orchestrator is not open
-/// stays a top-level session, as in the sidebar. `parent` names a session's orchestrator by ref
-/// and whether that orchestrator marked it done; `orchestrator` says whether a session is one.
-pub(super) fn nest(
-    rows: Vec<SessionInfo>,
-    parent: impl Fn(&str) -> Option<(String, bool)>,
-    orchestrator: impl Fn(&str) -> bool,
 ) -> Vec<SessionInfo> {
     let titles: std::collections::HashMap<String, String> = rows
         .iter()
@@ -406,14 +367,21 @@ pub(super) fn nest(
         .into_iter()
         .map(|mut row| {
             let reference = row.reference();
-            row.thread_of = parent(&reference).and_then(|(parent, resolved)| {
-                let title = titles.get(&parent)?.clone();
-                (parent != reference).then(|| ThreadParent {
-                    reference: parent,
-                    title,
-                    resolved,
-                })
-            });
+            row.thread_of = links
+                .iter()
+                .find(|link| format!("{}:{}", link.project_id, link.session_id) == reference)
+                .and_then(|link| {
+                    let parent = format!(
+                        "{}:{}",
+                        link.coordinator_project_id, link.coordinator_session_id
+                    );
+                    let title = titles.get(&parent)?.clone();
+                    (parent != reference).then(|| ThreadParent {
+                        reference: parent,
+                        title,
+                        resolved: link.is_resolved(),
+                    })
+                });
             row
         })
         .partition(|row| row.thread_of.is_some());
@@ -427,7 +395,7 @@ pub(super) fn nest(
             threads = rest;
             mine
         };
-        if orchestrator(&reference) {
+        if orchestrators.contains(&reference) {
             row.threads = Some(mine.len());
         }
         nested.push(row);
@@ -496,42 +464,26 @@ pub(super) struct SessionsRead {
     pub(super) sessions: Vec<SessionInfo>,
     /// The connected computers that could not be read: their sessions are missing, not closed.
     pub(super) unavailable: Vec<Unavailable>,
-    /// The connected computers, by name, that did not say in time which of their sessions are
-    /// threads (`computers::THREADS_TIMEOUT`): a thread their last answer named stays marked while
-    /// it is open; a thread among the others is not marked.
-    pub(super) threads_unknown: Vec<String>,
 }
 
 /// Every open session on this computer and on the connected computers that answered, waiting ones
-/// first, for a lookup by ref: a connected computer's threads are marked only when they were read
-/// already (`computers::Threads::NotNeeded`).
+/// first.
 pub(super) async fn list_sessions_async(state: &Arc<AppState>) -> Result<Vec<SessionInfo>, String> {
-    Ok(read_everywhere(state, computers::Threads::NotNeeded)
-        .await?
-        .sessions)
+    Ok(list_everywhere_async(state).await?.sessions)
 }
 
-/// Every open session here and on the connected computers with each coordinator's threads after
-/// it, the computers that could not be read (Agent access off, or not answering) with why, and
-/// those that did not say which of their sessions are threads.
+/// Every open session here and on the connected computers, and the computers that could not be
+/// read (Agent access off, or not answering), with why.
 pub(super) async fn list_everywhere_async(state: &Arc<AppState>) -> Result<SessionsRead, String> {
-    read_everywhere(state, computers::Threads::Wanted).await
-}
-
-async fn read_everywhere(
-    state: &Arc<AppState>,
-    threads: computers::Threads,
-) -> Result<SessionsRead, String> {
     let local_state = state.clone();
     let (local, elsewhere) = tokio::join!(
         tokio::task::spawn_blocking(move || list_sessions(&local_state)),
-        computers::other_computers(state, threads),
+        computers::other_computers(state),
     );
     let local = local.map_err(|error| error.to_string())??;
     Ok(SessionsRead {
         sessions: merge(local, elsewhere.sessions),
         unavailable: elsewhere.unavailable,
-        threads_unknown: elsewhere.threads_unknown,
     })
 }
 
@@ -540,7 +492,7 @@ pub(super) async fn list_projects_async(state: &Arc<AppState>) -> Result<Vec<Pro
     let local_state = state.clone();
     let (local, elsewhere) = tokio::join!(
         tokio::task::spawn_blocking(move || list_projects(&local_state)),
-        computers::other_computers(state, computers::Threads::NotNeeded),
+        computers::other_computers(state),
     );
     let mut projects = local.map_err(|error| error.to_string())??;
     projects.extend(elsewhere.projects);

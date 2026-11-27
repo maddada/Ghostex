@@ -142,9 +142,8 @@ pub(super) fn ensure_running(state: &Arc<AppState>) {
                 seeded = true;
                 // Each call keeps its own scope: a focused one learns from the list whether its
                 // session was renamed or closed, and drops the announcements it does not want. The
-                // computers that could not be read, or did not say which sessions are threads, go
-                // with it, so their sessions are not taken for closed or opened
-                // (conversation/sessions_context.rs).
+                // computers that could not be read go with it, so their sessions are not taken for
+                // closed (conversation/sessions_context.rs).
                 let read = Arc::new(read);
                 for tx in registry::senders() {
                     let _ = tx.send(Input::Sessions(read.clone()));

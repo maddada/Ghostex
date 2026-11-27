@@ -240,11 +240,10 @@ async fn voice_mode_lists_and_works_on_a_connected_computers_sessions() {
     let shown = tool("show_session", json!({"session": "Linux build fix"})).await;
     assert_eq!(shown["shown"], true, "{shown}");
     assert_eq!(shown["session"]["ref"], "S9r:P1:G1");
-    // The two refusals and the show sent nothing but the session list reads (the rows, the
-    // projects, and which rows are a coordinator's threads).
-    assert!(paths_seen(&seen)[before..].iter().all(|path| path == "/api/listSessions"
-        || path == "/api/listProjects"
-        || path == "/api/readPresentationSnapshot"));
+    // The two refusals and the show sent nothing but the session list reads.
+    assert!(paths_seen(&seen)[before..]
+        .iter()
+        .all(|path| path == "/api/listSessions" || path == "/api/listProjects"));
 
     // A new agent in that computer's project starts there, with its first prompt.
     let started = tool(
