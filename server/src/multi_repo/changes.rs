@@ -117,6 +117,21 @@ pub(crate) async fn multi_repo_diff(
             &repo.rel,
         );
         let files = repo_patch.matches("diff --git ").count();
+        // What Merge would bring into this repo's default branch: the same count Merge reads
+        // (worktree_ops/multi_repo.rs `merge_session_folder`), so the client hides Merge when
+        // every repo is at 0.
+        let repo_path = std::path::PathBuf::from(&repo.path);
+        let to_merge = tokio::task::spawn_blocking(move || {
+            let default = super::git::default_branch(&repo_path)?;
+            super::git::read(
+                &repo_path,
+                &["rev-list", "--count", &format!("{default}..HEAD")],
+            )
+            .and_then(|count| count.parse::<u64>().ok())
+        })
+        .await
+        .ok()
+        .flatten();
         if !patch.is_empty() && !patch.ends_with('\n') {
             patch.push('\n');
         }
@@ -139,6 +154,7 @@ pub(crate) async fn multi_repo_diff(
             "defaultBranch": answer.get("defaultBranch"),
             "onDefaultBranch": answer.get("onDefaultBranch"),
             "files": files,
+            "toMerge": to_merge,
         }));
         if first.is_none() {
             first = Some(answer);

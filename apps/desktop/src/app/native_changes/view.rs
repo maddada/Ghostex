@@ -1234,6 +1234,16 @@ impl ChangesView {
         cx.notify();
     }
 
+    /// Some repo of a project that spans several has commits Merge would bring in (or the
+    /// gxserver does not say, so Merge stays offered).
+    pub(crate) fn has_commits_to_merge(&self) -> bool {
+        self.data.as_ref().is_some_and(|data| {
+            data.repos
+                .iter()
+                .any(|repo| repo.to_merge.is_none_or(|count| count > 0))
+        })
+    }
+
     /// The project spans several repos (`changesDiff` answered `multiRepo`).
     pub(crate) fn is_multi_repo(&self) -> bool {
         self.data

@@ -31,7 +31,7 @@ impl ChangesView {
             // CDXC:Changes 2026-11-27 DECISION: User picked "One Merge for every repo" (Q5277).
             // After "Commit 2 repos" nothing is left to commit, so the bar keeps a Merge button for
             // a project that spans several repos; without it the branch could not be merged.
-            let merge = (self.is_multi_repo() && self.can_merge())
+            let merge = (self.is_multi_repo() && self.can_merge() && self.has_commits_to_merge())
                 .then(|| self.render_merge_only_row(s, cx));
             if results.is_none() && merge.is_none() {
                 return None;

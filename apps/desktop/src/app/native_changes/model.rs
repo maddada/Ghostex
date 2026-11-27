@@ -140,6 +140,9 @@ pub(crate) struct RepoGroup {
     /// project folder's own repo).
     pub(crate) rel: String,
     pub(crate) branch: Option<String>,
+    /// Commits its branch has that its default branch lacks (`toMerge`); `None` from a gxserver
+    /// that does not say.
+    pub(crate) to_merge: Option<u64>,
 }
 
 /// What `changesDiff` answered, parsed.
@@ -196,6 +199,7 @@ impl ChangesData {
                                 name: repo["name"].as_str().unwrap_or_default().to_string(),
                                 rel: repo["rel"].as_str().unwrap_or_default().to_string(),
                                 branch: repo["branch"].as_str().map(str::to_string),
+                                to_merge: repo["toMerge"].as_u64(),
                             })
                             .collect()
                     })
@@ -220,7 +224,16 @@ impl ChangesData {
         }
         // A Commit leaves the whole branch's patch as it was but empties the uncommitted list, so
         // the list is part of what counts as a change.
-        let fingerprint = fingerprint(&format!("{patch}\0{}", uncommitted_paths.join("\n")));
+        // A Merge changes only what is left to merge, so that counts too.
+        let to_merge: Vec<String> = repos
+            .iter()
+            .map(|repo| format!("{:?}", repo.to_merge))
+            .collect();
+        let fingerprint = fingerprint(&format!(
+            "{patch}\0{}\0{}",
+            uncommitted_paths.join("\n"),
+            to_merge.join(",")
+        ));
         Self {
             repos,
             files,
