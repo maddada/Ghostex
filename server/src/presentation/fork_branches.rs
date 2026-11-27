@@ -77,7 +77,7 @@ pub fn list_session_fork_branches(
         );
         branch.insert(
             "lifecycleState".to_string(),
-            Value::String(effective_lifecycle_state(session)),
+            Value::String(shown_lifecycle_state(session)),
         );
         let last_active_ms = parse_iso_ms(&last_active_at(session)).unwrap_or(0);
         branch.insert(
@@ -119,7 +119,7 @@ pub fn list_session_fork_branches(
             );
             branch.insert(
                 "lifecycleState".to_string(),
-                Value::String(effective_lifecycle_state(session)),
+                Value::String(shown_lifecycle_state(session)),
             );
             branch.insert(
                 "lastActiveMs".to_string(),

@@ -12,7 +12,7 @@ use serde_json::{json, Map, Value};
 
 use super::launch::PARENT_KEY;
 use crate::domain::DomainRepository;
-use crate::presentation::{effective_lifecycle_state, now_iso, presentation_activity};
+use crate::presentation::{now_iso, presentation_activity, shown_lifecycle_state};
 
 type SessionKey = (String, String);
 
@@ -30,7 +30,9 @@ fn cache() -> &'static Mutex<Cache> {
 
 /// One side chat's row: what the pill's list shows and what its dot reads.
 fn build_row(session: &Value, generated_at: &str) -> Value {
-    let lifecycle = effective_lifecycle_state(session);
+    // A Native side chat whose idle agent Ghostex stopped is listed like an idle one, never
+    // "Sleeping" (CDXC:SessionSleep 2026-11-27 in presentation/session_attributes.rs).
+    let lifecycle = shown_lifecycle_state(session);
     let running = lifecycle == "running";
     let activity = presentation_activity(session, generated_at);
     let mut row = json!({

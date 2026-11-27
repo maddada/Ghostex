@@ -109,8 +109,10 @@ impl GhostexGpuiApp {
                     .clone()
                     .or_else(|| session.agent_id.clone()),
                 working: session.activity == ghostex_gx_core::protocol::SessionActivity::Working,
+                // CDXC:SessionSleep 2026-11-27 DECISION: User: "I really want users to not worry about "sleeping"". A Native chat whose idle agent Ghostex stopped is not shown "asleep" on a bead.
                 sleeping: session.lifecycle_state
-                    == ghostex_gx_core::protocol::LifecycleState::Sleeping,
+                    == ghostex_gx_core::protocol::LifecycleState::Sleeping
+                    && !session.non_cli_mode,
             })
             .collect()
     }

@@ -483,7 +483,27 @@ impl GhostexGpuiApp {
             .agents_workspace
             .session(session_id)
             .map(|session| session.presentation_state);
+        // CDXC:SessionSleep 2026-11-27 DECISION: User: "I really want users to not worry about "sleeping"". A Native chat whose idle agent Ghostex stopped reads as idle here too, never asleep: showing it in the main window opens it, and its next message starts the agent.
+        let native_chat = self
+            .agents_chat_local_key_for_session(session_id)
+            .is_some_and(|key| {
+                self.gx_store
+                    .core
+                    .presentation()
+                    .is_native_chat_local_session(&key.project_id, &key.session_id)
+            });
         match state {
+            Some(TerminalSessionPresentationState::Sleeping) if native_chat => self
+                .render_session_popup_card(
+                    row_id,
+                    format!(
+                        "{} is idle",
+                        self.agents_workspace_tab_display_title(session_id)
+                    ),
+                    "Send it a message to carry on.",
+                    "Show Session",
+                    cx,
+                ),
             Some(TerminalSessionPresentationState::Sleeping) => self.render_session_popup_card(
                 row_id,
                 format!(

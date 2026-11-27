@@ -316,6 +316,19 @@ pub(crate) fn effective_lifecycle_state(session: &Value) -> String {
     lifecycle
 }
 
+/// The lifecycle a list shows the user: `effective_lifecycle_state`, except that a Native chat
+/// whose idle agent Ghostex stopped reads `running`, like any idle chat.
+///
+/// CDXC:SessionSleep 2026-11-27 DECISION: User: "I really want users to not worry about "sleeping"", and Coordinator follow-up: make the leftover "sleeping"/"asleep" text for released Native chats follow the same rule. For display only (side chats, fork branches); what acts on a session keeps reading `effective_lifecycle_state`.
+/// SEE-ALSO: server/src/session_native_release.rs.
+pub(crate) fn shown_lifecycle_state(session: &Value) -> String {
+    let lifecycle = effective_lifecycle_state(session);
+    if lifecycle == "sleeping" && crate::acp::session_is_non_cli(session) {
+        return "running".to_string();
+    }
+    lifecycle
+}
+
 pub(crate) fn provider_exists(session: &Value) -> bool {
     provider_session_state(session) == "exists"
 }

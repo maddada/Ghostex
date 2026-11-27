@@ -1842,11 +1842,15 @@ when you open it.
 - Native chats have no Sleep. Ghostex stops the agent of an idle Native chat by itself to free
   its memory: after 10 minutes with nothing to do, or 30 minutes while a Ghostex window or the
   phone shows it (2 and 10 minutes when the Mac is low on memory). A chat with a turn running, a
-  question or permission card, a queued or delayed message, a background command or monitor, a
-  coordinator's active threads, or a switch between Native and Terminal in progress is left
-  running. Nothing marks a stopped chat: it looks like any idle chat, opening it shows its
+  question or permission card, a queued or delayed message, a coordinator's active threads, or a
+  switch between Native and Terminal in progress is left running. So is one whose agent still has
+  background work: a background command, monitor or subagent (Claude Code), a background command
+  (Codex), a background job (Pi and OMP), or for any agent a tool call of its last turn that has
+  not finished; this keeps it running for at most 4 hours after its last activity, so work that
+  never reports its end does not hold it forever. Nothing marks a stopped chat: it looks like any idle chat, opening it shows its
   conversation without starting the agent, and the agent starts again with its conversation
-  when you send it a message (also from the phone or `ghostex agents send`). The Auto Sleep
+  when you send it a message (also from the phone or `ghostex agents send`). Side chats, fork
+  branches, Beads and the session popup also show it as idle, never asleep. The Auto Sleep
   settings, Sleep menu items and bulk Sleep, Wake and Sleep Inactive actions apply to
   Terminal-based chats only. In `ghostex sessions --json` a stopped Native chat still reads
   `sleep`, so `ghostex wake` and coordinator tools work as before.
