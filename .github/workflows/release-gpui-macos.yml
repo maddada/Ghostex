@@ -393,7 +393,7 @@ jobs:
           node tooling/release-gpui/await-run-artifacts.mjs \
             --names "${{ steps.code_server_darwin.outputs.artifact_name }}" \
             --producer-pattern '^(code_server_darwin_arm64)' \
-            --timeout-minutes 45
+            --timeout-minutes 90
       - name: Stage macOS runtime (code-server, zmx, gxserver package)
         env:
           GHOSTEX_COMPONENT_SIGNATURES_DEFERRED: '1'

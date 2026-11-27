@@ -50,7 +50,7 @@ env:
 jobs:
   component:
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 90
     outputs:
       action: ${{ steps.probe.outputs.action }}
       archive_name: ${{ steps.code_server_identity.outputs.archive_name }}
