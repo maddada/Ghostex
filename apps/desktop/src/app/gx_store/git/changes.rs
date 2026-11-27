@@ -15,7 +15,7 @@ use super::review::GitReviewConfirm;
 use super::scope::ScopeMiss;
 use super::toasts::ToastOptions;
 use crate::GhostexGpuiApp;
-use crate::app::native_changes::{ChangesScope, ChangesTarget, CommitAction};
+use crate::app::native_changes::{ChangesScope, ChangesTarget, CommitAction, RepoResults};
 
 fn changes_request_id(remote: bool) -> String {
     let millis = web_time::SystemTime::now()
@@ -156,6 +156,7 @@ impl GhostexGpuiApp {
         agent_id: Option<String>,
         file_paths: Option<Vec<String>>,
         new_branch: bool,
+        multi_repo: bool,
         cx: &mut gpui::Context<Self>,
     ) {
         let review_action = match action {
@@ -163,6 +164,7 @@ impl GhostexGpuiApp {
             CommitAction::CommitPush => GitReviewAction::Push,
             CommitAction::CommitPushPr => GitReviewAction::Pr,
         };
+        let project_key_owned = project_key.to_string();
         self.changes_review_then(
             project_key,
             review_action,
@@ -176,6 +178,7 @@ impl GhostexGpuiApp {
                         file_paths,
                         commit_on_new_ref: new_branch,
                         delete_worktree_after: false,
+                        multi_repo: multi_repo.then(|| (project_key_owned, action)),
                     },
                     cx,
                 );
@@ -220,11 +223,29 @@ impl GhostexGpuiApp {
                         file_paths,
                         commit_on_new_ref: false,
                         delete_worktree_after: false,
+                        multi_repo: None,
                     },
                     cx,
                 );
             },
         );
+    }
+
+    /// A Commit's answer in a project that spans several repos goes to the Changes view's list.
+    pub(crate) fn changes_show_repo_results(
+        &mut self,
+        project_key: &str,
+        answer: &Value,
+        message: String,
+        action: CommitAction,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(results) = RepoResults::from_answer(project_key, answer, message, action) else {
+            return;
+        };
+        if let Some(view) = self.native_changes.clone() {
+            view.update(cx, |view, cx| view.show_repo_results(results, cx));
+        }
     }
 
     /// Where an entry point of the Git menu used to open the commit review: the scope its action

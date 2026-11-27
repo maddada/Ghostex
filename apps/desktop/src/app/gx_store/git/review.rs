@@ -30,6 +30,9 @@ pub(crate) struct GitReviewConfirm {
     pub(crate) file_paths: Option<Vec<String>>,
     pub(crate) commit_on_new_ref: bool,
     pub(crate) delete_worktree_after: bool,
+    /// A Commit in a project that spans several repos: the Changes view's project key and action,
+    /// so the answer's per-repo list goes back to it.
+    pub(crate) multi_repo: Option<(String, crate::app::native_changes::CommitAction)>,
 }
 
 impl GhostexGpuiApp {
@@ -175,7 +178,12 @@ impl GhostexGpuiApp {
                 cx,
             );
         }
-        let trusted = match review.has_commit {
+        // A Try again on a repo whose commit went through but whose push failed has no files left:
+        // it only sends.
+        let send_only =
+            confirm.multi_repo.is_some() && confirm.file_paths.as_ref().is_some_and(Vec::is_empty);
+        let has_commit = review.has_commit && !send_only;
+        let trusted = match has_commit {
             false => None,
             true => match resolve_trusted_file_selection(&review, confirm.file_paths.as_deref()) {
                 Ok(selection) => Some(selection),
@@ -205,7 +213,13 @@ impl GhostexGpuiApp {
                 }
             },
         };
-        if review.action == GitReviewAction::Pr && !confirm.delete_worktree_after {
+        // CDXC:Changes 2026-11-27 DECISION: User picked "Commit the rest, list each repo"
+        // (Q5276): in a project that spans several repos a pull request is opened per repo by
+        // gxserver's ship workflow, like Commit and Commit & Push, not by the one-repo agent flow.
+        if review.action == GitReviewAction::Pr
+            && !confirm.delete_worktree_after
+            && confirm.multi_repo.is_none()
+        {
             return self.git_run_pull_request_agent_workflow(
                 scope,
                 state,
@@ -217,7 +231,7 @@ impl GhostexGpuiApp {
                     has_explicit_file_selection: trusted
                         .as_ref()
                         .is_some_and(|selection| selection.explicit),
-                    has_commit: review.has_commit,
+                    has_commit,
                     message: confirm.message.clone(),
                     create_branch: confirm.commit_on_new_ref,
                 },
@@ -225,7 +239,7 @@ impl GhostexGpuiApp {
             );
         }
         let mut params = json!({ "projectId": scope.project_id() });
-        if review.has_commit {
+        if has_commit {
             params["commit"] = json!({
                 "agentId": self.git_default_prompt_agent_id(confirm.agent_id.as_deref()),
                 "commitOnNewRef": confirm.commit_on_new_ref,
@@ -238,14 +252,28 @@ impl GhostexGpuiApp {
             GitReviewAction::Push => params["push"] = json!(true),
             GitReviewAction::Commit => {}
         }
-        let started = started_title(review.action, review.has_commit);
+        let started = started_title(review.action, has_commit);
         let finished = finished_title(review.action);
         let mutation = self.git_run_mutation(&scope, started, finished, params, cx);
         let action = review.action;
         let delete_after = confirm.delete_worktree_after;
+        let multi_repo = confirm.multi_repo.clone();
+        let message = confirm.message.clone();
         cx.spawn(async move |this, cx| {
             let result = mutation.await;
             let _ = this.update(cx, |this, cx| {
+                if let Some((project_key, commit_action)) = multi_repo {
+                    if let Some(answer) = &result {
+                        this.changes_show_repo_results(
+                            &project_key,
+                            answer,
+                            message,
+                            commit_action,
+                            cx,
+                        );
+                    }
+                    return;
+                }
                 if action == GitReviewAction::Pr {
                     let Some(result) = result else {
                         let title = match remote {

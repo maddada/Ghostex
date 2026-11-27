@@ -1306,6 +1306,7 @@ pub(super) fn project_context(
         icon_data_url: overlay.and_then(|overlay| overlay.icon_data_url.clone()),
         discovered_icon_data_url: project.discovered_icon_data_url.clone(),
         worktree,
+        repos: project.repos.iter().map(|repo| repo.name.clone()).collect(),
         diff_stats: inputs
             .host
             .project_diff_stats

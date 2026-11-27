@@ -34,6 +34,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         remote_name: Some("origin".to_string()),
         status_summary,
         worktree_name: "Ghostex-modal-gallery".to_string(),
+        repos: Vec::new(),
     };
     let host: DeleteWorktreeModalHost = Rc::new(|command, cx: &mut App| {
         match command {

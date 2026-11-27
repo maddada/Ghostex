@@ -23,11 +23,34 @@ impl ChangesView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        let data = self.data.as_ref()?;
-        let uncommitted = data.uncommitted_paths.len();
+        let uncommitted = self.data.as_ref()?.uncommitted_paths.len();
         if uncommitted == 0 {
-            return None;
+            // Nothing left to commit: the last Commit's list (a push that failed after its commit
+            // still offers Try again) stays until it is closed.
+            let results = self.render_repo_results(s, cx);
+            // CDXC:Changes 2026-11-27 DECISION: User picked "One Merge for every repo" (Q5277).
+            // After "Commit 2 repos" nothing is left to commit, so the bar keeps a Merge button for
+            // a project that spans several repos; without it the branch could not be merged.
+            let merge = (self.is_multi_repo() && self.can_merge())
+                .then(|| self.render_merge_only_row(s, cx));
+            if results.is_none() && merge.is_none() {
+                return None;
+            }
+            return Some(
+                v_flex()
+                    .flex_none()
+                    .w_full()
+                    .gap(px(6.0))
+                    .p(px(8.0))
+                    .border_t_1()
+                    .border_color(hsla(s.hairline))
+                    .bg(hsla(s.panel))
+                    .when_some(results, |this, results| this.child(results))
+                    .when_some(merge, |this, merge| this.child(merge))
+                    .into_any_element(),
+            );
         }
+        let data = self.data.as_ref()?;
         let input = self.message.clone()?;
         let on_default = data.on_default_branch;
         let branch = data.branch.clone().unwrap_or_default();
@@ -49,8 +72,27 @@ impl ChangesView {
             })
             .unwrap_or_else(|| "Agent".to_string());
         let confirming_merge = self.confirm == Some(Confirm::Merge);
+        let merge_question = match self.is_multi_repo() {
+            true => format!(
+                "Merge {branch} in every repo, each into its own default branch? Uncommitted files are committed first. A conflict stops the merge."
+            ),
+            false => format!(
+                "Merge {branch} into {base}? Uncommitted files are committed first, and you end up on {base}."
+            ),
+        };
         let disabled = count == 0;
-        let main_label = self.commit_action.short_label();
+        // CDXC:Changes 2026-11-27 DECISION: User picked "One list, one Commit" (Q5269): in a
+        // project that spans several repos the button says how many repos the Commit makes a
+        // commit in ("Commit 2 repos"), one commit per repo with the same message.
+        let main_label = match self.is_multi_repo() {
+            true => format!(
+                "{} {}",
+                self.commit_action.short_label(),
+                ghostex_gx_protocol::plural(self.commit_repo_count(), "repo", "repos")
+            ),
+            false => self.commit_action.short_label().to_string(),
+        };
+        let results = self.render_repo_results(s, cx);
         let files_label = if self.excluded.is_empty() {
             ghostex_gx_protocol::plural(uncommitted, "file", "files")
         } else {
@@ -69,6 +111,7 @@ impl ChangesView {
             .border_t_1()
             .border_color(hsla(s.hairline))
             .bg(hsla(s.panel))
+            .when_some(results, |this, results| this.child(results))
             .child(modal_text_area(&s.p, &input, Some(40.0), false, window, cx))
             .when(confirming_merge, |this| {
                 this.child(
@@ -80,24 +123,39 @@ impl ChangesView {
                                 .flex_1()
                                 .min_w_0()
                                 .text_color(hsla(s.text))
-                                .child(format!(
-                                    "Merge {branch} into {base}? Uncommitted files are committed first, and you end up on {base}."
-                                )),
+                                .child(merge_question),
                         )
-                        .child(small_button(s, "changes-merge-cancel", "Cancel", false, cx.listener(|this, _, _, cx| {
-                            this.confirm = None;
-                            cx.notify();
-                        })))
-                        .child(small_button(s, "changes-merge-yes", "Merge", true, cx.listener(|this, _, window, cx| {
-                            this.run_merge(window, cx);
-                        }))),
+                        .child(small_button(
+                            s,
+                            "changes-merge-cancel",
+                            "Cancel",
+                            false,
+                            cx.listener(|this, _, _, cx| {
+                                this.confirm = None;
+                                cx.notify();
+                            }),
+                        ))
+                        .child(small_button(
+                            s,
+                            "changes-merge-yes",
+                            "Merge",
+                            true,
+                            cx.listener(|this, _, window, cx| {
+                                this.run_merge(window, cx);
+                            }),
+                        )),
                 )
             })
             // CDXC:Changes 2026-10-25 DECISION: User picked "Both dark, side by side" (Q558): the file count stays on the left; the agent picker and the Commit split button sit together on the right with the same dark toolbar fill, 1px subtle border, 32px height, font and radius, and Commit's menu chevron is part of its split button behind a thin divider.
             .child(
                 h_flex()
                     .gap(px(8.0))
-                    .child(div().text_size(px(SMALL_SIZE)).text_color(hsla(s.muted)).child(files_label))
+                    .child(
+                        div()
+                            .text_size(px(SMALL_SIZE))
+                            .text_color(hsla(s.muted))
+                            .child(files_label),
+                    )
                     .when(!self.excluded.is_empty(), |this| {
                         this.child(
                             div()
@@ -146,7 +204,9 @@ impl ChangesView {
                                     .items_center()
                                     .cursor_pointer()
                                     .hover(|this| this.bg(hsla(s.p.raised_hover)))
-                                    .on_click(cx.listener(|this, _, window, cx| this.run_commit(window, cx)))
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.run_commit(window, cx)
+                                    }))
                                     .child(main_label),
                             )
                             .child(div().w(px(1.0)).h_full().bg(hsla(s.hairline)))
@@ -160,7 +220,9 @@ impl ChangesView {
                                     .justify_center()
                                     .cursor_pointer()
                                     .hover(|this| this.bg(hsla(s.p.raised_hover)))
-                                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                                    .on_mouse_down(MouseButton::Left, |_, _, cx| {
+                                        cx.stop_propagation()
+                                    })
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.agent_select.close();
                                         this.commit_menu_open = !this.commit_menu_open;
@@ -170,10 +232,187 @@ impl ChangesView {
                             ),
                     ),
             )
-            .when(self.commit_menu_open, |this| this.child(self.render_commit_menu(s, on_default, &base, cx)))
-            .when(self.agent_select.open, |this| this.child(self.render_agent_menu(s, cx)))
+            .when(self.commit_menu_open, |this| {
+                let multi_repo = self.is_multi_repo();
+                this.child(self.render_commit_menu(s, on_default, &base, multi_repo, cx))
+            })
+            .when(self.agent_select.open, |this| {
+                this.child(self.render_agent_menu(s, cx))
+            })
             .into_any_element();
         Some(bar)
+    }
+
+    /// The bar's one row when nothing is left to commit in a project that spans several repos:
+    /// "Merge every repo…", which asks first.
+    fn render_merge_only_row(&self, s: &ChangesStyle, cx: &mut Context<Self>) -> AnyElement {
+        let branch = self
+            .data
+            .as_ref()
+            .and_then(|data| data.branch.clone())
+            .unwrap_or_default();
+        let confirming = self.confirm == Some(Confirm::Merge);
+        let text = match confirming {
+            true => format!(
+                "Merge {branch} in every repo, each into its own default branch? A conflict stops the merge."
+            ),
+            false => "Nothing left to commit.".to_string(),
+        };
+        h_flex()
+            .gap(px(6.0))
+            .text_size(px(SMALL_SIZE))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .text_color(hsla(if confirming { s.text } else { s.muted }))
+                    .child(text),
+            )
+            .when(confirming, |this| {
+                this.child(small_button(
+                    s,
+                    "changes-merge-only-cancel",
+                    "Cancel",
+                    false,
+                    cx.listener(|this, _, _, cx| {
+                        this.confirm = None;
+                        cx.notify();
+                    }),
+                ))
+                .child(small_button(
+                    s,
+                    "changes-merge-only-yes",
+                    "Merge",
+                    false,
+                    cx.listener(|this, _, window, cx| this.run_merge(window, cx)),
+                ))
+            })
+            .when(!confirming, |this| {
+                this.child(small_button(
+                    s,
+                    "changes-merge-only",
+                    "Merge every repo\u{2026}",
+                    false,
+                    cx.listener(|this, _, _, cx| {
+                        this.confirm = Some(Confirm::Merge);
+                        cx.notify();
+                    }),
+                ))
+            })
+            .into_any_element()
+    }
+
+    /// The last Commit's list in a project that spans several repos: a row per repo with what it
+    /// did, or git's reason it failed and Try again (Q5276).
+    fn render_repo_results(&self, s: &ChangesStyle, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let results = self.repo_results.as_ref()?;
+        // The list belongs to the project its Commit ran in; another project's Changes never
+        // shows it.
+        if self.target.as_ref()?.project_key != results.project_key {
+            return None;
+        }
+        let failed = results.rows.iter().filter(|row| row.failed).count();
+        let title = match failed {
+            0 => format!(
+                "Done in {}",
+                ghostex_gx_protocol::plural(results.rows.len(), "repo", "repos")
+            ),
+            n => format!(
+                "{} of {} didn't finish",
+                n,
+                ghostex_gx_protocol::plural(results.rows.len(), "repo", "repos")
+            ),
+        };
+        Some(
+            v_flex()
+                .id("changes-repo-results")
+                .gap(px(4.0))
+                .p(px(8.0))
+                .rounded(px(8.0))
+                .border_1()
+                .border_color(hsla(s.hairline))
+                .text_size(px(SMALL_SIZE))
+                .child(
+                    h_flex()
+                        .gap(px(6.0))
+                        .child(
+                            div()
+                                .flex_1()
+                                .text_color(hsla(s.text))
+                                .font_weight(FontWeight::MEDIUM)
+                                .child(title),
+                        )
+                        .child(
+                            div()
+                                .id("changes-repo-results-close")
+                                .cursor_pointer()
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.repo_results = None;
+                                    cx.notify();
+                                }))
+                                .child(modal_icon(
+                                    super::rows::ICON_CLOSE,
+                                    ICON_SIZE - 3.0,
+                                    s.muted,
+                                )),
+                        ),
+                )
+                .children(results.rows.iter().map(|row| {
+                    let rel = row.rel.clone();
+                    h_flex()
+                        .gap(px(8.0))
+                        .items_start()
+                        .child(
+                            div()
+                                .flex_none()
+                                .w(px(14.0))
+                                .pt(px(2.0))
+                                .when(!row.failed, |this| {
+                                    this.child(modal_icon(super::rows::ICON_CHECK, 12.0, s.muted))
+                                })
+                                .when(row.failed, |this| {
+                                    this.child(modal_icon(super::rows::ICON_CLOSE, 12.0, s.danger))
+                                }),
+                        )
+                        .child(
+                            div()
+                                .flex_none()
+                                .text_color(hsla(s.text))
+                                .font_weight(FontWeight::MEDIUM)
+                                .child(row.name.clone()),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .text_color(hsla(if row.failed { s.danger } else { s.muted }))
+                                .child(row.text.clone()),
+                        )
+                        .when(row.failed, |this| {
+                            this.child(
+                                div()
+                                    .id(SharedString::from(format!("changes-repo-retry-{rel}")))
+                                    .flex_none()
+                                    .px(px(10.0))
+                                    .h(px(24.0))
+                                    .flex()
+                                    .items_center()
+                                    .rounded(px(6.0))
+                                    .border_1()
+                                    .border_color(hsla(s.hairline))
+                                    .bg(hsla(s.p.raised))
+                                    .text_color(hsla(s.text))
+                                    .cursor_pointer()
+                                    .hover(|this| this.bg(hsla(s.p.raised_hover)))
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        this.retry_repo(&rel, window, cx)
+                                    }))
+                                    .child("Try again"),
+                            )
+                        })
+                }))
+                .into_any_element(),
+        )
     }
 
     fn render_commit_menu(
@@ -181,6 +420,7 @@ impl ChangesView {
         s: &ChangesStyle,
         on_default: bool,
         base: &str,
+        multi_repo: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let current = self.commit_action;
@@ -275,8 +515,14 @@ impl ChangesView {
                 this.child(
                     row(
                         "changes-action-merge",
-                        format!("Merge into {base}\u{2026}"),
-                        "Merge this branch into the default branch. Asks first.",
+                        match multi_repo {
+                            true => "Merge every repo\u{2026}".to_string(),
+                            false => format!("Merge into {base}\u{2026}"),
+                        },
+                        match multi_repo {
+                            true => "Each repo into its own default branch. Asks first.",
+                            false => "Merge this branch into the default branch. Asks first.",
+                        },
                         false,
                     )
                     .on_click(cx.listener(|this, _, _, cx| {

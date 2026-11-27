@@ -36,6 +36,30 @@ pub(crate) fn parse_gpui_delete_worktree_draft(
         remote_name: draft_string(draft, "remoteName"),
         status_summary: draft_string(draft, "statusSummary").unwrap_or_default(),
         worktree_name: draft_string(draft, "worktreeName")?,
+        repos: draft
+            .get("repos")
+            .and_then(serde_json::Value::as_array)
+            .map(|repos| {
+                repos
+                    .iter()
+                    .map(|repo| DeleteWorktreeRepo {
+                        name: draft_string(repo, "name").unwrap_or_default(),
+                        kind: draft_string(repo, "kind").unwrap_or_default(),
+                        exists: draft_bool(repo, "exists"),
+                        uncommitted: repo
+                            .get("status")
+                            .and_then(serde_json::Value::as_str)
+                            .map(|status| {
+                                status
+                                    .lines()
+                                    .filter(|line| !line.trim().is_empty())
+                                    .count()
+                            })
+                            .unwrap_or_default(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
     })
 }
 

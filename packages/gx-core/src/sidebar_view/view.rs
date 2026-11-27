@@ -357,9 +357,21 @@ pub struct RowWorktree {
     pub name: String,
     /// Its branch; empty when the daemon has none.
     pub branch: String,
+    /// The repos in it when it holds several (a session folder), each on `branch`.
+    pub repos: Vec<String>,
 }
 
 impl RowWorktree {
+    /// The row's branch line: the label, then the repos of a session folder
+    /// (`add-order-refunds · api, web`).
+    pub fn line(&self) -> String {
+        if self.repos.is_empty() {
+            self.label().to_string()
+        } else {
+            format!("{} · {}", self.label(), self.repos.join(", "))
+        }
+    }
+
     /// What the row draws: the branch, else the folder's name.
     pub fn label(&self) -> &str {
         if self.branch.is_empty() {
@@ -389,6 +401,9 @@ pub struct ProjectContextView {
     pub discovered_icon_data_url: Option<String>,
     pub diff_stats: ProjectDiffStats,
     pub worktree: Option<WorktreeView>,
+    /// The names of the repos the project's folder covers when it covers several (a folder of
+    /// repos, a `.code-workspace`, a repo with submodules); empty for a single repo.
+    pub repos: Vec<String>,
     /// The project's git origin, when the daemon has probed one. Absent and an explicit `null`
     /// read the same here, because the one reader (the project menu's Copy Remote URL) tests it
     /// for truthiness.

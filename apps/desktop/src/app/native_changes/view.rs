@@ -91,6 +91,85 @@ impl CommitAction {
     }
 }
 
+/// What one repo of a project that spans several did on the last Commit (Q5276): what it did,
+/// or git's reason it failed.
+#[derive(Clone, Debug)]
+pub(crate) struct RepoOutcome {
+    pub(crate) name: String,
+    pub(crate) rel: String,
+    pub(crate) failed: bool,
+    pub(crate) text: String,
+}
+
+/// The last Commit's list, one row per repo, shown over the commit bar until the next Commit. A
+/// failed repo keeps its files picked; Try again commits them with the same message and action.
+#[derive(Clone, Debug)]
+pub(crate) struct RepoResults {
+    pub(crate) project_key: String,
+    pub(crate) rows: Vec<RepoOutcome>,
+    pub(crate) message: String,
+    pub(crate) action: CommitAction,
+}
+
+impl RepoResults {
+    /// The list a `runGitShipWorkflow` answer for a project that spans several repos gives, or
+    /// `None` for a one-repo answer.
+    pub(crate) fn from_answer(
+        project_key: &str,
+        answer: &serde_json::Value,
+        message: String,
+        action: CommitAction,
+    ) -> Option<Self> {
+        if answer.get("multiRepo") != Some(&serde_json::Value::Bool(true)) {
+            return None;
+        }
+        let rows = answer
+            .get("repos")?
+            .as_array()?
+            .iter()
+            .map(|repo| {
+                let error = repo["error"].as_str().map(str::to_string);
+                let mut done = Vec::new();
+                if repo["committed"] == serde_json::Value::Bool(true) {
+                    done.push("committed".to_string());
+                }
+                if repo["pushed"] == serde_json::Value::Bool(true) {
+                    done.push("pushed".to_string());
+                }
+                if let Some(url) = repo["pullRequest"]["url"].as_str() {
+                    done.push(format!("pull request {url}"));
+                }
+                let text = match &error {
+                    Some(error) if done.is_empty() => error.clone(),
+                    Some(error) => format!("{}, then: {error}", capitalized(&done.join(", "))),
+                    None if done.is_empty() => "Nothing to do".to_string(),
+                    None => capitalized(&done.join(", ")),
+                };
+                RepoOutcome {
+                    name: repo["name"].as_str().unwrap_or_default().to_string(),
+                    rel: repo["rel"].as_str().unwrap_or_default().to_string(),
+                    failed: error.is_some(),
+                    text,
+                }
+            })
+            .collect::<Vec<_>>();
+        (!rows.is_empty()).then(|| Self {
+            project_key: project_key.to_string(),
+            rows,
+            message,
+            action,
+        })
+    }
+}
+
+fn capitalized(text: &str) -> String {
+    let mut chars = text.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => String::new(),
+    }
+}
+
 /// What the view asks the app to do.
 pub(crate) enum ChangesRequest {
     Commit {
@@ -102,6 +181,9 @@ pub(crate) enum ChangesRequest {
         file_paths: Option<Vec<String>>,
         /// On the default branch, a pull request first moves the work onto a new branch.
         new_branch: bool,
+        /// The project spans several repos: one commit per repo, and the answer's list comes back
+        /// to the view (`show_repo_results`).
+        multi_repo: bool,
     },
     MultipleCommits {
         project_key: String,
@@ -218,6 +300,8 @@ pub(crate) struct ChangesView {
     /// Uncommitted files left out of the next commit.
     pub(crate) excluded: HashSet<String>,
     pub(crate) commit_menu_open: bool,
+    /// The last Commit's list in a project that spans several repos.
+    pub(crate) repo_results: Option<RepoResults>,
     pub(crate) confirm: Option<Confirm>,
     /// The file whose header menu is open, and where it was asked for (view coordinates).
     pub(crate) file_menu: Option<(String, gpui::Point<gpui::Pixels>)>,
@@ -299,6 +383,7 @@ impl ChangesView {
             agent_select: ModalSelect::new(),
             excluded: HashSet::new(),
             commit_menu_open: false,
+            repo_results: None,
             confirm: None,
             file_menu: None,
             cursor: None,
@@ -1120,7 +1205,11 @@ impl ChangesView {
         if self.commit_count() == 0 {
             return;
         }
-        let new_branch = self.commit_action == CommitAction::CommitPushPr
+        let multi_repo = self.is_multi_repo();
+        // A project that spans several repos commits on each repo's own branch; there is no
+        // single default branch to move off.
+        let new_branch = !multi_repo
+            && self.commit_action == CommitAction::CommitPushPr
             && self
                 .data
                 .as_ref()
@@ -1128,6 +1217,7 @@ impl ChangesView {
         let file_paths = self.commit_paths();
         let message = self.take_message(window, cx);
         self.commit_menu_open = false;
+        self.repo_results = None;
         (self.host)(
             ChangesRequest::Commit {
                 project_key: target.project_key,
@@ -1136,6 +1226,86 @@ impl ChangesView {
                 agent_id: self.agent_id.clone(),
                 file_paths,
                 new_branch,
+                multi_repo,
+            },
+            window,
+            cx,
+        );
+        cx.notify();
+    }
+
+    /// The project spans several repos (`changesDiff` answered `multiRepo`).
+    pub(crate) fn is_multi_repo(&self) -> bool {
+        self.data
+            .as_ref()
+            .is_some_and(|data| !data.repos.is_empty())
+    }
+
+    /// How many repos the next Commit makes a commit in.
+    pub(crate) fn commit_repo_count(&self) -> usize {
+        let Some(data) = self.data.as_ref() else {
+            return 0;
+        };
+        let picked: Vec<String> = data
+            .uncommitted_paths
+            .iter()
+            .filter(|path| !self.excluded.contains(*path))
+            .cloned()
+            .collect();
+        data.repo_count(&picked)
+    }
+
+    /// The app's answer to a Commit in a project that spans several repos.
+    pub(crate) fn show_repo_results(&mut self, results: RepoResults, cx: &mut Context<Self>) {
+        if self
+            .target
+            .as_ref()
+            .map(|target| target.project_key.as_str())
+            != Some(results.project_key.as_str())
+        {
+            return;
+        }
+        self.repo_results = Some(results);
+        cx.notify();
+    }
+
+    /// Try again on a repo whose commit failed: its picked files, with the message and action the
+    /// failed Commit had.
+    pub(crate) fn retry_repo(&mut self, rel: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let (Some(target), Some(data), Some(results)) = (
+            self.target.clone(),
+            self.data.as_ref(),
+            self.repo_results.clone(),
+        ) else {
+            return;
+        };
+        let Some(repo) = data.repos.iter().position(|repo| repo.rel == rel) else {
+            return;
+        };
+        let file_paths: Vec<String> = data
+            .uncommitted_paths
+            .iter()
+            .filter(|path| !self.excluded.contains(*path) && data.repo_index(path) == Some(repo))
+            .cloned()
+            .collect();
+        // A push or pull request that failed after the commit has no files left to commit; the
+        // retry then only sends.
+        let file_paths = (!file_paths.is_empty()).then_some(file_paths);
+        if file_paths.is_none() && results.action == CommitAction::Commit {
+            self.repo_results = None;
+            cx.notify();
+            return;
+        }
+        self.repo_results = None;
+        (self.host)(
+            ChangesRequest::Commit {
+                project_key: target.project_key,
+                action: results.action,
+                message: results.message,
+                agent_id: self.agent_id.clone(),
+                file_paths: Some(file_paths.unwrap_or_default()),
+                new_branch: false,
+                multi_repo: true,
             },
             window,
             cx,

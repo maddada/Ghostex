@@ -60,7 +60,11 @@ pub fn resolve_trusted_file_selection(
     };
     let mut selected: Vec<String> = Vec::new();
     for candidate in candidates {
+        // CDXC:Changes 2026-11-27: in a project that spans several repos, a workspace folder
+        // beside the project folder lists its files as `../lib/...`. Such a path is trusted only
+        // when it is exactly one the review (gxserver's own list) named.
         let trusted = normalize_relative_git_file_path(&candidate)
+            .or_else(|| review.has_file(&candidate).then(|| candidate.clone()))
             .filter(|path| review.has_file(path))
             .ok_or("Selected file is not part of the current Git review.")?;
         if !selected.contains(&trusted) {

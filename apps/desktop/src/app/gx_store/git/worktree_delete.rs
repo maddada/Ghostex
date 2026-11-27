@@ -62,6 +62,43 @@ pub(crate) async fn read_worktree_branch_facts(
     })
 }
 
+/// For a worktree session of a project that spans several repos, the dialog's facts read from
+/// `repoStates` (one row per repo, Q5278); `None` for a plain worktree.
+async fn read_session_folder_facts(
+    remote: calls::Remote,
+    project_id: String,
+) -> Option<serde_json::Map<String, Value>> {
+    let answer = calls::git_action(remote, project_id, "repoStates", json!({}))
+        .await
+        .ok()?;
+    if answer.get("multiRepo") != Some(&Value::Bool(true)) {
+        return None;
+    }
+    let branch = answer["branch"].as_str().map(str::to_string);
+    let repos = answer["repos"].as_array().cloned().unwrap_or_default();
+    let remote_branch_exists = repos
+        .iter()
+        .any(|repo| repo["remoteBranchExists"] == Value::Bool(true));
+    let has_changes = repos
+        .iter()
+        .any(|repo| short_status_has_changes(repo["status"].as_str().unwrap_or_default()));
+    // The summary is each repo's own `git status --short`, under its name.
+    let summary = repos
+        .iter()
+        .filter_map(|repo| {
+            let status = repo["status"].as_str()?.trim_end();
+            let name = repo["name"].as_str()?;
+            (!status.is_empty()).then(|| format!("{name}:\n{status}"))
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let mut draft = worktree_branch_metadata(branch.as_deref(), remote_branch_exists);
+    draft.insert("hasChanges".into(), json!(has_changes));
+    draft.insert("statusSummary".into(), json!(summary));
+    draft.insert("repos".into(), Value::Array(repos));
+    Some(draft)
+}
+
 impl GhostexGpuiApp {
     /// A project menu's Delete Worktree: read the branch and status first, so a dirty checkout can
     /// offer Commit before the destructive removal, then open the dialog.
@@ -98,6 +135,7 @@ impl GhostexGpuiApp {
             true => "Could not read remote worktree status.",
             false => "Could not read worktree status.",
         };
+        let session_folder = read_session_folder_facts(scope.remote.clone(), scope.project_id());
         let facts = read_worktree_branch_facts(
             scope.remote.clone(),
             scope.project_id(),
@@ -105,20 +143,29 @@ impl GhostexGpuiApp {
             failure,
         );
         cx.spawn(async move |this, cx| {
-            let facts = facts.await;
-            let _ = this.update(cx, |this, cx| match facts {
-                Ok(facts) => {
+            // CDXC:Worktrees 2026-11-27 DECISION: User picked "One dialog, a row per repo"
+            // (Q5278): a worktree session of a project that spans several repos opens the same
+            // dialog, with each repo's state in a row; deleting removes every repo's worktree,
+            // the links and the folder.
+            let facts = match session_folder.await {
+                Some(draft) => Ok(draft),
+                None => facts.await.map(|facts| {
                     let mut draft = worktree_branch_metadata(
                         facts.branch.as_deref(),
                         facts.remote_branch_exists,
                     );
-                    draft.insert("groupId".into(), json!(group_id));
                     draft.insert(
                         "hasChanges".into(),
                         json!(short_status_has_changes(&facts.status)),
                     );
-                    draft.insert("projectId".into(), json!(scope.scoped_id()));
                     draft.insert("statusSummary".into(), json!(facts.status.trim()));
+                    draft
+                }),
+            };
+            let _ = this.update(cx, |this, cx| match facts {
+                Ok(mut draft) => {
+                    draft.insert("groupId".into(), json!(group_id));
+                    draft.insert("projectId".into(), json!(scope.scoped_id()));
                     let name = Some(scope.title.clone())
                         .filter(|title| !title.is_empty())
                         .or(worktree.name.clone())

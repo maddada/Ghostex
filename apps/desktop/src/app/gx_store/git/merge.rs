@@ -268,6 +268,9 @@ impl GhostexGpuiApp {
             }
             self.git_set_busy(false, cx);
         }
+        if answer.get("multiRepo") == Some(&Value::Bool(true)) {
+            return self.git_after_multi_repo_merge(scope, &answer, toast_id, delete_after, cx);
+        }
         if conflicts {
             self.git_toast(
                 GitToastLevel::Warning,
@@ -306,6 +309,78 @@ impl GhostexGpuiApp {
             true => self.git_delete_worktree_after_completed(scope, cx),
             false => gpui::Task::ready(()),
         })
+    }
+
+    /// Merge in a project that spans several repos (Q5277): each repo merged into its own default
+    /// branch, deepest first, and the first conflict or refusal stopped it. The toast lists every
+    /// repo; a conflict is left for the user in that repo (the project folder is not a repo, so
+    /// no conflict agent starts there).
+    fn git_after_multi_repo_merge(
+        &mut self,
+        scope: &GitScope,
+        answer: &Value,
+        toast_id: &str,
+        delete_after: bool,
+        cx: &mut gpui::Context<Self>,
+    ) -> Option<gpui::Task<()>> {
+        let rows = answer
+            .get("repos")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let lines: Vec<String> = rows
+            .iter()
+            .map(|row| {
+                let name = row["name"].as_str().unwrap_or("repo");
+                let into = row["into"].as_str().unwrap_or("its default branch");
+                let what = match row["status"].as_str().unwrap_or_default() {
+                    "merged" => format!("merged into {into}"),
+                    "skipped" => "no new commits, skipped".to_string(),
+                    "notReached" => "not merged, stopped before it".to_string(),
+                    "conflicts" => format!("conflicts merging into {into}"),
+                    _ => "not merged".to_string(),
+                };
+                match row["message"]
+                    .as_str()
+                    .filter(|message| !message.is_empty())
+                {
+                    Some(message) if row["status"] != "merged" && row["status"] != "skipped" => {
+                        format!("{name}: {what}. {message}")
+                    }
+                    _ => format!("{name}: {what}"),
+                }
+            })
+            .collect();
+        let merged = rows.iter().filter(|row| row["status"] == "merged").count();
+        let description = lines.join("\n");
+        let (level, title) = match answer["status"].as_str().unwrap_or_default() {
+            "merged" => (
+                GitToastLevel::Success,
+                format!(
+                    "Merged {}",
+                    ghostex_gx_protocol::plural(merged, "repo", "repos")
+                ),
+            ),
+            "nothing" => (
+                GitToastLevel::Info,
+                "Nothing to merge: no repo has new commits".to_string(),
+            ),
+            "conflicts" => (
+                GitToastLevel::Warning,
+                "Merge stopped on conflicts".to_string(),
+            ),
+            _ => (GitToastLevel::Warning, "Merge stopped".to_string()),
+        };
+        self.git_toast(
+            level,
+            &title,
+            ToastOptions::keyed(toast_id).with_description(description),
+            cx,
+        );
+        if answer["status"] == "merged" && delete_after {
+            self.git_delete_worktree_after_completed(scope, cx).detach();
+        }
+        None
     }
 
     /// `launchMergeConflictAgent`: a prompt agent on the parent project, resolving the conflicts.

@@ -254,6 +254,20 @@ pub struct PresentationGitConfig {
     pub primary_action: Option<GitPrimaryAction>,
 }
 
+/// One repo of a project that covers several (`PresentationProject::repos`).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PresentationRepo {
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub name: String,
+    /// Its place below the project folder, `/`-separated; empty for the folder itself.
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub rel: String,
+    /// `root`, `folder`, `workspace` or `submodule`.
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub kind: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PresentationProject {
@@ -309,6 +323,15 @@ pub struct PresentationProject {
     /// Copied verbatim from the domain row; kept loose.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worktree: Option<Value>,
+    /// The repos the project's folder covers when it covers several (a folder of repos, a
+    /// `.code-workspace`, a repo with submodules); absent for a single repo and from an older
+    /// daemon (server/src/multi_repo).
+    #[serde(
+        default,
+        deserialize_with = "crate::de::null_as_default",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub repos: Vec<PresentationRepo>,
     /// The Hermes profile this project is the bot of; absent for every other project and from an
     /// older daemon (server/src/bot_projects.rs).
     #[serde(default, skip_serializing_if = "Option::is_none")]

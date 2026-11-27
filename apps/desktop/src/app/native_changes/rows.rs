@@ -20,6 +20,7 @@ use crate::app::window::native_modal_kit::{
     MODAL_MONO_FONT, hsla, modal_icon, modal_text_area, rgba_of,
 };
 
+pub(crate) const ICON_FOLDERS: &str = "titlebar/folders.svg";
 pub(crate) const ICON_CHEVRON_DOWN: &str = "titlebar/chevron-down.svg";
 pub(crate) const ICON_CHEVRON_RIGHT: &str = "titlebar/chevron-right.svg";
 pub(crate) const ICON_COPY: &str = "titlebar/copy.svg";
@@ -258,6 +259,7 @@ impl ChangesView {
             return div().into_any_element();
         };
         match row {
+            Row::Repo(repo) => self.render_repo_header(&s, repo),
             Row::File(file) => self.render_file_header(&s, file, false, cx),
             Row::Hunk(file, hunk) => self.render_hunk_header(&s, index, file, hunk, cx),
             Row::Line(..) | Row::Split(..) => self.render_line_row(&s, index, row, cx),
@@ -282,6 +284,78 @@ impl ChangesView {
             Row::Comment(id) => self.render_comment(&s, id, cx),
             Row::Editor => self.render_editor(&s, window, cx),
         }
+    }
+
+    /// A repo's header over its files, in a project that spans several repos: its name, its
+    /// branch, how many files changed and how many of them the next commit takes.
+    fn render_repo_header(&self, s: &ChangesStyle, repo_index: usize) -> AnyElement {
+        let Some(data) = self.data.as_ref() else {
+            return div().into_any_element();
+        };
+        let Some(repo) = data.repos.get(repo_index) else {
+            return div().into_any_element();
+        };
+        let files: Vec<_> = data
+            .files
+            .iter()
+            .filter(|file| data.repo_index(&file.path) == Some(repo_index))
+            .collect();
+        let additions = files.iter().map(|file| file.additions).sum();
+        let deletions = files.iter().map(|file| file.deletions).sum();
+        let picked = files
+            .iter()
+            .filter(|file| file.uncommitted && !self.excluded.contains(&file.path))
+            .count();
+        let count = match files.len() {
+            1 => "1 file".to_string(),
+            n => format!("{n} files"),
+        };
+        let count = match picked {
+            0 => format!("{count}, none picked"),
+            n if n == files.len() => count,
+            n => format!("{count}, {n} picked"),
+        };
+        h_flex()
+            .w_full()
+            .h(px(FILE_HEADER_HEIGHT))
+            .mt(px(if repo_index == 0 { 0.0 } else { 10.0 }))
+            .px(px(10.0))
+            .gap(px(7.0))
+            .text_size(px(UI_SIZE))
+            .child(
+                div()
+                    .flex_none()
+                    .child(modal_icon(ICON_FOLDERS, ICON_SIZE, s.muted)),
+            )
+            .child(
+                div()
+                    .flex_none()
+                    .text_color(hsla(s.text))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child(repo.name.clone()),
+            )
+            .when_some(repo.branch.clone(), |this, branch| {
+                this.child(
+                    div()
+                        .min_w_0()
+                        .flex_shrink(1.0)
+                        .overflow_hidden()
+                        .text_ellipsis()
+                        .whitespace_nowrap()
+                        .text_color(hsla(s.muted))
+                        .child(format!("on {branch}")),
+                )
+            })
+            .child(
+                div()
+                    .flex_none()
+                    .text_size(px(SMALL_SIZE))
+                    .text_color(hsla(s.muted))
+                    .child(count),
+            )
+            .child(stat(s, additions, deletions))
+            .child(div().flex_1())
+            .into_any_element()
     }
 
     /// A file's header, in the stream or pinned over it (`sticky`).

@@ -7833,6 +7833,40 @@ letters from the message box on a Mac; if your keyboard types a letter with one
 of them, change it in Settings > Hotkeys (New Chat: Project, Computer, Where It
 Runs, Branch).
 
+**Projects that span several repos.** Ghostex sees a project as spanning
+several repos when its folder holds several git repos (a folder of repos), when
+it is opened from a `.code-workspace` file whose folders are repos, or when its
+repo has submodules. Its header in the sidebar shows a stacked-folders icon and
+how many repos it has ("3 repos"). In a new chat with **New worktree** picked,
+the bar gets one more part, **2 of 3 repos**: its menu, "Repos in the new
+worktree", ticks the repos the worktree session gets, each one from the base
+branch you picked or, when a repo has no such branch, from its own default
+branch. The project folder's own repo is always in, and a submodule starts from
+the commit the repo holding it records. Sending the first message makes one session folder next
+to the project folder with a worktree of each ticked repo, all on one branch,
+and links to everything else (the repos you left out and plain files), so
+paths stay the same; the agent is told which folders are repos. The session's
+branch line in the sidebar names them ("add-order-refunds · api, web"). In
+Changes the files are grouped under a header per repo with its branch, and the
+commit bar says how many repos the commit touches ("Commit 2 repos"): one
+Commit makes a commit in each repo with picked files, with the same message (a
+submodule commits before the repo that points at it, which then takes the new
+pointer). Commit & Push and Commit, Push & PR do the same per repo. If one repo
+fails (a hook, a push that is refused), the others still go through, the list
+over the commit bar says what each repo did, and the failed repo keeps its files
+picked with git's reason and **Try again**. **Merge every repo…** in the commit
+bar's menu merges each repo's branch into that repo's own default branch:
+repos with no new commits are skipped, and the first conflict stops the merge,
+with the toast listing which repos already merged and which were not reached.
+**Delete Worktree** opens the usual dialog with a row per repo (its kind and
+its uncommitted files); deleting removes every repo's worktree, the links and
+the session folder, and never touches the project's own folders. Rename
+Worktree renames the branch in every repo and the session folder. The phone
+shows the same: the repos part in a new chat's bar, the repo names on the
+session's card, and Changes grouped by repo with "Commit 2 repos" (the phone
+commits every changed file; picking files and Commit & Push are on the
+computer).
+
 Issues Workflow (called Work mode before) ties your sessions to the tickets they
 work on. There is no switch: it is on for every project once it is set up. Its
 Linear parts (Create Linear Ticket, Linear statuses, Link to Linear issue or

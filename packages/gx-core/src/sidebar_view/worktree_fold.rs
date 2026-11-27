@@ -104,6 +104,7 @@ pub(super) fn row_worktree(group_id: &str, project: &ProjectContextInput) -> Row
         branch: worktree
             .map(|worktree| worktree.branch.clone())
             .unwrap_or_default(),
+        repos: project.repos.clone(),
     }
 }
 

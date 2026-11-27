@@ -20,5 +20,5 @@ pub(crate) use model::parse_patch_for_tests;
 pub(crate) use static_diff::render_static_diff;
 pub(crate) use view::{
     ChangesHostFn, ChangesHostInfo, ChangesPreset, ChangesRequest, ChangesTarget, ChangesView,
-    CommitAction,
+    CommitAction, RepoResults,
 };

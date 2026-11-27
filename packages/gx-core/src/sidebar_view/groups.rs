@@ -37,6 +37,8 @@ pub(crate) struct ProjectContextInput {
     pub(crate) icon_data_url: Option<String>,
     pub(crate) discovered_icon_data_url: Option<String>,
     pub(crate) worktree: Option<WorktreeView>,
+    /// The names of the repos the folder covers when it covers several.
+    pub(crate) repos: Vec<String>,
     pub(crate) diff_stats: super::inputs::ProjectDiffStats,
     /// How many worktree projects name this project as their parent.
     pub(crate) worktree_count: usize,
@@ -292,6 +294,7 @@ fn project_context_view(project: &ProjectContextInput) -> ProjectContextView {
         discovered_icon_data_url: project.discovered_icon_data_url.clone(),
         diff_stats: project.diff_stats,
         worktree: project.worktree.clone(),
+        repos: project.repos.clone(),
         git_remote_origin_url: project.git_remote_origin_url.clone(),
         git_work_tree: project.git_work_tree,
         bot_profile: project.bot_profile.clone(),

@@ -530,6 +530,8 @@ pub(crate) struct NativeChatView {
     pub(super) worktree_tray_where_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
     pub(super) worktree_tray_detail_bounds:
         std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
+    /// The repos part, in a project that spans several repos.
+    pub(super) worktree_tray_repos_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
     pub(super) worktree_tray_agent_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
     pub(crate) draft_revision: u64,
     pub(crate) draft_id: String,
@@ -751,6 +753,7 @@ impl NativeChatView {
             draft_machine_chip_bounds: Default::default(),
             worktree_tray_where_bounds: Default::default(),
             worktree_tray_detail_bounds: Default::default(),
+            worktree_tray_repos_bounds: Default::default(),
             worktree_tray_agent_bounds: Default::default(),
             menu_toggle: Default::default(),
             pill_bounds: Default::default(),

@@ -37,6 +37,7 @@ use std::rc::Rc;
 
 const WHERE_TRIGGER: &str = "chat-worktree-where";
 const DETAIL_TRIGGER: &str = "chat-worktree-detail";
+const REPOS_TRIGGER: &str = "chat-worktree-repos";
 const CLOUD_TRIGGER: &str = "chat-cloud-box-picker";
 const AGENT_TRIGGER: &str = "chat-draft-agent";
 const FAILED_COLOR: u32 = 0xef4444;
@@ -455,6 +456,28 @@ impl NativeChatView {
                         PartAction::None
                     },
                     bounds: self.worktree_tray_detail_bounds.clone(),
+                });
+            }
+            // A new worktree of a project with several repos: which repos go in it (chat core
+            // `menus/draft_worktree.rs` `repos_part`).
+            let repos = &tray["repos"];
+            if let Some(label) = repos["label"].as_str() {
+                place.push(Part {
+                    id: REPOS_TRIGGER,
+                    glyph: Some(repos["glyph"].as_str().unwrap_or("folders").into()),
+                    agent_icon: None,
+                    star: false,
+                    prefix: None,
+                    label: label.to_owned(),
+                    muted: false,
+                    tooltip: repos["tooltip"].as_str().unwrap_or(label).to_owned(),
+                    hotkey: None,
+                    action: PartAction::Menu {
+                        trigger: REPOS_TRIGGER,
+                        rows: menu_rows(&repos["menu"]),
+                        width: MENU_WIDTH,
+                    },
+                    bounds: self.worktree_tray_repos_bounds.clone(),
                 });
             }
         }

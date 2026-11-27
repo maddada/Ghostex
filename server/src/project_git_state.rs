@@ -212,6 +212,15 @@ pub async fn read_project_git_state(
             result => result,
         };
     }
+    // A project that spans several repos reads each repo (not cached: the cache keys on one
+    // checkout).
+    if let Some(state) = read_multi_repo_git_state(&projects, &project_id).await? {
+        let mut state = state;
+        if flag("gitHub") {
+            state["gitHub"] = read_git_hub_state(&projects, &project_id).await?;
+        }
+        return Ok(state);
+    }
     let state = match diff_stats_cache::read_git_state_cached(&projects, || {
         read_git_state(&projects, &project_id)
     })
@@ -227,6 +236,81 @@ pub async fn read_project_git_state(
         state["gitHub"] = read_git_hub_state(&projects, &project_id).await?;
     }
     Ok(state)
+}
+
+/// The local facts of a project that spans several repos, or `None` for any other project: each
+/// repo read in that repo, its files under the repo's place in the project (the paths Changes
+/// shows and a Commit takes), the numbers summed, and the branch of the project's own repo (the
+/// first one when the project folder is not a repo).
+///
+/// CDXC:Changes 2026-11-27 WHY: a Commit first reads this to check the picked files; read in the
+/// project folder alone, a folder of repos was "not a repository" and a submodule's files were
+/// unknown, so the Commit refused files Changes had offered.
+async fn read_multi_repo_git_state(
+    projects: &[Value],
+    project_id: &str,
+) -> Result<Option<Value>, TypedOperationError> {
+    let Some((project, set)) =
+        crate::git_ship_workflow::multi_repo_project(projects, project_id).await
+    else {
+        return Ok(None);
+    };
+    let lead = set
+        .repos
+        .iter()
+        .position(|repo| repo.kind == crate::multi_repo::RepoKind::Root)
+        .unwrap_or(0);
+    let mut files: Vec<Value> = Vec::new();
+    let (mut additions, mut deletions, mut ahead, mut behind) = (0i64, 0i64, 0i64, 0i64);
+    let (mut github, mut origin, mut upstream, mut changes) = (false, false, false, false);
+    let mut branch = Value::Null;
+    for (index, repo) in set.repos.iter().enumerate() {
+        let (repo_id, row) = crate::git_ship_workflow::repo_project_row(&project, repo);
+        let Some(state) = read_git_state(&[row], &repo_id).await? else {
+            continue;
+        };
+        let number = |key: &str| state.get(key).and_then(Value::as_i64).unwrap_or(0);
+        let truth = |key: &str| state.get(key).and_then(Value::as_bool) == Some(true);
+        additions += number("additions");
+        deletions += number("deletions");
+        ahead += number("aheadCount");
+        behind += number("behindCount");
+        github |= truth("hasGitHubRemote");
+        origin |= truth("hasOriginRemote");
+        upstream |= truth("hasUpstream");
+        changes |= truth("hasWorkingTreeChanges");
+        if index == lead || branch.is_null() {
+            branch = state.get("branch").cloned().unwrap_or(Value::Null);
+        }
+        for file in state
+            .get("files")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let mut file = file.clone();
+            if let Some(path) = file.get("path").and_then(Value::as_str) {
+                if !repo.rel.is_empty() {
+                    file["path"] = json!(format!("{}/{path}", repo.rel));
+                }
+            }
+            files.push(file);
+        }
+    }
+    Ok(Some(json!({
+        "additions": additions,
+        "aheadCount": ahead,
+        "behindCount": behind,
+        "branch": branch,
+        "deletions": deletions,
+        "files": files,
+        "hasGitHubRemote": github,
+        "hasOriginRemote": origin,
+        "hasUpstream": upstream,
+        "hasWorkingTreeChanges": changes,
+        "isRepo": true,
+        "multiRepo": true,
+    })))
 }
 
 /// The local facts, or `None` when the project is not inside a work tree.

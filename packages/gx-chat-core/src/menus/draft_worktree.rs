@@ -74,6 +74,9 @@ pub struct DraftWorktreeState {
     /// This folder's branch switch in flight, and how the last one went (`menus/folder_branch.rs`).
     pub folder_request: Option<u64>,
     pub folder_switch: Option<Value>,
+    /// A project with several repos: the `rel` of each repo this chat put in the new worktree;
+    /// `None` keeps gxserver's default pick.
+    pub repos: Option<Vec<String>>,
 }
 
 fn text(value: &Value, key: &str) -> Option<String> {
@@ -342,6 +345,95 @@ fn worktrees(answer: &Value) -> Vec<Value> {
         .unwrap_or_default()
 }
 
+/*
+CDXC:MultiRepo 2026-11-27 DECISION:
+User (Q5268, from the "Projects that span several repos" page): a new worktree of a project with
+several repos is one session folder with a worktree of each picked repo, on one branch. The tray
+gains a repos part after the base branch ("2 of 3 repos") whose menu, "Repos in the new worktree",
+ticks the repos to include; the project folder's own repo is always in it. The pick goes with the
+start as `repos`.
+SEE-ALSO: server/src/server/worktree_ops/multi_repo.rs (the tray's `multiRepo` and `repos`).
+*/
+/// The repos the answer offers (`[{name, rel, kind, picked, locked}]`), empty for a single repo.
+fn offered_repos(answer: &Value) -> Vec<Value> {
+    if answer.get("multiRepo").and_then(Value::as_bool) != Some(true) {
+        return Vec::new();
+    }
+    answer
+        .get("repos")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// The `rel` of each repo in the new worktree: the chat's picks, else gxserver's default.
+fn picked_repos(picks: Option<&Vec<String>>, answer: &Value) -> Vec<String> {
+    offered_repos(answer)
+        .iter()
+        .filter(|repo| {
+            let rel = repo.get("rel").and_then(Value::as_str).unwrap_or_default();
+            repo.get("locked").and_then(Value::as_bool) == Some(true)
+                || match picks {
+                    Some(picks) => picks.iter().any(|pick| pick == rel),
+                    None => repo.get("picked").and_then(Value::as_bool) == Some(true),
+                }
+        })
+        .filter_map(|repo| repo.get("rel").and_then(Value::as_str).map(str::to_string))
+        .collect()
+}
+
+/// The repos part for a new worktree of a project with several repos, else `null`:
+/// `{label, glyph, tooltip, menuTitle, menu, picked}`.
+pub fn repos_part(answer: &Value, picks: Option<&Vec<String>>, base: Option<&str>) -> Value {
+    let offered = offered_repos(answer);
+    if offered.is_empty() {
+        return Value::Null;
+    }
+    let picked = picked_repos(picks, answer);
+    let names: Vec<String> = offered
+        .iter()
+        .filter(|repo| {
+            picked
+                .iter()
+                .any(|rel| repo.get("rel").and_then(Value::as_str) == Some(rel.as_str()))
+        })
+        .filter_map(|repo| text(repo, "name"))
+        .collect();
+    let mut menu = vec![json!({
+        "heading": true,
+        "label": "Repos in the new worktree",
+        "description": match base {
+            Some(base) => format!("Each one from {base}, or its own default branch"),
+            None => "Each one from its default branch".to_string(),
+        },
+    })];
+    for repo in &offered {
+        let rel = repo.get("rel").and_then(Value::as_str).unwrap_or_default();
+        let locked = repo.get("locked").and_then(Value::as_bool) == Some(true);
+        let detail = match repo.get("kind").and_then(Value::as_str) {
+            _ if locked => "Always",
+            Some("submodule") => "Submodule",
+            Some("workspace") => "Workspace folder",
+            _ => "",
+        };
+        menu.push(json!({
+            "label": repo.get("name").cloned().unwrap_or(Value::Null),
+            "description": detail,
+            "checked": picked.iter().any(|pick| pick == rel),
+            "disabled": locked,
+            "command": { "type": "setDraftWorktree", "toggleRepo": rel },
+        }));
+    }
+    json!({
+        "label": format!("{} of {} repos", picked.len(), offered.len()),
+        "glyph": "folders",
+        "tooltip": format!("Repos in the new worktree: {}", names.join(", ")),
+        "menuTitle": "Repos in the new worktree",
+        "menu": menu,
+        "picked": picked,
+    })
+}
+
 /// The choice on: this chat's own pick, else the project's remembered one, else This folder.
 fn selected_mode(state: &ChatState, answer: &Value) -> String {
     let cloud_offered = crate::menus::cloud_box::offered(answer);
@@ -429,7 +521,11 @@ pub fn preview_tray(
         .map(str::to_string)
         .or_else(|| remembered(answer, "baseBranch").filter(|name| branch_exists(name)))
         .or_else(|| text(answer, "currentBranch"))
-        .or_else(|| listed_branches.first().and_then(|branch| text(branch, "name")));
+        .or_else(|| {
+            listed_branches
+                .first()
+                .and_then(|branch| text(branch, "name"))
+        });
     let mut segments = Vec::new();
     if available {
         segments.push(json!({ "mode": MODE_FOLDER, "label": "This folder" }));
@@ -445,13 +541,11 @@ pub fn preview_tray(
             "icon": crate::menus::cloud_box::ICON,
         }));
     }
-    let worktree_key = worktree_key_override
-        .map(str::to_string)
-        .filter(|key| {
-            worktree_list
-                .iter()
-                .any(|worktree| worktree.get("worktreeKey").and_then(Value::as_str) == Some(key))
-        });
+    let worktree_key = worktree_key_override.map(str::to_string).filter(|key| {
+        worktree_list
+            .iter()
+            .any(|worktree| worktree.get("worktreeKey").and_then(Value::as_str) == Some(key))
+    });
     let worktree_label = worktree_key.as_ref().and_then(|key| {
         worktree_list
             .iter()
@@ -485,6 +579,14 @@ pub fn preview_tray(
     value.insert("worktreeLabel".to_string(), json!(worktree_label));
     value.insert("busy".to_string(), json!(false));
     value.insert("status".to_string(), Value::Null);
+    value.insert(
+        "repos".to_string(),
+        if mode == MODE_NEW {
+            repos_part(answer, None, base_branch.as_deref())
+        } else {
+            Value::Null
+        },
+    );
     let mut value = Value::Object(value);
     value["where"] = where_part(&value);
     value["detail"] = detail_part(&value);
@@ -599,6 +701,18 @@ pub fn tray(state: &ChatState) -> Option<Value> {
     value.insert("worktreeKey".to_string(), json!(worktree_key));
     value.insert("worktreeLabel".to_string(), json!(worktree_label));
     value.insert("busy".to_string(), json!(moving));
+    value.insert(
+        "repos".to_string(),
+        if mode == MODE_NEW && !moving && tray.status.is_none() {
+            repos_part(
+                answer,
+                tray.repos.as_ref(),
+                selected_base(state, answer).as_deref(),
+            )
+        } else {
+            Value::Null
+        },
+    );
     value.insert("status".to_string(), status);
     if mode == MODE_CLOUD_BOX {
         if let Some(facts) = crate::menus::cloud_box::facts(answer) {
@@ -923,6 +1037,19 @@ pub fn pick(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
         mode = MODE_EXISTING.to_string();
         tray_state.mode = Some(mode.clone());
     }
+    if let Some(rel) = action.param("toggleRepo").and_then(Value::as_str) {
+        let answer = tray_state.answer.clone().unwrap_or(Value::Null);
+        let mut picked = picked_repos(tray_state.repos.as_ref(), &answer);
+        match picked.iter().position(|pick| pick == rel) {
+            Some(index) => {
+                picked.remove(index);
+            }
+            None => picked.push(rel.to_string()),
+        }
+        tray_state.repos = Some(picked);
+        mode = MODE_NEW.to_string();
+        tray_state.mode = Some(mode.clone());
+    }
     // A new pick clears the last failure's reason.
     tray_state.status = None;
     state.core.request_render();
@@ -1069,6 +1196,12 @@ pub fn intercept_send(
     });
     if mode == MODE_NEW {
         start["baseBranch"] = json!(base);
+        if let Some(picked) = current["repos"]
+            .get("picked")
+            .filter(|picked| picked.is_array())
+        {
+            start["repos"] = picked.clone();
+        }
     } else {
         start["worktreeKey"] = json!(worktree_key);
     }

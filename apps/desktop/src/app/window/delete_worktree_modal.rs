@@ -54,6 +54,20 @@ pub(crate) struct DeleteWorktreeDraft {
     pub(crate) remote_name: Option<String>,
     pub(crate) status_summary: String,
     pub(crate) worktree_name: String,
+    /// A worktree session of a project that spans several repos: one row per repo (Q5278).
+    pub(crate) repos: Vec<DeleteWorktreeRepo>,
+}
+
+/// One repo of a worktree session that spans several repos, as Delete Worktree shows it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct DeleteWorktreeRepo {
+    pub(crate) name: String,
+    /// `root`, `nested`, `workspace` or `submodule`.
+    pub(crate) kind: String,
+    /// Its worktree is still there.
+    pub(crate) exists: bool,
+    /// How many files `git status --short` lists.
+    pub(crate) uncommitted: usize,
 }
 
 /// What the dialog asks its host to do. The dialog removes its own window before sending any of these.
@@ -149,6 +163,17 @@ impl GpuiDeleteWorktreeModalWindow {
         }
         if self.remote_checked() && self.draft.remote_branch_name.is_some() {
             deletes.push(format!("remote branch {}", self.remote_branch_label()));
+        }
+        if !self.draft.repos.is_empty() {
+            let base = "This removes the worktree of each repo, the links and the folder";
+            return if deletes.is_empty() {
+                format!("{base}. Your project's own folders are not touched.")
+            } else {
+                format!(
+                    "{base}, and deletes the {} in every repo that has it.",
+                    deletes.join(" and the ")
+                )
+            };
         }
         if deletes.is_empty() {
             format!("{NOTE_PREFIX}.")
@@ -276,6 +301,69 @@ impl GpuiDeleteWorktreeModalWindow {
                     .child(modal_icon(ICON_CHECK, 15.0, rgb(0xffffff))),
             )
             .child(CLEAN_ROW)
+            .into_any_element()
+    }
+
+    /// The row per repo of a worktree session that spans several repos: its name, what kind of
+    /// repo it is and whether it has uncommitted files.
+    fn render_repo_rows(&self) -> AnyElement {
+        let lp = self.palette;
+        v_flex()
+            .w_full()
+            .min_w_0()
+            .border_1()
+            .border_color(hsla(css_fade(lp.input, 0.62)))
+            .children(self.draft.repos.iter().enumerate().map(|(index, repo)| {
+                let kind = match repo.kind.as_str() {
+                    "submodule" => "Submodule",
+                    "workspace" => "Workspace folder",
+                    "root" => "Project folder",
+                    _ => "Repo",
+                };
+                let state = match (repo.exists, repo.uncommitted) {
+                    (false, _) => "Already gone".to_string(),
+                    (true, 0) => "No local changes".to_string(),
+                    (true, 1) => "1 uncommitted file".to_string(),
+                    (true, n) => format!("{n} uncommitted files"),
+                };
+                h_flex()
+                    .w_full()
+                    .min_w_0()
+                    .gap(px(10.0))
+                    .px(px(12.0))
+                    .py(px(9.0))
+                    .when(index > 0, |this| {
+                        this.border_t_1()
+                            .border_color(hsla(css_fade(lp.input, 0.50)))
+                    })
+                    .text_size(px(13.0))
+                    .line_height(px(18.2))
+                    .child(
+                        div()
+                            .flex_none()
+                            .font_family(MODAL_MONO_FONT)
+                            .text_size(px(12.0))
+                            .text_color(hsla(lp.text(0.94)))
+                            .child(repo.name.clone()),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .text_color(hsla(css_fade(lp.muted, 0.86)))
+                            .child(kind),
+                    )
+                    .child(
+                        div()
+                            .flex_none()
+                            .text_color(hsla(if repo.exists && repo.uncommitted > 0 {
+                                lp.text(0.90)
+                            } else {
+                                css_fade(lp.muted, 0.86)
+                            }))
+                            .child(state),
+                    )
+            }))
             .into_any_element()
     }
 
@@ -408,6 +496,9 @@ impl GpuiDeleteWorktreeModalWindow {
             .p(px(20.0))
             .gap(px(18.0))
             .child(self.render_statement(question))
+            .when(!self.draft.repos.is_empty(), |this| {
+                this.child(self.render_repo_rows())
+            })
             .child(if self.draft.has_changes {
                 self.render_status_block()
             } else {

@@ -497,7 +497,7 @@ struct MultiShipFlags {
     pull_request: bool,
 }
 
-async fn multi_repo_project(
+pub(crate) async fn multi_repo_project(
     projects: &[Value],
     project_id: &str,
 ) -> Option<(Value, std::sync::Arc<crate::multi_repo::RepoSet>)> {
@@ -515,7 +515,10 @@ async fn multi_repo_project(
 
 /// A project row for one repo of the project, so the typed operations (which run only in a
 /// registered folder) run in that repo; it carries the project's Git settings.
-fn repo_project_row(project: &Value, repo: &crate::multi_repo::RepoEntry) -> (String, Value) {
+pub(crate) fn repo_project_row(
+    project: &Value,
+    repo: &crate::multi_repo::RepoEntry,
+) -> (String, Value) {
     let project_id = project
         .get("projectId")
         .and_then(Value::as_str)
@@ -745,7 +748,7 @@ fn repo_has_unpushed_work(repo: &std::path::Path) -> bool {
 /// `runGitShipWorkflow` for a project with several repos. Each repo with picked files (every
 /// repo with changes when no files are named) gets its own commit; push, sync and the pull
 /// request then run in each repo with commits to send. A repo that fails says git's reason and
-/// the others carry on; the call fails only when every repo it tried failed.
+/// the others carry on, and the answer lists every repo (even when all of them failed).
 async fn run_multi_repo_ship(
     state: &AppState,
     projects: &[Value],
@@ -900,19 +903,8 @@ async fn run_multi_repo_ship(
             .position(|repo| Some(repo.rel.as_str()) == row.get("rel").and_then(Value::as_str))
             .unwrap_or(usize::MAX)
     });
-    if tried > 0 && failed == tried {
-        let reasons: Vec<String> = results
-            .iter()
-            .filter_map(|row| {
-                Some(format!(
-                    "{}: {}",
-                    row.get("name")?.as_str()?,
-                    row.get("error")?.as_str()?
-                ))
-            })
-            .collect();
-        return Err(failure(reasons.join("\n")));
-    }
+    // Even when every repo failed the answer is the list, so the client shows each repo's
+    // reason with Try again (Q5276); `failed` says how many.
     if commit.is_none() && sends && tried == 0 {
         return Err(failure("No repo has commits to push."));
     }
@@ -921,6 +913,7 @@ async fn run_multi_repo_ship(
         "pushed": any_pushed,
         "pullRequest": first_pull_request,
         "multiRepo": true,
+        "failed": failed,
         "repos": results,
     }))
 }

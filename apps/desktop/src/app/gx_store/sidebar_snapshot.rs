@@ -653,6 +653,9 @@ fn project_context(group: &GroupView) -> Option<Value> {
         "discoveredIconDataUrl",
         context.discovered_icon_data_url.clone(),
     );
+    if !context.repos.is_empty() {
+        object.insert("repos".to_string(), json!(context.repos));
+    }
     if let Some(worktree) = &context.worktree {
         object.insert(
             "worktree".to_string(),
@@ -1014,7 +1017,8 @@ fn build_session(
                 "groupId": worktree.group_id,
                 "name": worktree.name,
                 "branch": worktree.branch,
-                "label": worktree.label(),
+                // A session folder's line names its repos too (`add-order-refunds · api, web`).
+                "label": worktree.line(),
             }),
         );
     }

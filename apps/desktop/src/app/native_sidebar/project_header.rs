@@ -81,6 +81,14 @@ impl GhostexGpuiApp {
             })
             .and_then(Value::as_str)
             .and_then(super::images::sidebar_image);
+        // CDXC:MultiRepo 2026-11-27: a project that spans several repos draws stacked folders in
+        // its icon's place (a favicon still wins) and its repo count after the name.
+        let repo_count = group
+            .project_context
+            .as_ref()
+            .and_then(|project| project.get("repos"))
+            .and_then(Value::as_array)
+            .map_or(0, Vec::len);
         // Set only on a bot's row, which draws a gateway dot instead of git stats and counts.
         let bot_status = group.bot_status();
         // CDXC:Icons 2026-10-24 DECISION:
@@ -167,6 +175,15 @@ impl GhostexGpuiApp {
                         .truncate()
                         .child(home_title.clone().unwrap_or_else(|| group.title.clone())),
                 )
+                .when(repo_count > 0 && home.is_none(), |title| {
+                    title.child(
+                        div()
+                            .flex_shrink_0()
+                            .text_size(px(11.5 * scale))
+                            .text_color(appearance.muted)
+                            .child(format!("{repo_count} repos")),
+                    )
+                })
                 // CDXC:RemoteMachines 2026-11-21 DECISION:
                 // User, of Main Hub's header: "why dont i see the machine icons here so i can click to toggle each machine pls". Main Hub's header draws the same per-computer icons as a project's (the homes are one merged entry since Q1993, so gx-core fills its chips and hides a computer's chats there, its Chief of Staff included), with the same rules: shown while another computer is in the list, clickable only when more than one computer has a Main Hub. Main Hub's title keeps no tooltip of its own; its card opens on hover.
                 .children(group.machine_names.iter().filter_map(|chip| {
@@ -300,6 +317,12 @@ impl GhostexGpuiApp {
                             .into_any_element(),
                         _ if folder_icon => gpui::svg()
                             .path("titlebar/folder.svg")
+                            .size(px(16.0 * scale))
+                            .flex_shrink_0()
+                            .text_color(appearance.muted)
+                            .into_any_element(),
+                        None if repo_count > 0 => gpui::svg()
+                            .path("titlebar/folders.svg")
                             .size(px(16.0 * scale))
                             .flex_shrink_0()
                             .text_color(appearance.muted)

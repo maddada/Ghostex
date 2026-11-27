@@ -131,6 +131,17 @@ impl ChangedFile {
     }
 }
 
+/// One repo of a project that spans several (`changesDiff`'s `repos`), drawn as a header over
+/// its files.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct RepoGroup {
+    pub(crate) name: String,
+    /// Its place in the project, the front of its files' paths (`api`, `../lib`, empty for the
+    /// project folder's own repo).
+    pub(crate) rel: String,
+    pub(crate) branch: Option<String>,
+}
+
 /// What `changesDiff` answered, parsed.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ChangesData {
@@ -146,6 +157,8 @@ pub(crate) struct ChangesData {
     /// Test files taken out of `files` while the view hides them, each with its place in the
     /// full list (`test_files.rs`).
     pub(crate) hidden_tests: Vec<(usize, ChangedFile)>,
+    /// The repos of a project that spans several, in the project's order; empty for one repo.
+    pub(crate) repos: Vec<RepoGroup>,
 }
 
 impl ChangesData {
@@ -171,6 +184,25 @@ impl ChangesData {
         for file in &mut files {
             file.uncommitted = uncommitted.contains(file.path.as_str());
         }
+        let repos: Vec<RepoGroup> =
+            if answer.get("multiRepo") == Some(&serde_json::Value::Bool(true)) {
+                answer
+                    .get("repos")
+                    .and_then(serde_json::Value::as_array)
+                    .map(|repos| {
+                        repos
+                            .iter()
+                            .map(|repo| RepoGroup {
+                                name: repo["name"].as_str().unwrap_or_default().to_string(),
+                                rel: repo["rel"].as_str().unwrap_or_default().to_string(),
+                                branch: repo["branch"].as_str().map(str::to_string),
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
         for path in list("tooLargePaths") {
             files.push(ChangedFile {
                 uncommitted: true,
@@ -182,7 +214,15 @@ impl ChangesData {
                 hunks: Vec::new(),
             });
         }
+        // Each repo's files together, in the project's order of repos.
+        if !repos.is_empty() {
+            files.sort_by_key(|file| repo_index_in(&repos, &file.path).unwrap_or(usize::MAX));
+        }
+        // A Commit leaves the whole branch's patch as it was but empties the uncommitted list, so
+        // the list is part of what counts as a change.
+        let fingerprint = fingerprint(&format!("{patch}\0{}", uncommitted_paths.join("\n")));
         Self {
+            repos,
             files,
             base_label: text("baseLabel").unwrap_or("HEAD").to_string(),
             branch: text("branch").map(str::to_string),
@@ -193,9 +233,26 @@ impl ChangesData {
                 == Some(true),
             truncated: answer.get("truncated").and_then(serde_json::Value::as_bool) == Some(true),
             uncommitted_paths,
-            fingerprint: fingerprint(patch),
+            fingerprint,
             hidden_tests: Vec::new(),
         }
+    }
+
+    /// The repo a project path is in: the one with the longest place in front of it. A path that
+    /// IS a repo's place (a submodule's pointer) belongs to the repo holding it.
+    pub(crate) fn repo_index(&self, path: &str) -> Option<usize> {
+        repo_index_in(&self.repos, path)
+    }
+
+    /// How many repos the given paths touch.
+    pub(crate) fn repo_count(&self, paths: &[String]) -> usize {
+        let mut seen: Vec<usize> = paths
+            .iter()
+            .filter_map(|path| self.repo_index(path))
+            .collect();
+        seen.sort_unstable();
+        seen.dedup();
+        seen.len()
     }
 
     pub(crate) fn additions(&self) -> usize {
@@ -205,6 +262,15 @@ impl ChangesData {
     pub(crate) fn deletions(&self) -> usize {
         self.files.iter().map(|file| file.deletions).sum()
     }
+}
+
+fn repo_index_in(repos: &[RepoGroup], path: &str) -> Option<usize> {
+    repos
+        .iter()
+        .enumerate()
+        .filter(|(_, repo)| repo.rel.is_empty() || path.starts_with(&format!("{}/", repo.rel)))
+        .max_by_key(|(_, repo)| repo.rel.len())
+        .map(|(index, _)| index)
 }
 
 fn fingerprint(text: &str) -> u64 {
@@ -384,6 +450,8 @@ fn differing_middle(old: &str, new: &str) -> (Range<usize>, Range<usize>) {
 /// One drawn row of the stream.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Row {
+    /// A repo's header over its files, in a project that spans several repos.
+    Repo(usize),
     File(usize),
     Hunk(usize, usize),
     /// A unified row: one hunk line.
@@ -444,7 +512,15 @@ pub(crate) fn build_rows(
             rows.push(Row::Editor);
         }
     };
+    let mut last_repo: Option<usize> = None;
     for (file_index, file) in data.files.iter().enumerate() {
+        if !data.repos.is_empty() {
+            let repo = data.repo_index(&file.path);
+            if let Some(repo) = repo.filter(|repo| Some(*repo) != last_repo) {
+                rows.push(Row::Repo(repo));
+            }
+            last_repo = repo;
+        }
         rows.push(Row::File(file_index));
         if collapsed.contains(&file.path) {
             continue;

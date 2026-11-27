@@ -524,12 +524,30 @@ impl GhostexGpuiApp {
             }
             this.update(cx, |this, cx| match result {
                 Ok(value) => {
-                    this.git_toast(
-                        GitToastLevel::Success,
-                        finished,
-                        ToastOptions::keyed(&toast_id),
-                        cx,
-                    );
+                    match multi_repo_failures(&value) {
+                        // Every repo went through, or a one-repo answer.
+                        None => this.git_toast(
+                            GitToastLevel::Success,
+                            finished,
+                            ToastOptions::keyed(&toast_id),
+                            cx,
+                        ),
+                        // CDXC:Changes 2026-11-27 DECISION: User picked "Commit the rest, list
+                        // each repo" (Q5276): the repos that could went through, the toast says
+                        // how many did not and why, and the Changes view lists each repo.
+                        Some((failed, total, reasons)) => this.git_toast(
+                            match failed == total {
+                                true => GitToastLevel::Error,
+                                false => GitToastLevel::Warning,
+                            },
+                            &format!(
+                                "{} didn't finish in {failed} of {total} repos",
+                                started.trim_end_matches('…')
+                            ),
+                            ToastOptions::keyed(&toast_id).with_description(reasons),
+                            cx,
+                        ),
+                    }
                     Some(value)
                 }
                 Err(error) => {
@@ -597,4 +615,24 @@ impl GhostexGpuiApp {
         }
         self.receive_sidebar_native_project_path_action_payload(&payload.to_string(), cx);
     }
+}
+
+/// In a project that spans several repos, the repos whose part of a ship failed: how many, out of
+/// how many, and each one's reason (`name: reason` lines). `None` when none failed.
+fn multi_repo_failures(answer: &Value) -> Option<(usize, usize, String)> {
+    if answer.get("multiRepo") != Some(&Value::Bool(true)) {
+        return None;
+    }
+    let repos = answer.get("repos")?.as_array()?;
+    let reasons: Vec<String> = repos
+        .iter()
+        .filter_map(|repo| {
+            Some(format!(
+                "{}: {}",
+                repo.get("name")?.as_str()?,
+                repo.get("error")?.as_str()?
+            ))
+        })
+        .collect();
+    (!reasons.is_empty()).then(|| (reasons.len(), repos.len(), reasons.join("\n")))
 }
