@@ -6,11 +6,16 @@ use std::collections::HashMap;
 
 use rusqlite::{params_from_iter, types::Value as SqlValue, Connection, OptionalExtension};
 use serde_json::{json, Value};
+use unicode_normalization::char::is_combining_mark;
+use unicode_normalization::UnicodeNormalization;
 
 /// Longer queries are cut to this.
 pub(super) const QUERY_MAX_CHARS: usize = 200;
 pub(super) const DEFAULT_LIMIT: usize = 20;
 pub(super) const MAX_LIMIT: usize = 50;
+/// At most this many of a word's trigrams go to the index (spread over the word, first and last
+/// included); the text check after it makes up for the ones left out.
+const TRIGRAMS_PER_WORD: usize = 8;
 /// The newest matching messages read per query. A common word stops here instead of reading every
 /// message, so the time stays flat as history grows.
 const HIT_LIMIT: i64 = 4_000;
@@ -51,7 +56,11 @@ struct Group {
 }
 
 pub(super) fn search(index: &Connection, domain: &Connection, query: &Query) -> Vec<Value> {
-    let terms = terms(&query.text);
+    let terms: Vec<String> = terms(&query.text)
+        .iter()
+        .map(|term| fold(term).text)
+        .filter(|term| !term.is_empty())
+        .collect();
     if terms.iter().map(|term| term.chars().count()).sum::<usize>() < 2 {
         return Vec::new();
     }
@@ -117,18 +126,21 @@ fn hit_groups(
     let mut args: Vec<SqlValue> = Vec::new();
     let mut sql = if long.is_empty() {
         args.push(SqlValue::Integer(SCAN_LIMIT));
-        "SELECT m.rowid, m.transcriptId, m.atMs FROM messages m
+        "SELECT m.rowid, m.transcriptId, m.atMs, m.text FROM messages m
          WHERE m.rowid > (SELECT coalesce(max(rowid), 0) FROM messages) - ?1"
             .to_string()
     } else {
-        // Each word as a quoted phrase: every one must appear, as any piece of a word.
-        let phrase = long
+        // The index keeps no positions (`detail=none`, a third of the size), so it cannot match a
+        // phrase: it finds the messages holding each word's trigrams, and the check below keeps
+        // those that hold the words themselves.
+        let trigrams = long
             .iter()
-            .map(|term| format!("\"{}\"", term.replace('"', "\"\"")))
+            .flat_map(|term| word_trigrams(term))
+            .map(|trigram| format!("\"{}\"", trigram.replace('"', "\"\"")))
             .collect::<Vec<_>>()
             .join(" ");
-        args.push(SqlValue::Text(phrase));
-        "SELECT m.rowid, m.transcriptId, m.atMs FROM messages_fts f
+        args.push(SqlValue::Text(trigrams));
+        "SELECT m.rowid, m.transcriptId, m.atMs, m.text FROM messages_fts f
          JOIN messages m ON m.rowid = f.rowid
          WHERE messages_fts MATCH ?1"
             .to_string()
@@ -163,6 +175,11 @@ fn hit_groups(
         let rowid: i64 = row.get(0)?;
         let transcript_id: i64 = row.get(1)?;
         let at_ms: i64 = row.get(2)?;
+        let text = row.get_ref(3)?.as_str().unwrap_or_default();
+        let folded = fold(text);
+        if !terms.iter().all(|term| folded.text.contains(term.as_str())) {
+            continue;
+        }
         match by_transcript.get(&transcript_id) {
             Some(&at) => {
                 let group = &mut groups[at];
@@ -247,12 +264,12 @@ fn shown_session(
 }
 
 /// How well `text` matches: 1 when every word is found as a whole word, 0.8 when one only starts
-/// a word, 0.3 when one only appears inside a word (or only with other accents), plus 0.25 when
-/// the words appear together as typed. Also where the first word was found (a byte offset).
+/// a word, 0.3 when one only appears inside a word, plus 0.25 when the words appear together as
+/// typed. Case and accents are ignored, as the index ignores them. Also where the first word was
+/// found (a byte offset in `text`).
 fn match_quality(text: &str, terms: &[String]) -> (f64, Option<usize>) {
-    let lower = text.to_lowercase();
-    // Lowercasing can change byte lengths outside ASCII; offsets then do not map back to `text`.
-    let same_offsets = lower.len() == text.len();
+    let folded = fold(text);
+    let lower = folded.text.as_str();
     let mut quality = 1.0f64;
     let mut first_at = None;
     for (position, term) in terms.iter().enumerate() {
@@ -278,14 +295,82 @@ fn match_quality(text: &str, terms: &[String]) -> (f64, Option<usize>) {
             }
         }
         quality = quality.min(best);
-        if position == 0 && same_offsets {
-            first_at = found_at;
+        if position == 0 {
+            first_at = found_at.map(|at| folded.origin(at));
         }
     }
     if terms.len() > 1 && lower.contains(&terms.join(" ")) {
         quality += 0.25;
     }
     (quality, first_at)
+}
+
+/// Text as the index compares it: lowercase, accents removed.
+struct Folded {
+    text: String,
+    /// For each byte of `text`, the byte of the original it came from; `None` when they are the
+    /// same (ASCII text).
+    origins: Option<Vec<usize>>,
+}
+
+impl Folded {
+    fn origin(&self, at: usize) -> usize {
+        self.origins
+            .as_ref()
+            .map_or(at, |origins| origins.get(at).copied().unwrap_or(0))
+    }
+}
+
+fn fold(text: &str) -> Folded {
+    if text.is_ascii() {
+        return Folded {
+            text: text.to_ascii_lowercase(),
+            origins: None,
+        };
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut origins = Vec::with_capacity(text.len());
+    let mut buffer = [0u8; 4];
+    for (at, c) in text.char_indices() {
+        for base in std::iter::once(c)
+            .nfd()
+            .filter(|part| !is_combining_mark(*part))
+        {
+            for lower in base.to_lowercase() {
+                let encoded = lower.encode_utf8(&mut buffer);
+                out.push_str(encoded);
+                origins.extend(std::iter::repeat_n(at, encoded.len()));
+            }
+        }
+    }
+    Folded {
+        text: out,
+        origins: Some(origins),
+    }
+}
+
+/// The trigrams of a word the index is asked for: all of a short word's, an even spread of a long
+/// one's.
+fn word_trigrams(term: &str) -> Vec<String> {
+    let chars: Vec<char> = term.chars().collect();
+    let all: Vec<String> = chars
+        .windows(3)
+        .map(|window| window.iter().collect::<String>())
+        .collect();
+    let mut picked: Vec<String> = Vec::new();
+    let count = all.len();
+    let wanted = count.min(TRIGRAMS_PER_WORD);
+    for step in 0..wanted {
+        let at = if wanted == 1 {
+            0
+        } else {
+            step * (count - 1) / (wanted - 1)
+        };
+        if !picked.contains(&all[at]) {
+            picked.push(all[at].clone());
+        }
+    }
+    picked
 }
 
 /// Up to 240 characters starting a few words before the match at `at`, whitespace collapsed and

@@ -9,7 +9,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use crate::paths::GxserverPaths;
 
 /// Bumped when what the index stores changes; a file of another version is deleted and rebuilt.
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 const FILE_NAME: &str = "chat-search.sqlite3";
 
 pub(super) fn database_file(paths: &GxserverPaths) -> PathBuf {
@@ -58,10 +58,13 @@ fn open_raw(file: &Path) -> rusqlite::Result<Connection> {
 /// CDXC:Sessions 2026-11-27 WHY:
 /// A trigram FTS5 index matches any 3+ character piece of a word (`sear` finds "research") in
 /// either case and with or without accents, without scanning messages, which is what makes search
-/// as you type fast on every chat. It is contentless (`content = ''`): the words live once, in
-/// `messages`, which builds the snippet; `contentless_delete` lets a rewritten transcript drop its
-/// rows. Keyed by transcript file, not session, because a restored or reopened session reads the
-/// same file as the one it came from, and each file is indexed once.
+/// as you type fast on every chat. It keeps no positions (`detail = none`): with them it was about
+/// 4.7 times the indexed words, about a gigabyte for a heavy user. Without them it cannot match a
+/// phrase, so a query asks for a word's trigrams and checks the candidates' words itself
+/// (query.rs). It is contentless (`content = ''`): the words live once, in `messages`, which
+/// builds the snippet; `contentless_delete` lets a rewritten transcript drop its rows. Keyed by
+/// transcript file, not session, because a restored or reopened session reads the same file as
+/// the one it came from, and each file is indexed once.
 fn create(db: &Connection) -> rusqlite::Result<()> {
     db.execute_batch(&format!(
         "BEGIN IMMEDIATE;
@@ -97,6 +100,7 @@ fn create(db: &Connection) -> rusqlite::Result<()> {
            text,
            content = '',
            contentless_delete = 1,
+           detail = none,
            tokenize = 'trigram remove_diacritics 1'
          );
          PRAGMA user_version = {SCHEMA_VERSION};

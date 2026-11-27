@@ -85,6 +85,8 @@ tokio = { version = "1", features = ["macros", "net", "process", "rt-multi-threa
 toml_edit = "0.25"
 tower = "0.5"
 unicode-width = "0.2"
+# Chat search folds accents and case the way its index does (chat_search/query.rs).
+unicode-normalization = "0.1"
 url = "2"
 vt100 = "0.18"
 uuid = { version = "1", features = ["v4"] }
