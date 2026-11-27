@@ -400,6 +400,14 @@ pub(crate) mod helpers {
 pub(crate) mod window {
     pub(crate) use crate::native_modal_kit;
     pub(crate) use crate::round_close_button;
+
+    /// The Agents Hub's key interceptor asks the app's text-field menu (app/window/text_field_menu.rs)
+    /// whether a key is the menu's. The demo draws no such menu, so no key is.
+    pub(crate) mod text_field_menu {
+        pub(crate) fn takes_keystroke(_keystroke: &gpui::Keystroke) -> bool {
+            false
+        }
+    }
 }
 
 /// The sidebar items Settings reads (app/native_sidebar): the Ask Ghostex AI flower icon

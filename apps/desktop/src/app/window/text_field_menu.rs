@@ -26,6 +26,23 @@
 //! carries [`TextFieldMenuLayer`], which closes the menu on a press anywhere else in that window,
 //! and Escape, the arrow keys and Return reach the menu through a keystroke interceptor.
 //!
+//! CDXC:ContextMenus 2026-11-27 WHY:
+//! With the menu open, Escape and Return act on the menu only (Escape closes it; Return picks the
+//! highlighted row or only closes it). Two things let them reach the field or window behind it.
+//! GPUI calls every keystroke interceptor even after one stopped the key, so a window that reads
+//! keys the same way (Search by Prompt, the Agents Hub) closed itself on the Escape that closed the
+//! menu: those interceptors ask [`takes_keystroke`] first. And the window losing key status closed
+//! the menu at once (through the layer's activation watch, and through the field's blur, which GPUI
+//! also sends then), while key status can drop for a moment and come straight back without the user
+//! leaving (AppKit while an activation completes, window utilities, and every keystroke an
+//! automation tool posts to a background app: resign key, become key, the key). The menu then closed
+//! just before the key arrived and the key went to the field: Settings search cleared or Settings
+//! closed, a Rename ended. A key loss now closes the menu only once the activation events settled
+//! (`APP_SWITCH_SETTLE`, as the chat menus wait: CDXC:SessionChat 2026-09-22 in
+//! native_chat/option_menu/window.rs) and only when the user left: another Ghostex window took the
+//! keyboard, or another app took the foreground from a Ghostex that had it, still so at a second
+//! look half a second later (an automation tool's key loss lasts about a quarter of a second).
+//!
 //! SEE-ALSO: apps/desktop/src/app/native_sidebar/menus.rs (the menu look),
 //! .dependencies/gpui-component/crates/component/src/input/input.rs (`set_context_menu_presenter`).
 
@@ -33,9 +50,9 @@ use std::{cell::RefCell, rc::Rc};
 
 use gpui::{
     Action, AnyElement, AnyWindowHandle, App, AppContext as _, Bounds, Context, FocusHandle,
-    InteractiveElement as _, IntoElement, KeystrokeEvent, ParentElement as _, Pixels, Point,
-    Render, SharedString, StatefulInteractiveElement as _, Styled as _, Subscription, WeakEntity,
-    Window, anchored, deferred, div, prelude::FluentBuilder as _, px, size, svg,
+    InteractiveElement as _, IntoElement, Keystroke, KeystrokeEvent, ParentElement as _, Pixels,
+    Point, Render, SharedString, StatefulInteractiveElement as _, Styled as _, Subscription,
+    WeakEntity, Window, anchored, deferred, div, prelude::FluentBuilder as _, px, size, svg,
 };
 use gpui_component::input::{InputContextMenuCapabilities, InputContextMenuRequest};
 
@@ -99,6 +116,9 @@ struct OpenMenu {
     focus: FocusHandle,
     /// The row the arrow keys are on.
     selected: Option<usize>,
+    /// Whether Ghostex was the frontmost app when the menu opened: only then does another app
+    /// taking the foreground close it (see [`close_unless_keyboard_returns`]).
+    app_was_active: bool,
     /// The layer in `parent` that closes the menu on a press elsewhere.
     layer: Option<WeakEntity<TextFieldMenuLayer>>,
     _keys: Subscription,
@@ -111,6 +131,23 @@ struct BlurWatch;
 
 thread_local! {
     static OPEN: RefCell<Option<OpenMenu>> = const { RefCell::new(None) };
+    /// The key the menu just took, until the end of its dispatch (see [`takes_keystroke`]).
+    static TAKEN: RefCell<Option<Keystroke>> = const { RefCell::new(None) };
+}
+
+/// Whether `keystroke` belongs to the open menu: Escape, the arrow keys or Return while it is open,
+/// or the key it took during this dispatch. Another keystroke interceptor (a window that reads keys
+/// before its fields) leaves such a key alone, because GPUI calls every interceptor even after one
+/// stopped the key.
+pub(crate) fn takes_keystroke(keystroke: &Keystroke) -> bool {
+    TAKEN.with(|taken| taken.borrow().as_ref() == Some(keystroke))
+        || (OPEN.with(|open| open.borrow().is_some()) && is_menu_key(keystroke))
+}
+
+/// Escape, Up, Down and Return without modifiers: the keys the menu handles itself.
+fn is_menu_key(keystroke: &Keystroke) -> bool {
+    !keystroke.modifiers.modified()
+        && matches!(keystroke.key.as_str(), "escape" | "up" | "down" | "enter")
 }
 
 /// Draws every text field's right-click menu as Ghostex's own (see the module comment). Call once
@@ -163,8 +200,14 @@ pub(crate) fn show_text_field_menu(
     let keys = cx.intercept_keystrokes(menu_key);
     let watch = cx.new(|_| BlurWatch);
     let blur = watch.update(cx, |_, cx| {
-        cx.on_blur(&request.focus_handle, window, |_, _, cx| {
-            close_text_field_menu(cx)
+        cx.on_blur(&request.focus_handle, window, |_, window, cx| {
+            // GPUI also blurs the field when its window loses key status, which can come straight
+            // back (see the module comment).
+            if window.is_window_active() {
+                close_text_field_menu(cx);
+            } else {
+                close_unless_keyboard_returns(cx);
+            }
         })
     });
     OPEN.with(|open| {
@@ -174,6 +217,7 @@ pub(crate) fn show_text_field_menu(
             lines: Rc::new(lines),
             focus: request.focus_handle.clone(),
             selected: None,
+            app_was_active: !crate::app::window::popup_dismissal::focus_went_to_another_app(cx),
             layer,
             _keys: keys,
             _blur: (watch, blur),
@@ -195,6 +239,58 @@ pub(crate) fn close_text_field_menu(cx: &mut App) {
     notify_layer(menu.parent, menu.layer.clone(), cx);
     // The keystroke interceptor may be the caller; it is dropped once it has returned.
     cx.defer(move |_| drop(menu));
+}
+
+/// After its field's window lost key status, closes the menu once the activation events settled
+/// if the user left it: another Ghostex window has the keyboard, or Ghostex is no longer the
+/// frontmost app (when it was as the menu opened). Both are looked at twice, the second time after
+/// [`SECOND_LOOK`], because they can read true for a moment while key status is away and coming
+/// back. The menu also closes when its window closed or the field lost focus within it. A key loss
+/// that comes back, or after which nothing else took the keyboard, leaves it open.
+fn close_unless_keyboard_returns(cx: &mut App) {
+    look_at_keyboard(
+        crate::app::window::popup_dismissal::APP_SWITCH_SETTLE,
+        false,
+        cx,
+    );
+}
+
+/// The wait before the second look of [`close_unless_keyboard_returns`]: longer than the key loss
+/// an automation tool causes around each keystroke it posts (about a quarter of a second).
+const SECOND_LOOK: std::time::Duration = std::time::Duration::from_millis(500);
+
+fn look_at_keyboard(after: std::time::Duration, second: bool, cx: &mut App) {
+    cx.spawn(async move |cx| {
+        cx.background_executor().timer(after).await;
+        cx.update(|cx| {
+            let Some((parent, focus, app_was_active)) = OPEN.with(|open| {
+                open.borrow()
+                    .as_ref()
+                    .map(|menu| (menu.parent, menu.focus.clone(), menu.app_was_active))
+            }) else {
+                return;
+            };
+            let close = match parent.update(cx, |_, window, _| {
+                (window.is_window_active(), focus.is_focused(window))
+            }) {
+                Err(_) => true,
+                Ok((true, focused)) => !focused,
+                Ok((false, _)) => {
+                    let left = cx.active_window().is_some_and(|active| active != parent)
+                        || (app_was_active
+                            && crate::app::window::popup_dismissal::focus_went_to_another_app(cx));
+                    if left && !second {
+                        look_at_keyboard(SECOND_LOOK, true, cx);
+                    }
+                    left && second
+                }
+            };
+            if close {
+                close_text_field_menu(cx);
+            }
+        });
+    })
+    .detach();
 }
 
 /// Redraws the layer in the field's window, after whatever is being updated now (the layer itself,
@@ -327,6 +423,10 @@ fn refresh(cx: &mut App) {
 fn menu_key(event: &KeystrokeEvent, window: &mut Window, cx: &mut App) {
     let keystroke = &event.keystroke;
     let plain = !keystroke.modifiers.modified();
+    if is_menu_key(keystroke) {
+        TAKEN.with(|taken| *taken.borrow_mut() = Some(keystroke.clone()));
+        cx.defer(|_| TAKEN.with(|taken| *taken.borrow_mut() = None));
+    }
     match keystroke.key.as_str() {
         "escape" if plain => {
             cx.stop_propagation();
@@ -515,7 +615,9 @@ pub(crate) struct TextFieldMenuLayer {
 
 impl TextFieldMenuLayer {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        // Another window or app taking the keyboard closes the menu, as it closes a system menu.
+        // Another window or app taking the keyboard closes the menu, as it closes a system menu,
+        // once the activation events settled: a key loss that comes straight back is not one (see
+        // the module comment).
         let activation = cx.observe_window_activation(window, |this, window, cx| {
             if !window.is_window_active()
                 && OPEN.with(|open| {
@@ -524,7 +626,7 @@ impl TextFieldMenuLayer {
                         .is_some_and(|menu| menu.parent == this.window)
                 })
             {
-                close_text_field_menu(cx);
+                close_unless_keyboard_returns(cx);
             }
         });
         Self {

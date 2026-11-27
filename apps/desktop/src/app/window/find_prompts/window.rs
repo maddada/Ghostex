@@ -226,6 +226,11 @@ impl GpuiFindPromptsModalWindow {
             if window.window_handle().window_id() != window_id {
                 return;
             }
+            // A field's right-click menu over this window owns Escape, the arrows and Return
+            // (window/text_field_menu.rs).
+            if crate::app::window::text_field_menu::takes_keystroke(&event.keystroke) {
+                return;
+            }
             let handled = view
                 .update(cx, |this, cx| {
                     this.handle_keystroke(&event.keystroke, window, cx)
