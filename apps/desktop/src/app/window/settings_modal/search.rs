@@ -226,12 +226,26 @@ pub(crate) fn grouped_search(
 /// store hides them (`hidden_keys`), from the page and from search alike. A search shows every
 /// matching row that is not hidden in its own section, and the fold stays out.
 ///
-/// Which rows a render pass draws: the everyday rows (the page body) or the Power User Flags (the
-/// fold). `None` draws both, for the search's own bookkeeping.
+/// CDXC:Settings 2026-11-27 DECISION: the coordinator rows keep the Advanced fold, which always
+/// shows (user: "don't change coordinator or autopilot thx i'l check later keep them as is pls";
+/// `ADVANCED_MAIN_SETTING_KEYS` holds only them), so a page with both draws its Advanced fold and
+/// then its Power User Flags.
+///
+/// Which rows a render pass draws: the everyday rows (the page body), the Advanced rows (the
+/// Advanced fold) or the Power User Flags (their fold). `None` draws all, for the search's own
+/// bookkeeping.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum RowTier {
     Everyday,
+    Advanced,
     PowerUserFlags,
+}
+
+impl RowTier {
+    /// One of the folds at the bottom of the page, not its body.
+    fn is_fold(self) -> bool {
+        matches!(self, Self::Advanced | Self::PowerUserFlags)
+    }
 }
 
 /// `shouldShowSettingsSection(result, tier)`: whether a section has a row for this pass.
@@ -240,7 +254,7 @@ pub(crate) fn should_show_section(result: &SectionSearch, tier: Option<RowTier>)
         return false;
     }
     if result.is_searching {
-        return tier != Some(RowTier::PowerUserFlags);
+        return !tier.is_some_and(RowTier::is_fold);
     }
     let catalog = settings_catalog();
     match tier {
@@ -248,7 +262,11 @@ pub(crate) fn should_show_section(result: &SectionSearch, tier: Option<RowTier>)
         Some(RowTier::Everyday) => result
             .visible_keys
             .iter()
-            .any(|key| !catalog.is_power_user_flag(key)),
+            .any(|key| !catalog.is_advanced(key) && !catalog.is_power_user_flag(key)),
+        Some(RowTier::Advanced) => result
+            .visible_keys
+            .iter()
+            .any(|key| catalog.is_advanced(key)),
         Some(RowTier::PowerUserFlags) => result
             .visible_keys
             .iter()
@@ -263,13 +281,15 @@ pub(crate) fn should_show_setting(
     tier: Option<RowTier>,
 ) -> bool {
     if result.is_searching {
-        return tier != Some(RowTier::PowerUserFlags)
+        return !tier.is_some_and(RowTier::is_fold)
             && (result.section_matches || result.visible_keys.contains(key));
     }
+    let catalog = settings_catalog();
     match tier {
         None => true,
-        Some(RowTier::Everyday) => !settings_catalog().is_power_user_flag(key),
-        Some(RowTier::PowerUserFlags) => settings_catalog().is_power_user_flag(key),
+        Some(RowTier::Everyday) => !catalog.is_advanced(key) && !catalog.is_power_user_flag(key),
+        Some(RowTier::Advanced) => catalog.is_advanced(key),
+        Some(RowTier::PowerUserFlags) => catalog.is_power_user_flag(key),
     }
 }
 
@@ -436,11 +456,11 @@ impl GeneralSearch {
         !js_trim(&self.query).is_empty()
     }
 
-    /// Whether this is the Power User Flags fold's pass. A row that is not a setting (a link to
-    /// another page, a button strip) belongs to the page body's pass only, or it draws twice with
-    /// the same element ids once the fold opens.
-    pub(crate) fn is_power_user_pass(&self) -> bool {
-        self.tier == Some(RowTier::PowerUserFlags)
+    /// Whether this is a fold's pass (Advanced or Power User Flags). A row that is not a setting (a
+    /// link to another page, a button strip) belongs to the page body's pass only, or it draws
+    /// twice with the same element ids once the fold opens.
+    pub(crate) fn is_fold_pass(&self) -> bool {
+        self.tier.is_some_and(RowTier::is_fold)
     }
 
     /// Whether a row that stands for several settings (Card details, Animations, Transcript

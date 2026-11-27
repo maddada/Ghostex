@@ -66,6 +66,9 @@ fn describe_type(entry: &CatalogEntry) -> String {
 
 fn render_entry(entry: &CatalogEntry) -> String {
     let mut flags = Vec::new();
+    if entry.advanced {
+        flags.push("advanced");
+    }
     if entry.power_user_flag {
         flags.push("power user flag");
     }

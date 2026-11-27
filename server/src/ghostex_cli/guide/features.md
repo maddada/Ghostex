@@ -4672,7 +4672,7 @@ version of the Projects features in Cursor and Claude Code.
   A project can have several coordinators, one per stream of work. In a
   coordinator's chat the effort picker offers the same Low, Medium, High and XHigh only.
   To pick from every level the agent has (Max, Ultra and the like), turn on
-  **Every effort level in coordinator pickers** (a setting in Settings > Chat);
+  **Every effort level in coordinator pickers** (an advanced setting in Settings > Chat);
   a coordinator works best on High or XHigh. From a terminal: `ghostex coordinator
   create [--agent <id>] [--goal <text>] [--task <first request>]
   [--model <model>] [--effort <effort>]` (without `--model` or `--effort` it
@@ -5275,7 +5275,7 @@ the page picks how much it does: **Off**, **Careful** (answers questions after
 minutes and approves anything that is not a hard limit), or **Custom** (your own
 mix of the rows below; changing a row makes it Custom). While it is on, Ghostex
 looks at every session it covers as soon as an agent finishes a turn, and sweeps
-all of them every 2 minutes (1 to 10 minutes under **Supervisor**). It then:
+all of them every 2 minutes (1 to 10 minutes under **Advanced**). It then:
 
 - **Carries on** a session that stopped while its background job finished, that
   stopped mid-task right after saying what it does next, or whose turn was cut
@@ -5331,7 +5331,7 @@ log notes it for you.
 with no recommended choice, or a session the rules could not keep moving. It
 starts the first time it is needed, as **Autopilot supervisor** in an
 **Autopilot** project that starts hidden in your sidebar (**Show hidden** lists
-it, and you can unhide it like any project), on the **Supervisor model** you pick under **Supervisor**: any agent, model and
+it, and you can unhide it like any project), on the **Supervisor model** you pick under **Advanced**: any agent, model and
 effort from the new session's model picker (Claude Opus 5.5 at medium by
 default). When its pick is at its usage limit it moves to the one you set in
 **When it's at its limit**, then to Opus 5.5 at medium or GPT 6.1 Sol at high,
@@ -5344,7 +5344,7 @@ question, tells a session how to carry on, reloads it, or leaves it for you
 with a note. It never approves a prompt itself.
 
 How often it wakes: only when something needs it. Besides the judgment calls
-above, **Supervisor check-up** under **Supervisor** (every 10 minutes by default;
+above, **Supervisor check-up** under **Advanced** (every 10 minutes by default;
 20 or 30 minutes, every hour, or Off) has Ghostex look for sessions that seem
 stuck in ways its rules don't settle: still silent after an interrupt and a
 reload, told to carry on but doing nothing, failing again and again, saying the

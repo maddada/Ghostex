@@ -273,6 +273,7 @@
       "sectionTitle": "Chat",
       "type": "boolean",
       "default": true,
+      "advanced": true,
       "agentWritable": true
     },
     {
@@ -553,6 +554,7 @@
       "sectionTitle": "Chat",
       "type": "boolean",
       "default": false,
+      "advanced": true,
       "agentWritable": true
     },
     {
@@ -662,6 +664,7 @@
       "sectionTitle": "Marked handovers",
       "type": "boolean",
       "default": false,
+      "advanced": true,
       "agentWritable": true
     },
     {
@@ -688,6 +691,7 @@
           "value": "badge"
         }
       ],
+      "advanced": true,
       "agentWritable": true
     },
     {
@@ -703,6 +707,7 @@
       "min": 0,
       "max": 100,
       "step": 10,
+      "advanced": true,
       "agentWritable": true
     },
     {
@@ -1454,7 +1459,7 @@
       "sectionTitle": "Session Cards",
       "type": "boolean",
       "default": false,
-      "powerUserFlag": true,
+      "advanced": true,
       "agentWritable": true
     },
     {
@@ -10750,8 +10755,9 @@
       "tab": "autopilot",
       "tabTitle": "Autopilot",
       "section": "supervisor",
-      "sectionTitle": "Supervisor",
+      "sectionTitle": "Advanced",
       "type": "ui",
+      "advanced": true,
       "agentWritable": false
     },
     {
@@ -10761,8 +10767,9 @@
       "tab": "autopilot",
       "tabTitle": "Autopilot",
       "section": "supervisor",
-      "sectionTitle": "Supervisor",
+      "sectionTitle": "Advanced",
       "type": "ui",
+      "advanced": true,
       "agentWritable": false
     },
     {
@@ -10772,8 +10779,9 @@
       "tab": "autopilot",
       "tabTitle": "Autopilot",
       "section": "supervisor",
-      "sectionTitle": "Supervisor",
+      "sectionTitle": "Advanced",
       "type": "ui",
+      "advanced": true,
       "agentWritable": false
     },
     {
@@ -10783,8 +10791,9 @@
       "tab": "autopilot",
       "tabTitle": "Autopilot",
       "section": "supervisor",
-      "sectionTitle": "Supervisor",
+      "sectionTitle": "Advanced",
       "type": "ui",
+      "advanced": true,
       "agentWritable": false
     },
     {

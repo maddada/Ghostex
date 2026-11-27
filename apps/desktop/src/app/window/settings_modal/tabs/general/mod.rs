@@ -22,11 +22,11 @@ pub(super) mod terminal_font;
 pub(super) mod web_runtime;
 
 use super::super::catalog::{SettingOption, module, settings_catalog};
-use super::super::fields::power_user_flags_fold_header;
 use super::super::fields::{
     BoolChoices, FieldStates, PageAction, RowSpec, SettingsPage, SliderBinding, bool_segmented_key,
     reset_key, segmented_field, select_field, slider_number_field, toggle_field,
 };
+use super::super::fields::{advanced_fold_header, power_user_flags_fold_header};
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
 use super::super::palette::SettingsPalette;
@@ -169,14 +169,14 @@ impl GeneralCx {
             return false;
         }
         if self.search.is_searching() {
-            return !self.search.is_power_user_pass();
+            return !self.search.is_fold_pass();
         }
         self.visible(section, key)
     }
 
     /// A chip row's element id for this pass, so the row drawn in both passes never repeats one.
     pub(super) fn pass_id(&self, body: &'static str, flags: &'static str) -> &'static str {
-        if self.search.is_power_user_pass() {
+        if self.search.is_fold_pass() {
             flags
         } else {
             body
@@ -448,44 +448,55 @@ impl Render for GeneralTab {
         let has_visible = tab
             .general_group()
             .is_some_and(|group| g.search.group_visible(group));
-        // The everyday rows, then the Power User Flags for the fold (CDXC:Settings 2026-11-27 in
-        // search.rs). A search renders every match in the first pass and nothing in the second.
-        // While the page's flags are hidden the store leaves them out (`hidden_keys`), so the
-        // second pass draws nothing and the fold row stays out too.
+        // The everyday rows, then the Advanced rows for their fold, then the Power User Flags for
+        // theirs (CDXC:Settings 2026-11-27 in search.rs). A search renders every match in the first
+        // pass and nothing in the others. While the page's flags are hidden the store leaves them
+        // out (`hidden_keys`), so their pass draws nothing and their fold row stays out too; the
+        // Advanced fold always shows.
         let everyday = GeneralCx {
             search: g.search.clone().with_tier(RowTier::Everyday),
             ..g.clone()
         };
         let mut blocks: Vec<PageBlock> = sections(self, &everyday, window, cx);
+        let above_folds: Vec<String> = blocks
+            .iter()
+            .filter_map(|block| block.anchor.clone())
+            .collect();
         let advanced = GeneralCx {
-            search: g.search.clone().with_tier(RowTier::PowerUserFlags),
-            shown_above_fold: blocks
-                .iter()
-                .filter_map(|block| block.anchor.clone())
-                .collect(),
+            search: g.search.clone().with_tier(RowTier::Advanced),
+            shown_above_fold: above_folds.clone(),
             ..g.clone()
         };
         let advanced_blocks = sections(self, &advanced, window, cx);
+        let flags = GeneralCx {
+            search: g.search.clone().with_tier(RowTier::PowerUserFlags),
+            shown_above_fold: above_folds,
+            ..g.clone()
+        };
+        let flag_blocks = sections(self, &flags, window, cx);
+        let pending = self.store.update(cx, |store, _| {
+            store.tracker(tab).borrow().pending_scroll.clone()
+        });
+        let opens = |fold: &[PageBlock], above: &[PageBlock]| {
+            pending.as_ref().is_some_and(|anchor| {
+                !above
+                    .iter()
+                    .any(|block| block.anchor.as_deref() == Some(anchor))
+                    && fold
+                        .iter()
+                        .any(|block| block.anchor.as_deref() == Some(anchor))
+            })
+        };
         if !advanced_blocks.is_empty() {
-            // A deep link to a section that only has Power User Flags opens the fold.
-            let pending = self.store.update(cx, |store, _| {
-                store.tracker(tab).borrow().pending_scroll.clone()
-            });
-            if let Some(anchor) = pending
-                && !blocks
-                    .iter()
-                    .any(|block| block.anchor.as_deref() == Some(&anchor))
-                && advanced_blocks
-                    .iter()
-                    .any(|block| block.anchor.as_deref() == Some(&anchor))
-            {
+            // A deep link to a section that only has advanced rows opens the fold.
+            if opens(&advanced_blocks, &blocks) {
                 self.store
                     .update(cx, |store, _| store.open_advanced_fold(tab));
             }
             let open = self.store.read(cx).advanced_fold_open(tab);
             blocks.push(PageBlock::section(
-                "powerUserFlagsFold",
-                power_user_flags_fold_header(
+                "advancedFold",
+                advanced_fold_header(
                     &g.p,
                     open,
                     move |page: &mut Self, _window, cx| {
@@ -497,6 +508,29 @@ impl Render for GeneralTab {
             ));
             if open {
                 blocks.extend(advanced_blocks);
+            }
+        }
+        if !flag_blocks.is_empty() {
+            // A deep link to a section that only has Power User Flags opens the fold.
+            if opens(&flag_blocks, &blocks) {
+                self.store
+                    .update(cx, |store, _| store.open_power_user_fold(tab));
+            }
+            let open = self.store.read(cx).power_user_fold_open(tab);
+            blocks.push(PageBlock::section(
+                "powerUserFlagsFold",
+                power_user_flags_fold_header(
+                    &g.p,
+                    open,
+                    move |page: &mut Self, _window, cx| {
+                        let store = page.store.clone();
+                        store.update(cx, |store, cx| store.toggle_power_user_fold(tab, cx));
+                    },
+                    cx,
+                ),
+            ));
+            if open {
+                blocks.extend(flag_blocks);
             }
         }
         if !has_visible {

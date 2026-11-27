@@ -203,9 +203,9 @@ pub(crate) fn push_power_user_flags<V: SettingsPage>(
             .iter()
             .any(|block| block.anchor.as_deref() == Some(&anchor))
     {
-        store.update(cx, |store, _| store.open_advanced_fold(tab));
+        store.update(cx, |store, _| store.open_power_user_fold(tab));
     }
-    let open = store.read(cx).advanced_fold_open(tab);
+    let open = store.read(cx).power_user_fold_open(tab);
     blocks.push(super::super::page::PageBlock::section(
         "powerUserFlagsFold",
         power_user_flags_fold_header(
@@ -213,7 +213,7 @@ pub(crate) fn push_power_user_flags<V: SettingsPage>(
             open,
             move |page: &mut V, _window, cx| {
                 let store = page.settings_store().clone();
-                store.update(cx, |store, cx| store.toggle_advanced_fold(tab, cx));
+                store.update(cx, |store, cx| store.toggle_power_user_fold(tab, cx));
             },
             cx,
         ),

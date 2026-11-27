@@ -271,6 +271,12 @@ impl SettingsCatalog {
         self.defaults.get(key)
     }
 
+    /// `isAdvancedMainSetting` (`ADVANCED_MAIN_SETTING_KEYS`): folded into the page's Advanced
+    /// section, which always shows.
+    pub(crate) fn is_advanced(&self, key: &str) -> bool {
+        catalog::is_advanced_setting(key)
+    }
+
     /// A row of its page's Power User Flags section (`ghostex_settings_catalog::power_user_flags`).
     pub(crate) fn is_power_user_flag(&self, key: &str) -> bool {
         catalog::is_power_user_flag(key)

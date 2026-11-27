@@ -282,6 +282,8 @@ pub(crate) struct SettingsStore {
     /// store change (the fast layers' tracked scroll handle), so the opened rows could not be
     /// scrolled to.
     advanced_folds: HashMap<SettingsTabId, bool>,
+    /// Which pages' Power User Flags folds are open (`power_user_fold_open`).
+    power_user_folds: HashMap<SettingsTabId, bool>,
     closed: bool,
     /// The dialogs and forms the last visit left open (settings_modal/restore.rs).
     open_forms: OpenFormMemory,
@@ -339,6 +341,7 @@ impl SettingsStore {
             navigation_task: None,
             restored_scroll: HashMap::new(),
             advanced_folds: HashMap::new(),
+            power_user_folds: HashMap::new(),
             closed: false,
             open_forms,
             extensions_group_open: false,
@@ -1104,7 +1107,7 @@ impl SettingsStore {
         )
     }
 
-    /// Whether page `tab`'s Power User Flags fold (or Cloud Boxes' Advanced fold) is open.
+    /// Whether page `tab`'s Advanced fold (a General page's, Autopilot's or Cloud Boxes') is open.
     pub(crate) fn advanced_fold_open(&self, tab: SettingsTabId) -> bool {
         self.advanced_folds.get(&tab).copied().unwrap_or(false)
     }
@@ -1118,6 +1121,23 @@ impl SettingsStore {
     pub(crate) fn toggle_advanced_fold(&mut self, tab: SettingsTabId, cx: &mut Context<Self>) {
         let open = !self.advanced_fold_open(tab);
         self.advanced_folds.insert(tab, open);
+        cx.notify();
+    }
+
+    /// Whether page `tab`'s Power User Flags fold is open.
+    pub(crate) fn power_user_fold_open(&self, tab: SettingsTabId) -> bool {
+        self.power_user_folds.get(&tab).copied().unwrap_or(false)
+    }
+
+    /// Opens page `tab`'s Power User Flags fold without a re-render (a deep link found its section
+    /// there while the page was already rendering).
+    pub(crate) fn open_power_user_fold(&mut self, tab: SettingsTabId) {
+        self.power_user_folds.insert(tab, true);
+    }
+
+    pub(crate) fn toggle_power_user_fold(&mut self, tab: SettingsTabId, cx: &mut Context<Self>) {
+        let open = !self.power_user_fold_open(tab);
+        self.power_user_folds.insert(tab, open);
         cx.notify();
     }
 

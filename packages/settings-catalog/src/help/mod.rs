@@ -11,9 +11,9 @@ use std::collections::{HashMap, HashSet};
 
 use crate::availability::{availability_note, platform_defaults};
 use crate::data::{
-    MAIN_SETTINGS_SECTION_SETTING_KEYS,
-    MARKED_HANDOVERS_HEADING_STRENGTH_PERCENT_STEP, MAX_AGENT_MANAGER_ZOOM_PERCENT,
-    MAX_COMMANDS_PANEL_DEFAULT_HEIGHT_PX, MAX_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
+    MAIN_SETTINGS_SECTION_SETTING_KEYS, MARKED_HANDOVERS_HEADING_STRENGTH_PERCENT_STEP,
+    MAX_AGENT_MANAGER_ZOOM_PERCENT, MAX_COMMANDS_PANEL_DEFAULT_HEIGHT_PX,
+    MAX_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
     MAX_MARKED_HANDOVERS_HEADING_STRENGTH_PERCENT, MAX_PROJECT_SWITCH_KEEP_ALIVE_MINUTES,
     MAX_SESSION_CHAT_TEXT_STRENGTH_PERCENT, MAX_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
     MAX_SESSION_CHAT_ZOOM_PERCENT, MAX_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
@@ -83,6 +83,8 @@ pub struct CatalogEntry {
     pub default: Option<&'static J>,
     pub options: Vec<SettingOption>,
     pub range: Option<NumberRange>,
+    /// Folded into its page's Advanced section, which always shows.
+    pub advanced: bool,
     /// In its page's Power User Flags section (`crate::power_user_flags`).
     pub power_user_flag: bool,
     pub agent_writable: bool,
@@ -289,6 +291,7 @@ fn catalog_entry(row: &SettingRow, location: &Location) -> CatalogEntry {
         } else {
             None
         },
+        advanced: row.advanced || crate::is_advanced_setting(row.key),
         power_user_flag: crate::power_user_flags::is_flag(row.key),
         agent_writable,
         platform_defaults: platform_defaults(row.key),
@@ -544,6 +547,9 @@ impl CatalogEntry {
                 fields.push(("step", Json::Num(step)));
             }
         }
+        if self.advanced {
+            fields.push(("advanced", Json::Bool(true)));
+        }
         if self.power_user_flag {
             fields.push(("powerUserFlag", Json::Bool(true)));
         }
@@ -759,6 +765,7 @@ pub fn published_catalog() -> Catalog {
                 default: None,
                 options: Vec::new(),
                 range: None,
+                advanced: false,
                 power_user_flag: false,
                 agent_writable: false,
                 platform_defaults: Vec::new(),

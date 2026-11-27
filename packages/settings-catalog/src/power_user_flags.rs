@@ -106,7 +106,6 @@ pub const PAGES: &[PageFlags] = &[
             "unifiedSessionCardHoverButtons",
             "titleSessionsByBranch",
             "showSessionCardHoverButtonsInContextMenu",
-            "sessionsBoldCoordinatorTitle",
             "dimSleepingSessions",
             "dimInactiveProjects",
             "wakeSleepingSessionsOnSelect",

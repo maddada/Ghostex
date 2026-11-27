@@ -53,9 +53,20 @@ use crate::json::J;
 /// CDXC:Settings 2026-11-19: the Interface pages draw every row without an Advanced fold, so the
 /// rows that moved onto them (general/theme.rs) and the active pane outline left this list too.
 /// CDXC:Settings 2026-11-27 DECISION:
-/// The Advanced fold and this list are gone: a page's Power User Flags (`crate::power_user_flags`,
-/// the rows the user picked) fold at its bottom instead, and only on Experience > Advanced. The
-/// rows of this list the user did not pick show with their page's other rows.
+/// A page's Power User Flags (`crate::power_user_flags`, the rows the user picked) fold at its
+/// bottom, only on Experience > Advanced; the rows of this list the user did not pick show with
+/// their page's other rows. The coordinator rows stay as they were, in the page's Advanced fold that
+/// always shows: user, "don't change coordinator or autopilot thx i'l check later keep them as is
+/// pls". So this list holds only them now (Autopilot's Supervisor section marks its own rows,
+/// pages/autopilot.rs).
+pub const ADVANCED_MAIN_SETTING_KEYS: &[&str] = &[
+    "chatQuietViewCoordinators",
+    "sessionsBoldCoordinatorTitle",
+    "markedHandoversStyle",
+    "markedHandoversEmoji",
+    "markedHandoversHeadingStrength",
+    "orchestratorAllEfforts",
+];
 
 /// CDXC:MarkedHandovers 2026-10-17 DECISION:
 /// User: "allow launching an orchestrator without the reply style ... but put "Not recommended" and make it an advanced setting, same for emojis setting". These rows are advanced and carry a visible "Not recommended" label: turning them on works against the marked handovers Ghostex recommends.
