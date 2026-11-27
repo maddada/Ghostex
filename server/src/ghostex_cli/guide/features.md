@@ -5918,8 +5918,10 @@ current during the call (sessions that open, close or are renamed, changed
 states, and how many threads a coordinator runs) without saying anything
 about it. What a waiting session asks isn't in that list; the agent reads it
 when you ask. A connected computer that can't be read is named in the list
-as out of reach (past three such computers, the list only counts them), and
-its sessions are not taken for closed. It answers the point
+as out of reach (up to three such computers, as far as the sessions leave
+room; past that the list only counts them, and a full list may only count
+them or leave the note out), and its sessions are not taken for closed. The
+sessions always come first: such notes never push one out of the list. It answers the point
 without preamble or filler and doesn't end with offers like "Want the
 details?". Its short opening line says it can approve or deny what a session
 waits on. While the
@@ -5927,9 +5929,12 @@ conversation is open it tells you when a session finishes its turn or starts
 waiting on a question or an approval, but not about a coordinator's threads
 (their approvals included; a call about the coordinator still hears those).
 That goes for a coordinator on a connected computer too; when that computer
-doesn't say within 2 seconds which of its sessions are threads, they count as
+doesn't say within 2 seconds which of its sessions are threads, the threads
+it named before stay threads while they are open, its other sessions count as
 sessions of their own, and the agent is told that it doesn't know which are
-threads there. A
+threads there. So a thread on a connected computer can still be announced
+when it opened after that computer last said which sessions are threads, or
+before that computer ever did. A
 session that finished its turn counts as waiting on a question only for the
 questions that turn asked: open questions from earlier turns, after you
 moved the session on, leave it idle (the sidebar's pink dot still shows them,
