@@ -536,6 +536,14 @@ export const storageCatalog = Object.freeze({
     textCodec,
     disk
   ),
+  canvasLastDrawing: define(
+    'canvasLastDrawing',
+    'The drawing Canvas had open last',
+    desktop + 'src/app/canvas/mod.rs',
+    'ghostex.canvas.lastDrawing.',
+    textCodec,
+    disk
+  ),
   docsAnnotatedFiles: define(
     'docsAnnotatedFiles',
     'HTML files with Annotate on',

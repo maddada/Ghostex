@@ -133,6 +133,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("changesViewTabHidden", J::Bool(false)),
     ("terminalViewTabHidden", J::Bool(false)),
     ("storybookViewTabHidden", J::Bool(false)),
+    ("canvasViewTabHidden", J::Bool(false)),
     ("linearViewTabHidden", J::Bool(false)),
     ("jiraViewTabHidden", J::Bool(false)),
     ("githubViewTabHidden", J::Bool(false)),

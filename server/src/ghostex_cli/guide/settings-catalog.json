@@ -12403,6 +12403,18 @@
       "agentWritable": true
     },
     {
+      "key": "canvasViewTabHidden",
+      "title": "Hide Canvas view",
+      "subtitle": "Hide the built-in drawing board. Its drawings stay in each project's .ghostex/drawings folder.",
+      "tab": "extensions",
+      "tabTitle": "Extensions",
+      "section": "viewOrder",
+      "sectionTitle": "Views",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
       "key": "storybookViewTabHidden",
       "title": "Hide Storybook view",
       "subtitle": "Hide the built-in component workshop. When enabled, it appears only in projects with Storybook.",

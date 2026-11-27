@@ -89,6 +89,16 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("settingsKey", J::Str("storybookViewTabHidden")),
         ("title", J::Str("Storybook")),
     ]),
+    // CDXC:Canvas 2026-11-27: the built-in Canvas view (apps/desktop/src/app/canvas/), which
+    // replaced the Community Canvas extension and keeps its id.
+    J::Obj(&[
+        ("description", J::Str("Sketch and diagram on a board. Drawings are kept in the project, out of git unless you include them.")),
+        ("category", J::Str("code-and-files")),
+        ("id", J::Str("canvas")),
+        ("placement", J::Str("view")),
+        ("settingsKey", J::Str("canvasViewTabHidden")),
+        ("title", J::Str("Canvas")),
+    ]),
     J::Obj(&[
         ("description", J::Str("Explore, edit, and search your project in a familiar, full-featured workspace without ever leaving Ghostex.")),
         ("category", J::Str("code-and-files")),

@@ -617,6 +617,7 @@ How to use this file:
 - **Hide GitHub Actions view** `githubActionsViewTabHidden` (boolean, default true): Enable GitHub Actions in Settings > Extensions, then choose its home URL when opening the view. Disabled by default.
 - **Hide PostHog view** `posthogViewTabHidden` (boolean, default true): Enable PostHog in Settings > Extensions, then choose its home URL when opening the view. Disabled by default.
 - **Hide Custom Website view** `customWebsiteViewTabHidden` (boolean, default true): Enable Custom Website in Settings > Extensions, then choose its home URL when opening the view. Disabled by default.
+- **Hide Canvas view** `canvasViewTabHidden` (boolean, default false): Hide the built-in drawing board. Its drawings stay in each project's .ghostex/drawings folder.
 - **Hide Storybook view** `storybookViewTabHidden` (boolean, default false): Hide the built-in component workshop. When enabled, it appears only in projects with Storybook.
 - **Hide Terminal view** `terminalViewTabHidden` (boolean, default false): Stop offering the Terminal view, so it is missing from the view panel tab strip, its + menu and the view picker.
 - **Hide Notifications bell** `notificationsTitlebarButtonHidden` (boolean, default false): Hide the Notifications bell from the sidebar's top row.

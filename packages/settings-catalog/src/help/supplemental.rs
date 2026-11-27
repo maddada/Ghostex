@@ -283,6 +283,17 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         user_only: false,
     },
     Supplemental {
+        key: "canvasViewTabHidden",
+        tab: EXTENSIONS,
+        group: None,
+        section: "viewOrder",
+        section_title: "Views",
+        title: "Hide Canvas view",
+        subtitle: "Hide the built-in drawing board. Its drawings stay in each project's .ghostex/drawings folder.",
+        options: &[],
+        user_only: false,
+    },
+    Supplemental {
         key: "storybookViewTabHidden",
         tab: EXTENSIONS,
         group: None,

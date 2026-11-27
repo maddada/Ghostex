@@ -336,6 +336,12 @@ pub const CATALOG: &[CatalogStore] = &[
         Records,
     ),
     store(
+        "canvasLastDrawing",
+        "ghostex.canvas.lastDrawing.",
+        true,
+        Records,
+    ),
+    store(
         "docsAnnotatedFiles",
         "ghostex.manage.annotatedFiles.",
         true,
