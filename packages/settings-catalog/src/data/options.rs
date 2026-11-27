@@ -663,7 +663,9 @@ pub const SESSION_CHAT_THEME_OPTIONS: &[Opt] = &[
 ];
 
 /// CDXC:SessionTitles 2026-09-11 WHY:
-/// Pi and Antigravity CLI are title-generation agents because both ship a non-interactive print mode (`pi -p`, `agy -p`) that was verified against the real binaries, and a machine with only those two CLIs used to be stuck with the Codex default, which is not installed there (GitHub issue #125).
+/// Pi is a title-generation agent because it ships a non-interactive print mode (`pi -p`) that was verified against the real binary, and a machine with only that CLI used to be stuck with the Codex default, which is not installed there (GitHub issue #125).
+/// CDXC:AgentProviders 2026-11-27 DECISION: User (Q5212, "Remove it"): Antigravity is no longer a Title Generation Agent (titles and Catch me up). `agy -p` is a model call on the user's account outside ACP; a saved Antigravity pick reads as the default.
+
 /// The values are sidebar agent ids, not executables, because settings and gxserver resolve the command through the sidebar agent registry.
 /// SEE-ALSO: server/src/server/title_generation/title_command.rs (normalize_title_generation_agent, build_title_generation_command).
 pub const SESSION_TITLE_GENERATION_AGENT_OPTIONS: &[Opt] = &[
@@ -672,7 +674,6 @@ pub const SESSION_TITLE_GENERATION_AGENT_OPTIONS: &[Opt] = &[
     opt("Claude", "claude"),
     opt("Grok Build", "grok"),
     opt("Pi Agent", "pi"),
-    opt("Antigravity", "antigravity"),
     opt("Empryo", "empryo"),
     opt("Custom", "custom"),
 ];

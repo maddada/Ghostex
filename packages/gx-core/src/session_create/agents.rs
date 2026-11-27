@@ -367,7 +367,6 @@ impl TitleGenerationSettings {
                         | "claude"
                         | "grok"
                         | "pi"
-                        | "antigravity"
                         | "empryo"
                         | "custom"
                 )

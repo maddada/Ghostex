@@ -12,17 +12,9 @@ use serde_json::{json, Map, Value};
 use crate::session_create::{default_agent_id_for_icon, resolve_sidebar_agent};
 use crate::sidebar_view::agents::default_agent_id;
 
-/// `SESSION_TITLE_GENERATION_AGENT_OPTIONS`.
-const TITLE_GENERATION_AGENTS: [&str; 8] = [
-    "codex",
-    "cursor",
-    "claude",
-    "grok",
-    "pi",
-    "antigravity",
-    "empryo",
-    "custom",
-];
+/// `SESSION_TITLE_GENERATION_AGENT_OPTIONS` (no Antigravity since 2026-11-27, Q5212).
+const TITLE_GENERATION_AGENTS: [&str; 7] =
+    ["codex", "cursor", "claude", "grok", "pi", "empryo", "custom"];
 
 /// The parameters of `/api/generateSessionTitle`, or the sentence the user is told when the
 /// picked agent cannot generate a name.

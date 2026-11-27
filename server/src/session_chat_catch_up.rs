@@ -8,7 +8,7 @@
 //! CDXC:CatchMeUp 2026-10-12 DECISION:
 //! User: "also please make catch me up just read last 30 agent messages". The summary reads everything from the 30th-newest agent message on (those agent replies, the user's messages between them and one line per tool call); a row of tool calls alone does not count as an agent message. This supersedes the 2026-10-11 window of the last 200 rows.
 //! CDXC:CatchMeUp 2026-10-11 WHY:
-//! gxserver owns it so every client (desktop, web, phone) gets the same summary: it reads the transcript backwards in 200-row pages (the detail pager's own cap; the same rows and text `ghostex read-session-chat --format text` prints, at most 10 pages) until the window holds 30 agent messages, keeps the newest 40,000 characters of that window as a safety net, and runs the Title Generation Agent (`sessionTitleGenerationAgent`) with the prompt on stdin. The title job's heredoc is not used: PowerShell, the Windows command shell, has no heredoc, and stdin has no command-line length limit. Agents that only take the prompt as an argument (Cursor, Grok, Pi, Antigravity) get the newest 8,000 characters, which keeps a Windows command line under its limit.
+//! gxserver owns it so every client (desktop, web, phone) gets the same summary: it reads the transcript backwards in 200-row pages (the detail pager's own cap; the same rows and text `ghostex read-session-chat --format text` prints, at most 10 pages) until the window holds 30 agent messages, keeps the newest 40,000 characters of that window as a safety net, and runs the Title Generation Agent (`sessionTitleGenerationAgent`) with the prompt on stdin. The title job's heredoc is not used: PowerShell, the Windows command shell, has no heredoc, and stdin has no command-line length limit. Agents that only take the prompt as an argument (Cursor, Grok, Pi) get the newest 8,000 characters, which keeps a Windows command line under its limit.
 //! SEE-ALSO: server/src/server/title_generation/title_command.rs (the agent commands), packages/gx-chat-core/src/composer/catch_up.rs (the button, the card and its states), apps/desktop/src/app/native_chat/catch_up.rs and apps/mobile/app/src/chat/native/cards/CatchUpCard.tsx (drawing).
 
 use std::time::Duration;
@@ -314,7 +314,6 @@ fn agent_label(agent: &str) -> String {
         "claude" => "Claude",
         "grok" => "Grok Build",
         "pi" => "Pi Agent",
-        "antigravity" => "Antigravity",
         "empryo" => "Empryo",
         "custom" => "Your custom summary command",
         other => other,

@@ -34,16 +34,22 @@ fn gpui_rename_session_generator_name() -> String {
     if agent == "custom" {
         return "your custom title command".to_string();
     }
-    modules::exports(modules::module::SETTINGS, Platform::current())
-        .into_iter()
-        .find(|(name, _)| *name == "SESSION_TITLE_GENERATION_AGENT_OPTIONS")
-        .and_then(|(_, options)| {
-            options.to_value().as_array()?.iter().find_map(|option| {
-                (option.get("value")?.as_str()? == agent)
-                    .then(|| option.get("label")?.as_str().map(str::to_string))
-                    .flatten()
+    let label = |wanted: &str| {
+        modules::exports(modules::module::SETTINGS, Platform::current())
+            .into_iter()
+            .find(|(name, _)| *name == "SESSION_TITLE_GENERATION_AGENT_OPTIONS")
+            .and_then(|(_, options)| {
+                options.to_value().as_array()?.iter().find_map(|option| {
+                    (option.get("value")?.as_str()? == wanted)
+                        .then(|| option.get("label")?.as_str().map(str::to_string))
+                        .flatten()
+                })
             })
-        })
+    };
+    // A pick that is no longer offered (Antigravity, Q5212) runs on the default, as gxserver's
+    // `normalize_title_generation_agent` reads it.
+    label(&agent)
+        .or_else(|| label("claude"))
         .unwrap_or(agent)
 }
 

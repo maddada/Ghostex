@@ -382,7 +382,6 @@ fn preview_command(agent: &str, command: Option<&str>) -> String {
         "claude" => "claude",
         "grok" => "grok",
         "pi" => "pi",
-        "antigravity" => "agy",
         "empryo" => "empryo",
         _ => "<custom command>",
     }
@@ -484,9 +483,6 @@ pub(super) fn title_generation_preview(agent: &str, command: Option<&str>) -> St
         ),
         "pi" => format!(
             "{command} -p --no-session --no-tools --no-context-files --thinking low '{prompt}'"
-        ),
-        "antigravity" => format!(
-            "{command} -p '{prompt}' --output-format text --effort low --disable-slash-commands"
         ),
         "empryo" => here_doc(
             &format!(

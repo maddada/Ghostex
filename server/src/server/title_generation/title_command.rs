@@ -96,15 +96,18 @@ pub(crate) async fn generate_first_prompt_session_title(
 }
 
 /// CDXC:SessionTitles 2026-09-11 WHY:
-/// Pi and Antigravity CLI generate titles through their non-interactive print modes (`pi -p`, `agy -p`), verified against the real binaries; before that a machine with only those CLIs fell back to the Codex default, which was not installed (GitHub issue #125).
-/// Pi gets `--no-tools --no-context-files --no-session` so a title prompt never runs tools, loads AGENTS.md, or leaves a session behind; Antigravity gets `--disable-slash-commands` so a prompt starting with `/` is not expanded.
+/// Pi generates titles through its non-interactive print mode (`pi -p`), verified against the real binary; before that a machine with only that CLI fell back to the Codex default, which was not installed (GitHub issue #125).
+/// Pi gets `--no-tools --no-context-files --no-session` so a title prompt never runs tools, loads AGENTS.md, or leaves a session behind.
+/// CDXC:AgentProviders 2026-11-27 DECISION: User (Q5212, "Remove it"): Antigravity is no longer a
+/// Title Generation Agent (titles and Catch me up). `agy -p` is a model call on the user's account
+/// outside ACP; a saved Antigravity pick reads as the default.
 /// CDXC:SessionTitles 2026-10-07 WHY:
 /// Empryo generates titles through `empryo --headless` (verified against 3.9.1-beta: a one-line title in about ten seconds, read from stdin); `--no-genome` and `--marionette-mode none` skip the repo map and the prompt pre-pass, `--max-steps 1` keeps it from running tools, and it saves no session without `--save-session`. Without it the Rename dialog offered Empryo, remembered it, and every Generate Name failed with "Choose a configured agent that supports name generation" (seen live 2026-10-07). It passes no `--effort`: the title runs on the user's default model, and Empryo rejects an effort that model lacks.
 /// SEE-ALSO: apps/desktop/src/app/window/settings_modal/tabs/agents/model.rs `title_generation_preview`, which must preview the same commands.
 pub(crate) fn normalize_title_generation_agent(value: Option<&str>) -> String {
     match value {
         Some(
-            "codex" | "cursor" | "claude" | "grok" | "pi" | "antigravity" | "empryo" | "custom",
+            "codex" | "cursor" | "claude" | "grok" | "pi" | "empryo" | "custom",
         ) => value.unwrap().to_string(),
         _ => "claude".to_string(),
     }
@@ -123,7 +126,6 @@ pub(crate) fn read_title_generation_command(
         "claude" => Ok("claude".to_string()),
         "grok" => Ok("grok".to_string()),
         "pi" => Ok("pi".to_string()),
-        "antigravity" => Ok("agy".to_string()),
         "empryo" => Ok("empryo".to_string()),
         "custom" => Err("Custom title generation command is not configured.".to_string()),
         _ => Ok("claude".to_string()),
@@ -149,8 +151,8 @@ fn title_generation_shell_command(
     .ok_or_else(|| format!("Unsupported title generation agent: {agent}"))
 }
 
-/// The command for an agent that takes its prompt as an argument (Cursor, Grok, Pi and
-/// Antigravity), with `quoted_prompt` already quoted for the shell that runs it.
+/// The command for an agent that takes its prompt as an argument (Cursor, Grok and Pi), with
+/// `quoted_prompt` already quoted for the shell that runs it.
 pub(crate) fn argument_title_generation_command(
     agent: &str,
     command: &str,
@@ -166,9 +168,6 @@ pub(crate) fn argument_title_generation_command(
         ),
         "pi" => format!(
             "{command} -p --no-session --no-tools --no-context-files --thinking low {quoted_prompt}"
-        ),
-        "antigravity" => format!(
-            "{command} -p {quoted_prompt} --output-format text --effort low --disable-slash-commands"
         ),
         _ => return None,
     })
@@ -358,7 +357,9 @@ pub(crate) fn internal_prompt_generation_environment(
         "GHOSTEX_INTERNAL_TITLE_GENERATION".to_string(),
         "1".to_string(),
     );
-    // CDXC:AgentProviders 2026-11-02 WHY: See `AGY_BACKGROUND_AUTO_UPDATE_OFF` (issue #397): these jobs run `agy -p` out of sight.
+    // CDXC:AgentProviders 2026-11-02 WHY: See `AGY_BACKGROUND_AUTO_UPDATE_OFF` (issue #397): these
+    // jobs ran `agy -p` out of sight. Antigravity is no Title Generation Agent since 2026-11-27
+    // (Q5212); the switch stays so a custom command that runs agy still doesn't update it.
     let (key, value) = crate::agent_hooks::probing::AGY_BACKGROUND_AUTO_UPDATE_OFF;
     environment.insert(key.to_string(), value.to_string());
     environment.into_iter().collect()
