@@ -1064,13 +1064,16 @@ async fn answer_session_chat_prompt(
                     ),
                 };
             }
-            if !approval_send.is_empty() {
-                if let Err(error) =
-                    verify_answer_targets_shown_prompt(state, &target, &params).await
-                {
-                    return domain_error_response(endpoint_path, request_id, error);
+            // The notice an Allow was checked against (`noticeDetectedAt`), kept so OMP's Approve
+            // row is typed only into that notice's dialog (below).
+            let verified = if approval_send.is_empty() {
+                None
+            } else {
+                match verify_answer_targets_shown_prompt(state, &target, &params).await {
+                    Ok(verified) => verified,
+                    Err(error) => return domain_error_response(endpoint_path, request_id, error),
                 }
-            }
+            };
             let omp = session_chat_agent_for_session(&target.session)
                 .map(|agent| {
                     crate::session_chat_follower::omp_agent_for_pi_transcript(
@@ -1121,16 +1124,18 @@ async fn answer_session_chat_prompt(
             } else if omp {
                 // OMP reads a typed "1" as the start of a "deny and send" message, so a notice's
                 // Allow is the Approve row of the dialog it shows now (`detect_omp_permission_picker`).
+                // That row goes through the same guard as a row pick (`GuardOmpApprovalRow`), bound
+                // to the notice the answer was verified against: a dialog that replaced it between
+                // the check and the keys gets nothing.
                 let screen =
                     crate::session_chat_send::capture_session_terminal_text(&target.zmx_name).await;
-                let Some(answer_key) = screen
+                let Some(approve) = screen
                     .as_deref()
                     .and_then(crate::session_chat_omp_blocking::detect_omp_permission_picker)
                     .and_then(|picker| {
-                        let approve = picker.rows.iter().position(|row| {
+                        picker.rows.iter().position(|row| {
                             matches!(row.label.as_str(), "Approve" | "Approve Once")
-                        })?;
-                        picker.answer_key(approve)
+                        })
                     })
                 else {
                     return domain_error_response(
@@ -1142,7 +1147,17 @@ async fn answer_session_chat_prompt(
                         },
                     );
                 };
-                crate::session_chat_send::build_terminal_picker_answer_steps(&answer_key)
+                match omp_row_pick_on_verified_notice(screen.as_deref(), approve, verified.as_ref())
+                {
+                    Ok(pick) => {
+                        vec![
+                            crate::session_chat_send::SessionChatSendStep::GuardOmpApprovalRow(
+                                pick,
+                            ),
+                        ]
+                    }
+                    Err(error) => return domain_error_response(endpoint_path, request_id, error),
+                }
             } else {
                 vec![crate::session_chat_send::SessionChatSendStep::Write(
                     approval_send.to_string(),
