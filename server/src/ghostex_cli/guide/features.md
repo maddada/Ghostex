@@ -2667,7 +2667,8 @@ UI mockup, a comparison or a small interactive tool. Ask for them by name
 visuals"); agents still understand the older words Ghostex page, gx page,
 inline HTML, inline questions and inline graphs. **Boosts** ask for these, and more, in one click. The Boost pill at the right
 of the strip on top of the chat box opens one list of them in sections: Show (Live page; Chart it, a Live page of charts and tables;
-Side by side, Map it, Ask me in a form), Actions (Browser use, where the agent works on
+Options, a Live page of real options side by side with a question for each kind of choice;
+Map it, Ask me in a form), Actions (Browser use, where the agent works on
 websites in your own signed-in Chrome with OpenCode Browse, which you install yourself (see
 OpenCode Browse below); Computer use, where it drives your desktop apps itself with Cua
 Driver; Embedded Browser use, where it drives pages in Ghostex's own browser; Fix and prove, where the agent reproduces

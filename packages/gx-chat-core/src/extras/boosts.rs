@@ -117,7 +117,9 @@ pub const BOOSTS: [Boost; 21] = [
         label: "Live page",
         icon: "titlebar/browser.svg",
         category: "show",
-        description: "The answer comes back as a page you open: mockups, comparisons, small tools.",
+        // CDXC:Boosts 2026-11-27 DECISION: "comparisons" left Live page's line once Options became
+        // the Live page of options to pick from, so the two don't read as the same Boost.
+        description: "The answer comes back as a page you open: mockups, explainers, small tools.",
         preview: "page",
         prompt: "Answer with a Live page: one self-contained HTML page you publish with `ghostex show`, then paste the block it prints into your reply. If you haven't in this conversation, run `ghostex visual guide pages` first and follow it.",
     },
@@ -133,14 +135,21 @@ pub const BOOSTS: [Boost; 21] = [
         // message".
         prompt: "Show the numbers in your answer on a Live page: charts, stat tiles and tables on one self-contained HTML page you publish with `ghostex show`, each chart with one plain sentence on what it shows, then paste the block it prints into your reply. Don't draw the charts in a ```visual block in the chat. If you haven't in this conversation, run `ghostex visual guide pages` first and follow it (charts take its --chart-1 to --chart-6 colours).",
     },
+    // CDXC:Boosts 2026-11-27 DECISION:
+    // User, on the page comparing Live page and Side by side ("Merge"): "i want side by side to be
+    // called "Options" and i want it to be exactly the same boost as live page in the end, just
+    // tuned a bit and it should be able to give more than 1 question just like live page does now,
+    // not just 1 question". The id stays `compare`, so saved prompts and `boost:compare` pills
+    // keep working; the prompt is Live page's, tuned for laying out options, with a question per
+    // kind of choice instead of the one question under them all.
     Boost {
         id: "compare",
-        label: "Side by side",
+        label: "Options",
         icon: "titlebar/layout-columns.svg",
         category: "show",
-        description: "Two to four real options drawn next to each other, picked with a click.",
+        description: "A Live page of real options drawn side by side, picked with clicks.",
         preview: "compare",
-        prompt: "Lay out two to four real options side by side on a Live page, each drawn as it would really look or work, with its trade-offs, and under them one question with your recommended pick so I can choose with a click. If you haven't in this conversation, run `ghostex visual guide pages` first and follow it.",
+        prompt: "Answer with a Live page: one self-contained HTML page you publish with `ghostex show`, then paste the block it prints into your reply. On it, lay out the real options side by side, each drawn as it would really look or work, with its trade-offs and your recommended pick. Ask as many questions as the decision needs, one per kind of choice, each right under its options, so I can choose with clicks. If you haven't in this conversation, run `ghostex visual guide pages` first and follow it.",
     },
     Boost {
         id: "map",

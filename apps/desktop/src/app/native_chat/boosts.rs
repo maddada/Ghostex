@@ -1435,19 +1435,63 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
                     ),
             )
             .into_any_element(),
-        "compare" | "triage" | "second" => div()
+        // Options: a Live page of options side by side, the recommended pick marked, and a second
+        // question under the first, since it asks one question per kind of choice.
+        "compare" => div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .child(bar(Some("options.html")))
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .flex_col()
+                    .gap(px(5.0 * s))
+                    .p(px(7.0 * s))
+                    .child(div().flex_1().min_h_0().flex().gap(px(5.0 * s)).children(
+                        ["A", "B", "C"].into_iter().map(|label| {
+                            let pick = label == "B";
+                            tile()
+                                .when(pick, |tile| tile.border(px(s)).border_color(tone))
+                                .child(small(label, p.foreground))
+                                .child(line(0.8, 4.0, strong))
+                                .child(div().flex_1())
+                                .when(pick, |tile| tile.child(small("Pick", tone)))
+                        }),
+                    ))
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .flex()
+                            .items_center()
+                            .gap(px(4.0 * s))
+                            .child(line(0.22, 4.0, strong))
+                            .children([true, false].into_iter().map(|on| {
+                                div()
+                                    .px(px(5.0 * s))
+                                    .rounded(px(3.0 * s))
+                                    .when(on, |chip| chip.bg(p.foreground.opacity(0.85)))
+                                    .when(!on, |chip| chip.border(px(s)).border_color(strong))
+                                    .child(small(
+                                        if on { "Monthly" } else { "Yearly" },
+                                        if on { p.background } else { p.card_muted },
+                                    ))
+                            })),
+                    ),
+            )
+            .into_any_element(),
+        "triage" | "second" => div()
             .size_full()
             .flex()
             .gap(px(5.0 * s))
             .p(px(7.0 * s))
             .children((0..if kind == "second" { 2 } else { 3 }).map(|n| {
-                let pick = (kind == "compare" && n == 1) || (kind == "second" && n == 1);
+                let pick = kind == "second" && n == 1;
                 tile()
                     .child(small(
                         match (kind, n) {
-                            ("compare", 0) => "A",
-                            ("compare", 1) => "B",
-                            ("compare", _) => "C",
                             ("triage", 0) => "#412",
                             ("triage", 1) => "#415",
                             ("triage", _) => "GX-88",
