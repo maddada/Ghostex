@@ -304,6 +304,7 @@ pub(crate) mod session_identity_log;
 pub mod session_keep_awake;
 pub mod session_lifecycle;
 pub(crate) mod session_links;
+pub mod session_native_release;
 pub(crate) mod session_needs_you;
 pub(crate) mod session_own_limits;
 pub mod session_parking;

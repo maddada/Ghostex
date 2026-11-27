@@ -46,7 +46,7 @@ struct Run {
 }
 
 #[derive(Clone, Debug, Default)]
-struct RolloutFacts {
+pub(super) struct RolloutFacts {
     /// `(directory, text)` of the last `agents_md` Codex recorded.
     agents_md: Option<(Option<String>, String)>,
     /// The commands of `exec` calls still waiting for their answer, by call id.
@@ -54,6 +54,13 @@ struct RolloutFacts {
     running: Vec<Run>,
     finished: Vec<Run>,
     last_at: i64,
+}
+
+impl RolloutFacts {
+    /// A command Codex left running in the background is still running.
+    pub(super) fn has_running_background(&self) -> bool {
+        !self.running.is_empty()
+    }
 }
 
 fn cut(text: &str, max: usize) -> String {
@@ -232,7 +239,7 @@ struct CacheEntry {
 }
 
 /// The facts of the rollout at `path`, reading only what was appended since the last call.
-fn scan_rollout(path: &Path) -> std::io::Result<RolloutFacts> {
+pub(super) fn scan_rollout(path: &Path) -> std::io::Result<RolloutFacts> {
     static CACHE: OnceLock<Mutex<(u64, HashMap<PathBuf, CacheEntry>)>> = OnceLock::new();
     let cache = CACHE.get_or_init(Mutex::default);
     let version = read_transcript_file_version(path)?;

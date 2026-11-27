@@ -1,4 +1,5 @@
-//! Auto Sleep ("Sleep idle agent sessions"): which sessions this daemon's sweep puts to sleep.
+//! Auto Sleep ("Sleep idle agent sessions"): which Terminal-based sessions this daemon's sweep puts
+//! to sleep (Native chats have their own idle release, session_native_release.rs).
 //! Pure: the runner (`server/session_auto_sleep_sweep.rs`) reads the settings file, the
 //! presentation snapshot and the keep-awake leases, and performs the sleeps.
 //!
@@ -114,12 +115,12 @@ pub fn sessions_to_sleep(
 
 /// What an orchestrator's threads say about putting it to sleep.
 #[derive(Default)]
-struct CoordinatorThreadActivity {
+pub(crate) struct CoordinatorThreadActivity {
     /// One of its threads is working or waiting on a question or approval.
-    has_active_thread: bool,
+    pub(crate) has_active_thread: bool,
     /// The latest `lastActiveAt` among its threads: a thread's turn ending stamps it, so this is
     /// when its last active thread stopped.
-    last_thread_activity_ms: Option<i64>,
+    pub(crate) last_thread_activity_ms: Option<i64>,
 }
 
 /// Per orchestrator, from the `coordinatorProjectId`/`coordinatorSessionId`/`coordinatorThreadState`
@@ -128,7 +129,7 @@ struct CoordinatorThreadActivity {
 /// CDXC:SessionSleep 2026-10-21 DECISION:
 /// User: "let's please not sleep main coordinator when there's threads under it that are active to avoid any issues due to this". An orchestrator waiting on a thread's report is idle by its own state, so Auto Sleep slept it and the report then had to resume it. While any of its threads is working, or waiting on a question or approval (their answer comes through the orchestrator), Auto Sleep and the daemon's automatic-sleep decline leave it awake; a thread that is finished, sleeping, closed or done does not. Once the last active thread stops, its idle clock counts from that moment or from its own last activity, whichever is later. A Sleep the user asks for still goes through.
 /// SEE-ALSO: server/src/coordinators/auto_sleep.rs (the daemon's decline over the thread records), server/src/coordinators/state.rs (`ThreadState`).
-fn coordinator_thread_activity(
+pub(crate) fn coordinator_thread_activity(
     sessions: &[Value],
 ) -> std::collections::HashMap<SessionRef, CoordinatorThreadActivity> {
     let mut activity = std::collections::HashMap::<SessionRef, CoordinatorThreadActivity>::new();
@@ -211,6 +212,13 @@ pub fn should_sleep(
         .and_then(Value::as_bool)
         == Some(true);
     if !can_sleep || !is_agent_terminal(session) {
+        return false;
+    }
+    /*
+    CDXC:SessionSleep 2026-11-27 DECISION:
+    User: "this auto sleep setting is for terminal-based chats. native chats shouldn't care about what's configured here." Native chats are released by their own rules (session_native_release.rs), so Auto Sleep never takes one.
+    */
+    if crate::session_native_release::is_native_chat(session) {
         return false;
     }
     // CDXC:SessionSleep 2026-08-22: a session nobody has prompted has no idle clock; gxserver declines it too (`neverActive`).

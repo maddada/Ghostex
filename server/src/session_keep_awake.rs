@@ -136,6 +136,20 @@ pre-existing caller sends.
 */
 pub fn sleep_trigger_is_automatic(sleep_trigger: Option<&str>) -> bool {
     sleep_trigger
-        .map(|value| value.trim().eq_ignore_ascii_case("automatic"))
+        .map(|value| {
+            let value = value.trim();
+            value.eq_ignore_ascii_case("automatic")
+                || value.eq_ignore_ascii_case(NATIVE_IDLE_SLEEP_TRIGGER)
+        })
         .unwrap_or(false)
+}
+
+/// The `sleepTrigger` of Native idle release (server/session_native_release_sweep.rs): automatic,
+/// so every automatic-sleep decline applies, except a client's keep-awake lease, which the sweep
+/// already weighed as a longer idle time.
+pub const NATIVE_IDLE_SLEEP_TRIGGER: &str = "nativeIdle";
+
+/// Whether `sleep_trigger` is Native idle release's.
+pub fn sleep_trigger_is_native_idle(sleep_trigger: Option<&str>) -> bool {
+    sleep_trigger.is_some_and(|value| value.trim().eq_ignore_ascii_case(NATIVE_IDLE_SLEEP_TRIGGER))
 }

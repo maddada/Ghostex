@@ -11,6 +11,7 @@
 //! - `skills.rs`: where each listed skill's SKILL.md is (home, project or plugin), or that it is built in.
 //! - `memory.rs`: the Environment section's RAM row, the session's process tree.
 //! - `environment.rs`, `changes.rs`, `connectors.rs`, `background.rs`: the panel's other sections.
+//! - `running_work.rs`: whether a session still has a background command running, for Native idle release.
 //! - `agents.rs`: the read for every other agent; `picker_skills.rs` (their Skills), `codex.rs` and
 //!   `opencode.rs` (those agents' own sections).
 //!
@@ -31,6 +32,7 @@ mod memory;
 mod opencode;
 mod picker_skills;
 mod probe;
+mod running_work;
 mod scan;
 mod skills;
 
@@ -38,3 +40,4 @@ pub(crate) use changes::read_changes;
 pub(crate) use environment::read_environment;
 pub(crate) use gate::{claude_task_tools_environment, session_details_enabled};
 pub(crate) use http::{handle_read_session_details_http, handle_stop_session_background_task_http};
+pub(crate) use running_work::session_has_running_background_work;

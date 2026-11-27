@@ -88,6 +88,13 @@ pub(super) struct TranscriptFacts {
 }
 
 impl TranscriptFacts {
+    /// A background command or monitor the session started is still running.
+    pub(super) fn has_running_background(&self) -> bool {
+        self.background
+            .values()
+            .any(|run| run.ended_at_ms.is_none())
+    }
+
     /// Finished background commands, newest first.
     pub(super) fn finished_background(&self) -> Vec<BackgroundRun> {
         let mut finished: Vec<BackgroundRun> = self

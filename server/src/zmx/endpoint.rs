@@ -576,14 +576,20 @@ pub fn dispatch_zmx_lifecycle_endpoint(
                     params.get("sleepTrigger").and_then(Value::as_str),
                 )
             {
-                if crate::session_keep_awake::is_held_awake(
-                    &lifecycle.project_id,
-                    &lifecycle.session_id,
-                ) || crate::session_chat_queue::session_has_pending_session_chat_queue(
-                    repository.connection(),
-                    &lifecycle.project_id,
-                    &lifecycle.session_id,
-                ) {
+                let native_idle = crate::session_keep_awake::sleep_trigger_is_native_idle(
+                    params.get("sleepTrigger").and_then(Value::as_str),
+                );
+                if (!native_idle
+                    && crate::session_keep_awake::is_held_awake(
+                        &lifecycle.project_id,
+                        &lifecycle.session_id,
+                    ))
+                    || crate::session_chat_queue::session_has_pending_session_chat_queue(
+                        repository.connection(),
+                        &lifecycle.project_id,
+                        &lifecycle.session_id,
+                    )
+                {
                     let session = require_session(repository, &lifecycle)?;
                     return Ok(ZmxEndpointOutput {
                         created_workspace_terminal: None,

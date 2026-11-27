@@ -547,6 +547,7 @@ pub async fn run_gxserver_foreground(
     crate::accounts::claude_swap_switch::start(state.clone());
     crate::accounts::usage_only::retire_usage_accounts(&state);
     session_auto_sleep_sweep::start_session_auto_sleep_sweep(state.clone());
+    session_native_release_sweep::start_session_native_release_sweep(state.clone());
     crate::chief::start_chief_sweep(state.clone());
     storage_cleanup_sweep::start_storage_cleanup_sweep(state.clone());
     sidebar_spaces_switch::start_sidebar_spaces_switch_watch(state.clone());

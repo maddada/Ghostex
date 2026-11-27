@@ -573,9 +573,16 @@ impl SessionChatQueueRuntime {
                 Assessment::Hold {
                     prompt_id, reason, ..
                 } => Some(Some((prompt_id.as_str(), reason.clone()))),
-                Assessment::HoldAndWake(prompt_id) => {
-                    Some(Some((prompt_id.as_str(), WaitReason::Asleep)))
-                }
+                Assessment::HoldAndWake(prompt_id) => Some(Some((
+                    prompt_id.as_str(),
+                    asleep_wait_reason(
+                        repository
+                            .get_session(&project_id, &session_id)
+                            .ok()
+                            .flatten()
+                            .as_ref(),
+                    ),
+                ))),
                 Assessment::Skip | Assessment::Fail { .. } | Assessment::DropStale { .. } => {
                     Some(None)
                 }
@@ -787,7 +794,9 @@ impl SessionChatQueueRuntime {
                     if self.composer_holds.wake_check_due(key, id, now) {
                         (self.waker)(project_id, session_id, id);
                     }
-                    head.map_or(Assessment::Skip, |head| hold(head, WaitReason::Asleep))
+                    head.map_or(Assessment::Skip, |head| {
+                        hold(head, asleep_wait_reason(Some(&session)))
+                    })
                 }
                 NotRunningHead::HoldAndWake(id) => Assessment::HoldAndWake(id.to_string()),
                 NotRunningHead::Wait => head.map_or(Assessment::Skip, |head| {
@@ -2178,5 +2187,17 @@ mod tests {
             .remove("sessionChatPrompt");
         assert!(!question_card_left_standing(&bare, &input_box));
         assert!(!crate::session_approval::session_awaits_answer(&bare));
+    }
+}
+
+/// How a message held for a sleeping session says why it waits. A Native chat's agent was stopped
+/// by Ghostex while idle, and the message is what starts it again, so it reads as starting.
+///
+/// CDXC:SessionSleep 2026-11-27 DECISION: User, of a Native chat whose idle agent Ghostex stopped: "wake on send", and "I really want users to not worry about "sleeping"". Its held message shows the normal starting state, never "Asleep".
+fn asleep_wait_reason(session: Option<&Value>) -> WaitReason {
+    if session.is_some_and(crate::acp::session_is_non_cli) {
+        WaitReason::Starting
+    } else {
+        WaitReason::Asleep
     }
 }
