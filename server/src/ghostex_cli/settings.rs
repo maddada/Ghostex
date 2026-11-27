@@ -100,8 +100,10 @@ pub struct CatalogEntry {
     pub max: Option<f64>,
     #[serde(default)]
     pub step: Option<f64>,
+    /// In its page's Power User Flags section, shown on Experience > Advanced
+    /// (packages/settings-catalog power_user_flags.rs).
     #[serde(default)]
-    pub advanced: Option<bool>,
+    pub power_user_flag: Option<bool>,
     pub agent_writable: bool,
 }
 
@@ -318,8 +320,8 @@ fn entry_json(entry: &CatalogEntry, file: &Map<String, Value>) -> Value {
     if let Some(step) = entry.step {
         object.insert("step".into(), json!(step));
     }
-    if entry.advanced == Some(true) {
-        object.insert("advanced".into(), json!(true));
+    if entry.power_user_flag == Some(true) {
+        object.insert("powerUserFlag".into(), json!(true));
     }
     object.insert("agentWritable".into(), json!(entry.agent_writable));
     object.insert("current".into(), current);
@@ -430,8 +432,8 @@ fn list_command(args: &[String]) -> CliResult<()> {
         if !entry.agent_writable {
             markers.push_str(" [read-only for agents]");
         }
-        if entry.advanced == Some(true) {
-            markers.push_str(" [advanced]");
+        if entry.power_user_flag == Some(true) {
+            markers.push_str(" [power user flag]");
         }
         println!(
             "  {:<44} {:<18} {:<30} {}{}",

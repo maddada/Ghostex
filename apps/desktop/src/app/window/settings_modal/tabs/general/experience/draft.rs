@@ -4,6 +4,7 @@
 use super::super::super::super::store::SettingsValues;
 use crate::fold_motion::{FoldMotion, bezier};
 use ghostex_settings_catalog::experience::{self, AREAS};
+use ghostex_settings_catalog::power_user_flags;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -116,14 +117,17 @@ impl ExperienceDraft {
             .unwrap_or_else(|| saved.value(key))
     }
 
-    /// The tried settings that differ from the saved ones, in the page's order.
+    /// The tried settings that differ from the saved ones, in the page's order, then the level
+    /// picked for the whole app (`power_user_flags::LEVEL_KEY`, CDXC:Settings 2026-11-27 in the
+    /// settings catalog's experience.rs `writes_all`).
     pub(super) fn changed(&self, saved: &SettingsValues) -> Vec<(&'static str, Value)> {
         AREAS
             .iter()
-            .flat_map(|area| area.controls.iter())
-            .filter_map(|control| {
-                let value = self.pending.get(control.key)?;
-                (*value != saved.value(control.key)).then(|| (control.key, value.clone()))
+            .flat_map(|area| area.controls.iter().map(|control| control.key))
+            .chain(std::iter::once(power_user_flags::LEVEL_KEY))
+            .filter_map(|key| {
+                let value = self.pending.get(key)?;
+                (*value != saved.value(key)).then(|| (key, value.clone()))
             })
             .collect()
     }

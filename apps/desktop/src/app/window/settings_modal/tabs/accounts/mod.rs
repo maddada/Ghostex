@@ -627,35 +627,30 @@ impl AccountsTab {
     ///
     /// CDXC:Settings 2026-09-20 DECISION:
     /// User: recommend adding even a single account so usage stats are easy to find in the sidebar usage strip and the status lines. This is the 2026-09-09 decision with the meters' new home named; the titlebar row they used to sit in is gone.
-    fn render_accounts_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    /// Hide emails and Screenshot mode: the Accounts page's Power User Flags, in the fold at its
+    /// bottom (CDXC:Settings 2026-11-27 in packages/settings-catalog power_user_flags.rs). They were
+    /// the first rows of the Accounts card.
+    fn render_screen_sharing_section(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let p = self.store.read(cx).palette();
-        let hide = self.hide_emails(cx);
-        let (connected, data, error, busy) = {
-            let client = self.client.read(cx);
-            (
-                client.connected(cx),
-                client.data.is_some(),
-                client.error.clone(),
-                client.busy,
-            )
-        };
-        let refresh = connected.then(|| self.render_page_menu(&p, cx));
-        let (hide_switch, screenshot_mode) = {
+        let (hide_switch, screenshot_mode, values) = {
             let store = self.store.read(cx);
             (
                 store.bool("hideAccountEmails"),
                 store.bool("screenshotMode"),
+                store.values(),
             )
         };
-        let mut rows: Vec<AnyElement> = vec![
+        let rows: Vec<AnyElement> = vec![
             toggle_field_with(
                 &p,
                 "hide-account-emails",
-                RowSpec::new("Hide emails").description(
-                    "Show only the first and last address characters and obscure the domain.",
-                ),
+                RowSpec::new("Hide emails")
+                    .description(
+                        "Show only the first and last address characters and obscure the domain.",
+                    )
+                    .keyed(&values, "hideAccountEmails"),
                 hide_switch,
-                None,
+                Some(super::super::fields::reset_key::<Self>("hideAccountEmails")),
                 |page: &mut Self, next, _window, cx| {
                     let store = page.store.clone();
                     store.update(cx, |store, cx| {
@@ -668,11 +663,13 @@ impl AccountsTab {
             toggle_field_with(
                 &p,
                 "screenshot-mode",
-                RowSpec::new("Screenshot mode").description(
-                    "Hide account names and emails, the sidebar's account tiles, the account on the model pill and your other workspaces, for screenshots and screen shares. A Screenshot mode chip shows while it is on. Stays on this computer.",
-                ),
+                RowSpec::new("Screenshot mode")
+                    .description(
+                        "Hide account names and emails, the sidebar's account tiles, the account on the model pill and your other workspaces, for screenshots and screen shares. A Screenshot mode chip shows while it is on. Stays on this computer.",
+                    )
+                    .keyed(&values, "screenshotMode"),
                 screenshot_mode,
-                None,
+                Some(super::super::fields::reset_key::<Self>("screenshotMode")),
                 |page: &mut Self, next, _window, cx| {
                     let store = page.store.clone();
                     store.update(cx, |store, cx| {
@@ -686,6 +683,23 @@ impl AccountsTab {
                 cx,
             ),
         ];
+        settings_section(&p, "Screen sharing", None, None, rows).map(IntoElement::into_any_element)
+    }
+
+    fn render_accounts_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let p = self.store.read(cx).palette();
+        let hide = self.hide_emails(cx);
+        let (connected, data, error, busy) = {
+            let client = self.client.read(cx);
+            (
+                client.connected(cx),
+                client.data.is_some(),
+                client.error.clone(),
+                client.busy,
+            )
+        };
+        let refresh = connected.then(|| self.render_page_menu(&p, cx));
+        let mut rows: Vec<AnyElement> = Vec::new();
         if connected && data {
             let setup = self.render_helper_setup_rows(&p, cx);
             rows.splice(0..0, setup);
@@ -849,6 +863,30 @@ impl Render for AccountsTab {
         if let Some(guide) = self.render_cliproxy_guide(&p, window, cx) {
             blocks.push(PageBlock::plain(guide));
         }
+        let flag_blocks: Vec<PageBlock> = self
+            .render_screen_sharing_section(cx)
+            .map(|section| PageBlock::section("accounts-screen-sharing", section))
+            .into_iter()
+            .collect();
+        // A search that shows the Accounts card shows them in place while they are shown at all.
+        if searching {
+            if self
+                .store
+                .read(cx)
+                .power_user_flags_shown(SettingsTabId::Accounts)
+            {
+                blocks.extend(flag_blocks);
+            }
+            return settings_page(&self.store, SettingsTabId::Accounts, &p, blocks, cx);
+        }
+        super::super::fields::push_power_user_flags(
+            &self.store,
+            &p,
+            SettingsTabId::Accounts,
+            &mut blocks,
+            flag_blocks,
+            cx,
+        );
         settings_page(&self.store, SettingsTabId::Accounts, &p, blocks, cx)
     }
 }

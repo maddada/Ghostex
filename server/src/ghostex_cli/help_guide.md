@@ -175,8 +175,8 @@ they ask for one.
   permission, Keychain, consent, pairing or sign-in prompts for the user, and
   never type passwords or 2FA.
 - Confirm before changing more than one setting at once, before changing a
-  setting the user only asked about, and before anything under Advanced or
-  Debugging.
+  setting the user only asked about, and before anything in a page's Power
+  User Flags or under Debugging.
 - Never edit `native-sidebar-settings.json`, the Ghostty config, or any other
   Ghostex file directly. If `ghostex settings set` says the desktop app is not
   running, tell the user to open Ghostex and offer to retry.

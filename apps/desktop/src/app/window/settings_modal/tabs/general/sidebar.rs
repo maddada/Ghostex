@@ -237,9 +237,12 @@ fn sidebar_section(
             false,
         ),
     ];
+    // CDXC:Settings 2026-11-27: Untracked lines is a Power User Flag, so its chip shows in the
+    // page's Power User Flags and the other six stay here (`GeneralCx::chip_visible`).
     if CARD_DETAILS.iter().any(|(key, _, _)| g.visible(s, key)) {
         let chips: Vec<Chip> = CARD_DETAILS
             .iter()
+            .filter(|(key, _, _)| g.chip_visible(s, key))
             .map(|(key, label, inverted)| Chip {
                 id: key,
                 label,
@@ -263,7 +266,7 @@ fn sidebar_section(
         });
         rows.push(chips_field(
             &g.p,
-            "sidebarCardDetails",
+            g.pass_id("sidebarCardDetails", "sidebarCardDetailsFlags"),
             spec,
             Some(reset),
             chips,

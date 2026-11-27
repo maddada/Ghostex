@@ -115,7 +115,7 @@ pub(crate) fn window_layout() -> Section {
             row("showActivePaneOutline", "Show active pane outline", "Show an outline around the currently focused pane."),
             row("workspaceActivePaneBorderColor", "Active pane outline colour", "Color of the outline around the currently focused pane."),
             row("panelAnimationSpeed", "Animations", "Set how fast the sidebar, the side panel, the Agents Panel and the bottom or right panel slide open and closed: Off, Slow, Normal or Fast. Reduce Motion in your computer settings always turns it off.").options(PANEL_ANIMATION_SPEED_OPTIONS),
-            row("sidebarCollapseAnimationDurationMs", "Animations (fold speed, set with Animations)", "Set how quickly sidebar sections, groups, and projects expand or collapse, and how quickly the floating sidebar and Agents Panel slide in from the window edge. Set to 0 for no animation."),
+            row("sidebarCollapseAnimationDurationMs", "Fold speed", "How many milliseconds sidebar sections, groups and projects take to fold open and closed, and the floating sidebar and Agents Panel to slide in. 0 turns it off. Animations sets it too."),
             row("closeSidePanelWithLastTab", "Close side panel with its last tab", "Close the side panel when you close its last tab, instead of showing the Open a view picker."),
             row("commandsPanelSide", "Commands pane side", "Dock the command pane below the workspace or to its right.").options(COMMANDS_PANEL_SIDE_OPTIONS),
     ];

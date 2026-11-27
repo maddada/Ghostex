@@ -7,16 +7,14 @@
 //! User: "ok implement the plan" for the Agents page redesign. The bulk hook tools leave the top of the agent list for this card at the bottom; the list keeps only a summary line (counting agents that are on) with Fix all. This replaces the 2026-08-28 roster toolbar ("quiet whole-set controls, a readiness chip and an info tooltip"), because a "3/23 hooks ready" count of every supported agent named agents the user never turned on.
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{
-    ButtonSize, ButtonVariant, RowSpec, SettingsDialogSpec, card_inset, dialog_footer,
-    settings_button, settings_button_sized, settings_dialog, settings_icon, settings_icon_button,
-    settings_section, toggle_field,
+    ButtonSize, ButtonVariant, SettingsDialogSpec, card_inset, dialog_footer, settings_button,
+    settings_button_sized, settings_dialog, settings_icon, settings_icon_button, settings_section,
 };
 use super::super::super::palette::SettingsPalette;
 use super::super::super::search::{TabSearch, should_show_setting};
 use super::AgentsTab;
 use super::icons;
 use super::model::{HookStatus, any_hook_removable, hook_agent_id};
-use super::turn_on::AUTO_INSTALL_HOOKS;
 
 use gpui::{
     Anchor, AnchoredPositionMode, AnyElement, Bounds, Context, Div, InteractiveElement as _,
@@ -268,19 +266,8 @@ impl AgentsTab {
                     .child(buttons),
             ));
         }
-        if !remote && should_show_setting(&section, AUTO_INSTALL_HOOKS, None) {
-            let checked = self.store.read(cx).values().bool(AUTO_INSTALL_HOOKS);
-            rows.push(toggle_field(
-                self,
-                p,
-                AUTO_INSTALL_HOOKS,
-                RowSpec::new("Install the hook when I turn on an agent").description(
-                    "Install an agent's session resume hook as soon as you turn it on, without asking.",
-                ),
-                checked,
-                cx,
-            ));
-        }
+        // Install the hook when I turn on an agent is in the page's Power User Flags since
+        // CDXC:Settings 2026-11-27 (config.rs `render_agents_advanced`).
         settings_section(p, "Session resume hooks", None, None, rows)
     }
 

@@ -1,7 +1,7 @@
-//! The Advanced fold at the bottom of a page: one clickable card row that opens the page's
-//! advanced sections under it (CDXC:Settings 2026-10-29 DECISION in search.rs: the rail's Show
-//! Advanced switch is gone; user: "a new section that's collapsed by default at the bottom ...
-//! called Advanced"). The sections themselves are ordinary `settings_section`s the page appends
+//! The Power User Flags fold at the bottom of a page: one clickable card row that opens the page's
+//! Power User Flags under it (CDXC:Settings 2026-11-27 DECISION in search.rs; it was the Advanced
+//! fold of CDXC:Settings 2026-10-29). Cloud Boxes keeps an Advanced fold of its own for its older
+//! providers (`advanced_fold_header`). The sections themselves are ordinary `settings_section`s the page appends
 //! after this header while it is open. Settings > Projects draws its Global settings fold with the
 //! same row (`settings_fold_row`), as the header of the panel that holds those sections.
 use super::super::super::native_modal_kit::*;
@@ -16,6 +16,29 @@ use gpui::{
 };
 use gpui_component::h_flex;
 
+/// The Power User Flags fold row (`ghostex_settings_catalog::power_user_flags::SECTION_TITLE`).
+pub(crate) fn power_user_flags_fold_header<V: SettingsPage>(
+    p: &SettingsPalette,
+    open: bool,
+    on_toggle: impl Fn(&mut V, &mut Window, &mut Context<V>) + 'static,
+    cx: &mut Context<V>,
+) -> AnyElement {
+    settings_fold_row(
+        p,
+        FoldRow {
+            id: "settings-power-user-flags-fold",
+            label: ghostex_settings_catalog::power_user_flags::SECTION_TITLE,
+            open,
+            frame: FoldFrame::Card,
+            trailing: None,
+            held_open: None,
+        },
+        on_toggle,
+        cx,
+    )
+}
+
+/// Cloud Boxes' Advanced fold (its older agentbox providers, CDXC:CloudBoxes 2026-11-02).
 pub(crate) fn advanced_fold_header<V: SettingsPage>(
     p: &SettingsPalette,
     open: bool,
@@ -149,3 +172,53 @@ pub(crate) fn settings_fold_row<V: SettingsPage>(
 /// A fold row that heads a panel (the mockups' 52px row with 20px sides).
 const PANEL_HEADER_MIN_HEIGHT: f32 = 52.0;
 const PANEL_HEADER_PADDING_X: f32 = 20.0;
+
+/// Appends page `tab`'s Power User Flags fold to `blocks`: its row, and `flag_blocks` under it while
+/// it is open. Nothing is added while a search runs (the matches show in place), while the page's
+/// flags are hidden (`SettingsStore::power_user_flags_shown`, CDXC:Settings 2026-11-27 in
+/// search.rs), or when this pass drew no flag. A deep link to a section only the fold holds opens it.
+pub(crate) fn push_power_user_flags<V: SettingsPage>(
+    store: &gpui::Entity<super::super::store::SettingsStore>,
+    p: &SettingsPalette,
+    tab: super::super::model::SettingsTabId,
+    blocks: &mut Vec<super::super::page::PageBlock>,
+    flag_blocks: Vec<super::super::page::PageBlock>,
+    cx: &mut Context<V>,
+) {
+    let shown = {
+        let store = store.read(cx);
+        !store.is_searching() && store.power_user_flags_shown(tab)
+    };
+    if !shown || flag_blocks.is_empty() {
+        return;
+    }
+    let pending = store.update(cx, |store, _| {
+        store.tracker(tab).borrow().pending_scroll.clone()
+    });
+    if let Some(anchor) = pending
+        && !blocks
+            .iter()
+            .any(|block| block.anchor.as_deref() == Some(&anchor))
+        && flag_blocks
+            .iter()
+            .any(|block| block.anchor.as_deref() == Some(&anchor))
+    {
+        store.update(cx, |store, _| store.open_advanced_fold(tab));
+    }
+    let open = store.read(cx).advanced_fold_open(tab);
+    blocks.push(super::super::page::PageBlock::section(
+        "powerUserFlagsFold",
+        power_user_flags_fold_header(
+            p,
+            open,
+            move |page: &mut V, _window, cx| {
+                let store = page.settings_store().clone();
+                store.update(cx, |store, cx| store.toggle_advanced_fold(tab, cx));
+            },
+            cx,
+        ),
+    ));
+    if open {
+        blocks.extend(flag_blocks);
+    }
+}

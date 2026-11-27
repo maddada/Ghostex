@@ -28,7 +28,6 @@ pub(crate) struct SettingRowDef {
     pub(crate) options: Vec<SettingOption>,
     /// Hidden words search matches like the title (`ghostex_settings_catalog::search_keywords`).
     pub(crate) keywords: Vec<String>,
-    pub(crate) advanced: bool,
 }
 
 /// A titled list of searchable rows: a General section, or one section of another page.
@@ -166,7 +165,6 @@ fn section_def(section: &catalog::Section) -> SearchSectionDef {
                     ))
                     .map(|word| word.to_string())
                     .collect(),
-                advanced: row.advanced,
             })
             .collect(),
     }
@@ -273,9 +271,9 @@ impl SettingsCatalog {
         self.defaults.get(key)
     }
 
-    /// `isAdvancedMainSetting` (`ADVANCED_MAIN_SETTING_KEYS`).
-    pub(crate) fn is_advanced(&self, key: &str) -> bool {
-        catalog::is_advanced_setting(key)
+    /// A row of its page's Power User Flags section (`ghostex_settings_catalog::power_user_flags`).
+    pub(crate) fn is_power_user_flag(&self, key: &str) -> bool {
+        catalog::is_power_user_flag(key)
     }
 
     /// `NOT_RECOMMENDED_SETTING_KEYS`: rows that carry a "Not recommended" label.

@@ -11,8 +11,8 @@ use super::super::catalog::SettingOption;
 use super::super::fields::notice::{is_service_unreachable, service_unreachable_state};
 use super::super::fields::{
     ButtonVariant, FieldStates, ROW_PADDING_X, ROW_PADDING_Y, RowSpec, SettingsPage, SliderBinding,
-    SliderSaver, advanced_fold_header, segmented_field, select_field, settings_button,
-    settings_section, slider_number_field_with, static_note, toggle_field_with,
+    SliderSaver, segmented_field, select_field, settings_button, settings_section,
+    slider_number_field_with, static_note, toggle_field_with,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -1031,44 +1031,16 @@ impl Render for AutopilotTab {
         {
             blocks.push(PageBlock::section("limits", section));
         }
-        // The supervisor and the sweep sit in the collapsed Advanced fold above the log, or in
-        // place while a search matches them (CDXC:Autopilot 2026-11-14 in
-        // packages/settings-catalog/src/pages/autopilot.rs). CDXC:Autopilot 2026-11-17
-        // DECISION: user, "put advanced above logs": Advanced sits above the Log.
-        if enabled {
-            let tab = SettingsTabId::Autopilot;
-            if search.tab.is_searching {
-                if shown("supervisor")
-                    && let Some(section) = self.supervisor_section(&p, window, cx)
-                {
-                    blocks.push(PageBlock::section("supervisor", section));
-                }
-            } else {
-                // A deep link to the section opens the fold, as Appearance's does.
-                let pending = self.store.update(cx, |store, _| {
-                    store.tracker(tab).borrow().pending_scroll.clone()
-                });
-                if pending.as_deref() == Some("supervisor") {
-                    self.store
-                        .update(cx, |store, _| store.open_advanced_fold(tab));
-                }
-                let open = self.store.read(cx).advanced_fold_open(tab);
-                blocks.push(PageBlock::section(
-                    "advancedFold",
-                    advanced_fold_header(
-                        &p,
-                        open,
-                        move |page: &mut Self, _window, cx| {
-                            let store = page.store.clone();
-                            store.update(cx, |store, cx| store.toggle_advanced_fold(tab, cx));
-                        },
-                        cx,
-                    ),
-                ));
-                if open && let Some(section) = self.supervisor_section(&p, window, cx) {
-                    blocks.push(PageBlock::section("supervisor", section));
-                }
-            }
+        // The supervisor and the sweep sat in the collapsed Advanced fold above the log
+        // (CDXC:Autopilot 2026-11-14 in packages/settings-catalog/src/pages/autopilot.rs;
+        // CDXC:Autopilot 2026-11-17 DECISION: user, "put advanced above logs").
+        // CDXC:Settings 2026-11-27 DECISION: the Advanced folds became Power User Flags holding only
+        // the rows the user picked, and no Autopilot row was picked, so they show above the log.
+        if enabled
+            && shown("supervisor")
+            && let Some(section) = self.supervisor_section(&p, window, cx)
+        {
+            blocks.push(PageBlock::section("supervisor", section));
         }
         if shown("activity")
             && let Some(section) = self.log_section(&p, cx)

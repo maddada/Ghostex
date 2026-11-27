@@ -83,14 +83,16 @@ impl ThemeTab {
         let mut rows = Vec::new();
         // CDXC:Settings 2026-10-29 DECISION (cleanup Q13): one Animations row sets the panel slide
         // speed and the sidebar fold speed together (Off 0 ms, Slow 600, Normal 400, Fast 200).
-        if t.visible(ANIMATION_KEY) || t.visible(FOLD_SPEED_KEY) {
+        // CDXC:Settings 2026-11-27: the fold speed on its own ("Animations: fold speed") is a Power
+        // User Flag, the Fold speed row below; Animations still sets both.
+        if t.visible(ANIMATION_KEY) {
             let spec = t
                 .spec(
                     ANIMATION_KEY,
                     "Animations",
                     "How fast the sidebar, the side panel, the Agents Panel and the bottom or right panel slide open and closed, and how fast sidebar sections, groups and projects fold. Reduce Motion in your computer settings always turns them off.",
                 )
-                .modified(values.is_modified(ANIMATION_KEY) || values.is_modified(FOLD_SPEED_KEY));
+                .modified(values.is_modified(ANIMATION_KEY));
             let options =
                 settings_catalog().options(module::SETTINGS, "PANEL_ANIMATION_SPEED_OPTIONS");
             let allowed: Vec<String> = options.iter().map(|option| option.value.clone()).collect();
@@ -122,6 +124,27 @@ impl ThemeTab {
                     patch.insert(FOLD_SPEED_KEY.to_string(), json!(fold_ms));
                     page.save_patch(patch, cx);
                 },
+                cx,
+            ));
+        }
+        if t.visible(FOLD_SPEED_KEY) {
+            rows.push(slider_number_field(
+                self,
+                &p,
+                t.spec(
+                    FOLD_SPEED_KEY,
+                    "Fold speed",
+                    "How many milliseconds sidebar sections, groups and projects take to fold open and closed, and the floating sidebar and Agents Panel to slide in. 0 turns it off. Animations sets it too.",
+                ),
+                Some(reset_key::<Self>(FOLD_SPEED_KEY)),
+                SliderBinding {
+                    key: FOLD_SPEED_KEY,
+                    min: number("MIN_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS"),
+                    max: number("MAX_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS"),
+                    step: number("SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS"),
+                },
+                values.f64(FOLD_SPEED_KEY),
+                window,
                 cx,
             ));
         }
@@ -161,6 +184,7 @@ impl ThemeTab {
                 cx,
             ));
         }
-        settings_section(&p, "Panels", None, None, rows).map(IntoElement::into_any_element)
+        settings_section(&p, t.section_title("panels", "Panels"), None, None, rows)
+            .map(IntoElement::into_any_element)
     }
 }

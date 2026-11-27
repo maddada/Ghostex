@@ -384,12 +384,13 @@ impl HotkeysTab {
 impl HotkeysTab {
     /// CDXC:Hotkeys 2026-09-19 DECISION:
     /// User: the Skip sleeping sessions option lives on the Hotkeys page right below the Previous/Next Session hotkeys it changes.
-    fn skip_sleeping_row(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    /// `dependent`: drawn right below the Next Session hotkey (a search), not in the fold.
+    fn skip_sleeping_row(&mut self, dependent: bool, cx: &mut Context<Self>) -> AnyElement {
         self.toggle(
             "sidebarSessionCycleSkipsSleeping",
             "Skip sleeping sessions",
             "Next Session and Previous Session jump over sleeping sessions in the sidebar.",
-            true,
+            dependent,
             cx,
         )
     }
@@ -408,10 +409,16 @@ impl Render for HotkeysTab {
                 store.search_query().to_string(),
             )
         };
+        // CDXC:Settings 2026-11-27: Expand Collapsed Projects on Jump and Skip sleeping sessions are
+        // this page's Power User Flags: in the fold at the bottom while browsing, in place while a
+        // search matches them, and nowhere while they are hidden (store.rs `hidden_keys`).
+        let hidden_flags = self.store.read(cx).general_search().hidden_keys.clone();
+        let searching = !query.trim().is_empty();
         let searches = hotkey_section_searches(&query, &|id| {
-            ghostex_settings_catalog::built_in_extensions::hotkey_shown_with(id, |key| {
-                Some(values.bool(key))
-            })
+            !hidden_flags.contains(&id)
+                && ghostex_settings_catalog::built_in_extensions::hotkey_shown_with(id, |key| {
+                    Some(values.bool(key))
+                })
         });
         let hotkeys = self.current_hotkeys(cx);
         let defaults = self.normal_defaults();
@@ -457,7 +464,9 @@ impl Render for HotkeysTab {
             }
             any_visible = true;
             let mut rows: Vec<AnyElement> = Vec::new();
-            if section_id == "projects"
+            if searching
+                && section_id == "projects"
+                && !hidden_flags.contains(&"expandCollapsedProjectsOnJump")
                 && should_show_setting(result, "expandCollapsedProjectsOnJump", None)
             {
                 rows.push(self.toggle(
@@ -580,7 +589,9 @@ impl Render for HotkeysTab {
                     );
                 }
                 if id == "focusNextSession"
+                    && searching
                     && !terminal_section
+                    && !hidden_flags.contains(&"sidebarSessionCycleSkipsSleeping")
                     && searches
                         .iter()
                         .find(|(id, _, _)| id == "navigation")
@@ -592,12 +603,37 @@ impl Render for HotkeysTab {
                             )
                         })
                 {
-                    rows.push(self.skip_sleeping_row(cx));
+                    rows.push(self.skip_sleeping_row(true, cx));
                 }
             }
             blocks.extend(
                 settings_section(&p, title.clone(), None, None, rows)
                     .map(|section| PageBlock::section(section_id.clone(), section)),
+            );
+        }
+        if !searching {
+            let rows = vec![
+                self.toggle(
+                    "expandCollapsedProjectsOnJump",
+                    "Expand Collapsed Projects on Jump",
+                    "Reveal a collapsed project row before focusing it from Jump to Project hotkeys.",
+                    false,
+                    cx,
+                ),
+                self.skip_sleeping_row(false, cx),
+            ];
+            let flag_blocks: Vec<PageBlock> =
+                settings_section(&p, "Jumping between sessions", None, None, rows)
+                    .map(|section| PageBlock::section("hotkeysPowerUserFlags", section))
+                    .into_iter()
+                    .collect();
+            super::super::fields::push_power_user_flags(
+                &self.store,
+                &p,
+                SettingsTabId::Hotkeys,
+                &mut blocks,
+                flag_blocks,
+                cx,
             );
         }
         if !any_visible {

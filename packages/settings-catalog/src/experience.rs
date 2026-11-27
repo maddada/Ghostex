@@ -1,6 +1,7 @@
 //! Experience: Chill, Regular and Advanced, named sets of existing settings that decide how many
 //! buttons and details each area of Ghostex shows (Settings > Experience). Picking a preset writes
-//! its settings; nothing records the pick. Each area shows the preset its settings match, and says
+//! its settings, and picking one for the whole app also saves it as `experienceLevel` (Advanced
+//! shows the Power User Flags, `crate::power_user_flags`). Each area shows the preset its settings match, and says
 //! Custom when they match none; the Experience row itself selects a preset only while every area
 //! matches it, and says Custom otherwise. The desktop, the web build, `ghostex settings` and the
 //! Help files read these tables; the phone keeps a copy in `src/settings/experience.ts`.
@@ -47,7 +48,7 @@ impl Preset {
         match self {
             Preset::Chill => "A simple chat box and a calm chat. Good for checking in on your agents.",
             Preset::Regular => "Pick the model, mode and effort as you chat, with file attach ready in the chat box.",
-            Preset::Advanced => "Every chat box control and detail on screen, including the context ring and last-active times.",
+            Preset::Advanced => "Every chat box control and detail on screen, including the context ring and last-active times, and the Power User Flags in Settings.",
         }
     }
 
@@ -318,7 +319,20 @@ pub fn writes(area: &Area, preset: Preset) -> Vec<(&'static str, Value)> {
         .collect()
 }
 
-/// The settings picking `preset` for the whole of Experience writes: every area's.
+/// The settings picking `preset` for the whole of Experience writes: every area's, and the level
+/// itself (`power_user_flags::LEVEL_KEY`).
+///
+/// CDXC:Settings 2026-11-27 DECISION:
+/// Experience now remembers the level picked for the whole app: Advanced shows every page's Power
+/// User Flags, and picking Chill or Regular hides them again (`crate::power_user_flags` has the
+/// user's words). Picking a level for one area only does not change it.
 pub fn writes_all(preset: Preset) -> Vec<(&'static str, Value)> {
-    AREAS.iter().flat_map(|area| writes(area, preset)).collect()
+    AREAS
+        .iter()
+        .flat_map(|area| writes(area, preset))
+        .chain(std::iter::once((
+            crate::power_user_flags::LEVEL_KEY,
+            Value::String(preset.id().to_string()),
+        )))
+        .collect()
 }

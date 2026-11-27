@@ -1,10 +1,12 @@
 //! The Debugging page (packages/core-ui/settings-modal/tabs/debugging.tsx (deleted 2026-10-01)), listed in the rail
 //! under its built-in extension: Show debug UI controls, then the diagnostic log areas. Use agent
-//! hooks moved to Settings > Agents > Advanced (CDXC:AgentHooks 2026-11-19 in
-//! tabs/agents/config.rs).
+//! hooks moved to Settings > Agents (CDXC:AgentHooks 2026-11-19 in tabs/agents/config.rs). Both
+//! rows are Power User Flags (CDXC:Settings 2026-11-27 in packages/settings-catalog
+//! power_user_flags.rs): they sit in the page's Power User Flags fold, which shows on Experience >
+//! Advanced or while one of them is changed; otherwise the page says how to see them.
 use super::super::fields::{
-    FieldStates, RowSpec, SettingsPage, diagnostic_logging_field, reset_key, settings_section,
-    toggle_field,
+    FieldStates, RowSpec, SettingsPage, diagnostic_logging_field, push_power_user_flags, reset_key,
+    settings_note_row, settings_section, toggle_field,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -50,7 +52,7 @@ impl SettingsPage for DebuggingTab {
 
 impl Render for DebuggingTab {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let (p, values, search, matching) = {
+        let (p, values, search, matching, flags_shown, searching) = {
             let store = self.store.read(cx);
             let matching: Vec<SettingsTabId> = if store.is_searching() {
                 rail_pages(store).into_iter().map(|page| page.tab).collect()
@@ -62,6 +64,8 @@ impl Render for DebuggingTab {
                 store.values(),
                 store.tab_search(SettingsTabId::Debugging),
                 matching,
+                store.power_user_flags_shown(SettingsTabId::Debugging),
+                store.is_searching(),
             )
         };
         let debugging_mode = values.bool("debuggingMode");
@@ -95,10 +99,36 @@ impl Render for DebuggingTab {
             ));
         }
         let mut blocks = Vec::new();
-        if let Some(section) = settings_section(&p, "", None, None, rows) {
+        if !flags_shown {
+            if !searching {
+                let note = settings_note_row(
+                    &p,
+                    "Show debug UI controls and Diagnostic logs are Power User Flags. Pick Advanced in Settings > Experience to see them.",
+                );
+                if let Some(section) = settings_section(&p, "", None, None, vec![note]) {
+                    let mut block = PageBlock::section("controls", section);
+                    block.margin_top += PAGE_TOP_PADDING;
+                    blocks.push(block);
+                }
+            }
+        } else if let Some(section) = settings_section(&p, "", None, None, rows) {
             let mut block = PageBlock::section("controls", section);
-            block.margin_top += PAGE_TOP_PADDING;
-            blocks.push(block);
+            if searching {
+                block.margin_top += PAGE_TOP_PADDING;
+                blocks.push(block);
+            } else {
+                push_power_user_flags(
+                    &self.store,
+                    &p,
+                    SettingsTabId::Debugging,
+                    &mut blocks,
+                    vec![block],
+                    cx,
+                );
+                if let Some(first) = blocks.first_mut() {
+                    first.margin_top += PAGE_TOP_PADDING;
+                }
+            }
         }
         if search.tab.is_searching && !search.tab.has_visible() {
             let store = self.store.clone();

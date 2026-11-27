@@ -88,6 +88,13 @@ impl ThemeTab {
             window,
             cx,
         );
-        settings_section(&p, "Terminal text", None, None, rows).map(IntoElement::into_any_element)
+        settings_section(
+            &p,
+            t.section_title("terminalText", "Terminal text"),
+            None,
+            None,
+            rows,
+        )
+        .map(IntoElement::into_any_element)
     }
 }

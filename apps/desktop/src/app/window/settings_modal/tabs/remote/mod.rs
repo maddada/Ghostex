@@ -140,7 +140,7 @@ impl RemoteFold {
         match self {
             Self::ThisComputer => "The computer you're on",
             Self::Tailscale => "Tailscale",
-            Self::Advanced => "Advanced",
+            Self::Advanced => ghostex_settings_catalog::power_user_flags::SECTION_TITLE,
         }
     }
 }
@@ -1231,8 +1231,23 @@ impl Render for RemoteTab {
                     .section("easyConnect")
                     .visible_keys
                     .contains("easyConnectRelay");
+            // CDXC:Settings 2026-11-27: the Advanced row is the page's Power User Flags (Relay,
+            // ports, allowed keys, the pairing address, the binary, gxserver, raw status), listed
+            // only on Experience > Advanced, or while the relay is not Ghostex's own so whoever
+            // changed it can still change it back (packages/settings-catalog power_user_flags.rs).
+            let relay_mode = self
+                .easy_connect
+                .as_ref()
+                .map(|status| status.relay.mode.clone())
+                .unwrap_or_default();
+            let flags_shown = self
+                .store
+                .read(cx)
+                .power_user_flags_shown(SettingsTabId::Remote)
+                || !(relay_mode.is_empty() || relay_mode == "ghostex");
             let folds: Vec<(RemoteFold, bool)> = RemoteFold::ALL
                 .into_iter()
+                .filter(|fold| flags_shown || *fold != RemoteFold::Advanced)
                 .filter_map(|fold| {
                     if !searching {
                         return Some((fold, self.open_fold == Some(fold)));
@@ -1332,7 +1347,8 @@ impl RemoteTab {
                 _ => fold.title().into(),
             };
             // This computer's row leads with its icon, as a saved computer's tile does.
-            // Tailscale and Advanced lead with the same 32px tile, so the three rows' text lines up.
+            // Tailscale and Power User Flags lead with the same 32px tile, so the three rows' text
+            // lines up.
             let leading = Some(match fold {
                 RemoteFold::ThisComputer => current_machine::this_computer_icon_tile(self, t, cx),
                 RemoteFold::Tailscale => machines::tile_icon(t, style::ICON_TAILSCALE),

@@ -229,11 +229,21 @@ fn power_section(
         ("keepAwakeActivateOnExternalDisplay", "External display"),
         ("keepAwakeWhileWorkingSessions", "While sessions work"),
     ];
-    if g.any_visible(s, &["keepAwakeActivation"])
-        || (g.search.is_searching() && ACTIVATION.iter().any(|(key, _)| g.visible(s, key)))
+    // CDXC:Settings 2026-11-27: On launch, External display and the three Turn off automatically
+    // chips are Power User Flags (Keep Awake fine-tuning), so they show in the page's Power User
+    // Flags and While sessions work stays here (`GeneralCx::chip_visible`).
+    let activation_chips = ACTIVATION
+        .iter()
+        .filter(|(key, _)| g.chip_visible(s, key))
+        .count();
+    if activation_chips > 0
+        && (g.any_visible(s, &["keepAwakeActivation"])
+            || !g.search.is_searching()
+            || ACTIVATION.iter().any(|(key, _)| g.visible(s, key)))
     {
         let chips: Vec<Chip> = ACTIVATION
             .iter()
+            .filter(|(key, _)| g.chip_visible(s, key))
             .map(|(key, label)| Chip {
                 id: key,
                 label,
@@ -257,7 +267,7 @@ fn power_section(
         });
         rows.push(chips_field(
             &g.p,
-            "keepAwakeActivation",
+            g.pass_id("keepAwakeActivation", "keepAwakeActivationFlags"),
             spec,
             Some(reset),
             chips,
@@ -271,23 +281,34 @@ fn power_section(
     ];
     const BATTERY: &str = "keepAwakeBatteryThresholdPercent";
     let threshold = g.values.f64(BATTERY);
-    if g.any_visible(s, &["keepAwakeDeactivation"])
-        || (g.search.is_searching()
-            && (g.visible(s, BATTERY) || DEACTIVATION.iter().any(|(key, _)| g.visible(s, key))))
+    let battery_chip = g.chip_visible(s, BATTERY);
+    let deactivation_chips = DEACTIVATION
+        .iter()
+        .filter(|(key, _)| g.chip_visible(s, key))
+        .count()
+        + usize::from(battery_chip);
+    if deactivation_chips > 0
+        && (g.any_visible(s, &["keepAwakeDeactivation"])
+            || !g.search.is_searching()
+            || g.visible(s, BATTERY)
+            || DEACTIVATION.iter().any(|(key, _)| g.visible(s, key)))
     {
         let mut chips: Vec<Chip> = DEACTIVATION
             .iter()
+            .filter(|(key, _)| g.chip_visible(s, key))
             .map(|(key, label)| Chip {
                 id: key,
                 label,
                 on: g.values.bool(key),
             })
             .collect();
-        chips.push(Chip {
-            id: BATTERY,
-            label: "Low battery",
-            on: threshold > 0.0,
-        });
+        if battery_chip {
+            chips.push(Chip {
+                id: BATTERY,
+                label: "Low battery",
+                on: threshold > 0.0,
+            });
+        }
         let spec = g
             .spec(
                 "keepAwakeDeactivation",
@@ -309,7 +330,7 @@ fn power_section(
         });
         rows.push(chips_field(
             &g.p,
-            "keepAwakeDeactivation",
+            g.pass_id("keepAwakeDeactivation", "keepAwakeDeactivationFlags"),
             spec,
             Some(reset),
             chips,

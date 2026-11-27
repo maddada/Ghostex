@@ -29,7 +29,7 @@ mod select;
 mod status;
 mod turn_on;
 
-use super::super::fields::{FieldStates, SettingsPage, advanced_fold_header};
+use super::super::fields::{FieldStates, SettingsPage, push_power_user_flags};
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
 use super::super::rail::{rail_pages, render_no_matches};
@@ -572,9 +572,9 @@ impl Render for AgentsTab {
         {
             blocks.push(PageBlock::section("homeFolder", section));
         }
-        // Agent configs sit in the collapsed Advanced fold at the bottom, or in place while a
-        // search matches them, as on Autopilot (CDXC:AgentHooks 2026-11-18 in
-        // packages/settings-catalog/src/pages/agents.rs).
+        // Agent configs are the page's Power User Flags, in the collapsed fold at the bottom (shown
+        // on Experience > Advanced or while one is changed), or in place while a search matches
+        // them (CDXC:Settings 2026-11-27 in packages/settings-catalog/src/pages/agents.rs).
         let tab = SettingsTabId::Agents;
         if search.tab.is_searching {
             if should_show_section(&search.section(config::AGENTS_ADVANCED), None)
@@ -583,30 +583,12 @@ impl Render for AgentsTab {
                 blocks.push(PageBlock::section(config::AGENTS_ADVANCED, section));
             }
         } else {
-            // A deep link to the section opens the fold.
-            let pending = self.store.update(cx, |store, _| {
-                store.tracker(tab).borrow().pending_scroll.clone()
-            });
-            if pending.as_deref() == Some(config::AGENTS_ADVANCED) {
-                self.store
-                    .update(cx, |store, _| store.open_advanced_fold(tab));
-            }
-            let open = self.store.read(cx).advanced_fold_open(tab);
-            blocks.push(PageBlock::section(
-                "advancedFold",
-                advanced_fold_header(
-                    &p,
-                    open,
-                    move |page: &mut Self, _window, cx| {
-                        let store = page.store.clone();
-                        store.update(cx, |store, cx| store.toggle_advanced_fold(tab, cx));
-                    },
-                    cx,
-                ),
-            ));
-            if open && let Some(section) = self.render_agents_advanced(&p, &search, cx) {
-                blocks.push(PageBlock::section(config::AGENTS_ADVANCED, section));
-            }
+            let flag_blocks: Vec<PageBlock> = self
+                .render_agents_advanced(&p, &search, cx)
+                .map(|section| PageBlock::section(config::AGENTS_ADVANCED, section))
+                .into_iter()
+                .collect();
+            push_power_user_flags(&self.store, &p, tab, &mut blocks, flag_blocks, cx);
         }
         let dialog = self
             .render_bypass_dialog(&p, window, cx)

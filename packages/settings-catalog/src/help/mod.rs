@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::availability::{availability_note, platform_defaults};
 use crate::data::{
-    ADVANCED_MAIN_SETTING_KEYS, MAIN_SETTINGS_SECTION_SETTING_KEYS,
+    MAIN_SETTINGS_SECTION_SETTING_KEYS,
     MARKED_HANDOVERS_HEADING_STRENGTH_PERCENT_STEP, MAX_AGENT_MANAGER_ZOOM_PERCENT,
     MAX_COMMANDS_PANEL_DEFAULT_HEIGHT_PX, MAX_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
     MAX_MARKED_HANDOVERS_HEADING_STRENGTH_PERCENT, MAX_PROJECT_SWITCH_KEEP_ALIVE_MINUTES,
@@ -83,7 +83,8 @@ pub struct CatalogEntry {
     pub default: Option<&'static J>,
     pub options: Vec<SettingOption>,
     pub range: Option<NumberRange>,
-    pub advanced: bool,
+    /// In its page's Power User Flags section (`crate::power_user_flags`).
+    pub power_user_flag: bool,
     pub agent_writable: bool,
     /// Defaults that differ from `default` on one platform (`availability::platform_default`).
     pub platform_defaults: Vec<(Platform, &'static J)>,
@@ -288,7 +289,7 @@ fn catalog_entry(row: &SettingRow, location: &Location) -> CatalogEntry {
         } else {
             None
         },
-        advanced: row.advanced || ADVANCED_MAIN_SETTING_KEYS.contains(&row.key),
+        power_user_flag: crate::power_user_flags::is_flag(row.key),
         agent_writable,
         platform_defaults: platform_defaults(row.key),
         availability: availability_note(row.key).or_else(|| {
@@ -543,8 +544,8 @@ impl CatalogEntry {
                 fields.push(("step", Json::Num(step)));
             }
         }
-        if self.advanced {
-            fields.push(("advanced", Json::Bool(true)));
+        if self.power_user_flag {
+            fields.push(("powerUserFlag", Json::Bool(true)));
         }
         fields.push(("agentWritable", Json::Bool(self.agent_writable)));
         if !self.platform_defaults.is_empty() {
@@ -758,7 +759,7 @@ pub fn published_catalog() -> Catalog {
                 default: None,
                 options: Vec::new(),
                 range: None,
-                advanced: false,
+                power_user_flag: false,
                 agent_writable: false,
                 platform_defaults: Vec::new(),
                 availability: None,
@@ -780,14 +781,14 @@ pub fn published_catalog() -> Catalog {
         .hotkeys
         .retain(|hotkey| !HELD_FROM_HELP_FILES.contains(&hotkey.id));
     for entry in &mut catalog.settings {
-        if let Some((_, title, subtitle, advanced)) = HELD_ROW_WORDING
+        if let Some((_, title, subtitle, power_user_flag)) = HELD_ROW_WORDING
             .iter()
             .chain(HELD_REGROUP_WORDING)
             .find(|(key, ..)| *key == entry.key.as_str())
         {
             entry.title = (*title).to_string();
             entry.subtitle = (*subtitle).to_string();
-            entry.advanced = *advanced;
+            entry.power_user_flag = *power_user_flag;
         }
     }
     catalog

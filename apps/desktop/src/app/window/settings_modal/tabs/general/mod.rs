@@ -3,8 +3,9 @@
 //! Terminal (Terminal, Terminal Behavior, Terminal Scrolling); Notifications (Sounds); Files &
 //! Links (File opening, Grok Bot, Editor, Dev Servers); Browser (Agents, Links, Pages, Web runtime,
 //! Sign-ins: browser.rs); Power & Sleep (When your computer starts, Memory, Auto Sleep, Power). They
-//! share the General search (`GeneralSearch`). Each page's advanced rows render in a second pass
-//! into a collapsed Advanced fold at its bottom (CDXC:Settings 2026-10-29 in search.rs).
+//! share the General search (`GeneralSearch`). Each page's Power User Flags render in a second pass
+//! into a collapsed Power User Flags fold at its bottom, shown on Experience > Advanced or while one
+//! of them is changed (CDXC:Settings 2026-11-27 in search.rs).
 //! Experimental and Reset to defaults moved to About.
 mod browser;
 mod chat_tools;
@@ -21,7 +22,7 @@ pub(super) mod terminal_font;
 pub(super) mod web_runtime;
 
 use super::super::catalog::{SettingOption, module, settings_catalog};
-use super::super::fields::advanced_fold_header;
+use super::super::fields::power_user_flags_fold_header;
 use super::super::fields::{
     BoolChoices, FieldStates, PageAction, RowSpec, SettingsPage, SliderBinding, bool_segmented_key,
     reset_key, segmented_field, select_field, slider_number_field, toggle_field,
@@ -133,13 +134,13 @@ pub(super) struct GeneralCx {
     pub(super) power_visible: bool,
     /// The Sidebar Tags deep link asked for the New tag form.
     pub(super) create_tag: bool,
-    /// The anchors of the sections the page already shows above the Advanced fold.
+    /// The anchors of the sections the page already shows above the Power User Flags fold.
     pub(super) shown_above_fold: Vec<String>,
 }
 
 impl GeneralCx {
     /// CDXC:Settings 2026-11-07 WHY:
-    /// The Advanced fold reuses each page's section builders, so a section with both everyday and advanced rows used to show its heading twice ("Sidebar" and "Session Cards" again under Advanced on Sidebar & Sessions). Inside the fold such a section is titled "More <title> settings"; a section whose rows are all advanced keeps its own title, since it shows only once.
+    /// The Advanced fold (now Power User Flags) reuses each page's section builders, so a section with both everyday and advanced rows used to show its heading twice ("Sidebar" and "Session Cards" again under Advanced on Sidebar & Sessions). Inside the fold such a section is titled "More <title> settings"; a section whose rows are all advanced keeps its own title, since it shows only once.
     pub(super) fn section_title(&self, anchor: &str, title: &str) -> SharedString {
         if self.shown_above_fold.iter().any(|shown| shown == anchor) {
             format!("More {title} settings").into()
@@ -156,6 +157,30 @@ impl GeneralCx {
     /// A row that stands for several settings (`GeneralSearch::any_visible`).
     pub(super) fn any_visible(&self, section: &str, keys: &[&str]) -> bool {
         self.search.any_visible(section, keys)
+    }
+
+    /// CDXC:Settings 2026-11-27 WHY:
+    /// A row of chips that each write their own key (Card details, Turn on and Turn off
+    /// automatically) shows, while browsing, the chips whose key belongs to this pass, so a Power
+    /// User Flag chip moves into the page's Power User Flags and the others stay above it. A search
+    /// draws every chip that is not hidden, in the page body's pass.
+    pub(super) fn chip_visible(&self, section: &str, key: &str) -> bool {
+        if self.search.hidden_keys.contains(&key) {
+            return false;
+        }
+        if self.search.is_searching() {
+            return !self.search.is_power_user_pass();
+        }
+        self.visible(section, key)
+    }
+
+    /// A chip row's element id for this pass, so the row drawn in both passes never repeats one.
+    pub(super) fn pass_id(&self, body: &'static str, flags: &'static str) -> &'static str {
+        if self.search.is_power_user_pass() {
+            flags
+        } else {
+            body
+        }
     }
 
     pub(super) fn options(&self, name: &str) -> Vec<SettingOption> {
@@ -423,15 +448,17 @@ impl Render for GeneralTab {
         let has_visible = tab
             .general_group()
             .is_some_and(|group| g.search.group_visible(group));
-        // The everyday rows, then the advanced rows for the fold (CDXC:Settings 2026-10-29 in
+        // The everyday rows, then the Power User Flags for the fold (CDXC:Settings 2026-11-27 in
         // search.rs). A search renders every match in the first pass and nothing in the second.
+        // While the page's flags are hidden the store leaves them out (`hidden_keys`), so the
+        // second pass draws nothing and the fold row stays out too.
         let everyday = GeneralCx {
             search: g.search.clone().with_tier(RowTier::Everyday),
             ..g.clone()
         };
         let mut blocks: Vec<PageBlock> = sections(self, &everyday, window, cx);
         let advanced = GeneralCx {
-            search: g.search.clone().with_tier(RowTier::Advanced),
+            search: g.search.clone().with_tier(RowTier::PowerUserFlags),
             shown_above_fold: blocks
                 .iter()
                 .filter_map(|block| block.anchor.clone())
@@ -440,7 +467,7 @@ impl Render for GeneralTab {
         };
         let advanced_blocks = sections(self, &advanced, window, cx);
         if !advanced_blocks.is_empty() {
-            // A deep link to a section that only has advanced rows opens the fold.
+            // A deep link to a section that only has Power User Flags opens the fold.
             let pending = self.store.update(cx, |store, _| {
                 store.tracker(tab).borrow().pending_scroll.clone()
             });
@@ -457,8 +484,8 @@ impl Render for GeneralTab {
             }
             let open = self.store.read(cx).advanced_fold_open(tab);
             blocks.push(PageBlock::section(
-                "advancedFold",
-                advanced_fold_header(
+                "powerUserFlagsFold",
+                power_user_flags_fold_header(
                     &g.p,
                     open,
                     move |page: &mut Self, _window, cx| {

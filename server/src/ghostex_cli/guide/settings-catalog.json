@@ -5,7 +5,7 @@
     {
       "key": "experiencePreset",
       "title": "Experience",
-      "subtitle": "How many buttons and details Ghostex shows. Chill: a simple chat box and a calm chat. Regular: pick the model, the mode and the effort as you chat. Advanced: for people who use terminals more. Pick one to try it in the preview first; nothing changes until Apply. Each area below follows it; change one and it says Custom.",
+      "subtitle": "How many buttons and details Ghostex shows. Chill: a simple chat box and a calm chat. Regular: pick the model, the mode and the effort as you chat. Advanced: for people who use terminals more, and it shows the Power User Flags at the bottom of Settings pages. Pick one to try it in the preview first; nothing changes until Apply. Each area below follows it; change one and it says Custom.",
       "tab": "experience",
       "tabTitle": "Experience",
       "section": "experience",
@@ -150,7 +150,7 @@
       "sectionTitle": "Chat",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -166,7 +166,7 @@
       "min": 50,
       "max": 100,
       "step": 5,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -201,7 +201,7 @@
           "value": "left"
         }
       ],
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -224,20 +224,7 @@
           "value": "band"
         }
       ],
-      "advanced": true,
-      "agentWritable": true
-    },
-    {
-      "key": "chatStatusInTranscript",
-      "title": "Status line in the chat",
-      "subtitle": "Show what the agent is doing as the last line of the chat instead of above the chat box.",
-      "tab": "chat",
-      "tabTitle": "Chat",
-      "section": "chat",
-      "sectionTitle": "Chat",
-      "type": "boolean",
-      "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -250,7 +237,7 @@
       "sectionTitle": "Chat",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -273,7 +260,7 @@
           "value": "compact"
         }
       ],
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -286,7 +273,6 @@
       "sectionTitle": "Chat",
       "type": "boolean",
       "default": true,
-      "advanced": true,
       "agentWritable": true
     },
     {
@@ -299,7 +285,6 @@
       "sectionTitle": "Chat",
       "type": "boolean",
       "default": true,
-      "advanced": true,
       "agentWritable": true
     },
     {
@@ -312,7 +297,6 @@
       "sectionTitle": "Chat",
       "type": "boolean",
       "default": true,
-      "advanced": true,
       "agentWritable": true
     },
     {
@@ -325,7 +309,6 @@
       "sectionTitle": "Chat",
       "type": "boolean",
       "default": false,
-      "advanced": true,
       "agentWritable": true
     },
     {
@@ -338,7 +321,7 @@
       "sectionTitle": "Chat",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -351,7 +334,6 @@
       "sectionTitle": "Chat",
       "type": "boolean",
       "default": false,
-      "advanced": true,
       "agentWritable": true
     },
     {
@@ -364,7 +346,6 @@
       "sectionTitle": "Chat",
       "type": "boolean",
       "default": true,
-      "advanced": true,
       "agentWritable": true
     },
     {
@@ -377,7 +358,6 @@
       "sectionTitle": "Chat",
       "type": "boolean",
       "default": true,
-      "advanced": true,
       "agentWritable": true
     },
     {
@@ -390,7 +370,6 @@
       "sectionTitle": "Chat",
       "type": "boolean",
       "default": true,
-      "advanced": true,
       "agentWritable": true
     },
     {
@@ -403,7 +382,6 @@
       "sectionTitle": "Chat",
       "type": "boolean",
       "default": true,
-      "advanced": true,
       "agentWritable": true
     },
     {
@@ -416,7 +394,7 @@
       "sectionTitle": "Chat",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -429,7 +407,7 @@
       "sectionTitle": "Chat",
       "type": "boolean",
       "default": true,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -465,7 +443,7 @@
       "sectionTitle": "Chat",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -478,7 +456,7 @@
       "sectionTitle": "Chat",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -527,6 +505,7 @@
           "value": "chat"
         }
       ],
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -561,7 +540,6 @@
       "sectionTitle": "Chat",
       "type": "boolean",
       "default": false,
-      "advanced": true,
       "agentWritable": true
     },
     {
@@ -671,7 +649,6 @@
       "sectionTitle": "Marked handovers",
       "type": "boolean",
       "default": false,
-      "advanced": true,
       "agentWritable": true
     },
     {
@@ -698,7 +675,6 @@
           "value": "badge"
         }
       ],
-      "advanced": true,
       "agentWritable": true
     },
     {
@@ -714,7 +690,6 @@
       "min": 0,
       "max": 100,
       "step": 10,
-      "advanced": true,
       "agentWritable": true
     },
     {
@@ -816,6 +791,7 @@
       "sectionTitle": "Sidebar",
       "type": "boolean",
       "default": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -888,7 +864,7 @@
           "value": "perView"
         }
       ],
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -901,7 +877,6 @@
       "sectionTitle": "Sidebar",
       "type": "boolean",
       "default": true,
-      "advanced": true,
       "agentWritable": true
     },
     {
@@ -914,7 +889,6 @@
       "sectionTitle": "Sidebar",
       "type": "boolean",
       "default": false,
-      "advanced": true,
       "agentWritable": true
     },
     {
@@ -927,7 +901,6 @@
       "sectionTitle": "Sidebar",
       "type": "boolean",
       "default": false,
-      "advanced": true,
       "agentWritable": true
     },
     {
@@ -940,7 +913,6 @@
       "sectionTitle": "Sidebar",
       "type": "boolean",
       "default": false,
-      "advanced": true,
       "agentWritable": true
     },
     {
@@ -953,7 +925,7 @@
       "sectionTitle": "Sidebar",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -966,7 +938,6 @@
       "sectionTitle": "Sidebar",
       "type": "boolean",
       "default": false,
-      "advanced": true,
       "agentWritable": true
     },
     {
@@ -979,7 +950,6 @@
       "sectionTitle": "Sidebar",
       "type": "boolean",
       "default": false,
-      "advanced": true,
       "agentWritable": true
     },
     {
@@ -992,7 +962,7 @@
       "sectionTitle": "Sidebar",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1008,7 +978,7 @@
       "min": 0,
       "max": 2000,
       "step": 100,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1033,7 +1003,7 @@
       "sectionTitle": "Sidebar",
       "type": "boolean",
       "default": true,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1046,7 +1016,7 @@
       "sectionTitle": "Sidebar",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1059,6 +1029,7 @@
       "sectionTitle": "Sidebar",
       "type": "boolean",
       "default": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1071,6 +1042,7 @@
       "sectionTitle": "Sidebar",
       "type": "boolean",
       "default": false,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1093,7 +1065,7 @@
           "value": "recent"
         }
       ],
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1118,7 +1090,7 @@
       "sectionTitle": "Sidebar",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1131,7 +1103,7 @@
       "sectionTitle": "Sidebar",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1192,7 +1164,7 @@
       "sectionTitle": "Sidebar",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1251,7 +1223,7 @@
       "sectionTitle": "Spaces",
       "type": "boolean",
       "default": true,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1305,7 +1277,7 @@
           "id": "close"
         }
       ],
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": false
     },
     {
@@ -1359,7 +1331,7 @@
           "id": "close"
         }
       ],
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": false
     },
     {
@@ -1406,6 +1378,7 @@
       "sectionTitle": "Session Cards",
       "type": "boolean",
       "default": false,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1442,7 +1415,7 @@
       "sectionTitle": "Session Cards",
       "type": "boolean",
       "default": true,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1455,7 +1428,7 @@
       "sectionTitle": "Session Cards",
       "type": "boolean",
       "default": true,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1468,7 +1441,7 @@
       "sectionTitle": "Session Cards",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1691,7 +1664,7 @@
       "sectionTitle": "Sleeping Sessions",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1704,7 +1677,7 @@
       "sectionTitle": "Sleeping Sessions",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1717,7 +1690,7 @@
       "sectionTitle": "Sleeping Sessions",
       "type": "boolean",
       "default": true,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1755,7 +1728,7 @@
           "value": "openGhosttySettingsDocs"
         }
       ],
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": false
     },
     {
@@ -1782,7 +1755,7 @@
           "value": "custom"
         }
       ],
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1798,7 +1771,7 @@
       "min": 50,
       "max": 100,
       "step": 5,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1811,7 +1784,7 @@
       "sectionTitle": "Terminal",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1826,7 +1799,7 @@
       "default": 0,
       "min": 0,
       "max": 64,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1841,7 +1814,7 @@
       "default": 0,
       "min": 0,
       "max": 64,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1880,7 +1853,7 @@
       "sectionTitle": "Terminal",
       "type": "boolean",
       "default": true,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1893,7 +1866,7 @@
       "sectionTitle": "Terminal",
       "type": "boolean",
       "default": true,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1906,6 +1879,7 @@
       "sectionTitle": "Terminal",
       "type": "boolean",
       "default": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1918,7 +1892,7 @@
       "sectionTitle": "Terminal",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1931,7 +1905,7 @@
       "sectionTitle": "Terminal",
       "type": "boolean",
       "default": true,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1966,7 +1940,7 @@
           "value": "300"
         }
       ],
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -1989,7 +1963,7 @@
           "value": "inherit"
         }
       ],
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -2036,7 +2010,7 @@
       "sectionTitle": "Behavior",
       "type": "number",
       "default": 15,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -2063,7 +2037,7 @@
           "value": "clipboard"
         }
       ],
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -2090,7 +2064,7 @@
           "value": "false"
         }
       ],
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -2103,7 +2077,7 @@
       "sectionTitle": "Behavior",
       "type": "boolean",
       "default": true,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -2116,7 +2090,7 @@
       "sectionTitle": "Behavior",
       "type": "boolean",
       "default": true,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -2129,7 +2103,7 @@
       "sectionTitle": "Behavior",
       "type": "boolean",
       "default": true,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -2142,7 +2116,7 @@
       "sectionTitle": "Behavior",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -2165,7 +2139,7 @@
           "value": "never"
         }
       ],
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -2178,7 +2152,7 @@
       "sectionTitle": "Scrolling",
       "type": "number",
       "default": 1,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -2191,7 +2165,7 @@
       "sectionTitle": "Scrolling",
       "type": "number",
       "default": 1,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -2204,7 +2178,7 @@
       "sectionTitle": "Scrolling",
       "type": "boolean",
       "default": true,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -2463,7 +2437,7 @@
       "sectionTitle": "Sounds",
       "type": "boolean",
       "default": true,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -2475,7 +2449,6 @@
       "section": "sounds",
       "sectionTitle": "Sounds",
       "type": "ui",
-      "advanced": true,
       "agentWritable": false
     },
     {
@@ -2622,7 +2595,7 @@
           "value": "flawless-victory"
         }
       ],
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -2635,7 +2608,7 @@
       "sectionTitle": "Sounds",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -2904,6 +2877,7 @@
       "sectionTitle": "File opening",
       "type": "boolean",
       "default": false,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -2960,6 +2934,7 @@
       "sectionTitle": "File opening",
       "type": "boolean",
       "default": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -2996,7 +2971,7 @@
       "sectionTitle": "Editor",
       "type": "boolean",
       "default": true,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -3009,7 +2984,7 @@
       "sectionTitle": "Editor",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -3022,7 +2997,7 @@
       "sectionTitle": "Editor",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -3057,7 +3032,7 @@
           "value": "24678-24680"
         }
       ],
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": false
     },
     {
@@ -3164,7 +3139,7 @@
       "sectionTitle": "Pages",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -3211,7 +3186,7 @@
           "value": "300"
         }
       ],
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -3396,7 +3371,7 @@
           "value": "300"
         }
       ],
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -3443,7 +3418,7 @@
           "value": "300"
         }
       ],
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -3490,7 +3465,7 @@
           "value": "300"
         }
       ],
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -3503,7 +3478,7 @@
       "sectionTitle": "Auto Sleep",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -3518,7 +3493,7 @@
       "default": 10,
       "min": 0,
       "max": 60,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -3577,7 +3552,7 @@
       "sectionTitle": "Auto Sleep",
       "type": "boolean",
       "default": true,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -3590,7 +3565,7 @@
       "sectionTitle": "Auto Sleep",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -3603,7 +3578,7 @@
       "sectionTitle": "Power",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -3642,7 +3617,7 @@
       "sectionTitle": "Power",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -3655,7 +3630,7 @@
       "sectionTitle": "Power",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -3690,7 +3665,7 @@
       "sectionTitle": "Power",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -3703,7 +3678,7 @@
       "sectionTitle": "Power",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -3802,7 +3777,7 @@
           "value": "90"
         }
       ],
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -3815,7 +3790,7 @@
       "sectionTitle": "Power",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -3828,7 +3803,7 @@
       "sectionTitle": "Power",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -4864,6 +4839,7 @@
       "sectionTitle": "Themes",
       "type": "number",
       "default": 17,
+      "powerUserFlag": true,
       "agentWritable": true,
       "availability": "Only on macOS."
     },
@@ -9313,6 +9289,7 @@
       "sectionTitle": "Text & Fonts",
       "type": "boolean",
       "default": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -9358,6 +9335,7 @@
       "min": 0,
       "max": 100,
       "step": 10,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -9372,6 +9350,7 @@
       "sectionTitle": "Text & Fonts",
       "type": "boolean",
       "default": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -9483,6 +9462,7 @@
       "default": 275,
       "min": 150,
       "max": 520,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -9499,6 +9479,7 @@
       "default": 200,
       "min": 40,
       "max": 600,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -9585,6 +9566,7 @@
       "sectionTitle": "Window & Layout",
       "type": "boolean",
       "default": false,
+      "powerUserFlag": true,
       "agentWritable": true,
       "availability": "Only on macOS."
     },
@@ -9665,8 +9647,8 @@
     },
     {
       "key": "sidebarCollapseAnimationDurationMs",
-      "title": "Animations (fold speed, set with Animations)",
-      "subtitle": "Set how quickly sidebar sections, groups, and projects expand or collapse, and how quickly the floating sidebar and Agents Panel slide in from the window edge. Set to 0 for no animation.",
+      "title": "Fold speed",
+      "subtitle": "How many milliseconds sidebar sections, groups and projects take to fold open and closed, and the floating sidebar and Agents Panel to slide in. 0 turns it off. Animations sets it too.",
       "tab": "windowLayout",
       "tabTitle": "Window & Layout",
       "group": "appearance",
@@ -9678,6 +9660,7 @@
       "min": 0,
       "max": 1000,
       "step": 100,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -9692,6 +9675,7 @@
       "sectionTitle": "Window & Layout",
       "type": "boolean",
       "default": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -9730,6 +9714,7 @@
       "sectionTitle": "Window & Layout",
       "type": "number",
       "default": 6,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -9922,6 +9907,7 @@
       "sectionTitle": "Debug controls",
       "type": "boolean",
       "default": false,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -9991,6 +9977,7 @@
           "value": "gxserver.hooklessActivity"
         }
       ],
+      "powerUserFlag": true,
       "agentWritable": false
     },
     {
@@ -10175,7 +10162,6 @@
       "sectionTitle": "Internal state (not user settings)",
       "type": "string",
       "default": "",
-      "advanced": true,
       "agentWritable": false
     },
     {
@@ -10233,6 +10219,18 @@
       "sectionTitle": "Internal state (not user settings)",
       "type": "json",
       "default": [],
+      "agentWritable": false
+    },
+    {
+      "key": "experienceLevel",
+      "title": "experienceLevel",
+      "subtitle": "App-managed state saved with the settings; not a user preference.",
+      "tab": "about",
+      "tabTitle": "About",
+      "section": "internalState",
+      "sectionTitle": "Internal state (not user settings)",
+      "type": "string",
+      "default": "",
       "agentWritable": false
     },
     {
@@ -10601,6 +10599,7 @@
       "sectionTitle": "Configuration",
       "type": "boolean",
       "default": false,
+      "powerUserFlag": true,
       "agentWritable": false
     },
     {
@@ -10625,6 +10624,7 @@
       "sectionTitle": "Configuration",
       "type": "boolean",
       "default": false,
+      "powerUserFlag": true,
       "agentWritable": false
     },
     {
@@ -10637,6 +10637,7 @@
       "sectionTitle": "Configuration",
       "type": "boolean",
       "default": false,
+      "powerUserFlag": true,
       "agentWritable": false
     },
     {
@@ -10649,6 +10650,7 @@
       "sectionTitle": "Configuration",
       "type": "boolean",
       "default": false,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -10735,9 +10737,8 @@
       "tab": "autopilot",
       "tabTitle": "Autopilot",
       "section": "supervisor",
-      "sectionTitle": "Advanced",
+      "sectionTitle": "Supervisor",
       "type": "ui",
-      "advanced": true,
       "agentWritable": false
     },
     {
@@ -10747,9 +10748,8 @@
       "tab": "autopilot",
       "tabTitle": "Autopilot",
       "section": "supervisor",
-      "sectionTitle": "Advanced",
+      "sectionTitle": "Supervisor",
       "type": "ui",
-      "advanced": true,
       "agentWritable": false
     },
     {
@@ -10759,9 +10759,8 @@
       "tab": "autopilot",
       "tabTitle": "Autopilot",
       "section": "supervisor",
-      "sectionTitle": "Advanced",
+      "sectionTitle": "Supervisor",
       "type": "ui",
-      "advanced": true,
       "agentWritable": false
     },
     {
@@ -10771,9 +10770,8 @@
       "tab": "autopilot",
       "tabTitle": "Autopilot",
       "section": "supervisor",
-      "sectionTitle": "Advanced",
+      "sectionTitle": "Supervisor",
       "type": "ui",
-      "advanced": true,
       "agentWritable": false
     },
     {
@@ -11072,6 +11070,7 @@
       "sectionTitle": "Agents",
       "type": "boolean",
       "default": false,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -11094,6 +11093,7 @@
           "value": "followUp"
         }
       ],
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -11219,6 +11219,7 @@
       "section": "config",
       "sectionTitle": "Defaults",
       "type": "ui",
+      "powerUserFlag": true,
       "agentWritable": false
     },
     {
@@ -11242,30 +11243,6 @@
       "sectionTitle": "Defaults",
       "type": "boolean",
       "default": false,
-      "agentWritable": true
-    },
-    {
-      "key": "agentGhostexNote",
-      "title": "Tell agents about Ghostex",
-      "subtitle": "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show Live pages, Ghostex forms and visuals in the chat, run other agents and coordinators, explain or change its own settings, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. It also asks them to link the files, PRs and issues they mention and to keep the images they show you in Ghostex's image folder. Applies to sessions started or resumed after you change it.",
-      "tab": "agents",
-      "tabTitle": "Agents",
-      "section": "config",
-      "sectionTitle": "Defaults",
-      "type": "boolean",
-      "default": true,
-      "agentWritable": true
-    },
-    {
-      "key": "sessionDetailsClaudeTaskTools",
-      "title": "Claude task list",
-      "subtitle": "Turn on Claude's task list tools, so Claude can keep a checklist that the Session details panel shows. Recent Claude models only get them when Ghostex asks. Applies to Claude sessions started or woken after you change it.",
-      "tab": "agents",
-      "tabTitle": "Agents",
-      "section": "config",
-      "sectionTitle": "Defaults",
-      "type": "boolean",
-      "default": true,
       "agentWritable": true
     },
     {
@@ -11464,18 +11441,6 @@
       "agentWritable": false
     },
     {
-      "key": "agentHooksAutoInstall",
-      "title": "Install the hook when I turn on an agent",
-      "subtitle": "Install an agent's session resume hook as soon as you turn it on, without asking.",
-      "tab": "agents",
-      "tabTitle": "Agents",
-      "section": "agentHooks",
-      "sectionTitle": "Session resume hooks",
-      "type": "boolean",
-      "default": false,
-      "agentWritable": true
-    },
-    {
       "key": "chiefShowOnAllSpaces",
       "title": "Show Main Hub on all Spaces",
       "subtitle": "Show Main Hub and your home folder's sessions at the top of every Space. Off, they stay at the top of the Space you moved them to.",
@@ -11561,7 +11526,7 @@
       "sectionTitle": "Agent configs",
       "type": "boolean",
       "default": true,
-      "advanced": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -11574,7 +11539,46 @@
       "sectionTitle": "Agent configs",
       "type": "boolean",
       "default": false,
-      "advanced": true,
+      "powerUserFlag": true,
+      "agentWritable": true
+    },
+    {
+      "key": "agentGhostexNote",
+      "title": "Tell agents about Ghostex",
+      "subtitle": "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show Live pages, Ghostex forms and visuals in the chat, run other agents and coordinators, explain or change its own settings, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. It also asks them to link the files, PRs and issues they mention and to keep the images they show you in Ghostex's image folder. Applies to sessions started or resumed after you change it.",
+      "tab": "agents",
+      "tabTitle": "Agents",
+      "section": "agentsAdvanced",
+      "sectionTitle": "Agent configs",
+      "type": "boolean",
+      "default": true,
+      "powerUserFlag": true,
+      "agentWritable": true
+    },
+    {
+      "key": "sessionDetailsClaudeTaskTools",
+      "title": "Claude task list",
+      "subtitle": "Turn on Claude's task list tools, so Claude can keep a checklist that the Session details panel shows. Recent Claude models only get them when Ghostex asks. Applies to Claude sessions started or woken after you change it.",
+      "tab": "agents",
+      "tabTitle": "Agents",
+      "section": "agentsAdvanced",
+      "sectionTitle": "Agent configs",
+      "type": "boolean",
+      "default": true,
+      "powerUserFlag": true,
+      "agentWritable": true
+    },
+    {
+      "key": "agentHooksAutoInstall",
+      "title": "Install the hook when I turn on an agent",
+      "subtitle": "Install an agent's session resume hook as soon as you turn it on, without asking.",
+      "tab": "agents",
+      "tabTitle": "Agents",
+      "section": "agentsAdvanced",
+      "sectionTitle": "Agent configs",
+      "type": "boolean",
+      "default": false,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -13940,8 +13944,9 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteAdvanced",
-      "sectionTitle": "Advanced",
+      "sectionTitle": "Power User Flags",
       "type": "ui",
+      "powerUserFlag": true,
       "agentWritable": false
     },
     {
@@ -13951,8 +13956,9 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteAdvanced",
-      "sectionTitle": "Advanced",
+      "sectionTitle": "Power User Flags",
       "type": "ui",
+      "powerUserFlag": true,
       "agentWritable": false
     },
     {
@@ -13962,8 +13968,9 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteAdvanced",
-      "sectionTitle": "Advanced",
+      "sectionTitle": "Power User Flags",
       "type": "ui",
+      "powerUserFlag": true,
       "agentWritable": false
     },
     {
@@ -13973,8 +13980,9 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteAdvanced",
-      "sectionTitle": "Advanced",
+      "sectionTitle": "Power User Flags",
       "type": "ui",
+      "powerUserFlag": true,
       "agentWritable": false
     },
     {
@@ -13984,8 +13992,9 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteAdvanced",
-      "sectionTitle": "Advanced",
+      "sectionTitle": "Power User Flags",
       "type": "ui",
+      "powerUserFlag": true,
       "agentWritable": false
     },
     {
@@ -13995,8 +14004,9 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteAdvanced",
-      "sectionTitle": "Advanced",
+      "sectionTitle": "Power User Flags",
       "type": "ui",
+      "powerUserFlag": true,
       "agentWritable": false
     },
     {
@@ -14006,8 +14016,9 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteAdvanced",
-      "sectionTitle": "Advanced",
+      "sectionTitle": "Power User Flags",
       "type": "ui",
+      "powerUserFlag": true,
       "agentWritable": false
     },
     {
@@ -15183,6 +15194,7 @@
       "sectionTitle": "Projects",
       "type": "boolean",
       "default": true,
+      "powerUserFlag": true,
       "agentWritable": true
     },
     {
@@ -15195,6 +15207,7 @@
       "sectionTitle": "Navigation",
       "type": "boolean",
       "default": false,
+      "powerUserFlag": true,
       "agentWritable": true
     }
   ],

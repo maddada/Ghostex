@@ -750,9 +750,23 @@ impl ThemeTab {
                 cx,
             ));
         }
-        // Windows and Linux menus use the system's own blur, which has no radius to set.
+        rows.extend(self.menu_blur_row(t, window, cx));
+        rows
+    }
+
+    /// Menu blur (macOS), a Power User Flag.
+    fn menu_blur_row(
+        &mut self,
+        t: &ThemeCx,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let p = t.p;
+        // Windows and Linux menus use the system's own blur, which has no radius to set. A Power
+        // User Flag (CDXC:Settings 2026-11-27): the body pass leaves it out and the page's fold
+        // draws it alone (`menu_blur_section`).
         if cfg!(target_os = "macos") && t.visible("windowGlassMenuBlurRadius") {
-            rows.push(slider_number_field(
+            return Some(slider_number_field(
                 self,
                 &p,
                 t.spec(
@@ -767,12 +781,25 @@ impl ThemeTab {
                     max: number("MAX_WINDOW_GLASS_BLUR_RADIUS"),
                     step: 1.0,
                 },
-                values.f64("windowGlassMenuBlurRadius"),
+                t.values.f64("windowGlassMenuBlurRadius"),
                 window,
                 cx,
             ));
         }
-        rows
+        None
+    }
+
+    /// Themes' Power User Flags: Menu blur on its own (CDXC:Settings 2026-11-27 in search.rs).
+    pub(super) fn menu_blur_section(
+        &mut self,
+        t: &ThemeCx,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let p = t.p;
+        let rows: Vec<AnyElement> = self.menu_blur_row(t, window, cx).into_iter().collect();
+        super::super::super::fields::settings_section(&p, "Menus", None, None, rows)
+            .map(IntoElement::into_any_element)
     }
 
     /// Behind the glass: the four picture cards.

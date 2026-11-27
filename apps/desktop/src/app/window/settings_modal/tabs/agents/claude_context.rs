@@ -110,6 +110,17 @@ impl AgentsTab {
             values.bool(COMPACT_WORKERS),
             cx,
         ));
+        // A Power User Flag that stays in Claude Code's panel and shows only with the page's flags
+        // (CDXC:Settings 2026-11-27 in packages/settings-catalog/src/pages/agents.rs).
+        let one_hour_hidden = self
+            .store
+            .read(cx)
+            .general_search()
+            .hidden_keys
+            .contains(&ONE_HOUR_CACHE);
+        if one_hour_hidden {
+            return rows;
+        }
         rows.push(toggle_field(
             self,
             p,

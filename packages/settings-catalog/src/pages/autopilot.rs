@@ -35,23 +35,22 @@ fn allowed() -> Section {
     )
 }
 
-/// The supervisor and the sweep sit in the page's collapsed Advanced fold.
+/// The supervisor and the sweep, at the bottom of the page.
 ///
 /// CDXC:Autopilot 2026-11-14 DECISION: user (Q3037, "advanced"): the supervisor and the sweep move out of the middle of the page into its Advanced fold at the bottom.
+/// CDXC:Settings 2026-11-27 DECISION: the Advanced folds became Power User Flags holding only the
+/// rows the user picked (power_user_flags.rs), and no Autopilot row was picked, so these show at
+/// the bottom of the page as an ordinary Supervisor section.
 fn supervisor() -> Section {
-    let advanced = |row: crate::rows::SettingRow| crate::rows::SettingRow {
-        advanced: true,
-        ..row
-    };
     section(
         "supervisor",
-        "Advanced",
+        "Supervisor",
         vec![
             // CDXC:Autopilot 2026-11-26 SEE-ALSO: apps/desktop/src/app/window/settings_modal/tabs/autopilot/supervisor_picker.rs (issue #765: any agent, model and effort, and the fallback row).
-            advanced(row("autopilotSupervisor", "Supervisor model", "The agent that wakes for judgment calls: any agent, model and effort from the new session's model picker (Claude Opus 5.5 at medium by default). It runs commands without asking and starts on an account with room.")),
-            advanced(row("autopilotSupervisorFallback", "When it's at its limit", "What the supervisor moves to when its pick is at its usage limit: any agent, model and effort, or Automatic (Opus 5.5 at medium, then GPT 6.1 Sol at high, whichever has room).")),
-            advanced(row("autopilotCheckup", "Supervisor check-up", "Off, or every 10 (the default), 20 or 30 minutes, or every hour: Ghostex looks for sessions that seem stuck in ways its rules don't settle (silent after a reload, told to carry on but doing nothing, failing again and again, saying the same thing in a loop, waiting on nothing) and wakes the supervisor only when it finds one, so a quiet check-up costs nothing. Also ghostex autopilot checkup.")),
-            advanced(row("autopilotSweep", "Look at every session every", "How often Autopilot sweeps every session it covers, from 1 to 10 minutes (2 by default). A session whose turn ends is looked at right away.")),
+            row("autopilotSupervisor", "Supervisor model", "The agent that wakes for judgment calls: any agent, model and effort from the new session's model picker (Claude Opus 5.5 at medium by default). It runs commands without asking and starts on an account with room."),
+            row("autopilotSupervisorFallback", "When it's at its limit", "What the supervisor moves to when its pick is at its usage limit: any agent, model and effort, or Automatic (Opus 5.5 at medium, then GPT 6.1 Sol at high, whichever has room)."),
+            row("autopilotCheckup", "Supervisor check-up", "Off, or every 10 (the default), 20 or 30 minutes, or every hour: Ghostex looks for sessions that seem stuck in ways its rules don't settle (silent after a reload, told to carry on but doing nothing, failing again and again, saying the same thing in a loop, waiting on nothing) and wakes the supervisor only when it finds one, so a quiet check-up costs nothing. Also ghostex autopilot checkup."),
+            row("autopilotSweep", "Look at every session every", "How often Autopilot sweeps every session it covers, from 1 to 10 minutes (2 by default). A session whose turn ends is looked at right away."),
         ],
     )
 }

@@ -180,12 +180,9 @@ pub(super) fn chat_settings() -> ChatSettings {
                 user_style: option("chatUserMessageStyle"),
                 // Agent work is retired (Q2773, Q2774): the core draws Default.
                 agent_work: None,
-                status_in_transcript: Some(
-                    object
-                        .get("chatStatusInTranscript")
-                        .and_then(Value::as_bool)
-                        == Some(true),
-                ),
+                // Status line in the chat is gone (CDXC:SessionChat 2026-11-27 DECISION in
+                // server/src/session_chat_read.rs): the working line stays above the chat box.
+                status_in_transcript: Some(false),
                 spacing: option("chatMessageSpacing"),
             }
         }),

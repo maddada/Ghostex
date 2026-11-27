@@ -409,11 +409,17 @@ impl SettingsPage for ThemeTab {
 }
 
 /// What every Theme group reads while it renders.
+#[derive(Clone)]
 pub(super) struct ThemeCx {
     pub(super) p: SettingsPalette,
     pub(super) values: SettingsValues,
     pub(super) searching: bool,
     visible: Rc<dyn Fn(&str) -> bool>,
+    /// This pass draws the page's Power User Flags (the fold at its bottom) instead of its body
+    /// (CDXC:Settings 2026-11-27 in search.rs).
+    pub(super) flags_pass: bool,
+    /// The anchors the page body drew, so a section the fold repeats is titled "More … settings".
+    shown_above_fold: Vec<String>,
     /// `hud.windowGlassBlockedBySystem`: the system's own transparency switch keeps the window opaque.
     pub(super) glass_blocked: bool,
     /// `nativeFilePickerAvailable`: the host can open file dialogs (`hud.appIconPickerUnavailable` is off).
@@ -423,6 +429,16 @@ pub(super) struct ThemeCx {
 impl ThemeCx {
     pub(super) fn visible(&self, key: &str) -> bool {
         (self.visible)(key)
+    }
+
+    /// A section's title in this pass: inside the Power User Flags fold a section the page body
+    /// already shows is "More <title> settings", as on the General pages (`GeneralCx::section_title`).
+    pub(super) fn section_title(&self, anchor: &str, title: &str) -> String {
+        if self.flags_pass && self.shown_above_fold.iter().any(|shown| shown == anchor) {
+            format!("More {title} settings")
+        } else {
+            title.to_string()
+        }
     }
 
     /// `getSettingModificationProps(key)` with the asterisk after the label.
@@ -641,7 +657,14 @@ impl ThemeTab {
                 cx,
             ));
         }
-        settings_section(&p, "Window frame", None, None, rows).map(IntoElement::into_any_element)
+        settings_section(
+            &p,
+            t.section_title("windowFrame", "Window frame"),
+            None,
+            None,
+            rows,
+        )
+        .map(IntoElement::into_any_element)
     }
 
     /// Appearance: System, Light and Dark as three preview cards, each a small window in that
@@ -1247,8 +1270,18 @@ impl Render for ThemeTab {
                 })
                 .unwrap_or_default();
             let searching = store.is_searching();
+            // CDXC:Settings 2026-11-27: while browsing, the page body draws the rows that are not
+            // Power User Flags and the fold's pass the flags (`flags_visible`); a page whose flags
+            // are hidden leaves them out of both and of the search (store.rs `hidden_keys`).
+            let hidden = store.hidden_power_user_flags();
             let visible: Rc<dyn Fn(&str) -> bool> = Rc::new(move |key: &str| {
-                !searching || theming_keys.get(key).copied().unwrap_or(false)
+                if hidden.contains(&key) {
+                    return false;
+                }
+                if searching {
+                    return theming_keys.get(key).copied().unwrap_or(false);
+                }
+                !ghostex_settings_catalog::is_power_user_flag(key)
             });
             let matching: Vec<SettingsTabId> = if searching {
                 rail_pages(store).into_iter().map(|page| page.tab).collect()
@@ -1266,6 +1299,8 @@ impl Render for ThemeTab {
                         .and_then(Value::as_bool)
                         == Some(true),
                     native_picker,
+                    flags_pass: false,
+                    shown_above_fold: Vec::new(),
                 },
                 matching,
             )
@@ -1335,6 +1370,63 @@ impl Render for ThemeTab {
                         .map(|section| PageBlock::section("terminalColours", section)),
                 );
             }
+        }
+        // The Power User Flags of this page, in the fold at its bottom (CDXC:Settings 2026-11-27 in
+        // search.rs). Only the sections that hold a flag are drawn again.
+        if !t.searching {
+            let hidden = self.store.read(cx).hidden_power_user_flags();
+            let flags = ThemeCx {
+                visible: Rc::new(move |key: &str| {
+                    !hidden.contains(&key) && ghostex_settings_catalog::is_power_user_flag(key)
+                }),
+                flags_pass: true,
+                shown_above_fold: blocks
+                    .iter()
+                    .filter_map(|block| block.anchor.clone())
+                    .collect(),
+                ..t.clone()
+            };
+            let mut flag_blocks: Vec<PageBlock> = Vec::new();
+            match tab {
+                SettingsTabId::TextFonts => {
+                    let (_, text) = self.font_sections(&flags, window, cx);
+                    flag_blocks.extend(
+                        self.terminal_text_section(&flags, window, cx)
+                            .map(|section| PageBlock::section("terminalTextFlags", section)),
+                    );
+                    flag_blocks.extend(text.map(|section| PageBlock::section("text", section)));
+                }
+                SettingsTabId::SizeZoom => {
+                    flag_blocks.extend(
+                        self.panel_sizes_section(&flags, window, cx)
+                            .map(|section| PageBlock::section("panelSizes", section)),
+                    );
+                }
+                SettingsTabId::WindowLayout => {
+                    flag_blocks.extend(
+                        self.window_frame_section(&flags, cx)
+                            .map(|section| PageBlock::section("windowFrameFlags", section)),
+                    );
+                    flag_blocks.extend(
+                        self.panels_section(&flags, window, cx)
+                            .map(|section| PageBlock::section("panelsFlags", section)),
+                    );
+                }
+                _ => {
+                    flag_blocks.extend(
+                        self.menu_blur_section(&flags, window, cx)
+                            .map(|section| PageBlock::section("menuBlur", section)),
+                    );
+                }
+            }
+            super::super::fields::push_power_user_flags(
+                &self.store,
+                &p,
+                tab,
+                &mut blocks,
+                flag_blocks,
+                cx,
+            );
         }
         // The preview binary's `pick-color` state (and a host without a system colour panel) opens
         // the terminal background's Pick Color dialog, once its row has drawn (terminal_background.rs).

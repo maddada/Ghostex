@@ -72,7 +72,7 @@ pub(crate) fn remote_machines() -> Section {
 pub(crate) fn remote_advanced() -> Section {
     section(
         "remoteAdvanced",
-        "Advanced",
+        crate::power_user_flags::SECTION_TITLE,
         vec![
             row("easyConnectRelay", "Relay", "Where phones meet this computer: Ghostex's relay first with Tailscale's public relays as fallback, public relays only, or a relay you run."),
             row(

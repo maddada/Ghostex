@@ -703,6 +703,9 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("chatComposerMaximize", J::Bool(true)),
     ("chatQuietViewCalm", J::Bool(false)),
     ("chatVariedWorkingWords", J::Bool(false)),
+    // CDXC:Settings 2026-11-27: the Experience level last picked for the whole app; Advanced shows
+    // the Power User Flags (power_user_flags.rs). Empty until a level is picked.
+    ("experienceLevel", J::Str("")),
     // CDXC:SessionChat 2026-10-16 DECISION: User, on a tester's request to draw the agent's thinking grey and its output white as terminals do: "Sure please do it as a toggle (disabled by default) so we can check how it looks." Off keeps the unified look; on, thinking takes the theme's muted text colour and replies its full foreground, in the desktop, web and phone chats.
     ("sessionChatMutedThinking", J::Bool(true)),
     ("sessionChatKeepComposerExpanded", J::Bool(false)),
@@ -755,7 +758,6 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:SessionChat 2026-11-07 SEE-ALSO: the chat look settings (Message layout, Your messages, Status line in the chat) are opt-in; Agent work and Tool call cards are retired (`migrate_retired_chat_looks` in lib.rs), all Default; the user decisions are in packages/gx-chat-core/src/transcript/chat_look.rs.
     ("chatMessageLayout", J::Str("default")),
     ("chatUserMessageStyle", J::Str("default")),
-    ("chatStatusInTranscript", J::Bool(false)),
     // CDXC:SessionChat 2026-11-07 SEE-ALSO: Chat box matches transcript width is opt-in, off; the user decision is on the chat box in apps/desktop/src/app/native_chat/composer.rs.
     ("chatComposerMatchesTranscriptWidth", J::Bool(false)),
     // CDXC:SessionChat 2026-11-07 SEE-ALSO: Message spacing's user decision is in packages/gx-chat-core/src/transcript/chat_look.rs.

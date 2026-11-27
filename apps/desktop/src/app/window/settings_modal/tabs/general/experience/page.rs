@@ -20,6 +20,7 @@ use super::super::{GeneralCx, GeneralTab};
 use super::preview::{PreviewState, preview};
 use crate::fold_motion::{FoldMotion, fold_duration, render_fold};
 use ghostex_settings_catalog::experience::{self, AREAS, Area, Preset};
+use ghostex_settings_catalog::power_user_flags;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -175,6 +176,22 @@ fn preview_card(
     } else {
         "This is your Ghostex now. Pick a level or a switch below to try it here first.".into()
     };
+    // Picking Advanced for the whole app shows the Power User Flags; leaving it hides them.
+    let flags_chip = changed
+        .iter()
+        .find(|(key, _)| *key == power_user_flags::LEVEL_KEY)
+        .and_then(|(_, value)| {
+            let on = value.as_str() == Some("advanced");
+            let was_on = power_user_flags::level_is_advanced(&|key| saved.value(key));
+            (on != was_on).then(|| {
+                let sign = if on { "+" } else { "−" };
+                chip(
+                    p,
+                    format!("{sign} {}", power_user_flags::SECTION_TITLE),
+                    true,
+                )
+            })
+        });
     let chips = changed.iter().filter_map(|(key, value)| {
         let control = AREAS
             .iter()
@@ -194,6 +211,7 @@ fn preview_card(
         );
         Some(chip(p, text, true))
     });
+    let chips = chips.chain(flags_chip);
     let has_changes = !changed.is_empty();
     v_flex()
         .w_full()

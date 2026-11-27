@@ -643,7 +643,7 @@ pub struct ChatForkInfo {
 }
 
 /// The chat look settings as the stored option ids (`chatMessageLayout`, `chatUserMessageStyle`,
-/// `chatAgentWorkStyle`, `chatStatusInTranscript`, `chatMessageSpacing`), which the chat read and
+/// `chatAgentWorkStyle`, `chatMessageSpacing`), which the chat read and
 /// the desktop host's chat settings carry. A field left out keeps what the chat core has; the core
 /// reads an unknown id as Default (`gx-chat-core`'s `transcript/chat_look.rs`).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -655,6 +655,8 @@ pub struct ChatLookSettings {
     pub user_style: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_work: Option<String>,
+    /// Status line in the chat, whose setting (`chatStatusInTranscript`) is gone since 2026-11-27:
+    /// always sent as false, kept for the phones that still read it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status_in_transcript: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

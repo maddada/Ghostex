@@ -32,6 +32,7 @@ pub mod layout;
 pub mod modules;
 mod pages;
 pub mod platform_text;
+pub mod power_user_flags;
 pub mod rows;
 mod search_keywords;
 pub mod spaces;
@@ -795,9 +796,9 @@ pub fn window_glass_light_key<'a>(
         .map_or(light, |(dark, _)| *dark)
 }
 
-/// Rows a page folds into its collapsed Advanced section (`isAdvancedMainSetting`).
-pub fn is_advanced_setting(key: &str) -> bool {
-    data::ADVANCED_MAIN_SETTING_KEYS.contains(&key)
+/// Rows a page keeps in its Power User Flags section (`power_user_flags`).
+pub fn is_power_user_flag(key: &str) -> bool {
+    power_user_flags::is_flag(key)
 }
 
 /// Rows that carry a "Not recommended" label (`NOT_RECOMMENDED_SETTING_KEYS`).

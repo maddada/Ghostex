@@ -755,12 +755,11 @@ pub(crate) async fn handle_read_session_chat_http(
             // Agent work Reduced and Quiet are retired (Q2773, Q2774): Default, so a phone that
             // still draws them goes back to Default.
             agent_work: Some("default".to_string()),
-            status_in_transcript: Some(
-                settings
-                    .get("chatStatusInTranscript")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false)
-            ),
+            // CDXC:SessionChat 2026-11-27 DECISION: user, of Status line in the chat: "remove this
+            // setting please i dont like it". The setting is gone and everyone keeps its default:
+            // the working line stays above the chat box. Sent as false so a phone that still has
+            // the field draws it there too.
+            status_in_transcript: Some(false),
             spacing: look_option("chatMessageSpacing"),
         }),
     );

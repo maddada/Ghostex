@@ -518,8 +518,17 @@ impl AgentsTab {
                 let rows = self.claude_context_rows(p, window, cx);
                 children.extend(rows.into_iter().map(panel_child));
             }
-            // What a message sent to a busy OMP or Pi does (pi_messages.rs).
-            if super::pi_messages::is_pi_like(agent) {
+            // What a message sent to a busy OMP or Pi does (pi_messages.rs). A Power User Flag
+            // that stays in the panel and shows only with the page's flags (CDXC:Settings
+            // 2026-11-27 in packages/settings-catalog/src/pages/agents.rs).
+            if super::pi_messages::is_pi_like(agent)
+                && !self
+                    .store
+                    .read(cx)
+                    .general_search()
+                    .hidden_keys
+                    .contains(&"piMessagesWhileWorking")
+            {
                 children.push(group_title(p, "Messages"));
                 let row = self.pi_messages_row(p, &agent_id, window, cx);
                 children.push(panel_child(row));

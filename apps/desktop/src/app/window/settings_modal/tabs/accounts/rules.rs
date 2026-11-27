@@ -439,7 +439,15 @@ impl AccountsTab {
             )];
         // CDXC:Settings 2026-11-14 DECISION (AGENTS.md, Q3107): hidden while Auto-redeem expiring
         // resets is off, no longer greyed out.
-        if on {
+        // CDXC:Settings 2026-11-27: Also at a limit is a Power User Flag that stays under its parent
+        // row, shown only with the Accounts page's flags (packages/settings-catalog power_user_flags.rs).
+        let flag_hidden = self
+            .store
+            .read(cx)
+            .general_search()
+            .hidden_keys
+            .contains(&at_limit_key);
+        if on && !flag_hidden {
             rows.push(setting_row(
                 p,
                 SharedString::from(format!("accounts-{provider}-auto-redeem-at-limit")),

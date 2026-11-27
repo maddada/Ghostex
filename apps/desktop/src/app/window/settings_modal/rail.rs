@@ -64,16 +64,17 @@ pub(crate) fn hotkey_section_searches(
                 subtitle: subtitle.to_string(),
                 options: Vec::new(),
                 keywords: Vec::new(),
-                advanced: false,
             };
-            if id == "projects" {
+            // CDXC:Settings 2026-11-27: these two are the Hotkeys page's Power User Flags, which a
+            // search finds only while they are shown (`hotkey_shown` is false for a hidden one).
+            if id == "projects" && hotkey_shown("expandCollapsedProjectsOnJump") {
                 rows.push(row(
                     "expandCollapsedProjectsOnJump",
                     "Expand collapsed projects on jump",
                     "Reveal a collapsed Projects row before focusing it from Jump to Project hotkeys.",
                 ));
             }
-            if id == "navigation" {
+            if id == "navigation" && hotkey_shown("sidebarSessionCycleSkipsSleeping") {
                 rows.push(row(
                     "sidebarSessionCycleSkipsSleeping",
                     "Skip sleeping sessions",
@@ -99,7 +100,6 @@ pub(crate) fn hotkey_section_searches(
                             .iter()
                             .map(|word| word.to_string())
                             .collect(),
-                        advanced: false,
                     });
                 }
             }
@@ -124,9 +124,10 @@ pub(crate) fn rail_pages(store: &SettingsStore) -> Vec<RailPage> {
     let general = store.general_search();
     let power_visible = store.keep_awake_on();
     let hotkey_sections = hotkey_section_searches(&query, &|id| {
-        ghostex_settings_catalog::built_in_extensions::hotkey_shown_with(id, |key| {
-            Some(store.bool(key))
-        })
+        !general.hidden_keys.contains(&id)
+            && ghostex_settings_catalog::built_in_extensions::hotkey_shown_with(id, |key| {
+                Some(store.bool(key))
+            })
     });
     let active_hotkey = store
         .active_section(SettingsTabId::Hotkeys)

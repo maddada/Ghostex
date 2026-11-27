@@ -609,8 +609,12 @@ pub fn exports(module: &str, platform: Platform) -> Vec<(&'static str, Json)> {
         ],
         module::SETTINGS_TYPES => vec![
             (
-                "ADVANCED_MAIN_SETTING_KEYS",
-                ADVANCED_MAIN_SETTING_KEYS.to_json(),
+                "POWER_USER_FLAG_KEYS",
+                crate::power_user_flags::PAGES
+                    .iter()
+                    .flat_map(|page| page.keys.iter().copied())
+                    .collect::<Vec<&str>>()
+                    .to_json(),
             ),
             (
                 "AGENT_HOOK_SUPPORTED_DEFAULT_AGENTS",

@@ -26,9 +26,7 @@ pub(crate) fn config() -> Section {
             row("customTitleCommand", "Custom Title Command", "Run this command with the title prompt on stdin. It should print only the title."),
             row("acceptAll", "Agent approvals", "Choose whether supported agents ask before editing files or running commands. Full permissions: the agent won't ask for permission before edits or commands. At your own risk. Per-agent settings can override this default."),
             row("trustProjectFoldersAutomatically", "Trust project folders automatically", "Mark each project and worktree folder as trusted before its agent starts, so no session stops at a \"Do you trust this folder?\" question. Off by default: the chat shows that question as a card with Trust folder and Don't trust. Turning it on asks for Touch ID, Windows Hello or your password on this computer."),
-            // CDXC:Settings 2026-11-11 DECISION in apps/desktop settings_modal/model.rs (`RailTier`, Q2511): these two moved here from Chat; they set what an agent is told and given when it starts, not how the chat looks.
-            row("agentGhostexNote", "Tell agents about Ghostex", "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show Live pages, Ghostex forms and visuals in the chat, run other agents and coordinators, explain or change its own settings, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. It also asks them to link the files, PRs and issues they mention and to keep the images they show you in Ghostex's image folder. Applies to sessions started or resumed after you change it."),
-            row("sessionDetailsClaudeTaskTools", "Claude task list", "Turn on Claude's task list tools, so Claude can keep a checklist that the Session details panel shows. Recent Claude models only get them when Ghostex asks. Applies to Claude sessions started or woken after you change it."),
+            // CDXC:Settings 2026-11-11 DECISION in apps/desktop settings_modal/model.rs (`RailTier`, Q2511): Tell agents about Ghostex and Claude task list moved here from Chat; they set what an agent is told and given when it starts, not how the chat looks.
             // CDXC:AgentProviders 2026-11-20 SEE-ALSO: server/src/agents/codex_lean.rs, where the user's decision is.
             row("leanCodexWorkers", "Lean Codex workers", "Codex threads a coordinator starts, and Codex sessions another session starts to report to it, run without Codex's own computer use, browser use, image generation, apps and plugins, so each request is about 12% smaller and they start faster. Sessions you start yourself keep all of them. Applies to sessions started or resumed after you change it."),
         ],
@@ -94,35 +92,38 @@ pub(crate) fn agent_hooks() -> Section {
         "Session resume hooks",
         vec![
             row("agentResumeHooks", "Session resume hooks", "Claude Code, Codex and OpenCode need no hook: Ghostex follows them from the files they write themselves. Other agents use a hook so Ghostex can capture their native session id and resume the exact conversation after sleep, reload, or app restart. Install one agent's hook from its row, fix every agent that is on with Fix all, install every missing hook with Install all (shown only when a hook is missing), or remove every Ghostex hook with Uninstall all in the ⋯ menu.").options_of(AGENT_HOOK_SUPPORTED_DEFAULT_AGENTS, "name", "name"),
-            row("agentHooksAutoInstall", "Install the hook when I turn on an agent", "Install an agent's session resume hook as soon as you turn it on, without asking."),
         ],
     )
 }
 
 /*
 CDXC:AgentHooks 2026-11-18 DECISION:
-User (Q4160): the status line helper becomes a setting, on by default, "in the agents page under advanced", and "mention why this is essential in the tooltip". It is the first row of the Agents page's collapsed Advanced fold (server/src/agent_hooks/statusline_setting.rs keeps the configs in step).
+User (Q4160): the status line helper becomes a setting, on by default, "in the agents page under advanced", and "mention why this is essential in the tooltip". It was the first row of the Agents page's collapsed Advanced fold, now its Power User Flags (CDXC:Settings 2026-11-27 in power_user_flags.rs) (server/src/agent_hooks/statusline_setting.rs keeps the configs in step).
 */
 pub(crate) fn advanced() -> Section {
-    let advanced = |row: crate::rows::SettingRow| crate::rows::SettingRow {
-        advanced: true,
-        ..row
-    };
+    // CDXC:Settings 2026-11-27 DECISION: the Agents page's Power User Flags (power_user_flags.rs):
+    // Read live status and Use agent hooks from the old Advanced fold, joined by Tell agents about
+    // Ghostex and Claude task list (from Defaults) and Install the hook when I turn on an agent
+    // (from Session resume hooks), the rows the user picked. Custom Title Command, the 1-hour
+    // prompt cache and Messages sent while it works stay where they are and show only with them.
     section(
         "agentsAdvanced",
         "Agent configs",
         vec![
-            advanced(row(
+            row(
                 "readAgentLiveStatus",
                 "Read live status from Claude Code and Cursor",
                 "Claude Code and Cursor hand their live model, effort, fast mode, context, cost and 5h / 7d limits only to a status line command, so the chat needs this to show them. Ghostex adds a small one to their settings: it keeps your own status line, draws nothing of its own in Claude, and does nothing outside Ghostex. It also adds the model to Codex's footer when you listed your own footer items. Off, Ghostex removes it and puts your own command back: the chat's model and effort update only after the next reply, fast mode, cost and More details stay empty, and limits show only for saved accounts.",
-            )),
+            ),
             // CDXC:AgentHooks 2026-11-19 DECISION: the user moved Use agent hooks here from Settings > Debugging, under Read live status (Q4170: only this row moves into Agents > Advanced, every other row stays where it is). Same switch, same behaviour, off by default (server/src/agent_hooks/hook_free.rs). It came to Debugging from Settings > Agents > Session resume hooks (Q3040).
-            advanced(row(
+            row(
                 "useAgentHooks",
                 "Use agent hooks",
                 "Install hooks for Claude, Codex and OpenCode and follow them through their hooks. Ghostex follows these three without hooks, so turn this on only if it can't follow them on this computer. When off, a session Ghostex can't follow asks in its chat before turning that agent's hook on. Other agents always use their hooks.",
-            )),
+            ),
+            row("agentGhostexNote", "Tell agents about Ghostex", "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show Live pages, Ghostex forms and visuals in the chat, run other agents and coordinators, explain or change its own settings, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. It also asks them to link the files, PRs and issues they mention and to keep the images they show you in Ghostex's image folder. Applies to sessions started or resumed after you change it."),
+            row("sessionDetailsClaudeTaskTools", "Claude task list", "Turn on Claude's task list tools, so Claude can keep a checklist that the Session details panel shows. Recent Claude models only get them when Ghostex asks. Applies to Claude sessions started or woken after you change it."),
+            row("agentHooksAutoInstall", "Install the hook when I turn on an agent", "Install an agent's session resume hook as soon as you turn it on, without asking."),
         ],
     )
 }

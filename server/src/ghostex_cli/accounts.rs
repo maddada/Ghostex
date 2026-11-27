@@ -119,10 +119,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
     // CDXC:Coordinators 2026-11-22 DECISION:
     // A coordinator asked to move work off a Claude pool that is out needs to see which other
     // agents have room. These accounts have no number (they never run or switch a session).
-    for (provider, heading) in [
-        ("cursor", "CURSOR"),
-        ("copilot", "COPILOT"),
-    ] {
+    for (provider, heading) in [("cursor", "CURSOR"), ("copilot", "COPILOT")] {
         let accounts: Vec<&Value> = usage_rows
             .iter()
             .filter(|row| row["provider"] == provider)
@@ -519,10 +516,7 @@ fn print_status(roster: &Value, json_output: bool) -> CliResult<()> {
             }
         }
     }
-    for (provider, heading) in [
-        ("cursor", "Cursor"),
-        ("copilot", "Copilot"),
-    ] {
+    for (provider, heading) in [("cursor", "Cursor"), ("copilot", "Copilot")] {
         for row in usage_rows.iter().filter(|row| row["provider"] == provider) {
             let status = match row["status"].as_str().unwrap_or_default() {
                 "loginRequired" => "needs sign-in",

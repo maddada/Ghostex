@@ -275,7 +275,8 @@ pub(crate) struct SettingsStore {
     navigation_task: Option<Task<()>>,
     /// The scroll top restored for each page on its first frame, so it is applied once.
     restored_scroll: HashMap<SettingsTabId, bool>,
-    /// The pages whose Advanced fold is open (CDXC:Settings 2026-10-29 in search.rs). Kept here,
+    /// The pages whose Power User Flags fold (Cloud Boxes: Advanced fold) is open (CDXC:Settings
+    /// 2026-11-27 in search.rs). Kept here,
     /// not on the page view, so opening it re-renders the whole modal like a setting change: a
     /// page-only notify left the scroll area's reach at the pre-fold height until the next
     /// store change (the fast layers' tracked scroll handle), so the opened rows could not be
@@ -777,6 +778,9 @@ impl SettingsStore {
             ghostex_settings_catalog::Platform::current(),
             |key| Some(self.string(key)),
         ));
+        // CDXC:Settings 2026-11-27: the Power User Flags of every page whose section is hidden
+        // (`power_user_flags_shown`) leave its rows and the search (search.rs `RowTier`).
+        hidden_keys.extend(self.hidden_power_user_flags());
         let tab_hidden_keys = hidden_keys.clone();
         if self.general_search.query != self.search_query
             || self.general_search.hidden_keys != hidden_keys
@@ -1076,7 +1080,31 @@ impl SettingsStore {
         }));
     }
 
-    /// Whether page `tab`'s Advanced fold is open.
+    /// Whether Experience is on Advanced, which shows every page's Power User Flags.
+    pub(crate) fn power_user_flags_on(&self) -> bool {
+        ghostex_settings_catalog::power_user_flags::level_is_advanced(&|key| self.value(key))
+    }
+
+    /// Whether page `tab` shows its Power User Flags section: on Experience > Advanced, or while
+    /// one of its flags differs from its default (CDXC:Settings 2026-11-27 in the settings
+    /// catalog's power_user_flags.rs).
+    pub(crate) fn power_user_flags_shown(&self, tab: SettingsTabId) -> bool {
+        ghostex_settings_catalog::power_user_flags::page_shown(
+            tab.id(),
+            self.power_user_flags_on(),
+            &|key| self.is_modified(key),
+        )
+    }
+
+    /// The flags of the pages whose Power User Flags section is hidden.
+    pub(crate) fn hidden_power_user_flags(&self) -> Vec<&'static str> {
+        ghostex_settings_catalog::power_user_flags::hidden_keys(
+            self.power_user_flags_on(),
+            &|key| self.is_modified(key),
+        )
+    }
+
+    /// Whether page `tab`'s Power User Flags fold (or Cloud Boxes' Advanced fold) is open.
     pub(crate) fn advanced_fold_open(&self, tab: SettingsTabId) -> bool {
         self.advanced_folds.get(&tab).copied().unwrap_or(false)
     }

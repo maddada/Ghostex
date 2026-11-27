@@ -88,14 +88,9 @@ impl AgentsTab {
         cx: &mut Context<Self>,
     ) -> Option<Div> {
         let section = search.section("config");
-        let (values, agents, hidden_keys) = {
+        let (values, agents) = {
             let store = self.store.read(cx);
-            (
-                store.values(),
-                agents_from_hud(store.hud()),
-                // Rows of a built-in extension that is off (Claude task list below).
-                store.general_search().hidden_keys.clone(),
-            )
+            (store.values(), agents_from_hud(store.hud()))
         };
         let mut rows: Vec<AnyElement> = Vec::new();
         if should_show_setting(&section, NEW_SESSION_AGENT_SCOPE, None) {
@@ -231,11 +226,17 @@ impl AgentsTab {
         let options = title_generation_options();
         let allowed: Vec<String> = options.iter().map(|option| option.value.clone()).collect();
         let title_agent = values.choice(TITLE_AGENT, &allowed);
+        // CDXC:Settings 2026-11-27: Custom Title Command is a Power User Flag that stays under this
+        // row, so Custom is offered only while the page's Power User Flags show (or is picked).
+        let flags_shown = self
+            .store
+            .read(cx)
+            .power_user_flags_shown(super::super::super::model::SettingsTabId::Agents);
         // Only agents that are on are offered (the saved choice stays listed so it still shows).
         let options: Vec<SettingOption> = options
             .into_iter()
             .filter(|option| {
-                option.value == "custom"
+                (option.value == "custom" && flags_shown)
                     || option.value == title_agent
                     || agents.iter().any(|agent| agent.agent_id == option.value)
             })
@@ -333,38 +334,6 @@ impl AgentsTab {
         }
         if should_show_setting(&section, TRUST_PROJECT_FOLDERS, None) {
             rows.push(self.folder_trust_row(p, &values, cx));
-        }
-        // CDXC:Settings 2026-11-11 DECISION:
-        // User: "move settings around so things make full sense"; Q2511 ("Move all five"): Tell agents about Ghostex and Claude task list moved here from Settings > Chat, because they set what an agent is told and given when it starts, not how the chat looks or acts. Each keeps its name, key and value. Claude task list still shows only while the Session details panel is on (its `settingKeys` in official_extensions.rs).
-        if should_show_setting(&section, GHOSTEX_NOTE, None) {
-            rows.push(toggle_field(
-                self,
-                p,
-                GHOSTEX_NOTE,
-                RowSpec::new("Tell agents about Ghostex")
-                    .description(
-                        "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show Live pages, Ghostex forms and visuals in the chat, run other agents and coordinators, explain or change its own settings, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it.",
-                    )
-                    .keyed(&values, GHOSTEX_NOTE),
-                values.bool(GHOSTEX_NOTE),
-                cx,
-            ));
-        }
-        if !hidden_keys.contains(&CLAUDE_TASK_TOOLS)
-            && should_show_setting(&section, CLAUDE_TASK_TOOLS, None)
-        {
-            rows.push(toggle_field(
-                self,
-                p,
-                CLAUDE_TASK_TOOLS,
-                RowSpec::new("Claude task list")
-                    .description(
-                        "Turn on Claude's task list tools, so Claude can keep a checklist that the Session details panel shows. Recent Claude models only get them when Ghostex asks. Applies to Claude sessions started or woken after you change it.",
-                    )
-                    .keyed(&values, CLAUDE_TASK_TOOLS),
-                values.bool(CLAUDE_TASK_TOOLS),
-                cx,
-            ));
         }
         if should_show_setting(&section, LEAN_CODEX_WORKERS, None) {
             rows.push(toggle_field(
@@ -469,9 +438,10 @@ impl AgentsTab {
         settings_section(p, "Home folder", None, None, rows)
     }
 
-    /// The Agent configs section in the Advanced fold at the bottom of the page: Read live status
-    /// from Claude Code and Cursor (CDXC:AgentHooks 2026-11-18 in
-    /// packages/settings-catalog/src/pages/agents.rs).
+    /// The Agent configs section in the Power User Flags fold at the bottom of the page: Read live
+    /// status from Claude Code and Cursor (CDXC:AgentHooks 2026-11-18), Use agent hooks, Tell agents
+    /// about Ghostex, Claude task list and Install the hook when I turn on an agent (CDXC:Settings
+    /// 2026-11-27 in packages/settings-catalog/src/pages/agents.rs).
     pub(super) fn render_agents_advanced(
         &mut self,
         p: &SettingsPalette,
@@ -479,7 +449,10 @@ impl AgentsTab {
         cx: &mut Context<Self>,
     ) -> Option<Div> {
         let section = search.section(AGENTS_ADVANCED);
-        let values = self.store.read(cx).values();
+        let (values, hidden_keys) = {
+            let store = self.store.read(cx);
+            (store.values(), store.general_search().hidden_keys.clone())
+        };
         let mut rows: Vec<AnyElement> = Vec::new();
         if should_show_setting(&section, READ_AGENT_LIVE_STATUS, None) {
             rows.push(toggle_field(
@@ -508,6 +481,56 @@ impl AgentsTab {
                     page.save(USE_AGENT_HOOKS, json!(next), cx);
                     page.refresh_hooks_after_switch(cx);
                 },
+                cx,
+            ));
+        }
+        // These two and Install the hook when I turn on an agent joined the page's Power User Flags
+        // (CDXC:Settings 2026-11-27 in packages/settings-catalog/src/pages/agents.rs).
+        // CDXC:Settings 2026-11-11 DECISION:
+        // User: "move settings around so things make full sense"; Q2511 ("Move all five"): Tell agents about Ghostex and Claude task list moved here from Settings > Chat, because they set what an agent is told and given when it starts, not how the chat looks or acts. Each keeps its name, key and value. Claude task list still shows only while the Session details panel is on (its `settingKeys` in official_extensions.rs).
+        if should_show_setting(&section, GHOSTEX_NOTE, None) {
+            rows.push(toggle_field(
+                self,
+                p,
+                GHOSTEX_NOTE,
+                RowSpec::new("Tell agents about Ghostex")
+                    .description(
+                        "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show Live pages, Ghostex forms and visuals in the chat, run other agents and coordinators, explain or change its own settings, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it.",
+                    )
+                    .keyed(&values, GHOSTEX_NOTE),
+                values.bool(GHOSTEX_NOTE),
+                cx,
+            ));
+        }
+        if !hidden_keys.contains(&CLAUDE_TASK_TOOLS)
+            && should_show_setting(&section, CLAUDE_TASK_TOOLS, None)
+        {
+            rows.push(toggle_field(
+                self,
+                p,
+                CLAUDE_TASK_TOOLS,
+                RowSpec::new("Claude task list")
+                    .description(
+                        "Turn on Claude's task list tools, so Claude can keep a checklist that the Session details panel shows. Recent Claude models only get them when Ghostex asks. Applies to Claude sessions started or woken after you change it.",
+                    )
+                    .keyed(&values, CLAUDE_TASK_TOOLS),
+                values.bool(CLAUDE_TASK_TOOLS),
+                cx,
+            ));
+        }
+        if !hidden_keys.contains(&super::turn_on::AUTO_INSTALL_HOOKS)
+            && should_show_setting(&section, super::turn_on::AUTO_INSTALL_HOOKS, None)
+        {
+            rows.push(toggle_field(
+                self,
+                p,
+                super::turn_on::AUTO_INSTALL_HOOKS,
+                RowSpec::new("Install the hook when I turn on an agent")
+                    .description(
+                        "Install an agent's session resume hook as soon as you turn it on, without asking.",
+                    )
+                    .keyed(&values, super::turn_on::AUTO_INSTALL_HOOKS),
+                values.bool(super::turn_on::AUTO_INSTALL_HOOKS),
                 cx,
             ));
         }
