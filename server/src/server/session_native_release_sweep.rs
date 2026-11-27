@@ -128,6 +128,10 @@ fn select_targets(state: &AppState) -> Vec<(String, String)> {
         let Ok(Some(session)) = repository.get_session(&project_id, &session_id) else {
             continue;
         };
+        // A connector card waiting for the user: the agent is inside that tool call.
+        if crate::connectors::waiting_connector_card(&session).is_some() {
+            continue;
+        }
         let activity_changed_at = session
             .pointer("/runtimeSettings/agentActivity/lastChangedAt")
             .and_then(Value::as_str);

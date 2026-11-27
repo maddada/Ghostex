@@ -52,9 +52,12 @@ pub fn row_allows_release(session: &Value) -> bool {
     let text = |key: &str| session.get(key).and_then(Value::as_str);
     let non_empty = |key: &str| text(key).is_some_and(|value| !value.trim().is_empty());
     let flag = |key: &str| session.get(key).and_then(Value::as_bool) == Some(true);
+    // `attention` is a finished turn whose reply nobody has opened yet: its agent is as idle as an
+    // `idle` one, and releasing it keeps the unread mark. (A connector card waiting in a turn also
+    // reads `attention`; the sweep leaves those running.)
     if !is_native_chat(session)
         || text("lifecycleState") != Some("running")
-        || text("activity") != Some("idle")
+        || !matches!(text("activity"), Some("idle" | "attention"))
         || text("kind") != Some("agent")
     {
         return false;
