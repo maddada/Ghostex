@@ -194,6 +194,9 @@ pub(crate) enum ChangesRequest {
         message: String,
         agent_id: Option<String>,
         file_paths: Option<Vec<String>>,
+        /// How many repos of a project that spans several the Merge reaches (its toast says
+        /// "Merging 3 repos…"); 0 for one repo.
+        repo_count: usize,
     },
     /// Adds `pill` after what is in the chat box of the session that owns the project, or pastes
     /// `text` (the full block) into its terminal; `done` gets where it went ("Claude's chat").
@@ -1244,6 +1247,39 @@ impl ChangesView {
         })
     }
 
+    /// The repos a Merge reaches: those with commits to bring in, and those the Merge commits
+    /// files in first (a path is in the repo with the longest `rel` in front of it).
+    fn merge_repo_count(&self) -> usize {
+        let Some(data) = self.data.as_ref() else {
+            return 0;
+        };
+        let committed: Vec<&String> = data
+            .uncommitted_paths
+            .iter()
+            .filter(|path| !self.excluded.contains(*path))
+            .collect();
+        let repo_of = |path: &str| {
+            data.repos
+                .iter()
+                .enumerate()
+                .filter(|(_, repo)| {
+                    repo.rel.is_empty() || path.starts_with(&format!("{}/", repo.rel))
+                })
+                .max_by_key(|(_, repo)| repo.rel.len())
+                .map(|(index, _)| index)
+        };
+        let mut reached = vec![false; data.repos.len()];
+        for (index, repo) in data.repos.iter().enumerate() {
+            reached[index] = repo.to_merge.is_none_or(|count| count > 0);
+        }
+        for path in committed {
+            if let Some(index) = repo_of(path) {
+                reached[index] = true;
+            }
+        }
+        reached.into_iter().filter(|reached| *reached).count()
+    }
+
     /// The project spans several repos (`changesDiff` answered `multiRepo`).
     pub(crate) fn is_multi_repo(&self) -> bool {
         self.data
@@ -1346,6 +1382,7 @@ impl ChangesView {
         self.confirm = None;
         self.commit_menu_open = false;
         let file_paths = self.commit_paths();
+        let repo_count = self.merge_repo_count();
         let message = self.take_message(window, cx);
         (self.host)(
             ChangesRequest::MergeIntoMain {
@@ -1353,6 +1390,7 @@ impl ChangesView {
                 message,
                 agent_id: self.agent_id.clone(),
                 file_paths,
+                repo_count,
             },
             window,
             cx,

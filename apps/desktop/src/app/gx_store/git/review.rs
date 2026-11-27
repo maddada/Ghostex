@@ -33,6 +33,8 @@ pub(crate) struct GitReviewConfirm {
     /// A Commit in a project that spans several repos: the Changes view's project key and action,
     /// so the answer's per-repo list goes back to it.
     pub(crate) multi_repo: Option<(String, crate::app::native_changes::CommitAction)>,
+    /// A Merge in a project that spans several repos: how many repos it reaches, for its toast.
+    pub(crate) merge_repo_count: usize,
 }
 
 impl GhostexGpuiApp {

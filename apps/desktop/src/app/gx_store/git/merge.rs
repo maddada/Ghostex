@@ -133,6 +133,7 @@ impl GhostexGpuiApp {
                     worktree.as_ref().and_then(|worktree| worktree.name.clone()),
                     confirm.agent_id.clone(),
                     confirm.delete_worktree_after,
+                    confirm.merge_repo_count,
                     cx,
                 );
             });
@@ -149,16 +150,21 @@ impl GhostexGpuiApp {
         worktree_name: Option<String>,
         agent_id: Option<String>,
         delete_after: bool,
+        repo_count: usize,
         cx: &mut gpui::Context<Self>,
     ) {
         let remote = scope.is_remote();
         let toast_id = new_toast_id("git");
+        // CDXC:MultiRepo 2026-11-27 WHY: one Merge in a project that spans several repos merges
+        // each of them, so its toast says how many instead of naming one main branch.
+        let title = match (remote, repo_count) {
+            (_, count) if count > 1 => format!("Merging {count} repos…"),
+            (true, _) => "Merging on the remote computer…".to_string(),
+            (false, _) => "Merging into main…".to_string(),
+        };
         self.git_toast(
             GitToastLevel::Info,
-            match remote {
-                true => "Merging on the remote computer…",
-                false => "Merging into main…",
-            },
+            &title,
             ToastOptions::persistent(&toast_id),
             cx,
         );

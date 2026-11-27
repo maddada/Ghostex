@@ -179,6 +179,7 @@ impl GhostexGpuiApp {
                         commit_on_new_ref: new_branch,
                         delete_worktree_after: false,
                         multi_repo: multi_repo.then(|| (project_key_owned, action)),
+                        merge_repo_count: 0,
                     },
                     cx,
                 );
@@ -208,6 +209,7 @@ impl GhostexGpuiApp {
         message: String,
         agent_id: Option<String>,
         file_paths: Option<Vec<String>>,
+        repo_count: usize,
         cx: &mut gpui::Context<Self>,
     ) {
         self.changes_review_then(
@@ -224,6 +226,7 @@ impl GhostexGpuiApp {
                         commit_on_new_ref: false,
                         delete_worktree_after: false,
                         multi_repo: None,
+                        merge_repo_count: repo_count,
                     },
                     cx,
                 );
