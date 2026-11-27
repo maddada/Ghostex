@@ -1128,7 +1128,7 @@ mod tests {
         assert_eq!(offline_retry_delay(u32::MAX).as_secs(), 60);
     }
 
-    const BUILD_CEF: &str = "156.0.31+ge603d97+chromium-156.0.8078.100";
+    const BUILD_CEF: &str = "158.0.6+g23f1736+chromium-158.0.8127.89";
     const OLD_CEF: &str = "154.0.26+ge72305f+chromium-154.0.8037.58";
 
     /// A folder of test runtime folders, removed when the test ends.
@@ -1176,7 +1176,7 @@ mod tests {
         assert!(skipped[0].contains(&stray.join("libcef.so").display().to_string()));
         let readiness = linux_cef_runtime_readiness(source, &skipped, || {
             Ok(CefRuntimeReadiness::InstallRequired {
-                version: "156.0.31-ge603d97-chromium-156.0.8078.100-stripped".to_string(),
+                version: "158.0.6-g23f1736-chromium-158.0.8127.89-stripped".to_string(),
             })
         });
         assert!(matches!(

@@ -171,7 +171,7 @@ describe('release provenance asset', () => {
   test('names and validates the published record', () => {
     expect(releaseProvenanceAssetName('7.8.0')).toBe('release-provenance-7.8.0.json');
     const record = buildReleaseProvenance({
-      components: { cef: { action: 'reused', componentVersion: '156.0.31-ge603d97-chromium-156.0.8078.100' } },
+      components: { cef: { action: 'reused', componentVersion: '158.0.6-g23f1736-chromium-158.0.8127.89' } },
       plan: { schemaVersion: 1 },
       products: { 'macos-arm64': macosRecord() },
       publishedAt: '2026-08-13T10:11:12.000Z',
