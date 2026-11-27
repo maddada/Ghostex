@@ -7136,9 +7136,11 @@ CLI: `ghostex create-agent claude-cloud --project-id <id> --prompt "<task>"`,
 A Cloud Box is a Linux machine on your own Instabox (instabox.sh) or Boat
 (boat.dev) account that runs a Ghostex session: the agent works there, not on
 this computer, and keeps working when this computer sleeps. Ghostex never
-bills; your provider account does. Cloud Boxes is a built-in extension, on by
-default on every computer (Settings > Extensions, `cloudBoxesEnabled`); turning
-it off hides it everywhere and keeps your boxes and settings. The Cloud Box
+bills; your provider account does. Cloud Boxes is a built-in extension, off by
+default (Settings > Extensions > Staff picks, `cloudBoxesEnabled`); it stays on
+for anyone who had already set up a Cloud Box or provider. Its Settings page is
+in the sidebar only while it is on; turning it off hides it everywhere and keeps
+your boxes and settings. The Cloud Box
 choice in a new chat's setup bar shows once you've connected a provider
 (or made a box), so it stays out of the way until you use Cloud Boxes.
 
@@ -7240,7 +7242,7 @@ choice in a new chat's setup bar shows once you've connected a provider
   Open Box Screen, Stop Box and Destroy Box. Cloud agentbox boxes bill while
   they exist.
 
-Related settings: `cloudBoxesEnabled` (on by default),
+Related settings: `cloudBoxesEnabled` (off by default),
 `cloudBoxesMonthlyCapUsd` (0 = no cap), `cloudBoxesIdleStopMinutes` (default
 15), `cloudBoxesDeleteStoppedAfterDays` (default 7),
 `cloudBoxesPhoneStartEnabled` (default off), `agentboxDefaultLocation` (where
@@ -8188,7 +8190,7 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   as it was.
   Built-in holds whole parts of Ghostex you can switch off to keep the app
   simple: Actions (off by default), Open In (on by default), Spaces (off by
-  default), Cloud Boxes (on by default), Workspaces (off by default; it brings workspaces and the team's
+  default), Cloud Boxes (off by default), Workspaces (off by default; it brings workspaces and the team's
   Slack flow). Turning one off removes it everywhere at once (its header button,
   Settings pages and rows, hotkeys, Quick Access rows and menus) and turning it
   back on restores everything you had set up. Settings: `actionsHidden`,

@@ -34,6 +34,7 @@ mod appearance;
 pub use appearance::effective_content_color_scheme;
 mod ghostty_themes;
 
+pub(crate) mod cloud_boxes_default;
 pub(crate) mod dark_look_default;
 pub(crate) mod defaults;
 pub(crate) mod experience_level;

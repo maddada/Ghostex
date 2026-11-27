@@ -367,6 +367,9 @@ fn main() {
     // the Power User Flags keep showing (shared_settings/experience_level.rs). Before the first
     // settings read too.
     shared_settings::experience_level::mark_existing_advanced_once();
+    // Cloud Boxes is off for new installs; whoever already set up a box or provider keeps it on
+    // (shared_settings/cloud_boxes_default.rs). Before the first settings read too.
+    shared_settings::cloud_boxes_default::keep_cloud_boxes_once();
     // The CLIProxyAPI hub key files join a saved secret-folder list once (shared_settings/hub_secret_folders.rs).
     shared_settings::hub_secret_folders::add_hub_secret_folders_once();
     // Enable Experimental Features becomes one switch each, once (shared_settings/experimental_switches.rs).

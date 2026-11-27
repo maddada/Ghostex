@@ -163,7 +163,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:Extensions 2026-10-01 DECISION: Actions is off by default (built_in_extensions.rs).
     ("actionsHidden", J::Bool(true)),
     // CDXC:CloudBoxes 2026-11-02 DECISION: Cloud Boxes is on by default everywhere (D11, official_extensions.rs); `cloudBoxesEnabled` replaces `cloudBoxesHidden`, whose saved `true` default would have kept it off.
-    ("cloudBoxesEnabled", J::Bool(true)),
+    // CDXC:CloudBoxes 2026-11-27 DECISION: User: "cloud boxes should be a staff picks extension to show that item in the sidebar of settings", and for new users (Q5275): "Off for new users (keep it on for anyone who already set up a Cloud Box or provider)". This is the one place the default lives; apps/desktop/src/shared_settings/cloud_boxes_default.rs keeps it on, once, for someone who already set up a box or provider.
+    ("cloudBoxesEnabled", J::Bool(false)),
     // Cloud Boxes (packages/gx-protocol/src/cloud_box/settings.rs `setting_keys`): 0 = no monthly cap.
     ("cloudBoxesMonthlyCapUsd", J::Num(0.0)),
     ("cloudBoxesIdleStopMinutes", J::Num(15.0)),

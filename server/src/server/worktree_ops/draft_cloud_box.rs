@@ -25,8 +25,6 @@ apps/mobile/app/src/chat/native/composer/BoxPicker.tsx.
 
 /// The tray mode of the Cloud Box segment.
 pub(crate) const MODE_CLOUD_BOX: &str = "cloudBox";
-/// The shared setting that turns Cloud Boxes on (D11, default on).
-const ENABLED_SETTING: &str = "cloudBoxesEnabled";
 /// How often a cloud move reads its box while the box starts.
 const FOLLOW_EVERY: Duration = Duration::from_millis(800);
 /// A box that has not finished its card by then is reported failed to the chat (it keeps
@@ -49,10 +47,13 @@ fn remember_box(project_id: &str, session_id: &str, row: CloudBox) {
     }
 }
 
+/// Whether the Cloud Boxes built-in extension is on, its default read from the catalog (off since
+/// 2026-11-27, packages/settings-catalog/src/data/defaults.rs).
 pub(crate) fn cloud_boxes_enabled(state: &AppState) -> bool {
-    crate::shared_settings_file::read_shared_settings(&state.paths)
-        .and_then(|settings| settings.get(ENABLED_SETTING).and_then(Value::as_bool))
-        .unwrap_or(true)
+    ghostex_settings_catalog::built_in_extensions::enabled_in_value(
+        crate::shared_settings_file::read_shared_settings(&state.paths).as_ref(),
+        ghostex_settings_catalog::built_in_extensions::CLOUD_BOXES,
+    )
 }
 
 async fn cloud_call(

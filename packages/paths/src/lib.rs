@@ -213,6 +213,12 @@ impl GhostexPaths {
         self.state_dir.join("experience-level-advanced-migrated")
     }
 
+    /// Written once the Cloud Boxes default step (`keep_cloud_boxes_once` in the desktop app) has
+    /// run, so someone who already set up a Cloud Box or provider keeps Cloud Boxes on.
+    pub fn cloud_boxes_default_marker_file(&self) -> PathBuf {
+        self.state_dir.join("cloud-boxes-default-migrated")
+    }
+
     pub fn gxserver_config_dir(&self) -> PathBuf {
         self.config_dir.join("gxserver")
     }
