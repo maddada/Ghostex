@@ -17,6 +17,14 @@ pub(crate) async fn run_git_action(
     match action.as_str() {
         "changesDiff" => return super::git_changes::changes_diff(params, context).await,
         "changesRevert" => return super::git_changes::changes_revert(params, context).await,
+        "repoStates" => {
+            let cwd = context.cwd.clone();
+            return tokio::task::spawn_blocking(move || {
+                crate::multi_repo::changes::repo_states(&cwd)
+            })
+            .await
+            .map_err(|error| TypedOperationError::dependency_unavailable(error.to_string()));
+        }
         _ => {}
     }
     if action == "countFileLines" {
@@ -522,6 +530,7 @@ pub(crate) fn normalize_git_action(input: Option<&Value>) -> Result<String, Type
         | "branch"
         | "changesDiff"
         | "changesRevert"
+        | "repoStates"
         | "commit"
         | "countFileLines"
         | "checkout"

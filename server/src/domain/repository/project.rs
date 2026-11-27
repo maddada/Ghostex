@@ -779,7 +779,15 @@ impl<'a> DomainRepository<'a> {
                 "projectId".to_string(),
                 Value::String(read_string_field(&existing, "projectId")?),
             );
-            if let Some(worktree) = worktree {
+            if let Some(mut worktree) = worktree {
+                // A session folder's row (multi_repo) keeps saying it holds several repos.
+                if existing
+                    .pointer("/worktree/multiRepo")
+                    .and_then(Value::as_bool)
+                    == Some(true)
+                {
+                    worktree.insert("multiRepo".to_string(), Value::Bool(true));
+                }
                 if !are_project_worktree_metadata_equal(existing.get("worktree"), &worktree) {
                     update_params.insert("worktree".to_string(), Value::Object(worktree));
                 }

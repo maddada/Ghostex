@@ -601,6 +601,18 @@ fn coordinator_session_start_context(
     let is_session_start = read_text(params, "eventName")
         .is_some_and(|event| event.eq_ignore_ascii_case("SessionStart"));
     let session_runtime = session.get("runtimeSettings").and_then(Value::as_object);
+    // CDXC:MultiRepo 2026-11-27: an agent starting in a folder with several repos is told which
+    // repos are there and to commit each one on its own (multi_repo/note.rs). A resume or fork
+    // already holds it.
+    let repos_note = (is_session_start
+        && !cfg!(test)
+        && !matches!(
+            read_text(params, "hookSource").as_deref(),
+            Some("resume" | "fork")
+        ))
+    .then(|| session.get("cwd").and_then(Value::as_str))
+    .flatten()
+    .and_then(crate::multi_repo::note::agent_note_for_cwd);
     let load_workspace_instructions = |paths: &crate::paths::GxserverPaths| -> Option<String> {
         if cfg!(test) {
             return None;
@@ -655,11 +667,15 @@ fn coordinator_session_start_context(
             } else {
                 None
             };
-        let combined = [base_context.as_deref(), codex_workspace_note.as_deref()]
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>()
-            .join("\n\n");
+        let combined = [
+            base_context.as_deref(),
+            codex_workspace_note.as_deref(),
+            repos_note.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join("\n\n");
         return Ok((!combined.is_empty()).then_some(combined));
     }
     let is_session_start = is_session_start
@@ -719,6 +735,7 @@ fn coordinator_session_start_context(
         legacy_coordinator.then_some(crate::coordinators::GUIDE_POINTER_COORDINATOR_INSTRUCTIONS),
         note.as_deref(),
         standing_role.as_deref(),
+        repos_note.as_deref(),
     ];
     let context = parts.into_iter().flatten().collect::<Vec<_>>().join("\n\n");
     Ok((!context.is_empty()).then_some(context))

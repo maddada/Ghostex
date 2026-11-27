@@ -6,6 +6,7 @@ pub mod delete;
 pub mod draft_cloud_box;
 pub mod draft_worktree;
 pub mod folder_branch;
+pub mod multi_repo;
 pub mod projects;
 pub mod pull_box_branch;
 pub mod rename;
@@ -213,6 +214,11 @@ pub(crate) async fn merge_worktree_into_main_for_project(
     params: &Map<String, Value>,
 ) -> std::result::Result<Value, ProjectWorktreeOperationError> {
     let plan = prepare_project_worktree_merge_plan(state, params)?;
+    if let Some((_, record)) =
+        crate::multi_repo::record::find(std::path::Path::new(&plan.worktree_path))
+    {
+        return multi_repo::merge_session_folder(plan.parent_project_id, record).await;
+    }
     let branch = resolve_current_project_worktree_branch_name(&plan.projects, &plan.worktree_path)
         .await?
         .or(plan.worktree_branch)

@@ -139,6 +139,13 @@ pub(crate) async fn delete_worktree_project_from_plan(
     state: &AppState,
     plan: DeleteWorktreeProjectPlan,
 ) -> std::result::Result<Value, DeleteWorktreeProjectError> {
+    // CDXC:MultiRepo 2026-11-27: a session folder goes in one step, every repo's worktree, the
+    // links and the folder (Q5278).
+    if let Some((root, record)) =
+        crate::multi_repo::record::find(std::path::Path::new(&plan.worktree_path))
+    {
+        return delete_session_folder(state, &plan, root, record).await;
+    }
     let branch_name = if plan.params.delete_local_branch || plan.params.delete_remote_branch {
         resolve_current_worktree_branch_name(&plan).await?
     } else {
@@ -158,6 +165,70 @@ pub(crate) async fn delete_worktree_project_from_plan(
     schedule_deleted_worktree_project_delta(state, &plan.params.project_id)?;
     Ok(json!({
         "checkoutRemoval": checkout_removal,
+        "project": project,
+        "warnings": warnings,
+    }))
+}
+
+/// Deletes a session folder: each repo's worktree (uncommitted files too: the dialog listed them
+/// per repo), the links and the folder, then each repo's branch and its remote branch when asked.
+/// A branch that will not go is a warning, as for a single worktree.
+async fn delete_session_folder(
+    state: &AppState,
+    plan: &DeleteWorktreeProjectPlan,
+    root: std::path::PathBuf,
+    record: crate::multi_repo::record::SessionRecord,
+) -> std::result::Result<Value, DeleteWorktreeProjectError> {
+    use crate::multi_repo::git;
+    let delete_local = plan.params.delete_local_branch;
+    let delete_remote = plan.params.delete_remote_branch;
+    let remote_name = plan.params.remote_name.clone();
+    let warnings = tokio::task::spawn_blocking(move || {
+        let mut warnings: Vec<Value> = Vec::new();
+        crate::multi_repo::session_folder::remove(&root, false, true)
+            .map_err(DomainStateError::bad_request)?;
+        for repo in &record.repos {
+            let source = std::path::Path::new(&repo.source);
+            if delete_local && git::has_commit(source, &format!("refs/heads/{}", record.branch)) {
+                let deleted = git::run(source, &["branch", "-d", &record.branch], git::GIT_TIMEOUT);
+                if !deleted.ok {
+                    warnings.push(json!({
+                        "kind": "localBranchDeleteFailed",
+                        "message": format!("{}: {}", repo.name, deleted.reason("git branch -d failed.")),
+                    }));
+                }
+            }
+            if delete_remote
+                && git::has_commit(
+                    source,
+                    &format!("refs/remotes/{remote_name}/{}", record.branch),
+                )
+            {
+                let deleted = git::run(
+                    source,
+                    &["push", &remote_name, "--delete", &record.branch],
+                    git::COMMIT_TIMEOUT,
+                );
+                if !deleted.ok {
+                    warnings.push(json!({
+                        "kind": "remoteBranchDeleteFailed",
+                        "message": format!("{}: {}", repo.name, deleted.reason("git push --delete failed.")),
+                    }));
+                }
+            }
+        }
+        Ok::<_, DomainStateError>(warnings)
+    })
+    .await
+    .map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("Worktree task failed: {error}"),
+    })??;
+    let project = remove_worktree_project_row(state, &plan.params.project_id)?;
+    schedule_deleted_worktree_project_delta(state, &plan.params.project_id)?;
+    Ok(json!({
+        "checkoutRemoval": { "forced": true, "retriedForSubmodules": false },
+        "multiRepo": true,
         "project": project,
         "warnings": warnings,
     }))

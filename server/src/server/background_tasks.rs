@@ -316,6 +316,11 @@ pub(crate) fn spawn_session_git_status_refresh_task(
                 not share the V2-only git-data gate. Independent statement, so a
                 failure in one pass never skips another.
                 */
+                // CDXC:MultiRepo 2026-11-27: the repos each project folder covers, from the disk
+                // alone (no git runs), so a repo cloned into a folder shows up within a minute.
+                if let Err(error) = run_project_repos_refresh_once(&pass_state) {
+                    log_project_icon_refresh_failure(&pass_state, &error.message);
+                }
                 if let Err(error) = run_project_icon_refresh_once(&pass_state) {
                     log_project_icon_refresh_failure(&pass_state, &error.message);
                 }
@@ -630,6 +635,48 @@ pub(crate) fn run_project_icon_refresh_once(
     Ok(())
 }
 
+/// Re-reads which repos each published project folder covers and sends a project delta for the
+/// ones whose repos changed (multi_repo/cache.rs).
+pub(crate) fn run_project_repos_refresh_once(
+    state: &Arc<AppState>,
+) -> std::result::Result<(), DomainStateError> {
+    let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("SQLite gxserver state error: {error}"),
+    })?;
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let projects = repository.list_projects()?;
+    let mut paths: Vec<String> = Vec::new();
+    for project in &projects {
+        if !crate::presentation::should_include_presentation_project(project) {
+            continue;
+        }
+        if let Some(path) = project.get("path").and_then(Value::as_str) {
+            if !paths.iter().any(|existing| existing == path) {
+                paths.push(path.to_string());
+            }
+        }
+    }
+    let changed: HashSet<String> = crate::multi_repo::cache::refresh(&paths)
+        .into_iter()
+        .collect();
+    for project in &projects {
+        let Some(path) = project.get("path").and_then(Value::as_str) else {
+            continue;
+        };
+        if !changed.contains(path)
+            || !crate::presentation::should_include_presentation_project(project)
+        {
+            continue;
+        }
+        let Some(project_id) = project.get("projectId").and_then(Value::as_str) else {
+            continue;
+        };
+        schedule_presentation_project_delta(state, &db, &repository, project_id, "projectUpdated")?;
+    }
+    Ok(())
+}
+
 pub(crate) fn log_project_icon_refresh_failure(state: &Arc<AppState>, message: &str) {
     let _ = state.logger.log(GxserverLogInput {
         level: LogLevel::Warn,
@@ -824,6 +871,36 @@ pub(crate) fn run_worktree_branch_rename_once(
         }
     }
     for plan in plans {
+        // CDXC:MultiRepo 2026-11-27: a session folder renames its one branch in every repo it
+        // holds, or in none (session_folder::rename_branch undoes a half rename).
+        if let Some((root, record)) =
+            crate::multi_repo::record::find(std::path::Path::new(&plan.worktree_path))
+        {
+            if record.branch != plan.from_branch {
+                continue;
+            }
+            let sources: Vec<std::path::PathBuf> = record
+                .repos
+                .iter()
+                .map(|repo| std::path::PathBuf::from(&repo.source))
+                .collect();
+            let Some(renamed) = worktree_sessions::resolve_renamed_branch_name(
+                &plan.title,
+                &plan.from_branch,
+                &|candidate| {
+                    sources
+                        .iter()
+                        .any(|source| crate::multi_repo::git::branch_taken(source, candidate))
+                },
+            ) else {
+                continue;
+            };
+            if crate::multi_repo::session_folder::rename_branch(&root, &renamed).is_err() {
+                continue;
+            }
+            finish_worktree_branch_rename(state, &db, &repository, &plan, &renamed)?;
+            continue;
+        }
         /*
         Re-read the branch from the checkout itself: the marker says what
         gxserver created, but the user may have switched or renamed the branch
@@ -849,45 +926,49 @@ pub(crate) fn run_worktree_branch_rename_once(
         ) {
             continue;
         }
-        let Some(session) = repository.get_session(&plan.project_id, &plan.session_id)? else {
-            continue;
-        };
-        if let Some(runtime_settings) =
-            worktree_sessions::runtime_settings_with_renamed_worktree_branch(
-                &session,
-                &renamed,
-                &now_iso(),
-            )
-        {
-            let mut update = Map::new();
-            update.insert("projectId".to_string(), json!(plan.project_id));
-            update.insert("sessionId".to_string(), json!(plan.session_id));
-            update.insert(
-                "runtimeSettings".to_string(),
-                Value::Object(runtime_settings),
-            );
-            repository.update_session(&update)?;
-        }
-        /*
-        CDXC:StateSync 2026-07-29:
-        Re-probing the renamed checkout is Sidebar V2 card data, so it answers to
-        the same `sidebarVersion` gate as the background passes; on a V1 machine
-        the rename still lands, it just does not warm a cache nothing reads. The
-        read sits here rather than at the top of the pass because a rename is a
-        rare event — most passes reach this line zero times.
-        */
-        session_git_status::refresh_session_git_status_cache(
-            &[plan.worktree_path.clone()],
-            session_lifecycle::read_sidebar_v2_selected(&state.paths),
-        );
-        schedule_presentation_session_delta(
-            state,
-            &db,
-            &repository,
-            &plan.project_id,
-            &plan.session_id,
-        )?;
+        finish_worktree_branch_rename(state, &db, &repository, &plan, &renamed)?;
     }
+    Ok(())
+}
+
+/// Records a branch rename in the session's marker, then refreshes its card.
+fn finish_worktree_branch_rename(
+    state: &Arc<AppState>,
+    db: &crate::storage::GxserverDatabase,
+    repository: &DomainRepository<'_>,
+    plan: &worktree_sessions::WorktreeBranchRenamePlan,
+    renamed: &str,
+) -> std::result::Result<(), DomainStateError> {
+    let Some(session) = repository.get_session(&plan.project_id, &plan.session_id)? else {
+        return Ok(());
+    };
+    if let Some(runtime_settings) = worktree_sessions::runtime_settings_with_renamed_worktree_branch(
+        &session,
+        renamed,
+        &now_iso(),
+    ) {
+        let mut update = Map::new();
+        update.insert("projectId".to_string(), json!(plan.project_id));
+        update.insert("sessionId".to_string(), json!(plan.session_id));
+        update.insert(
+            "runtimeSettings".to_string(),
+            Value::Object(runtime_settings),
+        );
+        repository.update_session(&update)?;
+    }
+    /*
+    CDXC:StateSync 2026-07-29:
+    Re-probing the renamed checkout is Sidebar V2 card data, so it answers to
+    the same `sidebarVersion` gate as the background passes; on a V1 machine
+    the rename still lands, it just does not warm a cache nothing reads. The
+    read sits here rather than at the top of the pass because a rename is a
+    rare event: most passes reach this line zero times.
+    */
+    session_git_status::refresh_session_git_status_cache(
+        &[plan.worktree_path.clone()],
+        session_lifecycle::read_sidebar_v2_selected(&state.paths),
+    );
+    schedule_presentation_session_delta(state, db, repository, &plan.project_id, &plan.session_id)?;
     Ok(())
 }
 

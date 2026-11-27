@@ -36,7 +36,10 @@ pub(crate) const WORKTREE_SESSION_DIRTY_WARNING: &str = "This worktree has uncom
 #[derive(Clone)]
 pub(crate) struct WorktreeSessionCreateRequest {
     agent_id: Option<String>,
-    base_branch: Option<String>,
+    pub(crate) base_branch: Option<String>,
+    /// For a project with several repos: the `rel` of each repo the session folder holds
+    /// (`None`: the default pick).
+    pub(crate) repos: Option<Vec<String>>,
     /// The branch to work on instead of a `ghostex/<8hex>` placeholder (chosen_branch.rs).
     pub(crate) branch: Option<String>,
     existing_worktree_path: Option<String>,
@@ -322,6 +325,13 @@ pub(crate) fn normalize_worktree_session_create_request(
     Ok(WorktreeSessionCreateRequest {
         agent_id,
         base_branch,
+        repos: params.get("repos").and_then(Value::as_array).map(|repos| {
+            repos
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        }),
         branch,
         existing_worktree_path,
         first_prompt,
@@ -376,6 +386,19 @@ pub(crate) async fn prepare_worktree_session_checkout(
             created: false,
             path: requested,
         });
+    }
+
+    // CDXC:MultiRepo 2026-11-27: a project with several repos gets a session folder, one
+    // worktree per repo on one branch (multi_repo.rs).
+    let multi_path = context.source_path.clone();
+    if let Some(set) =
+        tokio::task::spawn_blocking(move || crate::multi_repo::multi_repo_set(&multi_path))
+            .await
+            .ok()
+            .flatten()
+    {
+        return super::multi_repo::prepare_multi_repo_session_checkout(context, request, &set)
+            .await;
     }
 
     if let Some(branch) = request.branch.as_deref() {
@@ -604,6 +627,12 @@ pub(crate) async fn rollback_worktree_session_checkout(
     context: &ProjectWorktreeOperationContext,
     prepared: &PreparedWorktreeCheckout,
 ) {
+    if prepared.created {
+        if let Some(root) = super::multi_repo::session_folder_root(&prepared.path) {
+            super::multi_repo::discard_session_folder(root).await;
+            return;
+        }
+    }
     let mut remove_params = Map::new();
     remove_params.insert(
         "worktreePath".to_string(),

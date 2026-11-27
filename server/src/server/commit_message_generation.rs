@@ -107,6 +107,40 @@ pub(crate) async fn generate_commit_message_for_project(
         */
         (project, project_path, projects, settings)
     };
+    generate_commit_message_in(
+        state,
+        params,
+        &project_id,
+        &project,
+        &project_path,
+        &projects,
+        &settings,
+        requested_file_paths,
+    )
+    .await
+}
+
+/// Generation in a folder named by `project_id` in `projects`: the project itself, or one repo of
+/// a project with several (multi_repo/ship.rs passes a row for that repo, `project` staying the
+/// real project, whose settings pick the agent).
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn generate_commit_message_in(
+    state: &AppState,
+    params: &Map<String, Value>,
+    project_id: &str,
+    project: &Value,
+    project_path: &str,
+    projects: &[Value],
+    settings: &Map<String, Value>,
+    requested_file_paths: Vec<String>,
+) -> std::result::Result<Value, DomainStateError> {
+    let (project_id, project, project_path, projects, settings) = (
+        project_id.to_string(),
+        project,
+        project_path,
+        projects.to_vec(),
+        settings,
+    );
 
     let status =
         run_commit_message_generation_git_action(&projects, &project_id, "statusPorcelainZ", None)
@@ -196,14 +230,14 @@ pub(crate) async fn generate_commit_message_for_project(
         ));
     }
 
-    let agent = resolve_commit_message_generation_agent(&project, params, &settings)?;
+    let agent = resolve_commit_message_generation_agent(project, params, settings)?;
     let prompt = build_gxserver_commit_message_generation_prompt(
         typed_result_stdout(&branch).trim(),
-        read_project_generate_commit_body(&project),
+        read_project_generate_commit_body(project),
         &staged_summary,
         &staged_patch,
     );
-    let stdout = run_commit_message_generation_agent(state, &project_path, &agent, &prompt).await?;
+    let stdout = run_commit_message_generation_agent(state, project_path, &agent, &prompt).await?;
     parse_gxserver_generated_commit_message(&stdout, &agent.name)
 }
 

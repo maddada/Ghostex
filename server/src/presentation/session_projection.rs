@@ -51,6 +51,19 @@ pub(crate) fn project_presentation_project(project: &Value) -> Value {
         }),
     );
     /*
+    CDXC:MultiRepo 2026-11-27: the repos a project folder covers when it covers several
+    (multi_repo/mod.rs), as `[{name, rel, kind}]`. A cache read like the origin above; absent for a
+    plain single-repo project, so older phones and CLIs see nothing new.
+    */
+    insert_present_value(
+        &mut output,
+        "repos",
+        project
+            .get("path")
+            .and_then(Value::as_str)
+            .and_then(crate::multi_repo::published_repos),
+    );
+    /*
     CDXC:Icons 2026-07-29 (discovered icons):
     The icon the project itself ships through a favicon, app icon, or
     the icon its HTML entry point declares — discovered server-side and published

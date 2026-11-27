@@ -42,6 +42,7 @@ fn move_request(project_id: &str, mode: DraftWorktreeMode, text: &str) -> DraftM
         worktree_key: None,
         text: text.to_string(),
         image_paths: Vec::new(),
+        repos: None,
     }
 }
 

@@ -208,6 +208,9 @@ pub(crate) struct DraftMoveRequest {
     pub(crate) worktree_key: Option<String>,
     pub(crate) text: String,
     pub(crate) image_paths: Vec<String>,
+    /// For a project with several repos: the `rel` of each repo to put in the session folder
+    /// (`None`: the default pick).
+    pub(crate) repos: Option<Vec<String>>,
 }
 
 fn text_param(params: &Map<String, Value>, key: &str) -> Option<String> {
@@ -266,7 +269,15 @@ impl DraftMoveRequest {
                     .collect()
             })
             .unwrap_or_default();
+        let repos = start.get("repos").and_then(Value::as_array).map(|repos| {
+            repos
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        });
         Ok(Self {
+            repos,
             project_id: read_project_id(params)?,
             session_id: read_session_id(params)?,
             mode,
@@ -561,6 +572,22 @@ pub(super) async fn read_tray(
     let Ok(context) = resolve_project_worktree_operation_context(state, &context_params) else {
         return Ok(unavailable(true));
     };
+    // CDXC:MultiRepo 2026-11-27: a project with several repos gets one New worktree, a session
+    // folder, with the repos to put in it (multi_repo.rs).
+    let multi_path = context.source_path.clone();
+    if let Some(set) =
+        tokio::task::spawn_blocking(move || crate::multi_repo::multi_repo_set(&multi_path))
+            .await
+            .ok()
+            .flatten()
+    {
+        let mut base = Map::new();
+        base.insert("projectName".to_string(), json!(project_name));
+        base.insert("remembered".to_string(), memory.to_value());
+        base.insert("move".to_string(), move_value(&project_id, &session_id));
+        base.insert("cloudBox".to_string(), cloud_box);
+        return Ok(super::multi_repo::multi_repo_tray(&set, base).await);
+    }
     let (Ok(options), Ok(branches)) = (
         project_worktree_options(&context).await,
         project_worktree_base_branches(&context).await,
@@ -702,6 +729,8 @@ pub(crate) struct MadeForMove {
     pub(crate) checkout: Option<PreparedWorktreeCheckout>,
     /// The worktree project this move registered (not one that was registered before).
     pub(crate) registered_project_id: Option<String>,
+    /// The session folder this move made (a project with several repos).
+    pub(crate) session_folder: Option<std::path::PathBuf>,
 }
 
 async fn run_draft_move(
@@ -753,6 +782,16 @@ async fn create_new_for_move(
     request: &DraftMoveRequest,
     made: &mut MadeForMove,
 ) -> std::result::Result<Value, ProjectWorktreeOperationError> {
+    let multi_path = context.source_path.clone();
+    if let Some(set) =
+        tokio::task::spawn_blocking(move || crate::multi_repo::multi_repo_set(&multi_path))
+            .await
+            .ok()
+            .flatten()
+    {
+        return super::multi_repo::create_multi_repo_for_move(state, context, request, made, &set)
+            .await;
+    }
     let base_ref = match request.base_branch.clone() {
         Some(base) => base,
         None => source_branch(context).await.ok_or_else(|| {
@@ -985,6 +1024,10 @@ pub(crate) async fn rollback_draft_move(
         if remove_worktree_project_row(state, project_id).is_ok() {
             let _ = schedule_deleted_worktree_project_delta(state, project_id);
         }
+    }
+    if let Some(root) = made.session_folder {
+        super::multi_repo::discard_session_folder(root).await;
+        return;
     }
     let Some(checkout) = made.checkout else {
         return;

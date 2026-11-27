@@ -49,6 +49,16 @@ pub(crate) struct RenameWorktreeProjectPlan {
     /// plan time for the same reason as `worktree_path_resolved`: once the folder has moved there
     /// is nothing left on disk to ask.
     pub(crate) worktree_path_ignores_case: bool,
+    /// A session folder (a project with several repos): the folder itself and where it moves.
+    /// Its project folder (`worktree_path`) sits inside it, so the whole folder moves and every
+    /// repo's branch is renamed together.
+    pub(crate) session_folder: Option<SessionFolderRename>,
+}
+
+pub(crate) struct SessionFolderRename {
+    pub(crate) root: PathBuf,
+    pub(crate) destination_root: PathBuf,
+    pub(crate) branch: String,
 }
 
 pub(crate) enum RenameWorktreeProjectError {
@@ -242,6 +252,25 @@ pub(crate) fn prepare_rename_worktree_project_plan(
                 "Use letters, numbers, and . _ / - only, starting with a letter or number.",
             )
         })?;
+    // CDXC:MultiRepo 2026-11-27: a session folder moves whole, its project folder keeping its
+    // place inside it.
+    let session_folder =
+        crate::multi_repo::record::find(Path::new(&worktree_path)).map(|(root, record)| {
+            SessionFolderRename {
+                destination_root: PathBuf::from(&destination_path),
+                root,
+                branch: record.branch,
+            }
+        });
+    let destination_path = match &session_folder {
+        Some(folder) => path_to_string(&crate::multi_repo::join_rel(
+            &folder.destination_root,
+            &crate::multi_repo::relative_path(&folder.root, Path::new(&worktree_path))
+                .filter(|rel| rel != ".")
+                .unwrap_or_default(),
+        )),
+        None => destination_path,
+    };
     let moves_folder = destination_path != worktree_path;
     if !moves_folder && !params.rename_branch {
         return Err(DomainStateError::bad_request("Nothing to rename.").into());
@@ -253,10 +282,14 @@ pub(crate) fn prepare_rename_worktree_project_plan(
             )
             .into());
         }
-        if Path::new(&destination_path).exists() {
+        let destination_folder = session_folder
+            .as_ref()
+            .map(|folder| path_to_string(&folder.destination_root))
+            .unwrap_or_else(|| destination_path.clone());
+        if Path::new(&destination_folder).exists() {
             return Err(DomainStateError::bad_request(format!(
                 "A folder named \"{}\" already exists next to the project.",
-                path_file_name_for_rename(&destination_path)
+                path_file_name_for_rename(&destination_folder)
             ))
             .into());
         }
@@ -289,13 +322,19 @@ pub(crate) fn prepare_rename_worktree_project_plan(
         re-classifies both refusals off git's own output and produces the same
         sentences, so it, not this, is what actually enforces them.
         */
-        if worktree_sessions::worktree_has_populated_submodules(&worktree_path) {
+        // A session folder's submodules are worktrees of their own, which `git worktree repair`
+        // follows after the move.
+        if session_folder.is_none()
+            && worktree_sessions::worktree_has_populated_submodules(&worktree_path)
+        {
             return Err(DomainStateError::bad_request(
                 "This worktree has initialised submodules, and git cannot move those. Remove them (git submodule deinit --all) or move the folder yourself.",
             )
             .into());
         }
-        if worktree_sessions::worktree_is_locked(&parent_path, &worktree_path) {
+        if session_folder.is_none()
+            && worktree_sessions::worktree_is_locked(&parent_path, &worktree_path)
+        {
             return Err(DomainStateError::bad_request(
                 "This worktree is locked. Unlock it before renaming.",
             )
@@ -321,6 +360,7 @@ pub(crate) fn prepare_rename_worktree_project_plan(
         worktree_path,
         worktree_path_resolved,
         worktree_path_ignores_case,
+        session_folder,
     })
 }
 
@@ -351,6 +391,9 @@ pub(crate) async fn rename_worktree_project_from_plan(
     state: &AppState,
     plan: RenameWorktreeProjectPlan,
 ) -> std::result::Result<Value, RenameWorktreeProjectError> {
+    if plan.session_folder.is_some() {
+        return rename_session_folder(state, plan).await;
+    }
     let current_branch = resolve_renamed_worktree_branch_name(&plan).await?;
     /*
     CDXC:Worktrees 2026-08-10:
@@ -422,6 +465,55 @@ pub(crate) async fn rename_worktree_project_from_plan(
         "movedFolder": plan.moves_folder,
         "project": project,
         "renamedBranch": renamed_branch,
+    }))
+}
+
+/// Rename for a session folder: the branch in every repo (all or none), then the folder, the
+/// branch rename undone when the move fails.
+async fn rename_session_folder(
+    state: &AppState,
+    plan: RenameWorktreeProjectPlan,
+) -> std::result::Result<Value, RenameWorktreeProjectError> {
+    let Some(folder) = plan.session_folder.as_ref() else {
+        return Err(DomainStateError::bad_request("Nothing to rename.").into());
+    };
+    let wants_branch = plan.params.rename_branch && folder.branch != plan.params.name;
+    if !plan.moves_folder && !wants_branch {
+        return Err(DomainStateError::bad_request("Nothing to rename.").into());
+    }
+    let (root, destination_root, old_branch, new_branch, moves_folder) = (
+        folder.root.clone(),
+        folder.destination_root.clone(),
+        folder.branch.clone(),
+        plan.params.name.clone(),
+        plan.moves_folder,
+    );
+    let renamed = tokio::task::spawn_blocking(move || {
+        use crate::multi_repo::session_folder;
+        if wants_branch {
+            session_folder::rename_branch(&root, &new_branch)?;
+        }
+        if moves_folder {
+            if let Err(error) = session_folder::move_folder(&root, &destination_root) {
+                if wants_branch {
+                    let _ = session_folder::rename_branch(&root, &old_branch);
+                }
+                return Err(error);
+            }
+        }
+        Ok(wants_branch.then_some(new_branch))
+    })
+    .await
+    .map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("Rename task failed: {error}"),
+    })?
+    .map_err(DomainStateError::bad_request)?;
+    let project = apply_renamed_worktree_project_state(state, &plan, renamed.as_deref())?;
+    Ok(json!({
+        "movedFolder": plan.moves_folder,
+        "project": project,
+        "renamedBranch": renamed,
     }))
 }
 
@@ -711,6 +803,31 @@ pub(crate) fn write_renamed_worktree_project_state(
         {
             worktree.insert("createdAt".to_string(), created_at);
         }
+        update.insert("worktree".to_string(), Value::Object(worktree));
+    }
+    // A session folder's worktree keys say what detection cannot (its folder may not be a git
+    // checkout): the branch, and that it holds several repos.
+    if let Some(folder) = &plan.session_folder {
+        let mut worktree = projects
+            .iter()
+            .find(|candidate| {
+                candidate.get("projectId").and_then(Value::as_str) == Some(project_id)
+            })
+            .and_then(|candidate| candidate.get("worktree"))
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        worktree.insert(
+            "branch".to_string(),
+            json!(renamed_branch.unwrap_or(folder.branch.as_str())),
+        );
+        worktree.insert(
+            "name".to_string(),
+            json!(path_file_name_for_rename(&path_to_string(
+                &folder.destination_root
+            ))),
+        );
+        worktree.insert("multiRepo".to_string(), json!(true));
         update.insert("worktree".to_string(), Value::Object(worktree));
     }
     if let Some(board_config) = renamed_worktree_board_config(&projects, plan) {

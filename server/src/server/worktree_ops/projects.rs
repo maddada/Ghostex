@@ -273,6 +273,19 @@ pub(crate) async fn prepare_registered_worktree_project(
     let Some(setup_project_id) = setup_project_id else {
         return Ok(warnings);
     };
+    run_registered_worktree_setup_command(&projects, &project_id, setup_project_id).await?;
+    Ok(warnings)
+}
+
+/// The setup project's worktree command (or the Global Default's), run in the registered worktree
+/// project `project_id`; nothing when none is configured.
+pub(crate) async fn run_registered_worktree_setup_command(
+    projects: &[Value],
+    project_id: &str,
+    setup_project_id: &str,
+) -> std::result::Result<(), ProjectWorktreeOperationError> {
+    let project_id = project_id.to_string();
+    let projects = projects.to_vec();
     let setup_project = projects
         .iter()
         .find(|candidate| {
@@ -296,7 +309,7 @@ pub(crate) async fn prepare_registered_worktree_project(
     )
     .is_none()
     {
-        return Ok(warnings);
+        return Ok(());
     }
     let mut setup_params = Map::new();
     setup_params.insert(
@@ -320,7 +333,7 @@ pub(crate) async fn prepare_registered_worktree_project(
         }
         .into());
     }
-    Ok(warnings)
+    Ok(())
 }
 
 /// A Beads hooks answer that left Ghostex's old hooks setting in place becomes a warning; the log line carries only its token, never a path.

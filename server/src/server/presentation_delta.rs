@@ -42,6 +42,12 @@ pub(crate) fn schedule_presentation_project_delta(
         candidate list once per NEW family root and never again.
         */
         project_icon::ensure_published_project_icon_probed(&project);
+        // A new project reaches the sidebar with its repos already on it (multi_repo/cache.rs).
+        if crate::presentation::should_include_presentation_project(&project) {
+            if let Some(path) = project.get("path").and_then(Value::as_str) {
+                crate::multi_repo::cache::ensure(path);
+            }
+        }
     }
     let _event_sequence = lock_presentation_event_sequence(state)?;
     let delta = build_presentation_project_delta(repository, project_id, delta_type)?;

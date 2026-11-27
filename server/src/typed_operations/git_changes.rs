@@ -147,6 +147,8 @@ fn diff_args(base: &str, ignore_whitespace: bool, binary: bool, path: Option<&st
     if ignore_whitespace {
         list.push("-w".to_string());
     }
+    // A submodule's uncommitted files are its own changes; only its new pointer is the parent's.
+    list.push("--ignore-submodules=dirty".to_string());
     if binary {
         list.push("--binary".to_string());
     }
@@ -201,6 +203,13 @@ pub(crate) async fn changes_diff(
     params: &Map<String, Value>,
     context: &TypedOperationContext,
 ) -> Result<Value, TypedOperationError> {
+    // CDXC:MultiRepo 2026-11-27: a folder with several repos reads each on its own and joins
+    // them (multi_repo/changes.rs); `singleRepo` is that per-repo read.
+    if params.get("singleRepo").and_then(Value::as_bool) != Some(true) {
+        if let Some(set) = crate::multi_repo::multi_repo_set(&context.cwd) {
+            return crate::multi_repo::changes::multi_repo_diff(params, context, &set).await;
+        }
+    }
     let scope = ChangesScope::read(params);
     let ignore_whitespace = params.get("ignoreWhitespace").and_then(Value::as_bool) == Some(true);
     let Some(base) = resolve_base(context, scope).await? else {
@@ -216,7 +225,13 @@ pub(crate) async fn changes_diff(
     let mut patch = diff.stdout;
     let status = git(
         context,
-        args(&["status", "--porcelain=v1", "-z", "--untracked-files=all"]),
+        args(&[
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+            "--ignore-submodules=dirty",
+        ]),
         true,
     )
     .await?;
@@ -316,6 +331,11 @@ pub(crate) async fn changes_revert(
     params: &Map<String, Value>,
     context: &TypedOperationContext,
 ) -> Result<Value, TypedOperationError> {
+    if params.get("singleRepo").and_then(Value::as_bool) != Some(true) {
+        if let Some(set) = crate::multi_repo::multi_repo_set(&context.cwd) {
+            return crate::multi_repo::changes::multi_repo_revert(params, context, &set).await;
+        }
+    }
     let scope = ChangesScope::read(params);
     let ignore_whitespace = params.get("ignoreWhitespace").and_then(Value::as_bool) == Some(true);
     let path = normalize_relative_file_path(params.get("filePath"))?;

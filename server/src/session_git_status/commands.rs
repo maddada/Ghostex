@@ -30,28 +30,23 @@ impl SessionGitStatusProber for SystemSessionGitStatusProber {
 
     /// On Windows and macOS the last probe of `cwd` is kept until its folder or its Git folders change (`platform::folder_watch`), since every pass probed every session's folder with up to six git starts.
     fn probe_git(&self, cwd: &str) -> Option<SessionGitProbe> {
-        let owned_cwd = cwd.to_string();
-        let probe = move || {
-            probe_git_status_with(&move |args: &[&str]| run_git_probe_command(&owned_cwd, args))
-        };
-        #[cfg(any(windows, target_os = "macos"))]
-        {
-            use crate::platform::folder_watch::{ChangeGatedCache, GitFolders};
-            use std::sync::OnceLock;
-            static CACHE: OnceLock<ChangeGatedCache<SessionGitProbe>> = OnceLock::new();
-            let cache = CACHE.get_or_init(ChangeGatedCache::new);
-            let folder = std::path::Path::new(cwd);
-            if let Some(answer) = cache.unchanged(cwd, folder, GitFolders::WithSharedRefs) {
-                return Some(answer);
+        // CDXC:MultiRepo 2026-11-27: a folder with several repos (a session folder, or a project
+        // folder of repos) shows the sum of its repos' counts, on the session folder's branch.
+        if let Some((branch, repos)) = multi_repo_probe_paths(cwd) {
+            let probes: Vec<SessionGitProbe> = repos
+                .iter()
+                .filter_map(|path| probe_one_git_folder(path))
+                .collect();
+            if probes.is_empty() {
+                return None;
             }
-            let answer = probe();
-            if let Some(answer) = &answer {
-                cache.remember(cwd, answer.clone());
-            }
-            answer
+            return Some(SessionGitProbe {
+                branch: branch.or_else(|| probes.iter().find_map(|probe| probe.branch.clone())),
+                additions: probes.iter().map(|probe| probe.additions).sum(),
+                deletions: probes.iter().map(|probe| probe.deletions).sum(),
+            });
         }
-        #[cfg(not(any(windows, target_os = "macos")))]
-        probe()
+        probe_one_git_folder(cwd)
     }
 
     fn probe_pull_request(&self, cwd: &str, branch: &str) -> Option<SessionPullRequest> {
@@ -410,4 +405,60 @@ pub fn take_abandoned_command_readers() -> usize {
 /// under their own event instead of being attributed to the git-status pass.
 pub fn take_abandoned_project_git_remote_readers() -> usize {
     ABANDONED_PROJECT_GIT_REMOTE_READERS.swap(0, Ordering::Relaxed)
+}
+
+/// The repos to sum for `cwd`, with the branch to show: a session folder's record (its branch),
+/// else a project folder of repos already in the repos cache (never a disk scan here).
+fn multi_repo_probe_paths(cwd: &str) -> Option<(Option<String>, Vec<String>)> {
+    if let Some((root, record)) = crate::multi_repo::record::find(std::path::Path::new(cwd)) {
+        // Only the folder the session works in, not a repo inside it on its own.
+        let project_dir = crate::multi_repo::join_rel(&root, &record.project_rel);
+        if std::path::Path::new(cwd) != project_dir.as_path() {
+            return None;
+        }
+        let paths = record
+            .repos
+            .iter()
+            .map(|repo| {
+                crate::multi_repo::join_rel(&root, &repo.rel)
+                    .to_string_lossy()
+                    .to_string()
+            })
+            .collect();
+        return Some((Some(record.branch), paths));
+    }
+    let set = crate::multi_repo::cache::cached_repo_set(cwd).filter(|set| set.is_multi())?;
+    if set.root_is_repo {
+        // A repo with submodules: its own counts already include the submodule pointers.
+        return None;
+    }
+    Some((
+        None,
+        set.repos.iter().map(|repo| repo.path.clone()).collect(),
+    ))
+}
+
+fn probe_one_git_folder(cwd: &str) -> Option<SessionGitProbe> {
+    let owned_cwd = cwd.to_string();
+    let probe = move || {
+        probe_git_status_with(&move |args: &[&str]| run_git_probe_command(&owned_cwd, args))
+    };
+    #[cfg(any(windows, target_os = "macos"))]
+    {
+        use crate::platform::folder_watch::{ChangeGatedCache, GitFolders};
+        use std::sync::OnceLock;
+        static CACHE: OnceLock<ChangeGatedCache<SessionGitProbe>> = OnceLock::new();
+        let cache = CACHE.get_or_init(ChangeGatedCache::new);
+        let folder = std::path::Path::new(cwd);
+        if let Some(answer) = cache.unchanged(cwd, folder, GitFolders::WithSharedRefs) {
+            return Some(answer);
+        }
+        let answer = probe();
+        if let Some(answer) = &answer {
+            cache.remember(cwd, answer.clone());
+        }
+        answer
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    probe()
 }

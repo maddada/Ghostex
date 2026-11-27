@@ -318,6 +318,7 @@ async fn a_rename_that_gives_a_worktree_its_checkouts_parent_back_is_recorded() 
         worktree_path: worktree_project["path"].as_str().unwrap().to_string(),
         worktree_path_resolved: None,
         worktree_path_ignores_case: false,
+        session_folder: None,
     };
     let project = match apply_renamed_worktree_project_state(&state, &plan, None) {
         Ok(project) => project,
@@ -358,6 +359,7 @@ fn a_session_cwd_recorded_through_the_resolved_path_form_still_follows_the_move(
         worktree_path: "/tmp/rt-old".to_string(),
         worktree_path_resolved: Some("/private/tmp/rt-old".to_string()),
         worktree_path_ignores_case: false,
+        session_folder: None,
     };
 
     assert_eq!(
