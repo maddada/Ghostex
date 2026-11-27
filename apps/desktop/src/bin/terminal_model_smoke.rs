@@ -120,6 +120,7 @@ fn main() -> anyhow::Result<()> {
             Err(_) => anyhow::bail!("timed out waiting for terminal events"),
         };
         match event {
+            TerminalEvent::InputDrained => {}
             TerminalEvent::Bell => println!("event: bell"),
             TerminalEvent::TitleChanged => println!("event: title changed"),
             TerminalEvent::ClipboardWriteRequested => {
@@ -159,4 +160,85 @@ fn main() -> anyhow::Result<()> {
     );
     println!("smoke complete");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ghostty_vt::{VtMods, VtMouseAction, VtMouseInput};
+
+    #[test]
+    fn mouse_input_without_output_does_not_wake_renderer() -> anyhow::Result<()> {
+        let (tx, rx) = mpsc::channel();
+        let mut model = TerminalModel::spawn(
+            TerminalSpawnConfig {
+                program: "/bin/zsh".into(),
+                args: vec![
+                    "-c".into(),
+                    r"stty -echo; printf '\033[?1003h\033[?1006hready'; IFS= read -r line; printf 'done'".into(),
+                ],
+                env: vec![],
+                cwd: None,
+                cols: 80,
+                rows: 12,
+                cell_width_px: 8,
+                cell_height_px: 16,
+                max_scrollback: 100,
+            },
+            Arc::new(move |event| { let _ = tx.send(event); }),
+        )?;
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            let event =
+                rx.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))?;
+            if event == TerminalEvent::Wakeup && snapshot_has_line(&model.snapshot()?, "ready") {
+                break;
+            }
+        }
+        // Drain the startup output's coalesced notification before sending silent input.
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            anyhow::ensure!(
+                std::time::Instant::now() < deadline,
+                "startup did not settle"
+            );
+            match rx.recv_timeout(Duration::from_millis(100)) {
+                Ok(_) => {}
+                Err(mpsc::RecvTimeoutError::Timeout) => break,
+                Err(error) => return Err(error.into()),
+            }
+        }
+        assert!(model.send_mouse(
+            &VtMouseInput {
+                action: VtMouseAction::Motion,
+                button: None,
+                mods: VtMods::default(),
+                x: 16.0,
+                y: 16.0,
+            },
+            false,
+        ));
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(10))?,
+            TerminalEvent::InputDrained
+        );
+        assert!(!model.has_pending_input());
+        assert!(matches!(
+            rx.recv_timeout(Duration::from_millis(100)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ));
+
+        // Actual child output must still wake the renderer after the input queue drains.
+        model.write_input(b"\n")?;
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            let event =
+                rx.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))?;
+            if event == TerminalEvent::Wakeup && snapshot_has_line(&model.snapshot()?, "readydone")
+            {
+                break;
+            }
+        }
+        Ok(())
+    }
 }
