@@ -198,7 +198,7 @@ impl NativeChatView {
             0x171717
         });
         let measured = self.composer_button_bounds.send.clone();
-        div()
+        let button = div()
             .id("chat-send")
             .relative()
             .role(gpui::Role::Button)
@@ -285,6 +285,13 @@ impl NativeChatView {
                     .absolute()
                     .inset(px(0.0)),
             )
-            .into_any_element()
+            .into_any_element();
+        // The one-time tip's dot sits on Send's corner, never on Stop; an open tip stays open
+        // when Send turns into Stop under it (send_tip.rs).
+        let show_dot = !stop && super::send_tip::send_tip_pending();
+        if !show_dot && !self.send_tip_open {
+            return button;
+        }
+        self.wrap_send_with_tip(button, show_dot, p, cx)
     }
 }

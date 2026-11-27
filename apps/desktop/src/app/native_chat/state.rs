@@ -309,6 +309,8 @@ pub(crate) struct NativeChatView {
     /// Where the composer's More actions, Attach and Send buttons were last painted, which their
     /// menus line up with.
     pub(super) composer_button_bounds: super::toolbar::ComposerButtonBounds,
+    /// The one-time "two more ways to send" popup over Send is open (send_tip.rs).
+    pub(super) send_tip_open: bool,
     /// A model pop-up asked for before this view had its first snapshot: the trigger and its window.
     pub(super) pending_model_menu: Option<(gpui::Bounds<gpui::Pixels>, gpui::AnyWindowHandle)>,
     pub(crate) window_subscription: Option<Subscription>,
@@ -801,6 +803,7 @@ impl NativeChatView {
             menu_outside_pane: false,
             menu_side: None,
             composer_button_bounds: Default::default(),
+            send_tip_open: false,
             pending_model_menu: None,
             window_subscription: None,
             _app_modal_subscription: cx
