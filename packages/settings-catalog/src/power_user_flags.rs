@@ -21,7 +21,9 @@
 //! SEE-ALSO: apps/desktop/src/app/window/settings_modal/search.rs (`RowTier`), store.rs
 //! (`power_user_flags_shown`), tabs/general/experience/page.rs (saving the level).
 
-use serde_json::Value;
+use crate::experience::{area_matches, Preset, AREAS};
+use crate::json::ToJson;
+use serde_json::{Map, Value};
 
 /// The section's title on every page.
 pub const SECTION_TITLE: &str = "Power User Flags";
@@ -271,4 +273,44 @@ pub fn hidden_keys(advanced: bool, is_modified: &dyn Fn(&str) -> bool) -> Vec<&'
         .filter(|flags| !page_shown(flags.page, false, is_modified))
         .flat_map(|flags| flags.keys.iter().copied())
         .collect()
+}
+
+/// Saves the Advanced level for someone whose Experience already matches Advanced in every area but
+/// who has never saved a level (`LEVEL_KEY` missing or empty), so their Power User Flags show as they
+/// did before the level existed. Returns whether it changed `settings`; a saved level, or any area
+/// that is not on Advanced, is left alone.
+///
+/// CDXC:Settings 2026-11-27 DECISION:
+/// User, asked whether people who already match Advanced should get the saved level: "Migrate
+/// them." The desktop runs this once, behind a marker file, at start-up when the settings file
+/// already exists (`mark_existing_advanced_once` in apps/desktop/src/shared_settings/
+/// experience_level.rs), with no UI. A key the file does not hold reads as its default.
+pub fn mark_existing_advanced(settings: &mut Map<String, Value>) -> bool {
+    let saved_level = settings
+        .get(LEVEL_KEY)
+        .and_then(Value::as_str)
+        .is_some_and(|level| !level.is_empty());
+    if saved_level {
+        return false;
+    }
+    let advanced = {
+        let value = |key: &str| {
+            settings
+                .get(key)
+                .cloned()
+                .or_else(|| crate::default_value(key).map(|value| value.to_json().to_value()))
+                .unwrap_or(Value::Null)
+        };
+        AREAS
+            .iter()
+            .all(|area| area_matches(area, &value).contains(&Preset::Advanced))
+    };
+    if !advanced {
+        return false;
+    }
+    settings.insert(
+        LEVEL_KEY.to_string(),
+        Value::String(Preset::Advanced.id().to_string()),
+    );
+    true
 }

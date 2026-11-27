@@ -207,6 +207,12 @@ impl GhostexPaths {
         self.state_dir.join("heavy-views-default-migrated")
     }
 
+    /// Written once the saved Experience level step (`mark_existing_advanced_once` in the desktop
+    /// app) has run, so someone already on Advanced keeps seeing the Power User Flags.
+    pub fn experience_level_marker_file(&self) -> PathBuf {
+        self.state_dir.join("experience-level-advanced-migrated")
+    }
+
     pub fn gxserver_config_dir(&self) -> PathBuf {
         self.config_dir.join("gxserver")
     }
