@@ -160,6 +160,7 @@ pub(crate) fn guide_command(args: &[String]) -> CliResult<()> {
 
 const BOOSTS_HELP: &str =
     "Usage: ghostex visual boosts [list|show <id>|set <id> <prompt|->|reset <id>|on|off] [--json]
+       ghostex visual boosts triage-sources [get|set <app> [<app> ...]|mark-read <app> <unix-seconds>] [--json]
 
 Boosts are the pills a person adds to a chat message from the Boost pill in
 the chat box, or by typing * (Live page, Chart it, Computer use, Plan with
@@ -173,7 +174,12 @@ computer; Settings > Boosts edits them all.
   ghostex visual boosts set <id> <prompt>
                                      Edit a Boost's prompt (- reads it from stdin)
   ghostex visual boosts reset <id>   Go back to the prompt Ghostex ships
-  ghostex visual boosts on | off     Show or hide Boosts in every chat";
+  ghostex visual boosts on | off     Show or hide Boosts in every chat
+
+  triage-sources get --json          Read this computer's Triage picks and this workspace's last-read times
+  triage-sources set <app> [<app> ...]  Replace the picks with connector slugs, such as github gmail slack
+  triage-sources mark-read <app> <unix-seconds>  Advance a message source's last-read time after a successful run
+  Last-read times use GHOSTEX_WORKSPACE_ID when set and Personal otherwise.";
 
 fn call(params: Value) -> CliResult<Value> {
     call_gxserver_rpc(crate::boosts::BOOSTS_ENDPOINT, &params, &Flags::default())
@@ -181,6 +187,39 @@ fn call(params: Value) -> CliResult<Value> {
 
 fn rows(answer: &Value) -> Vec<Value> {
     answer["boosts"].as_array().cloned().unwrap_or_default()
+}
+
+fn triage_sources_command(words: &[&str], json_out: bool) -> CliResult<()> {
+    let workspace = std::env::var("GHOSTEX_WORKSPACE_ID").ok();
+    let params = match words {
+        [] | ["get"] => json!({ "op": "getTriageSources", "workspace": workspace }),
+        ["set", apps @ ..] if !apps.is_empty() => {
+            json!({ "op": "setTriageSources", "workspace": workspace, "sources": apps })
+        }
+        ["mark-read", app, timestamp] => {
+            let timestamp = timestamp.parse::<u64>().map_err(|_| {
+                CliError::Other("Use a last-read time in Unix seconds.".to_string())
+            })?;
+            json!({ "op": "markTriageRead", "workspace": workspace, "source": app, "timestamp": timestamp })
+        }
+        _ => return Err(CliError::Other(BOOSTS_HELP.to_string())),
+    };
+    let answer = call(params)?;
+    if json_out {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&answer).unwrap_or_default()
+        );
+    } else if let Some(sources) = answer["sources"].as_array() {
+        if sources.is_empty() {
+            println!("No Triage sources saved yet.");
+        } else {
+            for source in sources.iter().filter_map(Value::as_str) {
+                println!("{source}");
+            }
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn boosts_command(args: &[String]) -> CliResult<()> {
@@ -200,9 +239,14 @@ pub(crate) fn boosts_command(args: &[String]) -> CliResult<()> {
             .ok_or_else(|| CliError::Other(format!("Say which Boost.\n\n{BOOSTS_HELP}")))
     };
     let answer = match words.first().map(|word| word.as_str()).unwrap_or("list") {
+        "triage-sources" => {
+            let rest: Vec<&str> = words[1..].iter().map(|word| word.as_str()).collect();
+            return triage_sources_command(&rest, json_out);
+        }
         "list" => call(json!({ "op": "list" }))?,
         "show" => {
             let id = id()?;
+            let id = ghostex_gx_chat_core::extras::boosts::canonical_id(&id);
             let answer = call(json!({ "op": "list" }))?;
             let Some(row) = rows(&answer)
                 .into_iter()

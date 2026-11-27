@@ -818,6 +818,8 @@ pub fn composer_references(text: &str) -> Vec<ComposerReference> {
         }
         // A Boost for this message: its name in a pill (`extras/boosts.rs`).
         if let Some(id) = crate::extras::boosts::boost_id_of_href(&destination.path) {
+            let label =
+                crate::extras::boosts::boost(id).map_or(label, |boost| boost.label.to_string());
             references.push(ComposerReference {
                 end: indexed.offset(destination.end),
                 identity: format!("boost:{id}"),

@@ -2674,10 +2674,10 @@ OpenCode Browse below); Computer use, where it drives your desktop apps itself w
 Driver; Embedded Browser use, where it drives pages in Ghostex's own browser; Fix and prove, where the agent reproduces
 the problem first, then shows the same screenshot or test passing after its fix (it took the
 place of Show screenshots, whose pill still works); Second opinion, where an agent on another
-model checks the answer and, when code changed, reviews the diff), Work (Triage requests,
-which explains issues, pull requests or tickets one by one on a Live page with a decision for
-each; Triage messages, which puts open mentions, DMs, promises and unanswered asks on a Live
-page grouped by urgency with suggested replies, choices and a note box; Plan with workers; Try
+model checks the answer and, when code changed, reviews the diff), Work (Triage,
+which puts issues, pull requests, tickets and messages on one Live page in Requests and Messages
+sections, with a decision per item. Messages since the last successful read are grouped by urgency
+with suggested replies and a note box; Plan with workers; Try
 it in a worktree; Ship it, which commits the work on a branch,
 pushes it and opens a pull request, never merging it; Save to Docs; Steps for me, which lists
 what only you can do under Needs you; Add to Pings, which files a Ping about the
@@ -2705,6 +2705,20 @@ your own Boosts; select words in a message or the chat box and choose Save as Bo
 the small bar by the selection, or in the right-click menu) to start one from them. All of it is kept on this computer for every chat and device that
 uses it. `ghostex visual boosts` lists them, and `ghostex visual boosts reset <id>`
 resets one (`on` or `off` shows or hides Boosts).
+
+Triage asks which sources to use the first time you run it without naming any. It remembers
+your picks on this computer across chats. Try `*Triage github` or `*Triage all except slack`
+to override them for one run. Say “from now on only GitHub” to replace the saved picks.
+Triage leaves one connection Ping per missing source and continues with what it can reach.
+Old Triage messages pills open as Triage. Edited Triage messages instructions appear at
+the end of the Triage prompt, after your Triage requests edit or Ghostex's Triage prompt.
+You can edit the combined prompt or reset it from Settings > Boosts.
+
+Run `ghostex visual boosts triage-sources get --json` to see the saved picks and last-read
+times, or `ghostex visual boosts triage-sources set github gmail slack` to replace the picks.
+Triage uses `ghostex visual boosts triage-sources mark-read <app> <unix-seconds>` after a
+successful read. Last-read times are tracked separately for each workspace and message source.
+
 For a Live page the chat shows a card with a small preview
 picture of the page, the same on desktop, web, and mobile. Pages share one
 look: a soft dusk backdrop in dark mode (a soft dawn in light) with frosted

@@ -7,7 +7,7 @@
 //! every chat and every client of this computer (the desktop, the web build and the phone all reach
 //! it through `/api/boosts`), in `<state>/boosts.json`: an edited prompt per Boost until Reset to
 //! default (Settings > Boosts, or `ghostex visual boosts reset <id>`), the user's own Boosts in
-//! their order, and the on/off switch.
+//! their order, the on/off switch, and Triage source choices and last-read times.
 //!
 //! CDXC:Boosts 2026-11-20 WHY:
 //! The prompt is added here, after the draft check, as review comments are: gxserver sends only the exact text of the saved draft revision (the pills), and every send and queued prompt passes here on its way to the agent. It goes in the `<ghostex-system>` block every chat already hides, so phones whose chat core predates Boosts still show only what the user wrote.
@@ -16,7 +16,9 @@
 //! server/src/ghostex_cli/visual_guide.rs (the help each prompt points to),
 //! apps/desktop/src/app/window/settings_modal/tabs/boosts.rs (Settings > Boosts).
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use ghostex_gx_chat_core::extras::boosts::{
     self as core, Boost, CustomBoost, BOOSTS, CUSTOM_ICONS,
@@ -26,13 +28,18 @@ use serde_json::{json, Map, Value};
 use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;
 
-/// `/api/boosts`. Every answer is the whole state: `{on, hintSeen, boosts: [{id, label,
+/// `/api/boosts`. Boost operations return the catalog: `{on, hintSeen, boosts: [{id, label,
 /// category, description, prompt, edited, default}], custom: [{id, label, icon, prompt}], icons}`.
 /// `op`: `list` (the default), `set` (`id`, `prompt`: a Boost's prompt, Ghostex's or the user's),
 /// `reset` (`id`), `hintSeen`, `setOn` (`on`), `addCustom` (`label`, `icon`, `prompt`; answers the
 /// new one's id as `added`), `updateCustom` (`id`, any of `label`, `icon`, `prompt`),
 /// `deleteCustom` (`id`) and `moveCustom` (`id`, `to`: its new index).
+/// `getTriageSources`, `setTriageSources` (`sources`), and `markTriageRead` (`source`,
+/// `timestamp` in Unix seconds) return `{sources, lastRead}` for the requested `workspace`.
 pub(crate) const BOOSTS_ENDPOINT: &str = "/api/boosts";
+
+const LEGACY_TRIAGE: &str = "triage-messages";
+static SAVED_LOCK: Mutex<()> = Mutex::new(());
 
 /// What is saved.
 #[derive(Default)]
@@ -41,6 +48,8 @@ struct Saved {
     custom: Vec<CustomBoost>,
     off: bool,
     hint_seen: bool,
+    triage_sources: Vec<String>,
+    triage_last_read: BTreeMap<String, BTreeMap<String, u64>>,
     /// The number the next user's Boost's id ends with, so a deleted id is never reused.
     next: u64,
 }
@@ -74,6 +83,14 @@ fn read(paths: &GxserverPaths) -> Saved {
         custom,
         off: value.get("on") == Some(&Value::Bool(false)),
         hint_seen: value.get("hintSeen") == Some(&Value::Bool(true)),
+        triage_sources: value
+            .get("triageSources")
+            .and_then(|sources| serde_json::from_value(sources.clone()).ok())
+            .unwrap_or_default(),
+        triage_last_read: value
+            .get("triageLastRead")
+            .and_then(|last_read| serde_json::from_value(last_read.clone()).ok())
+            .unwrap_or_default(),
     }
 }
 
@@ -84,6 +101,8 @@ fn write(paths: &GxserverPaths, saved: &Saved) -> std::io::Result<()> {
         "on": !saved.off,
         "hintSeen": saved.hint_seen,
         "next": saved.next,
+        "triageSources": saved.triage_sources,
+        "triageLastRead": saved.triage_last_read,
     }))
     .unwrap_or_default();
     let path = file(paths);
@@ -97,20 +116,31 @@ fn write(paths: &GxserverPaths, saved: &Saved) -> std::io::Result<()> {
 }
 
 /// The edited prompt of Ghostex's `boost`, if the user edited it.
-fn edited<'a>(saved: &'a Saved, boost: &Boost) -> Option<&'a str> {
+fn saved_prompt<'a>(saved: &'a Saved, id: &str) -> Option<&'a str> {
     saved
         .prompts
-        .get(boost.id)
+        .get(id)
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|prompt| !prompt.is_empty())
+}
+
+fn edited(saved: &Saved, boost: &Boost) -> Option<String> {
+    let current = saved_prompt(saved, boost.id);
+    if boost.id == "triage" {
+        if let Some(messages) = saved_prompt(saved, LEGACY_TRIAGE) {
+            let requests = current.unwrap_or(boost.prompt);
+            return Some(format!("{requests}\n\n{messages}"));
+        }
+    }
+    current.map(str::to_string)
 }
 
 /// The prompt Boost `id` sends now: Ghostex's (or its edit), or the user's own; `None` for a
 /// Boost that is gone.
 fn prompt_of(saved: &Saved, id: &str) -> Option<String> {
     if let Some(boost) = core::boost(id) {
-        return Some(edited(saved, boost).unwrap_or(boost.prompt).to_string());
+        return Some(edited(saved, boost).unwrap_or_else(|| boost.prompt.to_string()));
     }
     saved
         .custom
@@ -207,16 +237,19 @@ fn listing(saved: &Saved) -> Value {
     json!({
         "on": !saved.off,
         "hintSeen": saved.hint_seen,
-        "boosts": BOOSTS.iter().map(|boost| json!({
-            "id": boost.id,
-            "label": boost.label,
-            "category": boost.category,
-            "iconPath": boost.icon,
-            "description": boost.description,
-            "prompt": edited(saved, boost).unwrap_or(boost.prompt),
-            "edited": edited(saved, boost).is_some(),
-            "default": boost.prompt,
-        })).collect::<Vec<_>>(),
+        "boosts": BOOSTS.iter().map(|boost| {
+            let prompt = edited(saved, boost);
+            json!({
+                "id": boost.id,
+                "label": boost.label,
+                "category": boost.category,
+                "iconPath": boost.icon,
+                "description": boost.description,
+                "prompt": prompt.as_deref().unwrap_or(boost.prompt),
+                "edited": prompt.is_some(),
+                "default": boost.prompt,
+            })
+        }).collect::<Vec<_>>(),
         "custom": saved.custom,
         "icons": CUSTOM_ICONS,
     })
@@ -238,13 +271,13 @@ fn text<'a>(params: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
     params.get(key).and_then(Value::as_str).map(str::trim)
 }
 
-fn checked_prompt(prompt: &str) -> Result<String, DomainStateError> {
+fn checked_prompt(prompt: &str, max_chars: usize) -> Result<String, DomainStateError> {
     if prompt.is_empty() {
         return Err(bad("Say what the agent is told."));
     }
-    if prompt.chars().count() > PROMPT_MAX_CHARS {
+    if prompt.chars().count() > max_chars {
         return Err(bad(format!(
-            "A Boost's prompt can be at most {PROMPT_MAX_CHARS} characters."
+            "A Boost's prompt can be at most {max_chars} characters."
         )));
     }
     Ok(prompt.to_string())
@@ -273,20 +306,88 @@ fn custom_index(saved: &Saved, params: &Map<String, Value>) -> Result<usize, Dom
         .ok_or_else(|| bad(format!("You have no Boost called \"{id}\".")))
 }
 
+fn triage_source(value: &Value) -> Result<String, DomainStateError> {
+    let invalid = || bad("Use a connector slug such as github, gmail, slack, or discordbot.");
+    let slug = value.as_str().ok_or_else(invalid)?.trim();
+    if slug.is_empty()
+        || slug.len() > 80
+        || !slug
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_'))
+        || !slug.as_bytes()[0].is_ascii_alphanumeric()
+    {
+        return Err(invalid());
+    }
+    Ok(slug.to_ascii_lowercase())
+}
+
+fn triage_state(saved: &Saved, workspace: &str) -> Value {
+    json!({
+        "sources": saved.triage_sources,
+        "lastRead": saved.triage_last_read.get(workspace).cloned().unwrap_or_default(),
+    })
+}
+
 /// One `/api/boosts` call.
 pub(crate) fn handle(
     paths: &GxserverPaths,
     params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
     let op = text(params, "op").unwrap_or("list");
+    let workspace = text(params, "workspace")
+        .filter(|key| !key.is_empty())
+        .unwrap_or(crate::workspaces::DEFAULT_WORKSPACE_ID);
+    // Source updates can arrive from another chat while Settings is editing a prompt.
+    let _lock = SAVED_LOCK.lock().unwrap_or_else(|error| error.into_inner());
     let mut saved = read(paths);
     let mut added = None;
     match op {
         "list" => return Ok(listing(&saved)),
+        "getTriageSources" => return Ok(triage_state(&saved, workspace)),
+        "setTriageSources" => {
+            let sources = params
+                .get("sources")
+                .and_then(Value::as_array)
+                .filter(|sources| !sources.is_empty())
+                .ok_or_else(|| bad("Name at least one Triage source."))?;
+            let mut picks = Vec::new();
+            for source in sources {
+                let source = triage_source(source)?;
+                if !picks.contains(&source) {
+                    picks.push(source);
+                }
+            }
+            saved.triage_sources = picks;
+        }
+        "markTriageRead" => {
+            let source = triage_source(params.get("source").unwrap_or(&Value::Null))?;
+            let now = chrono::Utc::now().timestamp() as u64;
+            let timestamp = params
+                .get("timestamp")
+                .and_then(Value::as_u64)
+                .filter(|&timestamp| timestamp > 0 && timestamp <= now)
+                .ok_or_else(|| bad("Use a last-read time in Unix seconds, no later than now."))?;
+            let previous = saved
+                .triage_last_read
+                .entry(workspace.to_string())
+                .or_default()
+                .entry(source)
+                .or_default();
+            *previous = (*previous).max(timestamp);
+        }
         "set" => {
-            let id = text(params, "id").unwrap_or_default();
-            let prompt = checked_prompt(text(params, "prompt").unwrap_or_default())?;
+            let id = core::canonical_id(text(params, "id").unwrap_or_default());
+            // Triage can contain two prompts saved before the catalog merged them.
+            let max_chars = if id == "triage" {
+                2 * PROMPT_MAX_CHARS + 2
+            } else {
+                PROMPT_MAX_CHARS
+            };
+            let prompt = checked_prompt(text(params, "prompt").unwrap_or_default(), max_chars)?;
             if let Some(boost) = core::boost(id) {
+                if id == "triage" {
+                    saved.prompts.remove(LEGACY_TRIAGE);
+                }
                 if prompt == boost.prompt {
                     saved.prompts.remove(boost.id);
                 } else {
@@ -307,6 +408,9 @@ pub(crate) fn handle(
                 ))
             })?;
             saved.prompts.remove(boost.id);
+            if boost.id == "triage" {
+                saved.prompts.remove(LEGACY_TRIAGE);
+            }
         }
         "hintSeen" => saved.hint_seen = true,
         "setOn" => {
@@ -319,7 +423,10 @@ pub(crate) fn handle(
                 id: format!("custom-{}", saved.next.max(1)),
                 label: checked_label(text(params, "label").unwrap_or_default())?,
                 icon: checked_icon(text(params, "icon")),
-                prompt: checked_prompt(text(params, "prompt").unwrap_or_default())?,
+                prompt: checked_prompt(
+                    text(params, "prompt").unwrap_or_default(),
+                    PROMPT_MAX_CHARS,
+                )?,
             };
             saved.next = saved.next.max(1) + 1;
             added = Some(boost.id.clone());
@@ -334,7 +441,7 @@ pub(crate) fn handle(
                 saved.custom[index].icon = checked_icon(text(params, "icon"));
             }
             if let Some(prompt) = text(params, "prompt") {
-                saved.custom[index].prompt = checked_prompt(prompt)?;
+                saved.custom[index].prompt = checked_prompt(prompt, PROMPT_MAX_CHARS)?;
             }
         }
         "deleteCustom" => {
@@ -356,6 +463,9 @@ pub(crate) fn handle(
         code: "internalError",
         message: format!("Ghostex could not save the Boosts: {error}"),
     })?;
+    if matches!(op, "setTriageSources" | "markTriageRead") {
+        return Ok(triage_state(&saved, workspace));
+    }
     let mut answer = listing(&saved);
     if let Some(id) = added {
         answer["added"] = json!(id);

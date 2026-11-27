@@ -1482,22 +1482,50 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
                     ),
             )
             .into_any_element(),
-        "triage" | "second" => div()
+        "triage" => div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .child(bar(Some("Live page")))
+            .child(
+                div()
+                    .flex_1()
+                    .flex()
+                    .gap(px(5.0 * s))
+                    .p(px(6.0 * s))
+                    .children(
+                        [
+                            ("Requests", "PR #412", "Review"),
+                            ("Messages", "Urgent · Launch DM", "Suggested reply"),
+                        ]
+                        .into_iter()
+                        .map(|(section, item, action)| {
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .flex()
+                                .flex_col()
+                                .gap(px(3.0 * s))
+                                .child(small(section, p.card_muted))
+                                .child(
+                                    tile()
+                                        .child(small(item, p.foreground))
+                                        .child(line(0.72, 4.0, strong))
+                                        .child(small(action, tone)),
+                                )
+                        }),
+                    ),
+            )
+            .into_any_element(),
+        "second" => div()
             .size_full()
             .flex()
             .gap(px(5.0 * s))
             .p(px(7.0 * s))
-            .children((0..if kind == "second" { 2 } else { 3 }).map(|n| {
-                let pick = kind == "second" && n == 1;
+            .children([false, true].into_iter().map(|pick| {
                 tile()
                     .child(small(
-                        match (kind, n) {
-                            ("triage", 0) => "#412",
-                            ("triage", 1) => "#415",
-                            ("triage", _) => "GX-88",
-                            (_, 0) => "Your agent",
-                            _ => "Second agent",
-                        },
+                        if pick { "Second agent" } else { "Your agent" },
                         p.foreground,
                     ))
                     .child(line(0.85, 4.0, strong))
@@ -1510,12 +1538,7 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
                             .when(pick, |chip| chip.bg(p.foreground.opacity(0.85)))
                             .when(!pick, |chip| chip.border(px(s)).border_color(strong))
                             .child(small(
-                                match kind {
-                                    "triage" => "Merge",
-                                    "second" if n == 1 => "Checked",
-                                    "second" => "Answer",
-                                    _ => "Pick",
-                                },
+                                if pick { "Checked" } else { "Answer" },
                                 if pick { p.background } else { p.card_muted },
                             )),
                     )
@@ -1704,8 +1727,8 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
                 }),
             )
             .into_any_element(),
-        // Triage messages, Add to Pings, Inbox it! and Schedule it: the cards each leaves.
-        "triage-messages" | "needs-you" | "inbox" | "schedule" => div()
+        // Add to Pings, Inbox it! and Schedule it: the cards each leaves.
+        "needs-you" | "inbox" | "schedule" => div()
             .size_full()
             .flex()
             .flex_col()
@@ -1714,10 +1737,6 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
             .p(px(8.0 * s))
             .children(
                 match kind {
-                    "triage-messages" => vec![
-                        ("DM: Launch timeline", "Urgent · suggested reply", "Reply"),
-                        ("@you: Review copy", "Today · unanswered ask", "Reply"),
-                    ],
                     "needs-you" => vec![(
                         "Check billing on mobile",
                         "Verify totals before release",
@@ -1749,7 +1768,6 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
                         .child(
                             svg()
                                 .path(match kind {
-                                    "triage-messages" => "titlebar/message-circle.svg",
                                     "needs-you" | "inbox" => "titlebar/circle-dot.svg",
                                     _ => "titlebar/clock.svg",
                                 })

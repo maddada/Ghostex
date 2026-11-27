@@ -60,6 +60,10 @@
 //! User: "please remove suggested boosts also, i dont like this feature." Do not surface inline
 //! contextual Boost suggestions above the chat box while typing; keep the Boost menu, `*` picker
 //! and pills.
+//! CDXC:Boosts 2026-11-27 DECISION:
+//! Q24 "Merge into one" supersedes the two separate Triage Boosts: one Triage on one Live page with Requests and Messages sections. Messages keep the time window, urgency and suggested replies.
+//! Q25 "Ask first time, then remember" saves the source choices on the computer. The user's message takes precedence: "tell the user they can say *Triage github or *Triage all except slack etc if they want to customize the triage sources later".
+//! Q26: "give the user pings for each missing triage source". Triage the sources that are reachable.
 //! SEE-ALSO: server/src/boosts.rs (the prompts, the user's Boosts, `/api/boosts`, the block under
 //! the message), apps/desktop/src/app/native_chat/boosts.rs (pill, menu, preview, hint chip, Try a
 //! Boost), apps/desktop/src/app/window/settings_modal/tabs/boosts.rs (Settings > Boosts),
@@ -93,7 +97,7 @@ pub struct Boost {
     /// One line on what the agent does, for the menu, the picker and the callout.
     pub description: &'static str,
     /// What the little preview beside the menu draws (`page`, `chart`, `compare`, `map`,
-    /// `triage`, `triage-messages`, `form`, `app`, `web`, `browser`, `shots`, `second`, `workers`,
+    /// `triage`, `form`, `app`, `web`, `browser`, `shots`, `second`, `workers`,
     /// `worktree`, `ship`, `docs`, `steps`, `needs-you`, `inbox`, `schedule`, `notify`).
     pub preview: &'static str,
     /// What the agent is told, unless the user edited it.
@@ -111,7 +115,7 @@ pub const TABS: [(&str, &str); 4] = [
 ];
 
 /// Ghostex's Boosts, in the menu's order.
-pub const BOOSTS: [Boost; 21] = [
+pub const BOOSTS: [Boost; 20] = [
     Boost {
         id: "live-page",
         label: "Live page",
@@ -216,21 +220,20 @@ pub const BOOSTS: [Boost; 21] = [
     },
     Boost {
         id: "triage",
-        label: "Triage requests",
+        label: "Triage",
         icon: "titlebar/checklist.svg",
         category: "work",
-        description: "Issues, pull requests or tickets explained one by one, with a decision for each.",
+        description: "Issues, PRs, tickets and messages, one card each with a decision.",
         preview: "triage",
-        prompt: "Triage the requests this message points at: GitHub issues and pull requests, Linear or Jira tickets, or whatever I name (if I named none, the open ones of this project). Read each one, then put them all on one Live page, one card per item: a link to it, what it asks for as short bullet points, a picture of it wherever one helps (a screenshot, a mockup or a small diagram), your recommendation, and a question with the choices for that item so I can decide each with a click. If you haven't in this conversation, run `ghostex visual guide pages` first and follow it.",
-    },
-    Boost {
-        id: "triage-messages",
-        label: "Triage messages",
-        icon: "titlebar/message-circle.svg",
-        category: "work",
-        description: "Open mentions, DMs, promises and unanswered asks grouped by urgency on a Live page.",
-        preview: "triage-messages",
-        prompt: "Give me a Live page of my open tasks from messages since the last triage (Slack, email, or whatever channel I name): mentions, DMs, promises I made, and unanswered asks. Drop what is already settled. Group them by urgency, and give each task a short summary with a link, a recommended reply, choices so I can decide with a click, and a note box. If you haven't in this conversation, run `ghostex visual guide pages` first and follow it.",
+        prompt: r#"Triage my requests and messages. Read `ghostex visual boosts triage-sources get --json` for this computer's saved picks and last-read times. Check `ghostex connectors status` and `ghostex connectors gh status` for the workspace (pass `--workspace` with `GHOSTEX_WORKSPACE_ID` when it is set). Offer GitHub issues and PRs, Linear, Jira, Gmail, Slack, Discord, and other relevant Ghostex Connectors, with connection status, when you ask for my picks.
+
+If I name sources or exclusions in this message, use those for this run, including "all except slack". Replace the saved picks only if I explicitly ask for a lasting change, such as "from now on only GitHub". Otherwise use the saved picks. With no picks and no override, ask what to read and wait for my answer, then save my picks with `ghostex visual boosts triage-sources set <app> [<app> ...]` using connector slugs (github for GitHub, discordbot for Discord). When you first save my picks, tell me once that I can say `*Triage github` or `*Triage all except slack` to choose other sources. If a saved source that used to work stops working, ask whether I want to replace it, and continue this run. Keep the picks until I ask to change them.
+
+For each selected source that needs a connection, add one Ping with `ghostex needs-you add "Connect <App> for triage" --detail "<why the connection is needed and what it unlocks>" --command "ghostex connectors connect <app>"`. Use `ghostex connectors gh sign-in` as GitHub's command. Include the workspace in the command when needed. Reuse any open connection Ping for that source. Continue with the sources you can reach.
+
+Check open requests in scope. For messages, read since the last successful triage of that source. If there is no last-read time, start with recent open items and state the window used. Save the upper bound of each message search (Unix seconds) with `ghostex visual boosts triage-sources mark-read <app> <unix-seconds>` after successfully delivering the results for that source. Leave the time alone after a narrowed, partial, or failed read.
+
+Put everything on one Live page with Requests and Messages sections and one card per item. Give each card a link, short bullets on what it asks for, your recommendation and choices I can click to decide. Show a useful visual for a request where it helps. For messages, surface open mentions, DMs, promises and unanswered asks, drop settled items, group cards by urgency, and include a suggested reply and a note box. If you haven't in this conversation, run `ghostex visual guide pages` first and follow it."#,
     },
     Boost {
         id: "workers",
@@ -343,14 +346,21 @@ pub const CUSTOM_ICONS: [&str; 10] = [
 /// Boosts that left the menu for another, as `(old id, the Boost it is now)`: a pill with the old
 /// id (in a draft, a queued message, or sent by a phone with an older chat core) gets the new
 /// Boost's name and prompt.
-pub const RENAMED: [(&str, &str); 1] = [("screenshots", "fix-and-prove")];
+pub const RENAMED: [(&str, &str); 2] = [
+    ("screenshots", "fix-and-prove"),
+    ("triage-messages", "triage"),
+];
+
+pub fn canonical_id(id: &str) -> &str {
+    RENAMED
+        .iter()
+        .find(|(old, _)| *old == id)
+        .map_or(id, |(_, new)| *new)
+}
 
 /// Ghostex's Boost `id` names (or named before it was renamed), if any.
 pub fn boost(id: &str) -> Option<&'static Boost> {
-    let id = RENAMED
-        .iter()
-        .find(|(old, _)| *old == id)
-        .map_or(id, |(_, new)| *new);
+    let id = canonical_id(id);
     BOOSTS.iter().find(|boost| boost.id == id)
 }
 
@@ -367,6 +377,7 @@ pub fn boost_id_of_href(href: &str) -> Option<&str> {
     href.trim()
         .strip_prefix(BOOST_LINK_SCHEME)
         .filter(|id| is_boost_id(id))
+        .map(canonical_id)
 }
 
 /// Ghostex's Boost a link's destination names, if any (a user's Boost is `None`).
@@ -486,10 +497,11 @@ pub fn without_boost_links(text: &str) -> String {
 pub fn toggle_boost(text: &str, id: &str, label: &str) -> String {
     let present: Vec<_> = boost_links(text)
         .into_iter()
-        .filter(|(_, found, _)| found == id)
+        .filter(|(_, found, _)| found == canonical_id(id))
         .map(|(range, _, _)| range)
         .collect();
     if present.is_empty() {
+        let id = canonical_id(id);
         let body = text.trim_end();
         return if body.is_empty() {
             format!("{} ", boost_link(id, label))
@@ -627,10 +639,7 @@ pub fn picker_choices(state: &BoostsState) -> Vec<(String, String, String)> {
 /// The name of the menu tab a Boost sits in (`Show`, `Do`, `Work`), `Custom` for the user's own:
 /// the `*` list's section labels.
 pub fn tab_label_of(id: &str) -> &'static str {
-    let category = BOOSTS
-        .iter()
-        .find(|boost| boost.id == id)
-        .map_or("custom", |boost| boost.category);
+    let category = boost(id).map_or("custom", |boost| boost.category);
     TABS.iter()
         .find(|(tab, _)| *tab == category)
         .map_or("Custom", |(_, label)| *label)
