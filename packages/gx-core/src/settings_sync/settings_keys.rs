@@ -74,6 +74,7 @@ pub const ALWAYS_SYNCED_KEYS: &[&str] = &[
     "memoryGuardNotify",
     "grokBotSends",
     "chatPageKeepOpen",
+    "chatEnterSends",
 ];
 
 /// Sidebar organization: the settings that change how the sidebar is organized, synced with the

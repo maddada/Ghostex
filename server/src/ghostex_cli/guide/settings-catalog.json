@@ -425,6 +425,18 @@
       "agentWritable": true
     },
     {
+      "key": "chatEnterSends",
+      "title": "Send with",
+      "subtitle": "Enter: Enter sends your message and Shift+Enter adds a new line. Cmd+Enter (Ctrl+Enter on Linux and Windows): Cmd+Enter sends and Enter adds a new line. Also applies to a hardware keyboard on the phone.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": true,
+      "agentWritable": true
+    },
+    {
       "key": "newChatTips",
       "title": "Tips on new chats",
       "subtitle": "Show a card of short tips about Ghostex under a new chat's headline. Got it on a tip hides that tip for good; Hide tips on the card turns this off.",

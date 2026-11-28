@@ -95,8 +95,10 @@ pub(super) fn register(cx: &mut gpui::App) {
         ("enter", "enter"),
         ("shift-enter", "enter"),
         (send.as_str(), "enter"),
-        // Interrupt and send; on Windows and Linux this is the send chord too.
+        // Interrupt and send; on Windows and Linux this is the send chord when Enter adds a line,
+        // and Ctrl+Shift+Enter keeps Interrupt and send available.
         ("ctrl-enter", "enter"),
+        ("ctrl-shift-enter", "enter"),
         ("alt-enter", "enter"),
         ("up", "up"),
         ("shift-up", "up"),
@@ -636,15 +638,39 @@ impl NativeChatView {
             }
             cx.stop_propagation();
             window.prevent_default();
-        } else if key.key == "enter" && !key.modifiers.shift {
-            // Ctrl+Enter is Claude Code's own "send now" key in the terminal, on every platform.
-            if key.modifiers.control && !key.modifiers.alt && !key.modifiers.platform {
+        } else if key.key == "enter" {
+            let enter_sends = enter_sends();
+            let mac = chat_mac_keys();
+            let ctrl_only = key.modifiers.control && !key.modifiers.alt && !key.modifiers.platform;
+            let primary_only = primary_held(&key.modifiers)
+                && !key.modifiers.shift
+                && !key.modifiers.alt
+                && !(key.modifiers.platform && key.modifiers.control);
+            let plain = !key.modifiers.shift
+                && !key.modifiers.alt
+                && !key.modifiers.control
+                && !key.modifiers.platform;
+            if !enter_sends && !mac && ctrl_only && key.modifiers.shift {
+                // On Linux and Windows with Ctrl+Enter set to send, Ctrl+Shift+Enter keeps
+                // Interrupt & Send available without clashing with normal Send.
                 this.submit("interrupt", window, cx);
-            } else {
+                cx.stop_propagation();
+                window.prevent_default();
+            } else if ctrl_only && !key.modifiers.shift && (enter_sends || mac) {
+                // Ctrl+Enter is Claude Code's own "send now" key in the terminal: on macOS in
+                // both modes, and on Linux/Windows while Enter sends.
+                this.submit("interrupt", window, cx);
+                cx.stop_propagation();
+                window.prevent_default();
+            } else if primary_only || (enter_sends && !key.modifiers.shift) {
                 this.send(false, window, cx);
+                cx.stop_propagation();
+                window.prevent_default();
+            } else if !enter_sends && plain {
+                // Plain Enter adds a new line; make sure the textarea isn't holding submit_on_enter
+                // before GPUI falls through to TextareaState::enter.
+                input.update(cx, |input, cx| input.set_submit_on_enter(false, cx));
             }
-            cx.stop_propagation();
-            window.prevent_default();
         } else if key.key == "tab"
             && !key.modifiers.alt
             && !key.modifiers.platform
@@ -809,6 +835,32 @@ fn matches_configured_inbox_hotkey(action_id: &str, keystroke: &gpui::Keystroke)
         && keystroke.modifiers.control == expect_control
         && keystroke.modifiers.alt == want_alt
         && keystroke.modifiers.shift == want_shift
+}
+
+/// Settings > Chat > Send with (`chatEnterSends`); a missing key reads as its default, true
+/// (Enter sends, Shift+Enter adds a new line). False makes Cmd+Enter (Ctrl+Enter on Linux and
+/// Windows) send while Enter adds a new line.
+pub(super) fn enter_sends() -> bool {
+    crate::shared_settings::shared_sidebar_settings_snapshot()
+        .object()
+        .get("chatEnterSends")
+        .and_then(serde_json::Value::as_bool)
+        != Some(false)
+}
+
+/// The chord key for Send in tooltips and Send's popup.
+pub(super) fn send_shortcut() -> &'static str {
+    if enter_sends() { "enter" } else { "cmd+enter" }
+}
+
+/// The chord key for Interrupt & Send in Send's popup. On Linux and Windows in Ctrl+Enter-sends
+/// mode, Ctrl+Enter sends normally so Interrupt & Send moves to Ctrl+Shift+Enter.
+pub(super) fn interrupt_send_shortcut() -> &'static str {
+    if !enter_sends() && !chat_mac_keys() {
+        "ctrl+shift+enter"
+    } else {
+        "ctrl+enter"
+    }
 }
 
 /// Settings > Chat > Tab to queue (`chatTabQueues`); a missing key reads as its default, on.

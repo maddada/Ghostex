@@ -214,6 +214,21 @@ fn chat_section(
     rows.extend(page.bool_choice(g, s, "sessionChatKeepComposerExpanded", "While scrolling, the chat box", "Shrinks: the desktop chat box gets smaller as you scroll up the chat and grows back at the end. Stays full size: it keeps its full size while you scroll.", [("Shrinks", false), ("Stays full size", true)], false, cx));
     rows.extend(page.bool_choice(g, s, "sessionChatConfirmEscapeInterrupt", "Interrupt with", "While the agent is working, One Escape interrupts it at once. Two Escapes: the first Escape asks you to press Escape again within 2 seconds before it interrupts.", [("One Escape", false), ("Two Escapes", true)], false, cx));
     rows.extend(page.toggle(g, s, "chatTabQueues", "Tab to queue", "Tab with text in the chat box queues it to send after the agent's turn. Off, Tab never queues: it picks a suggestion or moves on, as in an empty chat box. Holding Send still queues.", false, cx));
+    #[cfg(ghostex_web)]
+    let mac_keys = crate::terminal_element::uses_macos_text_editing();
+    #[cfg(not(ghostex_web))]
+    let mac_keys = cfg!(target_os = "macos");
+    let mod_enter_label = if mac_keys { "Cmd+Enter" } else { "Ctrl+Enter" };
+    rows.extend(page.bool_choice(
+        g,
+        s,
+        "chatEnterSends",
+        "Send with",
+        "Enter: Enter sends your message and Shift+Enter adds a new line. Cmd+Enter (Ctrl+Enter on Linux and Windows): Cmd+Enter sends and Enter adds a new line. Also applies to a hardware keyboard on the phone.",
+        [("Enter", true), (mod_enter_label, false)],
+        false,
+        cx,
+    ));
     // CDXC:Settings 2026-11-02 SEE-ALSO: the user's words on Default to Detailed view (an Advanced row) are in packages/settings-catalog/src/general/chat.rs.
     rows.extend(page.bool_choice(g, s, "sessionChatDetailedView", "New chats open in", "Normal view, or Detailed view: Quiet View with every line open, so all the work between replies shows. More actions > View in a chat picks Summary, Normal or Detailed for that chat.", [("Normal view", false), ("Detailed view", true)], false, cx));
     // CDXC:CatchMeUp 2026-11-27 SEE-ALSO: Catch Me Up's switch moved to Settings > Extensions (packages/settings-catalog/src/data/official_extensions.rs has the user's words).

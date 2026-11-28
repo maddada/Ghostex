@@ -186,6 +186,7 @@ pub(crate) struct NativeChatView {
     pub(crate) subagent_items: Arc<Vec<TranscriptItem>>,
     pub(crate) error: Option<String>,
     pub(crate) input: Option<Entity<TextareaState>>,
+    input_enter_sends: bool,
     input_subscription: Option<Subscription>,
     input_observer: Option<Subscription>,
     pub(super) suggestions: super::suggestions::SuggestionWindowState,
@@ -734,6 +735,7 @@ impl NativeChatView {
             items: Arc::default(),
             subagent_items: Arc::default(),
             input: None,
+            input_enter_sends: true,
             input_subscription: None,
             input_observer: None,
             suggestions: Default::default(),
@@ -973,16 +975,23 @@ impl NativeChatView {
 
     /// CDXC:SessionChat 2026-10-22 DECISION: The composer lays out each line whose first strong character is right-to-left (Arabic, Hebrew, Persian…) right-to-left and right-aligned, "like it works in text area in the web", i.e. `dir="auto"` per line; left-to-right lines stay as they are. The chat's other text fields do the same.
     pub(crate) fn ensure_input(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let enter_sends = super::keyboard::enter_sends();
         if self.input.is_none() {
             let draft = self.draft.clone();
             let input = cx.new(|cx| {
                 TextareaState::new(window, cx)
-                    .submit_on_enter(true)
+                    .submit_on_enter(enter_sends)
                     .auto_grow(3, 7)
                     .auto_text_direction(true)
                     .default_value(draft)
             });
             self.input = Some(input);
+            self.input_enter_sends = enter_sends;
+        } else if self.input_enter_sends != enter_sends {
+            self.input_enter_sends = enter_sends;
+            self.input.as_ref().unwrap().update(cx, |input, cx| {
+                input.set_submit_on_enter(enter_sends, cx);
+            });
         }
         let placeholder = ghostex_gx_chat_core::composer::policy::desktop_composer_placeholder(
             self.snapshot["composerPlaceholder"]

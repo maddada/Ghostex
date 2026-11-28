@@ -716,6 +716,11 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("sessionChatKeepComposerExpanded", J::Bool(false)),
     ("sessionChatConfirmEscapeInterrupt", J::Bool(true)),
     ("chatTabQueues", J::Bool(true)),
+    // CDXC:SessionChat 2026-11-28 DECISION: User (Q5424, Q5440): one Chat setting chooses whether
+    // Enter sends (default, Shift+Enter adds a new line) or Cmd+Enter (Ctrl+Enter on Linux and
+    // Windows) sends while Enter adds a new line. Syncs across devices (`ALWAYS_SYNCED_KEYS`) so
+    // the phone's hardware keyboard follows the same choice.
+    ("chatEnterSends", J::Bool(true)),
     // CDXC:CatchMeUp 2026-10-11 DECISION: User: "disable this feature by default. add a toggle to enable it under chat". The composer's Catch me up button shows only while this is on.
     ("chatCatchMeUp", J::Bool(false)),
     // CDXC:Onboarding 2026-11-11 SEE-ALSO: the tips card under a new chat's headline (packages/gx-chat-core/src/extras/new_chat_tips.rs, where the user's decision is); on by default, off from the card's Hide tips.

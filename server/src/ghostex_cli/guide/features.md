@@ -3107,8 +3107,8 @@ accepted, its text returns to the chat composer for editing. Rewind to here
 also returns the selected text when the message was never accepted, keeping
 anything already in the composer (`ghostex interrupt-session-chat <session>`).
 To stop the agent and send a new message at once, press Ctrl+Enter in the chat box
-(on every platform, the same key Claude Code uses in the terminal), or choose Interrupt & Send in Send's popup; on the phone, hold Send and choose Interrupt & Send
-(the same menu has Compact & Send). It is offered while the agent is working; Send's popup opens over the chat box when you point at Send with words in the box, or when you right-click Send: Send (Enter), Queue (Tab), Interrupt & Send (Ctrl+Enter) and Compact & Send (Option+Enter, Alt+Enter on Windows and Linux), each dimmed while it can't run; Escape or a click elsewhere closes it. Claude Code stops its turn and
+(on every platform while Enter sends, and on macOS in both modes; on Linux and Windows when Settings > Chat > Send with is set to Ctrl+Enter, Ctrl+Enter sends normally and Ctrl+Shift+Enter interrupts and sends), or choose Interrupt & Send in Send's popup; on the phone, hold Send and choose Interrupt & Send
+(the same menu has Compact & Send). Settings > Chat > Send with (`chatEnterSends`, synced across devices including the phone's hardware keyboard) switches between Enter to send (the default, Shift+Enter adds a new line) and Cmd+Enter (Ctrl+Enter on Linux and Windows) to send while Enter adds a new line. It is offered while the agent is working; Send's popup opens over the chat box when you point at Send with words in the box, or when you right-click Send: Send (Enter or Cmd+Enter/Ctrl+Enter), Queue (Tab), Interrupt & Send (Ctrl+Enter, or Ctrl+Shift+Enter on Linux/Windows when Ctrl+Enter sends) and Compact & Send (Option+Enter, Alt+Enter on Windows and Linux), each dimmed while it can't run; Escape or a click elsewhere closes it. Claude Code stops its turn and
 takes the message the way its own Ctrl+Enter does, and other agents are stopped as
 with Escape before the message is sent. While the agent is idle, Ctrl+Enter just sends.
 Codex rewind goes back to before the selected prompt in the same conversation,
@@ -4158,7 +4158,7 @@ Related settings: `hideAccountEmails`, `preferredAgentInterface`, `sessionChatTh
 slider that reads Auto until dragged; a percentage is the widest the transcript gets, taken of
 the window, so a side panel you open takes the empty space beside it first), `sessionChatDetailedView`,
 `sessionChatFileEditPreviews`, `sessionChatMutedThinking`,
-`sessionChatKeepComposerExpanded`, `sessionChatConfirmEscapeInterrupt`,
+`sessionChatKeepComposerExpanded`, `sessionChatConfirmEscapeInterrupt`, `chatEnterSends`,
 `terminalViewWidthMode` (`match-chat` makes the terminal body the same width
 as the chat transcript), `terminalWidthApplyToCommandPaneTerminals`.
 
