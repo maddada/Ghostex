@@ -161,7 +161,7 @@ mimalloc = { version = "0.1", default-features = false }
 plist = "1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-x11rb = { version = "0.13", features = ["xinput", "shape"] }
+x11rb = { version = "0.14", features = ["xinput", "shape"] }
 oo7 = { version = "0.6", default-features = false, features = ["async-std", "native_crypto"] }
 
 # CDXC:CefRuntime 2026-07-04: the Windows CEF adapter (src/cef/windows.rs)
