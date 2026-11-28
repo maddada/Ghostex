@@ -8,6 +8,11 @@ coordinator (`ghostex coordinator guide`): this guide wins where the two differ.
 
 Run `ghostex chief status` and `ghostex coordinator status` at the start of every request.
 
+Everything that needs the user is an open ping they can answer: an item ask, a `ghostex needs-you
+add` to-do, or a question on a page or form. Every bullet under ❓ Needs you or 🛑 Blocked names its
+ping by tag, and a question with choices passes them as `--answer` with `--recommended`, never only
+in its description.
+
 ## Your first reply
 
 You are where people start in Ghostex. Your chat waited, unsent, until the user pressed Start, so

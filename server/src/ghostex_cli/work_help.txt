@@ -6,7 +6,7 @@ Usage:
   ghostex work item step <W7> "<step>" [--done] [--chore] [--json]
   ghostex work item ask <W7> "<title>" [--detail "<the rest>"] [--command "<ghostex ...>"]
                         [--answers "A,B" | --answer "A" --answer "B"] [--recommended B]
-                        [--holds] [--steps <file|url>] [--tag Q12] [--json]
+                        [--free-text] [--holds] [--steps <file|url>] [--tag Q12] [--json]
   ghostex work item ask <W7> (--done <Q12> | --withdraw <Q12>) [--json]
   ghostex work item wait <W7> --on <W8|Q12|release|ota|rebuild|"words">... [--until <when>] ["<line>"] [--json]
   ghostex work item done <W7> ["<the one line worth keeping>"] [--json]
@@ -43,7 +43,9 @@ step records a step (--done when it is; --chore keeps a test run out of sight).
 ask puts a question or a task before the user with a question tag: a short
 plain title, the rest in --detail (only when it is needed to decide: the row
 then shows Details), one-click answers with --answers and
---recommended, --holds when the work stops until they answer. next-tag prints
+--recommended (choices written only in --detail are refused: pass them as
+answers, or add --free-text for a question answered in words), --holds when
+the work stops until they answer. next-tag prints
 the next free tag and takes it, so no one else gets it. wait says what it waits on: another item, a question, an
 event or words. done finishes it with the one line worth keeping; drop takes
 it off (restore brings it back for 7 days).

@@ -36,7 +36,7 @@ USAGE
   ghostex coordinator item step <W7> "<step>" [--done] [--chore] [--json]
   ghostex coordinator item ask <W7> "<title>" --detail "<what and why>" [--command "<ghostex ...>"]
                               [--answers "A,B" | --answer "A" --answer "B"] [--recommended B]
-                              [--multiple [--recommended A,B]] [--holds] [--steps <file|url>] [--tag Q12] [--json]
+                              [--multiple [--recommended A,B]] [--free-text] [--holds] [--steps <file|url>] [--tag Q12] [--json]
   ghostex coordinator item ask <W7> (--done <Q12> | --withdraw <Q12>) [--json]
   ghostex coordinator item wait <W7> --on <W8|Q12|release|ota|rebuild|"words">... [--until <when>] ["<line>"] [--json]
   ghostex coordinator item delivered <release|ota|rebuild> [<name>] [--json]
@@ -289,6 +289,10 @@ WORK ITEMS
   already recorded; a Dismiss withdraws the ask for good. A Needs you item
   with no open ask offers Done: "W7: Done" means the user did what the item
   asked, so move it on or finish it; Reply on it arrives as "W7: <words>".
+  Every bullet under Needs you or Blocked in a reply has an open ping the
+  user can answer (an item ask, a needs-you to-do, or a page or form
+  question), named there by its tag; a question with choices passes them as
+  --answer with --recommended, never only in --detail.
   Statuses, in the order the Work panel lists them:
     Needs you  the user has something to do or decide (an open ask)
     Blocked    the work stops until the user acts: an ask with --holds, and
@@ -349,7 +353,10 @@ WORK ITEMS
   or give each with --answer "Too small to read, simplify it"); at most 4
   answers of about 40 characters each (item ask refuses more or longer:
   explain each in --detail, or put choices that need a sentence each on a
-  Live page); --multiple
+  Live page). A question with choices passes them as --answer, never only
+  in --detail: item ask refuses a description that lists choices ("Option
+  A", "B:", "Ship now" or "Wait") with no answers; --free-text marks a
+  question the user answers in their own words; --multiple
   lets the user tick several of them in its Choices menu and send them
   together ("W7 Q12: macOS, Windows", in the order shown), and --recommended
   then takes several (--recommended macOS,Windows); the steps to

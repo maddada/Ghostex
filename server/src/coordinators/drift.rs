@@ -134,17 +134,22 @@ fn transcript_tail(session: &Value) -> Option<Vec<SessionChatMessage>> {
     }
 }
 
-/// The newest reply as `(identity, markdown)`, only while it is the transcript's newest text (a
-/// prompt after it means the next turn's reply is not written yet).
-fn newest_reply(messages: &[SessionChatMessage]) -> Option<(String, String)> {
+/// The newest reply as `(identity, markdown, written at in epoch ms)`, only while it is the
+/// transcript's newest text (a prompt after it means the next turn's reply is not written yet).
+fn newest_reply(messages: &[SessionChatMessage]) -> Option<(String, String, Option<i64>)> {
     let (message, text) = messages
         .iter()
         .rev()
         .filter(|message| !message.queued && message.role != SessionChatRole::System)
         .map(|message| (message, text_of(message)))
         .find(|(_, text)| !text.is_empty())?;
-    (message.role == SessionChatRole::Assistant)
-        .then(|| (format!("{}:{}", message.id, text.len()), text))
+    (message.role == SessionChatRole::Assistant).then(|| {
+        (
+            format!("{}:{}", message.id, text.len()),
+            text,
+            message.timestamp,
+        )
+    })
 }
 
 /// The newest "Context compacted" row's id.
@@ -414,6 +419,63 @@ fn asked_this_turn(db: &Connection, key: &SessionKey) -> bool {
         })
 }
 
+/// CDXC:Coordinators 2026-11-28 DECISION:
+/// User, to a coordinator: "For anything that needs me or is blocked YOU MUST HAVE A PING. Please
+/// fix this for all coordinators!!!!!" Its replies listed ❓ Needs you bullets (top up credits, say
+/// "do it" in another app, clean up a test machine, pick a colour) while `needs-you list` was empty,
+/// so the user had nothing to tap or answer. A reply with a ❓ Needs you or 🛑 Blocked section
+/// (gx-chat-core `waits_on_reader`, read the way the chat draws it) while nothing the coordinator
+/// asked waits on the user ([`had_ping_since`]) now earns the `Unpinged` reminder with the next
+/// message, and that slip is not held back by `DRIFT_REMINDER_TURNS`: it is cheap to tell (a
+/// section and an empty list) and the user asked for it every time. A reply that carries its own
+/// form (```questions) or Live page card (```visual) is its own ping. It reminds, never blocks:
+/// the reply has already been sent. The reply is judged when the next message arrives, often the
+/// user's answer to the very ask it pointed at, so a ping counts when it was open as the reply was
+/// written: still open, or settled (answered, done, withdrawn) or dismissed since. Only a
+/// coordinator with no ping at all is reminded; a section that names one open ask while another
+/// bullet has none is not caught.
+/// The reply's ❓ Needs you or 🛑 Blocked section has no ping behind it: nothing the coordinator
+/// asked waited on the user when it was written (`written_at`, epoch ms; unknown never reminds),
+/// and the reply carries no form or page of its own.
+fn unpinged_needs_you(
+    reply: &str,
+    written_at: Option<i64>,
+    db: &Connection,
+    key: &SessionKey,
+    session: &Value,
+) -> bool {
+    let Some(written_at) = written_at else {
+        return false;
+    };
+    ghostex_gx_chat_core::transcript::marked_sections::waits_on_reader(reply)
+        && !reply.contains("```questions")
+        && !reply.contains("```visual")
+        && !had_ping_since(db, key, session, written_at)
+}
+
+/// Whether anything the coordinator `key` asked waited on the user at `since_ms`: an ask on one of
+/// its work items (its threads' to-dos land there too) open now or settled since, a to-do of its
+/// own (`ghostex needs-you add`, snoozed ones included) open now or settled since, a form or page
+/// question open in its chat, or a question the user dismissed that the coordinator has not been
+/// told of yet. An unreadable work list counts as a ping, so a read error never sends a false
+/// reminder.
+fn had_ping_since(db: &Connection, key: &SessionKey, session: &Value, since_ms: i64) -> bool {
+    let settled_since = |at: &str| {
+        chrono::DateTime::parse_from_rfc3339(at)
+            .map_or(true, |at| at.timestamp_millis() >= since_ms)
+    };
+    let asks = super::work::list_work_items(db, key).map_or(true, |items| {
+        items
+            .iter()
+            .filter(|item| item.dropped_at.is_none())
+            .flat_map(|item| item.asks.iter())
+            .any(|ask| ask.settled_at.as_deref().map_or(true, settled_since))
+    });
+    asks || crate::session_needs_you::had_open_todo_since(session, since_ms)
+        || crate::session_chat_open_questions::open_question_count(session) > 0
+        || !crate::session_chat_dismissed::untold(db, &key.0, &key.1).is_empty()
+}
+
 /// The drift reminder and compaction note for the next message to the coordinator `key` (its
 /// session row `session`), with the record to keep once it is delivered; `None` for a session that
 /// is not a coordinator.
@@ -446,7 +508,7 @@ pub fn coordinator_drift_delivery(
     }
 
     let mid_turn = crate::session_chat_follower::session_chat_hook_working(session);
-    if let Some((identity, reply)) = newest_reply(&messages).filter(|_| !mid_turn) {
+    if let Some((identity, reply, written_at)) = newest_reply(&messages).filter(|_| !mid_turn) {
         if identity != record.judged {
             record.judged = identity;
             record.turns += 1;
@@ -454,8 +516,8 @@ pub fn coordinator_drift_delivery(
             let due = record
                 .reminded_at_turn
                 .is_none_or(|at| record.turns >= at + DRIFT_REMINDER_TURNS);
+            let mut slips = Vec::new();
             if due {
-                let mut slips = Vec::new();
                 if asks_in_text(&reply) && !asked_this_turn(db, key) {
                     slips.push(DriftSlip::AskedInText);
                 }
@@ -466,8 +528,16 @@ pub fn coordinator_drift_delivery(
                 {
                     slips.push(DriftSlip::Unmarked);
                 }
-                if let Some(reminder) = drift_reminder(&slips) {
-                    notes.push(reminder);
+            }
+            // Only the paced slips wait their turns; the unpinged one goes every time it happens
+            // (CDXC:Coordinators 2026-11-28 at `unpinged_needs_you`).
+            let paced = !slips.is_empty();
+            if unpinged_needs_you(&reply, written_at, db, key, session) {
+                slips.push(DriftSlip::Unpinged);
+            }
+            if let Some(reminder) = drift_reminder(&slips) {
+                notes.push(reminder);
+                if paced {
                     record.reminded_at_turn = Some(record.turns);
                 }
             }

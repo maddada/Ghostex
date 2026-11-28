@@ -450,6 +450,156 @@ pub fn answers_refusal(answers: &[String]) -> Option<String> {
     }
 }
 
+// CDXC:Coordinators 2026-11-28 DECISION:
+// User, to a coordinator: "You didn't give me choices on this question! You listed 2 options in
+// the description but didn't offer them in the ping itself." An `item ask` whose --detail lists
+// "Option A (recommended): ... Option B: ..." with no --answer showed the user no choices to tap.
+// `item ask` now refuses a description that reads like a list of choices when no answers were
+// given, unless `--free-text` says the question is answered in the user's own words. Detection is
+// conservative (a missed list is better than refusing a real free-text question): two or more
+// "Option A" / "Choice 2" labels, two or more lines opening with a letter label ("A:", "**B)**"),
+// two short quoted choices joined by "or", or two or more bold-labelled bullets one of which is
+// marked "(recommended)". Fenced code is ignored.
+/// The phrases in `detail` that read as a list of choices, empty when none do.
+fn listed_choices(detail: &str) -> Vec<String> {
+    let mut prose = Vec::new();
+    let mut fenced = false;
+    for line in detail.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            fenced = !fenced;
+            continue;
+        }
+        if !fenced {
+            prose.push(line);
+        }
+    }
+    let mut found: Vec<String> = Vec::new();
+
+    // 1. "Option A", "option 2", "Choice B": a label word followed by one letter A-F or digit 1-6.
+    let words: Vec<String> = prose
+        .join("\n")
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .map(str::to_string)
+        .collect();
+    let mut labels: Vec<String> = Vec::new();
+    for pair in words.windows(2) {
+        let lead = pair[0].to_ascii_lowercase();
+        let mark = &pair[1];
+        let is_mark = mark.len() == 1
+            && mark
+                .chars()
+                .all(|c| matches!(c, 'A'..='F' | 'a'..='f' | '1'..='6'));
+        if matches!(lead.as_str(), "option" | "choice") && is_mark {
+            let label = format!("{} {}", pair[0], mark.to_ascii_uppercase());
+            if !labels.iter().any(|seen| seen.eq_ignore_ascii_case(&label)) {
+                labels.push(label);
+            }
+        }
+    }
+    if labels.len() >= 2 {
+        found.extend(labels);
+    }
+
+    // 2. Lines opening with a letter label: "A: ...", "- **B)** ...", "(C) ...", "D. ...".
+    let mut letters: Vec<char> = Vec::new();
+    for line in &prose {
+        let line = line
+            .trim_start()
+            .trim_start_matches(['-', '*', '+', ' '])
+            .trim_start_matches(['*', '_', '(']);
+        let mut chars = line.chars();
+        let (Some(letter), Some(after)) = (chars.next(), chars.next()) else {
+            continue;
+        };
+        let rest: String = chars.collect();
+        let rest = rest.trim_start_matches(['*', '_', ')']);
+        let labelled = letter.is_ascii_uppercase()
+            && letter <= 'F'
+            && (matches!(after, ':' | ')')
+                || (after == '.' && rest.starts_with(' '))
+                || (matches!(after, '*' | '_') && rest.starts_with([':', ')', ' '])));
+        if labelled && !letters.contains(&letter) {
+            letters.push(letter);
+        }
+    }
+    if letters.len() >= 2 {
+        found.extend(letters.iter().map(|letter| format!("{letter}:")));
+    }
+
+    // 3. Two short quoted choices joined by "or": "Ship now" or "Wait a day".
+    let text = prose.join("\n");
+    let quotes: Vec<(usize, usize)> = {
+        let chars: Vec<(usize, char)> = text.char_indices().collect();
+        let mut spans = Vec::new();
+        let mut open: Option<usize> = None;
+        for (at, c) in chars {
+            match (c, open) {
+                ('"' | '\u{201c}', None) => open = Some(at),
+                ('"' | '\u{201d}', Some(start)) => {
+                    spans.push((start, at + c.len_utf8()));
+                    open = None;
+                }
+                _ => {}
+            }
+        }
+        spans
+    };
+    for pair in quotes.windows(2) {
+        let (first, second) = (pair[0], pair[1]);
+        let between = text[first.1..second.0]
+            .trim()
+            .trim_start_matches(',')
+            .trim();
+        let short = |span: (usize, usize)| text[span.0..span.1].chars().count() <= 44;
+        if between.eq_ignore_ascii_case("or") && short(first) && short(second) {
+            found.push(format!(
+                "{} or {}",
+                &text[first.0..first.1],
+                &text[second.0..second.1]
+            ));
+            break;
+        }
+    }
+
+    // 4. Two or more bullets that open with a bold label, one of them marked recommended.
+    let bold_bullets: Vec<&str> = prose
+        .iter()
+        .map(|line| line.trim_start())
+        .filter(|line| {
+            line.strip_prefix(['-', '*', '+'])
+                .map(str::trim_start)
+                .is_some_and(|rest| rest.starts_with("**"))
+        })
+        .collect();
+    if bold_bullets.len() >= 2
+        && bold_bullets.iter().any(|line| {
+            let lower = line.to_ascii_lowercase();
+            lower.contains("(recommended") || lower.contains("recommended)")
+        })
+    {
+        found.push("bold-labelled choices with one marked recommended".to_string());
+    }
+    found
+}
+
+/// Why `item ask` refuses a description that lists choices when the ask offers no answers, or
+/// `None` when it may stand (`free_text` for a question answered in the user's own words).
+pub fn choices_refusal(detail: &str, answers: &[String], free_text: bool) -> Option<String> {
+    if free_text || answers.iter().any(|answer| !answer.trim().is_empty()) {
+        return None;
+    }
+    let found = listed_choices(detail);
+    if found.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "The description lists choices ({}) but the ask offers no answers, so the user sees nothing to pick on its card. Pass each choice as an answer: --answer \"<short label>\" for each (at most {MAX_ASK_ANSWERS}, about {MAX_ASK_ANSWER_CHARS} characters each) and --recommended \"<label>\", and keep what each one does in --detail. If the user really answers in their own words, add --free-text.",
+        found.join(", ")
+    ))
+}
+
 /// Why `ghostex visual check` refuses a ```questions block question, or `None` when it may stand.
 pub fn form_question_refusal(title: &str, detail: &str) -> Option<String> {
     check_question(title, detail, &[], "\"detail\"")

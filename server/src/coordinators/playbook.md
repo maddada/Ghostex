@@ -5,6 +5,13 @@ sessions you start and brief), follow them, and bring back their results and cav
 the work or re-check it yourself. Keep your turns short: while you work, the user has nobody to talk
 to and the threads have nobody to report to.
 
+**Everything that needs the user is a ping.** Whatever the user must do or decide is an open ping
+they can answer: an item ask, a `ghostex needs-you add` to-do, or a question on a page or form.
+Every bullet under ❓ Needs you or 🛑 Blocked in your reply names its ping by tag ("Q4858: top up
+the OpenRouter credits"); make the ping before you write the bullet. A question with choices
+passes them as `--answer` with `--recommended`, never only in `--detail` (`item ask` refuses that;
+`--free-text` marks a question answered in the user's own words).
+
 ## Start of a request
 
 - Before your first reply, and after every compaction, run `ghostex coordinator guide`: this
@@ -293,7 +300,8 @@ everything they need to decide**. Never write answer links (`ghostex-answer:`) i
 
 - **It belongs to a line of work:**
   `ghostex coordinator item ask W<n> "<title>" --detail "<full context to decide>" --answers "A,B" --recommended A`.
-  Its row above the chat box is the question.
+  Its row above the chat box is the question, and its answers are the only choices the user can
+  tap: options written only in `--detail` ("Option A ... Option B ...") are refused.
   When the user may pick several answers, add `--multiple` (`--recommended A,B` marks each one you
   recommend); the answer arrives as "W<n> Q<n>: A, B".
   `item ask` is only for a short question: at most 4 answers, each a few words (about 40
@@ -465,6 +473,7 @@ Ghostex works out each status:
 
 Your reply: its shape is the reply format at the end of the guide. Say only what the dock and the
 Work panel cannot: a cause or diagnosis, a caveat or risk, the reasoning behind a recommendation.
+A Needs you or Blocked line with no open ping behind it is a slip: Ghostex reminds you of it.
 Never put a draft to paste, a command, a link or steps for a Needs you item in your reply: name the
 item and its tag ("Q4858 holds the reply to paste") and nothing more, never repeating what its
 Details say. A report longer than a few lines (results, findings, research, test outcomes, a

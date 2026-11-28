@@ -55,16 +55,26 @@ pub enum DriftSlip {
     WorkedItself,
     /// Its reply has no marked sections while Marked handovers asks coordinators for them.
     Unmarked,
+    /// Its reply has a ❓ Needs you or 🛑 Blocked section while nothing it asked waits on the user
+    /// (no open item ask, to-do, or form or page question).
+    Unpinged,
 }
 
 impl DriftSlip {
-    pub const ALL: [DriftSlip; 3] = [Self::AskedInText, Self::WorkedItself, Self::Unmarked];
+    pub const ALL: [DriftSlip; 4] = [
+        Self::AskedInText,
+        Self::WorkedItself,
+        Self::Unmarked,
+        Self::Unpinged,
+    ];
 
     fn words(self) -> &'static str {
         match self {
             Self::AskedInText => "ask that as a form or an item ask, not in plain text",
             Self::WorkedItself => "hand real work to a thread with start-thread",
             Self::Unmarked => "end with the marked sections",
+            // No "; " inside: it separates the slips (`is_drift_reminder`).
+            Self::Unpinged => "your last reply had a Needs you or Blocked section with no open ping behind it, so give each of its bullets an item ask, a needs-you to-do or a form or page question the user can answer, and name its tag on the bullet",
         }
     }
 }

@@ -2087,6 +2087,14 @@ pub fn handle_work_request(
                 if let Some(refusal) = super::ask_guard::answers_refusal(&answers) {
                     return Err(bad(refusal));
                 }
+                // Choices written only in the description go on the card as answers (the why is
+                // at `choices_refusal`); `--free-text` keeps a question answered in words.
+                let free_text = params.get("freeText").and_then(Value::as_bool) == Some(true);
+                if let Some(refusal) =
+                    super::ask_guard::choices_refusal(&detail, &answers, free_text)
+                {
+                    return Err(bad(refusal));
+                }
                 let command = param_text(params, "command").unwrap_or_default();
                 if let Some(refusal) =
                     crate::session_needs_you::paste_refusal(&words, &detail, &command, &answers)

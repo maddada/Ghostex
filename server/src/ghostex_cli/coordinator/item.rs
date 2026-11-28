@@ -252,6 +252,8 @@ pub(super) fn item(args: &[String], parsed: &ParsedArgs) -> CliResult<()> {
             let holds = switch(parsed, "holds", &mut words);
             let chore = switch(parsed, "chore", &mut words);
             let multiple = switch(parsed, "multiple", &mut words);
+            // The parser stores `--free-text` camel-cased (args.rs `to_camel_case`).
+            let free_text = switch(parsed, "freeText", &mut words);
             let line = words.get(1).cloned();
             match verb {
                 "now" => {
@@ -292,6 +294,11 @@ pub(super) fn item(args: &[String], parsed: &ParsedArgs) -> CliResult<()> {
                         // `--multiple`: the user ticks any of the answers and sends them at once.
                         if multiple {
                             params.insert("multiple".into(), json!(true));
+                        }
+                        // `--free-text`: answered in the user's own words, so a description
+                        // that reads like a list of choices is not refused for lacking answers.
+                        if free_text {
+                            params.insert("freeText".into(), json!(true));
                         }
                         // `--answer` repeated keeps each answer whole, commas and all.
                         let each = repeated(args, "answer");

@@ -359,6 +359,18 @@ pub(crate) fn open_count(session: &Value) -> usize {
         })
 }
 
+/// Whether a to-do of this session was waiting on the user at `since_ms` (epoch ms): one still
+/// open (snoozed ones included) or one settled since. Each is a ping the user can answer
+/// (coordinators/drift.rs, the unpinged Needs you reminder).
+pub(crate) fn had_open_since(session: &Value, since_ms: i64) -> bool {
+    let record = NeedsYouRecord::of(session);
+    !record.open.is_empty()
+        || record.settled.iter().any(|item| {
+            chrono::DateTime::parse_from_rfc3339(&item.at)
+                .map_or(true, |at| at.timestamp_millis() >= since_ms)
+        })
+}
+
 /// The open to-dos (and recently settled ones for the Answered drawer) as a chat frame carries them (`needsYou`).
 pub(crate) fn frame_value(record: &NeedsYouRecord) -> Value {
     json!({

@@ -3394,8 +3394,9 @@ last thing you read: ⚠️ Read this, 🛑 Blocked, 💡 Suggestions and, at th
 when it has something, and every bullet under a marker starts with a capital letter; a thread's report to its coordinator is marked too.
 Settings > Chat > Marked handovers picks who does it: Coordinators only (the default), Every session
 (every other agent session Ghostex starts too) or Off (coordinators answer with a few sentences of
-news). A coordinator writes each reply as these sections with bullets under them, with no Needs you
-section for a question that already waits above the chat box. A thread marks its report to its
+news). A coordinator writes each reply as these sections with bullets under them, and anything under
+its Needs you or Blocked is also a question or to-do waiting above the chat box, named by its tag,
+so you always have something to answer. A thread marks its report to its
 coordinator under all three. An agent the setting does not cover writes as usual. Every session
 reaches Claude Code, Codex and ZCode; coordinators get it through their guide. This used to be
 a switch, Marked handovers in every session, plus the advanced Coordinators answer without markers:
