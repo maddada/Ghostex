@@ -28,7 +28,7 @@ required-features = ["cli"]
 # orchestration layer (identify → dispatch → score → recursively unwrap); the
 # actual decoding is delegated to these mature crates:
 plist = "1"                # binary + XML property lists (Apple)
-base64 = "0.22"            # base64 (standard + url-safe)
+base64 = "0.23"            # base64 (standard + url-safe)
 hex = "0.4"                # hex
 uuid = "1"                 # UUID/GUID parse + format
 flate2 = "1"               # gzip / zlib / raw deflate

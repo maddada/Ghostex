@@ -8,7 +8,7 @@ build = "build.rs"
 anyhow = "1"
 aes-gcm = { version = "0.11", default-features = false, features = ["aes", "alloc"] }
 axum = { version = "0.8", features = ["ws"] }
-base64 = "0.22"
+base64 = "0.23"
 bytes = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 crossterm = "0.29"

@@ -1665,7 +1665,7 @@ name = "ghostex-gpui-web"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "base64 0.22.1",
+ "base64 0.23.1",
  "chrono",
  "console_error_panic_hook",
  "console_log",

@@ -9,7 +9,7 @@ name = "ghostex-editor"
 path = "src/main.rs"
 
 [dependencies]
-base64 = "0.22"
+base64 = "0.23"
 ctrlc = "3.5"
 interprocess = "2.4"
 mime_guess = "2"

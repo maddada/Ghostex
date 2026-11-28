@@ -18,7 +18,7 @@ path = "src/main.rs"
 [dependencies]
 aes-gcm = { version = "0.11", default-features = false, features = ["aes", "alloc"] }
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
-base64 = "0.22"
+base64 = "0.23"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 futures-util = "0.3"
 ghostex-gx-protocol = { path = "../../packages/gx-protocol" }

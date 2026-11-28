@@ -20,7 +20,7 @@ ghostex-settings-catalog = { path = "../../packages/settings-catalog" }
 ghostex-gx-chat-core = { path = "../../packages/gx-chat-core" }
 ghostex-gx-chat-client = { path = "../../packages/gx-chat-client" }
 anyhow = "1"
-base64 = "0.22"
+base64 = "0.23"
 chrono = { version = "0.4.45", default-features = false, features = ["std", "clock", "wasmbind"] }
 icu_normalizer = "2"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp", "tiff"] }

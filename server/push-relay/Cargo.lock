@@ -383,7 +383,7 @@ name = "ghostex-push-relay"
 version = "0.1.1"
 dependencies = [
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "hex",
  "p256",
  "reqwest",

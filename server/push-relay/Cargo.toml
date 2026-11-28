@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
-base64 = "0.22"
+base64 = "0.23"
 hex = "0.4"
 p256 = { version = "0.13", features = ["ecdsa", "pkcs8", "pem"] }
 reqwest = { version = "0.12", default-features = false, features = ["http2", "rustls-tls-webpki-roots", "json"] }

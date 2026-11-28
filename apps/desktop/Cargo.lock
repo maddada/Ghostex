@@ -725,7 +725,7 @@ dependencies = [
 name = "blob-decoder"
 version = "0.2.2"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "flate2",
  "hex",
  "plist",
@@ -2560,7 +2560,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "backtrace",
- "base64 0.22.1",
+ "base64 0.23.1",
  "cc",
  "cef",
  "chrono",
@@ -2706,7 +2706,7 @@ dependencies = [
 name = "ghostex-owner-keys"
 version = "0.1.0"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "block2 0.6.2",
  "futures",
  "libc",

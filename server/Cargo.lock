@@ -1383,7 +1383,7 @@ dependencies = [
 name = "ghostex-owner-keys"
 version = "0.1.0"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "block2",
  "futures",
  "libc",
@@ -1451,7 +1451,7 @@ dependencies = [
  "aes-gcm",
  "anyhow",
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "bytes",
  "chrono",
  "convex",

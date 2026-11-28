@@ -55,7 +55,7 @@ path = "src/bin/native_docs_demo.rs"
 
 [dependencies]
 anyhow = "1"
-base64 = "0.22"
+base64 = "0.23"
 chrono = "0.4.45"
 # CDXC:CefRuntime 2026-10-25 WHY: keep the cef-rs gitlink at 154.3.0+154.0.32 or newer (every CEF 156 build qualifies: its 8078 branch carries the fix as e048aa005). Earlier CEF 154 builds (chromiumembedded/cef#4285, fixed by 4f8a5688b) CHECK-crash in TabStripModel::IsTabSelected whenever Chromium opens a new tab its own way, a DevTools Target.createTarget or the "+" button in a Chromium-drawn tab strip, and the whole app quits (GitHub #302).
 cef = { path = "../../.dependencies/cef-rs/cef", default-features = false }

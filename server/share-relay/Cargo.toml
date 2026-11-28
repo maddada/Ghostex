@@ -12,7 +12,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1"
 axum = { version = "0.8", features = ["ws"] }
-base64 = "0.22"
+base64 = "0.23"
 futures-util = "0.3"
 hex = "0.4"
 serde = { version = "1", features = ["derive"] }
