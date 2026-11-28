@@ -57,7 +57,13 @@ impl NativeChatView {
         let Some(text) = text.filter(|text| is_long_paste(text)) else {
             return false;
         };
-        self.start_upload(super::composer_attach::Upload::Text(text), cx);
+        // The key check the chat box runs on typed text at Send (secret_send_warning.rs), run on
+        // the text the file holds, since the box will only hold its reference.
+        let secret_like = ghostex_gx_chat_core::composer::secret_like::looks_like_secret(&text);
+        self.start_upload(
+            super::composer_attach::Upload::Text { text, secret_like },
+            cx,
+        );
         true
     }
 

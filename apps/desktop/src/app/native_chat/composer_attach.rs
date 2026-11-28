@@ -29,8 +29,19 @@ pub(super) enum Upload {
     Picture(gpui::Image),
     /// A dropped or picked file, copied onto the session's machine.
     File(String),
-    /// A text paste too long for the chat box, saved as a text file (long_paste.rs).
-    Text(String),
+    /// A text paste too long for the chat box, saved as a text file (long_paste.rs), and
+    /// whether the text looks like it holds a key or token (secret_send_warning.rs).
+    Text { text: String, secret_like: bool },
+}
+
+impl Upload {
+    /// What the error card calls it when it fails.
+    fn noun(&self) -> &'static str {
+        match self {
+            Self::Picture(_) => "picture",
+            Self::File(_) | Self::Text { .. } => "file",
+        }
+    }
 }
 
 /// A picture or file whose upload failed twice: it stays in the chat box until Send uploads it
@@ -43,8 +54,9 @@ pub(super) struct FailedUpload {
     pub(super) error: String,
 }
 
-/// The error card's words when a message's picture failed to upload twice: Send uploads it again.
-fn picture_failed_message(reason: &str) -> String {
+/// The error card's words when a message's picture or file (`noun`) failed to upload twice: Send
+/// uploads it again.
+fn upload_failed_message(noun: &str, reason: &str) -> String {
     let reason = reason.trim().trim_end_matches(['.', ' ']);
     let why = if reason.is_empty() {
         String::new()
@@ -52,7 +64,7 @@ fn picture_failed_message(reason: &str) -> String {
         format!(" ({reason})")
     };
     format!(
-        "The picture couldn't be uploaded{why}. It is still in the chat box: press Send to try again."
+        "The {noun} couldn't be uploaded{why}. It is still in the chat box: press Send to try again."
     )
 }
 
@@ -67,7 +79,7 @@ struct UploadTarget {
 /// One try at saving a picture or copying a file onto the session's machine.
 async fn upload_once(config: UploadTarget, upload: &Upload) -> Attached {
     let image = match upload {
-        Upload::Text(text) => {
+        Upload::Text { text, .. } => {
             let saved = super::long_paste::save_pasted_text(
                 config.remote.clone(),
                 &config.project_id,
@@ -257,6 +269,15 @@ impl NativeChatView {
     /// SEE-ALSO: apps/mobile/app/src/chat/rust/host.ts (`attachOne`, `retryFailedPictures`).
     pub(super) fn start_upload(&mut self, upload: Upload, cx: &mut Context<Self>) {
         let paste = self.paste_tiles.started();
+        if matches!(
+            upload,
+            Upload::Text {
+                secret_like: true,
+                ..
+            }
+        ) {
+            self.secret_pastes.push((paste, None));
+        }
         cx.notify();
         // The core's own count (the collapse gate, the phone's spinner) follows in its own turn,
         // and a send made before this lands takes it by this id.
@@ -321,7 +342,13 @@ impl NativeChatView {
         for (path, picture) in pictures {
             self.seed_chat_image(&path, picture, cx);
         }
-        if let (Upload::Text(text), [path], false) = (&upload, paths.as_slice(), sent) {
+        if let Upload::Text {
+            secret_like: true, ..
+        } = &upload
+        {
+            self.secret_paste_landed(paste, paths.first().filter(|_| !sent).cloned());
+        }
+        if let (Upload::Text { text, .. }, [path], false) = (&upload, paths.as_slice(), sent) {
             let selection = self.upload_selection(cx);
             self.insert_long_paste(path, text.clone(), selection, cx);
         } else if !paths.is_empty() && !sent {
@@ -350,12 +377,13 @@ impl NativeChatView {
         // Failed twice: it stays in the chat box, marked failed, and its own words say so; a
         // message that waited for it comes back to the box with the error card (attaching.rs).
         let error = error.map(|reason| {
+            let noun = upload.noun();
             self.failed_uploads.push(FailedUpload {
                 key: paste,
                 upload,
                 error: reason.clone(),
             });
-            picture_failed_message(&reason)
+            upload_failed_message(noun, &reason)
         });
         let error = if sent { error } else { None };
         // The core counts the upload down. The chat box's references are already in; a sent
@@ -467,7 +495,7 @@ pub(super) fn local_pictures(
 
 #[cfg(test)]
 mod tests {
-    use super::{UPLOAD_FAILED_WORDS, picture_failed_message};
+    use super::{UPLOAD_FAILED_WORDS, upload_failed_message};
 
     #[test]
     fn a_failed_picture_says_send_tries_again_never_tap_to_retry() {
@@ -476,10 +504,14 @@ mod tests {
             "Couldn't upload. Press Send to try again."
         );
         assert_eq!(
-            picture_failed_message("Connection reset."),
+            upload_failed_message("picture", "Connection reset."),
             "The picture couldn't be uploaded (Connection reset). It is still in the chat box: press Send to try again."
         );
-        assert!(!picture_failed_message("").contains("()"));
-        assert!(!picture_failed_message("x").to_lowercase().contains("tap"));
+        assert!(!upload_failed_message("picture", "").contains("()"));
+        assert!(
+            !upload_failed_message("picture", "x")
+                .to_lowercase()
+                .contains("tap")
+        );
     }
 }

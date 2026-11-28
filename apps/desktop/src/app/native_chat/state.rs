@@ -332,6 +332,9 @@ pub(crate) struct NativeChatView {
     pub(super) failed_uploads: Vec<super::composer_attach::FailedUpload>,
     /// The last long paste saved as a file, for its toast's Keep inline (long_paste.rs).
     pub(super) long_paste: Option<ghostex_gx_chat_core::composer::long_paste::LongPaste>,
+    /// Long pastes whose text looks like a key, by upload id, with their saved path once it is in
+    /// the chat box: a Send of them warns as typed keys do (secret_send_warning.rs).
+    pub(super) secret_pastes: Vec<(u64, Option<String>)>,
     /// A send from the chat box waiting for a paste or drop to land (`composer_attach.rs`): its mode.
     pub(super) held_send: Option<String>,
     /// The timer that looks at a held send again while a clipboard read is pending.
@@ -829,6 +832,7 @@ impl NativeChatView {
             paste_tiles: Default::default(),
             failed_uploads: Vec::new(),
             long_paste: None,
+            secret_pastes: Vec::new(),
             held_send: None,
             held_send_recheck: None,
             carry: Default::default(),

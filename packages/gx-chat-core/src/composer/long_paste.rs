@@ -7,7 +7,8 @@
 //! as a text file and shows as the usual file tile with its `[File #N](path)` reference where the
 //! text would have gone. A short toast says so, and its Keep inline button swaps the reference for
 //! the pasted text, so one click undoes it. Pastes with pictures or files, and text under the limit,
-//! paste as before.
+//! paste as before. A long paste whose text looks like a key (`secret_like.rs`) still gets the
+//! chat box's Send warning, though the box only holds its reference.
 //!
 //! CDXC:Clipboard 2026-11-28 WHY:
 //! 32 KB (about 8,000 tokens, or 600 to 800 lines of code) is far past anything typed by hand, so

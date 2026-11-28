@@ -38,7 +38,9 @@ impl NativeChatView {
     /// and warned about, and a second Send of the same, unedited text, at least
     /// `SECOND_SEND_AFTER` later, goes.
     pub(super) fn hold_secret_like_send(&mut self, cx: &mut Context<Self>) -> bool {
-        if !ghostex_gx_chat_core::composer::secret_like::looks_like_secret(&self.draft) {
+        if !ghostex_gx_chat_core::composer::secret_like::looks_like_secret(&self.draft)
+            && !self.holds_secret_paste()
+        {
             self.secret_send_warning.held = None;
             return false;
         }
@@ -67,6 +69,33 @@ impl NativeChatView {
         ));
         cx.notify();
         true
+    }
+
+    /// A long paste saved as a file whose text looks like a key is still on its way into the chat
+    /// box, or its reference is in it (long_paste.rs). Forgets the ones whose reference has left.
+    fn holds_secret_paste(&mut self) -> bool {
+        let draft = &self.draft;
+        self.secret_pastes.retain(|(_, path)| match path {
+            None => true,
+            Some(path) => draft.contains(&format!("]({path})")),
+        });
+        !self.secret_pastes.is_empty()
+    }
+
+    /// A secret-looking long paste's upload ended: with the `path` its reference went into the box
+    /// with, or none (it failed, or a send took it), so it stops counting. A retried upload counts
+    /// again from its start (`start_upload`).
+    pub(super) fn secret_paste_landed(&mut self, id: u64, path: Option<String>) {
+        match path {
+            Some(path) => {
+                for entry in &mut self.secret_pastes {
+                    if entry.0 == id {
+                        entry.1 = Some(path.clone());
+                    }
+                }
+            }
+            None => self.secret_pastes.retain(|entry| entry.0 != id),
+        }
     }
 
     /// The warning shows for the text in the box: a held Enter's repeats do not count as the
