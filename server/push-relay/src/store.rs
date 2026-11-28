@@ -5,7 +5,7 @@
 //! the computer is meant to encrypt; never checked here) is kept until replaced or `snapshot_lifetime`. Both share
 //! one cap on entries and bytes. The relay cannot tell a paired phone's id from anyone else's, so these caps, and
 //! the caller's quota for new ids that the route checks through `put`, are what bound the memory a caller can make
-//! it hold.
+//! the store hold (request bodies being read are apart from this; README, "Memory").
 
 use std::collections::HashMap;
 use std::sync::Mutex;

@@ -2,7 +2,7 @@
 name = "ghostex-push-relay"
 version = "0.2.0"
 edition = "2021"
-description = "Ghostex's push relay: holds the Apple push key and sends Live Activity, notification and widget pushes for the Ghostex iPhone app, nothing else, and briefly holds an update token mailbox and a widget snapshot store in memory."
+description = "Ghostex's push relay: holds the Apple push key and sends Live Activity, notification and widget pushes for the Ghostex iPhone app, nothing else, and holds an update token mailbox and a widget snapshot store in memory."
 publish = false
 
 [lib]

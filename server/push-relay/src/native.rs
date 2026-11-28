@@ -44,14 +44,15 @@ pub const MAX_ENVELOPE_CHARS: usize = 3072;
 pub const ENVELOPE_VERSION: u8 = 1;
 const ENVELOPE_NONCE_BYTES: usize = 12;
 const ENVELOPE_TAG_BYTES: usize = 16;
-/// The phone's limits for the identifiers of a push (`src/notifications/pushMessage.ts` in the phone app).
+/// Meant to match the phone's limits for the identifiers of a push (`src/notifications/pushMessage.ts` in the
+/// phone app; not checked here).
 const IDENTIFIER_MAX: usize = 64;
 const NOTIFICATION_ID_MAX: usize = 128;
 /// How far the event's time may lie from the relay's clock, as for a Live Activity push.
 const TIMESTAMP_PAST_S: i64 = 3600;
 const TIMESTAMP_FUTURE_S: i64 = 300;
 /// An alert is worth showing for an hour after its event (gxserver's `ALERT_TTL_MS`); a background refresh only
-/// for a few minutes; a widget reload for an hour (Apple keeps only the latest for a device anyway).
+/// for a few minutes; a widget reload for an hour (Apple's documentation: it keeps only the latest for a device).
 const ALERT_TTL_S: i64 = 3600;
 const BACKGROUND_TTL_S: i64 = 600;
 const WIDGETS_TTL_S: i64 = 3600;
@@ -70,10 +71,10 @@ pub struct AlertRequest {
     /// only the form). Alerts only.
     #[serde(default)]
     pub envelope: Option<String>,
-    /// iOS stacks the alerts of one thread together: `<machineId>:<sessionId>`. Alerts only.
+    /// `<machineId>:<sessionId>`; iOS stacks the alerts of one thread together (Apple's documentation). Alerts only.
     #[serde(default)]
     pub thread_id: Option<String>,
-    /// What a tap on the alert opens, as the phone reads it. Alerts only.
+    /// What a tap on the alert is meant to open, as the phone reads it (not checked here). Alerts only.
     #[serde(default)]
     pub data: Option<AlertData>,
     /// Whether the alert plays the default sound. Alerts only.
@@ -83,8 +84,9 @@ pub struct AlertRequest {
     pub timestamp: i64,
 }
 
-/// The identifiers a tap needs, as today's Expo push carries them in `data` and the phone reads them
-/// (`pushEventFromData` in the phone's `src/notifications/pushMessage.ts`). Identifiers only, never names or text.
+/// The identifiers a tap needs, as gxserver's Expo push carries them in `data` (`server/src/push/message.rs`) and
+/// the phone is meant to read them (`pushEventFromData` in the phone's `src/notifications/pushMessage.ts`). Meant
+/// to be identifiers only, never names or text; the relay checks only their form.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct AlertData {
@@ -161,8 +163,8 @@ fn too_large(payload: &[u8]) -> Refusal {
     }
 }
 
-/// Printable ASCII without spaces, at most `max` characters: how the computer writes its identifiers and the phone
-/// reads them.
+/// Printable ASCII without spaces, at most `max` characters: meant to match how the computer writes its
+/// identifiers and the phone reads them.
 fn identifier(value: &str, max: usize) -> bool {
     (1..=max).contains(&value.len()) && value.bytes().all(|byte| (0x21..=0x7e).contains(&byte))
 }
@@ -217,7 +219,7 @@ pub fn prepare_alert(request: AlertRequest, now: i64) -> Result<NativePush, Refu
             environment: request.environment,
             push_type: PushType::Background,
             kind: BACKGROUND_KIND,
-            // Apple takes a background push only at priority 5.
+            // Apple's documentation: a background push is taken only at priority 5.
             priority: 5,
             payload,
             expiration: request.timestamp + BACKGROUND_TTL_S,
@@ -233,7 +235,7 @@ pub fn prepare_alert(request: AlertRequest, now: i64) -> Result<NativePush, Refu
         "alert".into(),
         json!({ "title": ALERT_TITLE, "body": words }),
     );
-    // The phone's notification service extension runs only for an alert marked mutable.
+    // Apple's documentation: the notification service extension runs only for an alert marked mutable.
     aps.insert("mutable-content".into(), json!(1));
     if let Some(thread_id) = request.thread_id {
         if !valid_thread_id(&thread_id) {
@@ -302,7 +304,8 @@ pub fn prepare_widgets(request: WidgetsRequest, now: i64) -> Result<NativePush, 
         environment: request.environment,
         push_type: PushType::Widgets,
         kind: "widgets",
-        // WidgetKit budgets these and reloads when it suits the phone; 5 asks Apple to deliver with power in mind.
+        // Apple's documentation: WidgetKit budgets these and reloads when it suits the phone; 5 asks Apple to
+        // deliver with power in mind.
         priority: 5,
         payload,
         expiration: now + WIDGETS_TTL_S,

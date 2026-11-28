@@ -2,8 +2,8 @@
 //! for the `/push/` routes also per alert, background and widget token, per mailbox and snapshot id, and per
 //! caller address for the ids it may create. A bucket holds `burst` requests and refills `per_minute` a minute.
 //! An idle bucket of the Live Activity route is forgotten after 10 minutes; one of the `/push/` routes only once it
-//! would have refilled completely. Each table is bounded: when it is full of busy keys a new key is refused rather
-//! than growing it.
+//! would have refilled completely (10 minutes at least). Each table is bounded: when it is full of busy keys a new
+//! key is refused rather than growing it.
 
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -58,7 +58,8 @@ pub struct LimitConfig {
     /// How long a snapshot is kept when nothing replaces it.
     pub snapshot_lifetime: Duration,
     /// Keys each table of the `/push/` routes' limits holds at most (the Live Activity route's tables keep
-    /// theirs), so all of them together stay well inside the service's memory limit.
+    /// theirs). Chosen so that every table and the store full fit under the service's memory limit in a local
+    /// macOS measurement; bodies being read come on top, and Linux was not measured (README, "Memory").
     pub push_max_keys: usize,
     /// Tokens Apple dropped that the `/push/` routes remember, apart from the Live Activity route's.
     pub push_max_gone_tokens: usize,

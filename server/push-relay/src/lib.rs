@@ -16,8 +16,9 @@
 //! phone, and the phone is meant to give it only to the computers it paired with (the client's behaviour, not
 //! checked here). What someone else can do with the relay is in `README.md`.
 //!
-//! It logs counts, Apple's status and reason, and an 8-hex hash of a token or id; never a token, an id, a
-//! content state, an envelope, a snapshot or anything from the key's files.
+//! It logs a line for each push sent or failed, each refusal, each store and each mailbox take (the outcome,
+//! Apple's status and reason, an 8-hex hash of a token or id) and start-up lines; never a token, an id, a content
+//! state, an envelope, a snapshot or anything from the key's files. The counts are only in the health checks.
 //!
 //! CDXC:Notifications 2026-11-11 DECISION: User, on keeping the Lock Screen banner current: "yes sure do it
 //! now but can we have it on same vps we have already???". The relay runs on relay-eu.ghostex.dev beside the
