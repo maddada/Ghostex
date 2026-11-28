@@ -93,11 +93,11 @@ fn has_agent_flag(command: &str) -> bool {
 /// (google-antigravity/antigravity-cli#1890, closed as intended). Ghostex never adds `--agent`, but
 /// a user can type it into Antigravity's Command or a custom agent that works like Antigravity. The
 /// user's design: "make it a yellow flashing dot on the field, when u hover it then it shows that
-/// warning". The dot is the theme's Warning colour, at the field's right end, and only shows while
+/// warning". The dot is a bright yellow (SettingsPalette::agent_flag_warning_yellow), at the field's right end, and only shows while
 /// the command (as typed, before it is saved) has the flag. SEE-ALSO: the "Custom flags ignored"
 /// card in server/src/session_chat_options/detection.rs.
 fn agent_flag_dot(p: &SettingsPalette, agent_id: &str) -> AnyElement {
-    let colour = hsla(p.warning());
+    let colour = hsla(p.agent_flag_warning_yellow());
     div()
         .id(SharedString::from(format!(
             "agent-command-agent-flag-{agent_id}"

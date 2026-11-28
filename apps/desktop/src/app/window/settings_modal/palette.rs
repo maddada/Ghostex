@@ -268,14 +268,18 @@ impl SettingsPalette {
         css_fade(self.raised, 0.82)
     }
 
-    /// The theme's Warning role, or what it paints while unset: the chat's working dot
-    /// (helpers/theme_role_defaults.rs).
-    pub(crate) fn warning(&self) -> Rgba {
-        crate::app::helpers::theme_role_or_rgba(
-            "warning",
-            self.light,
-            rgb(crate::app::native_sidebar::status::WORKING_COLOR),
-        )
+    /// The bright yellow of the Antigravity `--agent` warning dot in Settings > Agents: `#FACC15`
+    /// on dark Settings, `#EAB308` on light so it still stands out against the field.
+    ///
+    /// CDXC:AgentProviders 2026-11-28 DECISION: the dot first used the theme's Warning role, which
+    /// reads as a dim amber on the dark Settings background. The user picked "Brighter yellow", so
+    /// the dot has its own fixed yellow and the theme's Warning colour elsewhere is unchanged.
+    pub(crate) fn agent_flag_warning_yellow(&self) -> Rgba {
+        if self.light {
+            rgb(0xEAB308)
+        } else {
+            rgb(0xFACC15)
+        }
     }
 
     /// `bg-input/90`: the slider track.
