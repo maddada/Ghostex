@@ -191,14 +191,17 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         });
     }
 
+    let stderr_head: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
     if let Some(stderr) = stderr {
         let t_err = transport.clone();
+        let head = stderr_head.clone();
         thread::spawn(move || {
             let reader = BufReader::new(stderr);
             for line in reader.lines().map_while(Result::ok) {
                 let trimmed = line.trim();
                 if !trimmed.is_empty() {
                     t_err.spool_event(&json!({ "stderr": trimmed }));
+                    super::startup_error::record_stderr_head_line(&head, trimmed);
                 }
             }
         });
@@ -220,12 +223,19 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         "clientInfo": crate::acp::client_info(),
     });
     if let Err(err) = transport.call("initialize", init_params, CURSOR_RPC_TIMEOUT) {
-        eprintln!("Cursor Native initialize failed: {err}");
+        let exited = child.try_wait().ok().flatten();
+        let message = super::startup_error::startup_failure_message(
+            "Cursor Native",
+            &err,
+            exited,
+            &stderr_head,
+        );
+        eprintln!("Cursor Native initialize failed: {message}");
         super::host::report_driver_startup_error(
             endpoint.as_ref(),
             spec.family,
-            &err,
-            is_cursor_auth_error(&err),
+            &message,
+            is_cursor_auth_error(&message),
         );
         stop_child_gracefully(&transport, &mut child, &mut child_lifetime, &child_pid);
         return 1;

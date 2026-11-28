@@ -33,9 +33,6 @@ use super::spec::{
 
 const CODEX_RPC_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// How many of Codex's first stderr lines a failed start quotes.
-const STARTUP_STDERR_LINES: usize = 20;
-
 /// Why Codex did not start, for the failed-start card and the log: what Codex printed on stderr
 /// first (so the log's first line is Codex's own words), then whether it exited or why
 /// `initialize` failed.
@@ -909,10 +906,7 @@ fn spawn_and_init_codex(
                 let trimmed = line.trim();
                 if !trimmed.is_empty() {
                     t_err.spool_event(&json!({ "stderr": trimmed }));
-                    let mut head = head.lock().unwrap_or_else(|p| p.into_inner());
-                    if head.len() < STARTUP_STDERR_LINES {
-                        head.push(trimmed.to_string());
-                    }
+                    super::startup_error::record_stderr_head_line(&head, trimmed);
                 }
             }
         });
@@ -943,10 +937,7 @@ fn spawn_and_init_codex(
         state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = 0;
         let exited = child.try_wait().ok().flatten();
         stop_codex_gracefully(&transport, &mut child, &mut lifetime, child_pid);
-        let said = stderr_head
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .join("\n");
+        let said = super::startup_error::stderr_head_text(&stderr_head);
         return Err(startup_failure_message(&err, exited, &said));
     }
     let _ = transport.notify("initialized", json!({}));

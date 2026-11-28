@@ -2159,14 +2159,17 @@ pub fn run(args: &[String]) -> i32 {
     }
 
     // Drain stderr into spool so pipe never blocks.
+    let stderr_head: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
     if let Some(stderr) = stderr {
         let t_err = transport.clone();
+        let head = stderr_head.clone();
         thread::spawn(move || {
             let reader = BufReader::new(stderr);
             for line in reader.lines().map_while(Result::ok) {
                 let trimmed = line.trim();
                 if !trimmed.is_empty() {
                     t_err.spool_event(&json!({ "stderr": trimmed }));
+                    super::startup_error::record_stderr_head_line(&head, trimmed);
                 }
             }
         });
@@ -2572,12 +2575,20 @@ pub fn run(args: &[String]) -> i32 {
     let init_result = match transport.call("initialize", init_params, ACP_RPC_TIMEOUT) {
         Ok(res) => res,
         Err(err) => {
-            eprintln!("Native host initialize failed: {err}");
+            let exited = child.try_wait().ok().flatten();
+            let agent_name = super::startup_error::agent_label(spec.family);
+            let message = super::startup_error::startup_failure_message(
+                agent_name,
+                &err,
+                exited,
+                &stderr_head,
+            );
+            eprintln!("Native host initialize failed: {message}");
             report_driver_startup_error(
                 endpoint.as_ref(),
                 spec.family,
-                &err,
-                super::startup_error::looks_like_auth_error(&err),
+                &message,
+                super::startup_error::looks_like_auth_error(&message),
             );
             stop_child_gracefully(&transport, &mut child, &mut child_lifetime, &child_pid);
             return 1;

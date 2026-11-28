@@ -212,8 +212,13 @@ fn looks_like_secret(word: &str) -> bool {
     if PREFIXES.iter().any(|prefix| trimmed.starts_with(prefix)) || trimmed.starts_with("eyJ") {
         return true;
     }
+    // CDXC:Security 2026-11-28 WHY (Fable's review of the #789 fix): `ANTHROPIC_API_KEY=sk-ant-…` on a failed start's stderr line passed every check here: the word starts with the name, `names_a_secret` wants the bare name with its `=` still on it (which `split_once` has taken off), and the `=` fails the long-run test. A value under a name that says key, token, secret or password is hidden, and so is a value that is itself shaped like a key.
     if let Some((name, value)) = trimmed.split_once('=') {
-        if names_a_secret(name) && !value.is_empty() {
+        let name = name.to_ascii_lowercase();
+        let secret_name = ["key", "token", "secret", "password", "passwd", "credential"]
+            .iter()
+            .any(|part| name.contains(part));
+        if !value.is_empty() && (secret_name || looks_like_secret(value)) {
             return true;
         }
     }

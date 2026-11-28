@@ -102,6 +102,55 @@ pub(crate) fn failed_start_reason(err: &AcpStartupError) -> String {
     }
 }
 
+/// How many of an agent's first stderr lines a failed start quotes.
+pub(crate) const STARTUP_STDERR_LINES: usize = 20;
+
+/// Keeps one of the first lines an agent printed on stderr, for a start that fails.
+///
+/// CDXC:Security 2026-11-28 WHY (Fable's review of the #789 fix):
+/// These lines leave the agent's own spool: the failed-start card shows them, and `ghostex coordinator start-thread --computer` prints them on the computer that asked. So each is kept the way a failed send's reason is shown (session_chat_send_failure.rs `displayable_reason`): terminal codes gone, a word shaped like a key or following a secret's name hidden, cut to a sentence or two. The spool keeps the raw text.
+pub(crate) fn record_stderr_head_line(head: &Mutex<Vec<String>>, line: &str) {
+    let mut head = head.lock().unwrap_or_else(|p| p.into_inner());
+    if head.len() < STARTUP_STDERR_LINES {
+        head.push(crate::session_chat_send_failure::displayable_reason(line));
+    }
+}
+
+pub(crate) fn stderr_head_text(stderr_head: &Mutex<Vec<String>>) -> String {
+    stderr_head
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .join("\n")
+        .trim()
+        .to_string()
+}
+
+/// Why a Native agent did not start, for the failed-start card and log: what the agent printed
+/// on stderr first (so the first line is its own words), then whether it exited or why
+/// `initialize` failed.
+///
+/// CDXC:AgentProviders 2026-11-28 WHY:
+/// GitHub #789: a thread whose worktree folder was gone failed with "Claude Code couldn't start"
+/// while the real error (`bwrap: Can't find source path`) sat only in the host's spool. GitHub
+/// #782 had done this for Codex (driver_codex.rs); every Native driver now reports it.
+pub(crate) fn startup_failure_message(
+    agent_name: &str,
+    init_error: &str,
+    exited: Option<std::process::ExitStatus>,
+    stderr_head: &Mutex<Vec<String>>,
+) -> String {
+    let lead = match exited {
+        Some(status) => format!("{agent_name} stopped before it started ({status})"),
+        None => format!("{agent_name} initialize failed: {init_error}"),
+    };
+    let said = stderr_head_text(stderr_head);
+    if said.is_empty() {
+        lead
+    } else {
+        format!("{said}\n{lead}")
+    }
+}
+
 pub(crate) fn looks_like_auth_error(message: &str) -> bool {
     let lower = message.to_ascii_lowercase();
     lower.contains("authentication required")

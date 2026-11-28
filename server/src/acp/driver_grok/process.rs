@@ -90,14 +90,17 @@ pub(super) fn spawn_and_initialize_grok(
     let transport = Arc::new(GrokTransport::new(stdin, spool_session_id));
 
     // Drain stderr into spool.
+    let stderr_head: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
     if let Some(stderr) = stderr {
         let t_err = transport.clone();
+        let head = stderr_head.clone();
         thread::spawn(move || {
             let reader = BufReader::new(stderr);
             for line in reader.lines().map_while(Result::ok) {
                 let trimmed = line.trim();
                 if !trimmed.is_empty() {
                     t_err.spool_event(&json!({ "stderr": trimmed }));
+                    crate::acp::startup_error::record_stderr_head_line(&head, trimmed);
                 }
             }
         });
@@ -159,8 +162,14 @@ pub(super) fn spawn_and_initialize_grok(
     let init_res = match transport.call("initialize", init_params, GROK_INITIALIZE_TIMEOUT) {
         Ok(res) => res,
         Err(err) => {
+            let exited = child.try_wait().ok().flatten();
             cleanup_on_err(&transport, &mut child, &mut child_lifetime, child_pid);
-            return Err(format!("Grok Native initialize failed: {err}"));
+            return Err(crate::acp::startup_error::startup_failure_message(
+                "Grok Native",
+                &err,
+                exited,
+                &stderr_head,
+            ));
         }
     };
     {

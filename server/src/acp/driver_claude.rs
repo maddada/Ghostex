@@ -1012,14 +1012,17 @@ fn spawn_and_init_claude(
     let transport = Arc::new(ClaudeTransport::new(stdin, spool_session_id));
     *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = Some(transport.clone());
 
+    let stderr_head: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
     if let Some(stderr) = stderr {
         let t_err = transport.clone();
+        let head = stderr_head.clone();
         thread::spawn(move || {
             let reader = BufReader::new(stderr);
             for line in reader.lines().map_while(Result::ok) {
                 let trimmed = line.trim();
                 if !trimmed.is_empty() {
                     t_err.spool_event(&json!({ "stderr": trimmed }));
+                    super::startup_error::record_stderr_head_line(&head, trimmed);
                 }
             }
         });
@@ -1740,8 +1743,14 @@ fn spawn_and_init_claude(
             process_gen.fetch_add(1, Ordering::AcqRel);
             *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
             state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = 0;
+            let exited = child.try_wait().ok().flatten();
             stop_claude_gracefully(&transport, &mut child, &mut lifetime, child_pid);
-            return Err(format!("Claude Native initialize failed: {err}"));
+            return Err(super::startup_error::startup_failure_message(
+                "Claude Native",
+                &err,
+                exited,
+                &stderr_head,
+            ));
         }
     };
     if let Some(chosen_model) = resolved_default_to_apply {

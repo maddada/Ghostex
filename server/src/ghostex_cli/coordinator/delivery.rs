@@ -13,6 +13,56 @@ use crate::ghostex_cli::{
 /// box takes the brief.
 const BRIEF_CONFIRM_WINDOW: Duration = Duration::from_secs(60);
 const BRIEF_CONFIRM_POLL: Duration = Duration::from_secs(1);
+/// How many looks in a row must show the failed-start card before `start-thread` calls it failed.
+const START_FAILED_LOOKS: u32 = 3;
+const START_ERROR_MAX_CHARS: usize = 400;
+
+/// The card on the thread's screen: its kind, its title with the agent's own error behind it.
+struct Notice {
+    kind: String,
+    shown: String,
+}
+
+/// CDXC:Coordinators 2026-11-28 WHY:
+/// GitHub #789: a thread whose agent could not start answered `pending` after a minute with only
+/// the card's title ("Claude Code couldn't start"); the error the agent printed (`bwrap: Can't
+/// find source path`) sat behind the card's Details toggle and in the host's spool. The card's
+/// `details` (a Native agent's stderr, acp/startup_error.rs) or `errorLines` (what a terminal
+/// agent printed, session_chat_notice/start_failure.rs) now follow the title, and a start that
+/// failed is an error after a few looks instead of a minute's wait.
+fn notice_of(chat: &Value) -> Option<Notice> {
+    let notice = &chat["terminalNotice"];
+    let title = agents::text(notice, "title");
+    if title.is_empty() {
+        return None;
+    }
+    let why = ["details", "errorLines"]
+        .iter()
+        .map(|key| agents::text(notice, key))
+        .find(|text| !text.is_empty())
+        .map(|text| {
+            let line = text
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .collect::<Vec<_>>()
+                .join(" | ");
+            if line.chars().count() > START_ERROR_MAX_CHARS {
+                let mut cut: String = line.chars().take(START_ERROR_MAX_CHARS - 1).collect();
+                cut.push('…');
+                cut
+            } else {
+                line
+            }
+        });
+    Some(Notice {
+        kind: agents::text(notice, "kind").to_string(),
+        shown: match why {
+            Some(why) => format!("{title}: {why}"),
+            None => title.to_string(),
+        },
+    })
+}
 
 pub(super) enum BriefOutcome {
     /// The thread's transcript records the brief: it is working on it.
@@ -38,6 +88,7 @@ pub(super) fn confirm_brief_started(
     let before = agents::TranscriptRows::Known(Default::default());
     let started = Instant::now();
     let mut retried = false;
+    let mut failed_looks = 0;
     loop {
         std::thread::sleep(BRIEF_CONFIRM_POLL);
         let chat = call_gxserver_rpc("/api/readSessionChat", &read, flags).ok();
@@ -47,14 +98,26 @@ pub(super) fn confirm_brief_started(
         {
             return Ok(BriefOutcome::Started);
         }
-        let notice = chat
-            .as_ref()
-            .map(|chat| agents::text(&chat["terminalNotice"], "title").to_string())
-            .filter(|title| !title.is_empty());
+        let notice = chat.as_ref().and_then(notice_of);
+        let start_failed = notice.as_ref().is_some_and(|notice| {
+            notice.kind == crate::session_chat_notice::SESSION_CHAT_NOTICE_AGENT_EXITED
+        });
+        failed_looks = if start_failed { failed_looks + 1 } else { 0 };
+        let notice = notice.map(|notice| notice.shown);
         let row = prompt_id.and_then(|prompt_id| queued_row(&target, prompt_id, flags));
         let row_state = row
             .as_ref()
             .map(|row| agents::text(row, "state").to_string());
+        // The card stayed for a few looks, or the brief's send already failed on it.
+        if start_failed
+            && (failed_looks >= START_FAILED_LOOKS || row_state.as_deref() == Some("failed"))
+        {
+            return Err(CliError::Other(format!(
+                "Created thread {}, but its agent did not start: {}. Its brief waits in its chat queue until the agent starts. Fix the error (or tell the user) before trying again; do not start another thread.",
+                agents::text(thread, "globalRef"),
+                notice.unwrap_or_default().trim_end_matches('.')
+            )));
+        }
         if row_state.as_deref() == Some("failed") {
             let error = row
                 .as_ref()
