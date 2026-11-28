@@ -330,6 +330,8 @@ pub(crate) struct NativeChatView {
     pub(super) paste_tiles: super::clipboard::PasteTiles,
     /// Pictures and files whose upload failed twice, still in the chat box (composer_attach.rs).
     pub(super) failed_uploads: Vec<super::composer_attach::FailedUpload>,
+    /// Undo/redo entries for failed-upload tiles dropped with their `x` button (composer_attach.rs).
+    pub(super) failed_upload_undo: super::composer_attach::FailedUploadUndo,
     /// A send from the chat box waiting for a paste or drop to land (`composer_attach.rs`): its mode.
     pub(super) held_send: Option<String>,
     /// The timer that looks at a held send again while a clipboard read is pending.
@@ -373,7 +375,7 @@ pub(crate) struct NativeChatView {
     /// The height rows replaced since the list's last layout took out below the reader, which the
     /// list itself does not count until it lays them out (scroll_bottom.rs `SplicedHeight`).
     pub(super) spliced_height: super::scroll_bottom::SplicedHeight,
-    input_needs_sync: bool,
+    pub(super) input_needs_sync: bool,
     pub(super) input_placeholder: String,
     input_undoable: bool,
     pub(super) input_caret: Option<usize>,
@@ -826,6 +828,7 @@ impl NativeChatView {
             paste_started: None,
             paste_tiles: Default::default(),
             failed_uploads: Vec::new(),
+            failed_upload_undo: Default::default(),
             held_send: None,
             held_send_recheck: None,
             carry: Default::default(),
@@ -1037,7 +1040,9 @@ impl NativeChatView {
                             if this.composer_focused {
                                 this.short_pane_composer_open = true;
                             }
-                            this.draft = draft;
+                            let before = std::mem::replace(&mut this.draft, draft);
+                            this.failed_upload_undo
+                                .note_input_change(&before, &this.draft);
                             this.draft_revision += 1;
                             this.persist_draft(cx);
                             cx.emit(NativeChatEvent::DraftState(this.draft.is_empty()));
@@ -1086,14 +1091,22 @@ impl NativeChatView {
                 })
                 .unwrap_or(self.draft.len());
             if let Some(input) = &self.input {
-                input.update(cx, |input, cx| {
-                    if undoable {
+                if undoable {
+                    let changed = input.read(cx).value().as_str() != self.draft.as_str();
+                    input.update(cx, |input, cx| {
                         input.replace_all(self.draft.clone(), window, cx);
-                    } else {
-                        input.set_value(self.draft.clone(), window, cx);
+                        input.set_selected_range(caret..caret, cx);
+                    });
+                    if changed {
+                        self.failed_upload_undo.note_text_edit(&self.draft);
                     }
-                    input.set_selected_range(caret..caret, cx);
-                });
+                } else {
+                    self.failed_upload_undo.clear();
+                    input.update(cx, |input, cx| {
+                        input.set_value(self.draft.clone(), window, cx);
+                        input.set_selected_range(caret..caret, cx);
+                    });
+                }
             }
         }
         /*
