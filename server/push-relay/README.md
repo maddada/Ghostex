@@ -13,8 +13,12 @@ for a Live Activity's new update token, and one widget snapshot per id, which th
 (the relay does not check).
 
 It lives beside `server/share-relay` because it is the same kind of thing: a small standalone service on
-the same box (relay-eu.ghostex.dev), behind the same Caddy, built the same way into one static binary. It
-is its own crate (own `Cargo.lock`), so gxserver's build never compiles it.
+the same box (relay-eu.ghostex.dev), behind the same Caddy, built into one static binary (`build-linux.sh`).
+It is its own crate (own `Cargo.lock`), so gxserver's build never compiles it.
+
+What this README says about Apple's push service, iOS, WidgetKit and Expo comes from their documentation; the
+relay's tests talk to a stand-in for Apple and do not check it. What it says the phone app and the computer do,
+beyond the code it cites, is how those clients are meant to work, not something checked here.
 
 ## Live Activity request
 
@@ -37,8 +41,9 @@ is its own crate (own `Cargo.lock`), so gxserver's build never compiles it.
 - `environment`: `production` (default) or `sandbox` (Apple's development service, for development builds).
 - `timestamp`: unix seconds, now (within the last hour or the next 5 minutes); Apple drops an update older
   than one it delivered.
-- `contentState`: required for `update` and `start`, optional for `end`. The JSON the app's
-  `GhostexActivityContent` decodes (`apps/mobile/app/modules/ghostex-live-activity/ios/Shared`).
+- `contentState`: required for `update` and `start`, optional for `end`. The relay passes it on without checking
+  its shape; it must be the JSON the app's `GhostexActivityContent` decodes
+  (`apps/mobile/app/modules/ghostex-live-activity/ios/Shared`).
 - `staleDate`: optional, unix seconds within the next 12 hours. `dismissalDate`: `end` only, within 4 hours.
 - `priority`: 5 or 10 (default 10).
 
@@ -55,8 +60,10 @@ Answers (JSON, `ok` true or false):
 | 200 | | Apple took it (`apnsId`). |
 | 400 | `bad-request` | Not a Live Activity push this relay sends (`detail` says why). |
 | 410 | `token-gone` | Apple no longer takes this token (unregistered, bad, or not for this app); drop it. Refused here for 24 hours without asking Apple. |
-| 413 | `too-large` | Over 8 KB, or Apple's payload over 4 KB. |
-| 429 | `rate-limited` | `retryAfter` seconds (also `Retry-After`). Also when Apple answers 429 for the device. |
+| 413 | `too-large` | Apple's payload over 4 KB. |
+| 413 | (not JSON) | The body is over the size Caddy (8 KB) or the relay (8 KiB) reads at all; the proxy or the server answers before the relay's code runs. |
+| 429 | `rate-limited` | The relay's own limit, or no free slot of its 64 requests to Apple within 5 seconds: `retryAfter` seconds (also `Retry-After`). |
+| 429 | `apple` | Apple's limit for this device (`appleStatus` 429, `appleReason`). No `retryAfter`: back off on the caller's side. |
 | 502 | `apple`, `apple-unreachable` | Apple refused it otherwise (`appleStatus`, `appleReason`) or did not answer. |
 | 503 | `not-configured` | The relay has no key yet. |
 
@@ -83,19 +90,21 @@ Answers (JSON, `ok` true or false):
 - `environment`, `timestamp`: as for a Live Activity push (`timestamp` is the event's time).
 - `envelope`: optional. Standard base64 (with padding), at most 3072 characters, that decodes to the format
   version byte `1`, a 12-byte nonce and a ciphertext of at least its 16-byte tag. It goes on as the payload's
-  top-level `envelope` key; the phone's notification service extension decrypts it and replaces the title and
-  body. Without it, or when the phone cannot decrypt it, the phone shows the fixed words.
+  top-level `envelope` key; the phone's notification service extension is meant to decrypt it and replace the
+  title and body. Without it, or when the phone cannot decrypt it, the phone is meant to show the fixed words.
 - `threadId`: optional, `<machineId>:<sessionId>`, each part 1 to 64 printable ASCII characters without spaces
   (split at the first `:`). iOS stacks the alerts of one thread together.
 - `data`: optional, exactly `kind`, `machineId` and `sessionId` (each 1 to 64 printable ASCII characters without
   spaces), optional `notificationId` (up to 128) and optional `worker` (true or false); any other key is refused.
-  It goes on as the payload's top-level `data` key, the same object today's Expo push carries, so the phone opens
-  the right session on a tap with `pushEventFromData(data)` (`src/notifications/pushMessage.ts` in the phone app)
-  whether or not the notification service extension ran.
+  It goes on as the payload's top-level `data` key. It is meant to be the same object today's Expo push
+  carries, so the phone opens the right session on a tap with `pushEventFromData(data)`
+  (`src/notifications/pushMessage.ts` in the phone app) whether or not the notification service extension ran.
 - `sound`: optional; `true` plays the default sound. No caller picks a sound file.
 
-What the phone shows in the clear is the relay's own: the title `Ghostex` and the event's fixed words, the
-ones gxserver's alerts use (`server/src/push/message.rs`). No request can put other words on a lock screen.
+What the alert carries in the clear is the relay's own: the title `Ghostex` and the event's fixed words below.
+They follow gxserver's alert words (`server/src/push/message.rs`), with `approval` added here; gxserver's
+"Running low" words have no kind here. No request can put other words into the alert's clear text; only an
+envelope the phone decrypts replaces them.
 
 | `kind` | Words |
 | --- | --- |
@@ -132,7 +141,7 @@ Any other field, or any other `kind`, is refused.
 `{"token":"<the widget extension's push token; hex>","environment":"production"}` (environment optional). It
 goes to Apple as push type `widgets`, topic `com.maddada.ghostex.ios.push-type.widgets`, priority 5, expiry one
 hour, payload `{"aps":{"content-changed":true}}`: WidgetKit reloads the widgets when its budget allows, and
-they fetch the snapshot. Any other field is refused.
+they are meant to fetch the snapshot. Any other field is refused.
 
 Answers of both push routes (JSON, `ok` true or false):
 
@@ -143,19 +152,20 @@ Answers of both push routes (JSON, `ok` true or false):
 | 410 | `token-gone` | Apple no longer takes this token for this topic; drop it. Refused here for 24 hours without asking Apple (remembered apart from the Live Activity route). |
 | 413 | `too-large` | An envelope over 3072 characters, or Apple's payload over 4 KB. |
 | 413 | (not JSON) | The body is over the size Caddy (16 KB) or the relay (16 KiB) reads at all; the proxy or the server answers before the relay's code runs. |
-| 429 | `rate-limited` | The relay's own limit: `retryAfter` seconds and a `Retry-After` header. |
+| 429 | `rate-limited` | The relay's own limit, or no free slot of its 64 requests to Apple within 5 seconds: `retryAfter` seconds and a `Retry-After` header. |
 | 429 | `apple` | Apple's limit for this device (`appleStatus` 429, `appleReason`, e.g. `TooManyRequests`). No `retryAfter`: back off on the caller's side. |
 | 502 | `apple`, `apple-unreachable` | Apple refused it otherwise (`appleStatus`, `appleReason`, e.g. `TopicDisallowed` when the key is not allowed this topic) or did not answer. |
 | 503 | `not-configured` | The relay has no key yet. |
 
 ## Token mailbox: `PUT` and `GET /push/v1/mailbox`
 
-When a push starts a Live Activity, only the woken phone learns the activity's update token. It leaves the token
-here and the computer collects it.
+When a push starts a Live Activity, only the woken phone learns the activity's update token. The phone is meant
+to leave the token here for the computer to collect; no computer code in this repository does that yet.
 
-- The id: `Authorization: Bearer <id>`, 256 bits in hex (64 characters), which the phone and the computer derive
-  from their pairing key. It is a capability, so it never goes in the URL, where a proxy's logs would keep it;
-  Caddy leaves the `Authorization` header out of its logs. The relay files the entry under the id's SHA-256 and
+- The id: `Authorization: Bearer <id>`, 64 hex characters, which the phone and the computer are meant to derive
+  from their pairing key (256 bits). It is a capability, so the relay reads it only from that header, never from
+  the URL, where a proxy's logs would keep it; Caddy's default access log writes that header as `REDACTED` (the
+  operator's logging configuration decides this). The relay files the entry under the id's SHA-256 and
   never holds or logs the id itself.
 - `PUT`: the body is the update token in hex (64 to 512 characters, at most 1 KB with whitespace around
   it). It replaces what the id holds. 200 `{"ok":true}`.
@@ -166,9 +176,8 @@ here and the computer collects it.
 
 ## Widget snapshot: `PUT` and `GET /push/v1/snapshot`
 
-While the app is closed, the computer leaves the widgets' data here, meant to be encrypted for the phone (the
-relay does not check), and the widget extension
-fetches it when it reloads.
+While the app is closed, the computer is meant to leave the widgets' data here, encrypted for the phone (the
+relay does not check), and the widget extension to fetch it when it reloads.
 
 - The id: `Authorization: Bearer <id>`, as for the mailbox.
 - `PUT`: the body is the snapshot, any bytes (the computer is meant to encrypt it; the relay does not check),
@@ -198,19 +207,22 @@ They need no Apple key; they answer while the relay is not configured.
 ## Limits, and why these numbers
 
 - Per device token: 10 pushes, refilled 10 a minute. A banner changes when an agent starts, waits,
-  finishes or stops; gxserver coalesces those, so a phone needs a few a minute at most. Apple budgets
-  pushes per activity and throttles a device that gets too many; 10 a minute keeps a broken computer
-  inside that.
+  finishes or stops; gxserver sends one phone at most one update every 5 seconds
+  (`server/src/live_activity/runtime.rs`), so changes that keep coming faster than 10 a minute get 429 and
+  gxserver waits the `retryAfter`. Apple budgets pushes per activity and throttles a device that gets too many;
+  10 a minute is meant to keep a broken computer inside that.
 - Per push-to-start token: 2, then one every 10 minutes. A start is needed only when no banner runs; Apple
   limits starts tightly.
-- Per caller address (the last `X-Forwarded-For` entry, which Caddy sets; an IPv6 address counts by its /64,
-  since anyone given a /64 has more addresses than a limit could count one by one): 60, refilled 60 a minute,
-  for every request, refused ones included. Enough for a home with several computers and phones, and it stops
-  one address from probing tokens quickly.
-- Whole relay: 300, refilled 3000 a minute (50 a second), and 64 requests to Apple in flight. Only a request
-  that is about to go to Apple spends it, so junk from many addresses cannot use up what real pushes need. Apple takes
-  far more than that from one key; the cap is what keeps a flood from many addresses from reaching Apple
-  as a flood, so Apple never has a reason to throttle the key itself.
+- Per caller address (the last parsable `X-Forwarded-For` entry, which Caddy adds; an IPv6 address counts by
+  its /64, since anyone given a /64 has more addresses than a limit could count one by one): 60, refilled 60 a
+  minute, for every send request, refused ones included (the health check is not counted). Meant to be enough
+  for a home with several computers and phones; it holds one address to 60 token tries a minute.
+- Whole relay: 300, refilled 3000 a minute (50 a second), and 64 requests to Apple in flight. A request the
+  relay refuses itself (malformed, a token already known as gone, an address or a token over its quota) does
+  not spend it. One that passes those checks does, even when Apple then refuses its token: well-formed requests
+  with random tokens from many addresses can use it up, and real pushes then get 429 until it refills. That is
+  apart from the memory risk below. The cap holds what this route sends Apple to 50 a second; how much Apple
+  takes from one key before it throttles it is Apple's and not checked here.
 - A token Apple called gone (410, `BadDeviceToken`, `Unregistered`, `DeviceTokenNotForTopic`) is refused
   here for 24 hours. At most 100,000 are remembered (the oldest goes first), so random tokens cannot grow the
   relay's memory without end; the health check reports the count (`goneTokens`).
@@ -221,22 +233,23 @@ The `/push/` routes have limits of their own, so their traffic never takes from 
 
 - Per caller address: 60, refilled 60 a minute, for every push request; and separately 60, refilled 60 a
   minute, for every mailbox and snapshot request. Counted as above (last `X-Forwarded-For` entry, IPv6 by /64).
-- Per device token, alerts: 10, refilled 10 a minute. gxserver sends one phone at most 8 alerts a minute
-  (`server/src/push/limiter.rs`); 10 leaves room for that and stops a broken computer.
+- Per device token, alerts: 10, refilled 10 a minute. gxserver holds its Expo alerts to 8 a phone a minute
+  (`server/src/push/limiter.rs`); 10 leaves room for that budget once a computer sends through this route, and
+  stops a broken computer.
 - Per device token, background pushes: 3, refilled 3 an hour. Apple advises sending no more than two or three
   an hour and holds back the rest itself.
-- Per widget push token: 4, refilled 6 an hour. WidgetKit budgets the reloads a push asks for; the computer
-  coalesces changes, and more than one push every 10 minutes would only spend the widgets' budget.
+- Per widget push token: 4, refilled 6 an hour. WidgetKit budgets the reloads a push asks for; the computer is
+  meant to coalesce changes, and more than one push every 10 minutes would only spend the widgets' budget.
 - Whole relay: 300, refilled 3000 a minute, and 64 requests to Apple in flight, apart from the Live Activity
-  route's same numbers. Even both at once (6000 a minute) stay far below what Apple takes from one key.
-- Per mailbox id and per snapshot id: 20, refilled 20 a minute. A computer polls the mailbox for a few
-  minutes after a start and a widget fetches its snapshot when it reloads; neither needs more. Only an id the
+  route's same numbers (6000 a minute for both together); Apple's own ceiling for one key is not checked here.
+- Per mailbox id and per snapshot id: 20, refilled 20 a minute. A computer is meant to poll the mailbox for a
+  few minutes after a start and a widget to fetch its snapshot when it reloads; neither needs more. Only an id the
   store holds, or one it has just admitted, is counted, so reads of unknown ids and refused new ids leave no
   state here.
 - New ids per caller address: 20, refilled 20 an hour, for the mailbox and the snapshot store together,
   checked before anything is stored or counted for the id. Replacing what an id already holds, and reading, do
-  not count. A phone leaves a mailbox entry after a pushed start and a computer keeps one snapshot per paired
-  phone, so a home with several phones and computers needs a few an hour. Like every `/push/` bucket, an idle
+  not count. A phone is meant to leave a mailbox entry after a pushed start and a computer to keep one snapshot
+  per paired phone, so a home with several phones and computers needs a few an hour. Like every `/push/` bucket, an idle
   one is forgotten only once it would have refilled completely (here after an hour), so a pause never hands
   out a fresh quota early.
 - What the mailbox and the snapshot store hold together: at most 5,000 entries and 5 MiB of tokens and
@@ -280,25 +293,29 @@ The `/push/` routes have limits of their own, so their traffic never takes from 
 ## Who can call it, and what an attacker can do
 
 It is open, the way Expo's push service is: the device token is what lets anyone push to a phone. A
-Live Activity token belongs to one activity on one phone; a push-to-start token to one app install. They
-are 32 bytes or more of Apple's randomness, cannot be guessed, and go only to the computers that phone
-paired with (the phone's push registration, over the paired connection).
+Live Activity token belongs to one activity on one phone; a push-to-start token to one app install. Apple
+makes them from 32 bytes or more of randomness, so they cannot be guessed (the relay takes 32 to 256 bytes in
+hex), and the phone is meant to hand them only to the computers it paired with (its push registration, over
+the paired connection).
 
-- Without a token, an attacker reaches no phone. Random tokens get `BadDeviceToken` from Apple and the
-  per-address and relay-wide limits stop them from making that a flood. Within those quotas the worst they
+- Without a token, an attacker reaches no phone. Random tokens get `BadDeviceToken` from Apple, and the limits
+  hold them to 60 a minute per address and 50 a second for the relay. Within those quotas the worst they
   can do is spend the relay-wide budget, so real pushes get 429 for a while and banners go stale until it
   refills: a denial of this feature, not of the key. Many parallel requests can also take memory beyond what
   the quotas bound; see the memory risk under "Limits, and why these numbers".
 - With one phone's token (from that user's computer, for example), an attacker can update, end or start
-  that one phone's Ghostex banner with content of their choosing, at most 10 times a minute (starts 2, then
+  that one phone's Ghostex banner with content of their choosing: 10 at once, then 10 a minute (starts 2, then
   one per 10 minutes). The banner shows agent and project names and counts; the alert of a start is fixed.
-  They cannot send notifications, reach other apps (the topic is fixed), or touch other phones.
-- With one phone's device token, an attacker can send that phone alerts, at most 10 a minute, but only with
-  the fixed title and an event's fixed words; an envelope they make cannot be decrypted by the phone, which
-  then shows the fixed words. Background pushes are limited to 3 an hour, widget pushes to 6 an hour.
+  Through this route they cannot send a notification or reach another app (the push type and topic are fixed),
+  and Apple ties the token to that one phone.
+- With one phone's device token, an attacker can send that phone alerts, 10 at once, then 10 a minute, but only
+  with the fixed title and an event's fixed words; an envelope they make is meant to fail to decrypt on the
+  phone (it lacks the pairing key), which then shows the fixed words. Background pushes are limited to 3 at
+  once, then 3 an hour; widget pushes to 4 at once, then 6 an hour.
 - The relay cannot tell a paired phone or computer from anyone else: it never learns the pairing key, so
   any well-formed id is accepted. Without an id, an attacker cannot read or replace anyone's mailbox entry
-  or snapshot (256 bits cannot be guessed). They can fill the store with ids of their own, which the
+  or snapshot: the relay takes any 64 hex characters, and an id derived as intended (256 bits) cannot be
+  guessed. They can fill the store with ids of their own, which the
   per-address quota for new ids, the per-address limits and the shared caps bound; at the caps new ids are
   refused for everyone (`store-full`) until entries expire (10 minutes for the mailbox, 24 hours for
   snapshots), while ids already held keep working: a denial of new widget snapshots and token returns, not
@@ -312,23 +329,27 @@ paired with (the phone's push registration, over the paired connection).
   that activity's update token as the phone left it, so whoever holds the id can take it and then update or
   end that phone's Live Activity as above. Only the widget snapshot is meant to be encrypted, by the computer
   before the upload; the relay does not check that it is.
-- Nobody can get the key out through the relay: it is read from a file only the service's user can read,
-  is never logged, and no answer carries it.
+- Nobody can get the key out through the relay: it is read from a file the deploy steps make readable only to
+  root and the service's group (the operator's setup), its contents are never logged, and no answer carries it.
 
 What the relay can read: of an alert, the event, the identifiers in `threadId` and `data` and whether it
 sounds; of a mailbox entry, the update token itself, held as the phone sent it; nothing of the envelope, which
 it never decrypts (it checks only the envelope's form and size). A snapshot it stores as the bytes it was
 given, without decrypting or checking them; its confidentiality relies on the computer encrypting it before
 the upload. What Apple sees of an alert:
-the fixed title and event words, `threadId`, `data`, the push type, the token and the envelope as ciphertext;
-of a widget push, the push type and the token. That these hold no
+the fixed title and event words, `threadId`, `data`, the push type, the token and the envelope (a ciphertext
+when the computer encrypted it); of a widget push, the push type and the token. That these hold no
 names rests on the computer that sends them (see the alert route). The mailbox and the snapshots stay in the
 relay's memory only, never on disk, and are gone on a restart.
 
-The log has counts, Apple's status and reason, and an 8-hex hash of a token or id; never a token, an id, a
-content state, an envelope, a snapshot, the key's id or anything from the key's files. A mailbox or snapshot id
-travels only in the `Authorization` header, never in a URL, so it stays out of Caddy's logs too (Caddy logs
-that header as `REDACTED`).
+The log has a line for each push sent or failed, each refusal, each store and each mailbox take, with its
+outcome (the reason of a refusal, the kind, the environment, Apple's
+status and reason, the time taken) and an 8-hex hash of a token or id, plus start-up lines (whether the key
+loaded, the listening address); never a token, an id, a content state, an envelope, a snapshot, the key's id or
+anything from the key's files. The relay reads a mailbox
+or snapshot id only from the `Authorization` header, never from the URL, so with Caddy's default logging it
+stays out of Caddy's logs too (Caddy writes that header as `REDACTED`; the operator's logging configuration
+decides this).
 
 ## Run it locally
 
@@ -382,5 +403,6 @@ snapshot, which is the clients' behaviour and not checked here.
 
 Adding the `/push/` routes to a relay that already runs: build with `build-linux.sh`, replace the binary,
 add the `handle /push/*` block next to `handle /live-activity/*` (step 5), `systemctl restart
-ghostex-push-relay`, reload Caddy, and check both health routes (step 6). The Live Activity route answers as
-before throughout.
+ghostex-push-relay`, reload Caddy, and check both health routes (step 6). After the restart the Live Activity
+route keeps the same contract; between the stop and the start the relay refuses connections, so requests in
+that gap fail temporarily (what Caddy answers them with is not checked here).
