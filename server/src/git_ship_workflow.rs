@@ -182,9 +182,7 @@ pub(crate) async fn run_git_ship_workflow(
             .await
             .map_err(typed)?;
         if !is_confirmed_open_pull_request(&result) {
-            return Err(failure(
-                "GitHub CLI could not create or find an open pull request.",
-            ));
+            return Err(failure(pull_request_failure_message(&result)));
         }
         pull_request = result.get("pr").cloned().unwrap_or(Value::Null);
     }
@@ -459,32 +457,35 @@ async fn sync_current_branch(projects: &[Value], project_id: &str) -> Result<(),
     Ok(())
 }
 
-/// `isGpuiConfirmedOpenPullRequest`.
+/// `isGpuiConfirmedOpenPullRequest`: accepts a verified open pull/merge request URL for the
+/// repository's hosting provider.
 fn is_confirmed_open_pull_request(result: &Value) -> bool {
     let Some(pr) = result.get("pr") else {
         return false;
     };
+    let provider = pr
+        .get("provider")
+        .or_else(|| result.get("provider"))
+        .and_then(Value::as_str)
+        .and_then(ghostex_gx_protocol::git_provider::GitHostProvider::from_wire_name)
+        .unwrap_or_default();
     result.get("ok").and_then(Value::as_bool) == Some(true)
         && pr.get("state").and_then(Value::as_str) == Some("open")
-        && pr
-            .get("url")
-            .and_then(Value::as_str)
-            .is_some_and(is_git_hub_pull_url)
+        && pr.get("url").and_then(Value::as_str).is_some_and(|url| {
+            crate::source_control::pull_request::provider_for(provider)
+                .validate_pr_url(url, None)
+                .is_some()
+        })
 }
 
-/// `^https://github.com/[^/\s]+/[^/\s]+/pull/\d+$`.
-fn is_git_hub_pull_url(url: &str) -> bool {
-    let Some(rest) = url.strip_prefix("https://github.com/") else {
-        return false;
-    };
-    let parts: Vec<&str> = rest.split('/').collect();
-    let segment = |part: &str| !part.is_empty() && !part.chars().any(char::is_whitespace);
-    parts.len() == 4
-        && segment(parts[0])
-        && segment(parts[1])
-        && parts[2] == "pull"
-        && !parts[3].is_empty()
-        && parts[3].chars().all(|ch| ch.is_ascii_digit())
+fn pull_request_failure_message(result: &Value) -> &'static str {
+    result
+        .get("provider")
+        .and_then(Value::as_str)
+        .and_then(ghostex_gx_protocol::git_provider::GitHostProvider::from_wire_name)
+        .unwrap_or_default()
+        .terms()
+        .cli_create_or_find_failed
 }
 
 // ---------------------------------------------------------------------------
@@ -874,11 +875,8 @@ async fn run_multi_repo_ship(
                             }
                             row["pullRequest"] = pr;
                         }
-                        Ok(_) => {
-                            error = Some(
-                                "GitHub CLI could not create or find an open pull request."
-                                    .to_string(),
-                            )
+                        Ok(result) => {
+                            error = Some(pull_request_failure_message(&result).to_string())
                         }
                         Err(pr_error) => error = Some(pr_error.message),
                     }

@@ -443,6 +443,26 @@ impl GhostexGpuiApp {
         self.git_publish_menu_state(cx);
     }
 
+    /// The active project's detected Git hosting provider (GitHub by default).
+    pub(crate) fn git_active_provider(&self) -> ghostex_gx_protocol::git_provider::GitHostProvider {
+        if let Some(provider) = self.gx_store.git.state.git_provider {
+            return provider;
+        }
+        let Some(active) = self.git_active_scoped_project_id() else {
+            return ghostex_gx_protocol::git_provider::GitHostProvider::GitHub;
+        };
+        let Some(key) = ghostex_gx_core::ProjectKey::parse_workspace_project_id(&active) else {
+            return ghostex_gx_protocol::git_provider::GitHostProvider::GitHub;
+        };
+        self.gx_store
+            .core
+            .presentation()
+            .project(&key)
+            .and_then(|project| project.git_remote_origin_url.value())
+            .and_then(|url| ghostex_gx_protocol::git_provider::detect_provider_from_remote_url(url))
+            .unwrap_or_default()
+    }
+
     /// The preferences the drawn state takes: the active project's (`gitStateForHud`).
     fn git_active_preferences(&self) -> GitPreferences {
         self.git_active_scoped_project_id()

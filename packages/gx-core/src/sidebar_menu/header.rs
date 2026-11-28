@@ -252,8 +252,12 @@ pub fn project_header_rows(
         };
     }
     let worktree = if project.worktree.is_some() {
+        let provider = group
+            .git_remote_origin_url
+            .and_then(ghostex_gx_protocol::git_provider::detect_provider_from_remote_url)
+            .unwrap_or_default();
         MenuItem::row(
-            "Create PR",
+            provider.terms().create_short_label,
             "git-pull-request",
             MenuCommand::command(message::run_sidebar_git_action(group_id, "pr")),
         )

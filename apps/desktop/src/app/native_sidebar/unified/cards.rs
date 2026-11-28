@@ -633,6 +633,15 @@ impl GhostexGpuiApp {
                             "draft" => appearance.muted,
                             _ => chrome_color(0x3fb950, 0x1a7f37).into(),
                         };
+                        let prefix = pull_request
+                            .url
+                            .as_deref()
+                            .and_then(
+                                ghostex_gx_protocol::git_provider::detect_provider_from_pr_url,
+                            )
+                            .unwrap_or_default()
+                            .terms()
+                            .number_prefix;
                         h_flex()
                             .flex_shrink_0()
                             .gap(px(2.0 * scale))
@@ -643,7 +652,7 @@ impl GhostexGpuiApp {
                                     .size(px(12.0 * scale))
                                     .text_color(color),
                             )
-                            .child(format!("#{}", pull_request.number))
+                            .child(format!("{prefix}{}", pull_request.number))
                     }))
                     .child(agent()),
             )

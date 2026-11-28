@@ -632,16 +632,32 @@ fn changes(data: &Value) -> Option<Value> {
     let default = changes["defaultBranch"].as_str().unwrap_or("main");
     let pull_request = changes.get("pullRequest").filter(|pr| pr.is_object());
     let open_pr = pull_request.filter(|pr| pr["open"] == true);
+    let provider = changes
+        .get("gitProvider")
+        .and_then(Value::as_str)
+        .and_then(ghostex_gx_protocol::git_provider::GitHostProvider::from_wire_name)
+        .or_else(|| {
+            pull_request
+                .and_then(|pr| pr.get("provider").and_then(Value::as_str))
+                .and_then(ghostex_gx_protocol::git_provider::GitHostProvider::from_wire_name)
+        })
+        .or_else(|| {
+            pull_request
+                .and_then(|pr| pr.get("url").and_then(Value::as_str))
+                .and_then(ghostex_gx_protocol::git_provider::detect_provider_from_pr_url)
+        })
+        .unwrap_or_default();
+    let terms = provider.terms();
     let button = if let Some(pr) = open_pr {
         Some(json!({
-            "label": format!("View PR #{}", pr["number"]),
+            "label": format!("View {} {}{}", terms.short, terms.number_prefix, pr["number"]),
             "action": open_action("url", json!({"url": pr["url"]})),
         }))
     } else if on_default {
         (additions + deletions > 0)
             .then(|| json!({"label": "Commit", "action": open_action("commit", Value::Null)}))
     } else {
-        Some(json!({"label": "Create PR", "action": open_action("createPullRequest", Value::Null)}))
+        Some(json!({"label": terms.create_short_label, "action": open_action("createPullRequest", Value::Null)}))
     };
     // CDXC:SessionDetails 2026-11-22 DECISION:
     // User (merge page, Q4438): the branch moves from Environment into the Changes card, where it

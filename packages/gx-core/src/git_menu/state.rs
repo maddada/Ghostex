@@ -5,6 +5,9 @@
 //! state serializes to the same JSON the old runtime published and the parity harness can diff
 //! the two byte for byte.
 
+use ghostex_gx_protocol::git_provider::{
+    deserialize_optional_git_host_provider, GitHostProvider,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -99,18 +102,30 @@ pub enum GitPullRequestState {
 pub struct GitPullRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub number: Option<i64>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_git_host_provider"
+    )]
+    pub provider: Option<GitHostProvider>,
     pub state: GitPullRequestState,
     pub title: String,
     pub url: String,
 }
 
-/// What the GitHub CLI said about a project: kept apart from the local Git facts because it has
-/// its own, much longer lease (`CDXC:Git 2026-07-29`).
+/// What the hosting provider CLI (`gh` / `glab`) said about a project: kept apart from the local
+/// Git facts because it has its own, much longer lease (`CDXC:Git 2026-07-29`).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GitHubState {
     pub has_git_hub_cli: bool,
     pub pr: Option<GitPullRequest>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_git_host_provider"
+    )]
+    pub provider: Option<GitHostProvider>,
 }
 
 /// A project's three Git preferences (`gitConfig`).
@@ -158,6 +173,12 @@ pub struct GitState {
     pub confirm_suggested_commit: bool,
     pub deletions: i64,
     pub generate_commit_body: bool,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_git_host_provider"
+    )]
+    pub git_provider: Option<GitHostProvider>,
     pub has_checked_git_hub_remote: bool,
     pub has_git_hub_cli: bool,
     pub has_git_hub_remote: bool,
@@ -191,6 +212,7 @@ impl GitState {
             confirm_suggested_commit: preferences.confirm_commit,
             deletions: 0,
             generate_commit_body: preferences.generate_commit_body,
+            git_provider: None,
             has_checked_git_hub_remote: false,
             has_git_hub_cli: false,
             has_git_hub_remote: false,
@@ -217,10 +239,21 @@ impl GitState {
         self
     }
 
-    /// The same state with a GitHub answer laid over it.
+    /// The resolved hosting provider for this project, defaulting to GitHub when unspecified
+    /// (for example from an older remote gxserver or a repo without a recognized remote).
+    pub fn provider(&self) -> GitHostProvider {
+        self.git_provider
+            .or_else(|| self.pr.as_ref().and_then(|pr| pr.provider))
+            .unwrap_or_default()
+    }
+
+    /// The same state with a hosting-provider CLI answer laid over it.
     pub fn with_git_hub(mut self, git_hub: &GitHubState) -> Self {
         self.has_git_hub_cli = git_hub.has_git_hub_cli;
         self.pr = git_hub.pr.clone();
+        if git_hub.provider.is_some() {
+            self.git_provider = git_hub.provider;
+        }
         self
     }
 

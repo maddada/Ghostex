@@ -326,7 +326,7 @@ pub(crate) fn gpui_open_remote_existing_project_pull_request_in_browser(
 ) -> Result<(), String> {
     /*
     CDXC:RemoteMachines 2026-06-24-19:25:
-    Remote PR browser opens must re-run `prView` through the saved-machine gxserver tunnel and open only a validated HTTPS GitHub pull-request URL. Renderer URLs, cached PR payloads, Browser titles, command text, SSH details, tokens, and daemon bodies are not launch authority.
+    Remote PR/MR browser opens must re-run `prView` through the saved-machine gxserver tunnel and open only a validated HTTPS PR/MR URL. Renderer URLs, cached PR payloads, Browser titles, command text, SSH details, tokens, and daemon bodies are not launch authority.
     */
     let result = gpui_remote_gxserver_rpc_result(
         target,
@@ -337,15 +337,22 @@ pub(crate) fn gpui_open_remote_existing_project_pull_request_in_browser(
         }),
         Duration::from_secs(15),
     )?;
+    let provider = result
+        .get("provider")
+        .and_then(serde_json::Value::as_str)
+        .and_then(ghostex_gx_protocol::git_provider::GitHostProvider::from_wire_name)
+        .unwrap_or_default();
+    let terms = provider.terms();
     if gpui_typed_operation_exit_code(&result) != Some(0) {
-        return Err("No open remote pull request is available for this project.".to_string());
+        return Err(terms.no_open_remote_for_project.to_string());
     }
-    let url = gpui_trusted_github_pull_request_url_from_pr_view_stdout(
+    let url = gpui_trusted_pull_request_url_from_pr_view_stdout(
         gpui_typed_operation_stdout(&result),
+        provider,
     )
-    .ok_or_else(|| "No open remote pull request is available for this project.".to_string())?;
+    .ok_or_else(|| terms.no_open_remote_for_project.to_string())?;
     gpui_spawn_os_open(std::ffi::OsStr::new(&url))
-        .map_err(|_| "Ghostex couldn't open the remote pull request.".to_string())
+        .map_err(|_| terms.could_not_open_remote.to_string())
 }
 
 pub(crate) fn gpui_open_remote_project_in_ide(

@@ -81,16 +81,21 @@ impl ChangesView {
             ),
         };
         let disabled = count == 0;
+        let git_provider = self
+            .info
+            .as_ref()
+            .map(|info| info.git_provider)
+            .unwrap_or_default();
         // CDXC:Changes 2026-11-27 DECISION: User picked "One list, one Commit" (Q5269): in a
         // project that spans several repos the button says how many repos the Commit makes a
         // commit in ("Commit 2 repos"), one commit per repo with the same message.
         let main_label = match self.is_multi_repo() {
             true => format!(
                 "{} {}",
-                self.commit_action.short_label(),
+                self.commit_action.short_label(git_provider),
                 ghostex_gx_protocol::plural(self.commit_repo_count(), "repo", "repos")
             ),
-            false => self.commit_action.short_label().to_string(),
+            false => self.commit_action.short_label(git_provider).to_string(),
         };
         let results = self.render_repo_results(s, cx);
         let files_label = if self.excluded.is_empty() {
@@ -424,6 +429,11 @@ impl ChangesView {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let current = self.commit_action;
+        let git_provider = self
+            .info
+            .as_ref()
+            .map(|info| info.git_provider)
+            .unwrap_or_default();
         let row = |id: &'static str, label: String, detail: &'static str, checked: bool| {
             h_flex()
                 .id(id)
@@ -463,7 +473,7 @@ impl ChangesView {
                           cx: &mut Context<Self>| {
             row(
                 id,
-                action.label(on_default).to_string(),
+                action.label(on_default, git_provider).to_string(),
                 detail,
                 current == action,
             )
@@ -497,7 +507,7 @@ impl ChangesView {
                 if on_default {
                     "You're on the default branch: moves the work to a new branch named from the message first."
                 } else {
-                    "Commit, push, then open a pull request."
+                    git_provider.terms().commit_push_create_detail
                 },
                 cx,
             ))

@@ -157,17 +157,18 @@ pub fn plan_git_action_after_read(
             {
                 GitActionStep::OpenExistingPullRequest
             } else if !state.has_git_hub_cli {
+                let terms = state.provider().terms();
                 GitActionStep::Toast(if remote {
                     toast(
                         Warning,
-                        "Remote GitHub CLI unavailable",
-                        Some("Install GitHub CLI on the remote machine before creating a pull request."),
+                        terms.remote_cli_unavailable_title,
+                        Some(terms.remote_cli_unavailable_description),
                     )
                 } else {
                     toast(
                         Warning,
-                        "GitHub CLI unavailable",
-                        Some("Install GitHub CLI before creating a pull request."),
+                        terms.cli_unavailable_title,
+                        Some(terms.cli_unavailable_description),
                     )
                 })
             } else if state.has_working_tree_changes {

@@ -51,6 +51,8 @@ pub(crate) struct ChangesHostInfo {
     pub(crate) default_agent_id: Option<String>,
     /// The saved Hide test files choice (`changesHideTestFiles`).
     pub(crate) hide_test_files: bool,
+    /// The active project's Git hosting provider (for host-specific PR/MR words).
+    pub(crate) git_provider: ghostex_gx_protocol::git_provider::GitHostProvider,
 }
 
 /// What an entry point asks the view to show when it opens it.
@@ -73,20 +75,28 @@ pub(crate) enum CommitAction {
 }
 
 impl CommitAction {
-    pub(crate) fn label(self, on_default_branch: bool) -> &'static str {
+    pub(crate) fn label(
+        self,
+        on_default_branch: bool,
+        provider: ghostex_gx_protocol::git_provider::GitHostProvider,
+    ) -> &'static str {
+        let terms = provider.terms();
         match self {
             Self::Commit => "Commit",
             Self::CommitPush => "Commit & Push",
-            Self::CommitPushPr if on_default_branch => "Commit, Push & Create PR on a new branch",
-            Self::CommitPushPr => "Commit, Push & Create PR",
+            Self::CommitPushPr if on_default_branch => terms.commit_push_create_new_branch_label,
+            Self::CommitPushPr => terms.commit_push_create_label,
         }
     }
 
-    pub(crate) fn short_label(self) -> &'static str {
+    pub(crate) fn short_label(
+        self,
+        provider: ghostex_gx_protocol::git_provider::GitHostProvider,
+    ) -> &'static str {
         match self {
             Self::Commit => "Commit",
             Self::CommitPush => "Commit & Push",
-            Self::CommitPushPr => "Commit, Push & PR",
+            Self::CommitPushPr => provider.terms().commit_push_short_label,
         }
     }
 }
@@ -137,7 +147,16 @@ impl RepoResults {
                     done.push("pushed".to_string());
                 }
                 if let Some(url) = repo["pullRequest"]["url"].as_str() {
-                    done.push(format!("pull request {url}"));
+                    let provider = repo["pullRequest"]["provider"]
+                        .as_str()
+                        .and_then(
+                            ghostex_gx_protocol::git_provider::GitHostProvider::from_wire_name,
+                        )
+                        .or_else(|| {
+                            ghostex_gx_protocol::git_provider::detect_provider_from_pr_url(url)
+                        })
+                        .unwrap_or_default();
+                    done.push(format!("{} {url}", provider.terms().singular));
                 }
                 let text = match &error {
                     Some(error) if done.is_empty() => error.clone(),
