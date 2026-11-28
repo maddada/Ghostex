@@ -1324,6 +1324,26 @@ fn spawn_and_init_claude(
                                     }
                                 }
                             } else if subtype == Some("status") {
+                                // Claude reports its permission mode on `system/status` too
+                                // (a mode it switched by itself, such as leaving plan mode).
+                                // Without this, `native_mode` goes stale and
+                                // `apply_claude_approval_level` can skip a needed
+                                // `set_permission_mode`, leaving Claude in a looser mode than
+                                // the chat's approval level. No `mode_sync_lock` here: the sync
+                                // holds it while it waits for this reader to deliver the
+                                // `set_permission_mode` reply, and Claude may report the new
+                                // mode on a status line first.
+                                if let Some(pm) = msg
+                                    .get("permissionMode")
+                                    .and_then(Value::as_str)
+                                    .filter(|m| !m.is_empty())
+                                {
+                                    let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                    s.native_mode = pm.to_string();
+                                    if !s.explicit_approval_level {
+                                        s.approval_level = claude_native_mode_to_approval_level(pm);
+                                    }
+                                }
                                 let status = msg.get("status").and_then(Value::as_str);
                                 if status == Some("requesting") {
                                     // When a mid-turn `user` message arrives just as a reply finishes
