@@ -672,7 +672,13 @@ impl NativeChatView {
             let _ = handle.update(cx, |_, window, _| window.remove_window());
             if let Some(main_window) = main_window {
                 let _ = main_window.update(cx, |_, window, cx| {
-                    window.activate_window();
+                    // The panel also closes on its own when its ask leaves the dock (answered or
+                    // withdrawn elsewhere), which must not pull Ghostex in front of another app.
+                    crate::app::window_activation::activate_window_if_frontmost(
+                        window,
+                        cx,
+                        "dock ask panel closed",
+                    );
                     let _ = chat.update(cx, |chat, cx| {
                         chat.focus_requested = true;
                         cx.notify();

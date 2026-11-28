@@ -82,4 +82,5 @@ pub(crate) mod voice_agent;
 pub(crate) mod web_app;
 pub(crate) mod web_host;
 pub(crate) mod window;
+pub(crate) mod window_activation;
 pub(crate) mod workspace_windows;

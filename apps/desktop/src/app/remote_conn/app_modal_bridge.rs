@@ -8,6 +8,12 @@ use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::*;
 
+thread_local! {
+    /// Dialogs asked for while another app was frontmost (`open_app_modal_from_bridge`).
+    static DIALOGS_HELD_FOR_RETURN: std::cell::RefCell<Vec<serde_json::Value>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
 impl GhostexGpuiApp {
     pub(crate) fn receive_app_modal_host_bridge_event(
         &mut self,
@@ -375,11 +381,21 @@ fn gpui_app_modal_open_message_allowed_fields(
 }
 
 impl GhostexGpuiApp {
+    /// The user came back to Ghostex: the dialogs asked for while they were in another app open,
+    /// in the order they were asked for (a later one replaces an earlier one, as it would have).
+    pub(crate) fn open_app_modals_held_for_return(&mut self, cx: &mut gpui::Context<Self>) {
+        let held = DIALOGS_HELD_FOR_RETURN.with(|held| std::mem::take(&mut *held.borrow_mut()));
+        for message in held {
+            self.open_app_modal_from_bridge(message, cx);
+        }
+    }
+
     /// What the bridge's `open` arm does: validate the modal, rebuild its open message from the
     /// allowlist, attach the sidebar state, and OPEN THE WINDOW.
     ///
     /// CDXC:AppModal 2026-09-21 WHY:
     /// Moved out of the `open` arm so the sidebar store opens a dialog through the same code the old runtime's `openAppModal` reaches, instead of through `dispatch_open_gpui_app_modal_message`, which only delivers a message INTO a window that already exists and returns silently when none does. The store's Rename, Note, More menu rows, Configure, Space editor, Add Worktree and History all called that one, so every one of them did nothing unless a dialog happened to be open already, while their gates (which compare the planned call, not the host that performs it) stayed clean.
+
     pub(crate) fn open_app_modal_from_bridge(
         &mut self,
         message: serde_json::Value,
@@ -392,6 +408,16 @@ impl GhostexGpuiApp {
         else {
             return;
         };
+        // CDXC:FocusRouting 2026-11-28 DECISION (issue #792): a dialog asked for while another app
+        // is frontmost (an agent's first reply opening Connect a Device, an agent running
+        // `ghostex settings open`) opens when the user comes back to Ghostex, never over the app
+        // they are typing in. A dialog the user asked for from outside (a notification click, the
+        // menu bar) opens as soon as Ghostex is active, which their click makes it.
+        if !crate::app::window_activation::may_take_keyboard(cx) {
+            crate::app::window_activation::log_held(modal.modal_id());
+            DIALOGS_HELD_FOR_RETURN.with(|held| held.borrow_mut().push(message));
+            return;
+        }
         /*
         CDXC:TranscriptExport 2026-08-20:
         Capture the exported file's path from the dialog's own open

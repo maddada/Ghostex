@@ -35,6 +35,9 @@ pub(crate) struct AppNotices {
     /// Approvals closed without an answer: still waiting, back in the modal with the next notice.
     pub(crate) set_aside: Vec<String>,
     pub(crate) window: Option<(WindowHandle<Root>, Entity<GpuiNoticeModalWindow>)>,
+    /// A notice arrived while another app was frontmost: its modal opens when the user comes back
+    /// to Ghostex (`release_app_notices_held_for_return`), never over the app they are in.
+    pub(crate) held: bool,
 }
 
 impl GpuiAppToast {
@@ -288,9 +291,30 @@ impl GhostexGpuiApp {
             }
             self.app_notices.window = None;
         }
+        // CDXC:FocusRouting 2026-11-28 DECISION (issue #792): every toast with a button lands here,
+        // most of them because an agent or a computer did something, and the modal is a window
+        // that takes the keyboard. While another app is frontmost it waits, and opens when the
+        // user comes back to Ghostex.
+        if !crate::app::window_activation::may_take_keyboard(cx) {
+            if !self.app_notices.held {
+                crate::app::window_activation::log_held("notice");
+            }
+            self.app_notices.held = true;
+            return;
+        }
+        self.app_notices.held = false;
         let host: NoticeModalHost =
             self.native_app_modal_host(cx, |app, command, cx| app.answer_app_notice(command, cx));
         self.app_notices.window = self.open_app_notice_window(palette, host, items, cx);
+    }
+
+    /// The user came back to Ghostex: the notices that waited while they were in another app open.
+    /// The browser build never holds a notice (its page is the app), so nothing calls this there.
+    #[cfg_attr(ghostex_web, allow(dead_code))]
+    pub(crate) fn release_app_notices_held_for_return(&mut self, cx: &mut gpui::Context<Self>) {
+        if self.app_notices.held {
+            self.sync_app_notice_window(cx);
+        }
     }
 
     fn answer_app_notice(&mut self, command: NoticeModalCommand, cx: &mut gpui::Context<Self>) {

@@ -387,6 +387,8 @@ pub(crate) fn open_workspace_window(
                     #[cfg(not(target_os = "macos"))]
                     let source_focus = false;
                     note_workspace_window_activated(window, source_focus, cx);
+                    // What waited while the user was in another app opens now that they are back.
+                    app.release_popups_held_for_return(cx);
                     crate::app::window::popup_dismissal::note_workspace_window_activation(
                         gpui::Window::window_handle(window).window_id(),
                         cx,

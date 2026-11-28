@@ -609,6 +609,11 @@ fn set_add_computer_after_first_reply(pending: bool) {
     }
 }
 
+/// An agent's first reply came while another app was frontmost: Connect a Device (or Add a
+/// computer) waits for the user to come back to Ghostex.
+static CONNECT_DEVICE_HELD: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 impl GhostexGpuiApp {
     /// CDXC:Onboarding 2026-11-11 DECISION:
     /// User, on the first-run page (step 18, windows that open by themselves after setup), picked "Wait until after the first reply": setup's "Pair my phone after setup" no longer opens Connect a Device over the first session the moment setup closes; it opens once an agent first finishes a turn or needs the user (its session goes into attention), and the wait survives a restart until then.
@@ -641,6 +646,16 @@ impl GhostexGpuiApp {
         if sessions_into_attention == 0 || !(phone || computer) || !self.is_lead_window() {
             return;
         }
+        // CDXC:FocusRouting 2026-11-28 (issue #792): the reply that opens it usually arrives while
+        // the user is in another app; the window waits for them to come back to Ghostex
+        // (`release_popups_held_for_return`) instead of opening over that app.
+        if !crate::app::window_activation::may_take_keyboard(cx) {
+            if !CONNECT_DEVICE_HELD.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                crate::app::window_activation::log_held("connect a device after the first reply");
+            }
+            return;
+        }
+        CONNECT_DEVICE_HELD.store(false, std::sync::atomic::Ordering::Relaxed);
         if phone {
             set_connect_device_after_first_reply(false);
             self.open_app_modal_from_bridge(
@@ -651,6 +666,16 @@ impl GhostexGpuiApp {
             return;
         }
         self.open_queued_add_computer(cx);
+    }
+
+    /// The user came back to Ghostex: what waited for them while they were in another app opens now
+    /// (the notice modal, and Connect a Device after the first reply).
+    pub(crate) fn release_popups_held_for_return(&mut self, cx: &mut gpui::Context<Self>) {
+        self.release_app_notices_held_for_return(cx);
+        self.open_app_modals_held_for_return(cx);
+        if CONNECT_DEVICE_HELD.load(std::sync::atomic::Ordering::Relaxed) {
+            self.open_queued_connect_device_after_reply(1, cx);
+        }
     }
 
     /// Connect a Device just closed: Add a computer, when setup queued it and the phone went first.

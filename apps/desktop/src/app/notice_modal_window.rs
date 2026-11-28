@@ -89,9 +89,13 @@ impl GhostexGpuiApp {
     pub(crate) fn app_notice_window_closed(&mut self, cx: &mut gpui::Context<Self>) {
         crate::app::window::popup_dismissal::set_notice_window(None);
         if let Some(modal) = self.native_app_modal.as_ref() {
-            let _ = modal
-                .window
-                .update(cx, |_, window, _| window.activate_window());
+            let _ = modal.window.update(cx, |_, window, cx| {
+                crate::app::window_activation::activate_window_if_frontmost(
+                    window,
+                    cx,
+                    "notice closed, back to the open dialog",
+                )
+            });
         }
     }
 }

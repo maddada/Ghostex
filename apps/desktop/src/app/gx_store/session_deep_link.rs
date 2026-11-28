@@ -79,7 +79,7 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        cx.activate(true);
+        crate::app::window_activation::bring_ghostex_forward_for_user(cx, "session link");
         window.activate_window();
         let Some(target) = parse_session_link(link) else {
             self.show_session_link_notice(session_link_invalid_notice(), cx);

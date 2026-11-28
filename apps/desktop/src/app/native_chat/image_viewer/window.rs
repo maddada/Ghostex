@@ -175,7 +175,13 @@ impl NativeChatView {
                 cx.defer(move |cx| {
                     let _ = handle.update(cx, |_, window, _| window.remove_window());
                     if let Some(main) = main {
-                        let _ = main.update(cx, |_, window, _| window.activate_window());
+                        let _ = main.update(cx, |_, window, cx| {
+                            crate::app::window_activation::activate_window_if_frontmost(
+                                window,
+                                cx,
+                                "image viewer closed",
+                            )
+                        });
                     }
                 });
             }

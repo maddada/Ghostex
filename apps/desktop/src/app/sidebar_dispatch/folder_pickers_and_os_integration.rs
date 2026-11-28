@@ -148,7 +148,7 @@ impl GhostexGpuiApp {
             return true;
         }
         if ghostex_gx_protocol::is_terminal_link_route(link) {
-            cx.activate(true);
+            crate::app::window_activation::bring_ghostex_forward_for_user(cx, "terminal link");
             window.activate_window();
             let notice = ghostex_gx_core::terminal_link_gone_notice();
             self.dispatch_gpui_app_modal_toast("warning", &notice.title, &notice.description, cx);
@@ -179,7 +179,7 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        cx.activate(true);
+        crate::app::window_activation::bring_ghostex_forward_for_user(cx, "ghostex link");
         window.activate_window();
         let action = url.host_str().unwrap_or_default().to_ascii_lowercase();
         let query_value = |name: &str| -> Option<String> {
@@ -281,7 +281,10 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        cx.activate(true);
+        crate::app::window_activation::bring_ghostex_forward_for_user(
+            cx,
+            "file opened with Ghostex",
+        );
         window.activate_window();
         let mut open_paths = Vec::new();
         let mut script_paths = Vec::new();

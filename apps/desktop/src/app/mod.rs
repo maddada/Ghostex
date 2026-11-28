@@ -28,6 +28,7 @@ pub(crate) mod screenshot_mode;
 pub(crate) mod shell_hotkeys;
 pub(crate) mod switch_requests;
 pub(crate) mod window;
+pub(crate) mod window_activation;
 
 pub(crate) mod add_project_modal_lifecycle;
 pub(crate) mod add_session_link_modal_lifecycle;

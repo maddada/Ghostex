@@ -111,7 +111,7 @@ impl GhostexGpuiApp {
         window: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        cx.activate(true);
+        crate::app::window_activation::bring_ghostex_forward_for_user(cx, "notification click");
         if let Some(page) = session_id
             .strip_prefix(crate::app::browser_page_notifications::BROWSER_PAGE_NOTIFICATION_PREFIX)
         {

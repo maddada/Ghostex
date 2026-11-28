@@ -179,7 +179,11 @@ fn capture_screenshot(output: &Path, flags: &Flags) -> CliResult<()> {
     if let Some(parent) = output.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    if flags.text("activate").as_deref() != Some("false") {
+    // CDXC:FocusRouting 2026-11-28 DECISION (issue #792): agents run `ghostex screenshot` and
+    // `ghostex bundle` (a bug report's diagnostics) while the user works in another app, and
+    // pulling Ghostex in front of it took their keyboard. Ghostex is brought forward only when the
+    // command asks for it with `--activate`; otherwise the screen is captured as it is.
+    if flags.contains("activate") && flags.text("activate").as_deref() != Some("false") {
         activate_ghostex_app();
     }
     exec_file(

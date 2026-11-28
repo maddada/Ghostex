@@ -399,7 +399,7 @@ impl GhostexGpuiApp {
     pub(super) fn ghostex_capture_bring_ghostex_forward(&mut self, cx: &mut Context<Self>) {
         let main = self.main_window_handle;
         App::defer(cx, move |cx| {
-            cx.activate(true);
+            crate::app::window_activation::bring_ghostex_forward_for_user(cx, "Floating Capture");
             if let Some(main) = main {
                 let _ = main.update(cx, |_, window, _| window.activate_window());
             }
