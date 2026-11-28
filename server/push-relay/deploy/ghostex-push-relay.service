@@ -1,9 +1,9 @@
-# Ghostex's Live Activity push relay (share.ghostex.dev/live-activity/), behind Caddy on the same box.
+# Ghostex's push relay (share.ghostex.dev/live-activity/ and share.ghostex.dev/push/), behind Caddy on the same box.
 # Install: /opt/ghostex-push-relay/ghostex-push-relay, the system user ghostex-push-relay, and
 # /etc/ghostex-push-relay (root:ghostex-push-relay 0750) for the Apple key (AuthKey.p8) and apns.conf
 # (KEY_ID=, TEAM_ID=), each root:ghostex-push-relay 0640. Without them it starts and refuses pushes.
 [Unit]
-Description=Ghostex Live Activity push relay
+Description=Ghostex push relay
 After=network-online.target
 Wants=network-online.target
 

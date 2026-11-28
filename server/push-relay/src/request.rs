@@ -8,6 +8,7 @@
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
+use crate::apns::{Outgoing, PushType};
 use crate::MAX_APNS_PAYLOAD_BYTES;
 
 /// The Swift type of the activity's attributes in the iPhone app (`GhostexActivityAttributes.swift`); it has
@@ -122,9 +123,24 @@ pub struct Prepared {
     pub expiration: i64,
 }
 
-fn valid_token(token: &str) -> bool {
+impl Prepared {
+    /// This Live Activity push as it goes to Apple.
+    pub fn outgoing(&self) -> Outgoing<'_> {
+        Outgoing {
+            token: &self.token,
+            environment: self.environment,
+            push_type: PushType::LiveActivity,
+            priority: self.priority,
+            expiration: self.expiration,
+            payload: &self.payload,
+        }
+    }
+}
+
+/// A device token in hex, as every push route takes it (64 to 512 characters, whole bytes).
+pub(crate) fn valid_token(token: &str) -> bool {
     (TOKEN_HEX_MIN..=TOKEN_HEX_MAX).contains(&token.len())
-        && token.len() % 2 == 0
+        && token.len().is_multiple_of(2)
         && token.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 

@@ -1,9 +1,17 @@
-# Ghostex's Live Activity push relay, on the share relay's name: add this handle block inside the
+# Ghostex's push relay, on the share relay's name: add these two handle blocks inside the
 # existing share.ghostex.dev site (server/share-relay/deploy/Caddyfile), above its reverse_proxy line.
-# Caddy holds the certificate; the relay listens on loopback only.
+# Caddy holds the certificate; the relay listens on loopback only. /push/ takes a larger body because a
+# widget snapshot may be up to 8 KiB on its own; the relay refuses anything over its own limits. Mailbox and
+# snapshot ids travel in the Authorization header, never in the path, and Caddy logs that header as REDACTED.
 	handle /live-activity/* {
 		request_body {
 			max_size 8KB
+		}
+		reverse_proxy 127.0.0.1:58810
+	}
+	handle /push/* {
+		request_body {
+			max_size 16KB
 		}
 		reverse_proxy 127.0.0.1:58810
 	}

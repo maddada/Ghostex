@@ -80,9 +80,8 @@ async fn main() {
     let apple = Credentials::load(&args.key, &args.config)
         .and_then(|credentials| Apple::new(credentials, target));
     match &apple {
-        Ok(apple) => log(&format!(
-            "configured key_id={} target={}",
-            apple.key_id(),
+        Ok(_) => log(&format!(
+            "configured: the key loaded; target={}",
             match &args.stand_in {
                 Some(_) => "stand-in",
                 None => "apple",

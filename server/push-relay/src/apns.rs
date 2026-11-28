@@ -2,7 +2,8 @@
 //!
 //! The provider token is a JWT signed with the `.p8` key (ES256), naming the Key ID and the Team ID. Apple
 //! refuses one older than an hour and answers `TooManyProviderTokenUpdates` when it changes more often than
-//! every 20 minutes, so one token is made and reused for 40 minutes.
+//! every 20 minutes, so one token is made and reused for 40 minutes, and made again sooner (once it is 20 minutes
+//! old) only when Apple calls it expired or invalid (`send`).
 
 use std::path::Path;
 use std::sync::Mutex;
@@ -15,11 +16,55 @@ use p256::ecdsa::{Signature, SigningKey};
 use p256::pkcs8::DecodePrivateKey;
 use serde_json::{json, Value};
 
-use crate::request::{Environment, Prepared};
-use crate::TOPIC;
+use crate::request::Environment;
+use crate::{APP_TOPIC, TOPIC, WIDGETS_TOPIC};
 
 pub const PRODUCTION_ORIGIN: &str = "https://api.push.apple.com";
 pub const SANDBOX_ORIGIN: &str = "https://api.sandbox.push.apple.com";
+
+/// Apple's push type for each kind of push the relay sends. Each fixes Apple's `apns-push-type` header and the
+/// topic it goes to; no caller names either.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PushType {
+    /// A Live Activity update, end or start (`/live-activity/v1/send`).
+    LiveActivity,
+    /// A visible notification (`/push/v1/alert`).
+    Alert,
+    /// A background push with no alert, for the app's opportunistic refresh (`/push/v1/alert`, kind `background`).
+    Background,
+    /// A WidgetKit reload (`/push/v1/widgets`).
+    Widgets,
+}
+
+impl PushType {
+    pub fn header(self) -> &'static str {
+        match self {
+            PushType::LiveActivity => "liveactivity",
+            PushType::Alert => "alert",
+            PushType::Background => "background",
+            PushType::Widgets => "widgets",
+        }
+    }
+
+    pub fn topic(self) -> &'static str {
+        match self {
+            PushType::LiveActivity => TOPIC,
+            PushType::Alert | PushType::Background => APP_TOPIC,
+            PushType::Widgets => WIDGETS_TOPIC,
+        }
+    }
+}
+
+/// One push as it goes to Apple.
+pub struct Outgoing<'a> {
+    pub token: &'a str,
+    pub environment: Environment,
+    pub push_type: PushType,
+    pub priority: u8,
+    /// When Apple may stop trying to deliver it (unix seconds).
+    pub expiration: i64,
+    pub payload: &'a [u8],
+}
 
 /// A provider token is reused this long.
 const PROVIDER_TOKEN_REUSE: Duration = Duration::from_secs(40 * 60);
@@ -87,10 +132,6 @@ impl Credentials {
             key_id,
             team_id,
         })
-    }
-
-    pub fn key_id(&self) -> &str {
-        &self.key_id
     }
 
     /// A provider token issued at `issued_at` (unix seconds).
@@ -192,10 +233,6 @@ impl Apple {
         })
     }
 
-    pub fn key_id(&self) -> &str {
-        self.credentials.key_id()
-    }
-
     /// The cached provider token, or a new one when it is 40 minutes old, or when `renew` and Apple allows a
     /// new one (20 minutes). The flag says whether this call made a new one.
     fn provider_token(&self, renew: bool) -> (String, bool) {
@@ -215,7 +252,7 @@ impl Apple {
         (token, true)
     }
 
-    async fn post(&self, push: &Prepared, provider_token: &str) -> Result<AppleAnswer, String> {
+    async fn post(&self, push: &Outgoing<'_>, provider_token: &str) -> Result<AppleAnswer, String> {
         let url = format!(
             "{}/3/device/{}",
             self.target.origin(push.environment),
@@ -225,12 +262,12 @@ impl Apple {
             .client
             .post(url)
             .header("authorization", format!("bearer {provider_token}"))
-            .header("apns-push-type", "liveactivity")
-            .header("apns-topic", TOPIC)
+            .header("apns-push-type", push.push_type.header())
+            .header("apns-topic", push.push_type.topic())
             .header("apns-priority", push.priority.to_string())
             .header("apns-expiration", push.expiration.to_string())
             .header("content-type", "application/json")
-            .body(push.payload.clone())
+            .body(push.payload.to_vec())
             .send()
             .await
             // The error text can carry the URL, and so the token: only its kind goes out.
@@ -274,7 +311,7 @@ impl Apple {
 
     /// Sends one push. A provider token Apple calls expired or invalid is made again once, when Apple allows a
     /// new one, and the push retried with it.
-    pub async fn send(&self, push: &Prepared) -> Result<AppleAnswer, String> {
+    pub async fn send(&self, push: &Outgoing<'_>) -> Result<AppleAnswer, String> {
         let answer = self.post(push, &self.provider_token(false).0).await?;
         let stale_token = answer.status == 403
             && matches!(
