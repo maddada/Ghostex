@@ -925,7 +925,13 @@ fn spawn_and_init_codex(
         "initialize",
         json!({
             "clientInfo": crate::acp::client_info(),
-            "capabilities": { "experimentalApi": true },
+            "capabilities": {
+                "experimentalApi": true,
+                // Nothing reads the whole-turn diff Codex re-sends after every file change; it
+                // only grew the spool. Output deltas stay on: they keep `lastEventAtMs` fresh
+                // through long commands.
+                "optOutNotificationMethods": ["turn/diff/updated"],
+            },
         }),
         CODEX_RPC_TIMEOUT,
     ) {
