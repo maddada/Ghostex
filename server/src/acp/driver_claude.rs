@@ -1268,6 +1268,19 @@ fn spawn_and_init_claude(
                                 if was_empty {
                                     act_out.sync();
                                 }
+                            } else if subtype == "elicitation" {
+                                // An MCP server asked for input Native chat cannot show yet.
+                                // Cancel it (the server goes on without the answer) instead of
+                                // failing the request, which Claude Code reports as an error in
+                                // the tool call.
+                                let _ = t_out.write_json(&json!({
+                                    "type": "control_response",
+                                    "response": {
+                                        "subtype": "success",
+                                        "request_id": req_id,
+                                        "response": { "action": "cancel" },
+                                    }
+                                }));
                             } else {
                                 let _ = t_out.write_json(&json!({
                                     "type": "control_response",
