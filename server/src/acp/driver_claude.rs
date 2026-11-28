@@ -338,6 +338,15 @@ impl ClaudeState {
         } else {
             explicit_approval_level.unwrap_or(AcpApprovalLevel::Ask)
         };
+        // Until the first `result` reports the real window, a `[1m]` model starts at 1M.
+        let initial_window = if initial_model
+            .as_deref()
+            .is_some_and(|m| m.trim().to_ascii_lowercase().ends_with("[1m]"))
+        {
+            1_000_000
+        } else {
+            200_000
+        };
         Self {
             native_session_id: None,
             working: false,
@@ -370,7 +379,7 @@ impl ClaudeState {
             live_tool_detail: None,
             live_tool_started_at: None,
             usage_used_tokens: None,
-            usage_window_size: Some(200_000),
+            usage_window_size: Some(initial_window),
             last_event_at_ms: now_ms(),
             child_pid: 0,
             child_exited: false,
@@ -625,6 +634,41 @@ fn extract_claude_message_text(msg: &Value) -> String {
             .to_string(),
         _ => String::new(),
     }
+}
+
+/// The context window of the model the conversation runs on, from a `result`'s `modelUsage`.
+///
+/// `modelUsage` has one entry per model the process used in the turn, including small side calls
+/// (a Haiku title or a web-fetch summary), in the order the process first used them. The entry
+/// for the session's model wins (matched without the `[1m]` suffix); with no match, the largest
+/// window, since side models never have a bigger one than the main model.
+fn claude_main_context_window(
+    model_usage: &serde_json::Map<String, Value>,
+    current_model: Option<&str>,
+) -> Option<u64> {
+    let window = |entry: &Value| {
+        entry
+            .get("contextWindow")
+            .and_then(Value::as_u64)
+            .filter(|cw| *cw > 0)
+    };
+    let bare = |model: &str| {
+        model
+            .trim()
+            .trim_end_matches("[1m]")
+            .trim_end_matches("[1M]")
+            .to_ascii_lowercase()
+    };
+    if let Some(current) = current_model.map(bare).filter(|m| !m.is_empty()) {
+        if let Some(cw) = model_usage
+            .iter()
+            .find(|(model, _)| bare(model) == current)
+            .and_then(|(_, entry)| window(entry))
+        {
+            return Some(cw);
+        }
+    }
+    model_usage.values().filter_map(window).max()
 }
 
 fn is_claude_auth_error(error_code: Option<&str>, text: &str) -> bool {
@@ -1467,18 +1511,17 @@ fn spawn_and_init_claude(
                             ) = {
                                 let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
                                 rewind::forget_rewind_resume_point(&mut s);
-                                if let Some(model_usage) =
-                                    msg.get("modelUsage").and_then(Value::as_object)
+                                if let Some(cw) = msg
+                                    .get("modelUsage")
+                                    .and_then(Value::as_object)
+                                    .and_then(|usage| {
+                                        claude_main_context_window(
+                                            usage,
+                                            s.current_model.as_deref(),
+                                        )
+                                    })
                                 {
-                                    if let Some((_, first)) = model_usage.iter().next() {
-                                        if let Some(cw) =
-                                            first.get("contextWindow").and_then(Value::as_u64)
-                                        {
-                                            if cw > 0 {
-                                                s.usage_window_size = Some(cw);
-                                            }
-                                        }
-                                    }
+                                    s.usage_window_size = Some(cw);
                                 }
                                 let result_interrupted = msg
                                     .get("subtype")
