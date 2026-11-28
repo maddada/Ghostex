@@ -1031,7 +1031,19 @@ fn spawn_and_init_claude(
     // Last: `--mcp-config` and `--allowedTools` each take several values.
     argv.extend(crate::connectors::native_connector_tool_args("claude"));
 
-    let mut child = super::child_lifetime::end_with_host(&mut Command::new(&prog))
+    let mut command = Command::new(&prog);
+    // A resumed session's first request otherwise goes out before its MCP servers connect, and
+    // Claude Code tells the agent they disconnected. A value the user or the command set wins.
+    let resuming = resume_session_id.is_some_and(|id| !id.trim().is_empty());
+    if resuming
+        && std::env::var_os("MCP_CONNECTION_NONBLOCKING").is_none()
+        && !acp_envs
+            .iter()
+            .any(|(key, _)| key == "MCP_CONNECTION_NONBLOCKING")
+    {
+        command.env("MCP_CONNECTION_NONBLOCKING", "0");
+    }
+    let mut child = super::child_lifetime::end_with_host(&mut command)
         .env_remove(super::channel::ACP_CHANNEL_SECRET_ENV)
         .env_remove("CLAUDECODE")
         .envs(acp_envs)
