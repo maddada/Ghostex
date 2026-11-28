@@ -268,6 +268,16 @@ impl SettingsPalette {
         css_fade(self.raised, 0.82)
     }
 
+    /// The theme's Warning role, or what it paints while unset: the chat's working dot
+    /// (helpers/theme_role_defaults.rs).
+    pub(crate) fn warning(&self) -> Rgba {
+        crate::app::helpers::theme_role_or_rgba(
+            "warning",
+            self.light,
+            rgb(crate::app::native_sidebar::status::WORKING_COLOR),
+        )
+    }
+
     /// `bg-input/90`: the slider track.
     pub(crate) fn slider_track(&self) -> Rgba {
         css_fade(self.hairline, 0.9)

@@ -435,20 +435,41 @@ fn acp_terminal_notice(
         .and_then(|rt| rt.get(crate::acp::SESSION_NON_CLI_IGNORED_COMMAND_KEY))
         .and_then(Value::as_str)
         .and_then(|saved| crate::acp::ignored_flags::still_ignored(&family, saved))?;
+    // CDXC:AgentProviders 2026-11-28 DECISION:
+    // Antigravity bills a conversation run by a custom agent (`--agent <name>`) at about 4 times
+    // the usual quota (google-antigravity/antigravity-cli#1890, closed as intended). When Native
+    // skipped `--agent` from an Antigravity command, the card does not offer Terminal, which would
+    // run it at that cost, and points to AGENTS.md, GEMINI.md or a skill instead. Other flags and
+    // agents keep the Switch to Terminal card. SEE-ALSO: the Command field's warning dot in
+    // apps/desktop/src/app/window/settings_modal/tabs/agents/panel.rs.
+    let antigravity_agent_flag = crate::acp::canonical_native_family(&family)
+        == Some("antigravity")
+        && ignored
+            .split_whitespace()
+            .any(|token| token == "--agent" || token.starts_with("--agent="));
+    let (detail, mut actions) = if antigravity_agent_flag {
+        (
+            "Antigravity bills custom agents (--agent) at about 4x the usual quota, so Native mode left it out. Put your instructions in AGENTS.md, GEMINI.md or a skill instead.",
+            Vec::new(),
+        )
+    } else {
+        (
+            "Native mode skipped extra flags or environment settings from this agent's command. Switch to Terminal if you need them.",
+            vec![SessionChatTerminalNoticeAction::switch_to_terminal(
+                "Switch to Terminal",
+            )],
+        )
+    };
+    actions.push(crate::acp::ignored_flags::never_show_action());
     let mut notice = SessionChatTerminalNotice::new(
         "nonCliIgnoredCommand",
         SessionChatTerminalNoticeSeverity::Info,
         SessionChatTerminalNoticeSource::Watchdog,
         "Custom flags ignored",
     )
-    .with_detail(
-        "Native mode skipped extra flags or environment settings from this agent's command. Switch to Terminal if you need them.",
-    )
+    .with_detail(detail)
     .with_details(Some(ignored))
-    .with_actions(vec![
-        SessionChatTerminalNoticeAction::switch_to_terminal("Switch to Terminal"),
-        crate::acp::ignored_flags::never_show_action(),
-    ])
+    .with_actions(actions)
     .with_input_blocking(false);
     if let Some(created_at) = session
         .and_then(|s| s.get("createdAt"))

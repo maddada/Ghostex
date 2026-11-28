@@ -11,7 +11,11 @@
 //! `agents-editor-new`, `agents-editor-edit` (Claude), `agents-skip-confirm`, `agents-loading`
 //! (hook status never answers), `agents-empty` (no launchers), `agents-search` ("approval"),
 //! `agents-no-match` ("tailscale"), `agents-home` (scrolled to the Home folder card),
-//! `agents-home-open` (its folders row opened by a search). The page reads the page states from `preview_state`.
+//! `agents-home-open` (its folders row opened by a search), `agents-antigravity` (Antigravity open,
+//! its command without `--agent`), `agents-antigravity-agent-flag` (the same with `--agent`, so its
+//! Command field wears the warning dot) and `agents-antigravity-custom` (a custom agent that works
+//! like Antigravity open, its command with `--agent=`). One panel at a time: both open would draw
+//! Antigravity's CLI group twice. The page reads the page states from `preview_state`.
 use crate::settings_modal::catalog::{module, settings_catalog};
 use serde_json::{Map, Value, json};
 use std::cell::RefCell;
@@ -69,6 +73,27 @@ pub(super) fn extend_sidebar_state(message: &mut Value) {
     if state() == "agents-off" {
         message["hud"]["agents"][0]["enabled"] = json!(false);
         message["hud"]["agents"][0]["lastUsedAt"] = json!("2026-11-10T09:00:00Z");
+    }
+    // Antigravity's own command and a custom agent that works like Antigravity, with and without
+    // the `--agent` flag (the warning dot on Command, agents/panel.rs `agent_flag_dot`).
+    let flag = matches!(
+        state().as_str(),
+        "agents-antigravity-agent-flag" | "agents-antigravity-custom"
+    );
+    if flag || state() == "agents-antigravity" {
+        let agents = message["hud"]["agents"]
+            .as_array_mut()
+            .expect("default roster");
+        let (own, custom) = if flag {
+            ("agy --agent reviewer", "agy --mode auto --agent=reviewer")
+        } else {
+            ("agy --mode auto", "agy --model gemini-3-pro")
+        };
+        agents[8]["command"] = json!(own);
+        agents.push(json!({
+            "agentId": "agy-reviewer", "command": custom, "icon": "antigravity-cli",
+            "isDefault": false, "name": "Antigravity reviewer"
+        }));
     }
 }
 

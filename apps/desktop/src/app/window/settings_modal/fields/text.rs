@@ -123,6 +123,22 @@ pub(crate) fn settings_text_input_with_disabled(
     window: &Window,
     cx: &gpui::App,
 ) -> AnyElement {
+    settings_text_input_with_trailing(p, state, width, monospace, disabled, None, window, cx)
+}
+
+/// The same input skin with `trailing` (a small mark such as a warning dot) inside the field at its
+/// right end, vertically centred, after the text so the text never runs under it.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn settings_text_input_with_trailing(
+    p: &SettingsPalette,
+    state: &Entity<InputState>,
+    width: Option<f32>,
+    monospace: bool,
+    disabled: bool,
+    trailing: Option<AnyElement>,
+    window: &Window,
+    cx: &gpui::App,
+) -> AnyElement {
     let focused = !disabled && state.read(cx).focus_handle(cx).is_focused(window);
     div()
         .when_some(width, |this, width| this.w(px(width)).flex_shrink_0())
@@ -153,6 +169,10 @@ pub(crate) fn settings_text_input_with_disabled(
                     .text_color(hsla(p.foreground)),
             ),
         )
+        .when_some(trailing, |this, trailing| {
+            this.gap(px(8.0))
+                .child(div().flex_shrink_0().child(trailing))
+        })
         .into_any_element()
 }
 

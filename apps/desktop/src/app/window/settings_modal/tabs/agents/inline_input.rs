@@ -1,7 +1,7 @@
 //! The Name and Command inputs of an expanded row. Unlike Settings text fields, which save every
 //! keystroke, these save once, on Enter or when focus leaves, because each save rewrites the
 //! agent roster in every project.
-use super::super::super::fields::settings_text_input;
+use super::super::super::fields::settings_text_input_with_trailing;
 use super::super::super::palette::SettingsPalette;
 use super::AgentsTab;
 use gpui::Focusable as _;
@@ -21,6 +21,37 @@ impl AgentsTab {
         width: f32,
         monospace: bool,
         on_commit: impl Fn(&mut Self, String, &mut Context<Self>) + 'static,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        self.inline_input_with_trailing(
+            p,
+            id,
+            value,
+            placeholder,
+            width,
+            monospace,
+            on_commit,
+            None::<fn(&str) -> Option<AnyElement>>,
+            window,
+            cx,
+        )
+    }
+
+    /// [`Self::inline_input`] with `trailing`, which maps the text in the box (typed or saved) to a
+    /// mark drawn inside the field at its right end. The panel redraws as the user types, so the
+    /// mark follows the text before it is saved.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn inline_input_with_trailing(
+        &mut self,
+        p: &SettingsPalette,
+        id: SharedString,
+        value: &str,
+        placeholder: &str,
+        width: f32,
+        monospace: bool,
+        on_commit: impl Fn(&mut Self, String, &mut Context<Self>) + 'static,
+        trailing: Option<impl FnOnce(&str) -> Option<AnyElement>>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -51,6 +82,10 @@ impl AgentsTab {
                     &input,
                     window,
                     move |page: &mut Self, input, event: &InputEvent, _window, cx| {
+                        if matches!(event, InputEvent::Change) {
+                            cx.notify();
+                            return;
+                        }
                         if !matches!(event, InputEvent::Blur | InputEvent::PressEnter { .. }) {
                             return;
                         }
@@ -67,6 +102,16 @@ impl AgentsTab {
                 input
             }
         };
-        settings_text_input(p, &input, Some(width), monospace, window, cx)
+        let mark = trailing.and_then(|trailing| trailing(input.read(cx).value().as_ref()));
+        settings_text_input_with_trailing(
+            p,
+            &input,
+            Some(width),
+            monospace,
+            false,
+            mark,
+            window,
+            cx,
+        )
     }
 }

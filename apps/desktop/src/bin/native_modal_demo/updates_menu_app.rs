@@ -419,6 +419,9 @@ pub(crate) mod native_sidebar {
     pub(crate) mod status {
         use gpui::{Hsla, ParentElement as _, SharedString, Styled as _, div, px};
 
+        /// app/native_sidebar/status.rs `WORKING_COLOR`: the theme's Warning while it is unset.
+        pub(crate) const WORKING_COLOR: u32 = 0xc68a06;
+
         /// Stand-in for app/native_sidebar/status.rs `corner_dot`: the same 4pt dot, 3pt in from
         /// the top-right corner, with a 1pt ring of what it sits on; the preview has no hover.
         pub(crate) fn corner_dot(

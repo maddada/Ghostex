@@ -10,24 +10,28 @@ use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{
     ButtonSize, ButtonVariant, ROW_PADDING_X, RowSpec, SELECT_WIDTH, setting_row,
     settings_button_sized, settings_list_item, settings_select, settings_select_described,
+    wrapped_tooltip_text,
 };
 use super::super::super::palette::SettingsPalette;
 use super::AgentsTab;
 use super::icons;
 use super::model::{
-    AgentButton, HookStatusItem, default_agents, hook_removable, inherit_value,
-    non_cli_mode_family, permission_mode_options, preferred_interface_override_options,
-    session_mode_options, supports_accept_all, supports_chat_view,
+    AgentButton, HookStatusItem, auto_permission_family, default_agents, hook_removable,
+    inherit_value, non_cli_mode_family, permission_mode_options,
+    preferred_interface_override_options, session_mode_options, supports_accept_all,
+    supports_chat_view,
 };
 use super::roster::hook_detail_icon;
 use super::select::DropdownOption;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, IntoElement, ParentElement as _, SharedString, Styled as _, Window, div,
+    Animation, AnimationExt as _, AnyElement, Context, InteractiveElement as _, IntoElement,
+    ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, Window, div,
     px,
 };
 use gpui_component::{h_flex, v_flex};
 use serde_json::{Map, Value, json};
+use std::time::Duration;
 
 /// A setting row or list item inside the panel: the row's own 20px sides are given back.
 fn panel_child(element: AnyElement) -> AnyElement {
@@ -67,6 +71,62 @@ fn off_note(p: &SettingsPalette, name: &str) -> AnyElement {
 
 /// Width of the Name and Command inputs.
 const INPUT_WIDTH: f32 = 300.0;
+
+/// The warning dot's tooltip on an Antigravity command that runs a custom agent.
+const ANTIGRAVITY_AGENT_FLAG_WARNING: &str = "Antigravity bills custom agents (--agent) at about 4x the usual quota. Put your instructions in AGENTS.md, GEMINI.md or a skill instead.";
+
+/// Whether `command` passes Antigravity's `--agent` flag (`--agent x` or `--agent=x`) as a word of
+/// its own, not inside another word (`--agents`, `x--agent`).
+fn has_agent_flag(command: &str) -> bool {
+    command
+        .split_whitespace()
+        .map(|word| word.trim_matches(|c| c == '"' || c == '\''))
+        .any(|word| word == "--agent" || word.starts_with("--agent="))
+}
+
+/// The small yellow dot inside the Command field of an Antigravity command that uses `--agent`,
+/// pulsing softly (opacity 100% to 40%, 1.2 s a cycle), with the warning as its tooltip.
+///
+/// CDXC:AgentProviders 2026-11-28 DECISION:
+/// Antigravity bills a conversation run by a custom agent (`--agent <name>`, `.agents/agents/*`,
+/// plugin agents and their subagents) at about 4 times the usual quota
+/// (google-antigravity/antigravity-cli#1890, closed as intended). Ghostex never adds `--agent`, but
+/// a user can type it into Antigravity's Command or a custom agent that works like Antigravity. The
+/// user's design: "make it a yellow flashing dot on the field, when u hover it then it shows that
+/// warning". The dot is the theme's Warning colour, at the field's right end, and only shows while
+/// the command (as typed, before it is saved) has the flag. SEE-ALSO: the "Custom flags ignored"
+/// card in server/src/session_chat_options/detection.rs.
+fn agent_flag_dot(p: &SettingsPalette, agent_id: &str) -> AnyElement {
+    let colour = hsla(p.warning());
+    div()
+        .id(SharedString::from(format!(
+            "agent-command-agent-flag-{agent_id}"
+        )))
+        .size(px(16.0))
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_default()
+        .child(
+            div()
+                .size(px(8.0))
+                .rounded_full()
+                .bg(colour)
+                .with_animation(
+                    SharedString::from(format!("agent-command-agent-flag-pulse-{agent_id}")),
+                    Animation::new(Duration::from_millis(1200))
+                        .repeat()
+                        .with_max_fps(crate::app::helpers::INDICATOR_MAX_FPS),
+                    |dot, delta| {
+                        // Bright, fading to 40% and back, eased like a breath.
+                        let wave = 0.5 + 0.5 * (delta * std::f32::consts::TAU).cos();
+                        dot.opacity(0.4 + 0.6 * wave)
+                    },
+                ),
+        )
+        .tooltip(wrapped_tooltip_text(ANTIGRAVITY_AGENT_FLAG_WARNING))
+        .into_any_element()
+}
 
 impl AgentsTab {
     /// `saveAgent` for a changed permission mode: the agent as it is with the new mode.
@@ -292,7 +352,11 @@ impl AgentsTab {
                 )));
             }
             let command_agent = agent.clone();
-            let command_input = self.inline_input(
+            let antigravity = auto_permission_family(&agent.agent_id, agent.icon.as_deref())
+                == Some("antigravity");
+            let dot_palette = *p;
+            let dot_agent_id = agent_id.clone();
+            let command_input = self.inline_input_with_trailing(
                 p,
                 SharedString::from(format!("agent-command-{agent_id}")),
                 agent.command.as_deref().unwrap_or_default(),
@@ -302,6 +366,9 @@ impl AgentsTab {
                 move |page: &mut Self, command, cx| {
                     page.save_agent_fields(&command_agent, None, Some(command), None, cx)
                 },
+                antigravity.then_some(move |command: &str| {
+                    has_agent_flag(command).then(|| agent_flag_dot(&dot_palette, &dot_agent_id))
+                }),
                 window,
                 cx,
             );
