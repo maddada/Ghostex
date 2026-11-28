@@ -988,8 +988,33 @@ fn spawn_and_init_codex(
         .as_array()
         .is_none_or(Vec::is_empty);
     if need_models {
-        if let Ok(list) = transport.call("model/list", json!({}), CODEX_RPC_TIMEOUT) {
-            if let Some(data) = list.get("data").and_then(Value::as_array) {
+        // `model/list` is paged: follow `nextCursor` (bounded) so models past the first page
+        // reach the picker.
+        let mut pages: Vec<Value> = Vec::new();
+        let mut cursor: Option<String> = None;
+        for _ in 0..10 {
+            let params = match cursor.as_deref() {
+                Some(c) => json!({ "cursor": c }),
+                None => json!({}),
+            };
+            let Ok(page) = transport.call("model/list", params, CODEX_RPC_TIMEOUT) else {
+                break;
+            };
+            if let Some(data) = page.get("data").and_then(Value::as_array) {
+                pages.extend(data.iter().cloned());
+            }
+            cursor = page
+                .get("nextCursor")
+                .and_then(Value::as_str)
+                .filter(|c| !c.is_empty())
+                .map(str::to_string);
+            if cursor.is_none() {
+                break;
+            }
+        }
+        if !pages.is_empty() {
+            let data = &pages;
+            {
                 use ghostex_gx_chat_core::menus::catalog::{
                     is_placeholder_model_label, is_placeholder_model_value,
                 };
