@@ -1149,8 +1149,18 @@ pub(crate) fn build_ghostex_claude_settings_json(
     cwd: Option<&str>,
     effort: Option<&str>,
     skip_dangerous_prompt: bool,
+    native_stream: bool,
 ) -> Option<String> {
     let mut settings = serde_json::Map::new();
+    // In stream-json mode Claude Code omits thinking text unless thinking summaries are asked
+    // for (`showThinkingSummaries`, Claude Code 2.1.3xx), so a Native chat's thinking rows came
+    // back empty. Only the Native stream sets it; a terminal session keeps the user's setting.
+    if native_stream {
+        settings.insert(
+            "showThinkingSummaries".to_string(),
+            serde_json::Value::Bool(true),
+        );
+    }
     let mut env_map = serde_json::Map::new();
     for (k, v) in &profile.connector_envs {
         if is_allowed_connector_env_key(k) {
@@ -1338,7 +1348,13 @@ pub fn build_cli_switch_argv_with_options(
             inner_args.push(e.to_string());
         }
         if let Some(settings_json) =
-            build_ghostex_claude_settings_json(profile, cwd, effort, accept_all && !read_only)
+            build_ghostex_claude_settings_json(
+                profile,
+                cwd,
+                effort,
+                accept_all && !read_only,
+                false,
+            )
         {
             inner_args.push("--settings".to_string());
             inner_args.push(settings_json);

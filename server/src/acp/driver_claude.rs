@@ -1022,7 +1022,7 @@ fn spawn_and_init_claude(
     // Synthesize Ghostex's own `--settings` JSON strictly from server-generated fields (never
     // from untrusted command strings, never containing hooks, command helpers, or allow rules).
     if let Some(settings_json) =
-        build_ghostex_claude_settings_json(&parsed.profile, Some(cwd), effort, false)
+        build_ghostex_claude_settings_json(&parsed.profile, Some(cwd), effort, false, true)
     {
         argv.push("--settings".to_string());
         argv.push(settings_json);
