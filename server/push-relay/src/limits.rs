@@ -61,8 +61,8 @@ pub struct LimitConfig {
     pub snapshot_lifetime: Duration,
     /// Keys each table of the `/push/` routes' limits holds at most (the Live Activity route's tables keep
     /// theirs). Chosen so that every table and the store full fit under the service's memory limit in a local
-    /// macOS measurement; bodies being read come on top (at most `body_reads` of them), and Linux was not measured
-    /// (README, "Memory").
+    /// macOS measurement; bodies being read come on top (at most `body_reads` of them). One Linux measurement with
+    /// HTTP and its limits are in README, "Memory".
     pub push_max_keys: usize,
     /// Tokens Apple dropped that the `/push/` routes remember, apart from the Live Activity route's.
     pub push_max_gone_tokens: usize,

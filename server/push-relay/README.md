@@ -160,15 +160,31 @@ The relay does not authenticate its callers.
 ### Memory
 
 The unit sets `MemoryMax=128M`; the limits are fixed in the code, and the `/push/` caps were sized against a
-local macOS measurement with every table and the store full, without HTTP. Linux is not measured. Request bodies
-come on top of that: at most 256 are read or held at once, relay-wide for both route families (step 0), each up
-to its route's limit (8 KiB / 16 KiB), so their payload is at most 256 × 16 KiB = 4 MiB. That bounds the payload
-only, not connections, HTTP parsing or buffers. With all 256 places taken, every further `POST` and `PUT` gets 503
+local macOS measurement with every table and the store full, without HTTP. Request bodies come on top of that: at
+most 256 are read or held at once, relay-wide for both route families (step 0), each up to its route's limit
+(8 KiB / 16 KiB), so their payload is at most 256 × 16 KiB = 4 MiB. That bounds the payload only, not
+connections, HTTP parsing or buffers. With all 256 places taken, every further `POST` and `PUT` gets 503
 `bodies-full` until one frees; a body not in within 10 seconds gets 408 `too-slow` and frees its place. So a
 sender who keeps 256 slow bodies open makes the relay refuse every push and store write for as long as it keeps
-doing so: the limits bound payload and waiting time, not availability. If the kernel kills the relay for
-exceeding `MemoryMax`, the unit restarts it (`Restart=always`, `RestartSec=2`, within systemd's start limits) and
-everything under Lifetimes is lost.
+doing so: the limits bound payload and waiting time, not availability.
+
+One Linux measurement ([run 46145530387](https://github.com/cagatay-io/Ghostex/actions/runs/46145530387),
+2026-11-28) holds for its profile only: the relay alone (no Caddy) on a GitHub-hosted x86-64 Ubuntu runner, a
+static musl build made with `musl-gcc` (not `build-linux.sh`'s Zig), in a systemd scope with `MemoryMax=128M` and
+`MemorySwapMax=0`, without the unit's `LimitNOFILE` and other hardening, pushing to a stand-in for Apple over
+HTTP/2 without TLS on loopback. Filled: the Live Activity address and token tables to 200,000 keys, the
+push-to-start table to 199,383 of 200,000, the dropped tokens to 100,000 and 7,000, seven `/push/` tables to
+7,000 keys and the snapshot-id table to 5,000 of 7,000, the store to 5,000 entries and 5 MiB. Then 256 slow
+bodies held every place (64 more requests got 503, the 256 got 408), and 320 requests with 16 KiB bodies were
+sent at once, ten times: each of those 3,200 bodies was read and then refused with 429 because the `/push/`
+caller-address table was full, so none was processed further. The scope's peak was 115,806,208 bytes (110.4 MiB
+of 128 MiB): 96.7 MiB with the tables and the store full and no request open, 108.2 MiB with every place held by
+a slow body; the kernel did not kill the relay. Not measured: the production path (Caddy, TLS to Apple, the box's
+kernel, architecture and unit), requests that pass every check in parallel, more connections than these, and
+longer running time.
+
+If the kernel kills the relay for exceeding `MemoryMax`, the unit restarts it (`Restart=always`, `RestartSec=2`,
+within systemd's start limits) and everything under Lifetimes is lost.
 
 ## Logs
 
