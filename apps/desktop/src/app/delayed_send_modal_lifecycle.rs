@@ -52,6 +52,22 @@ impl GhostexGpuiApp {
         let Some(session_id) = text("sessionId").filter(|session_id| !session_id.is_empty()) else {
             return;
         };
+        // Delayed Send off (Staff picks): the dialog opens only for a session that already has
+        // one scheduled (its armed pill), so it can still be cancelled; from any other route (a
+        // hotkey, a command, an older menu) it does not open. CDXC:DelayedSend 2026-11-28 in the
+        // catalog.
+        let already_scheduled = message
+            .get("delayedSendDeadlineAt")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|deadline| !deadline.is_empty())
+            || flag("sendWhenAllProjectSessionsStopActive")
+            || flag("sendWhenAgentStopsActive")
+            || message
+                .get("sendWhenSpecificAgentFinishes")
+                .is_some_and(|watched| !watched.is_null());
+        if !already_scheduled && !crate::app::delayed_actions::delayed_send_on() {
+            return;
+        }
         // `closeAfterDoneActive ?? sessionsById[id].closeAfterDone ?? commandSessionIndicators[id].closeAfterDone ?? false`.
         let close_after_done_active = message
             .get("closeAfterDoneActive")
@@ -96,10 +112,13 @@ impl GhostexGpuiApp {
             ),
             send_when_agent_stops_active: flag("sendWhenAgentStopsActive"),
             // Absent (a command pane tab, an older sender) offers the switch.
+            // Close After Done off (Staff picks) hides its switch too, unless this session is
+            // already armed, so it can be turned off here.
             supports_close_after_done: message
                 .get("supportsCloseAfterDone")
                 .and_then(serde_json::Value::as_bool)
-                != Some(false),
+                != Some(false)
+                && (close_after_done_active || crate::app::delayed_actions::close_after_done_on()),
             send_when_specific_agent_finishes: delayed_send_agent_reference(
                 message.get("sendWhenSpecificAgentFinishes"),
             ),

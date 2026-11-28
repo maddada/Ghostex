@@ -62,6 +62,16 @@ pub const SESSION_NOTES: &str = "sessionNotes";
 /// Settings' Session Tags section); its switch is `sessionTagsEnabled`. Off by default; Favorite
 /// stays while it is off. The phone learns it from `builtInFeaturesOff`.
 pub const SESSION_TAGS: &str = "sessionTags";
+/// Delayed Send (a message sent later: the session menus' Delayed Send, the chat's and terminal
+/// bar's More actions row, its hotkey); its switch is `delayedSendEnabled`. Off by default;
+/// gxserver refuses new delayed sends while it is off, and ones already scheduled still go out.
+/// The phone learns it from `builtInFeaturesOff`.
+pub const DELAYED_SEND: &str = "delayedSend";
+/// Close After Done (a session closes itself after its agent finishes: the session menus' row,
+/// the hover button, its hotkey); its switch is `closeAfterDoneEnabled`. Off by default; gxserver
+/// refuses arming it while it is off, and a session already armed still closes. The phone learns
+/// it from `builtInFeaturesOff`.
+pub const CLOSE_AFTER_DONE: &str = "closeAfterDone";
 /// The Chat Status Line (the line of pinned details under the chat box). Off by default.
 pub const CHAT_STATUS_LINE: &str = "chatStatusLine";
 /// Catch Me Up (the button at the top right of an empty chat box and its summary card); its switch

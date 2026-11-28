@@ -436,6 +436,12 @@ pub struct SidebarSettings {
     /// The Session Tags extension is on: Tag As, the ☰ menu's tag filters, a tag's icon on a card
     /// and Quick Access's All tags. Favorite stays while it is off (sidebar_menu/session.rs).
     pub session_tags_enabled: bool,
+    /// The Delayed Send Staff pick is on: menus offer Delayed Send. A delayed send already
+    /// scheduled keeps its countdown and its Postpone By / Disable rows while it is off.
+    pub delayed_send_enabled: bool,
+    /// The Close After Done Staff pick is on: menus and the hover strip offer it. A session
+    /// already armed keeps its countdown and its row, to turn it off, while it is off.
+    pub close_after_done_enabled: bool,
     /// Settings › Sidebar is Unified sidebar (`sidebarView: unified`); the Project sidebar is
     /// the default (unified_sidebar/).
     pub unified_sidebar: bool,
@@ -503,6 +509,8 @@ impl Default for SidebarSettings {
             open_in_enabled: true,
             session_notes_enabled: false,
             session_tags_enabled: false,
+            delayed_send_enabled: false,
+            close_after_done_enabled: false,
             unified_sidebar: false,
             unified_working_section: true,
             unified_session_order: UnifiedSessionOrder::Recent,
@@ -659,6 +667,14 @@ impl SidebarSettings {
             session_tags_enabled: built_in_extensions::enabled_in_value(
                 Some(settings),
                 built_in_extensions::SESSION_TAGS,
+            ),
+            delayed_send_enabled: built_in_extensions::enabled_in_value(
+                Some(settings),
+                built_in_extensions::DELAYED_SEND,
+            ),
+            close_after_done_enabled: built_in_extensions::enabled_in_value(
+                Some(settings),
+                built_in_extensions::CLOSE_AFTER_DONE,
             ),
         }
     }

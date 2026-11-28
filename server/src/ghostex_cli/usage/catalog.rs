@@ -584,6 +584,13 @@ pub fn usage() -> String {
     let show_apps = crate::ghostex_cli::built_in_extensions::built_in_extension_enabled(
         ghostex_settings_catalog::built_in_extensions::GHOSTEX_APPS,
     );
+    // CDXC:DelayedSend 2026-11-28: the two Staff picks' commands are listed only while each is on.
+    let show_delayed_send = crate::ghostex_cli::built_in_extensions::built_in_extension_enabled(
+        ghostex_settings_catalog::built_in_extensions::DELAYED_SEND,
+    );
+    let show_close_after_done = crate::ghostex_cli::built_in_extensions::built_in_extension_enabled(
+        ghostex_settings_catalog::built_in_extensions::CLOSE_AFTER_DONE,
+    );
     let ui_commands = [
         format_help_command(
             "app show <app.html> | list | guide",
@@ -815,6 +822,8 @@ pub fn usage() -> String {
     .into_iter()
     .filter(|line| show_connectors || !line.starts_with("  connectors "))
     .filter(|line| show_apps || !line.starts_with("  app "))
+    .filter(|line| show_delayed_send || !line.starts_with("  delayed-send "))
+    .filter(|line| show_close_after_done || !line.starts_with("  close-after-done "))
     .collect::<Vec<_>>()
     .join("\n");
 

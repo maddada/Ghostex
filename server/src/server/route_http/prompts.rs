@@ -16,6 +16,21 @@ pub(super) async fn route_prompts_http(
         caller,
     } = request;
     Ok(match endpoint.path.as_str() {
+        // A new delayed send while the Delayed Send Staff pick is off is refused; cancelling and
+        // postponing one already scheduled stay (CDXC:DelayedSend 2026-11-28, delayed_actions_feature.rs).
+        "/api/scheduleDelayedSend"
+            if !crate::delayed_actions_feature::delayed_send_on(&state.paths) =>
+        {
+            routed_json(
+                Some(endpoint.path),
+                StatusCode::BAD_REQUEST,
+                rpc_error(
+                    "badRequest",
+                    &crate::delayed_actions_feature::delayed_send_off_message(),
+                    Some(request_id),
+                ),
+            )
+        }
         "/api/scheduleDelayedSend" | "/api/cancelDelayedSend" | "/api/postponeDelayedSend" => {
             handle_delayed_send_http(&state, endpoint.path, request_id, &body_json)
         }

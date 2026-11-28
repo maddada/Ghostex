@@ -482,6 +482,12 @@ pub(crate) fn populations(data: &QuickAccessData) -> Populations {
     let pane_actions = PANE_ACTION_COMMAND_IDS
         .iter()
         .filter(|id| !hidden.contains(*id))
+        // Delayed Send while its Staff pick is off (CDXC:DelayedSend 2026-11-28 in the catalog).
+        .filter(|id| {
+            built_in_extensions::hotkey_shown_with(id, |key| {
+                data.settings().get(key).and_then(Value::as_bool)
+            })
+        })
         .filter_map(|id| {
             hotkey_definitions()
                 .iter()

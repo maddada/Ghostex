@@ -209,7 +209,6 @@ Run results:
 Safety:
   Inspect exact automation and run ids before destructive operations.
   Use --remove-worktree true only when the exact archived run worktree should be removed.
-  Project automations are separate from the per-session delayed-send and close-after-done controls.
 "#
     )
 }

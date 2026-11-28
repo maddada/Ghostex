@@ -200,6 +200,8 @@ pub(crate) fn official_icon(id: &str) -> &'static str {
         "readAloud" => "titlebar/volume.svg",
         "sessionNotes" => "modals/settings/note.svg",
         "sessionTags" => "modals/settings/tag.svg",
+        "delayedSend" => "titlebar/clock-check.svg",
+        "closeAfterDone" => "modals/settings/clock-x.svg",
         "chatStatusLine" => "titlebar/info-circle.svg",
         "catchMeUp" => "titlebar/history.svg",
         "ghostexApps" => "titlebar/device-desktop.svg",

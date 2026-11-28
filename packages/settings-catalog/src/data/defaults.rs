@@ -180,6 +180,9 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("sessionNotesHidden", J::Bool(true)),
     // CDXC:SessionTags 2026-11-27 DECISION: Session Tags is off by default (official_extensions.rs); this is the one place its default lives.
     ("sessionTagsEnabled", J::Bool(false)),
+    // CDXC:DelayedSend 2026-11-28 DECISION: Delayed Send and Close After Done are Staff pick extensions, off by default (official_extensions.rs); this is the one place their defaults live.
+    ("delayedSendEnabled", J::Bool(false)),
+    ("closeAfterDoneEnabled", J::Bool(false)),
     // CDXC:SessionChat 2026-11-22 DECISION: the Chat Status Line is off by default, for existing users too (official_extensions.rs).
     ("chatStatusLineEnabled", J::Bool(false)),
     // CDXC:GhostexApps 2026-11-25 DECISION: Ghostex Apps is off by default, a Beta built-in extension (official_extensions.rs).

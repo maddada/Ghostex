@@ -199,13 +199,14 @@ fn save_items<V: SettingsPage>(
 /// The drag-to-reorder list of the hover buttons (fields/reorder.rs).
 const LIST: &str = "session-card-hover-buttons";
 
-/// Puts a button the strip left out (Note, while Session notes is off) back where it was, so a
-/// click or a drag never drops it or its on/off state from the saved list.
+/// Puts the buttons the strip left out (Note while Session notes is off, Close After Done while
+/// its Staff pick is off) back where they were, in saved order, so a click or a drag never drops
+/// one or its on/off state from the saved list.
 fn with_hidden(
     mut items: Vec<HoverButtonItem>,
-    hidden: &Option<(usize, HoverButtonItem)>,
+    hidden: &[(usize, HoverButtonItem)],
 ) -> Vec<HoverButtonItem> {
-    if let Some((at, item)) = hidden {
+    for (at, item) in hidden {
         items.insert((*at).min(items.len()), item.clone());
     }
     items
@@ -227,17 +228,31 @@ pub(crate) fn hover_actions_field<V: SettingsPage>(
 ) -> AnyElement {
     let mut items = normalize_hover_buttons(value);
     // CDXC:SessionNotes 2026-10-30 WHY: while Session notes is off (Settings > Extensions) its Note button leaves the strip, and the saved list keeps it, on or off, for when it comes back.
-    let notes_on = {
+    // CDXC:DelayedSend 2026-11-28: Close After Done's button leaves it the same way while its
+    // Staff pick is off.
+    let (notes_on, close_after_done_on) = {
         let store = page.settings_store().read(cx);
-        ghostex_settings_catalog::built_in_extensions::enabled_with(
-            ghostex_settings_catalog::built_in_extensions::SESSION_NOTES,
-            |key| Some(store.bool(key)),
+        let on = |id: &str| {
+            ghostex_settings_catalog::built_in_extensions::enabled_with(id, |key| {
+                Some(store.bool(key))
+            })
+        };
+        (
+            on(ghostex_settings_catalog::built_in_extensions::SESSION_NOTES),
+            on(ghostex_settings_catalog::built_in_extensions::CLOSE_AFTER_DONE),
         )
     };
-    let hidden = (!notes_on)
-        .then(|| items.iter().position(|item| item.id == "note"))
-        .flatten()
-        .map(|at| (at, items.remove(at)));
+    // Taken out front to back, so putting them back front to back lands each where it was.
+    let mut hidden: Vec<(usize, HoverButtonItem)> = Vec::new();
+    let mut at = 0;
+    while at < items.len() {
+        let id = items[at].id.as_str();
+        if (id == "note" && !notes_on) || (id == "closeAfterDone" && !close_after_done_on) {
+            hidden.push((at + hidden.len(), items.remove(at)));
+        } else {
+            at += 1;
+        }
+    }
     let palette = *p;
     super::reorder::reorder_options(
         page,

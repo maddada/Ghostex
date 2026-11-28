@@ -91,10 +91,14 @@ fn write_armed(db: &Connection, armed: &BTreeSet<SessionKey>) -> Result<(), Doma
 
 /// `/api/toggleCloseAfterDone`: `{ projectId, sessionId, armed? }`. Without `armed` it toggles.
 /// Answers `{ armed, projectId, sessionId }`.
+///
+/// `arm_refusal` is what a call that would arm it is told instead (the Close After Done Staff pick
+/// is off, CDXC:DelayedSend 2026-11-28 in delayed_actions_feature.rs); disarming always works.
 pub fn toggle(
     db: &Connection,
     repository: &DomainRepository<'_>,
     params: &Map<String, Value>,
+    arm_refusal: Option<String>,
 ) -> Result<Value, DomainStateError> {
     let text = |key: &str| {
         params
@@ -128,6 +132,9 @@ pub fn toggle(
         .get("armed")
         .and_then(Value::as_bool)
         .unwrap_or(!armed.contains(&key));
+    if let Some(refusal) = arm_refusal.filter(|_| arm) {
+        return Err(DomainStateError::bad_request(refusal));
+    }
     if arm && is_orchestrator(db, &key) {
         return Err(DomainStateError::bad_request(ORCHESTRATOR_REFUSAL));
     }

@@ -32,7 +32,9 @@ pub(crate) fn toggle_close_after_done(
     repository: &DomainRepository<'_>,
     params: &Map<String, Value>,
 ) -> std::result::Result<Value, DomainStateError> {
-    let result = close_after_done::toggle(db, repository, params)?;
+    let arm_refusal = (!crate::delayed_actions_feature::close_after_done_on(&state.paths))
+        .then(crate::delayed_actions_feature::close_after_done_off_message);
+    let result = close_after_done::toggle(db, repository, params, arm_refusal)?;
     if let (Some(project_id), Some(session_id)) = (
         result.get("projectId").and_then(Value::as_str),
         result.get("sessionId").and_then(Value::as_str),

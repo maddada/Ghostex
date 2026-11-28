@@ -92,6 +92,13 @@ impl GhostexGpuiApp {
                 cx.notify();
                 true
             }
+            // Close After Done off (Staff picks): nothing arms it; an armed one still cancels
+            // above (CDXC:DelayedSend 2026-11-28 in the catalog).
+            GpuiCommandCloseAfterDoneToggleTarget::ArmLiveSession
+                if !crate::app::delayed_actions::close_after_done_on() =>
+            {
+                false
+            }
             GpuiCommandCloseAfterDoneToggleTarget::ArmLiveSession => {
                 let Some(session) = self.command_pane.session_mut(session_id) else {
                     return false;

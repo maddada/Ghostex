@@ -37,6 +37,7 @@ mod ghostty_themes;
 pub(crate) mod cloud_boxes_default;
 pub(crate) mod dark_look_default;
 pub(crate) mod defaults;
+pub(crate) mod delayed_actions_default;
 pub(crate) mod experience_level;
 pub(crate) mod experimental_switches;
 pub(crate) mod ghostty_config_file;

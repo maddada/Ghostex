@@ -370,6 +370,9 @@ fn main() {
     // Cloud Boxes is off for new installs; whoever already set up a box or provider keeps it on
     // (shared_settings/cloud_boxes_default.rs). Before the first settings read too.
     shared_settings::cloud_boxes_default::keep_cloud_boxes_once();
+    // Delayed Send and Close After Done are off for everyone, once; whoever turns one back on
+    // keeps it (shared_settings/delayed_actions_default.rs). Before the first settings read too.
+    shared_settings::delayed_actions_default::turn_off_delayed_actions_once();
     // Session Tags is off by default; whoever already uses tags keeps it on
     // (shared_settings/session_tags_default.rs). Before the first settings read too.
     shared_settings::session_tags_default::keep_session_tags_once();

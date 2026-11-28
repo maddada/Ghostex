@@ -349,6 +349,31 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("title", J::Str("Session Tags")),
         ("settingKeys", J::Arr(&[J::Str("sidebarSessionTagListItems"), J::Str("showTagMenuWhenParking")])),
     ]),
+    // CDXC:DelayedSend 2026-11-28 DECISION:
+    // User: "make delayed actions (delayed send and close after done) both staff pick extensions disabled by default for new users pls. disable it even for existing users. when disabled no settings about it and not shown in any menus". Two whole-feature entries, off by default under keys that enable (`delayedSendEnabled`, `closeAfterDoneEnabled`, data/defaults.rs, the one place), listed in Staff picks (Talk to your agents). apps/desktop/src/shared_settings/delayed_actions_default.rs turns both off once for existing users too (marker `delayed-actions-default-migrated`), so someone who turns one back on keeps it. Off hides every offer of it: the session menu rows and hover button, the chat's and the terminal bar's More actions rows, the Delayed Send dialog's Close After Done switch, the hotkey and its Settings > Hotkeys and Quick Access rows, the hover strip's Settings option, the new-chat tip, the CLI help lines, and the phone's (through `builtInFeaturesOff`). gxserver refuses a new delayed send or a new Close After Done while it is off (server/src/delayed_actions_feature.rs), with this entry's title in the message. What is already scheduled or armed still runs, and its countdown and its Cancel stay on the card, so nothing the user asked for is lost or left without a way to stop it.
+    // SEE-ALSO: packages/gx-core/src/sidebar_view/inputs.rs (`delayed_send_enabled`, `close_after_done_enabled`), apps/desktop/src/app/delayed_actions.rs, apps/mobile/app/src/sessions/delayedActionsSwitch.ts.
+    J::Obj(&[
+        ("description", J::Str("Write a message now and have it sent later: after a delay, at a time, or when an agent finishes. Messages already scheduled still go out while this is off.")),
+        ("category", J::Str("features")),
+        ("id", J::Str("delayedSend")),
+        ("placement", J::Str("feature")),
+        ("settingsKey", J::Str("delayedSendEnabled")),
+        ("settingsKeyEnables", J::Bool(true)),
+        ("appWide", J::Bool(true)),
+        ("title", J::Str("Delayed Send")),
+        ("hotkeys", J::Arr(&[J::Str("delayedSend")])),
+    ]),
+    J::Obj(&[
+        ("description", J::Str("Close a session on its own a few minutes after its agent finishes, so finished work clears itself out of the sidebar. A session already set to close still closes while this is off.")),
+        ("category", J::Str("features")),
+        ("id", J::Str("closeAfterDone")),
+        ("placement", J::Str("feature")),
+        ("settingsKey", J::Str("closeAfterDoneEnabled")),
+        ("settingsKeyEnables", J::Bool(true)),
+        ("appWide", J::Bool(true)),
+        ("title", J::Str("Close After Done")),
+        ("hotkeys", J::Arr(&[J::Str("closeAfterDone")])),
+    ]),
     // CDXC:SessionChat 2026-11-22 DECISION:
     // User, of the row of pills under the chat box (the status line, which old users saw as three empty grey placeholder pills): "i dont wanna see this anymore". It becomes opt-in: a built-in extension, Chat Status Line, off by default under a key that enables (`chatStatusLineEnabled`), so a settings file from before it, which has no such key, reads off and existing users lose the line too. Off, no line and no room for one under the chat box, in the desktop and Ghostex in a browser; on, the line shows the details pinned to it as before. The pinned details are kept either way.
     // SEE-ALSO: apps/desktop/src/app/gx_chat/boot.rs (`ChatSettings::status_line`, the desktop's and the browser's switch), packages/gx-chat-core/src/menus/context/document.rs (`statusLineOff`), apps/desktop/src/app/native_chat/context_meter.rs (the line).

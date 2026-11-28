@@ -691,6 +691,23 @@ pub(crate) async fn handle_renderer_command_http(
     let mut payload = with_renderer_session_target(payload);
     // `ghostex close-after-done` reaches the app through here; an orchestrator is refused before
     // the app is asked, so the CLI (and the phone, which runs it) gets the plain error.
+    // Close After Done off (Staff picks): the toggle only disarms a session already armed; one
+    // that would arm is refused with the Staff pick to turn on (CDXC:DelayedSend 2026-11-28,
+    // delayed_actions_feature.rs).
+    if action == "toggleCloseAfterDone"
+        && !crate::delayed_actions_feature::close_after_done_on(&state.paths)
+        && !renderer_command_targets_armed_session(state, &payload)
+    {
+        return routed_json(
+            Some(endpoint_path),
+            StatusCode::BAD_REQUEST,
+            rpc_error(
+                "badRequest",
+                &crate::delayed_actions_feature::close_after_done_off_message(),
+                Some(request_id),
+            ),
+        );
+    }
     if action == "toggleCloseAfterDone" && renderer_command_targets_orchestrator(state, &payload) {
         return routed_json(
             Some(endpoint_path),
@@ -1034,6 +1051,45 @@ pub(crate) fn normalize_renderer_command_timeout_ms(value: Option<&Value>) -> Re
 
 /// Whether a renderer command's session is one of this daemon's orchestrators, by its
 /// `sessionTarget` (or `projectId`/`sessionId`), or by a bare session id when no project is named.
+/// The session a renderer command names: its project id when known, and its session id.
+fn renderer_command_session<'a>(
+    payload: &'a Map<String, Value>,
+) -> Option<(Option<&'a str>, &'a str)> {
+    let target = payload
+        .get("sessionTarget")
+        .and_then(Value::as_object)
+        .unwrap_or(payload);
+    let text = |key: &str| {
+        target
+            .get(key)
+            .or_else(|| payload.get(key))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    };
+    let selector = text("sessionId")?;
+    // A selector may also be a reply-to id (`S90:P3lv0:G4ldy`) or a sidebar id (`P3lv0:G4ldy`).
+    let mut parts = selector.rsplit(':');
+    let session_id = parts.next().unwrap_or(selector);
+    let project_id = text("projectId").or_else(|| parts.next());
+    Some((project_id, session_id))
+}
+
+/// Whether a renderer command names a session whose Close After Done is armed.
+fn renderer_command_targets_armed_session(state: &AppState, payload: &Map<String, Value>) -> bool {
+    let Some((project_id, session_id)) = renderer_command_session(payload) else {
+        return false;
+    };
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return false;
+    };
+    crate::close_after_done::read_armed(&db).is_ok_and(|armed| {
+        armed.iter().any(|(armed_project, armed_session)| {
+            armed_session == session_id && project_id.is_none_or(|project| project == armed_project)
+        })
+    })
+}
+
 fn renderer_command_targets_orchestrator(state: &AppState, payload: &Map<String, Value>) -> bool {
     let target = payload
         .get("sessionTarget")

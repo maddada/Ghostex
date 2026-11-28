@@ -808,6 +808,17 @@ impl GhostexGpuiApp {
                     {
                         continue;
                     }
+                    // The two Staff picks while off (CDXC:DelayedSend 2026-11-28 in the catalog).
+                    if *action == TerminalAgentBarAction::DelayedActions
+                        && !crate::app::delayed_actions::delayed_send_on()
+                    {
+                        continue;
+                    }
+                    if *action == TerminalAgentBarAction::CloseAfterDone
+                        && !crate::app::delayed_actions::close_after_done_on()
+                    {
+                        continue;
+                    }
                     if let Some(heading) = terminal_agent_bar_menu_group_heading(*action) {
                         rows.push(terminal_agent_bar_menu_group_label(heading));
                     }

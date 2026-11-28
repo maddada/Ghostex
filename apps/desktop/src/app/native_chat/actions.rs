@@ -349,6 +349,8 @@ impl NativeChatView {
         match place {
             // The chat core's own session actions, with their hotkeys: the core offers each only
             // where this chat's agent can do it (Fork only for agents gxserver can fork).
+            // Delayed Send while its Staff pick is off (CDXC:DelayedSend 2026-11-28 in the catalog).
+            "delayedSend" if !crate::app::delayed_actions::delayed_send_on() => Vec::new(),
             "rename" | "sleep" | "fork" | "fullReload" | "delayedSend" => {
                 let id = if place == "delayedSend" {
                     "delayedActions"

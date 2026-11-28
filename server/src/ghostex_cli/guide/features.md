@@ -1447,7 +1447,16 @@ where they are while you open, change and close views.
   Browser, Beads, Automate, or Files view has a minimum width of 455px.
 - Presets: Settings > Sidebar & Sessions > Sidebar > Preset switches groups of card
   details at once; the Card details row below it shows the individual parts.
-- Timed Delayed Send: open **Delayed Send** from an agent's right-click menu
+- Delayed Send and Close After Done are Staff pick extensions, both off by
+  default for everyone (Settings > Extensions > Staff picks,
+  `delayedSendEnabled`, `closeAfterDoneEnabled`). While one is off, nothing
+  offers it: no menu row, hover button, hotkey, Settings row or tip, here, in a
+  browser and on the phone, and `ghostex delayed-send` or
+  `ghostex close-after-done` says which Staff pick to turn on. A message
+  already scheduled still goes out and a session already set to close still
+  closes; its countdown stays on its card, with Postpone By and Disable Delayed
+  Send, or Close After Done to turn it off.
+- Timed Delayed Send (with Delayed Send on): open **Delayed Send** from an agent's right-click menu
   under **More**. Session Automations opens with **When all agents finish**
   selected. Choose **After a delay** for hours and minutes, or
   **Specific time** for a future date and time, then **Save changes**.
@@ -1482,7 +1491,8 @@ where they are while you open, change and close views.
   to the reverse action on an active row (Unpin, Wake, Unsnooze, Unpark,
   Cancel Close After Done). The enabled buttons also stay in the
   session's right-click menu (Note and its hover button show only while
-  Session notes is on in Settings > Extensions). Close is the
+  Session notes is on in Settings > Extensions, and Close After Done only while
+  its Staff pick is on). Close is the
   exception: while it is on the card it is never in the menu, and turning it
   off puts Close back as the menu's last row. Hover buttons also in context
   menu (on by default) controls the rest; turn it off and every enabled
@@ -1499,7 +1509,8 @@ where they are while you open, change and close views.
   Postpone By, then the place's rarer rows (Move to Group, Sleep Below and
   Close Below in the sidebar; Stash Prompt, Skills, Context window and Options
   in the chat box). Close is last. A row shows only where it applies, such as
-  Coordinator on a coordinator and Mark Thread Done on a thread. View 1st
+  Coordinator on a coordinator and Mark Thread Done on a thread, and Delayed
+  Send and Close After Done only while their Staff picks are on. View 1st
   Message and Focus are gone from the menus, and Generate Title is a command
   palette command, Session: Generate Title, which names the focused session
   from its recent prompts.
@@ -8325,12 +8336,13 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   as it was.
   Built-in holds whole parts of Ghostex you can switch off to keep the app
   simple: Actions (off by default), Open In (on by default), Spaces (off by
-  default), Cloud Boxes (off by default), Workspaces (off by default; it brings workspaces and the team's
+  default), Cloud Boxes (off by default), Delayed Send (off by default), Close
+  After Done (off by default), Workspaces (off by default; it brings workspaces and the team's
   Slack flow). Turning one off removes it everywhere at once (its header button,
   Settings pages and rows, hotkeys, Quick Access rows and menus) and turning it
   back on restores everything you had set up. Settings: `actionsHidden`,
   `openInTitlebarButtonHidden`, `sidebarSpacesEnabled`, `cloudBoxesEnabled`,
-  `workspacesHidden`; Experimental: `gbotsEnabled`, `readAloudHidden`, `connectorsHidden`, `osIntegrationHidden`,
+  `delayedSendEnabled`, `closeAfterDoneEnabled`, `workspacesHidden`; Experimental: `gbotsEnabled`, `readAloudHidden`, `connectorsHidden`, `osIntegrationHidden`,
   `keepAwakeEnabled`, `allAutomationsEnabled`, `terminalShadersEnabled`, `fasterRendering`,
   `chatToolCallLines`, `securityLogsEnabled`.
   **Sidebar extensions** (such as Workbench) put their own content in the

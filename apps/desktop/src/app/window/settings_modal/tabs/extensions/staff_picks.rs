@@ -21,6 +21,11 @@
 //! User: "please make tagging sessions in general an advanced feature. show it in staff picks
 //! extensions disabled by default". Session Tags gets its own group, Keep track of your sessions,
 //! as a Feature card whose switch is `sessionTagsEnabled`.
+//!
+//! CDXC:DelayedSend 2026-11-28 DECISION:
+//! User: "make delayed actions (delayed send and close after done) both staff pick extensions
+//! disabled by default for new users pls". Delayed Send and Close After Done join Talk to your
+//! agents as Feature cards whose switches are `delayedSendEnabled` and `closeAfterDoneEnabled`.
 use super::super::super::fields::small_switch_control;
 use super::super::super::model::SettingsTabId;
 use super::super::super::palette::SettingsPalette;
@@ -70,6 +75,8 @@ const GROUPS: [(&str, &[Pick]); 4] = [
             Pick::Boosts,
             Pick::BuiltIn("catchMeUp", "Chat"),
             Pick::BuiltIn("ghostexApps", "Feature"),
+            Pick::BuiltIn("delayedSend", "Feature"),
+            Pick::BuiltIn("closeAfterDone", "Feature"),
         ],
     ),
     (

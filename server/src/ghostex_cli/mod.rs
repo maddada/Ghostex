@@ -960,9 +960,18 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "delayed-send" => {
             // `--cancel` clears the armed automation; otherwise the parser
             // accepts the timer and both agent-completion trigger modes.
+            // A new one needs the Delayed Send Staff pick on; cancelling never does
+            // (CDXC:DelayedSend 2026-11-28, server/src/delayed_actions_feature.rs).
             if args.iter().any(|arg| arg == "--cancel") {
                 run_bridge_action("cancelDelayedSend", Parser::SessionSelector, plain, args)
             } else {
+                if !built_in_extensions::built_in_extension_enabled(
+                    ghostex_settings_catalog::built_in_extensions::DELAYED_SEND,
+                ) {
+                    return Err(CliError::Other(
+                        crate::delayed_actions_feature::delayed_send_off_message(),
+                    ));
+                }
                 run_bridge_action("scheduleDelayedSend", Parser::DelayedSend, plain, args)
             }
         }

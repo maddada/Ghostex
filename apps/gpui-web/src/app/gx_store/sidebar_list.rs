@@ -104,6 +104,11 @@ impl SidebarList {
             crate::app::session_notes::session_notes_on();
         self.last_inputs.settings.session_tags_enabled =
             crate::app::session_notes::session_tags_on();
+        // Delayed Send and Close After Done the same way (CDXC:DelayedSend 2026-11-28).
+        self.last_inputs.settings.delayed_send_enabled =
+            crate::app::delayed_actions::delayed_send_on();
+        self.last_inputs.settings.close_after_done_enabled =
+            crate::app::delayed_actions::close_after_done_on();
         // How long this computer's Ghostex service has been away, which the empty list's waiting
         // copy reads, as the desktop's `note_machine_state` tracks it.
         let loaded = core

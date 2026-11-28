@@ -68,6 +68,8 @@ pub(crate) mod screenshot_mode;
 pub(crate) mod session_handoff_modal_lifecycle;
 mod session_note_modal_lifecycle;
 /// Whether Session notes is on for the computer serving the page (the desktop's `app/session_notes.rs` twin).
+/// Whether the Delayed Send and Close After Done Staff picks are on (CDXC:DelayedSend 2026-11-28).
+pub(crate) mod delayed_actions;
 pub(crate) mod session_notes;
 mod work_link_picker_modal_lifecycle;
 #[allow(dead_code)]

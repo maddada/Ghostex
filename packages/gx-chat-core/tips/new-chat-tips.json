@@ -314,7 +314,8 @@
       "id": "delayed-send",
       "icon": "clock-check",
       "title": "Send a message later",
-      "body": "Type a message, then right-click the session > More > Delayed Send to send it later."
+      "body": "Type a message, then right-click the session > More > Delayed Send to send it later.",
+      "requires": "delayedSend"
     },
     {
       "id": "session-notes",

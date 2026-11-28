@@ -309,7 +309,12 @@ fn action_rows(
                 layout_submenu("snooze", snooze_presets)
             }
         }),
-        close_after_done: caps.can_close_after_done.then(|| {
+        // Close After Done off (Staff picks): no row and no hover button, except on a session
+        // already armed, so it can still be turned off (CDXC:DelayedSend 2026-11-28 in the catalog).
+        close_after_done: (caps.can_close_after_done
+            && (settings.close_after_done_enabled
+                || row.close_after_done.as_ref().is_some_and(|timer| timer.armed)))
+        .then(|| {
             layout_row(
                 "closeAfterDone",
                 false,
@@ -787,7 +792,12 @@ fn claude_cloud_rows(id: &str, row: &SessionRow, group: &MenuGroup<'_>) -> Vec<M
 
 /// The Postpone By presets, Edit Delayed Send and Disable Delayed Send, while a delayed send is
 /// armed.
-fn postpone_rows(id: &str, row: &SessionRow, caps: &SessionCapabilities) -> Vec<MenuItem> {
+fn postpone_rows(
+    id: &str,
+    row: &SessionRow,
+    caps: &SessionCapabilities,
+    delayed_send_on: bool,
+) -> Vec<MenuItem> {
     let armed = row
         .delayed_send
         .as_ref()
@@ -806,11 +816,15 @@ fn postpone_rows(id: &str, row: &SessionRow, caps: &SessionCapabilities) -> Vec<
         })
         .collect();
     children.push(MenuItem::separator());
-    children.push(MenuItem::row(
-        "Edit Delayed Send",
-        "pencil",
-        MenuCommand::session_action(id, "delayedSend"),
-    ));
+    // While Delayed Send is off a scheduled one can be postponed or disabled, not edited: editing
+    // schedules it again, which gxserver refuses then.
+    if delayed_send_on {
+        children.push(MenuItem::row(
+            "Edit Delayed Send",
+            "pencil",
+            MenuCommand::session_action(id, "delayedSend"),
+        ));
+    }
     children.push(MenuItem::row(
         "Disable Delayed Send",
         "x",
@@ -1028,11 +1042,13 @@ impl Places<'_, '_> {
                 MenuCommand::command(message::full_reload_session(id)),
             )],
             "switchAccount" => switch_account_rows(id, row, group, caps, in_box),
-            "delayedSend" if caps.can_delayed_send => vec![layout_row(
-                "delayedSend",
-                false,
-                MenuCommand::session_action(id, "delayedSend"),
-            )],
+            "delayedSend" if caps.can_delayed_send && input.settings.delayed_send_enabled => {
+                vec![layout_row(
+                    "delayedSend",
+                    false,
+                    MenuCommand::session_action(id, "delayedSend"),
+                )]
+            }
             "note" => self.action(HoverAction::Note),
             "closeAfterDone"
                 if !self.in_strip(HoverAction::CloseAfterDone)
@@ -1051,7 +1067,7 @@ impl Places<'_, '_> {
                 .into_iter()
                 .collect(),
             "makeCoordinator" => make_coordinator_rows(id, row, group, caps, in_box),
-            "postponeBy" => postpone_rows(id, row, caps),
+            "postponeBy" => postpone_rows(id, row, caps, input.settings.delayed_send_enabled),
             "moveToProject" => move_to_project_item(id, row, input.group_moves, group.is_stale)
                 .into_iter()
                 .collect(),

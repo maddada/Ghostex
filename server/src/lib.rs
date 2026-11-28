@@ -50,6 +50,7 @@ pub mod constants;
 pub mod coordinators;
 pub(crate) mod crash_report;
 pub mod custom_session_tags;
+pub mod delayed_actions_feature;
 pub mod delayed_sends;
 pub mod domain;
 pub(crate) mod dsh_activity;

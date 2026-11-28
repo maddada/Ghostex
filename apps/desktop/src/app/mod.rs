@@ -60,6 +60,8 @@ pub(crate) mod create_linear_ticket_modal_lifecycle;
 pub(crate) mod create_worktree_modal_lifecycle;
 pub(crate) mod custom_link_modal_lifecycle;
 pub(crate) mod custom_links;
+/// Whether the Delayed Send and Close After Done Staff picks are on (CDXC:DelayedSend 2026-11-28).
+pub(crate) mod delayed_actions;
 pub(crate) mod delayed_send;
 pub(crate) mod delayed_send_modal_lifecycle;
 pub(crate) mod delayed_send_sessions;

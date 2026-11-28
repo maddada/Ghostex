@@ -225,6 +225,12 @@ impl GhostexPaths {
         self.state_dir.join("session-tags-default-migrated")
     }
 
+    /// Written once the Delayed Send and Close After Done step (`turn_off_delayed_actions_once` in
+    /// the desktop app) has run, so both are turned off for existing users exactly once.
+    pub fn delayed_actions_default_marker_file(&self) -> PathBuf {
+        self.state_dir.join("delayed-actions-default-migrated")
+    }
+
     pub fn gxserver_config_dir(&self) -> PathBuf {
         self.config_dir.join("gxserver")
     }
