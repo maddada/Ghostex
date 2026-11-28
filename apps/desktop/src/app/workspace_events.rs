@@ -396,18 +396,39 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        let remote_machine_id = match message.project_id.as_deref() {
-            Some(project_id) => gpui_remote_project_reference_from_project_id(project_id)
-                .map(|reference| reference.remote_machine_id),
-            None if !message.from_quick_header => self.browser_project_remote_machine_id(),
-            None => None,
-        };
+        let remote_machine_id = self.renderer_open_remote_machine_id(&message);
         self.open_browser_url_from_renderer_command_with_machine(
             message,
             remote_machine_id,
             window,
             cx,
         );
+    }
+
+    /// The remote computer whose page `message` opens, or `None` for this computer's.
+    pub(crate) fn renderer_open_remote_machine_id(
+        &self,
+        message: &GpuiSidebarOpenBrowserUrlMessage,
+    ) -> Option<String> {
+        match message.project_id.as_deref() {
+            Some(project_id) => gpui_remote_project_reference_from_project_id(project_id)
+                .map(|reference| reference.remote_machine_id),
+            None if !message.from_quick_header => self.browser_project_remote_machine_id(),
+            None => None,
+        }
+    }
+
+    /// `ghostex browser open` while this computer has no web runtime: the page's tab opens in the
+    /// Browser behind its Install prompt, never in the system browser (`OpenBrowser` in
+    /// gx_store/renderer_commands/perform.rs answers the caller that the runtime is not installed).
+    pub(crate) fn open_browser_url_behind_install_prompt(
+        &mut self,
+        message: GpuiSidebarOpenBrowserUrlMessage,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let remote_machine_id = self.renderer_open_remote_machine_id(&message);
+        self.open_browser_url_door(message, remote_machine_id, false, window, cx);
     }
 
     /// CDXC:Browser 2026-10-31 WHY:
@@ -417,6 +438,18 @@ impl GhostexGpuiApp {
         &mut self,
         message: GpuiSidebarOpenBrowserUrlMessage,
         remote_machine_id: Option<String>,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.open_browser_url_door(message, remote_machine_id, true, window, cx);
+    }
+
+    /// `link_fallback`: without the web runtime, a link goes to the system browser (below).
+    fn open_browser_url_door(
+        &mut self,
+        message: GpuiSidebarOpenBrowserUrlMessage,
+        remote_machine_id: Option<String>,
+        link_fallback: bool,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
@@ -444,8 +477,15 @@ impl GhostexGpuiApp {
         /*
         CDXC:CefRuntime 2026-09-28 WHY:
         Without the optional web runtime a link opened here would land on the Browser's install prompt, so it opens in the system browser instead; the Open links in setting keeps its value and applies again once the runtime is installed. A remote computer's own localhost is the exception: the system browser cannot reach it, so that link still opens the Browser, which offers the install.
+
+        CDXC:CefRuntime 2026-11-28 WHY:
+        12.5.0 smoke: the ☰ menu's Browser row (and a project header's New Browser Tab) showed nothing on a fresh home while Cmd+T showed the Browser's Install prompt, because the row's launch page took the link fallback above and went to the system browser. A New Browser Tab is the user asking for the Browser, not a link, so it opens the Browser here like Cmd+T, where the prompt offers the install. The web page keeps its own browser's tab. `ghostex browser open` never falls back either (`open_browser_url_behind_install_prompt`).
         */
-        if remote_machine_id.is_none() && !crate::app::helpers::web_runtime::web_runtime_available()
+        let new_tab_wants_browser = cfg!(not(ghostex_web)) && message.is_new_browser_tab();
+        if link_fallback
+            && remote_machine_id.is_none()
+            && !new_tab_wants_browser
+            && !crate::app::helpers::web_runtime::web_runtime_available()
         {
             if let Some(url) = normalize_address(&message.url) {
                 let _ = gpui_open_external_http_url(&url);

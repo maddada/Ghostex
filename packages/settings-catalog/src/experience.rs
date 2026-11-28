@@ -48,7 +48,7 @@ impl Preset {
         match self {
             Preset::Chill => "A simple chat box and a calm chat. Good for checking in on your agents.",
             Preset::Regular => "Pick the model, mode and effort as you chat, with file attach ready in the chat box.",
-            Preset::Advanced => "Every chat box control and detail on screen, including the context ring and last-active times, and the Power User Flags in Settings.",
+            Preset::Advanced => "Every chat box control and detail on screen, including last-active times, and the Power User Flags in Settings.",
         }
     }
 

@@ -2565,6 +2565,18 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             CodexDenyMode::HomeOrGbot
         };
         let prof = desired_codex_profile(mode, initial_approval_level, parsed.read_only);
+        // CDXC:AgentSandbox 2026-11-28 WHY:
+        // 12.5.0 smoke on Linux: a Native Chat Codex in No project (it runs in the home folder)
+        // never started: `codex app-server` (codex-cli 0.172.0) exits at once with "config
+        // defines `[permissions]` profiles but does not set `default_permissions`" when the
+        // profiles above come without one, before any request can name the profile. The same
+        // failure on macOS (checked with 0.172.0); a project folder has no profiles, so it
+        // started. The starting profile is now the launch default too; `thread/start`,
+        // `thread/resume` and each turn still pick the profile they need.
+        if let Some(prof) = prof {
+            argv.push("-c".to_string());
+            argv.push(format!("default_permissions=\"{prof}\""));
+        }
         (mode, prof)
     } else {
         (CodexDenyMode::None, None)

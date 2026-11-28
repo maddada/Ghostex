@@ -334,6 +334,22 @@ impl GhostexGpuiApp {
                     );
                 }
                 if let Ok(message) = gpui_sidebar_open_browser_url_from_json(&payload.to_string()) {
+                    /*
+                    CDXC:CefRuntime 2026-11-28 WHY:
+                    12.5.0 smoke: on a fresh home `ghostex browser open` put the page in the user's own default browser (Windows) or showed nothing in Ghostex (macOS), and answered ok, because it took the link fallback to the system browser (`open_browser_url_door`). The command asks for Ghostex's Browser, so without the runtime it says so, as `--background` already does, and the page's tab waits in the Browser behind its Install prompt (an accepted agent toast lands there too). The web page has no runtime to install and keeps its own browser's tab.
+                    */
+                    if cfg!(not(ghostex_web))
+                        && !crate::app::helpers::web_runtime::web_runtime_available()
+                        && self.renderer_open_remote_machine_id(&message).is_none()
+                    {
+                        self.open_browser_url_behind_install_prompt(message, window, cx);
+                        return Ok(json!({
+                            "accepted": false,
+                            "action": action,
+                            "error": "The Browser's web runtime is not installed. Press Install in Ghostex's Browser, then open the page again.",
+                            "ok": false,
+                        }));
+                    }
                     self.open_browser_url_from_renderer_command(message, window, cx);
                     if let (Some(agent_session), Some(project_id)) = (agent_session, &project_id) {
                         self.note_agent_browser_page(agent_session, project_id);

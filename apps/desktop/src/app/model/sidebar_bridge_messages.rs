@@ -125,6 +125,15 @@ pub(crate) struct GpuiSidebarOpenBrowserUrlMessage {
     pub(crate) project_id: Option<String>,
 }
 
+impl GpuiSidebarOpenBrowserUrlMessage {
+    /// A New Browser Tab (the ☰ menu's Browser row, a project header's New Browser Tab, Quick
+    /// Access): the launch page in a fresh tab, which the user asked for as a Browser, not a link.
+    pub(crate) fn is_new_browser_tab(&self) -> bool {
+        self.reuse == GpuiBrowserRendererOpenReuse::None
+            && self.url == ghostex_gx_core::DEFAULT_BROWSER_LAUNCH_URL
+    }
+}
+
 /*
 CDXC:Sessions 2026-07-28:
 `command` is a fixed selector, not renderer-provided command text: it may only
