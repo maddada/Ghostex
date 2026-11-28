@@ -126,8 +126,7 @@ pub(crate) fn gpui_read_native_resource_processes() -> Vec<GpuiNativeResourcePro
     keeps Win32 process-tree identities separate from Linux PIDs while rows
     continue to display and act on each process's real system PID.
     */
-    static WINDOWS_PROCESS_SYSTEM: std::sync::OnceLock<Mutex<(System, bool)>> =
-        std::sync::OnceLock::new();
+    static WINDOWS_PROCESS_SYSTEM: Mutex<Option<(System, bool)>> = Mutex::new(None);
 
     let refresh_kind = ProcessRefreshKind::nothing()
         .with_cpu()
@@ -135,22 +134,20 @@ pub(crate) fn gpui_read_native_resource_processes() -> Vec<GpuiNativeResourcePro
         .with_cmd(UpdateKind::OnlyIfNotSet)
         .with_exe(UpdateKind::OnlyIfNotSet);
     let mut native_processes = WINDOWS_PROCESS_SYSTEM
-        .get_or_init(|| Mutex::new((System::new(), false)))
         .lock()
         .ok()
-        .map(|mut state| {
-            if !state.1 {
-                state
-                    .0
-                    .refresh_processes_specifics(ProcessesToUpdate::All, true, refresh_kind);
-                thread::sleep(MINIMUM_CPU_UPDATE_INTERVAL);
-                state.1 = true;
+        .and_then(|mut state| {
+            if state.is_none() {
+                *state = Some((System::new().ok()?, false));
             }
-            state
-                .0
-                .refresh_processes_specifics(ProcessesToUpdate::All, true, refresh_kind);
-            state
-                .0
+            let (system, sampled) = state.as_mut()?;
+            if !*sampled {
+                system.refresh_processes_specifics(ProcessesToUpdate::All, true, refresh_kind);
+                thread::sleep(MINIMUM_CPU_UPDATE_INTERVAL);
+                *sampled = true;
+            }
+            system.refresh_processes_specifics(ProcessesToUpdate::All, true, refresh_kind);
+            let processes = system
                 .processes()
                 .iter()
                 .filter_map(|(pid, process)| {
@@ -183,7 +180,8 @@ pub(crate) fn gpui_read_native_resource_processes() -> Vec<GpuiNativeResourcePro
                         system_pid,
                     })
                 })
-                .collect::<Vec<_>>()
+                .collect::<Vec<_>>();
+            Some(processes)
         })
         .unwrap_or_default();
 
@@ -375,7 +373,9 @@ fn gpui_read_windows_process_details(
     } else {
         ProcessRefreshKind::nothing()
     };
-    let mut system = System::new();
+    let Ok(mut system) = System::new() else {
+        return HashMap::new();
+    };
     system.refresh_processes_specifics(ProcessesToUpdate::Some(&system_pids), true, refresh_kind);
     system_pids
         .iter()

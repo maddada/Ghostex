@@ -29,7 +29,7 @@ pub(crate) enum SourceCodeServerPortHolderClose {
 
 /// The program on `port`, for the card's text; `None` when it cannot be found.
 pub(crate) fn source_code_server_port_holder(port: u16) -> Option<SourceCodeServerPortHolder> {
-    let listener = port_listeners(port).into_iter().next()?;
+    let listener = port_listeners(port).ok()?.into_iter().next()?;
     let is_node = listener
         .name
         .trim_end_matches(".exe")
@@ -44,7 +44,10 @@ pub(crate) fn source_code_server_port_holder(port: u16) -> Option<SourceCodeServ
 
 /// Ends whatever listens on `port`, looked up now rather than when the card was drawn.
 pub(crate) fn source_code_server_close_port_holders(port: u16) -> SourceCodeServerPortHolderClose {
-    let listeners = port_listeners(port);
+    let listeners = match port_listeners(port) {
+        Ok(listeners) => listeners,
+        Err(message) => return SourceCodeServerPortHolderClose::Failed(message),
+    };
     if listeners.is_empty() {
         return SourceCodeServerPortHolderClose::Closed;
     }
@@ -68,7 +71,11 @@ pub(crate) fn source_code_server_close_port_holders(port: u16) -> SourceCodeServ
     }
     let deadline = Instant::now() + Duration::from_secs(3);
     while Instant::now() < deadline {
-        if port_listeners(port)
+        let listeners = match port_listeners(port) {
+            Ok(listeners) => listeners,
+            Err(message) => return SourceCodeServerPortHolderClose::Failed(message),
+        };
+        if listeners
             .iter()
             .all(|listener| !pids.contains(&listener.pid))
         {
@@ -80,7 +87,7 @@ pub(crate) fn source_code_server_close_port_holders(port: u16) -> SourceCodeServ
 }
 
 #[cfg(target_os = "windows")]
-fn port_listeners(port: u16) -> Vec<PortListener> {
+fn port_listeners(port: u16) -> Result<Vec<PortListener>, String> {
     use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
     // In the WSL environment the editor listens inside WSL; Windows only shows WSL's relay.
@@ -89,7 +96,7 @@ fn port_listeners(port: u16) -> Vec<PortListener> {
         && let Ok(owners) = windows_terminal_backend::source_code_server_port_owners(port)
         && !owners.is_empty()
     {
-        return owners
+        return Ok(owners
             .into_iter()
             .map(|(pid, name)| PortListener {
                 pid,
@@ -98,7 +105,7 @@ fn port_listeners(port: u16) -> Vec<PortListener> {
                 other_session: false,
                 code_server_wrapper: None,
             })
-            .collect();
+            .collect());
     }
     let own_pid = std::process::id();
     let mut pids = gpui_read_windows_resource_servers()
@@ -110,16 +117,17 @@ fn port_listeners(port: u16) -> Vec<PortListener> {
         .collect::<Vec<_>>();
     pids.dedup();
     if pids.is_empty() {
-        return Vec::new();
+        return Ok(Vec::new());
     }
-    let mut system = System::new();
+    let mut system = System::new().map_err(|_| "Could not read running processes.".to_owned())?;
     system.refresh_processes_specifics(
         ProcessesToUpdate::All,
         true,
         ProcessRefreshKind::nothing().with_cmd(UpdateKind::Always),
     );
     let own_session = windows_session_id(own_pid);
-    pids.into_iter()
+    Ok(pids
+        .into_iter()
         .filter_map(|pid| {
             let process = system.process(Pid::from_u32(pid))?;
             let name = std::path::Path::new(process.name())
@@ -146,7 +154,7 @@ fn port_listeners(port: u16) -> Vec<PortListener> {
                 code_server_wrapper: code_server_wrapper.map(|parent| parent.as_u32()),
             })
         })
-        .collect()
+        .collect())
 }
 
 #[cfg(target_os = "windows")]
@@ -241,7 +249,7 @@ fn end_processes_elevated(pids: &[u32]) -> Result<(), SourceCodeServerPortHolder
 }
 
 #[cfg(not(target_os = "windows"))]
-fn port_listeners(port: u16) -> Vec<PortListener> {
+fn port_listeners(port: u16) -> Result<Vec<PortListener>, String> {
     let own_pid = std::process::id();
     let mut pids = gpui_read_native_resource_servers()
         .into_iter()
@@ -249,7 +257,8 @@ fn port_listeners(port: u16) -> Vec<PortListener> {
         .map(|server| server.pid)
         .collect::<Vec<_>>();
     pids.dedup();
-    pids.into_iter()
+    Ok(pids
+        .into_iter()
         .filter_map(|pid| {
             let (parent, name) = unix_process_parent_and_name(pid)?;
             let code_server_wrapper = (parent > 1)
@@ -265,7 +274,7 @@ fn port_listeners(port: u16) -> Vec<PortListener> {
                 code_server_wrapper,
             })
         })
-        .collect()
+        .collect())
 }
 
 #[cfg(not(target_os = "windows"))]

@@ -173,7 +173,7 @@ ghostex-editor-client = { path = "../../packages/editor-client" }
 liblzma = { version = "0.4", default-features = false, features = ["static", "parallel"] }
 # The same zip version Velopack reads its Setup.exe package with (ghostex_windows_installer_pack.rs stores that package uncompressed).
 zip = { version = "9.8.1", default-features = false, features = ["deflate"] }
-sysinfo = "0.39"
+sysinfo = "0.40"
 velopack = { version = "1.2.0", features = ["public-utils"] }
 # CDXC:Onboarding 2026-10-01 WHY: WebView2 for the first-run intro video only (window/onboarding/intro_web_view.rs; macOS uses its own WKWebView shim). The version the GhostexEditor helper already ships (apps/editor/desktop); without default features it pulls no GTK or X11 crates.
 wry = { version = "0.57", default-features = false }
