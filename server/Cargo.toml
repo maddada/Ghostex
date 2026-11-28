@@ -47,10 +47,9 @@ ghostex-agent-sync = { path = "../packages/agent-sync" }
 # The live subscription to a Work workspace's team Convex project (crate::team_sync). rustls, not the
 # default vendored OpenSSL, so it reuses the TLS stack the server already ships.
 convex = { version = "0.10.4", default-features = false, features = ["rustls-tls-webpki-roots"] }
-# The voice agent's provider sockets (xAI Grok Voice, OpenAI Realtime, xAI speech-to-text): the same
-# tokio-tungstenite build axum's WebSocket support compiles in (0.29; convex pins 0.28) and convex's
-# rustls stack, so no new socket or TLS code ships. `tungstenite` below is that same 0.29 build.
-tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+# The voice agent's provider sockets use the same WebSocket stack as the Ghostex client crates.
+# Axum 0.8.9 and Convex 0.10.4 still bring their own versions (0.29 and 0.28).
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
 libc = "0.2"
 markdown = "1"
 md-5 = "0.11"
@@ -61,7 +60,7 @@ rand = "0.10"
 ring = "0.17"
 # CDXC:Security 2026-11-16 WHY: `ghostex computer-code` asks Touch ID, Windows Hello or the system (polkit) password before it approves a device with y, when Settings > Security > "Require Touch ID or your password to approve" is on: the same presence prompt the app uses (packages/owner-keys). Only its `confirm_presence` is called here; the key store code comes with it.
 ghostex-owner-keys = { path = "../packages/owner-keys" }
-tungstenite = { version = "0.29", default-features = false, features = ["handshake"] }
+tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
 ureq = { version = "3.5", features = ["json"] }
 # CDXC:Sharing 2026-11-24 DECISION:
 # User chose OpenTunnel as the default built-in tunnel provider, embedded as the Rust library crate

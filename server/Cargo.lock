@@ -1497,10 +1497,10 @@ dependencies = [
  "tempfile",
  "tiny-skia",
  "tokio",
- "tokio-tungstenite 0.29.0",
+ "tokio-tungstenite 0.30.0",
  "toml_edit",
  "tower",
- "tungstenite 0.29.0",
+ "tungstenite 0.30.0",
  "unicode-normalization",
  "unicode-width",
  "ureq",
@@ -3844,12 +3844,8 @@ checksum = "8f72a05e828585856dacd553fba484c242c46e391fb0e58917c942ee9202915c"
 dependencies = [
  "futures-util",
  "log",
- "rustls",
- "rustls-pki-types",
  "tokio",
- "tokio-rustls",
  "tungstenite 0.29.0",
- "webpki-roots 0.26.11",
 ]
 
 [[package]]
@@ -3866,6 +3862,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tungstenite 0.30.0",
+ "webpki-roots 0.26.11",
 ]
 
 [[package]]
@@ -4059,8 +4056,6 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.9.5",
- "rustls",
- "rustls-pki-types",
  "sha1 0.10.7",
  "thiserror 2.0.21",
 ]
