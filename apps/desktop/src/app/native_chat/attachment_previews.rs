@@ -44,18 +44,64 @@ fn remove_button_look(p: &ChatAppearance) -> RemoveButtonLook {
 }
 
 impl NativeChatView {
-    /// Drops the markdown reference this tile stands for, through the shared removal rule.
+    /// Drops the markdown reference this tile stands for, through the shared removal rule, directly
+    /// on the composer input so Cmd+Z / Ctrl+Z restores it in the same place in edit order.
+    ///
+    /// CDXC:SessionChat 2026-11-28 DECISION:
+    /// User (Q5374): "Just make sure we have code that when we press x to remove them cmd + z
+    /// brings img back". Removing an attachment tile applies `remove_reference_range` straight to
+    /// the composer input as one atomic undoable edit (instead of waiting on a core round-trip and
+    /// whole-draft replace), and removing a failed-upload tile (`drop_failed_upload` in
+    /// `composer_attach.rs`) interleaves into the same Cmd+Z / Ctrl+Z timeline.
     fn remove_composer_attachment(
         &mut self,
         range: std::ops::Range<usize>,
+        window: &mut gpui::Window,
         cx: &mut Context<Self>,
     ) {
+        use gpui::{EntityInputHandler as _, Focusable as _};
+        if range.end > self.draft.len()
+            || !self.draft.is_char_boundary(range.start)
+            || !self.draft.is_char_boundary(range.end)
+        {
+            return;
+        }
         let start = self.draft[..range.start].encode_utf16().count();
         let end = self.draft[..range.end].encode_utf16().count();
-        self.invoke(
-            json!({"type":"removeAttachment","text":self.draft,"start":start,"end":end}),
-            cx,
-        );
+        if !self.input_needs_sync
+            && let Some(input) = self.input.clone()
+            && input.read(cx).value().as_str() == self.draft.as_str()
+        {
+            let delete = ghostex_gx_chat_core::composer::references::remove_reference_range(
+                &self.draft,
+                start,
+                end,
+            );
+            input.update(cx, |input, cx| {
+                input.replace_text_in_range(Some(delete), "", window, cx);
+            });
+            let next = input.read(cx).value().to_string();
+            if next != self.draft {
+                self.draft = next;
+                self.failed_upload_undo.note_text_edit(&self.draft);
+                self.draft_revision += 1;
+                self.persist_draft(cx);
+                cx.emit(super::state::NativeChatEvent::DraftState(
+                    self.draft.is_empty(),
+                ));
+                self.notify_composer(cx);
+            }
+            self.save_draft(cx);
+            if !input.read(cx).focus_handle(cx).is_focused(window) {
+                self.focus_requested = true;
+                cx.notify();
+            }
+            return;
+        }
+        let edit =
+            ghostex_gx_chat_core::composer::references::remove_reference(&self.draft, start, end);
+        self.replace_draft(&edit.text, false, false, cx);
+        self.input_caret = Some(edit.caret);
     }
 
     /// The draft's image references in the shape the viewer reads, and where `path` sits in them.
@@ -222,9 +268,9 @@ impl NativeChatView {
                                     .size(px(9.0 * s))
                                     .text_color(remove.glyph),
                             )
-                            .on_click(
-                                cx.listener(move |this, _, _, cx| this.drop_failed_upload(key, cx)),
-                            ),
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                this.drop_failed_upload(key, window, cx)
+                            })),
                     )
                     .into_any_element()
             })
@@ -392,7 +438,7 @@ impl NativeChatView {
                                 if let Some(key) = &answer_key {
                                     this.remove_answer_attachment(key, removed.clone(), window, cx);
                                 } else {
-                                    this.remove_composer_attachment(removed.clone(), cx)
+                                    this.remove_composer_attachment(removed.clone(), window, cx)
                                 }
                             })),
                     ),

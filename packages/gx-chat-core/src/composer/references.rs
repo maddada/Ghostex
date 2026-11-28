@@ -254,10 +254,9 @@ pub fn insert_reference(current: &str, reference: &str, start: usize, end: usize
     }
 }
 
-/// Drops the reference an attachment thumbnail stands for, the way removing a pasted image did in
-/// `packages/core-ui/chat/session-chat-composer.tsx`: one leading space and one trailing space go
-/// with it so the surrounding sentence keeps its spacing.
-pub fn remove_reference(current: &str, start: usize, end: usize) -> ComposerEdit {
+/// UTF-16 range dropped for a reference at `[start, end)`, including at most one adjacent
+/// horizontal space on each side so the surrounding sentence keeps its spacing.
+pub fn remove_reference_range(current: &str, start: usize, end: usize) -> std::ops::Range<usize> {
     let indexed = Utf16Text::new(current);
     let start_index = indexed.index_of_offset(start);
     let end_index = indexed.index_of_offset(end);
@@ -275,13 +274,24 @@ pub fn remove_reference(current: &str, start: usize, end: usize) -> ComposerEdit
     } else {
         end_index
     };
+    indexed.offset(from)..indexed.offset(to)
+}
+
+/// Drops the reference an attachment thumbnail stands for, the way removing a pasted image did in
+/// `packages/core-ui/chat/session-chat-composer.tsx`: one leading space and one trailing space go
+/// with it so the surrounding sentence keeps its spacing.
+pub fn remove_reference(current: &str, start: usize, end: usize) -> ComposerEdit {
+    let range = remove_reference_range(current, start, end);
+    let indexed = Utf16Text::new(current);
+    let from = indexed.index_of_offset(range.start);
+    let to = indexed.index_of_offset(range.end);
     ComposerEdit {
         text: format!(
             "{}{}",
             indexed.slice(0, from),
             indexed.slice(to, indexed.len())
         ),
-        caret: indexed.offset(from),
+        caret: range.start,
     }
 }
 

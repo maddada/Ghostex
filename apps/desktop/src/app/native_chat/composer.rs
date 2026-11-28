@@ -186,6 +186,7 @@ impl NativeChatView {
         self.draft.clear();
         self.draft_id = next_id;
         self.draft_revision = 1;
+        self.failed_upload_undo.clear();
         if let Some(input) = &self.input {
             input.update(cx, |input, cx| input.set_value("", window, cx));
         }

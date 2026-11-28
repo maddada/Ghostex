@@ -8,7 +8,7 @@
 
 use super::state::NativeChatView;
 use base64::Engine as _;
-use gpui::{Context, Window};
+use gpui::{Context, EntityInputHandler as _, Focusable as _, Window};
 use serde_json::json;
 
 /// What a background save or import hands back: the session machine's paths, the pictures the
@@ -39,6 +39,148 @@ pub(super) struct FailedUpload {
     pub(super) upload: Upload,
     /// Why the last try failed (the tile's tooltip).
     pub(super) error: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PendingTextHistory {
+    Undo,
+    Redo,
+}
+
+struct RemovedFailedUpload {
+    index: usize,
+    failed: FailedUpload,
+    text_trail: Vec<String>,
+}
+
+struct RestoredFailedUpload {
+    key: u64,
+    text_trail: Vec<String>,
+}
+
+/// Undo and redo stack for failed-upload tiles dropped with their `x` button, interleaved in exact
+/// edit order with the composer `TextareaState`'s text undo history.
+#[derive(Default)]
+pub(super) struct FailedUploadUndo {
+    undo: Vec<RemovedFailedUpload>,
+    redo: Vec<RestoredFailedUpload>,
+    pending_text: Option<PendingTextHistory>,
+    pending_generation: u64,
+}
+
+impl FailedUploadUndo {
+    pub(super) fn clear(&mut self) {
+        self.undo.clear();
+        self.redo.clear();
+        self.pending_text = None;
+    }
+
+    fn is_empty(&self) -> bool {
+        self.undo.is_empty() && self.redo.is_empty()
+    }
+
+    fn record_removed(&mut self, index: usize, failed: FailedUpload) {
+        self.redo.clear();
+        self.pending_text = None;
+        self.undo.push(RemovedFailedUpload {
+            index,
+            failed,
+            text_trail: Vec::new(),
+        });
+    }
+
+    pub(super) fn note_text_edit(&mut self, after: &str) {
+        self.redo.clear();
+        self.pending_text = None;
+        if let Some(top) = self.undo.last_mut() {
+            top.text_trail.push(after.to_owned());
+        }
+    }
+
+    pub(super) fn note_input_change(&mut self, before: &str, after: &str) {
+        match self.pending_text.take() {
+            Some(PendingTextHistory::Undo) => {
+                if let Some(top) = self.undo.last_mut()
+                    && !top.text_trail.is_empty()
+                {
+                    top.text_trail.pop();
+                    while top.text_trail.last().is_some_and(|text| text != after) {
+                        top.text_trail.pop();
+                    }
+                }
+                if let Some(top) = self.redo.last_mut() {
+                    top.text_trail.push(before.to_owned());
+                }
+            }
+            Some(PendingTextHistory::Redo) => {
+                if let Some(top) = self.redo.last_mut()
+                    && !top.text_trail.is_empty()
+                {
+                    while top.text_trail.last().is_some_and(|text| text != after) {
+                        top.text_trail.pop();
+                    }
+                    if top.text_trail.last().is_some_and(|text| text == after) {
+                        top.text_trail.pop();
+                    }
+                }
+                if let Some(top) = self.undo.last_mut() {
+                    top.text_trail.push(after.to_owned());
+                }
+            }
+            None => self.note_text_edit(after),
+        }
+    }
+
+    fn pop_undo_if_top(&mut self) -> Option<RemovedFailedUpload> {
+        if self
+            .undo
+            .last()
+            .is_some_and(|top| top.text_trail.is_empty())
+        {
+            self.undo.pop()
+        } else {
+            None
+        }
+    }
+
+    fn push_redo(&mut self, key: u64) {
+        self.redo.push(RestoredFailedUpload {
+            key,
+            text_trail: Vec::new(),
+        });
+    }
+
+    fn pop_redo_if_top(&mut self) -> Option<RestoredFailedUpload> {
+        if self
+            .redo
+            .last()
+            .is_some_and(|top| top.text_trail.is_empty())
+        {
+            self.redo.pop()
+        } else {
+            None
+        }
+    }
+
+    fn push_undo_from_redo(&mut self, index: usize, failed: FailedUpload) {
+        self.undo.push(RemovedFailedUpload {
+            index,
+            failed,
+            text_trail: Vec::new(),
+        });
+    }
+
+    fn mark_pending_text(&mut self, direction: PendingTextHistory) -> u64 {
+        self.pending_generation = self.pending_generation.wrapping_add(1);
+        self.pending_text = Some(direction);
+        self.pending_generation
+    }
+
+    fn clear_pending_if(&mut self, generation: u64) {
+        if self.pending_generation == generation {
+            self.pending_text = None;
+        }
+    }
 }
 
 /// The error card's words when a message's picture failed to upload twice: Send uploads it again.
@@ -267,15 +409,145 @@ impl NativeChatView {
     /// Send: the pictures and files whose upload failed go up again, and the send takes them
     /// along as it takes any upload still on its way (Q3274 A).
     pub(super) fn retry_failed_uploads(&mut self, cx: &mut Context<Self>) {
+        self.failed_upload_undo.clear();
         for failed in std::mem::take(&mut self.failed_uploads) {
             self.start_upload(failed.upload, cx);
         }
     }
 
-    /// A failed tile's remove button: it leaves the chat box.
-    pub(super) fn drop_failed_upload(&mut self, key: u64, cx: &mut Context<Self>) {
-        self.failed_uploads.retain(|failed| failed.key != key);
+    /// Break `TextareaState` typing coalescing so text edits before and after a failed-upload tile
+    /// removal stay separate undo steps.
+    fn break_composer_undo_coalescing(
+        input: &gpui::Entity<gpui_component::input::TextareaState>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        input.update(cx, |input, cx| {
+            let selected = input.selected_range();
+            let reversed = input.is_selection_reversed();
+            let at = input
+                .value()
+                .get(..selected.start)
+                .map(|prefix| prefix.encode_utf16().count())
+                .unwrap_or(0);
+            input.replace_text_in_range(Some(at..at), "", window, cx);
+            input.set_selected_range_with_direction(selected, reversed, cx);
+        });
+    }
+
+    /// A failed tile's remove button: it leaves the chat box, kept as one undo step so Cmd+Z /
+    /// Ctrl+Z puts it back in the same place.
+    pub(super) fn drop_failed_upload(
+        &mut self,
+        key: u64,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(index) = self
+            .failed_uploads
+            .iter()
+            .position(|failed| failed.key == key)
+        else {
+            return;
+        };
+        let failed = self.failed_uploads.remove(index);
+        self.failed_upload_undo.record_removed(index, failed);
+        if let Some(input) = self.input.clone() {
+            Self::break_composer_undo_coalescing(&input, window, cx);
+            if !input.read(cx).focus_handle(cx).is_focused(window) {
+                self.focus_requested = true;
+            }
+        }
+        self.notify_composer(cx);
         cx.notify();
+    }
+
+    /// Cmd+Z / Ctrl+Z while the composer has focus: restores a removed failed-upload tile when
+    /// that removal is the latest undoable action, otherwise lets the text field undo normally.
+    pub(super) fn composer_undo(
+        &mut self,
+        _: &gpui_component::input::Undo,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(input) = self
+            .input
+            .clone()
+            .filter(|input| input.read(cx).focus_handle(cx).is_focused(window))
+        else {
+            cx.propagate();
+            return;
+        };
+        if let Some(removed) = self.failed_upload_undo.pop_undo_if_top() {
+            cx.stop_propagation();
+            let key = removed.failed.key;
+            let at = removed.index.min(self.failed_uploads.len());
+            self.failed_uploads.insert(at, removed.failed);
+            self.failed_upload_undo.push_redo(key);
+            Self::break_composer_undo_coalescing(&input, window, cx);
+            self.expand_composer(true, cx);
+            self.notify_composer(cx);
+            cx.notify();
+            return;
+        }
+        if !self.failed_upload_undo.is_empty() {
+            let generation = self
+                .failed_upload_undo
+                .mark_pending_text(PendingTextHistory::Undo);
+            let chat = cx.weak_entity();
+            window.defer(cx, move |_, cx| {
+                let _ = chat.update(cx, |chat, _| {
+                    chat.failed_upload_undo.clear_pending_if(generation);
+                });
+            });
+        }
+        cx.propagate();
+    }
+
+    /// Cmd+Shift+Z / Ctrl+Shift+Z / Ctrl+Y while the composer has focus: re-removes a restored
+    /// failed-upload tile when that step is next on the redo timeline, otherwise forwards to the
+    /// text field.
+    pub(super) fn composer_redo(
+        &mut self,
+        _: &gpui_component::input::Redo,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(input) = self
+            .input
+            .clone()
+            .filter(|input| input.read(cx).focus_handle(cx).is_focused(window))
+        else {
+            cx.propagate();
+            return;
+        };
+        while let Some(restored) = self.failed_upload_undo.pop_redo_if_top() {
+            if let Some(index) = self
+                .failed_uploads
+                .iter()
+                .position(|failed| failed.key == restored.key)
+            {
+                cx.stop_propagation();
+                let failed = self.failed_uploads.remove(index);
+                self.failed_upload_undo.push_undo_from_redo(index, failed);
+                Self::break_composer_undo_coalescing(&input, window, cx);
+                self.notify_composer(cx);
+                cx.notify();
+                return;
+            }
+        }
+        if !self.failed_upload_undo.is_empty() {
+            let generation = self
+                .failed_upload_undo
+                .mark_pending_text(PendingTextHistory::Redo);
+            let chat = cx.weak_entity();
+            window.defer(cx, move |_, cx| {
+                let _ = chat.update(cx, |chat, _| {
+                    chat.failed_upload_undo.clear_pending_if(generation);
+                });
+            });
+        }
+        cx.propagate();
     }
 
     fn finish_composer_attach(
