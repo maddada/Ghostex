@@ -249,7 +249,7 @@ fn fix_item(fix: &AccountFix) -> Value {
 }
 
 /// The no-room limit card's dropdown: a model with room first, the sign-ins and turn-ons, the
-/// account panel, an account the user may pick by hand, then waiting and stopping.
+/// account panel, an account the user may pick by hand, then waiting, stopping and Not now.
 fn wait_action_menu(words: &WaitWords, acknowledged: bool, reset: Option<&str>) -> Value {
     let mut items = Vec::new();
     if let Some(action) = words.action.as_ref() {
@@ -293,9 +293,9 @@ fn wait_action_menu(words: &WaitWords, acknowledged: bool, reset: Option<&str>) 
         "stopRecovery",
         Some(json!({ "kind": "stopRecovery" })),
     ));
-    if acknowledged {
-        items.push(menu_item("dismiss", "Not now", "dismiss", None));
-    }
+    // CDXC:AgentProviders 2026-11-28 DECISION: User (Q5305), of the out-of-usage card's menu:
+    // always show Not now, also before Wait was chosen; it only puts the card away.
+    items.push(menu_item("dismiss", "Not now", "dismiss", None));
     json!({ "label": ACTION_MENU_LABEL, "items": items })
 }
 
