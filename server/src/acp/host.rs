@@ -1667,14 +1667,30 @@ fn allow_always_security_warning(params: &Value) -> Option<String> {
     }
 }
 
+/// The image types agy embeds, and its per-image size limit. Anything else it refuses, so it
+/// goes to agy as the file's path instead (agy can open the file itself).
+const ANTIGRAVITY_EMBED_IMAGE_MIMES: &[&str] =
+    &["image/png", "image/jpeg", "image/webp", "image/bmp"];
+const ANTIGRAVITY_MAX_EMBED_IMAGE_BYTES: usize = 10 * 1024 * 1024;
+
 fn build_prompt_blocks(
     paths: &crate::paths::GxserverPaths,
+    family: &str,
     text: &str,
     image_paths: &[String],
 ) -> Result<Vec<Value>, String> {
     let mut blocks = Vec::new();
+    let mut path_only: Vec<String> = Vec::new();
     for raw in image_paths {
         let (bytes, mime) = super::read_validated_acp_image(paths, raw)?;
+        if family == "antigravity"
+            && (!ANTIGRAVITY_EMBED_IMAGE_MIMES.contains(&mime)
+                || bytes.len() > ANTIGRAVITY_MAX_EMBED_IMAGE_BYTES)
+        {
+            let (canonical, _) = super::validate_acp_image_path(paths, raw)?;
+            path_only.push(canonical.to_string_lossy().to_string());
+            continue;
+        }
         let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
         blocks.push(json!({
             "type": "image",
@@ -1682,6 +1698,20 @@ fn build_prompt_blocks(
             "mimeType": mime,
         }));
     }
+    let text = if path_only.is_empty() {
+        text.to_string()
+    } else {
+        let mut with_paths = text.trim_end().to_string();
+        if !with_paths.is_empty() {
+            with_paths.push_str("\n\n");
+        }
+        with_paths.push_str("Attached images (open them from these paths):");
+        for path in &path_only {
+            with_paths.push_str("\n- ");
+            with_paths.push_str(path);
+        }
+        with_paths
+    };
     if !text.trim().is_empty() || blocks.is_empty() {
         blocks.push(json!({
             "type": "text",
@@ -3451,7 +3481,7 @@ pub fn run(args: &[String]) -> i32 {
                         ep.ack(id, false, Value::Null, Some("ACP_AGENT_BUSY"));
                         continue;
                     }
-                    let blocks = match build_prompt_blocks(&gx_paths, &text, &images) {
+                    let blocks = match build_prompt_blocks(&gx_paths, spec.family, &text, &images) {
                         Ok(blocks) => blocks,
                         Err(err) => {
                             ep.ack(id, false, Value::Null, Some(&err));
