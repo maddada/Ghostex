@@ -1667,9 +1667,8 @@ fn spawn_and_init_claude(
                                     .turn_saw_api_error
                                     .take()
                                     .or_else(|| {
-                                        denied_text.map(|text| {
-                                            (Some("api_error_403".to_string()), text)
-                                        })
+                                        denied_text
+                                            .map(|text| (Some("api_error_403".to_string()), text))
                                     })
                                     .or_else(|| {
                                         (result_is_error && auth_error_text.is_none()).then(|| {
@@ -1782,7 +1781,11 @@ fn spawn_and_init_claude(
             // stdout closed (Claude exited) or this process generation was replaced: no
             // control response can come any more, so every waiting request returns at once
             // instead of waiting out its timeout.
-            t_out.pending.lock().unwrap_or_else(|p| p.into_inner()).clear();
+            t_out
+                .pending
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .clear();
         });
     }
 

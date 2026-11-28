@@ -1347,15 +1347,13 @@ pub fn build_cli_switch_argv_with_options(
             inner_args.push("--effort".to_string());
             inner_args.push(e.to_string());
         }
-        if let Some(settings_json) =
-            build_ghostex_claude_settings_json(
-                profile,
-                cwd,
-                effort,
-                accept_all && !read_only,
-                false,
-            )
-        {
+        if let Some(settings_json) = build_ghostex_claude_settings_json(
+            profile,
+            cwd,
+            effort,
+            accept_all && !read_only,
+            false,
+        ) {
             inner_args.push("--settings".to_string());
             inner_args.push(settings_json);
         }

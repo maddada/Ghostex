@@ -140,9 +140,9 @@ impl CodexTransport {
                     Ok(resp.get("result").cloned().unwrap_or(Value::Null))
                 }
             }
-            Err(mpsc::RecvTimeoutError::Disconnected) => {
-                Err(format!("Codex app-server exited before answering `{method}`."))
-            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(format!(
+                "Codex app-server exited before answering `{method}`."
+            )),
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 self.pending
                     .lock()
@@ -363,10 +363,10 @@ fn codex_thread_is_archived_error(err: &str) -> bool {
 /// those with no thread. A sub-agent's request stays: that thread can outlive the lead's turn.
 fn take_own_thread_requests(s: &mut CodexState) -> Vec<PendingCodexRequest> {
     let own = s.thread_id.clone();
-    let (mine, others): (VecDeque<_>, VecDeque<_>) =
-        s.pending_requests.drain(..).partition(|req| {
-            req.thread_id.is_none() || own.is_none() || req.thread_id == own
-        });
+    let (mine, others): (VecDeque<_>, VecDeque<_>) = s
+        .pending_requests
+        .drain(..)
+        .partition(|req| req.thread_id.is_none() || own.is_none() || req.thread_id == own);
     s.pending_requests = others;
     mine.into_iter().collect()
 }
@@ -2652,7 +2652,11 @@ fn spawn_codex_stdout_reader(
         // stdout closed (Codex exited) or this process generation was replaced: no reply can
         // come any more. Dropping the waiters' senders makes every pending `call` return at
         // once instead of waiting out its full timeout.
-        t_out.pending.lock().unwrap_or_else(|p| p.into_inner()).clear();
+        t_out
+            .pending
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clear();
     });
 }
 
