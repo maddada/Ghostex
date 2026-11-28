@@ -86,7 +86,7 @@ fn text_bounds(
         ..Default::default()
     };
     let tree = resvg::usvg::Tree::from_str(&svg, &options).ok()?;
-    let bounds = tree.root().abs_bounding_box();
+    let bounds = tree.root().abs_bounding_box()?;
     Some((bounds.x(), bounds.y(), bounds.width(), bounds.height()))
 }
 

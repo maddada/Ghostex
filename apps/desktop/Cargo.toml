@@ -78,7 +78,7 @@ ghostex-docs = { path = "../../packages/project-docs" }
 zorite-editor = { path = "../../.dependencies/zorite/zorite-editor" }
 ratex-gpui = { path = "../../.dependencies/zorite/ratex-gpui" }
 mermaid-rs-renderer = { version = "0.3.1", default-features = false }
-resvg = { version = "0.46.0", default-features = false, features = ["text", "system-fonts", "memmap-fonts"] }
+resvg = { version = "0.50.0", default-features = false, features = ["text", "system-fonts", "memmap-fonts"] }
 similar = "3"
 gpui = { git = "https://github.com/zed-industries/zed" }
 gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }

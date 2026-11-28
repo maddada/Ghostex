@@ -140,8 +140,10 @@ pub(crate) fn sanitize_icon(text: &str) -> Result<String, String> {
 
     let tree = resvg::usvg::Tree::from_str(&svg, &resvg::usvg::Options::default())
         .map_err(|error| format!("it doesn't draw as an SVG ({error})"))?;
-    let bounds = tree.root().abs_bounding_box();
-    if !tree.root().has_children() || (bounds.width() <= 0.0 && bounds.height() <= 0.0) {
+    let Some(bounds) = tree.root().abs_bounding_box() else {
+        return Err("it draws nothing".to_string());
+    };
+    if bounds.width() <= 0.0 && bounds.height() <= 0.0 {
         return Err("it draws nothing".to_string());
     }
     Ok(svg)
