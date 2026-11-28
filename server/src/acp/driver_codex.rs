@@ -1989,11 +1989,39 @@ fn spawn_codex_stdout_reader(
 
                     match method {
                         "item/commandExecution/requestApproval" => {
-                            let command = params
-                                .get("command")
+                            // A managed-network ask enforces the user's (or their admin's)
+                            // network allowlist: it asks even at Full access, never auto-accepted.
+                            let network_host = params
+                                .pointer("/networkApprovalContext/host")
                                 .and_then(Value::as_str)
-                                .unwrap_or("shell command")
-                                .to_string();
+                                .map(str::trim)
+                                .filter(|h| !h.is_empty());
+                            let network_ask = params
+                                .get("networkApprovalContext")
+                                .is_some_and(|v| !v.is_null())
+                                || params
+                                    .get("proposedNetworkPolicyAmendments")
+                                    .and_then(Value::as_array)
+                                    .is_some_and(|a| !a.is_empty());
+                            let command = match params.get("command").and_then(Value::as_str) {
+                                Some(c) if !c.trim().is_empty() => c.to_string(),
+                                _ if network_ask => match network_host {
+                                    Some(host) => {
+                                        let protocol = params
+                                            .pointer("/networkApprovalContext/protocol")
+                                            .and_then(Value::as_str)
+                                            .unwrap_or("network");
+                                        format!("Network access to {host} ({protocol})")
+                                    }
+                                    None => "Network access".to_string(),
+                                },
+                                _ if params.get("kind").and_then(Value::as_str)
+                                    == Some("writeStdin") =>
+                                {
+                                    "Input to a running command".to_string()
+                                }
+                                _ => "shell command".to_string(),
+                            };
                             let tool_use_id = params
                                 .get("itemId")
                                 .and_then(Value::as_str)
@@ -2009,13 +2037,17 @@ fn spawn_codex_stdout_reader(
                                     "rawInput": { "command": command },
                                 }
                             });
-                            let reason = match evaluate_permission(
-                                level,
-                                &synthetic,
-                                &allow_opts,
-                                &roots,
-                                &cwd,
-                            ) {
+                            let decision = if network_ask {
+                                PermissionDecision::AskUser {
+                                    reason: Some(
+                                        "Codex's network policy asks before this connection."
+                                            .to_string(),
+                                    ),
+                                }
+                            } else {
+                                evaluate_permission(level, &synthetic, &allow_opts, &roots, &cwd)
+                            };
+                            let reason = match decision {
                                 PermissionDecision::AutoApprove { .. } => {
                                     println!(
                                         "\r\n[Codex Native] Auto-approved ({}): Bash ({})",
