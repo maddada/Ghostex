@@ -24,7 +24,7 @@ A Live Activity update (the times are examples; the relay checks them against it
   "contentState": { "updatedAt": "…", "counts": { "working": 1, "waiting": 0 }, "agents": [], "moreCount": 0 } }
 ```
 
-| Field | Accepted (anything else, and any field not listed for the route: 400; an optional field sent as `null` counts as missing) |
+| Field | Accepted (anything else, and any field not listed for the route: 400. `null` counts as missing only for `contentState`, `staleDate`, `dismissalDate`, `priority`, `envelope`, `threadId`, `data` (and its `notificationId` and `worker`) and `sound`; `environment: null` gets 400, its default applies only when the field is omitted) |
 | --- | --- |
 | `token` | hex, 64 to 512 characters, whole bytes; sent lowercased. For `start`, the push-to-start token. |
 | `environment` | `production` (default, `api.push.apple.com`) or `sandbox` (`api.sandbox.push.apple.com`) |
@@ -135,10 +135,11 @@ new key refused with 429 (`retryAfter` 60).
 | idle bucket | dropped by the cleanup once a minute, or when its table is full, once idle this long | Live Activity 10 minutes; `/push/` until it would be full again, at least 10 minutes (10 for addresses, alert tokens and ids, 40 for widget tokens, 60 for background tokens and new ids) | a restart |
 | provider token (signed JWT) | reused while younger than this; kept until a push needs a new one | 40 minutes | the 403 renewal in step 8 |
 
-Only store entries carry a lifetime checked on each access: an expired entry is never handed out, and its memory
-is freed then, at the cleanup once a minute, or when a `PUT` needs space. Buckets and gone tokens leave only
-through the cleanup (or a full table's own pruning), so they can stay a little past the times above. A restart
-empties everything above and the health counts; nothing is written to disk.
+Store entries are removed when accessed after they expired: an expired entry is never handed out, and its memory
+is freed then, at the cleanup once a minute, or when a `PUT` needs space. The provider token's age is checked on
+each push, and it is replaced after 40 minutes (see the table). Buckets and gone tokens leave only through the
+cleanup (or a full table's own pruning), so they can stay a little past the times above. A restart empties
+everything above and the health counts; nothing is written to disk.
 
 ## Who can call it, and what that allows
 
@@ -155,9 +156,9 @@ The relay does not authenticate its callers.
 - Whoever holds a snapshot id can read and replace it. The relay stores the bytes unchanged and does not check
   that they are encrypted; their confidentiality rests on the computer encrypting them before the upload.
 - Strangers can fill the stores up to the caps: new ids then get `store-full` for everyone until space frees.
-  Held ids can still be read and replaced by a value that fits; a larger replacement can get 503 `store-full` at
-  the byte cap, and the old value stays readable. Many addresses can likewise fill a limit table (new keys get
-  429).
+  Held ids can still be read and replaced by a value that fits, within the address and id quotas (429 with
+  `Retry-After` is possible); a larger replacement can get 503 `store-full` at the byte cap and leaves the old
+  value stored unchanged. Many addresses can likewise fill a limit table (new keys get 429).
 - The key is read at start from `AuthKey.p8` and `apns.conf`, which the deploy steps make readable only to root
   and the service's group; no answer or log line carries it or its two ids. Apple receives per push the token
   (in the path), push type, topic, priority, expiry, the signed provider token and the payload; a widget push
@@ -204,10 +205,12 @@ Apple's status and reason, ms) or did not (`failed` / `push failed`); each refus
 `bad-request`, `too-large`, `token-gone`, `too-many-new-ids`, `store-full`); each body refused at step 0
 (`body refused reason=bodies-full` / `reason=too-slow`); each store and mailbox take. No line for health checks,
 snapshot reads, reads of an empty id, the mailbox `HEAD`, bodies refused for size before the route's code or
-bodies the client broke off (a mailbox or snapshot body within the route's limit but over its own cap gets a JSON
-413 and a `reason=too-large` line). A label is the first 8 hex of the SHA-256 of the token or lowercased id; no
-line carries a token, an id, a content state, an envelope, `threadId`, `data`, a snapshot or anything from the
-key's files. Whether Caddy's access log keeps the `Authorization` header depends on its logging configuration.
+bodies the client broke off. Once a mailbox or snapshot `PUT` reaches its size check, a body within the route's
+limit but over its own cap gets a JSON 413 and a `reason=too-large` line; a request refused earlier (for example
+400 for a missing or invalid Bearer id) logs its own reason and no size line. A label is the first 8 hex of the
+SHA-256 of the token or lowercased id; no line carries a token, an id, a content state, an envelope, `threadId`,
+`data`, a snapshot or anything from the key's files. Whether Caddy's access log keeps the `Authorization` header
+depends on its logging configuration.
 
 ## Run, build, deploy
 
@@ -250,5 +253,5 @@ body places and read time in `BODY_READS` and `BODY_READ_TIME` there too, body s
 `src/push_routes.rs` (plus the Caddy `max_size`). Change it there, measure the peak memory again in the profile
 the relay is meant to run in (tables, store, body places and pushes waiting on Apple), set `MemoryMax` in
 `deploy/ghostex-push-relay.service` above that peak with a reserve you state, rebuild with `build-linux.sh`,
-deploy binary and unit (`systemctl daemon-reload`, then restart). A measured peak bounds memory in that profile;
-it promises no availability.
+deploy binary and unit (`systemctl daemon-reload`, then restart). A measured peak is what that run observed, not
+an upper bound for later runs, and it promises no availability.
