@@ -211,6 +211,8 @@ struct PendingCodexRequest {
     summary: String,
     tool_use_id: Option<String>,
     reason: Option<String>,
+    /// The Codex thread that asked (the lead's or a sub-agent's), from `params.threadId`.
+    thread_id: Option<String>,
 }
 
 impl PendingCodexRequest {
@@ -355,6 +357,18 @@ fn codex_thread_is_archived_error(err: &str) -> bool {
                 .next()
                 .is_some_and(|w| w.trim_end_matches(|c: char| !c.is_alphanumeric()) == "archived")
     })
+}
+
+/// Takes the pending requests the lead's turn leaves orphaned when it completes: its own and
+/// those with no thread. A sub-agent's request stays: that thread can outlive the lead's turn.
+fn take_own_thread_requests(s: &mut CodexState) -> Vec<PendingCodexRequest> {
+    let own = s.thread_id.clone();
+    let (mine, others): (VecDeque<_>, VecDeque<_>) =
+        s.pending_requests.drain(..).partition(|req| {
+            req.thread_id.is_none() || own.is_none() || req.thread_id == own
+        });
+    s.pending_requests = others;
+    mine.into_iter().collect()
 }
 
 /// How long Codex may keep retrying one turn (`error { willRetry: true }` with no progress in
@@ -2021,6 +2035,10 @@ fn spawn_codex_stdout_reader(
                                 summary: command,
                                 tool_use_id,
                                 reason,
+                                thread_id: params
+                                    .get("threadId")
+                                    .and_then(Value::as_str)
+                                    .map(str::to_string),
                             };
                             let was_empty = {
                                 let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
@@ -2108,6 +2126,10 @@ fn spawn_codex_stdout_reader(
                                 summary,
                                 tool_use_id,
                                 reason,
+                                thread_id: params
+                                    .get("threadId")
+                                    .and_then(Value::as_str)
+                                    .map(str::to_string),
                             };
                             let was_empty = {
                                 let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
@@ -2150,6 +2172,10 @@ fn spawn_codex_stdout_reader(
                                 summary,
                                 tool_use_id,
                                 reason: None,
+                                thread_id: params
+                                    .get("threadId")
+                                    .and_then(Value::as_str)
+                                    .map(str::to_string),
                             };
                             let was_empty = {
                                 let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
@@ -2184,6 +2210,10 @@ fn spawn_codex_stdout_reader(
                                 summary,
                                 tool_use_id,
                                 reason: None,
+                                thread_id: params
+                                    .get("threadId")
+                                    .and_then(Value::as_str)
+                                    .map(str::to_string),
                             };
                             let was_empty = {
                                 let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
@@ -2226,6 +2256,10 @@ fn spawn_codex_stdout_reader(
                                 summary,
                                 tool_use_id,
                                 reason: None,
+                                thread_id: params
+                                    .get("threadId")
+                                    .and_then(Value::as_str)
+                                    .map(str::to_string),
                             };
                             let was_empty = {
                                 let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
@@ -2254,6 +2288,23 @@ fn spawn_codex_stdout_reader(
                     .and_then(Value::as_str)
                     .unwrap_or_default();
                 let params = msg.get("params").unwrap_or(&Value::Null);
+                // Codex settled one of its requests itself (the turn moved on, the item was
+                // cancelled, another client answered): drop its card, for any thread, so a stale
+                // Allow cannot answer a request Codex no longer waits for.
+                if method == "serverRequest/resolved" {
+                    if let Some(request_id) = params.get("requestId") {
+                        let removed = {
+                            let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                            let before = s.pending_requests.len();
+                            s.pending_requests.retain(|p| &p.rpc_id != request_id);
+                            s.pending_requests.len() != before
+                        };
+                        if removed {
+                            act_out.sync();
+                        }
+                    }
+                    return;
+                }
                 /*
                 CDXC:AgentProviders 2026-11-28 WHY:
                 GitHub #791: one `codex app-server` runs the lead thread and every sub-agent thread
@@ -2356,7 +2407,7 @@ fn spawn_codex_stdout_reader(
                                     s.active_turn_id = None;
                                     s.file_change_items.clear();
                                     s.clear_live_turn_output();
-                                    (false, s.pending_requests.drain(..).collect())
+                                    (false, take_own_thread_requests(&mut s))
                                 }
                             } else if s.awaiting_turn_start {
                                 (true, Vec::new())
@@ -2380,7 +2431,7 @@ fn spawn_codex_stdout_reader(
                                 s.active_turn_id = None;
                                 s.file_change_items.clear();
                                 s.clear_live_turn_output();
-                                (false, s.pending_requests.drain(..).collect())
+                                (false, take_own_thread_requests(&mut s))
                             }
                         };
                         if stale_turn {
