@@ -1691,7 +1691,7 @@ pub(crate) async fn switch_to_acp(
     let server_id = state.metadata.server_id.clone();
     let pid = project_id.to_string();
     let sid = session_id.to_string();
-    let (session, family, already_acp) = tokio::task::spawn_blocking(move || {
+    let (session, family, already_acp, hub_refusal) = tokio::task::spawn_blocking(move || {
         let db = open_gxserver_database(&paths).map_err(|error| DomainStateError {
             code: "internalError",
             message: format!("SQLite gxserver state error: {error}"),
@@ -1705,7 +1705,10 @@ pub(crate) async fn switch_to_acp(
             })?;
         let family = session_native_switch_family(&session)?;
         let already_acp = super::session_is_acp(&session);
-        Ok::<_, DomainStateError>((session, family, already_acp))
+        let hub_refusal = (!already_acp)
+            .then(|| crate::accounts::hub::session_hub_refusal(&paths, &session))
+            .flatten();
+        Ok::<_, DomainStateError>((session, family, already_acp, hub_refusal))
     })
     .await
     .map_err(|error| DomainStateError {
@@ -1721,6 +1724,12 @@ pub(crate) async fn switch_to_acp(
             "restarted": false,
             "family": family,
         }));
+    }
+    // The switch sleeps the Terminal agent and wakes it in Native, and that wake is refused On a
+    // hub that holds a Google login (agents/resume_plan.rs), which would leave a working chat
+    // stopped on the refusal. So it is refused here, as `switch_to_cli` refuses the other way.
+    if let Some(reason) = hub_refusal {
+        return Err(DomainStateError::bad_request(reason));
     }
 
     if super::pending_switch::is_in_flight(project_id, session_id) {
@@ -2095,31 +2104,35 @@ pub(crate) async fn execute_switch_to_acp(
     let server_id = state.metadata.server_id.clone();
     let pid = project_id.to_string();
     let sid = session_id.to_string();
-    let (session, family, already_acp, is_thread) = tokio::task::spawn_blocking(move || {
-        let db = open_gxserver_database(&paths).map_err(|error| DomainStateError {
-            code: "internalError",
-            message: format!("SQLite gxserver state error: {error}"),
-        })?;
-        let repository = DomainRepository::new(&db, server_id.as_str());
-        let session = repository
-            .get_session(&pid, &sid)?
-            .ok_or_else(|| DomainStateError {
-                code: "notFound",
-                message: "The session no longer exists.".to_string(),
+    let (session, family, already_acp, is_thread, hub_refusal) =
+        tokio::task::spawn_blocking(move || {
+            let db = open_gxserver_database(&paths).map_err(|error| DomainStateError {
+                code: "internalError",
+                message: format!("SQLite gxserver state error: {error}"),
             })?;
-        let family = session_native_switch_family(&session)?;
-        let already_acp = super::session_is_acp(&session);
-        let is_thread = crate::coordinators::read_thread(&db, &pid, &sid)
-            .ok()
-            .flatten()
-            .is_some();
-        Ok::<_, DomainStateError>((session, family, already_acp, is_thread))
-    })
-    .await
-    .map_err(|error| DomainStateError {
-        code: "internalError",
-        message: format!("Could not read session for Native mode: {error}"),
-    })??;
+            let repository = DomainRepository::new(&db, server_id.as_str());
+            let session = repository
+                .get_session(&pid, &sid)?
+                .ok_or_else(|| DomainStateError {
+                    code: "notFound",
+                    message: "The session no longer exists.".to_string(),
+                })?;
+            let family = session_native_switch_family(&session)?;
+            let already_acp = super::session_is_acp(&session);
+            let is_thread = crate::coordinators::read_thread(&db, &pid, &sid)
+                .ok()
+                .flatten()
+                .is_some();
+            let hub_refusal = (!already_acp)
+                .then(|| crate::accounts::hub::session_hub_refusal(&paths, &session))
+                .flatten();
+            Ok::<_, DomainStateError>((session, family, already_acp, is_thread, hub_refusal))
+        })
+        .await
+        .map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("Could not read session for Native mode: {error}"),
+        })??;
 
     if already_acp {
         return Ok(json!({
@@ -2128,6 +2141,10 @@ pub(crate) async fn execute_switch_to_acp(
             "restarted": false,
             "family": family,
         }));
+    }
+    // A queued or bulk switch reaches here without `switch_to_acp`'s own hub check.
+    if let Some(reason) = hub_refusal {
+        return Err(DomainStateError::bad_request(reason));
     }
 
     let lifecycle = crate::presentation::effective_lifecycle_state(&session);

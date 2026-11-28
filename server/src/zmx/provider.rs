@@ -524,9 +524,24 @@ pub(crate) fn start_session_provider_with_observed_state(
         crate::agentbox::wake_agentbox_activity_poller();
     }
     crate::session_chat_empryo_tabs::select_empryo_own_tab_after_start(&session, None);
+    let native_without_host = launched_acp.is_none() && crate::acp::session_is_acp(&probed_session);
+    // A client that read the attach metadata first (the desktop's restore, `ghostex attach`) hands
+    // back only its `startupText`, so the refusal behind that text is looked up again: the check
+    // made for the metadata is still kept (accounts/hub/mod.rs `checked_logins`), so this asks the
+    // hub nothing new.
+    let hub_refusal = hub_refusal.or_else(|| {
+        (native_without_host && explicit_startup_text.is_some())
+            .then(|| {
+                crate::accounts::hub::session_hub_refusal(
+                    &crate::paths::get_gxserver_paths(None),
+                    &probed_session,
+                )
+            })
+            .flatten()
+    });
     if launched_acp.is_some() {
         crate::acp::startup_error::clear(&lifecycle.project_id, &lifecycle.session_id);
-    } else if crate::acp::session_is_acp(&probed_session) {
+    } else if native_without_host {
         if let Some(reason) = hub_refusal.as_deref() {
             let family = crate::acp::session_acp_family(&probed_session).unwrap_or_default();
             crate::acp::startup_error::record(

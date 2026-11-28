@@ -349,6 +349,24 @@ pub(crate) fn get_provider_restart_startup_for_session(
         return (None, None);
     }
     if crate::agents::session_is_draft(session) {
+        // A draft comes back on the command it was created with, which `build_agent_resume_plan`
+        // never sees, so the hub check every resume makes is made here too: a draft On a hub that
+        // gained a Google login since it was created prints why instead of starting on that hub.
+        let paths = crate::paths::get_gxserver_paths(None);
+        if let Some(reason) = crate::accounts::hub::session_hub_refusal(&paths, session) {
+            let plan = crate::agents::hub_refused_resume_plan(
+                session
+                    .get("agentId")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+                &reason,
+            );
+            let startup_text = plan
+                .get("startupText")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            return (startup_text, Some(reason));
+        }
         return (get_agent_launch_startup_text_for_session(session), None);
     }
     let (resume_startup_text, hub_refusal) =

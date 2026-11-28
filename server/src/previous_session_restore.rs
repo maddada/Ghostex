@@ -35,6 +35,10 @@ const RESTORED_RUNTIME_KEYS: &[&str] = &[
     "agentSessionPath",
     "firstUserMessage",
     "launchAgentId",
+    // A session On a hub keeps the hub's id, which its start, resume, fork and mode switches check
+    // for a Google login (accounts/hub/mod.rs `session_hub_refusal`); without it the restored
+    // session still ran on the hub through `accountBaseCommand`, unchecked.
+    crate::accounts::hub::launch::RUNTIME_KEY,
     // CDXC:SessionLinks 2026-10-24 DECISION: User: "when i close a session in the sidebar then i restore it it should keep the links". The restored session is a new row, so its links come along with it: `sessionLinks` (the links that joined by themselves or by hand, the pins, the removed ones, which stay removed, and what was last read about each) and work mode's hand-set `workLinks`. Before this the restored session started with none, and only what its branch or transcript named came back.
     "sessionLinks",
     "workLinks",

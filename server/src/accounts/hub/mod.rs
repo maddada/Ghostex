@@ -483,6 +483,9 @@ pub(crate) fn warn_google_login_once(
         },
     );
     if inserted.is_err() {
+        // No row was added, so the hub is not marked as warned: the next launch tries again.
+        warned.pop();
+        let _ = std::fs::write(&path, serde_json::to_string(&warned).unwrap_or_default());
         return;
     }
     if let Some(state) = crate::collab_shim::sidecar::app_state() {

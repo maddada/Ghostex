@@ -1028,9 +1028,14 @@ pub(crate) fn resolve_hub_profile_dir(family: &str, hub_id: &str) -> Option<Path
         "codex" => crate::accounts::model::Provider::Codex,
         _ => return None,
     };
+    // The home `apply` wrote the folder under (accounts/hub/launch.rs): a separate profile's own
+    // home, else the user's. With no home at all there is no folder to name, as before.
     let home = crate::paths::get_gxserver_paths(None)
         .agent_config_home_dir()
         .to_path_buf();
+    if !home.is_absolute() {
+        return None;
+    }
     Some(crate::accounts::hub::launch::profile_dir(
         &home,
         provider,
