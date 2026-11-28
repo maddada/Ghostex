@@ -932,9 +932,11 @@ pub fn detect_session_chat_terminal_state(
         so a running Claude background agent left `agentFleet` null on every read and Codex's
         roster came and went. Their roster lives in the agent's own transcripts and spawn graph,
         the same as in a terminal, so they read it the way OMP does; with no screen, Claude keeps
-        only working children (no footer row to keep an idle one).
+        only working children (no footer row to keep an idle one). Hermes keeps its delegate_task
+        children in its own `state.db` under the Native session's id, read the same way, so a Native
+        Hermes chat shows the Subagents pill a Terminal one does.
         */
-        let reads_transcript_fleet = matches!(family, "omp" | "claude" | "codex");
+        let reads_transcript_fleet = matches!(family, "omp" | "claude" | "codex" | "hermes");
         let (fleet, fleet_observed) = if reads_transcript_fleet {
             match session_row.as_ref().and_then(|session| {
                 crate::session_chat_fleet_status::read_fleet(session, None).ok()
