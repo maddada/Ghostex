@@ -202,6 +202,9 @@ pub(crate) struct GpuiSwitchRequestToast {
 pub(crate) struct GpuiChatUndoToast {
     pub(crate) chat: gpui::WeakEntity<crate::app::native_chat::state::NativeChatView>,
     pub(crate) command: serde_json::Value,
+    /// The button's words when they say more than Undo (`chatUndoLabel`): "Keep inline" on a long
+    /// paste the chat box saved as a file (native_chat/long_paste.rs).
+    pub(crate) label: Option<String>,
 }
 
 impl GpuiChatUndoToast {
@@ -216,13 +219,16 @@ impl std::fmt::Debug for GpuiChatUndoToast {
         f.debug_struct("GpuiChatUndoToast")
             .field("chat", &self.chat.entity_id())
             .field("command", &self.command)
+            .field("label", &self.label)
             .finish()
     }
 }
 
 impl PartialEq for GpuiChatUndoToast {
     fn eq(&self, other: &Self) -> bool {
-        self.chat.entity_id() == other.chat.entity_id() && self.command == other.command
+        self.chat.entity_id() == other.chat.entity_id()
+            && self.command == other.command
+            && self.label == other.label
     }
 }
 
@@ -239,9 +245,16 @@ pub(crate) fn gpui_chat_undo_toast_from_bridge_message(
     let command = message
         .get("chatUndo")
         .filter(|command| command.is_object())?;
+    let label = message
+        .get("chatUndoLabel")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|label| !label.is_empty())
+        .map(str::to_string);
     toast.action = Some(GpuiAppToastAction::ChatUndo(Box::new(GpuiChatUndoToast {
         chat,
         command: command.clone(),
+        label,
     })));
     Some(toast)
 }
@@ -324,7 +337,8 @@ impl GpuiAppToastAction {
             Self::OpenCanvas => "Open Canvas",
             Self::OpenAgentSettings => "Install or pick another agent",
             Self::OpenUpdateDownloadPage => "Open download page",
-            Self::UndoSyncedChange { .. } | Self::ChatUndo(_) => "Undo",
+            Self::ChatUndo(undo) => undo.label.as_deref().unwrap_or("Undo"),
+            Self::UndoSyncedChange { .. } => "Undo",
             Self::ResetInterfaceScale => "Set to 100%",
             Self::RepairSpaceo => "Repair",
             Self::SecurityApproval { deny: false, .. } => "Approve",
@@ -1158,6 +1172,7 @@ impl GpuiAppToastWindow {
         } else {
             gpui::rgb(0xfcfcfc).into()
         };
+        let label = undo.label.clone().unwrap_or_else(|| "Undo".to_owned());
         div()
             .id(format!("ghostex-gpui-app-toast-undo-{toast_id}"))
             .flex_shrink_0()
@@ -1174,7 +1189,7 @@ impl GpuiAppToastWindow {
             .text_size(px(12.0))
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(ink)
-            .child("Undo")
+            .child(label)
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|_this, _event: &MouseDownEvent, window, cx| {
