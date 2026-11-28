@@ -140,7 +140,10 @@ impl CodexTransport {
                     Ok(resp.get("result").cloned().unwrap_or(Value::Null))
                 }
             }
-            Err(_) => {
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                Err(format!("Codex app-server exited before answering `{method}`."))
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {
                 self.pending
                     .lock()
                     .unwrap_or_else(|p| p.into_inner())
@@ -2467,6 +2470,10 @@ fn spawn_codex_stdout_reader(
                 eprintln!("[Codex Native] Warning: recovered from panic in stdout reader.");
             }
         }
+        // stdout closed (Codex exited) or this process generation was replaced: no reply can
+        // come any more. Dropping the waiters' senders makes every pending `call` return at
+        // once instead of waiting out its full timeout.
+        t_out.pending.lock().unwrap_or_else(|p| p.into_inner()).clear();
     });
 }
 
