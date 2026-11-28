@@ -9,7 +9,8 @@ relay, which holds the key, to send the push.
 
 The `/push/` routes let a computer send the app's notifications, background pushes and widget pushes the same
 way, straight to Apple instead of through Expo, and hold two small things in memory for the phone: a mailbox
-for a Live Activity's new update token, and one encrypted widget snapshot per id.
+for a Live Activity's new update token, and one widget snapshot per id, which the computer is meant to encrypt
+(the relay does not check).
 
 It lives beside `server/share-relay` because it is the same kind of thing: a small standalone service on
 the same box (relay-eu.ghostex.dev), behind the same Caddy, built the same way into one static binary. It
@@ -165,11 +166,13 @@ here and the computer collects it.
 
 ## Widget snapshot: `PUT` and `GET /push/v1/snapshot`
 
-While the app is closed, the computer leaves the widgets' data here, encrypted, and the widget extension
+While the app is closed, the computer leaves the widgets' data here, meant to be encrypted for the phone (the
+relay does not check), and the widget extension
 fetches it when it reloads.
 
 - The id: `Authorization: Bearer <id>`, as for the mailbox.
-- `PUT`: the body is the encrypted snapshot, any bytes, 1 byte to 8 KiB. It replaces what the id holds and
+- `PUT`: the body is the snapshot, any bytes (the computer is meant to encrypt it; the relay does not check),
+  1 byte to 8 KiB. It replaces what the id holds and
   starts its 24 hours again. 200 `{"ok":true}`.
 - `GET`: 200 with the bytes as stored (`application/octet-stream`); 404 `empty` when the id holds nothing.
 - A snapshot is kept until it is replaced or for 24 hours.
@@ -256,13 +259,16 @@ The `/push/` routes have limits of their own, so their traffic never takes from 
   per table, 7,000 gone tokens) were chosen to fit beside the Live Activity route's tables (200,000 keys each,
   100,000 gone tokens), which take most of the memory. What is measured is local only: a release build on
   macOS, with the real limiter and store types filled to every cap in one process, held about 92 to 97 MiB
-  resident over several runs, with no HTTP, TLS or connections. Only a flood from very many addresses fills
-  every table at once. Memory under load is an open availability
+  resident over several runs, with no HTTP, TLS or connections. Filling every table takes that many distinct
+  keys: the Live Activity route's address table alone needs 200,000 caller addresses and each `/push/`
+  address table 7,000, with an IPv6 address counted by its /64. Memory under load is an open availability
   risk: a public `POST` or `PUT` body is read (up to its per-request cap: 8 KB on `/live-activity/`, 16 KB on
   `/push/`, through Caddy) before the address quotas and the id checks run, and there is no overall budget
   for bodies being read, so many parallel requests add memory on top of full tables and a full store.
-  Whether that reaches the service's 128 MiB limit on Linux is not measured. If it does, systemd restarts the
-  relay at the limit, and every mailbox entry and snapshot is lost.
+  Whether that reaches the service's 128 MiB limit on Linux is not measured. If the kernel kills the relay
+  because it cannot stay under `MemoryMax`, the unit is configured to restart it (`Restart=always`,
+  `RestartSec=2`, subject to systemd's restart limits); every mailbox entry and snapshot is lost when the
+  process ends.
 - Raising a limit: these limits are fixed in the code, not read from a setting. The rates and the
   `/push/` caps are in `LimitConfig::default()` in `src/limits.rs`, the Live Activity route's 200,000 keys per
   table in `MAX_KEYS` beside it, and the body sizes in `src/lib.rs` and `src/push_routes.rs` (those also have
@@ -279,9 +285,10 @@ are 32 bytes or more of Apple's randomness, cannot be guessed, and go only to th
 paired with (the phone's push registration, over the paired connection).
 
 - Without a token, an attacker reaches no phone. Random tokens get `BadDeviceToken` from Apple and the
-  per-address and relay-wide limits stop them from making that a flood. The worst they can do is spend the
-  relay-wide budget, so real pushes get 429 for a while and banners go stale until it refills: a denial of
-  this feature, not of anything else on the box, and not of the key.
+  per-address and relay-wide limits stop them from making that a flood. Within those quotas the worst they
+  can do is spend the relay-wide budget, so real pushes get 429 for a while and banners go stale until it
+  refills: a denial of this feature, not of the key. Many parallel requests can also take memory beyond what
+  the quotas bound; see the memory risk under "Limits, and why these numbers".
 - With one phone's token (from that user's computer, for example), an attacker can update, end or start
   that one phone's Ghostex banner with content of their choosing, at most 10 times a minute (starts 2, then
   one per 10 minutes). The banner shows agent and project names and counts; the alert of a start is fixed.
@@ -303,7 +310,8 @@ paired with (the phone's push registration, over the paired connection).
   are unreadable rests on the computer encrypting them for the phone before it uploads them. An update token
   lets them do no more than the Live Activity token above. The mailbox entry itself is not encrypted: it is
   that activity's update token as the phone left it, so whoever holds the id can take it and then update or
-  end that phone's Live Activity as above. Only the widget snapshot is encrypted, by the computer.
+  end that phone's Live Activity as above. Only the widget snapshot is meant to be encrypted, by the computer
+  before the upload; the relay does not check that it is.
 - Nobody can get the key out through the relay: it is read from a file only the service's user can read,
   is never logged, and no answer carries it.
 
@@ -364,11 +372,13 @@ phone, a Live Activity started while the app is closed, a widget that updates wh
 key Apple does not allow for a topic gets Apple's refusal on that route (502 `apple`, e.g.
 `TopicDisallowed`).
 
-Updating: replace the binary and `systemctl restart ghostex-push-relay`. A Live Activity push the restart
-refused (no connection, or a 5xx) is tried again by gxserver after a minute with the newest content
-(`server/src/live_activity/relay.rs`, `runtime.rs`); no computer code in this repository calls the `/push/`
-routes yet. A restart empties the mailbox and the snapshots; they fill again only when a phone leaves a new
-token and a computer uploads a new snapshot, which is the clients' behaviour and not checked here.
+Updating: replace the binary and `systemctl restart ghostex-push-relay`. When a Live Activity push fails for
+a temporary reason (no connection, a timeout, a 5xx), gxserver tries again after a backoff (60 seconds by
+default) with freshly computed content, as long as a push is still due (not, for example, after the phone
+cleared its registration); no stored request is replayed (`server/src/live_activity/relay.rs`,
+`runtime.rs`). No computer code in this repository calls the `/push/` routes yet. A restart empties the
+mailbox and the snapshots; they fill again only when a phone leaves a new token and a computer uploads a new
+snapshot, which is the clients' behaviour and not checked here.
 
 Adding the `/push/` routes to a relay that already runs: build with `build-linux.sh`, replace the binary,
 add the `handle /push/*` block next to `handle /live-activity/*` (step 5), `systemctl restart
