@@ -156,6 +156,27 @@ pub(crate) fn decode_messages(messages: &[Value]) -> Vec<SessionChatMessage> {
                                         output.push(text.to_string());
                                     }
                                 }
+                                /*
+                                CDXC:SessionChat 2026-11-28 WHY:
+                                A `task` call's child session is `state.metadata.sessionId`, the id the
+                                Subagents menu and the viewer open. OpenCode 1 printed it as the
+                                result's first line (`task_id: ses_… (for resuming…)`); a result that
+                                lacks it gets that line, so the row's chip opens the same child instead
+                                of looking it up by the task's description.
+                                */
+                                if matches!(part["name"].as_str(), Some("task" | "subagent")) {
+                                    if let Some(child) = state["metadata"]["sessionId"]
+                                        .as_str()
+                                        .or_else(|| state["metadata"]["sessionID"].as_str())
+                                        .filter(|child| {
+                                            crate::session_chat_opencode::safe_id(child)
+                                        })
+                                    {
+                                        if !output.iter().any(|text| text.contains(child)) {
+                                            output.insert(0, format!("task_id: {child}"));
+                                        }
+                                    }
+                                }
                                 if is_failed && !state["error"].is_null() {
                                     output.push(
                                         state["error"]["message"]

@@ -26,14 +26,6 @@ pub struct SubagentTarget {
 /// The default agent path a relative selector is resolved against.
 pub const ROOT_AGENT_PATH: &str = "/root";
 
-const SUBAGENT_TOOL_NAMES: &[&str] = &[
-    "spawn_agent",
-    "agent",
-    "task",
-    "send_message",
-    "followup_task",
-];
-
 /// `sessionChatToolSubagent`: the subagent a tool call points at, or `None` when it points at none.
 pub fn tool_subagent(
     call: Option<&Value>,
@@ -41,8 +33,11 @@ pub fn tool_subagent(
     agent_path: &str,
 ) -> Option<SubagentTarget> {
     let call_name = call?.get("name").and_then(Value::as_str)?;
-    let tool = call_name.split(['.', ':']).next_back()?.to_lowercase();
-    if tool.is_empty() || !SUBAGENT_TOOL_NAMES.contains(&tool.as_str()) {
+    // One name list and one id reader with the tool-row chip (`transcript::subagent`), so a chip
+    // and the viewer never disagree about which child a call started.
+    let tool = crate::transcript::subagent::subagent_tool_key(call_name);
+    if tool.is_empty() || !crate::transcript::subagent::SUBAGENT_TOOL_NAMES.contains(&tool.as_str())
+    {
         return None;
     }
     let input = record(call.and_then(|call| call.get("input")));
@@ -74,7 +69,11 @@ pub fn tool_subagent(
         .or_else(|| text(field(&output, "agent_nickname")));
     let id = text(field(&output, "agent_id"))
         .or_else(|| text(field(&output, "agentId")))
-        .or_else(|| agent_id_in_text(output_value.and_then(Value::as_str).unwrap_or_default()));
+        .or_else(|| {
+            crate::transcript::subagent::child_id_in_output(
+                output_value.and_then(Value::as_str).unwrap_or_default(),
+            )
+        });
     let selector = id
         .or_else(|| text(field(&output, "task_name")))
         .or_else(|| {
@@ -130,31 +129,4 @@ fn text(value: Option<&Value>) -> Option<String> {
 
 fn field<'a>(record: &'a Option<Map<String, Value>>, key: &str) -> Option<&'a Value> {
     record.as_ref()?.get(key)
-}
-
-/// `/\bagentId:\s*([a-zA-Z0-9_-]+)/`, the id a Codex result paints into its text.
-fn agent_id_in_text(output: &str) -> Option<String> {
-    let bytes = output.as_bytes();
-    let mut from = 0;
-    while let Some(found) = output[from..].find("agentId:") {
-        let at = from + found;
-        let word_boundary =
-            at == 0 || !(bytes[at - 1].is_ascii_alphanumeric() || bytes[at - 1] == b'_');
-        if word_boundary {
-            let rest = &output[at + "agentId:".len()..];
-            // JavaScript's `\s` does NOT include U+0085, so a `agentId:\u{85}abc` matches no id.
-            let body = rest.trim_start_matches(crate::transcript::jsstr::is_js_space);
-            let id: String = body
-                .chars()
-                .take_while(|character| {
-                    character.is_ascii_alphanumeric() || *character == '_' || *character == '-'
-                })
-                .collect();
-            if !id.is_empty() {
-                return Some(id);
-            }
-        }
-        from = at + 1;
-    }
-    None
 }
