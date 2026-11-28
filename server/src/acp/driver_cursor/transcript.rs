@@ -34,6 +34,10 @@ pub(super) struct CursorTranscriptWriter {
     pending_thought: String,
     pending_text: String,
     tools: HashMap<String, ActiveToolBuffer>,
+    /// The Cursor session this writer records (`bind`); `None` for a sub-agent's writer.
+    bound_session_id: Option<String>,
+    /// A line added to a tool call's result when it is written (`note_tool_result`).
+    result_notes: HashMap<String, String>,
 }
 
 impl CursorTranscriptWriter {
@@ -46,7 +50,53 @@ impl CursorTranscriptWriter {
             pending_thought: String::new(),
             pending_text: String::new(),
             tools: HashMap::new(),
+            bound_session_id: None,
+            result_notes: HashMap::new(),
         }
+    }
+
+    /// The Cursor session id `bind` recorded, which is the lead's own.
+    pub(super) fn bound_session_id(&self) -> Option<&str> {
+        self.bound_session_id.as_deref()
+    }
+
+    /// Adds `note` to the result of tool call `call_id` when that result is written.
+    pub(super) fn note_tool_result(&mut self, call_id: &str, note: String) {
+        self.result_notes.insert(call_id.to_string(), note);
+    }
+
+    /// Binds this writer to `path` (a sub-agent's transcript), appending to what it holds.
+    /// Returns `true` when the file already had lines, so a replay of them is not written twice.
+    pub(super) fn bind_path(&mut self, path: PathBuf) -> bool {
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
+            }
+        }
+        let populated = path.is_file() && fs::metadata(&path).map(|m| m.len() > 0).unwrap_or(false);
+        self.open_at(path, populated);
+        populated
+    }
+
+    fn open_at(&mut self, path: PathBuf, already_populated: bool) {
+        // Count existing lines so `ghostexId` sequence numbers remain strictly monotonic.
+        if already_populated {
+            if let Ok(existing) = fs::read_to_string(&path) {
+                self.seq = existing.lines().count() as u64 + 10;
+            }
+        }
+        let mut opts = OpenOptions::new();
+        opts.create(true).append(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(0o600);
+        }
+        self.file = opts.open(&path).ok();
+        self.path = Some(path);
     }
 
     /// Bind this writer to `<state_dir>/cursor-native-transcripts/<session_id>.jsonl`.
@@ -108,22 +158,8 @@ impl CursorTranscriptWriter {
             }
         }
 
-        // Count existing lines so `ghostexId` sequence numbers remain strictly monotonic.
-        if already_populated {
-            if let Ok(existing) = fs::read_to_string(&path) {
-                self.seq = existing.lines().count() as u64 + 10;
-            }
-        }
-
-        let mut opts = OpenOptions::new();
-        opts.create(true).append(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            opts.mode(0o600);
-        }
-        self.file = opts.open(&path).ok();
-        self.path = Some(path);
+        self.bound_session_id = Some(session_id.to_string());
+        self.open_at(path, already_populated);
         already_populated
     }
 
@@ -380,7 +416,14 @@ impl CursorTranscriptWriter {
 
         if is_terminal {
             let finished = self.tools.remove(call_id).unwrap();
-            let (output, is_error, diff) = extract_acp_tool_result(&finished, status);
+            let (mut output, is_error, diff) = extract_acp_tool_result(&finished, status);
+            if let Some(note) = self.result_notes.remove(&finished.call_id) {
+                output = if output.trim().is_empty() {
+                    note
+                } else {
+                    format!("{output}\n\n{note}")
+                };
+            }
             result_record = Some((finished.call_id, output, is_error, diff));
         }
 

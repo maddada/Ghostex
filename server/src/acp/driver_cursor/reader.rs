@@ -189,6 +189,32 @@ pub(super) fn spawn_stdout_reader(
                         .get("sessionUpdate")
                         .and_then(Value::as_str)
                         .unwrap_or_default();
+                    // A sub-agent's own updates come under its session id (subagents.rs); they go
+                    // to its transcript, never into the lead's transcript or live message. Its
+                    // launch and end notices come under the session that started it, which is a
+                    // sub-agent itself for a nested one, so those feed the roster either way.
+                    if let Some(sid) = msg.pointer("/params/sessionId").and_then(Value::as_str) {
+                        let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                        let is_lead = s
+                            .transcript
+                            .bound_session_id()
+                            .is_none_or(|lead| lead == sid);
+                        if !is_lead {
+                            match kind {
+                                "subagent_spawned" => {
+                                    let lead = s.transcript.bound_session_id().map(str::to_string);
+                                    if let Some((child, Some(call_id))) =
+                                        s.subagents.spawned(lead.as_deref(), update)
+                                    {
+                                        s.subagents.note_tool_result(sid, &call_id, &child);
+                                    }
+                                }
+                                "subagent_state_update" => s.subagents.state_update(update),
+                                _ => s.subagents.route(sid, update),
+                            }
+                            return;
+                        }
+                    }
                     match kind {
                         "current_mode_update" => {
                             if let Some(mode_id) = update
@@ -314,6 +340,15 @@ pub(super) fn spawn_stdout_reader(
                                 .unwrap_or("Subagent");
                             let task = update.get("task").and_then(Value::as_str).unwrap_or("");
                             let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                            let lead = s.transcript.bound_session_id().map(str::to_string);
+                            if let Some((child, Some(call_id))) =
+                                s.subagents.spawned(lead.as_deref(), update)
+                            {
+                                // The Task row's result names its child, so the row's chip opens
+                                // it (`agentId:` is the label the chat core reads).
+                                s.transcript
+                                    .note_tool_result(&call_id, format!("agentId: {child}"));
+                            }
                             s.live_tool_label = Some(format!("Subagent: {name}"));
                             if !task.trim().is_empty() {
                                 s.live_tool_detail = Some(task.chars().take(120).collect());
@@ -321,6 +356,10 @@ pub(super) fn spawn_stdout_reader(
                             if s.live_tool_started_at.is_none() {
                                 s.live_tool_started_at = Some(now_iso_rfc3339());
                             }
+                        }
+                        "subagent_state_update" => {
+                            let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                            s.subagents.state_update(update);
                         }
                         "usage_update" => {
                             let used = update.get("used").and_then(Value::as_u64);

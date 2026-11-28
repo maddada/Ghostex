@@ -245,10 +245,12 @@ pub(crate) async fn handle_read_subagent(
                         | SessionChatTranscriptAgent::Hermes
                         | SessionChatTranscriptAgent::Grok
                 ) || (omp && *a == SessionChatTranscriptAgent::Pi)
+                    // Only Native Cursor keeps its children's transcripts (acp/driver_cursor/subagents.rs).
+                    || (*a == SessionChatTranscriptAgent::Cursor && crate::acp::session_is_acp(&session))
             })
             .ok_or_else(|| {
                 anyhow::anyhow!(
-                    "Subagent transcripts are supported for Codex, Claude, OpenCode, Hermes, Grok and OMP."
+                    "Subagent transcripts are supported for Codex, Claude, OpenCode, Hermes, Grok, OMP and Native Cursor."
                 )
             })?;
         let root_id = read_runtime_text(&session, "agentSessionId")
@@ -267,7 +269,18 @@ pub(crate) async fn handle_read_subagent(
         } else {
             selector
         };
+        let mut child_model = None;
         let child = match family {
+            SessionChatTranscriptAgent::Cursor => {
+                let record = crate::acp::driver_cursor::resolve_cursor_subagent(&root_id, &selector)?;
+                child_model = record.model;
+                ChildTranscript {
+                    id: record.id,
+                    name: record.name,
+                    path: record.path,
+                    agent_type: record.agent_type,
+                }
+            }
             SessionChatTranscriptAgent::OpenCode => {
                 if crate::acp::driver_opencode::is_mirror_path(&root) {
                     let (path, name, agent_type) =
@@ -328,7 +341,11 @@ pub(crate) async fn handle_read_subagent(
         match read_session_chat_tail_page(family, &child.path, limit, before_offset)? {
             SessionChatTailPage::NotFound => anyhow::bail!("This subagent's transcript is not available yet."),
             SessionChatTailPage::Page { messages, lifecycle, has_more, before_offset, .. } => {
-                let mut details = serde_json::to_value(model::read(&child.path, family)?)?;
+                let mut read_model = model::read(&child.path, family)?;
+                if read_model.model.is_none() {
+                    read_model.model = child_model;
+                }
+                let mut details = serde_json::to_value(read_model)?;
                 details["id"] = json!(child.id);
                 details["name"] = json!(child.name);
                 let agent_type = if family == SessionChatTranscriptAgent::Claude {
@@ -344,7 +361,7 @@ pub(crate) async fn handle_read_subagent(
                     "status": if messages.is_empty() { "empty" } else { "ready" },
                     "messages": messages, "hasMore": has_more, "beforeOffset": before_offset,
                     "epoch": 0, "seq": 0,
-                    "agent": match family { SessionChatTranscriptAgent::OpenCode => "opencode", SessionChatTranscriptAgent::Codex => "codex", SessionChatTranscriptAgent::Hermes => "hermes", SessionChatTranscriptAgent::Grok => "grok", SessionChatTranscriptAgent::Pi => "omp", _ => "claude" },
+                    "agent": match family { SessionChatTranscriptAgent::OpenCode => "opencode", SessionChatTranscriptAgent::Codex => "codex", SessionChatTranscriptAgent::Hermes => "hermes", SessionChatTranscriptAgent::Grok => "grok", SessionChatTranscriptAgent::Pi => "omp", SessionChatTranscriptAgent::Cursor => "cursor", _ => "claude" },
                     "agentSessionId": child.id, "subagent": details,
                 });
                 // A Pi turn ends on a closing reply, but an OMP child's run can end on its final

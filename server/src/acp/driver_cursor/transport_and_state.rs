@@ -187,6 +187,7 @@ pub(super) struct CursorState {
     pub(super) last_error: Option<(Option<String>, String)>,
     pub(super) transport_failure: CursorTransportFailure,
     pub(super) transcript: CursorTranscriptWriter,
+    pub(super) subagents: super::subagents::CursorSubagents,
 }
 
 impl CursorState {
@@ -231,6 +232,7 @@ impl CursorState {
             last_error: None,
             transport_failure: CursorTransportFailure::default(),
             transcript: CursorTranscriptWriter::new(),
+            subagents: Default::default(),
         }
     }
 
@@ -392,6 +394,7 @@ impl CursorState {
             "childExited": self.child_exited,
             "authError": self.last_auth_error,
             "lastError": last_error,
+            "agentFleet": self.subagents.fleet_json(),
         })
     }
 }
@@ -657,6 +660,7 @@ impl Drop for ReaderExitGuard {
         let mut s = self.0.lock().unwrap_or_else(|p| p.into_inner());
         s.child_exited = true;
         s.working = false;
+        s.subagents.end_all();
     }
 }
 

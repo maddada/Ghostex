@@ -11,6 +11,7 @@
 mod config_and_store;
 mod permissions;
 mod reader;
+mod subagents;
 mod transcript;
 mod transport_and_state;
 
@@ -30,6 +31,7 @@ pub(crate) use config_and_store::{
     cursor_native_transcript_dir, cursor_native_transcript_meta_path,
     cursor_native_transcript_path, user_cli_default_level,
 };
+pub(crate) use subagents::resolve_cursor_subagent;
 
 use config_and_store::{
     is_cursor_auth_error, is_cursor_usage_limit_error, read_cursor_acp_meta_title,
@@ -251,6 +253,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                 let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                 let populated = s.transcript.bind(resume_id);
                 s.transcript.suppress_writes = populated;
+                s.subagents.loading = true;
                 populated
             };
             let res = transport.call(
@@ -269,6 +272,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     s.transcript.flush_text();
                 }
                 s.transcript.suppress_writes = false;
+                s.subagents.loading = false;
             }
             res.map(|val| (resume_id.to_string(), val))
         } else {
@@ -809,6 +813,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             "[Image]".to_string()
                         };
                         s.transcript.write_user_message(&display_text);
+                        s.subagents.begin_turn();
                         (prev_working, prev_gen, s.turn_generation)
                     };
 
