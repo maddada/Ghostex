@@ -160,8 +160,21 @@ pub struct Apple {
 }
 
 impl Apple {
+    /// CDXC:Notifications 2026-11-28 WHY:
+    /// Reqwest 0.13 removed its bundled WebPKI roots feature. Supply the same roots and ring provider explicitly. A preconfigured rustls client also needs its ALPN list set for APNs HTTP/2.
     pub fn new(credentials: Credentials, target: Target) -> Result<Self, String> {
+        let roots =
+            rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+        let mut tls = rustls::ClientConfig::builder_with_provider(
+            rustls::crypto::ring::default_provider().into(),
+        )
+        .with_safe_default_protocol_versions()
+        .map_err(|error| format!("cannot configure TLS: {error}"))?
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+        tls.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
         let builder = reqwest::Client::builder()
+            .tls_backend_preconfigured(tls)
             .timeout(REQUEST_TIMEOUT)
             .user_agent("ghostex-push-relay");
         let builder = match target {
@@ -276,5 +289,52 @@ impl Apple {
             (renewed, true) => self.post(push, &renewed).await,
             (_, false) => Ok(answer),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use p256::ecdsa::{signature::Verifier, VerifyingKey};
+    use p256::pkcs8::DecodePublicKey;
+
+    // The test private scalar is 1, and its public key is the P-256 generator.
+    const TEST_KEY: &str = "-----BEGIN PRIVATE KEY-----
+MEECAQAwEwYHKoZIzj0CAQYIKoZIzj0DAQcEJzAlAgEBBCAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAQ==
+-----END PRIVATE KEY-----";
+    const TEST_PUBLIC_KEY: &str = "-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEaxfR8uEsQkf4vOblY6RA8ncDfYEt
+6zOg9KE5RdiYwpZP40Li/hp/m47n60p8D54WK84zV2sxXs7LtkBoN79R9Q==
+-----END PUBLIC KEY-----";
+
+    #[test]
+    fn provider_token_is_a_verifiable_es256_jwt() {
+        let credentials = Credentials {
+            key: SigningKey::from_pkcs8_pem(TEST_KEY).unwrap(),
+            key_id: "TESTKEY123".into(),
+            team_id: "TESTTEAM12".into(),
+        };
+        let issued_at = 1_700_000_000;
+        let token = credentials.provider_token(issued_at);
+        let (signing_input, signature) = token.rsplit_once('.').unwrap();
+        let (header, claims) = signing_input.split_once('.').unwrap();
+        let decode_json = |segment| -> Value {
+            serde_json::from_slice(&URL_SAFE_NO_PAD.decode(segment).unwrap()).unwrap()
+        };
+
+        assert_eq!(
+            decode_json(header),
+            json!({ "alg": "ES256", "kid": "TESTKEY123" })
+        );
+        assert_eq!(
+            decode_json(claims),
+            json!({ "iss": "TESTTEAM12", "iat": issued_at })
+        );
+        let signature = Signature::from_slice(&URL_SAFE_NO_PAD.decode(signature).unwrap()).unwrap();
+        let public_key = VerifyingKey::from_public_key_pem(TEST_PUBLIC_KEY).unwrap();
+        public_key
+            .verify(signing_input.as_bytes(), &signature)
+            .unwrap();
     }
 }
