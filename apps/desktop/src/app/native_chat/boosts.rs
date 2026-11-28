@@ -1544,7 +1544,7 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
                     )
             }))
             .into_any_element(),
-        "map" | "workers" | "worktree" => div()
+        "map" | "workers" | "swarm" | "worktree" => div()
             .size_full()
             .flex()
             .flex_col()
@@ -1563,6 +1563,7 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
                     .child(small(
                         match kind {
                             "workers" => "Coordinator",
+                            "swarm" => "Swarm · tracker",
                             "worktree" => "main",
                             _ => "Chat box",
                         },
@@ -1574,6 +1575,7 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
                 div().flex().gap(px(8.0 * s)).children(
                     match kind {
                         "workers" => vec!["Worker 1", "Worker 2", "Worker 3"],
+                        "swarm" => vec!["PR #1", "PR #2", "PR #3"],
                         "worktree" => vec!["boost/onboarding"],
                         _ => vec!["gxserver", "Agent"],
                     }
@@ -1589,6 +1591,43 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
                             .child(small(label, p.foreground))
                     }),
                 ),
+            )
+            .into_any_element(),
+        "balance" => div()
+            .size_full()
+            .flex()
+            .gap(px(6.0 * s))
+            .p(px(7.0 * s))
+            .children(
+                [
+                    ("Mac Studio", 0.78_f32, false),
+                    ("Linux box", 0.24_f32, true),
+                ]
+                .into_iter()
+                .map(|(name, load, pick)| {
+                    tile()
+                        .when(pick, |tile| tile.border(px(s)).border_color(tone))
+                        .child(small(name, p.foreground))
+                        .child(
+                            div()
+                                .w_full()
+                                .h(px(5.0 * s))
+                                .rounded(px(2.0 * s))
+                                .bg(soft)
+                                .child(
+                                    div()
+                                        .w(relative(load))
+                                        .h_full()
+                                        .rounded(px(2.0 * s))
+                                        .bg(if pick { tone } else { strong }),
+                                ),
+                        )
+                        .child(div().flex_1())
+                        .child(small(
+                            if pick { "Next thread" } else { "Busy" },
+                            if pick { tone } else { p.card_muted },
+                        ))
+                }),
             )
             .into_any_element(),
         "form" | "steps" => div()

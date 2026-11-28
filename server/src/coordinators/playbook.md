@@ -79,6 +79,10 @@ command there before ghostex starts, and your turn and the user's messages wait 
 - **Split big jobs into parallel threads:** when a job has steps that touch different parts of the
   app, give each step its own thread at the same time instead of handing them to one thread in a
   row.
+- **Swarm and Auto balance:** on a big multi-item request (roughly 8 or more independent items),
+  use the Swarm boost (`ghostex visual boosts show swarm`); when you can reach more than one
+  computer (`ghostex computers`), use the Auto balance boost (`ghostex visual boosts show
+  auto-balance`).
 - **Ask first** when a request is large or ambiguous: propose the split in two or three lines, unless
   the user said to just go.
 - **Another project:** ask its main coordinator instead of starting a thread in its folder:

@@ -97,8 +97,8 @@ pub struct Boost {
     /// One line on what the agent does, for the menu, the picker and the callout.
     pub description: &'static str,
     /// What the little preview beside the menu draws (`page`, `chart`, `compare`, `map`,
-    /// `triage`, `form`, `app`, `web`, `browser`, `shots`, `second`, `workers`,
-    /// `worktree`, `ship`, `docs`, `steps`, `needs-you`, `inbox`, `schedule`, `notify`).
+    /// `triage`, `form`, `app`, `web`, `browser`, `shots`, `second`, `workers`, `swarm`,
+    /// `balance`, `worktree`, `ship`, `docs`, `steps`, `needs-you`, `inbox`, `schedule`, `notify`).
     pub preview: &'static str,
     /// What the agent is told, unless the user edited it.
     pub prompt: &'static str,
@@ -115,7 +115,7 @@ pub const TABS: [(&str, &str); 4] = [
 ];
 
 /// Ghostex's Boosts, in the menu's order.
-pub const BOOSTS: [Boost; 20] = [
+pub const BOOSTS: [Boost; 22] = [
     Boost {
         id: "live-page",
         label: "Live page",
@@ -243,6 +243,42 @@ Put everything on one Live page with Requests and Messages sections and one card
         description: "A coordinator splits the job, runs workers on it and sends you one report.",
         preview: "workers",
         prompt: "Treat this as a bigger job for workers: unless this session already is a coordinator, make it one with `ghostex coordinator promote`, split the work into threads with `ghostex coordinator start-thread`, and send me one report when they finish. Read `ghostex coordinator --help` first.",
+    },
+    Boost {
+        id: "swarm",
+        label: "Swarm",
+        icon: "titlebar/rocket.svg",
+        category: "work",
+        description: "Splits a big job into tracked worktree PRs across chosen computers and models.",
+        preview: "swarm",
+        prompt: r#"Run this as a coordinator swarm: if this session is not already a coordinator, promote it with `ghostex coordinator promote` and follow `ghostex coordinator guide`.
+
+1. Run `ghostex computers` to see reachable computers, then ask the user in one Ghostex question form (a ```questions block, checked with `ghostex visual check`; run `ghostex visual guide forms` if needed): which computer or computers to run on, which model to use for UI work and which for non-UI work (recommended defaults: Claude Opus high for UI, Neon high through the Antigravity agent for non-UI), and the max parallel threads per computer (recommended default: 3). Wait for the answers before starting workers.
+
+2. Split the request into one Markdown requirement file per item in `~/.local/share/agent-work/<project>/<task>/reqs/` (the user's decision, design picks, verbatim note, research and a Status block), plus `tracker.md` in that task folder: one row per item with state (todo, in progress, PR open, merged, blocked, dropped), thread ref, machine, model, branch, PR link and note. Group tightly related items into one PR.
+
+3. Message each chosen computer's main coordinator first (`ghostex agents send --main-coordinator --computer <name> --path <checkout> ...`) about branch rules and what not to disturb; if it cannot answer (such as a usage limit), carry on with safe defaults.
+
+4. Test each chosen worker model with one tiny read-only thread on the target machine before the first wave; have that same thread read the machine's resources (`nproc; uptime; free -g; df -h ~; ps -eo pid,pcpu,pmem,comm --sort=-pcpu | head`).
+
+5. Run each item (or tightly related group) as its own worktree thread on the chosen machine (`ghostex coordinator start-thread --computer <name> --worktree ...`), one branch and one PR against main each. Start at most the chosen number of threads at once and only raise it while load stays under the core count, memory is plentiful and at least 30 GB disk is free; allow no more than 2 full Rust builds at once on one machine. Recheck resources before each wave.
+
+6. Workers on another computer cannot read the coordinator's files: paste the worker rules and the requirement text into each brief. Mock pages for new UI get committed on the worker's branch so you can fetch and publish them.
+
+7. New visible UI gets the user's OK on a Live page (`ghostex show`) before it is built; combine several items' questions into one page. Ask every question through Ghostex forms, item asks or Live pages, never plain text.
+
+8. Security-sensitive work (auth, tokens, permissions, merge actions) gets a review thread before it is marked ready.
+
+9. Keep `tracker.md` current, remove each worktree once its PR is open, and send the parent coordinator a short note at milestones."#,
+    },
+    Boost {
+        id: "auto-balance",
+        label: "Auto balance",
+        icon: "titlebar/switch-horizontal.svg",
+        category: "work",
+        description: "Spreads coordinator threads across reachable computers, picking the least busy one.",
+        preview: "balance",
+        prompt: "Spread threads across every computer you can reach: run `ghostex computers` to find every reachable computer with agent access enabled (including this computer). Before each `ghostex coordinator start-thread`, compare each machine's load, free memory and free disk (via a short read-only thread or that machine's main coordinator), start the next thread with `--computer <name>` on the least busy machine that has the project checked out, and never overload one.",
     },
     Boost {
         id: "worktree",

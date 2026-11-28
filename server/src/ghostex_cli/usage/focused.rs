@@ -651,9 +651,11 @@ Guide:
 
 Boosts:
   A Boost is a pill the user adds to a chat message (Live page, Chart it,
-  Side by side, Map it, Ask me in a form; Computer use, Browser use, Show
-  screenshots, Second opinion; Triage, Plan with workers, Try it in
-  a worktree, Save to Docs, Steps for me, Tell me when done; or their own).
+  Options, Map it, Ask me in a form; Browser use, Computer use, Embedded
+  Browser use, Fix and prove, Second opinion; Triage, Plan with workers,
+  Swarm, Auto balance, Try it in a worktree, Ship it, Save to Docs, Steps
+  for me, Add to Pings, Inbox it!, Schedule it, Tell me when done; or their
+  own).
   Ghostex adds its prompt under that message in a <ghostex-system> block; do
   what it asks in your answer, after reading the guide it names.
   `gx visual boosts` lists them and edits or resets their prompts.
