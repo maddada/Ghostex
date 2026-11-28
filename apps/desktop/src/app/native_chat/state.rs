@@ -330,6 +330,8 @@ pub(crate) struct NativeChatView {
     pub(super) paste_tiles: super::clipboard::PasteTiles,
     /// Pictures and files whose upload failed twice, still in the chat box (composer_attach.rs).
     pub(super) failed_uploads: Vec<super::composer_attach::FailedUpload>,
+    /// The last long paste saved as a file, for its toast's Keep inline (long_paste.rs).
+    pub(super) long_paste: Option<ghostex_gx_chat_core::composer::long_paste::LongPaste>,
     /// A send from the chat box waiting for a paste or drop to land (`composer_attach.rs`): its mode.
     pub(super) held_send: Option<String>,
     /// The timer that looks at a held send again while a clipboard read is pending.
@@ -826,6 +828,7 @@ impl NativeChatView {
             paste_started: None,
             paste_tiles: Default::default(),
             failed_uploads: Vec::new(),
+            long_paste: None,
             held_send: None,
             held_send_recheck: None,
             carry: Default::default(),
@@ -1260,6 +1263,12 @@ impl NativeChatView {
         // Settings, never the chat core.
         if action.get("type").and_then(Value::as_str) == Some("openAccountsSettings") {
             self.open_accounts_settings(action["reconnectAccountId"].as_str(), cx);
+            return;
+        }
+        // The long paste toast's Keep inline (long_paste.rs): the chat box's own text.
+        if action.get("type").and_then(Value::as_str) == Some(super::long_paste::KEEP_PASTE_INLINE)
+        {
+            self.keep_paste_inline(&action, cx);
             return;
         }
         if action

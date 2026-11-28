@@ -133,6 +133,11 @@ impl NativeChatView {
                         "Pasted image".to_owned(),
                         Some(std::sync::Arc::new(image.clone())),
                     ),
+                    super::composer_attach::Upload::Text(_) => (
+                        ghostex_gx_chat_core::composer::long_paste::PASTED_TEXT_FILE_NAME
+                            .to_owned(),
+                        None,
+                    ),
                     super::composer_attach::Upload::File(path) => (
                         std::path::Path::new(path)
                             .file_name()

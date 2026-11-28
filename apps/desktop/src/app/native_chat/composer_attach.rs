@@ -29,6 +29,8 @@ pub(super) enum Upload {
     Picture(gpui::Image),
     /// A dropped or picked file, copied onto the session's machine.
     File(String),
+    /// A text paste too long for the chat box, saved as a text file (long_paste.rs).
+    Text(String),
 }
 
 /// A picture or file whose upload failed twice: it stays in the chat box until Send uploads it
@@ -65,6 +67,27 @@ struct UploadTarget {
 /// One try at saving a picture or copying a file onto the session's machine.
 async fn upload_once(config: UploadTarget, upload: &Upload) -> Attached {
     let image = match upload {
+        Upload::Text(text) => {
+            let saved = super::long_paste::save_pasted_text(
+                config.remote.clone(),
+                &config.project_id,
+                &config.session_id,
+                text,
+            )
+            .await;
+            return match saved {
+                Ok(path) => Attached {
+                    paths: vec![path],
+                    pictures: Vec::new(),
+                    error: None,
+                },
+                Err(error) => Attached {
+                    paths: Vec::new(),
+                    pictures: Vec::new(),
+                    error: Some(error),
+                },
+            };
+        }
         Upload::File(path) => {
             let external_paths = vec![path.clone()];
             let params = json!({"paths":external_paths,"projectId":config.project_id,"sessionId":config.session_id});
@@ -232,7 +255,7 @@ impl NativeChatView {
     ///
     /// CDXC:Clipboard 2026-11-15 DECISION (issue #618, Q3274 A): a failed picture never leaves the chat box; Ghostex retries once by itself, then shows it failed ("Couldn't upload. Press Send to try again."); pressing Send again retries the upload (no "tap to retry"). A message a send took it with ends as a refused send does: its words back in the chat box with the error card saying why.
     /// SEE-ALSO: apps/mobile/app/src/chat/rust/host.ts (`attachOne`, `retryFailedPictures`).
-    fn start_upload(&mut self, upload: Upload, cx: &mut Context<Self>) {
+    pub(super) fn start_upload(&mut self, upload: Upload, cx: &mut Context<Self>) {
         let paste = self.paste_tiles.started();
         cx.notify();
         // The core's own count (the collapse gate, the phone's spinner) follows in its own turn,
@@ -298,15 +321,11 @@ impl NativeChatView {
         for (path, picture) in pictures {
             self.seed_chat_image(&path, picture, cx);
         }
-        if !paths.is_empty() && !sent {
-            let selection = self
-                .input
-                .as_ref()
-                .map(|input| input.read(cx).selected_range())
-                .unwrap_or(self.draft.len()..self.draft.len());
-            let clamp = |offset: usize| offset.min(self.draft.len());
-            let start = self.draft[..clamp(selection.start)].encode_utf16().count();
-            let end = self.draft[..clamp(selection.end)].encode_utf16().count();
+        if let (Upload::Text(text), [path], false) = (&upload, paths.as_slice(), sent) {
+            let selection = self.upload_selection(cx);
+            self.insert_long_paste(path, text.clone(), selection, cx);
+        } else if !paths.is_empty() && !sent {
+            let (start, end) = self.upload_selection(cx);
             let paths: Vec<&str> = paths.iter().map(String::as_str).collect();
             let edit = ghostex_gx_chat_core::composer::references::insert_path_references(
                 &self.draft,
@@ -347,6 +366,19 @@ impl NativeChatView {
             cx,
         );
         cx.notify();
+    }
+
+    /// The chat box's selection, in UTF-16 offsets into the draft: where an upload's references go.
+    fn upload_selection(&self, cx: &Context<Self>) -> (usize, usize) {
+        let selection = self
+            .input
+            .as_ref()
+            .map(|input| input.read(cx).selected_range())
+            .unwrap_or(self.draft.len()..self.draft.len());
+        let clamp = |offset: usize| offset.min(self.draft.len());
+        let start = self.draft[..clamp(selection.start)].encode_utf16().count();
+        let end = self.draft[..clamp(selection.end)].encode_utf16().count();
+        (start, end)
     }
 
     /// A send from the chat box while a paste's clipboard is still being read: kept, with nothing

@@ -70,6 +70,7 @@ mod inline_answers;
 mod inter_agent_message;
 mod launch;
 mod link_words;
+mod long_paste;
 mod menu_toggle;
 mod minimap;
 mod native_switch_chip;

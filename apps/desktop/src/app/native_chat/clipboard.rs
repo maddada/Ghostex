@@ -120,7 +120,11 @@ impl NativeChatView {
             // Text the field inserts itself; references in it to files on another computer are
             // copied to the session's (carry_attachments.rs).
             if matches!(target, PasteInto::Composer) {
-                if let Some(text) = clipboard.text() {
+                let text = clipboard.text();
+                if self.take_long_paste(text.clone(), cx) {
+                    return true;
+                }
+                if let Some(text) = text {
                     self.carry_pasted_attachments(&text, cx);
                 }
             }

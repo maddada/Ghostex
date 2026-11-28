@@ -236,13 +236,20 @@ pub fn insert_path_references(
     edit
 }
 
+/// Whether a reference inserted at UTF-16 offset `start` gets a space before it: the text right
+/// before it is not whitespace.
+pub fn reference_needs_leading_space(current: &str, start: usize) -> bool {
+    let indexed = Utf16Text::new(current);
+    let start_index = indexed.index_of_offset(start);
+    start_index > 0 && !indexed.at(start_index - 1).is_some_and(is_js_whitespace)
+}
+
 /// Inserts `reference` at `[start, end)`, adding the spaces the sentence around it needs.
 pub fn insert_reference(current: &str, reference: &str, start: usize, end: usize) -> ComposerEdit {
     let indexed = Utf16Text::new(current);
     let start_index = indexed.index_of_offset(start);
     let end_index = indexed.index_of_offset(end);
-    let needs_leading_space =
-        start_index > 0 && !indexed.at(start_index - 1).is_some_and(is_js_whitespace);
+    let needs_leading_space = reference_needs_leading_space(current, start);
     let inserted = format!("{}{reference} ", if needs_leading_space { " " } else { "" });
     ComposerEdit {
         text: format!(

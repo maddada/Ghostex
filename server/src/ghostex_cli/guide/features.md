@@ -2140,6 +2140,11 @@ arrow beside it; the arrow (or Up in an empty chat box) puts the text back in th
 chat box until the message leaves, and the picture lands there instead. If the
 picture can't be saved, the message comes back to the chat box and its error card
 says why. The phone's Send works while a picture uploads, the same way.
+On the computer and in the browser, pasting more than 32 KB of text into the chat
+box (about 600 lines of code) saves it as a text file instead: it shows as a file
+tile and the agent reads the file. A short notice says so; its Keep inline button
+puts the pasted text back in the chat box as plain text. The phone pastes long
+text as text.
 A message you send is the chat's last message the moment you press Enter, with
 a spinner beside it while it is on its way (or the play button of a message
 waiting behind a working agent), and it reaches the agent once. If Ghostex's
