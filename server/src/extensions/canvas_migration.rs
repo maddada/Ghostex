@@ -11,10 +11,12 @@
 //! installed and working, and no note is shown. Background pictures were not picked for the
 //! built-in, so they are dropped (the note says so only when a board had one).
 //!
-//! A board that is not linked to a project, or whose project is gone, has nowhere to go yet
-//! (the user decides where; the coordinator asked), so while any such board has content nothing
-//! is moved and Canvas stays installed. A board with nothing drawn on it carries nothing to keep
-//! and is not written.
+//! CDXC:Canvas 2026-11-28 DECISION:
+//! User (Q5292, "No project folder"): a board that is not linked to a project, or whose project
+//! is gone, goes to No project's folder, `~/.ghostex/drawings/` (No project's chats start in the
+//! home folder, so its drawings live under it, as Main Hub's do), and Canvas opens it there while
+//! No project is the active project. A board with nothing drawn on it carries nothing to keep and
+//! is not written.
 //!
 //! The extension's storage (`ExtensionStoreEntry::storage`) holds `boards` (the index:
 //! `{schemaVersion, boards: [{id, name, projectId}], lastOpen}`), `board:<id>` (an Excalidraw scene
@@ -154,10 +156,11 @@ fn move_boards(state: &AppState) -> Result<CanvasMovedNote, String> {
 
     let db = open_gxserver_database(&state.paths).map_err(|error| error.to_string())?;
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-    let mut project_paths: BTreeMap<String, PathBuf> = BTreeMap::new();
-    let mut homeless = Vec::new();
+    // Where each board goes: its project's folder, or No project's (the home folder).
+    let mut targets: Vec<(String, PathBuf)> = Vec::with_capacity(boards.len());
+    let mut no_project: Option<(String, PathBuf)> = None;
     for board in &boards {
-        let path = board.project_id.as_deref().and_then(|project_id| {
+        let project = board.project_id.as_deref().and_then(|project_id| {
             repository
                 .get_project_without_session_history(project_id)
                 .ok()
@@ -171,31 +174,26 @@ fn move_boards(state: &AppState) -> Result<CanvasMovedNote, String> {
                         .map(PathBuf::from)
                 })
                 .filter(|path| path.is_dir())
+                .map(|path| (project_id.to_string(), path))
         });
-        match (path, board.project_id.as_ref()) {
-            (Some(path), Some(project_id)) => {
-                project_paths.insert(project_id.clone(), path);
-            }
-            _ => homeless.push(match &board.project_id {
-                Some(project_id) => format!("\"{}\" (project {project_id} is gone)", board.name),
-                None => format!("\"{}\" (no project)", board.name),
-            }),
-        }
-    }
-    if !homeless.is_empty() {
-        return Err(format!(
-            "{} board(s) have no project to go to: {}",
-            homeless.len(),
-            homeless.join(", ")
-        ));
+        let target = match project {
+            Some(target) => target,
+            None => match &no_project {
+                Some(target) => target.clone(),
+                None => {
+                    let target = no_project_target(state, &db, &repository).map_err(|error| {
+                        format!("board \"{}\" has no project, and {error}", board.name)
+                    })?;
+                    no_project = Some(target.clone());
+                    target
+                }
+            },
+        };
+        targets.push(target);
     }
 
     let mut note = CanvasMovedNote::default();
-    for board in &boards {
-        let Some(project_id) = board.project_id.as_ref() else {
-            continue;
-        };
-        let project = &project_paths[project_id];
+    for (board, (project_id, project)) in boards.iter().zip(&targets) {
         let written = write_board(project, board).and_then(|path| {
             verify_board(&path, board)?;
             Ok(path)
@@ -225,6 +223,27 @@ fn move_boards(state: &AppState) -> Result<CanvasMovedNote, String> {
         }
     }
     Ok(note)
+}
+
+/// No project's id and the folder its drawings go under: the home folder, so they land in
+/// `~/.ghostex/drawings/`, where Canvas opens them in No project (apps/desktop/src/app/canvas).
+fn no_project_target(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    repository: &DomainRepository<'_>,
+) -> Result<(String, PathBuf), String> {
+    let project = crate::no_project::ensure_no_project_project(state, db, repository)
+        .map_err(|error| format!("No project could not be found: {error}"))?;
+    let project_id = project
+        .get("projectId")
+        .and_then(Value::as_str)
+        .ok_or("No project has no id.")?
+        .to_string();
+    let home = crate::resume_lookup::home_dir();
+    if !home.is_dir() {
+        return Err(format!("the home folder {} is missing", home.display()));
+    }
+    Ok((project_id, home))
 }
 
 fn remove_written(files: &[CanvasMovedFile]) {
