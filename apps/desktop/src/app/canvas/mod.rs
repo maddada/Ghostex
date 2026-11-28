@@ -387,7 +387,14 @@ pub(crate) fn write_last_drawing(project_id: &str, file: &str) {
 }
 
 impl GhostexGpuiApp {
-    /// The project Canvas draws in, or `None` without a project on this computer.
+    /// The project Canvas draws in, or `None` without a project on this computer. In No project
+    /// that is the home folder, so its drawings are `~/.ghostex/drawings/`.
+    ///
+    /// CDXC:Canvas 2026-11-28 DECISION:
+    /// User (Q5292, "No project folder"): Canvas boards with no project go to No project's folder,
+    /// `~/.ghostex/drawings/`. No project's own folder (`<state>/no-project`) only keeps it apart
+    /// from Main Hub; its chats start in the home folder, so Canvas does too, and the Community
+    /// extension's boards without a project are moved there (server/src/extensions/canvas_migration.rs).
     pub(crate) fn canvas_project(&self) -> Option<CanvasProject> {
         let snapshot = self.latest_sidebar_project_snapshot.as_ref()?;
         if snapshot.is_quick_projectless {
@@ -398,6 +405,11 @@ impl GhostexGpuiApp {
             return None;
         }
         let path = snapshot.in_memory_project_path.clone()?;
+        let path = if self.gx_store_is_no_project_target(ghostex_gx_core::LOCAL_MACHINE_ID, &id) {
+            gpui_home_dir()
+        } else {
+            path
+        };
         Some(CanvasProject { id, path })
     }
 

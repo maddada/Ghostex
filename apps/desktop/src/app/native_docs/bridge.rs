@@ -20,7 +20,23 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
         done: impl FnOnce(&mut Self, serde_json::Value, &mut gpui::Context<Self>) + 'static,
     ) {
-        let snapshot = self.latest_sidebar_project_snapshot.clone();
+        self.run_docs_files_request_at(payload, None, cx, done);
+    }
+
+    /// [`Self::run_docs_files_request`] with the local project's root replaced by `root`: Canvas's
+    /// page in No project reads and saves its drawing under the home folder
+    /// (`canvas_project` in app/canvas/mod.rs).
+    pub(crate) fn run_docs_files_request_at(
+        &mut self,
+        payload: String,
+        root: Option<std::path::PathBuf>,
+        cx: &mut gpui::Context<Self>,
+        done: impl FnOnce(&mut Self, serde_json::Value, &mut gpui::Context<Self>) + 'static,
+    ) {
+        let mut snapshot = self.latest_sidebar_project_snapshot.clone();
+        if let (Some(root), Some(snapshot)) = (root, snapshot.as_mut()) {
+            snapshot.in_memory_project_path = Some(root);
+        }
         let additional_docs_folders_text =
             gpui_manage_additional_docs_folders_text(&self.sidebar_runtime_settings_snapshot);
         let global_docs_directory_text =
