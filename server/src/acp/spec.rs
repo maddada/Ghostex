@@ -270,6 +270,8 @@ pub struct AcpLaunchProfile {
     pub gbot_computer_use_off: bool,
     pub lean_worker: bool,
     pub claude_chrome: bool,
+    /// The chat turned Chrome off (`--no-chrome`), whatever its account's default (claude_chrome.rs).
+    pub claude_chrome_off: bool,
     pub hermes_profile: Option<String>,
 }
 
@@ -432,6 +434,8 @@ fn build_acp_host_launch_command_for_platform(
     }
     if family == "claude" && profile.claude_chrome {
         parts.push("--chrome".to_string());
+    } else if family == "claude" && profile.claude_chrome_off {
+        parts.push("--no-chrome".to_string());
     }
     if let Some(hermes_profile) = profile
         .hermes_profile
@@ -1338,8 +1342,8 @@ pub fn build_cli_switch_argv_with_options(
             inner_args.push("--append-system-prompt-file".to_string());
             inner_args.push(path);
         }
-        if profile.claude_chrome && super::claude_chrome::claude_cli_supports_chrome(None) {
-            inner_args.push("--chrome".to_string());
+        if let Some(flag) = super::claude_chrome::cli_switch_flag(profile) {
+            inner_args.push(flag.to_string());
         }
     } else if spec.family == "codex" {
         if let Some(m) = model {

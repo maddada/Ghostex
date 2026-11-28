@@ -81,6 +81,9 @@ pub fn apply_state_frame(
     if let Some(modes) = frame.state.unavailable_modes.clone() {
         state.session.unavailable_modes = modes;
     }
+    if let Some(switch) = frame.state.claude_chrome.clone() {
+        state.session.claude_chrome = switch;
+    }
     if let Some(non_cli) = frame.state.non_cli_mode {
         state.session.non_cli_mode = non_cli;
     }
@@ -219,6 +222,7 @@ pub fn apply_agent_identity(state: &mut ChatState, patch: &AgentIdentity) {
         *session.later_question_ids = Vec::new();
         session.agent_restarted_at = Vec::new();
         session.unavailable_modes = Vec::new();
+        session.claude_chrome = Default::default();
         session.non_cli_mode = false;
         session.switch_to_native_queued = false;
         session.switch_to_native_wait = None;
@@ -699,6 +703,9 @@ pub fn apply_authoritative(
     }
     if let Some(modes) = result.state.unavailable_modes.clone() {
         state.session.unavailable_modes = modes;
+    }
+    if let Some(switch) = result.state.claude_chrome.clone() {
+        state.session.claude_chrome = switch;
     }
     if let Some(non_cli) = result.state.non_cli_mode {
         state.session.non_cli_mode = non_cli;

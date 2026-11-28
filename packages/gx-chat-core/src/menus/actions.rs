@@ -61,6 +61,7 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         }],
         ActionKind::SelectOption => select_option(state, action, context),
         ActionKind::RestartInMode => crate::menus::mode_restart::toggle(state, action),
+        ActionKind::SetClaudeChrome => crate::menus::chrome_switch::toggle(state, action),
 
         _ => Vec::new(),
     }

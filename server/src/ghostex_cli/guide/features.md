@@ -2541,6 +2541,17 @@ from then on. While it waits, the Mode button says "Full permissions when idle";
 turn the switch off to cancel. Only that chat changes, and only you can turn it
 on (agents can't). From the CLI:
 `ghostex select-session-chat-model <session> --mode bypass|auto|manual|accept-edits|plan --defer`.
+At the bottom of a Claude Code chat's Mode menu, on the desktop, in the browser
+and on the phone, the Claude in Chrome switch ("Browser tools for this chat")
+connects or drops Claude in Chrome for that one chat. It starts on when the chat
+was created with `--chrome` or when its account's Claude Code has Claude in
+Chrome "Enabled by default". Claude Code only loads Chrome when it starts, so
+moving the switch restarts Claude on the same conversation: at once when it is
+idle, else once its reply ends (the menu line says "Waiting for Claude to be
+idle" and the Mode button "Chrome on when idle" or "Chrome off when idle"; move
+the switch back to cancel). The choice stays with that chat across reloads,
+forks and Native/Terminal switches (`--chrome` or `--no-chrome`). Only you can
+turn Chrome on; a chat in a box has no switch.
 Codex chats have a Mode button too, for what Codex is allowed to do: Ask for
 approval (it asks before editing outside the project or using the
 internet), Approve for me (an automatic reviewer approves safe actions and only
@@ -4337,7 +4348,7 @@ and asks you to update Antigravity to 1.5.1 or newer (Settings > Updates) and tr
 again, or switch to Terminal-based.
 A Native Codex chat's `/` list offers only `/compact`, `/btw` and `/mention`; the other
 Codex commands need Terminal-based mode.
-Native Claude Code sessions honor Claude Code's own "Enabled by default" Claude in Chrome setting (`claudeInChromeDefaultEnabled: true` in that account's `.claude.json`) by launching and resuming with `--chrome` when your installed `claude` CLI accepts it.
+Native Claude Code sessions honor Claude Code's own "Enabled by default" Claude in Chrome setting (`claudeInChromeDefaultEnabled: true` in that account's `.claude.json`) by launching and resuming with `--chrome` when your installed `claude` CLI accepts it. The Mode menu's Claude in Chrome switch changes it for one chat.
 For a Native session, **Switch to Terminal-based** lives in the chat's
 More actions (`•••`) menu instead of the composer toolbar; choosing it asks
 first and explains that switching is not instant and interrupts any active turn

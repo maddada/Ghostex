@@ -221,6 +221,7 @@ pub fn compute_native_chat_options(state: &ChatState, _context: &ChatContext) ->
         selection_error: selection_error.clone(),
         unavailable_modes: state.session.unavailable_modes.clone(),
         non_cli_mode: state.session.non_cli_mode,
+        claude_chrome: state.session.claude_chrome.clone(),
     };
     let option_menus =
         native_option_menus(catalog.as_ref(), &values, &option_descriptors, &menu_params);
@@ -308,6 +309,12 @@ pub fn compute_native_chat_options(state: &ChatState, _context: &ChatContext) ->
             option_labels.mode.as_deref(),
         ));
         option_labels.mode_note = Some(crate::menus::mode_restart::PILL_SUFFIX.to_string());
+    } else if let Some(suffix) = crate::menus::chrome_switch::pill_suffix(state) {
+        option_labels.mode = Some(match option_labels.mode.as_deref() {
+            Some(label) if !label.is_empty() => format!("{label} · {suffix}"),
+            _ => suffix.to_string(),
+        });
+        option_labels.mode_note = Some(suffix.to_string());
     }
     // Never show "Default", "Default (recommended)", "Auto", "Model", or blank when the agent has
     // a concrete model list: resolve to the agent's concrete default model from the catalog.

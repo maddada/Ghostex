@@ -151,6 +151,7 @@ fn rpc_method_name(wire: &str) -> &'static str {
         ChatRpcMethod::ReadSessionWhere => "readSessionWhere",
         ChatRpcMethod::StopSessionBackgroundTask => "stopSessionBackgroundTask",
         ChatRpcMethod::RestartSessionInMode => "restartSessionInMode",
+        ChatRpcMethod::SetSessionClaudeChrome => "setSessionClaudeChrome",
         ChatRpcMethod::HoldSessionChatSend => "holdSessionChatSend",
         ChatRpcMethod::ListHeldSessionChatSends => "listHeldSessionChatSends",
         ChatRpcMethod::CancelHeldSessionChatSend => "cancelHeldSessionChatSend",

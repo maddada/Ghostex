@@ -33,6 +33,9 @@ pub struct NativeChatMenuItem {
     pub hotkey_action: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+    /// An app asset drawn as the row's icon instead of an agent's (`icon`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub separator: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -48,7 +51,7 @@ pub struct NativeChatMenuItem {
 }
 
 impl NativeChatMenuItem {
-    fn new(id: impl Into<String>) -> Self {
+    pub(crate) fn new(id: impl Into<String>) -> Self {
         Self {
             id: id.into(),
             ..Self::default()
@@ -123,6 +126,8 @@ pub struct OptionMenuParams {
     pub unavailable_modes: Vec<ghostex_gx_protocol::UnavailableMode>,
     /// True while this session runs in Non-CLI (ACP) mode, so approval level switches queue live.
     pub non_cli_mode: bool,
+    /// The Mode menu's "Claude in Chrome" switch (menus/chrome_switch.rs).
+    pub claude_chrome: ghostex_gx_protocol::ClaudeChromeSwitch,
 }
 
 fn command(descriptor_id: &str) -> Map<String, Value> {
@@ -352,6 +357,8 @@ pub fn native_option_menus(
                 items.push(item);
                 items.extend(restart.flatten());
             }
+            // Last, under the approval levels: Claude Code's Chrome switch (menus/chrome_switch.rs).
+            items.extend(crate::menus::chrome_switch::rows(&params.claude_chrome));
             items
         }
     };

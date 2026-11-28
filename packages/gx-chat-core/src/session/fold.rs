@@ -237,6 +237,10 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
         .unavailable_modes
         .clone()
         .or_else(|| previous_side.and_then(|state| state.unavailable_modes.clone()));
+    folded.result.state.claude_chrome = side
+        .claude_chrome
+        .clone()
+        .or_else(|| previous_side.and_then(|state| state.claude_chrome.clone()));
     folded.result.state.non_cli_mode = side
         .non_cli_mode
         .or_else(|| previous_side.and_then(|state| state.non_cli_mode));

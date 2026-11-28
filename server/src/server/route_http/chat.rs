@@ -198,6 +198,16 @@ pub(super) async fn route_chat_http(
             )
             .await
         }
+        "/api/setSessionClaudeChrome" => {
+            crate::session_chat_chrome_switch::handle_set_session_claude_chrome_http(
+                &state,
+                &caller,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
+        }
         "/api/restartSessionInMode" => {
             crate::session_chat_mode_restart::handle_restart_session_in_mode_http(
                 &state,

@@ -172,6 +172,8 @@ pub struct SessionChatQueueSnapshot {
     pub later_question_until: Value,
     /// The modes this session's agent cannot use (session_chat_mode_availability.rs).
     pub unavailable_modes: Vec<ghostex_gx_protocol::UnavailableMode>,
+    /// The Mode menu's "Claude in Chrome" switch (session_chat_chrome_switch.rs).
+    pub claude_chrome: ghostex_gx_protocol::ClaudeChromeSwitch,
     /// True while this session runs in Non-CLI (ACP) mode.
     pub non_cli_mode: bool,
     /// True while a Terminal -> Native switch is queued until the active reply ends (`Q4771`).
@@ -230,6 +232,7 @@ impl SessionChatQueueSnapshot {
             "unavailableModes".to_string(),
             json!(self.unavailable_modes),
         );
+        target.insert("claudeChrome".to_string(), json!(self.claude_chrome));
         target.insert("nonCliMode".to_string(), json!(self.non_cli_mode));
         target.insert(
             "switchToNativeQueued".to_string(),
@@ -299,6 +302,7 @@ impl SessionChatQueueSnapshot {
         revision.push_str(&serde_json::to_string(&self.later_question_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.later_question_until).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.unavailable_modes).unwrap_or_default());
+        revision.push_str(&serde_json::to_string(&self.claude_chrome).unwrap_or_default());
         revision.push_str(if self.non_cli_mode {
             "|nonCli:1"
         } else {
@@ -1337,6 +1341,9 @@ fn read_snapshot(
                 db, project_id, session_id,
             ),
             unavailable_modes: crate::session_chat_mode_availability::read_unavailable_modes(
+                db, project_id, session_id,
+            ),
+            claude_chrome: crate::session_chat_chrome_switch::read_switch(
                 db, project_id, session_id,
             ),
             non_cli_mode: read_non_cli_mode(db, project_id, session_id),

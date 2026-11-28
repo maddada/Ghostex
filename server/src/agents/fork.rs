@@ -299,6 +299,8 @@ fn acp_profile_from_plan(plan: &Value, fam: &str) -> crate::acp::spec::AcpLaunch
         lean_worker: plan.get("acpLeanWorker").and_then(Value::as_bool) == Some(true),
         claude_chrome: fam == "claude"
             && plan.get("acpClaudeChrome").and_then(Value::as_bool) == Some(true),
+        claude_chrome_off: fam == "claude"
+            && plan.get("acpClaudeChromeOff").and_then(Value::as_bool) == Some(true),
         hermes_profile: None,
     }
 }
@@ -513,6 +515,8 @@ pub(crate) fn build_agent_fork_plan(
             lean_worker: super::is_lean_worker(source_runtime),
             claude_chrome: fam == "claude"
                 && crate::acp::claude_chrome::is_claude_chrome_session(source_runtime),
+            claude_chrome_off: fam == "claude"
+                && crate::acp::claude_chrome::is_claude_chrome_off(source_runtime),
             hermes_profile: None,
         }
     };
@@ -691,6 +695,9 @@ pub(crate) fn build_agent_fork_plan(
         }
         if profile.claude_chrome {
             plan.insert("acpClaudeChrome".to_string(), json!(true));
+        }
+        if profile.claude_chrome_off {
+            plan.insert("acpClaudeChromeOff".to_string(), json!(true));
         }
     }
     if let Some(command) = primary_command {

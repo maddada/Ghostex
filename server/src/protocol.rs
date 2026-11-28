@@ -700,6 +700,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/refreshAgentModelLineup"
         // CDXC:SessionChat 2026-11-14 WHY: remote-allowed like reloadSessionAgent: the Mode menu's "Restart in Bypass when idle" restarts the agent on the machine that runs it; it carries only ids, the mode and on or off (session_chat_mode_restart.rs).
         | "/api/restartSessionInMode"
+        // CDXC:SessionChat 2026-11-28 WHY: remote-allowed like restartSessionInMode: the Mode menu's "Claude in Chrome" switch restarts Claude on the machine that runs it; it carries only ids and on or off (session_chat_chrome_switch.rs).
+        | "/api/setSessionClaudeChrome"
         | "/api/readSessionChatSkills"
         | "/api/readSessionChatFiles"
         | "/api/sendSessionChatMessage"

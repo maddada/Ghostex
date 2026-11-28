@@ -573,6 +573,8 @@ pub async fn run_gxserver_foreground(
     crate::acp::pending_switch::start_pending_switch_runtime(state.clone());
     // The Mode menu's "Restart in Bypass when idle" switches that were on when gxserver stopped.
     crate::session_chat_mode_restart::resume_waiting_restarts(&state);
+    // The Mode menu's "Claude in Chrome" switches that were waiting when gxserver stopped.
+    crate::session_chat_chrome_switch::resume_waiting_restarts(&state);
     coordinator_runtime::start_coordinator_runtime(state.clone());
     lead_runtime::start_lead_runtime(state.clone());
     session_stall_runtime::start_session_stall_runtime(state.clone());

@@ -38,6 +38,8 @@ pub struct SessionState {
     pub later_question_ids: crate::state::Stamped<Vec<String>>,
     /// The modes this session's agent cannot use, as gxserver keeps them. Absent means unchanged.
     pub unavailable_modes: Vec<ghostex_gx_protocol::UnavailableMode>,
+    /// The Mode menu's "Claude in Chrome" switch, as gxserver keeps it. Absent means unchanged.
+    pub claude_chrome: ghostex_gx_protocol::ClaudeChromeSwitch,
     /// True while this session runs through a Non-CLI (ACP) host. Absent means unchanged.
     pub non_cli_mode: bool,
     /// True while a Terminal -> Native switch is queued until the active reply finishes (`Q4771`).
@@ -222,6 +224,7 @@ impl Default for SessionState {
             retired_async_question_ids: Vec::new(),
             later_question_ids: Default::default(),
             unavailable_modes: Vec::new(),
+            claude_chrome: Default::default(),
             non_cli_mode: false,
             switch_to_native_queued: false,
             switch_to_native_wait: None,

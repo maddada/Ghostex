@@ -182,6 +182,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
 
         ActionKind::SelectOption
         | ActionKind::RestartInMode
+        | ActionKind::SetClaudeChrome
         | ActionKind::ModelMenuView
         | ActionKind::ModelMenuFavorite
         | ActionKind::ModelMenuPick

@@ -333,6 +333,12 @@ pub(crate) mod tests {
                 why: tag.into(),
                 restart: None,
             }]),
+            claude_chrome: Some(ghostex_gx_protocol::ClaudeChromeSwitch {
+                offered: flag,
+                on: !flag,
+                pending: flag,
+                failed: Some(tag.into()),
+            }),
             non_cli_mode: Some(flag),
             switch_to_native_queued: Some(!flag),
             switch_to_native_wait: Some(format!("wait {tag}")),

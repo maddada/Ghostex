@@ -15,6 +15,7 @@ pub mod accounts_data;
 pub mod accounts_presentation;
 pub mod actions;
 pub mod catalog;
+pub mod chrome_switch;
 pub mod cloud_box;
 pub mod context;
 pub mod controls;

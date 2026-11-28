@@ -285,6 +285,25 @@ pub struct UnavailableMode {
     pub restart: Option<ModeRestart>,
 }
 
+/// The Mode menu's "Claude in Chrome" switch of a Claude Code chat
+/// (server/src/session_chat_chrome_switch.rs).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeChromeSwitch {
+    /// False where the chat has no switch (not Claude Code, or a box that can't reach Chrome).
+    #[serde(default)]
+    pub offered: bool,
+    /// Whether the chat runs with Chrome, or will once the waiting restart happens.
+    #[serde(default)]
+    pub on: bool,
+    /// A restart that brings `on` waits for Claude to be idle.
+    #[serde(default)]
+    pub pending: bool,
+    /// Why the last restart did not happen, in the user's words.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failed: Option<String>,
+}
+
 /// The "restart in this mode when idle" switch beside an [`UnavailableMode`].
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -457,6 +476,9 @@ pub struct ChatSideState {
     /// them on. Absent means unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unavailable_modes: Option<Vec<UnavailableMode>>,
+    /// The Mode menu's "Claude in Chrome" switch. Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claude_chrome: Option<ClaudeChromeSwitch>,
     /// True while this session runs through a Non-CLI host (e.g. ACP), so the chat box's Mode
     /// button offers the four approval levels instead of the agent CLI's Shift+Tab modes.
     /// Absent means unchanged.

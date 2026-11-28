@@ -36,7 +36,7 @@ use crate::ghostex_cli::rpc::{
 /// base64-encoded so no shell
 /// (POSIX, PowerShell, WSL) can re-quote a JSON body on its way through.
 /// SEE-ALSO: packages/gx-chat-core/src/wire/rpc.rs, apps/mobile/app/src/chat/rust/transport.ts
-const SESSION_CHAT_RPC_METHODS: [&str; 54] = [
+const SESSION_CHAT_RPC_METHODS: [&str; 55] = [
     "readSessionChat",
     "readSessionChatSkills",
     "readSessionChatFiles",
@@ -84,6 +84,7 @@ const SESSION_CHAT_RPC_METHODS: [&str; 54] = [
     "readSessionDetails",
     "stopSessionBackgroundTask",
     "restartSessionInMode",
+    "setSessionClaudeChrome",
     "runGitAction",
     "beadsView",
     "beadsGenerateTitle",

@@ -111,6 +111,7 @@ fn action_marks_draft_changed(action_type: &str) -> bool {
         action_type,
         "selectOption"
             | "restartInMode"
+            | "setClaudeChrome"
             | "modelMenuPick"
             | "modelMenuTrait"
             | "accounts"

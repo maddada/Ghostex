@@ -681,6 +681,8 @@ pub(crate) fn to_agent_resume_input(
                         && crate::acp::claude_chrome::is_claude_chrome_session(Some(
                             &runtime_settings,
                         )),
+                    claude_chrome_off: fam == "claude"
+                        && crate::acp::claude_chrome::is_claude_chrome_off(Some(&runtime_settings)),
                     hermes_profile,
                 },
                 acp_model,

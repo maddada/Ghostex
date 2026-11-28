@@ -129,6 +129,10 @@ pub fn side_state_moves(
             .as_ref()
             .is_some_and(|modes| &session.unavailable_modes != modes)
         || side
+            .claude_chrome
+            .as_ref()
+            .is_some_and(|switch| &session.claude_chrome != switch)
+        || side
             .non_cli_mode
             .is_some_and(|mode| session.non_cli_mode != mode)
         || side

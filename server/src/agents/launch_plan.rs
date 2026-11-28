@@ -950,6 +950,10 @@ pub(crate) fn create_agent_session_params_for_project(
                             )) == Some(false),
                             lean_worker: super::is_lean_worker(Some(&runtime_settings)),
                             claude_chrome: fam == "claude" && claude_chrome,
+                            claude_chrome_off: fam == "claude"
+                                && crate::acp::claude_chrome::is_claude_chrome_off(Some(
+                                    &runtime_settings,
+                                )),
                             hermes_profile,
                         };
                         let acp_cmd = crate::acp::spec::build_acp_host_launch_command_with_profile(

@@ -138,6 +138,7 @@ pub(crate) mod session_chat_async_questions;
 pub mod session_chat_branch;
 pub(crate) mod session_chat_branch_facts;
 pub(crate) mod session_chat_catch_up;
+mod session_chat_chrome_switch;
 pub(crate) mod session_chat_claude_background;
 pub(crate) mod session_chat_claude_bypass_consent;
 pub mod session_chat_claude_dialog;

@@ -248,6 +248,8 @@ action_kinds! {
     SelectOption => "selectOption",
     // The Mode menu's "Restart in Bypass when idle" switch (`menus/mode_restart.rs`).
     RestartInMode => "restartInMode",
+    // The Mode menu's "Claude in Chrome" switch (`menus/chrome_switch.rs`).
+    SetClaudeChrome => "setClaudeChrome",
     ModelMenuView => "modelMenuView",
     ModelMenuFavorite => "modelMenuFavorite",
     ModelMenuPick => "modelMenuPick",

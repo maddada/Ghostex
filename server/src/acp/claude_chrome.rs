@@ -8,6 +8,9 @@
 //! reads only the session's own `.claude.json` (default home, `CLAUDE_CONFIG_DIR`, cswap slot,
 //! or CLIProxyAPI hub profile) and checks `claude --help` first so older Claude CLIs without
 //! `--chrome` skip it instead of failing startup.
+//! A chat's own choice (`CLAUDE_CHROME_KEY`, from `--chrome` or the Mode menu's "Claude in Chrome"
+//! switch, server/src/session_chat_chrome_switch.rs) wins over the account's default: on passes
+//! `--chrome`, off passes `--no-chrome` so a Terminal-mode Claude does not load it by default.
 
 use std::collections::HashMap;
 use std::io::Read as _;
@@ -25,13 +28,25 @@ use super::spec::AcpLaunchProfile;
 
 /// The create param `ghostex agents create --chrome` and `ghostex coordinator start-thread --chrome` send.
 pub const CLAUDE_CHROME_PARAM: &str = "chrome";
-/// The runtime setting that remembers an explicit `--chrome` launch across resumes and forks.
+/// The runtime setting that holds this chat's own Chrome choice across resumes, forks and
+/// Native/Terminal switches: `true` (created with `--chrome`, or the Mode menu's "Claude in
+/// Chrome" switch turned on), `false` (that switch turned off), absent (the account's default).
 pub const CLAUDE_CHROME_KEY: &str = "claudeChrome";
 
 const HELP_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
+/// How long one reading of an account's Chrome default stands, so the queue frames gxserver
+/// publishes for a chat don't each read its `.claude.json`.
+const ACCOUNT_DEFAULT_TTL: Duration = Duration::from_secs(10);
+
+/// What the installed `claude --help` lists.
+#[derive(Clone, Copy, Default)]
+struct ChromeFlags {
+    chrome: bool,
+    no_chrome: bool,
+}
 
 type HelpCacheKey = PathBuf;
-type HelpCacheEntry = (Option<SystemTime>, u64, bool);
+type HelpCacheEntry = (Option<SystemTime>, u64, ChromeFlags);
 
 static CLAUDE_CHROME_HELP_CACHE: OnceLock<Mutex<HashMap<HelpCacheKey, HelpCacheEntry>>> =
     OnceLock::new();
@@ -41,12 +56,88 @@ pub fn claude_chrome_requested(params: &Map<String, Value>) -> bool {
     params.get(CLAUDE_CHROME_PARAM).and_then(Value::as_bool) == Some(true)
 }
 
-/// Whether a session was explicitly started with `--chrome`.
+/// This chat's own Chrome choice: `Some(true)` on, `Some(false)` off, `None` the account's default.
+pub fn claude_chrome_choice(runtime_settings: Option<&Map<String, Value>>) -> Option<bool> {
+    runtime_settings?.get(CLAUDE_CHROME_KEY)?.as_bool()
+}
+
+/// Whether this chat starts with Chrome connected whatever its account's default.
 pub fn is_claude_chrome_session(runtime_settings: Option<&Map<String, Value>>) -> bool {
-    runtime_settings
-        .and_then(|settings| settings.get(CLAUDE_CHROME_KEY))
-        .and_then(Value::as_bool)
-        == Some(true)
+    claude_chrome_choice(runtime_settings) == Some(true)
+}
+
+/// Whether this chat starts without Chrome whatever its account's default.
+pub fn is_claude_chrome_off(runtime_settings: Option<&Map<String, Value>>) -> bool {
+    claude_chrome_choice(runtime_settings) == Some(false)
+}
+
+/// Whether this Claude chat starts with Chrome: its own choice, else its account's "Enabled by
+/// default" (the switch's starting state, server/src/session_chat_chrome_switch.rs). Reads only
+/// that one key of the `.claude.json` the chat's account runs on.
+pub(crate) fn chat_starts_with_chrome(runtime_settings: Option<&Map<String, Value>>) -> bool {
+    if let Some(choice) = claude_chrome_choice(runtime_settings) {
+        return choice;
+    }
+    let text = |key: &str| {
+        runtime_settings
+            .and_then(|runtime| runtime.get(key))
+            .and_then(Value::as_str)
+    };
+    let hub_id = runtime_settings.and_then(crate::accounts::hub::launch::picked_hub);
+    // The account fields a launch reads, as stored: what the memo is keyed on.
+    let key = format!(
+        "{}|{}|{}",
+        text("accountCommand").unwrap_or(""),
+        text("accountId").unwrap_or(""),
+        hub_id.as_deref().unwrap_or("")
+    );
+    static MEMO: OnceLock<Mutex<HashMap<String, (Instant, bool)>>> = OnceLock::new();
+    let memo = MEMO.get_or_init(Default::default);
+    if let Some((at, on)) = memo.lock().ok().and_then(|memo| memo.get(&key).copied()) {
+        if at.elapsed() < ACCOUNT_DEFAULT_TTL {
+            return on;
+        }
+    }
+    let profile = AcpLaunchProfile {
+        account_wrapper: super::spec::account_wrapper_from_ghostex_account(
+            "claude",
+            runtime_settings,
+            text("accountCommand"),
+        ),
+        hub_id,
+        ..AcpLaunchProfile::default()
+    };
+    let on = account_default_enabled(&profile, &hub_envs(&profile));
+    if let Ok(mut memo) = memo.lock() {
+        memo.insert(key, (Instant::now(), on));
+    }
+    on
+}
+
+/// The `CLAUDE_CONFIG_DIR` a CLIProxyAPI hub profile starts Claude with (`build_acp_server_argv`).
+fn hub_envs(profile: &AcpLaunchProfile) -> Vec<(String, String)> {
+    if profile.account_wrapper.is_some() {
+        return Vec::new();
+    }
+    profile
+        .hub_id
+        .as_deref()
+        .and_then(|hub| super::spec::resolve_hub_profile_dir("claude", hub))
+        .map(|dir| {
+            vec![(
+                "CLAUDE_CONFIG_DIR".to_string(),
+                dir.to_string_lossy().into_owned(),
+            )]
+        })
+        .unwrap_or_default()
+}
+
+/// Whether Claude Code's own "Enabled by default" Claude in Chrome setting is on for the account
+/// this launch runs on.
+fn account_default_enabled(profile: &AcpLaunchProfile, acp_envs: &[(String, String)]) -> bool {
+    !cfc_env_explicitly_disabled()
+        && resolve_claude_config_json_path(profile, acp_envs)
+            .is_some_and(|path| read_claude_in_chrome_default_enabled(&path))
 }
 
 /// Refuses `--chrome` on non-Claude agents or sandboxed boxes that cannot reach host Chrome.
@@ -70,29 +161,43 @@ pub fn check_claude_chrome_family(
     )))
 }
 
-/// Appends `--chrome` to a Claude command when the session was explicitly created with `--chrome`:
-/// a Terminal-mode command only when the installed `claude` CLI accepts it, an `acp-host` command
-/// always (its Native driver checks the CLI itself, `should_pass_chrome_flag`).
+/// Appends this chat's own Chrome choice to a Claude command (`--chrome` or `--no-chrome`, none
+/// when it follows the account's default): to a Terminal-mode command only when the installed
+/// `claude` CLI accepts the flag, to an `acp-host` command always (its Native driver checks the CLI
+/// itself, `should_pass_chrome_flag`).
 pub(crate) fn with_claude_chrome_flag(
     family: Option<&str>,
     runtime_settings: Option<&Map<String, Value>>,
     command: &str,
 ) -> String {
     let trimmed = command.trim_end();
+    let Some(on) = claude_chrome_choice(runtime_settings) else {
+        return command.to_string();
+    };
     if family != Some("claude")
         || trimmed.is_empty()
-        || !is_claude_chrome_session(runtime_settings)
         || trimmed
             .split_whitespace()
             .any(|token| token == "--chrome" || token == "--no-chrome")
     {
         return command.to_string();
     }
-    if super::acp_family_from_launch_command(trimmed).is_none() && !claude_cli_supports_chrome(None)
-    {
-        return command.to_string();
+    if super::acp_family_from_launch_command(trimmed).is_none() {
+        let flags = claude_cli_chrome_flags(None);
+        if !(if on { flags.chrome } else { flags.no_chrome }) {
+            return command.to_string();
+        }
     }
-    format!("{trimmed} --chrome")
+    format!("{trimmed} {}", if on { "--chrome" } else { "--no-chrome" })
+}
+
+/// The flag a Native-to-Terminal switch adds for this chat's own Chrome choice, when the installed
+/// `claude` accepts it (spec.rs `build_cli_switch_argv_with_options`).
+pub(crate) fn cli_switch_flag(profile: &AcpLaunchProfile) -> Option<&'static str> {
+    if profile.claude_chrome && claude_cli_supports_chrome(None) {
+        return Some("--chrome");
+    }
+    (profile.claude_chrome_off && claude_cli_chrome_flags(None).no_chrome).then_some("--no-chrome")
 }
 
 /// Whether `driver_claude` should pass `--chrome` on this Native Claude launch or resume.
@@ -101,10 +206,10 @@ pub(crate) fn should_pass_chrome_flag(
     acp_envs: &[(String, String)],
     prog: &str,
 ) -> bool {
-    let wants_chrome = profile.claude_chrome
-        || (!cfc_env_explicitly_disabled()
-            && resolve_claude_config_json_path(profile, acp_envs)
-                .is_some_and(|path| read_claude_in_chrome_default_enabled(&path)));
+    if profile.claude_chrome_off {
+        return false;
+    }
+    let wants_chrome = profile.claude_chrome || account_default_enabled(profile, acp_envs);
     if !wants_chrome {
         return false;
     }
@@ -179,11 +284,16 @@ fn read_claude_in_chrome_default_enabled(path: &Path) -> bool {
         == Some(true)
 }
 
-/// Checks whether the installed `claude` CLI accepts `--chrome` by inspecting `claude --help`
-/// (cached per binary path, mtime, and size). Returns `false` if unavailable or unsupported.
+/// Whether the installed `claude` CLI accepts `--chrome`.
 pub(crate) fn claude_cli_supports_chrome(prog_hint: Option<&str>) -> bool {
+    claude_cli_chrome_flags(prog_hint).chrome
+}
+
+/// The Chrome flags `claude --help` lists (cached per binary path, mtime, and size). None when
+/// Claude is not found or does not answer.
+fn claude_cli_chrome_flags(prog_hint: Option<&str>) -> ChromeFlags {
     let Some(executable) = resolve_claude_executable_for_probe(prog_hint) else {
-        return false;
+        return ChromeFlags::default();
     };
     let meta = std::fs::metadata(&executable).ok();
     let stamp = meta
@@ -195,23 +305,23 @@ pub(crate) fn claude_cli_supports_chrome(prog_hint: Option<&str>) -> bool {
         .get_or_init(Default::default)
         .lock()
     {
-        if let Some(&(cached_mtime, cached_len, supported)) = cache.get(&executable) {
+        if let Some(&(cached_mtime, cached_len, flags)) = cache.get(&executable) {
             if stamp.0.is_some() && cached_mtime == stamp.0 && cached_len == stamp.1 {
-                return supported;
+                return flags;
             }
         }
     }
 
-    let supported = probe_help_supports_chrome(&executable);
+    let flags = probe_help_chrome_flags(&executable);
     if stamp.0.is_some() {
         if let Ok(mut cache) = CLAUDE_CHROME_HELP_CACHE
             .get_or_init(Default::default)
             .lock()
         {
-            cache.insert(executable, (stamp.0, stamp.1, supported));
+            cache.insert(executable, (stamp.0, stamp.1, flags));
         }
     }
-    supported
+    flags
 }
 
 fn resolve_claude_executable_for_probe(prog_hint: Option<&str>) -> Option<PathBuf> {
@@ -238,7 +348,7 @@ fn resolve_claude_executable_for_probe(prog_hint: Option<&str>) -> Option<PathBu
         .and_then(|home| crate::accounts::helpers::probe_executable(home, "claude"))
 }
 
-fn probe_help_supports_chrome(executable: &Path) -> bool {
+fn probe_help_chrome_flags(executable: &Path) -> ChromeFlags {
     let mut cmd = crate::platform::process::background_command(executable);
     cmd.arg("--help")
         .env_remove("CLAUDECODE")
@@ -246,7 +356,7 @@ fn probe_help_supports_chrome(executable: &Path) -> bool {
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
     let Ok(mut child) = cmd.spawn() else {
-        return false;
+        return ChromeFlags::default();
     };
     let stdout = child.stdout.take();
     let reader = std::thread::spawn(move || {
@@ -272,14 +382,16 @@ fn probe_help_supports_chrome(executable: &Path) -> bool {
     };
     let bytes = reader.join().unwrap_or_default();
     if !ok {
-        return false;
+        return ChromeFlags::default();
     }
-    help_lists_chrome(&String::from_utf8_lossy(&bytes))
-}
-
-fn help_lists_chrome(help: &str) -> bool {
-    help.split_whitespace().any(|token| {
-        let trimmed = token.trim_matches(|ch: char| !ch.is_ascii_alphanumeric() && ch != '-');
-        trimmed == "--chrome"
-    })
+    let help = String::from_utf8_lossy(&bytes);
+    let lists = |flag: &str| {
+        help.split_whitespace().any(|token| {
+            token.trim_matches(|ch: char| !ch.is_ascii_alphanumeric() && ch != '-') == flag
+        })
+    };
+    ChromeFlags {
+        chrome: lists("--chrome"),
+        no_chrome: lists("--no-chrome"),
+    }
 }
