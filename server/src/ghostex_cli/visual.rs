@@ -317,10 +317,32 @@ fn report_question_form(
         } else {
             format!("{}: ", question.tag)
         };
+        // What the form opens with picked (`FormQuestion::preselected`): Send with no change sends it.
+        let opens: Vec<&str> = question
+            .preselected()
+            .iter()
+            .filter_map(|index| question.choices.get(*index as usize))
+            .map(|choice| choice.label.as_str())
+            .collect();
+        let opens = if opens.is_empty() {
+            String::new()
+        } else {
+            format!("; opens with \"{}\" picked", opens.join("\", \""))
+        };
         println!(
-            "- {tag}{} (answer key \"{}\"): {kind}",
+            "- {tag}{} (answer key \"{}\"): {kind}{opens}",
             question.title, question.key
         );
+        let recommended = question
+            .choices
+            .iter()
+            .filter(|choice| choice.recommended)
+            .count();
+        if !question.multiple && !question.text && recommended > 1 {
+            println!(
+                "  Warning: this single-pick question marks {recommended} choices recommended and only the first opens picked; mark exactly one."
+            );
+        }
     }
     if ghostex_gx_visual::questions::takes_notes(form) {
         println!(

@@ -263,14 +263,16 @@ mentions `ghostex-answer:`; older versions show plain links.
 - Each question: `title`; `detail`, a short explanation; `tag`, an optional
   short label such as an issue id; `name`, the answer's key (the title when
   there is none); `multiple` for several picks; `type: "text"` for a text box
-  instead of choices (`placeholder` sets its hint). At most 20 questions.
+  instead of choices (`placeholder` sets its hint); `"preselect": false` to
+  open it blank even though a choice is recommended (see below). At most 20
+  questions.
 - One question per dimension: split a list that mixes kinds of choice (a
   look, a layout, extras) into one question each, and use `multiple`
   whenever the choices can combine, so a combined answer is several picks
   rather than Other and a note. Keep a question pick one only when its
   choices truly exclude each other, and say why in its `detail`; say there
-  that a mix is welcome in the note. A pick-any question may mark several
-  choices `recommended`. `ghostex visual check` warns about a pick-one list
+  that a mix is welcome in the note. Mark exactly one choice `recommended`
+  in a pick-one question; a pick-any question may mark several. `ghostex visual check` warns about a pick-one list
   that looks like several kinds of choice. When the answers arrive, say the
   combined pick back in one line.
 - Link what you ask about: when a question is about a PR, issue, file, page,
@@ -283,10 +285,16 @@ mentions `ghostex-answer:`; older versions show plain links.
   enough.
 - Each choice is its text, or `{"label", "detail", "value", "recommended"}`:
   `value` is what you receive (the label when there is none) and
-  `recommended` adds a Recommended badge. At most 26 choices.
+  `recommended` adds a Recommended badge and opens it already picked. At most
+  26 choices.
 - Write only the questions. The chat letters the choices, ends every choice
   question with "Other / none of these" and a note box, and adds the Send
-  button. Nothing is ever preselected (a pick clicked again clears). Newer
+  button. A recommended choice starts picked (every recommended one in a
+  pick-any question), so the reader can send your recommendations as they
+  are; they pick another or click it again to clear it. A question with no
+  recommended choice, or with `"preselect": false`, starts blank. Use
+  `"preselect": false` only for an answer the reader must give on purpose
+  (deleting something, spending money). Newer
   Ghostex versions send a question left blank as `"skipped"` (older ones as
   `null`). Don't add your own "Other" choice.
   A form of two or more questions also ends with a notes box for anything
@@ -804,7 +812,9 @@ and `data-choice` (first bullet below), which gives it a Pick button:
 - `<gx-question>`: `title`; `tag`, an optional short label such as an issue
   id; `name`, the answer's key (the title when there is none); `multiple`
   for several picks; `type="text"` for a text box instead of choices;
-  `type="menus"` for named `<select>` menus whose answer is
+  `preselect="false"` to open it blank even though a choice is
+  recommended (for an answer the reader must give on purpose, such as
+  deleting something); `type="menus"` for named `<select>` menus whose answer is
   `{"<menu name>": "<value>"}` (an `<option data-when="agent=Claude">` shows
   only while the menu named `agent` has that value, `a=x; b=y` needs both;
   `<select data-look="tiles">` draws its options as logo tiles, with
@@ -815,9 +825,13 @@ and `data-choice` (first bullet below), which gives it a Pick button:
   `title` becomes a link, and a `<p>` takes an `<a href>`.
 - `<gx-choice>`: its text is the choice and a `<small>` inside is a one-line
   detail. `value` is what you receive (the text without the `<small>` when
-  there is none). `recommended` adds a Recommended badge. `picked` opens it
-  already picked (a prefilled answer the reader can send as is); a
-  `data-pick` row takes `data-picked`.
+  there is none). `recommended` adds a Recommended badge and opens it
+  already picked (every recommended one for `multiple`), so the reader can
+  send your recommendations as they are; mark exactly one per pick-one
+  question. A recommended row or a card with a `.gx-ribbon` opens picked
+  too. `picked` picks a choice without the badge; when a question has
+  `picked` choices it opens on those instead. A `data-pick` row takes
+  `data-picked`.
 - List a question's choices in exactly the order its variants appear above
   it: the first variant on the page is the first choice, and a variant
   lettered "A." is choice a. Never move the recommended choice to the top;
@@ -829,8 +843,9 @@ and `data-choice` (first bullet below), which gives it a Pick button:
   tied cards; only rows make their own). The kit letters the choices, ends every choice
   question with "Other / none of these" and a note box, ends the page with
   an "Anything else?" box (the reader can type there and paste images) just
-  above the send button, and adds the send button. Nothing is preselected unless you mark it `picked` (the reader can also click a pick again
-  to clear it), and a question left blank arrives as `"skipped"` (`null` in older
+  above the send button, and adds the send button. Nothing is preselected
+  unless you mark it `recommended` or `picked` (the reader can also click a
+  pick again to clear it), and a question left blank arrives as `"skipped"` (`null` in older
   Ghostex versions). Don't write your
   own form, button, "Other" choice, note box or "Anything else?" question. Newer Ghostex versions also add
   a Skip all button; a skipped question arrives as `"skipped"`.

@@ -695,7 +695,9 @@ Questions:
   Optional: \"detail\" on a question, \"multiple\": true for several picks,
   \"placeholder\" for a text box, \"submit\" to rename the button, and
   \"withdraw\": [\"Q40\"] (see check below). The chat adds \"Other / none of
-  these\", the note boxes and Send itself. Write the block to a file and run
+  these\", the note boxes and Send itself. A recommended choice opens picked,
+  so mark exactly one in a pick-one question; \"preselect\": false keeps a
+  question blank. Write the block to a file and run
   `ghostex visual check <file>` before sending it; send it only when check
   lists your questions with no error and nothing to write the standard way.
 

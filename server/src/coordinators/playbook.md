@@ -351,7 +351,8 @@ Rules for every question, whichever way you ask it:
   question pick any (`multiple` in a form or page, `item ask --multiple` on a line of work) unless
   its choices truly exclude each other, and
   when it is pick one, say why in its description ("one surface only"). Say there that a mix is
-  welcome in the note. In a pick-any question, mark every choice you recommend. `visual check` warns
+  welcome in the note. In a pick-any question, mark every choice you recommend; in a pick-one, mark
+  exactly one. A form or page opens with the recommended choices picked. `visual check` warns
   about a pick-one list that looks like several kinds of choice. When the answers arrive, open your
   reply with the combined pick in one line ("Building A + D + G, A darker in dark mode"), so a
   misread shows at once.

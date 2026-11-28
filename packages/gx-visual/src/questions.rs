@@ -18,7 +18,8 @@
 //! ````
 //!
 //! The model is the page kit's (`server/src/visual_pages/kit.rs`): a choice question ends with
-//! "Other / none of these" and a note box, nothing is preselected, and the answers go back to the
+//! "Other / none of these" and a note box, a recommended choice starts picked
+//! ([`FormQuestion::preselected`]), and the answers go back to the
 //! agent as the same `<ghostex-page-answers>` message a page sends, keyed by each question's `name`
 //! (its title when it has none), a note as `"<key> (note)"`, and a form of two or more questions
 //! ends with a notes box whose text arrives last, as `"Additional notes"` ([`notes_key`]). A question
@@ -101,6 +102,41 @@ pub struct FormQuestion {
     pub text: bool,
     pub placeholder: String,
     pub choices: Vec<FormChoice>,
+    /// `"preselect": false`: the question opens blank even when a choice is recommended.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub no_preselect: bool,
+}
+
+impl FormQuestion {
+    /// The choices the question opens with picked: its recommended ones (only the first for pick
+    /// one), none for a text question or one written with `"preselect": false`.
+    ///
+    /// CDXC:SessionChat 2026-11-28 DECISION:
+    /// User: pages "with all recommended options pre-selected so I can go through it". A choice
+    /// marked `recommended` starts picked, in a ```questions form and in a page's `<gx-question>`
+    /// (server/src/visual_pages/kit.rs), so Send with no change sends the recommendations; the
+    /// reader picks another or clicks it again to clear it, like any pick. A pick-any question
+    /// starts with every recommended choice checked, and a question with none stays blank (sent as
+    /// `"skipped"`). `"preselect": false` (`preselect="false"` on a `<gx-question>`) keeps a
+    /// question blank, for an answer the reader must give on purpose (deleting something, spending
+    /// money), where a Send without reading should not approve the agent's pick. Supersedes
+    /// "nothing is preselected" of 2026-10-11 above.
+    pub fn preselected(&self) -> Vec<u32> {
+        if self.text || self.no_preselect {
+            return Vec::new();
+        }
+        let picks = self
+            .choices
+            .iter()
+            .enumerate()
+            .filter(|(_, choice)| choice.recommended)
+            .map(|(index, _)| index as u32);
+        if self.multiple {
+            picks.collect()
+        } else {
+            picks.take(1).collect()
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
@@ -294,6 +330,7 @@ fn question(
             .and_then(Value::as_bool)
             .unwrap_or(false),
         placeholder: string(object.get("placeholder")),
+        no_preselect: object.get("preselect").and_then(Value::as_bool) == Some(false),
         text,
         choices,
         title,

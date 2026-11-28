@@ -1,8 +1,9 @@
 //! The reader's side of a question form (a ```questions block, `transcript/question_forms.rs`):
 //! picking choices, the note or text answer, sending the answers to the agent, and the saved picks.
 //!
-//! A choice question's picks follow the page kit (`server/src/visual_pages/kit.rs`): nothing starts
-//! picked, clicking a pick again clears it, one of N replaces the pick while many of N toggles, and
+//! A choice question's picks follow the page kit (`server/src/visual_pages/kit.rs`): its
+//! recommended choices start picked (`FormQuestion::preselected`, the SessionChat 2026-11-28
+//! DECISION in packages/gx-visual/src/questions.rs), clicking a pick again clears it, one of N replaces the pick while many of N toggles, and
 //! "Other / none of these" (the row after the last choice) is a pick of its own whose note says
 //! what instead. A question left blank when the form is sent goes to the agent as `"skipped"`, and
 //! Skip all (`skip_all`) sends at once. The `<ghostex-page-answers>` message uses the normal chat
@@ -188,6 +189,17 @@ pub fn reopen_after_removed_answers(state: &mut ChatState, queued_prompt_id: &st
     }
 }
 
+/// The picks a form opens with before the reader touches it: each question's recommended choices.
+fn opening_drafts(form: &QuestionForm) -> Vec<QuestionDraft> {
+    form.questions
+        .iter()
+        .map(|question| QuestionDraft {
+            indices: question.preselected(),
+            ..QuestionDraft::default()
+        })
+        .collect()
+}
+
 /// Whether a question's draft answers it: a pick, words, or a skip.
 pub(crate) fn draft_answered(draft: &QuestionDraft) -> bool {
     draft.skipped
@@ -207,7 +219,13 @@ fn save(state: &ChatState, id: &str) -> Vec<Effect> {
         .drafts
         .iter()
         .enumerate()
-        .filter(|(_, draft)| draft_answered(draft))
+        // A recommended pick the reader cleared is kept too, so a reload does not pick it again.
+        .filter(|(index, draft)| {
+            draft_answered(draft)
+                || form(state, id)
+                    .and_then(|form| form.questions.get(*index))
+                    .is_some_and(|question| !question.preselected().is_empty())
+        })
         .map(|(index, draft)| (index.to_string(), draft.clone()))
         .collect();
     if !entry.notes.trim().is_empty() {
@@ -911,9 +929,11 @@ pub fn sync(state: &mut ChatState) -> Vec<Effect> {
         {
             continue;
         }
+        let opening = form(state, &id).map(opening_drafts).unwrap_or_default();
         let entry = state.questions.forms.entry(id.clone()).or_default();
         entry.load_requested = true;
-        entry.drafts = vec![QuestionDraft::default(); count];
+        entry.drafts = opening;
+        entry.drafts.resize(count, QuestionDraft::default());
         effects.push(Effect::ReadStorage {
             key: form_drafts_key(&session_key, &id),
         });
@@ -1247,11 +1267,7 @@ fn project_each(state: &ChatState) -> BTreeMap<String, Value> {
                 (None, None) if entry.drafts.len() == form.questions.len() => {
                     ("open", entry.drafts.clone(), entry.notes.clone())
                 }
-                (None, None) => (
-                    "open",
-                    vec![QuestionDraft::default(); form.questions.len()],
-                    String::new(),
-                ),
+                (None, None) => ("open", opening_drafts(form), String::new()),
             };
             // A form the reader removed without answering reads Canceled: it opens to be read but
             // takes no answer (`questions/later.rs`).
