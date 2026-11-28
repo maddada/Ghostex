@@ -459,6 +459,8 @@ fn project_skill_roots(agent_id: &str) -> (&'static [&'static [&'static str]], P
         ),
         "antigravity" => (
             &[
+                // agy reads a project's `.gemini/skills` first (it creates the folder on start).
+                &[".gemini", "skills"],
                 &[".agents", "skills"],
                 &["_agents", "skills"],
                 &[".agent", "skills"],
