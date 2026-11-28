@@ -93,7 +93,7 @@ zip = { version = "9.8.1", default-features = false, features = ["deflate"] }
 jsonc-parser = { version = "0.34", features = ["cst", "serde"] }
 # CDXC:Automations 2026-11-08 WHY:
 # A daily, weekly or cron automation runs at its wall time in the schedule's own zone (`local` or an IANA name the desktop writes), so gxserver reads the system tz database through jiff to resolve the zone and its DST gaps and folds (automations/schedule_zone.rs). chrono alone knows only UTC and this computer's zone.
-jiff = "0.2.38"
+jiff = "1.0.3"
 
 [target.'cfg(windows)'.dependencies]
 ghostex-editor-client = { path = "../packages/editor-client" }

@@ -340,11 +340,11 @@ fn reset_instant(text: &str, now: Timestamp) -> Option<String> {
         None => (None, wall),
     };
     let (hour, minute) = clock(time)?;
-    let today = now.to_zoned(zone.clone()).date();
+    let today = now.to_zoned_datetime(zone.clone()).date();
     let instant = |date: civil::Date| -> Option<Timestamp> {
         Some(
             date.at(hour, minute, 0, 0)
-                .to_zoned(zone.clone())
+                .to_zoned_datetime(zone.clone())
                 .ok()?
                 .timestamp(),
         )
