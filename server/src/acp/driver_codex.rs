@@ -2039,10 +2039,7 @@ fn spawn_codex_stdout_reader(
                             });
                             let decision = if network_ask {
                                 PermissionDecision::AskUser {
-                                    reason: Some(
-                                        "Codex's network policy asks before this connection."
-                                            .to_string(),
-                                    ),
+                                    reason: Some(super::CODEX_NETWORK_ASK_REASON.to_string()),
                                 }
                             } else {
                                 evaluate_permission(level, &synthetic, &allow_opts, &roots, &cwd)

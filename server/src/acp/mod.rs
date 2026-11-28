@@ -43,6 +43,17 @@ mod omp_elicitation;
 pub(crate) mod pending_switch;
 pub(crate) mod spec;
 
+/// The reason the Codex Native driver puts on a managed-network approval card ("Network access
+/// to <host> (<protocol>)"): Codex enforcing the user's, or their admin's, network allowlist.
+/// The card's own text for the user, and how Autopilot knows the card (`is_codex_network_ask`).
+pub(crate) const CODEX_NETWORK_ASK_REASON: &str =
+    "Codex's network policy asks before this connection.";
+
+/// True for an approval card whose reason is the Codex driver's managed-network one.
+pub(crate) fn is_codex_network_ask(reason: Option<&str>) -> bool {
+    reason.is_some_and(|reason| reason.trim() == CODEX_NETWORK_ASK_REASON)
+}
+
 /// What every Native host says it is in its handshake (`clientInfo`): Ghostex, by its own name
 /// and the app's real version.
 ///

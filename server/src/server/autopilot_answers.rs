@@ -831,7 +831,7 @@ pub(super) fn decide_prompt(
                 tool,
                 summary,
                 tool_use_id,
-                ..
+                reason,
             } => {
                 let text = summary.clone().unwrap_or_default();
                 let saw = format!("It asked to run {tool}: {}", short(&text, 160));
@@ -855,10 +855,19 @@ pub(super) fn decide_prompt(
                 } else {
                     classify(&tool, &text, project_path)
                 };
-                return match after_users_minute(
-                    verdict(config, class, read_only, reads_only(&tool, &text)),
-                    waited,
-                ) {
+                /*
+                CDXC:Autopilot 2026-11-28 DECISION:
+                User, after the security review of the Codex Native network ask: "Autopilot must always leave Codex managed-network asks (the 'Network access to host (protocol)' cards) to the user, at every Autopilot level, including for sub-agents." The card is Codex enforcing the user's, or their admin's, network allowlist, so only a person answers it: Autopilot neither approves it (All but limits approved it as a plain command) nor declines it (a read-only thread declined it). It is known by the reason the Codex driver gives it (`crate::acp::CODEX_NETWORK_ASK_REASON`), which a sub-agent's ask carries too. Where Autopilot answers no approvals it waits as before.
+                */
+                let judged = match verdict(config, class, read_only, reads_only(&tool, &text)) {
+                    Verdict::Wait => Verdict::Wait,
+                    _ if crate::acp::is_codex_network_ask(reason.as_deref()) => Verdict::Leave(
+                        "Codex's network policy asks before this connection, so it waits for you."
+                            .to_string(),
+                    ),
+                    judged => judged,
+                };
+                return match after_users_minute(judged, waited) {
                     Verdict::Wait => wait(),
                     Verdict::Hold(after_ms) => hold(after_ms),
                     Verdict::Approve => decision(
