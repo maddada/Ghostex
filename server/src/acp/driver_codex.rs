@@ -322,6 +322,28 @@ fn codex_error_info_code(info: Option<&Value>) -> Option<String> {
     }
 }
 
+/// The text of a Codex `TurnError` (`message`, then `additionalDetails` when Codex gave any).
+fn codex_error_text(err: &Value) -> Option<String> {
+    let msg = err
+        .get("message")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|m| !m.is_empty())?;
+    match err
+        .get("additionalDetails")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|d| !d.is_empty() && !msg.contains(*d))
+    {
+        Some(details) => Some(format!("{msg}\n{details}")),
+        None => Some(msg.to_string()),
+    }
+}
+
+/// How long Codex may keep retrying one turn (`error { willRetry: true }` with no progress in
+/// between) before Ghostex ends the turn with the last retry's error.
+const CODEX_RETRY_BUDGET: Duration = Duration::from_secs(10 * 60);
+
 fn codex_model_is_available(available_models: &Value, requested: &str) -> bool {
     let Some(arr) = available_models.as_array() else {
         return true;
@@ -399,6 +421,10 @@ struct CodexState {
     last_error: Option<(Option<String>, String)>,
     compacting: bool,
     compacting_started_at: Option<String>,
+    /// When Codex began its current run of `error { willRetry: true }` notices (reconnects,
+    /// overloaded or 5xx retries), and the last such message. Cleared by any sign of progress.
+    retry_started_at: Option<Instant>,
+    retry_message: Option<String>,
     approval_level: AcpApprovalLevel,
     use_cli_default: bool,
     read_only: bool,
@@ -460,6 +486,8 @@ impl CodexState {
             last_error: None,
             compacting: false,
             compacting_started_at: None,
+            retry_started_at: None,
+            retry_message: None,
             approval_level,
             use_cli_default,
             read_only,
@@ -492,6 +520,8 @@ impl CodexState {
     }
 
     fn clear_live_turn_output(&mut self) {
+        self.retry_started_at = None;
+        self.retry_message = None;
         self.live_stream_text.clear();
         self.live_stream_started_at = None;
         self.live_thought_text.clear();
@@ -2328,6 +2358,8 @@ fn spawn_codex_stdout_reader(
                     "item/agentMessage/delta" => {
                         if let Some(delta) = params.get("delta").and_then(Value::as_str) {
                             let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                            s.retry_started_at = None;
+                            s.retry_message = None;
                             if s.live_stream_started_at.is_none() {
                                 s.live_stream_started_at = Some(now_iso_rfc3339());
                             }
@@ -2347,6 +2379,11 @@ fn spawn_codex_stdout_reader(
                         }
                     }
                     "item/started" => {
+                        {
+                            let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                            s.retry_started_at = None;
+                            s.retry_message = None;
+                        }
                         if let Some(item) = params.get("item") {
                             let itype =
                                 item.get("type").and_then(Value::as_str).unwrap_or_default();
@@ -2416,7 +2453,17 @@ fn spawn_codex_stdout_reader(
                             .get("willRetry")
                             .and_then(Value::as_bool)
                             .unwrap_or(false);
-                        if !will_retry {
+                        if will_retry {
+                            // Codex retries a dropped stream or an overloaded API by itself, with
+                            // no limit. Each notice refreshes `lastEventAtMs`, so no stall check
+                            // ever fires; the poll loop ends the turn after `CODEX_RETRY_BUDGET`.
+                            let err_obj = params.get("error").unwrap_or(params);
+                            let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                            if s.working {
+                                s.retry_started_at.get_or_insert_with(Instant::now);
+                                s.retry_message = codex_error_text(err_obj);
+                            }
+                        } else {
                             let err_obj = params.get("error").unwrap_or(params);
                             let msg = err_obj
                                 .get("message")
@@ -2797,6 +2844,54 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     break;
                 }
             }
+        }
+        let stalled_retry = {
+            let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+            match s.retry_started_at {
+                Some(at) if s.working && at.elapsed() >= CODEX_RETRY_BUDGET => {
+                    let said = s
+                        .retry_message
+                        .take()
+                        .unwrap_or_else(|| "Codex could not reach the model.".to_string());
+                    s.retry_started_at = None;
+                    // Set before the interrupt, so the interrupted `turn/completed` keeps it.
+                    s.last_turn_stop_error = Some("error".to_string());
+                    s.last_error = Some((
+                        None,
+                        format!("Codex kept retrying for 10 minutes and gave up: {said}"),
+                    ));
+                    true
+                }
+                Some(_) if !s.working => {
+                    s.retry_started_at = None;
+                    s.retry_message = None;
+                    false
+                }
+                _ => false,
+            }
+        };
+        if stalled_retry {
+            eprintln!("[Codex Native] Retries ran past the budget; ending the turn.");
+            interrupt_active_codex_turn(&proc_opt, &state);
+            if state.lock().unwrap_or_else(|p| p.into_inner()).working {
+                if let Err(err) = restart_codex_process(
+                    &mut proc_opt,
+                    &spawn_cfg,
+                    &state,
+                    &activity,
+                    &child_pid,
+                    &active_transport,
+                    &process_gen,
+                ) {
+                    eprintln!("[Codex Native] Failed to restart after stalled retries: {err}");
+                }
+            }
+            // A failed turn, not one the user stopped.
+            state
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .last_turn_interrupted = false;
+            activity.sync();
         }
         let Some(ep) = endpoint.as_ref() else {
             thread::sleep(Duration::from_millis(500));
