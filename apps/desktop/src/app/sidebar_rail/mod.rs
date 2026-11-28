@@ -9,8 +9,6 @@
 
 #[cfg(not(ghostex_web))]
 mod host;
-#[cfg(not(ghostex_web))]
-mod intro;
 mod menu;
 mod model;
 mod render;

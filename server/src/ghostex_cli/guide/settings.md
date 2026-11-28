@@ -401,7 +401,6 @@ How to use this file:
 - **projectWebsiteViews** `projectWebsiteViews` (structured value; change it in Settings, not with `ghostex settings set`): App-managed state saved with the settings; not a user preference.
 - **appIconSourceId** `appIconSourceId` (text, default (empty)) [not agent-writable]: App-managed state saved with the settings; not a user preference.
 - **sidebarRailPins** `sidebarRailPins` (structured value; change it in Settings, not with `ghostex settings set`): App-managed state saved with the settings; not a user preference.
-- **sidebarRailIntro** `sidebarRailIntro` (text, default (empty)) [not agent-writable]: App-managed state saved with the settings; not a user preference.
 - **nativeModeIntro** `nativeModeIntro` (text, default (empty)) [not agent-writable]: App-managed state saved with the settings; not a user preference.
 - **unifiedProjectOrder** `unifiedProjectOrder` (structured value; change it in Settings, not with `ghostex settings set`): App-managed state saved with the settings; not a user preference.
 - **experienceLevel** `experienceLevel` (text, default (empty)) [not agent-writable]: App-managed state saved with the settings; not a user preference.

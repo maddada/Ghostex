@@ -856,7 +856,7 @@ pub fn usage() -> String {
         format_help_command("screenshot [output.png]", "Capture the Ghostex window"),
         format_help_command(
             "debug show-modal <name> | --list",
-            "Open a one-time pop-up (rail-intro) on this computer's Ghostex window for checks and screenshots; its once-only marker and your settings stay as they are",
+            "Open a one-time pop-up (native-mode-intro) on this computer's Ghostex window for checks and screenshots; its once-only marker and your settings stay as they are",
         ),
         format_help_command(
             "logs [--file name] [--lines n] [--grep text] [--json]",

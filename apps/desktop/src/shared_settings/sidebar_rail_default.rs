@@ -1,17 +1,16 @@
 //! The rail (`sidebarLayout` "rail") is the default. This switches everyone who already had a
-//! settings file to it and queues their one-time "Meet the rail" pop-up.
+//! settings file to it.
 
 use std::fs;
 
 use super::*;
 use serde_json::Value;
 
-/// Writes `sidebarLayout` "rail" and `sidebarRailIntro` "pending" into an existing settings file
-/// that has not chosen a layout, once.
+/// Writes `sidebarLayout` "rail" into an existing settings file that has not chosen a layout, once.
 ///
 /// CDXC:Sidebar 2026-11-20 WHY:
 /// The same shape as `keep_old_dark_look_once` (dark_look_default.rs): a new install has no settings file at its first start, so it is left alone and starts on Rail; the marker file records that this has run, so a new install that saves other settings later is never mistaken for an existing one. A file that cannot be read or saved is left as it is and no marker is written, so the next start tries again. This runs before anything reads the settings file.
-/// SEE-ALSO: `switch_existing_settings_to_rail` in packages/settings-catalog/src/lib.rs, app/sidebar_rail/intro.rs (the intro).
+/// SEE-ALSO: `switch_existing_settings_to_rail` in packages/settings-catalog/src/lib.rs.
 pub fn migrate_sidebar_rail_default_once() {
     let paths = ghostex_storage_paths();
     let marker = paths.sidebar_rail_default_marker_file();
@@ -43,7 +42,7 @@ pub fn migrate_sidebar_rail_default_once() {
                             for problem in problems {
                                 log::error!("Settings file: {problem}");
                             }
-                            "existing settings, switched to the rail, pop-up pending"
+                            "existing settings, switched to the rail"
                         }
                         Err(error) => {
                             eprintln!("Ghostex could not switch to the rail: {error}");

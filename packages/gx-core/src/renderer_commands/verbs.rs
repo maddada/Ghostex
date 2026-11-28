@@ -33,13 +33,14 @@ use crate::workspace_groups::{SessionGroupOp, SessionGroupRequest};
 ///
 /// CDXC:AppModal 2026-11-20 DECISION:
 /// User, after the 11.12.0 smoke run: "To see Meet the rail again I quit the app, edited the
-/// settings file and moved the marker aside, twice"; a `ghostex debug show-modal rail-intro` opens
-/// the one-time pop-up on the real window for checks and screenshots without touching its
+/// settings file and moved the marker aside, twice"; a `ghostex debug show-modal <name>` opens
+/// a one-time pop-up on the real window for checks and screenshots without touching its
 /// once-only marker or any setting. Only pop-ups whose preview acts on nothing are listed: the
-/// others' buttons pair devices, install updates or write settings for real.
-/// SEE-ALSO: apps/desktop/src/app/sidebar_rail/intro.rs (`open_sidebar_rail_intro_preview`),
+/// others' buttons pair devices, install updates or write settings for real. Meet the rail itself
+/// was removed on 2026-11-28 (user: "take it out no need anymore").
+/// SEE-ALSO: apps/desktop/src/app/native_mode_intro.rs (`open_native_mode_intro_preview`),
 /// server/src/ghostex_cli/debug.rs.
-pub const DEBUG_SHOW_MODALS: [&str; 2] = ["rail-intro", "native-mode-intro"];
+pub const DEBUG_SHOW_MODALS: [&str; 1] = ["native-mode-intro"];
 
 /// The tabs `ghostex settings open --tab` may name, each a `SettingsTabId` id
 /// (apps/desktop/src/app/window/settings_modal/model.rs). Keep in lockstep with

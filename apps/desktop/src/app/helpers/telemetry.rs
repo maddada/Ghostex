@@ -243,8 +243,8 @@ pub(crate) fn record_gpui_surface_opened_telemetry(
         .detach();
 }
 
-/// The sidebar's layout changed: `layout` is "rail" or "classic", `source` "settings" or "intro"
-/// (gxserver re-checks both, server/src/telemetry/taxonomy.rs `SIDEBAR_LAYOUTS`).
+/// The sidebar's layout changed: `layout` is "rail" or "classic", `source` "settings" (gxserver
+/// re-checks both, server/src/telemetry/taxonomy.rs `SIDEBAR_LAYOUTS`).
 pub(crate) fn record_gpui_sidebar_layout_changed_telemetry(
     layout: &'static str,
     source: &'static str,
@@ -252,19 +252,6 @@ pub(crate) fn record_gpui_sidebar_layout_changed_telemetry(
     record_gpui_client_event_on_thread(
         "sidebar_layout.changed",
         serde_json::json!({ "layout": layout, "source": source }),
-    );
-}
-
-/// Meet the rail opened, on `layout` ("rail" or "classic").
-pub(crate) fn record_gpui_rail_intro_shown_telemetry(layout: &'static str) {
-    record_gpui_client_event_on_thread("rail_intro.shown", serde_json::json!({ "layout": layout }));
-}
-
-/// Meet the rail closed (Done, Escape or its corner) keeping `layout`.
-pub(crate) fn record_gpui_rail_intro_answered_telemetry(layout: &'static str) {
-    record_gpui_client_event_on_thread(
-        "rail_intro.answered",
-        serde_json::json!({ "chose": layout }),
     );
 }
 

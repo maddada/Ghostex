@@ -349,8 +349,6 @@ pub const EVENT_EXTENSION_DISABLED: &str = "extension.disabled";
 pub const EVENT_BOOSTS_USED: &str = "boosts.used";
 pub const EVENT_SETTINGS_SNAPSHOT: &str = "settings.snapshot";
 pub const EVENT_SIDEBAR_LAYOUT_CHANGED: &str = "sidebar_layout.changed";
-pub const EVENT_RAIL_INTRO_SHOWN: &str = "rail_intro.shown";
-pub const EVENT_RAIL_INTRO_ANSWERED: &str = "rail_intro.answered";
 pub const EVENT_ONBOARDING_STEP: &str = "onboarding.step";
 pub const EVENT_RELIABILITY_ERROR: &str = "reliability.error";
 pub const EVENT_SESSION_MODE_STATE: &str = "session_mode.state";
@@ -424,6 +422,11 @@ rides the daily `settings.snapshot` (`sidebar_layout`, also on the person);
 from Settings or the pop-up's Switch; `rail_intro.shown` carries the layout the
 pop-up opened on and `rail_intro.answered` the one kept on Done. Nothing else
 about the rail (its pins, clicks or order) is sent.
+
+CDXC:Telemetry 2026-11-28: the Meet the rail pop-up was removed (user: "take it
+out no need anymore"), so `rail_intro.shown` and `rail_intro.answered` are gone
+and an older build that still sends them is refused as an unknown client event.
+`sidebar_layout.changed` keeps accepting source `intro`, which such builds send.
 */
 pub const SIDEBAR_LAYOUTS: &[&str] = &["rail", "classic"];
 pub const SIDEBAR_LAYOUT_SOURCES: &[&str] = &["settings", "intro"];
@@ -445,8 +448,6 @@ pub const CLIENT_PING_EVENTS: &[&str] = &[
     EVENT_SURFACE_OPENED,
     EVENT_CLIENT_CONNECTED,
     EVENT_SIDEBAR_LAYOUT_CHANGED,
-    EVENT_RAIL_INTRO_SHOWN,
-    EVENT_RAIL_INTRO_ANSWERED,
     EVENT_ONBOARDING_STEP,
     EVENT_RELIABILITY_ERROR,
     EVENT_SESSION_MODE_SWITCHED,
@@ -529,8 +530,6 @@ pub fn is_known_event(event: &str) -> bool {
             | EVENT_BOOSTS_USED
             | EVENT_SETTINGS_SNAPSHOT
             | EVENT_SIDEBAR_LAYOUT_CHANGED
-            | EVENT_RAIL_INTRO_SHOWN
-            | EVENT_RAIL_INTRO_ANSWERED
             | EVENT_ONBOARDING_STEP
             | EVENT_RELIABILITY_ERROR
             | EVENT_SESSION_MODE_STATE
@@ -717,8 +716,6 @@ fn event_property_spec(event: &str, key: &str) -> Option<PropertySpec> {
         (EVENT_SIDEBAR_LAYOUT_CHANGED, "source") => {
             Some(PropertySpec::Enum(SIDEBAR_LAYOUT_SOURCES))
         }
-        (EVENT_RAIL_INTRO_SHOWN, "layout") => Some(PropertySpec::Enum(SIDEBAR_LAYOUTS)),
-        (EVENT_RAIL_INTRO_ANSWERED, "chose") => Some(PropertySpec::Enum(SIDEBAR_LAYOUTS)),
         (EVENT_ONBOARDING_STEP, "step") => Some(PropertySpec::Enum(ONBOARDING_STEPS)),
         (EVENT_ONBOARDING_STEP, "platform") => Some(PropertySpec::Enum(PLATFORMS)),
         (EVENT_RELIABILITY_ERROR, "category") => {

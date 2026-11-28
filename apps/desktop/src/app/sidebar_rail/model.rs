@@ -22,14 +22,6 @@ pub(crate) const RAIL_WIDTH: f32 = 52.0;
 pub(crate) const RAIL_BUTTON: f32 = 36.0;
 /// An outline icon's box (the user's "20px icons").
 pub(crate) const RAIL_ICON: f32 = 20.0;
-/// Meet the rail's window size, for the app modal kinds (model/app_modal_kind.rs). The pop-up is
-/// the desktop's (app/window/rail_intro_modal.rs); the web build never opens it.
-#[cfg(not(ghostex_web))]
-pub(crate) use crate::app::window::{RAIL_INTRO_MODAL_INITIAL_HEIGHT, RAIL_INTRO_MODAL_WIDTH};
-#[cfg(ghostex_web)]
-pub(crate) const RAIL_INTRO_MODAL_WIDTH: f32 = 0.0;
-#[cfg(ghostex_web)]
-pub(crate) const RAIL_INTRO_MODAL_INITIAL_HEIGHT: f32 = 0.0;
 /// Between two buttons: a 44pt pitch.
 pub(crate) const RAIL_GAP: f32 = 8.0;
 pub(crate) const RAIL_BUTTON_RADIUS: f32 = 9.0;
@@ -77,17 +69,6 @@ pub(crate) fn sidebar_rail_on() -> bool {
 /// The layout the settings chose when last read: 0 not read yet, 1 rail, 2 classic.
 #[cfg(not(ghostex_web))]
 static SIDEBAR_LAYOUT_SEEN: AtomicU8 = AtomicU8::new(0);
-/// The pop-up's Switch changed the layout to `rail`: counted here, with its source, and noted as
-/// seen so the settings read that follows does not count it again as a Settings change. Each
-/// Switch counts, however quickly they follow each other.
-#[cfg(not(ghostex_web))]
-pub(crate) fn note_sidebar_layout_switched_from_intro(rail: bool) {
-    SIDEBAR_LAYOUT_SEEN.store(if rail { 1 } else { 2 }, Ordering::Relaxed);
-    crate::app::helpers::telemetry::record_gpui_sidebar_layout_changed_telemetry(
-        if rail { "rail" } else { "classic" },
-        "intro",
-    );
-}
 
 /// Called whenever the settings are read: a change of layout after the first read is a switch from
 /// Settings or `ghostex settings`, counted once.
@@ -99,11 +80,9 @@ pub(crate) fn note_sidebar_layout(settings: &serde_json::Map<String, serde_json:
     if before == 0 || before == now {
         return;
     }
-    // Switches from the Meet the rail pop-up are counted by the pop-up itself.
-    let source = "settings";
     crate::app::helpers::telemetry::record_gpui_sidebar_layout_changed_telemetry(
         if rail { "rail" } else { "classic" },
-        source,
+        "settings",
     );
 }
 

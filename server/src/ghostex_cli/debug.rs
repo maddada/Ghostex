@@ -26,7 +26,7 @@ Tools for checking the Ghostex app by hand or from an agent.
                       Works only for the Ghostex app on this computer: it refuses
                       --computer, another --server, and a terminal over SSH.
 
-  ghostex debug show-modal rail-intro      Meet the rail (the 11.12.0 sidebar pop-up)
+  ghostex debug show-modal native-mode-intro   The Native mode announcement
 
 Other native-modal-demo previews act for real in the app (they pair devices, install
 updates or save settings), so they open only in the preview binary:

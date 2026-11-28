@@ -942,12 +942,12 @@ and delete `<run>\gx`. Close the real step 2 threads with
 
 ### One-time pop-ups (extras)
 
-A release with a one-time pop-up (Meet the rail in 11.12.0) gets its screenshot
-and checks without replaying the upgrade: never edit the settings file or move
-the shown-once marker aside and restart (11.12.0 did that twice). Run
-`ghostex debug show-modal rail-intro`; it opens the pop-up on the real window
+A release with a one-time pop-up gets its screenshot and checks without
+replaying the upgrade: never edit the settings file or move the shown-once
+marker aside and restart (11.12.0 did that twice). Run
+`ghostex debug show-modal <name>`; it opens the pop-up on the real window
 as it shows after the upgrade, without touching its shown-once state.
-`ghostex debug show-modal --list` lists the others it can open (the
+`ghostex debug show-modal --list` lists the ones it can open (the
 remaining `native-modal-demo` previews act for real, so they open only in the
 preview binary). Screenshot it at the run's window size, press
 its buttons by query like any other, and close it with its own button.

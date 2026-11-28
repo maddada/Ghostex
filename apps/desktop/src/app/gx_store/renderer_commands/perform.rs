@@ -415,7 +415,6 @@ impl GhostexGpuiApp {
             #[cfg(not(ghostex_web))]
             RendererVerb::ShowDebugModal { name } => {
                 match name.as_str() {
-                    "rail-intro" => self.open_sidebar_rail_intro_preview(cx),
                     "native-mode-intro" => self.open_native_mode_intro_preview(cx),
                     _ => return Err(RendererCommandError::UnknownDebugModal),
                 }

@@ -4,7 +4,7 @@ Standalone preview of the native GPUI app modals so their look can be checked
 against the React Storybook stories without launching Ghostex. Run with:
     cargo run --release --bin native-modal-demo
 Environment:
-    GHOSTEX_NATIVE_MODAL_DEMO=export-transcript|go-back|header-more|custom-links|custom-link-dialog|crash-report|updates-menu|start-menu|chief-row|notice-modal|gbot-team|new-gbot|new-bot|rail-intro|... (which modal; default export-transcript)
+    GHOSTEX_NATIVE_MODAL_DEMO=export-transcript|go-back|header-more|custom-links|custom-link-dialog|crash-report|updates-menu|start-menu|chief-row|notice-modal|gbot-team|new-gbot|new-bot|... (which modal; default export-transcript)
     GHOSTEX_NATIVE_MODAL_DEMO_THEME=dark|light                (default dark)
     GHOSTEX_NATIVE_MODAL_DEMO_SIDEBAR_THEME=dark-green|...    (a dark theme's text colours)
     GHOSTEX_NATIVE_MODAL_DEMO_CHROME=<rrggbb>                 (tint the modal from a theme chrome)
@@ -154,10 +154,6 @@ mod permission_guide_demo;
 mod permission_guide_tag;
 #[path = "../app/window/popup_dismissal.rs"]
 mod popup_dismissal;
-#[path = "native_modal_demo/rail_intro.rs"]
-mod rail_intro_demo;
-#[path = "../app/window/rail_intro_modal.rs"]
-mod rail_intro_modal;
 #[path = "native_modal_demo/remote_gxserver_install.rs"]
 mod remote_gxserver_install_demo;
 #[path = "../app/window/remote_gxserver_install_modal.rs"]
@@ -898,7 +894,6 @@ fn main() {
                 "gbot-team" => gbot_team_demo::open(&demo, cx),
                 "new-gbot" => new_gbot_demo::open(&demo, cx),
                 "new-bot" => new_bot_demo::open(&demo, cx),
-                "rail-intro" => rail_intro_demo::open(&demo, cx),
                 "native-mode-intro" => native_mode_intro_demo::open(&demo, cx),
                 "close-buttons" => close_buttons_demo::open(&demo, cx),
                 "browser-route-icon" => browser_route_icon_demo::open(&demo, cx),

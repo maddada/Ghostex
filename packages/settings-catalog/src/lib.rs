@@ -359,27 +359,20 @@ pub fn keep_old_heavy_views_for_existing_settings(
     changed
 }
 
-/// Switches someone who already had a settings file to the rail when it became the default, and
-/// marks their one-time "Meet the rail" pop-up as pending. Returns whether it changed anything; a
-/// layout they chose themselves is left alone.
+/// Switches someone who already had a settings file to the rail when it became the default.
+/// Returns whether it changed anything; a layout they chose themselves is left alone.
 ///
-/// CDXC:Sidebar 2026-11-20 DECISION: User, for 11.12.0: "On first start of this version, existing users are switched to the Rail automatically (not left on Classic), and the pop-up explains it." The desktop runs this once, behind a marker file, at start-up when the settings file already exists (`migrate_sidebar_rail_default_once`); a new install has no file then, so it starts on Rail without the pop-up. A file a build of the same day set to Classic with its pop-up still pending was never answered, so it is switched too.
+/// CDXC:Sidebar 2026-11-20 DECISION: User, for 11.12.0: "On first start of this version, existing users are switched to the Rail automatically (not left on Classic)". The desktop runs this once, behind a marker file, at start-up when the settings file already exists (`migrate_sidebar_rail_default_once`); a new install has no file then, so it starts on Rail.
+/// CDXC:Sidebar 2026-11-28 DECISION: User: "pls dont show this to new usesr ... actually take it out no need anymore". The one-time "Meet the rail" pop-up that explained the switch is gone, and with it the `sidebarRailIntro` setting this used to set to "pending"; a value an older build saved is left in the file and read by nothing.
 pub fn switch_existing_settings_to_rail(
     settings: &mut serde_json::Map<String, serde_json::Value>,
 ) -> bool {
-    let text = |key: &str| settings.get(key).and_then(serde_json::Value::as_str);
-    let unanswered_classic =
-        text("sidebarLayout") == Some("classic") && text("sidebarRailIntro") == Some("pending");
-    if settings.contains_key("sidebarLayout") && !unanswered_classic {
+    if settings.contains_key("sidebarLayout") {
         return false;
     }
     settings.insert(
         "sidebarLayout".to_string(),
         serde_json::Value::String("rail".to_string()),
-    );
-    settings.insert(
-        "sidebarRailIntro".to_string(),
-        serde_json::Value::String("pending".to_string()),
     );
     true
 }
@@ -1027,21 +1020,20 @@ mod sidebar_layout_tests {
         serde_json::from_value(value).unwrap()
     }
 
-    /// A file that never chose a layout goes to Rail and queues Meet the rail, once.
+    /// A file that never chose a layout goes to Rail, once.
     #[test]
-    fn a_file_without_a_layout_goes_to_the_rail_and_queues_the_pop_up() {
+    fn a_file_without_a_layout_goes_to_the_rail() {
         let mut object = settings(json!({"sidebarWidth": 320}));
         assert!(switch_existing_settings_to_rail(&mut object));
         assert_eq!(object.get("sidebarLayout"), Some(&json!("rail")));
-        assert_eq!(object.get("sidebarRailIntro"), Some(&json!("pending")));
         assert!(!switch_existing_settings_to_rail(&mut object));
     }
 
-    /// A layout chosen (the pop-up answered, or Settings) is kept.
+    /// A layout chosen in Settings is kept.
     #[test]
     fn a_chosen_layout_is_kept() {
         for layout in ["rail", "classic"] {
-            let mut object = settings(json!({"sidebarLayout": layout, "sidebarRailIntro": "done"}));
+            let mut object = settings(json!({"sidebarLayout": layout}));
             assert!(!switch_existing_settings_to_rail(&mut object));
             assert_eq!(object.get("sidebarLayout"), Some(&json!(layout)));
         }

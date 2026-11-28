@@ -369,7 +369,7 @@ pub fn boosts_used(
     capture(taxonomy::EVENT_BOOSTS_USED, &properties);
 }
 
-/// The sidebar's layout changed (Settings, or the Meet the rail intro), forwarded from
+/// The sidebar's layout changed (Settings), forwarded from
 /// `/api/recordClientEvent`.
 pub fn sidebar_layout_changed(layout: &'static str, source: &'static str) {
     note_active_usage();
@@ -379,24 +379,6 @@ pub fn sidebar_layout_changed(layout: &'static str, source: &'static str) {
             ("layout", PropertyValue::Enum(layout)),
             ("source", PropertyValue::Enum(source)),
         ],
-    );
-}
-
-/// The one-time Meet the rail pop-up opened on `layout`.
-pub fn rail_intro_shown(layout: &'static str) {
-    note_active_usage();
-    capture(
-        taxonomy::EVENT_RAIL_INTRO_SHOWN,
-        &[("layout", PropertyValue::Enum(layout))],
-    );
-}
-
-/// The Meet the rail pop-up closed keeping `chose`.
-pub fn rail_intro_answered(chose: &'static str) {
-    note_active_usage();
-    capture(
-        taxonomy::EVENT_RAIL_INTRO_ANSWERED,
-        &[("chose", PropertyValue::Enum(chose))],
     );
 }
 

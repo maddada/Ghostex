@@ -22,8 +22,8 @@ use super::{
     extensions::{self, ExtensionRef},
     taxonomy::{
         self, EVENT_APP_LAUNCHED, EVENT_CLIENT_CONNECTED, EVENT_ONBOARDING_STEP,
-        EVENT_RAIL_INTRO_ANSWERED, EVENT_RAIL_INTRO_SHOWN, EVENT_RELIABILITY_ERROR,
-        EVENT_SESSION_MODE_SWITCHED, EVENT_SIDEBAR_LAYOUT_CHANGED, EVENT_SURFACE_OPENED,
+        EVENT_RELIABILITY_ERROR, EVENT_SESSION_MODE_SWITCHED, EVENT_SIDEBAR_LAYOUT_CHANGED,
+        EVENT_SURFACE_OPENED,
     },
 };
 
@@ -55,16 +55,6 @@ pub fn record_client_event(body: &Value) {
             let source = enum_property(properties, "source", taxonomy::SIDEBAR_LAYOUT_SOURCES);
             if let (Some(layout), Some(source)) = (layout, source) {
                 capture::sidebar_layout_changed(layout, source);
-            }
-        }
-        EVENT_RAIL_INTRO_SHOWN => {
-            if let Some(layout) = enum_property(properties, "layout", taxonomy::SIDEBAR_LAYOUTS) {
-                capture::rail_intro_shown(layout);
-            }
-        }
-        EVENT_RAIL_INTRO_ANSWERED => {
-            if let Some(chose) = enum_property(properties, "chose", taxonomy::SIDEBAR_LAYOUTS) {
-                capture::rail_intro_answered(chose);
             }
         }
         EVENT_ONBOARDING_STEP => {

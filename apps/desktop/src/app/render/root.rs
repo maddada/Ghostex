@@ -212,8 +212,6 @@ impl Render for GhostexGpuiApp {
         self.note_screen_for_crash_report();
         // The Focus Sidebar hotkey's entry ends at once when its sidebar is no longer drawn.
         self.check_native_sidebar_keyboard_entry(cx);
-        // Meet the rail, once, for someone who had Ghostex before the rail (app/sidebar_rail/intro.rs).
-        self.maybe_open_sidebar_rail_intro(cx);
         // Native mode announcement, once after updating on desktop (app/native_mode_intro.rs).
         self.maybe_open_native_mode_intro(cx);
         crate::app::workspace_windows::sync_workspace_window_title(window, &self.project_name, cx);

@@ -337,8 +337,8 @@ fn main() {
     // Before anything reads or writes terminal settings, so the first config Ghostex
     // terminals load is the copied one.
     shared_settings::ghostty_config_migration::migrate_terminal_config_from_ghostty_once();
-    // The rail is the default; an existing settings file is switched to it and gets the one-time
-    // Meet the rail pop-up (shared_settings/sidebar_rail_default.rs).
+    // The rail is the default; an existing settings file is switched to it
+    // (shared_settings/sidebar_rail_default.rs).
     shared_settings::sidebar_rail_default::migrate_sidebar_rail_default_once();
     // Queue the one-time Native mode announcement modal for existing installs after updating.
     shared_settings::native_mode_intro::migrate_native_mode_intro_once();
