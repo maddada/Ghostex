@@ -27,7 +27,10 @@ pub(super) fn list_project_directory(
     }
     let mut entries = Vec::new();
     let drawings = context.roots.drawings.as_deref();
-    if let (Some(drawings), true) = (drawings, requested == ghostex_docs::project::GHOSTEX_FOLDER_NAME) {
+    if let (Some(drawings), true) = (
+        drawings,
+        requested == ghostex_docs::project::GHOSTEX_FOLDER_NAME,
+    ) {
         // No project's `.ghostex` holds only its drawings folder (`~/.ghostex/drawings`).
         entries.push(drawings_folder_entry(
             ghostex_docs::project::DRAWINGS_FOLDER_NAME,

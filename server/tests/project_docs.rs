@@ -20,6 +20,7 @@ fn project_root(path: &Path) -> ProjectDocsRoot {
     ProjectDocsRoot {
         project_path: path.to_path_buf(),
         extra: None,
+        drawings: None,
     }
 }
 
@@ -31,6 +32,7 @@ fn with_docs_directory(project: &Path, docs_directory: &Path) -> ProjectDocsRoot
             path: docs_directory.to_path_buf(),
             error: None,
         }),
+        drawings: None,
     }
 }
 
@@ -45,6 +47,7 @@ fn with_missing_docs_directory(project: &Path, configured: &Path) -> ProjectDocs
                 configured.display()
             )),
         }),
+        drawings: None,
     }
 }
 

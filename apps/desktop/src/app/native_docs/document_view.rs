@@ -185,12 +185,7 @@ impl GhostexGpuiApp {
                 self.native_docs
                     .project
                     .as_ref()
-                    .map(|project| {
-                        project
-                            .absolute_path(file)
-                            .to_string_lossy()
-                            .into_owned()
-                    })
+                    .map(|project| project.absolute_path(file).to_string_lossy().into_owned())
                     .unwrap_or_else(|| path.to_string())
             }
         }

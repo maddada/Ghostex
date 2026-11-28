@@ -125,7 +125,10 @@ pub(crate) fn manage_list_project_directory(
     }
     let mut entries = Vec::new();
     let drawings = context.roots.drawings.as_deref();
-    if let (Some(drawings), true) = (drawings, requested == ghostex_docs::project::GHOSTEX_FOLDER_NAME) {
+    if let (Some(drawings), true) = (
+        drawings,
+        requested == ghostex_docs::project::GHOSTEX_FOLDER_NAME,
+    ) {
         // No project's `.ghostex` holds only its drawings folder (`~/.ghostex/drawings`).
         entries.push(manage_drawings_folder_entry(
             ghostex_docs::project::DRAWINGS_FOLDER_NAME,
@@ -146,7 +149,10 @@ pub(crate) fn manage_list_project_directory(
         if let Some(drawings) = drawings {
             let ghostex = ghostex_docs::project::GHOSTEX_FOLDER_NAME;
             entries.retain(|entry| entry["path"] != ghostex);
-            entries.insert(0, manage_drawings_folder_entry(ghostex, ghostex, drawings, 0));
+            entries.insert(
+                0,
+                manage_drawings_folder_entry(ghostex, ghostex, drawings, 0),
+            );
         }
         if let Some(mount) = &context.roots.extra {
             match &mount.location {
