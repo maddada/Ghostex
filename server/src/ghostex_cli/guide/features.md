@@ -3172,9 +3172,10 @@ itself.
 Claude children stay in the Subagents list while the terminal lists them, including
 between monitor events. Idle children are labelled Idle and their clocks pause;
 click a child's name or task to open its transcript.
-The Subagents pill shows for Claude, Codex, OpenCode, Grok, Hermes and OMP, and for
-Cursor in Native mode; the sub-agent's name on the tool row that started it opens
-the same transcript. Antigravity and Pi have no Subagents pill.
+The Subagents pill shows for Antigravity, Claude, Codex, OpenCode, Grok, Hermes and
+OMP, and for Cursor in Native mode; the sub-agent's name on the tool row that started
+it opens the same transcript. An Antigravity child stays in the list until your next
+message once it is done. Pi has no Subagents pill.
 For Codex and Claude, the Subagents list and popup title show the child's latest
 model and effort in compact form, such as Opus 5 High or Astra xHigh. Codex rows
 show the child's name/path beside the model and effort, after a ‣ separator.

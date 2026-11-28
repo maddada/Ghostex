@@ -1,5 +1,5 @@
 //! CDXC:SessionStatus 2026-09-06 WHY:
-//! Subagents and Claude monitors can outlive the lead turn while nobody follows its chat. Probe running Claude, Codex, Hermes and OMP sessions on the daemon's clock so the shared status projection discovers and retires that work without an open chat.
+//! Subagents and Claude monitors can outlive the lead turn while nobody follows its chat. Probe running Antigravity, Claude, Codex, Hermes and OMP sessions on the daemon's clock so the shared status projection discovers and retires that work without an open chat.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -68,7 +68,8 @@ pub(crate) fn has_fleet_reader(agent: Option<SessionChatOptionAgent>) -> bool {
     matches!(
         agent,
         Some(
-            SessionChatOptionAgent::Claude
+            SessionChatOptionAgent::Antigravity
+                | SessionChatOptionAgent::Claude
                 | SessionChatOptionAgent::Codex
                 | SessionChatOptionAgent::Hermes
                 | SessionChatOptionAgent::Omp
@@ -92,6 +93,9 @@ pub(crate) fn read_fleet(
             crate::session_chat_hermes_fleet::read_hermes_fleet(session)
         }
         Some(SessionChatOptionAgent::Omp) => crate::session_chat_omp_fleet::read_omp_fleet(session),
+        Some(SessionChatOptionAgent::Antigravity) => {
+            crate::session_chat_antigravity_fleet::read_antigravity_fleet(session)
+        }
         _ => Ok(None),
     }
 }

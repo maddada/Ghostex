@@ -239,7 +239,8 @@ pub(crate) async fn handle_read_subagent(
             .filter(|a| {
                 matches!(
                     a,
-                    SessionChatTranscriptAgent::Codex
+                    SessionChatTranscriptAgent::Antigravity
+                        | SessionChatTranscriptAgent::Codex
                         | SessionChatTranscriptAgent::Claude
                         | SessionChatTranscriptAgent::OpenCode
                         | SessionChatTranscriptAgent::Hermes
@@ -250,7 +251,7 @@ pub(crate) async fn handle_read_subagent(
             })
             .ok_or_else(|| {
                 anyhow::anyhow!(
-                    "Subagent transcripts are supported for Codex, Claude, OpenCode, Hermes, Grok, OMP and Native Cursor."
+                    "Subagent transcripts are supported for Antigravity, Codex, Claude, OpenCode, Hermes, Grok, OMP and Native Cursor."
                 )
             })?;
         let root_id = read_runtime_text(&session, "agentSessionId")
@@ -270,6 +271,7 @@ pub(crate) async fn handle_read_subagent(
             selector
         };
         let mut child_model = None;
+        let mut child_effort = None;
         let child = match family {
             SessionChatTranscriptAgent::Cursor => {
                 let record = crate::acp::driver_cursor::resolve_cursor_subagent(&root_id, &selector)?;
@@ -307,6 +309,18 @@ pub(crate) async fn handle_read_subagent(
                 }
             },
             SessionChatTranscriptAgent::Codex => codex_child(&root, &root_id, &selector)?,
+            // A child is its own agy conversation, read through the same step-log mirror as the lead.
+            SessionChatTranscriptAgent::Antigravity => {
+                let record = crate::session_chat_antigravity_fleet::antigravity_descendant(&root_id, &selector)?;
+                (child_model, child_effort) = crate::session_chat_antigravity_fleet::antigravity_child_model(&record.id);
+                ChildTranscript {
+                    path: crate::session_chat_antigravity_mirror::resolve_antigravity_chat_transcript_path(Some(&record.id), None)
+                        .ok_or_else(|| anyhow::anyhow!("This subagent's transcript is not available yet."))?,
+                    name: record.role.clone().or_else(|| record.type_name.clone()).unwrap_or_else(|| record.id.clone()),
+                    agent_type: record.type_name,
+                    id: record.id,
+                }
+            }
             SessionChatTranscriptAgent::Hermes => ChildTranscript {
                 name: crate::session_chat_hermes_fleet::hermes_subagent_title(&root_id, &selector)?,
                 path: crate::session_chat_hermes::resolve_hermes_chat_transcript_path(&selector)
@@ -345,6 +359,9 @@ pub(crate) async fn handle_read_subagent(
                 if read_model.model.is_none() {
                     read_model.model = child_model;
                 }
+                if read_model.effort.is_none() {
+                    read_model.effort = child_effort;
+                }
                 let mut details = serde_json::to_value(read_model)?;
                 details["id"] = json!(child.id);
                 details["name"] = json!(child.name);
@@ -361,7 +378,7 @@ pub(crate) async fn handle_read_subagent(
                     "status": if messages.is_empty() { "empty" } else { "ready" },
                     "messages": messages, "hasMore": has_more, "beforeOffset": before_offset,
                     "epoch": 0, "seq": 0,
-                    "agent": match family { SessionChatTranscriptAgent::OpenCode => "opencode", SessionChatTranscriptAgent::Codex => "codex", SessionChatTranscriptAgent::Hermes => "hermes", SessionChatTranscriptAgent::Grok => "grok", SessionChatTranscriptAgent::Pi => "omp", SessionChatTranscriptAgent::Cursor => "cursor", _ => "claude" },
+                    "agent": match family { SessionChatTranscriptAgent::OpenCode => "opencode", SessionChatTranscriptAgent::Codex => "codex", SessionChatTranscriptAgent::Hermes => "hermes", SessionChatTranscriptAgent::Grok => "grok", SessionChatTranscriptAgent::Pi => "omp", SessionChatTranscriptAgent::Cursor => "cursor", SessionChatTranscriptAgent::Antigravity => "antigravity", _ => "claude" },
                     "agentSessionId": child.id, "subagent": details,
                 });
                 // A Pi turn ends on a closing reply, but an OMP child's run can end on its final

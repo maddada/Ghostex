@@ -280,6 +280,46 @@ const BACKGROUND_TASK_RESULT: &str = "finished with result:";
 const BACKGROUND_TASKS_STOPPED: &str = "background tasks have been stopped";
 const BACKGROUND_TASK_SENDER: &str = "sender=";
 
+/* ------------------------------------------------------------ subagents */
+
+/// CDXC:SessionChat 2026-11-28 WHY:
+/// agy's `invoke_subagent` result names the child it started in a JSON block after this sentence (`"conversationId": "<id>"`, agy 1.5.18). The chat's sub-agent chip reads a child id only from labels such as Claude's `agentId: <id>`, so the spawn row's result gets that line and its chip opens the child (session_chat_antigravity_fleet.rs).
+const SUBAGENT_CREATED: &str = "Created the following subagent:";
+const SUBAGENT_CONVERSATION_ID: &str = "\"conversationId\":";
+/// How agy hands a conversation a message from another one: `[Message] timestamp=… sender=<id>
+/// priority=… content=<text>`.
+const MESSAGE_HEADER: &str = "[Message]";
+const MESSAGE_CONTENT: &str = " content=";
+
+/// The conversation an `invoke_subagent` result says it started.
+fn spawned_subagent_id(output: &str) -> Option<String> {
+    let after = &output[output.find(SUBAGENT_CREATED)? + SUBAGENT_CREATED.len()..];
+    let rest = after[after.find(SUBAGENT_CONVERSATION_ID)? + SUBAGENT_CONVERSATION_ID.len()..]
+        .trim_start()
+        .strip_prefix('"')?;
+    let id = &rest[..rest.find('"')?];
+    is_safe_antigravity_session_id(id).then(|| id.to_string())
+}
+
+/// `(sender, text)` of a message another conversation sent this one, carried by a `SYSTEM` step.
+fn conversation_message(record: &Map<String, Value>) -> Option<(String, String)> {
+    if record.get("source").and_then(Value::as_str) != Some("SYSTEM") {
+        return None;
+    }
+    let content = extract_string(record.get("content"))?;
+    let (_, bodies) = split_harness_envelopes(&content);
+    bodies.into_iter().find_map(|body| {
+        let body = body.trim().strip_prefix(MESSAGE_HEADER)?;
+        let at = body.find(MESSAGE_CONTENT)?;
+        let sender = body[..at]
+            .split_whitespace()
+            .find_map(|word| word.strip_prefix(BACKGROUND_TASK_SENDER))?
+            .to_string();
+        let text = body[at + MESSAGE_CONTENT.len()..].trim().to_string();
+        (!text.is_empty()).then_some((sender, text))
+    })
+}
+
 /// One background task's end, as agy's system message reports it:
 /// `… content=Task id "<id>" finished with result: <output>`.
 struct TaskEnd {
@@ -455,6 +495,18 @@ impl BackgroundTasks {
             }
             (Some("MODEL"), _) => {
                 let call = self.pending_calls.pop_front().flatten();
+                // A sub-agent reports back with a message of its own (`sender=<child>`), and agy runs
+                // the lead again then, so the lead's "it will report back" prose is not its turn's end.
+                if let Some(child) = record
+                    .get("content")
+                    .and_then(Value::as_str)
+                    .and_then(spawned_subagent_id)
+                {
+                    if !self.running.contains(&child) {
+                        self.running.push(child);
+                    }
+                    return;
+                }
                 // A launch is a call still running; a finished read that shows the same sentence
                 // (an older agy transcript) launched nothing.
                 if record.get("status").and_then(Value::as_str) != Some("RUNNING") {
@@ -601,7 +653,10 @@ fn mirror_rows_for_step(
             let Some(content) = step_text(record, "content") else {
                 return Vec::new();
             };
-            let output = antigravity_tool_output(&content);
+            let mut output = antigravity_tool_output(&content);
+            if let Some(child) = spawned_subagent_id(&output) {
+                output.push_str(&format!("\n\nagentId: {child}"));
+            }
             let mut extra = Map::from_iter([
                 ("toolType".into(), Value::from(tool_type)),
                 ("text".into(), Value::from(output.clone())),
@@ -662,6 +717,11 @@ fn build_mirror(raw: &[u8]) -> Vec<u8> {
     let mut background_tasks = BackgroundTasks::default();
     // A `/compact` waiting for its compaction: no model step has answered it yet.
     let mut compact_pending = false;
+    // CDXC:SessionChat 2026-11-28 WHY: a sub-agent's log opens with the task its parent sent it, as a
+    // message (`SYSTEM` step, `sender=<parent>`) rather than a prompt, so its viewer started at the
+    // child's first tool call with no task. A conversation whose first step is such a message is a
+    // sub-agent; that sender's messages are its prompts and become user rows.
+    let mut parent: Option<String> = None;
     for line in text.lines() {
         if line.trim().is_empty() {
             continue;
@@ -671,6 +731,18 @@ fn build_mirror(raw: &[u8]) -> Vec<u8> {
         };
         // A task that ended in this step no longer holds the step's own prose open.
         let mut rows = background_tasks.end_rows(&record);
+        if let Some((sender, text)) = conversation_message(&record) {
+            if parent.is_none() && record.get("step_index").and_then(Value::as_u64) == Some(0) {
+                parent = Some(sender.clone());
+            }
+            if parent.as_deref() == Some(sender.as_str()) {
+                rows.extend(step_row(
+                    &record,
+                    "user",
+                    Map::from_iter([("text".into(), Value::from(text))]),
+                ));
+            }
+        }
         rows.extend(mirror_rows_for_step(
             &record,
             background_tasks.any_running(),

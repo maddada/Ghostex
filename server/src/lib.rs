@@ -130,6 +130,7 @@ pub(crate) mod session_chat_agent_restart;
 pub(crate) mod session_chat_agent_restarts;
 pub mod session_chat_agent_tasks;
 pub(crate) mod session_chat_agent_tasks_transcript;
+pub(crate) mod session_chat_antigravity_fleet;
 pub mod session_chat_antigravity_mirror;
 pub mod session_chat_antigravity_permission;
 pub mod session_chat_antigravity_status;

@@ -1003,6 +1003,26 @@ impl HostPendingPermission {
     }
 }
 
+/// CDXC:SessionChat 2026-11-28 WHY:
+/// agy (1.5.18) streams a sub-agent's calls that need an approval under the lead's session, with the
+/// child's conversation id before a colon in the call id (`<child>:call_…`). They lit the lead's live
+/// "Running …" line as if the lead ran them. The approval prompt still reaches the user; the child's
+/// work shows in the Subagents menu and its own transcript (session_chat_antigravity_fleet.rs).
+fn is_antigravity_child_tool_call(state: &Mutex<HostState>, update: &Value) -> bool {
+    let Some((child, _)) = update
+        .get("toolCallId")
+        .and_then(Value::as_str)
+        .and_then(|id| id.split_once(':'))
+    else {
+        return false;
+    };
+    if !crate::session_chat_antigravity_mirror::is_safe_antigravity_session_id(child) {
+        return false;
+    }
+    let s = state.lock().unwrap_or_else(|p| p.into_inner());
+    s.family == "antigravity" && s.native_session_id.as_deref() != Some(child)
+}
+
 struct HostState {
     family: String,
     native_session_id: Option<String>,
@@ -2596,7 +2616,9 @@ pub fn run(args: &[String]) -> i32 {
                                     );
                                 }
                             }
-                            "tool_call" | "tool_call_update" => {
+                            "tool_call" | "tool_call_update"
+                                if !is_antigravity_child_tool_call(&st_out, &update) =>
+                            {
                                 let status = update
                                     .get("status")
                                     .and_then(Value::as_str)

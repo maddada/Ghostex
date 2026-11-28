@@ -178,6 +178,17 @@ fn antigravity_canonical_tool_call(name: &str, args: &Value) -> (String, Value) 
                 ),
             ]),
         )),
+        // CDXC:SessionChat 2026-11-28 WHY: agy's sub-agent spawn is the chat's `Task` row, so it
+        // reads like every other agent's and its chip opens the child the mirror's `agentId:` line
+        // names (session_chat_antigravity_fleet.rs).
+        "invoke_subagent" => Some((
+            "Task",
+            object(vec![
+                ("description", text("Role").or_else(|| text("TypeName"))),
+                ("subagent_type", text("TypeName")),
+                ("prompt", text("Prompt")),
+            ]),
+        )),
         "list_dir" => Some(("LS", object(vec![("path", text("DirectoryPath"))]))),
         "find_by_name" => Some((
             "Glob",
