@@ -78,7 +78,7 @@ impl GhostexGpuiApp {
         let project_file = self.native_docs.project.as_ref().and_then(|project| {
             let local =
                 gpui_remote_project_reference_from_project_id(&project.project_id).is_none();
-            let candidate = project.project_path.join(&relative);
+            let candidate = project.absolute_path(Path::new(&relative));
             (local && relative.contains('/') && candidate.exists()).then(|| candidate.is_dir())
         });
         if let Some(is_directory) = project_file {
@@ -158,10 +158,7 @@ impl GhostexGpuiApp {
         let Ok(resolved) = std::fs::canonicalize(path) else {
             return fail(self, &format!("Nothing exists at {}.", path.display()), cx);
         };
-        let root =
-            std::fs::canonicalize(&project.project_path).unwrap_or(project.project_path.clone());
-        if let Ok(relative) = resolved.strip_prefix(&root) {
-            let relative = relative.to_string_lossy().replace('\\', "/");
+        if let Some(relative) = project.relative_path(&resolved) {
             if relative.is_empty() {
                 return fail(self, "That is the project folder itself.", cx);
             }

@@ -59,9 +59,16 @@ impl GhostexGpuiApp {
         let snapshot = self.latest_sidebar_project_snapshot.as_ref()?;
         let project_id = snapshot.active_project_id.as_ref()?.0.clone();
         let project_path = snapshot.in_memory_project_path.clone()?;
+        let paths = crate::shared_settings::ghostex_storage_paths();
+        let drawings = ghostex_docs::project::no_project_drawings_folder(
+            &project_path,
+            &paths.state_dir,
+            &paths.home_dir,
+        );
         Some(DocsProjectKey {
             project_id,
             project_path,
+            drawings,
         })
     }
 

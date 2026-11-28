@@ -224,8 +224,8 @@ impl GhostexGpuiApp {
                 });
             }
             // Canvas's page is the Files embed page on one drawing: it reads and saves that file
-            // and nothing else (manage_embed_request_allowed), through the Files bridge, rooted
-            // where Canvas keeps the project's drawings (the home folder in No project).
+            // and nothing else (manage_embed_request_allowed), through the Files bridge (which
+            // answers No project's `.ghostex/drawings` from `~/.ghostex/drawings`).
             (
                 ProjectWorkareaCefSurfaceSlotKey::Extension(id),
                 cef::ProjectWorkareaBridgeEvent::ManageFilesRequest(payload),
@@ -253,8 +253,7 @@ impl GhostexGpuiApp {
                     self.dispatch_files_answer_to_slot(slot_key, &page, &response.to_string(), cx);
                     return;
                 }
-                let root = self.canvas_project().map(|project| project.path);
-                self.run_docs_files_request_at(payload, root, cx, move |this, response, cx| {
+                self.run_docs_files_request(payload, cx, move |this, response, cx| {
                     this.dispatch_files_answer_to_slot(slot_key, &page, &response.to_string(), cx);
                 });
             }

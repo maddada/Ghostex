@@ -306,7 +306,7 @@ impl GhostexGpuiApp {
                 let document = if document.is_absolute() {
                     document.to_path_buf()
                 } else {
-                    project.project_path.join(document)
+                    project.absolute_path(document)
                 };
                 return Some(join_relative_link(document.parent()?, link));
             };
@@ -314,7 +314,7 @@ impl GhostexGpuiApp {
             Some(if resolved.is_absolute() {
                 resolved.to_path_buf()
             } else {
-                project.project_path.join(resolved)
+                project.absolute_path(resolved)
             })
         };
         let mut candidates = Vec::new();

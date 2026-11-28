@@ -83,6 +83,17 @@ pub(crate) fn manage_docs_path<'a>(
         });
     }
     let outer = manage_normalized_relative_path(path)?;
+    if let Some(drawings) = &context.roots.drawings
+        && let Some(inner) = ghostex_docs::project::drawings_inner_path(&outer)
+    {
+        return Ok(ManageDocsPath {
+            chat: false,
+            extra: false,
+            inner: inner.to_string(),
+            outer,
+            root: drawings.as_path(),
+        });
+    }
     let Some(inner) = manage_extra_root_relative_path(&outer) else {
         return Ok(ManageDocsPath {
             chat: false,
@@ -495,10 +506,12 @@ pub(crate) fn manage_docs_root(
         None => global_docs_directory.trim().to_string(),
     };
     let project = manage_in_memory_project_root(in_memory_project_path)?;
+    let drawings = manage_no_project_drawings_folder(&project);
     if configured.is_empty() {
         return Ok(ManageDocsRoots {
             chat: chat_root,
             chat_file_name,
+            drawings,
             project,
             extra: None,
         });
@@ -506,12 +519,27 @@ pub(crate) fn manage_docs_root(
     Ok(ManageDocsRoots {
         chat: chat_root,
         chat_file_name,
+        drawings,
         project,
         extra: Some(ManageDocsExtraMount {
             location: manage_configured_docs_root(&configured),
             name: manage_docs_extra_root_name(&configured),
         }),
     })
+}
+
+/// No project's `~/.ghostex/drawings`, which answers for its `.ghostex/drawings` (CDXC:Canvas
+/// 2026-11-28 in packages/project-docs/src/project.rs), canonicalized; `None` for any other
+/// project, or while the folder does not exist.
+pub(crate) fn manage_no_project_drawings_folder(project_root: &Path) -> Option<PathBuf> {
+    let paths = shared_settings::ghostex_storage_paths();
+    ghostex_docs::project::no_project_drawings_folder(
+        project_root,
+        &paths.state_dir,
+        &paths.home_dir,
+    )
+    .and_then(|folder| fs::canonicalize(folder).ok())
+    .filter(|folder| folder.is_dir())
 }
 
 /// The mount's label: the configured folder's own basename, so a vault at
@@ -534,6 +562,9 @@ or its error because that failure belongs on one tree node.
 pub(crate) struct ManageDocsRoots {
     pub(crate) chat: Option<PathBuf>,
     pub(crate) chat_file_name: Option<String>,
+    /// The folder that answers for `.ghostex/drawings` instead of the project's own (No
+    /// project's `~/.ghostex/drawings`).
+    pub(crate) drawings: Option<PathBuf>,
     pub(crate) extra: Option<ManageDocsExtraMount>,
     pub(crate) project: PathBuf,
 }

@@ -124,7 +124,16 @@ pub(crate) fn manage_list_project_directory(
         ghostex_docs::directory::invalidate();
     }
     let mut entries = Vec::new();
-    if requested.is_empty() {
+    let drawings = context.roots.drawings.as_deref();
+    if let (Some(drawings), true) = (drawings, requested == ghostex_docs::project::GHOSTEX_FOLDER_NAME) {
+        // No project's `.ghostex` holds only its drawings folder (`~/.ghostex/drawings`).
+        entries.push(manage_drawings_folder_entry(
+            ghostex_docs::project::DRAWINGS_FOLDER_NAME,
+            ghostex_docs::project::DRAWINGS_RELATIVE_PATH,
+            drawings,
+            1,
+        ));
+    } else if requested.is_empty() {
         manage_append_project_scope_children(
             &mut entries,
             &context.roots.project,
@@ -134,6 +143,11 @@ pub(crate) fn manage_list_project_directory(
             "",
             0,
         )?;
+        if let Some(drawings) = drawings {
+            let ghostex = ghostex_docs::project::GHOSTEX_FOLDER_NAME;
+            entries.retain(|entry| entry["path"] != ghostex);
+            entries.insert(0, manage_drawings_folder_entry(ghostex, ghostex, drawings, 0));
+        }
         if let Some(mount) = &context.roots.extra {
             match &mount.location {
                 Ok(root) => entries.push(json!({
@@ -174,6 +188,20 @@ pub(crate) fn manage_list_project_directory(
         response["entries"] = json!(entries);
     }
     Ok(response)
+}
+
+/// A folder row No project shows for its drawings (`.ghostex` and `.ghostex/drawings`), dated
+/// by the drawings folder.
+fn manage_drawings_folder_entry(name: &str, path: &str, drawings: &Path, depth: usize) -> Value {
+    json!({
+        "depth": depth,
+        "displayPath": path,
+        "kind": "directory",
+        "modifiedAt": fs::metadata(drawings).ok().and_then(|m| m.modified().ok()).map(gpui_iso8601_utc),
+        "name": name,
+        "path": path,
+        "size": Value::Null,
+    })
 }
 
 /// Appends `directory`'s children, folders first, as entries addressed `outer_prefix/name` and
@@ -260,6 +288,10 @@ pub(crate) fn manage_search_project(
         MAX_MATCHES
     };
     let mut roots = vec![(context.roots.project.clone(), String::new(), String::new())];
+    if let Some(drawings) = &context.roots.drawings {
+        let prefix = ghostex_docs::project::DRAWINGS_RELATIVE_PATH.to_string();
+        roots.push((drawings.clone(), prefix.clone(), prefix));
+    }
     if let Some(mount) = &context.roots.extra
         && let Ok(location) = &mount.location
     {

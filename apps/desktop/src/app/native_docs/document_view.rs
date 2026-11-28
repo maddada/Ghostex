@@ -187,8 +187,7 @@ impl GhostexGpuiApp {
                     .as_ref()
                     .map(|project| {
                         project
-                            .project_path
-                            .join(file)
+                            .absolute_path(file)
                             .to_string_lossy()
                             .into_owned()
                     })

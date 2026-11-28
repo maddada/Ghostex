@@ -92,8 +92,7 @@ impl GhostexGpuiApp {
             let file = std::path::Path::new(path);
             match &self.native_docs.project {
                 Some(project) if !file.is_absolute() => project
-                    .project_path
-                    .join(file)
+                    .absolute_path(file)
                     .to_string_lossy()
                     .into_owned(),
                 _ => path.to_string(),

@@ -13,6 +13,48 @@ use gpui_component::input::{EditorState, InputState};
 pub(crate) struct DocsProjectKey {
     pub(crate) project_id: String,
     pub(crate) project_path: std::path::PathBuf,
+    /// No project's `~/.ghostex/drawings`, which Files shows as its `.ghostex/drawings` (CDXC:Canvas
+    /// 2026-11-28 in packages/project-docs/src/project.rs).
+    pub(crate) drawings: Option<std::path::PathBuf>,
+}
+
+impl DocsProjectKey {
+    /// Where a Files path is on this computer: in the project's folder, or for No project's
+    /// `.ghostex/drawings` in `~/.ghostex/drawings`.
+    pub(crate) fn absolute_path(&self, relative: &std::path::Path) -> std::path::PathBuf {
+        if let Some(drawings) = &self.drawings
+            && let Some(inner) = relative
+                .to_str()
+                .and_then(ghostex_docs::project::drawings_inner_path)
+        {
+            return if inner.is_empty() {
+                drawings.clone()
+            } else {
+                drawings.join(inner)
+            };
+        }
+        self.project_path.join(relative)
+    }
+
+    /// The Files path of `absolute` (already resolved) when it is inside the project, or inside No
+    /// project's drawings folder; `""` for the project folder itself.
+    pub(crate) fn relative_path(&self, absolute: &std::path::Path) -> Option<String> {
+        let slashes = |path: &std::path::Path| path.to_string_lossy().replace('\\', "/");
+        if let Some(drawings) = &self.drawings {
+            let drawings = std::fs::canonicalize(drawings).unwrap_or(drawings.clone());
+            if let Ok(inner) = absolute.strip_prefix(&drawings) {
+                let inner = slashes(inner);
+                let base = ghostex_docs::project::DRAWINGS_RELATIVE_PATH;
+                return Some(if inner.is_empty() {
+                    base.to_string()
+                } else {
+                    format!("{base}/{inner}")
+                });
+            }
+        }
+        let root = std::fs::canonicalize(&self.project_path).unwrap_or(self.project_path.clone());
+        absolute.strip_prefix(&root).ok().map(slashes)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -468,6 +468,7 @@ mod missing_file_tests {
         let roots = ManageDocsRoots {
             chat: None,
             chat_file_name: None,
+            drawings: None,
             extra: None,
             project: fs::canonicalize(&project).expect("canonical project"),
         };
