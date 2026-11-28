@@ -154,10 +154,11 @@ fn rate_limited(wait: Duration) -> Response {
     response
 }
 
-/// A `POST` or `PUT` body, read only after taking a place from the relay-wide quota of bodies (503 at once, unread,
-/// when none is free) and within the read-time limit (408). The place is held until the handler has answered, so
-/// at most `body_reads` bodies are in memory at once, and it is given back however the request ends: answered,
-/// refused, timed out, or dropped when the client goes away.
+/// A `POST` or `PUT` body, collected only after taking a place from the relay-wide quota of bodies (503 at once
+/// without collecting it when none is free; bytes sent with the headers may already sit in the HTTP server's
+/// buffer) and within the read-time limit (408). The place is held until the handler has answered, also while a
+/// push waits for Apple, so at most `body_reads` bodies are in memory at once, and it is given back however the
+/// request ends: answered, refused, timed out, or dropped once the server sees the client has gone.
 pub(crate) struct ReadBody {
     pub(crate) bytes: Bytes,
     _place: OwnedSemaphorePermit,

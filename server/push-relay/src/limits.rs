@@ -67,7 +67,8 @@ pub struct LimitConfig {
     /// Tokens Apple dropped that the `/push/` routes remember, apart from the Live Activity route's.
     pub push_max_gone_tokens: usize,
     /// Request bodies of both route families being read or held at once, relay-wide: a `POST` or `PUT` takes one
-    /// before its body is read and keeps it until it is answered; with none free it gets 503 unread.
+    /// before its body is collected and keeps it until it is answered; with none free it gets 503 without the body
+    /// being collected.
     pub body_reads: usize,
     /// How long reading one request body may take before the relay answers 408 and frees its place.
     pub body_read_time: Duration,
