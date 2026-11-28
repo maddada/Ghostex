@@ -10,7 +10,7 @@
     "deploy": "convex deploy"
   },
   "dependencies": {
-    "convex": "1.46.0"
+    "convex": "1.50.0"
   },
   "devDependencies": {
     "@types/node": "24.10.1",
