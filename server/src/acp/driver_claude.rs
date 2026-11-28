@@ -106,7 +106,10 @@ impl ClaudeTransport {
                     Ok(inner.get("response").cloned().unwrap_or(Value::Null))
                 }
             }
-            Err(_) => {
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                Err("Claude exited before answering the control request.".to_string())
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {
                 self.pending
                     .lock()
                     .unwrap_or_else(|p| p.into_inner())
@@ -1652,6 +1655,10 @@ fn spawn_and_init_claude(
                     eprintln!("[Claude Native] Warning: recovered from panic in stdout reader.");
                 }
             }
+            // stdout closed (Claude exited) or this process generation was replaced: no
+            // control response can come any more, so every waiting request returns at once
+            // instead of waiting out its timeout.
+            t_out.pending.lock().unwrap_or_else(|p| p.into_inner()).clear();
         });
     }
 
