@@ -11,8 +11,6 @@ const GHOSTTYKIT_HEADER: &str =
     "../../.dependencies/ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64/Headers/ghostty.h";
 const GHOSTTYKIT_ARCHIVE: &str = "../../.dependencies/ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64/ghostty-internal.a";
 const GPUI_MACOS_DEPLOYMENT_TARGET_FLAG: &str = "-mmacosx-version-min=15.0";
-// GpuiGhostexCapture.m uses WindowServer capture APIs deprecated in macOS 14 and obsoleted in 15.
-const GPUI_MACOS_CAPTURE_DEPLOYMENT_TARGET_FLAG: &str = "-mmacosx-version-min=14.0";
 const LIBGHOSTTY_VT_BUILD_SCRIPT: &str = "scripts/build-libghostty-vt.sh";
 const WINDOWS_APP_ICON_SOURCE: &str = "resources/AppIcon.appiconset/icon_512x512.png";
 const WINDOWS_APP_ICON_SIZES: [u32; 5] = [16, 32, 64, 128, 256];
@@ -567,26 +565,13 @@ fn ghostty_app_version(ghostty_dir: &Path) -> String {
 }
 
 fn gpui_macos_objc_build() -> cc::Build {
-    /*
-    CDXC:GhostexCapture 2026-09-30 WHY:
-    GPUI Objective-C shims must compile against Ghostex's supported macOS deployment target, matching the GPUI package metadata (LSMinimumSystemVersion). Do not inherit the current host OS as the minimum target: newer SDKs mark the WindowServer capture API Ghostex Capture uses (`CGWindowListCreateImage` in GpuiGhostexCapture.m) unavailable for future deployment targets.
-
-    The SDK marks `CGWindowListCreateImage` and `CGWindowListCreateImageFromArray` obsoleted in macOS 15.0, a compile-time error at a 15.0 target; macOS 15 and later still export them and Ghostex Capture calls them today. GpuiGhostexCapture.m alone therefore keeps a 14.0 target (`gpui_macos_capture_objc_build`) until it moves to ScreenCaptureKit; the app as a whole still requires 15.0.
-    */
-    gpui_macos_objc_build_with_target(GPUI_MACOS_DEPLOYMENT_TARGET_FLAG)
-}
-
-fn gpui_macos_capture_objc_build() -> cc::Build {
-    gpui_macos_objc_build_with_target(GPUI_MACOS_CAPTURE_DEPLOYMENT_TARGET_FLAG)
-}
-
-fn gpui_macos_objc_build_with_target(deployment_target_flag: &str) -> cc::Build {
+    // Match the bundle's LSMinimumSystemVersion even when building on a newer host.
     let mut build = cc::Build::new();
     build
         .flag("-fobjc-arc")
         .flag("-fblocks")
         .flag("-Wno-deprecated-declarations")
-        .flag(deployment_target_flag);
+        .flag(GPUI_MACOS_DEPLOYMENT_TARGET_FLAG);
     build
 }
 
@@ -1077,7 +1062,7 @@ fn main() {
     // Ghostex Capture's floating windows, system-wide hotkeys and screenshots (see the file's
     // CDXC:GhostexCapture note).
     println!("cargo:rerun-if-changed={}", gpui_ghostex_capture.display());
-    gpui_macos_capture_objc_build()
+    gpui_macos_objc_build()
         .file(gpui_ghostex_capture)
         .compile("ghostex_gpui_ghostex_capture");
 
@@ -1249,6 +1234,7 @@ fn main() {
     println!("cargo:rustc-link-lib=framework=QuartzCore");
     println!("cargo:rustc-link-lib=framework=CoreText");
     println!("cargo:rustc-link-lib=framework=CoreGraphics");
+    println!("cargo:rustc-link-lib=framework=ScreenCaptureKit");
     println!("cargo:rustc-link-lib=framework=CoreFoundation");
     println!("cargo:rustc-link-lib=framework=Security");
     println!("cargo:rustc-link-lib=framework=ApplicationServices");

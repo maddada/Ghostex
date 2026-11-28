@@ -1,6 +1,6 @@
 //! Reading pixels off the screen: a screen's area, or the front window of the app the user was in.
 //!
-//! macOS goes through the WindowServer (the native shim), Windows through GDI and X11 through
+//! macOS goes through ScreenCaptureKit (the native shim), Windows through GDI and X11 through
 //! `GetImage` on the root window. Images come back full resolution, so a Retina or 150% screen
 //! yields more pixels than its size in points.
 

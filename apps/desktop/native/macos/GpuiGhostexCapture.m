@@ -5,14 +5,14 @@
 // GPUI opens the windows (so the same views run on Windows and Linux) but has no call to move an
 // open window, keep a pop-up visible while another app is active, or register a system-wide
 // hotkey. Carbon's RegisterEventHotKey is used because it needs no Accessibility or Input
-// Monitoring permission, unlike an NSEvent global monitor. Screenshots use the same WindowServer
-// API as App Shots. The SDK marks it obsoleted in macOS 15.0, so build.rs compiles this file alone
-// against a 14.0 deployment target (gpui_macos_capture_objc_build); macOS 15 and later still export it.
+// Monitoring permission, unlike an NSEvent global monitor.
 
 #import <AppKit/AppKit.h>
 #import <Carbon/Carbon.h>
 #import <CoreGraphics/CoreGraphics.h>
+#import <ScreenCaptureKit/ScreenCaptureKit.h>
 #import <objc/runtime.h>
+#include <math.h>
 
 extern void GhostexGpuiCaptureHotkeyPressed(uint32_t hotkey_id);
 
@@ -213,6 +213,108 @@ bool GhostexGpuiCaptureScreenAccess(bool request) {
   return true;
 }
 
+/// CDXC:GhostexCapture 2026-11-28 WHY: The Rust capture workers expect synchronous results. Share one deadline across display discovery and image callbacks, and let the callbacks own their results so a late reply cannot touch the caller's path or output pointers.
+static dispatch_time_t GhostexGpuiCaptureDeadline(void) {
+  return dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC);
+}
+
+static SCShareableContent *GhostexGpuiCaptureContent(dispatch_time_t deadline) {
+  dispatch_semaphore_t done = dispatch_semaphore_create(0);
+  __block SCShareableContent *result = nil;
+  [SCShareableContent getShareableContentExcludingDesktopWindows:NO
+                                             onScreenWindowsOnly:YES
+                                               completionHandler:^(SCShareableContent *content,
+                                                                   NSError *error) {
+    result = error ? nil : content;
+    dispatch_semaphore_signal(done);
+  }];
+  return dispatch_semaphore_wait(done, deadline) == 0 ? result : nil;
+}
+
+static CGImageRef GhostexGpuiCaptureDisplayImage(SCContentFilter *filter, CGRect source,
+                                                 CGFloat scale, dispatch_time_t deadline) {
+  SCStreamConfiguration *config = [SCStreamConfiguration new];
+  config.sourceRect = source;
+  config.width = (size_t)ceil(source.size.width * scale);
+  config.height = (size_t)ceil(source.size.height * scale);
+  config.captureResolution = scale > 1.0 ? SCCaptureResolutionBest : SCCaptureResolutionNominal;
+  config.showsCursor = NO;
+
+  dispatch_semaphore_t done = dispatch_semaphore_create(0);
+  __block id result = nil;
+  [SCScreenshotManager captureImageWithFilter:filter
+                                configuration:config
+                            completionHandler:^(CGImageRef image, NSError *error) {
+    result = error ? nil : (__bridge id)image;
+    dispatch_semaphore_signal(done);
+  }];
+  if (dispatch_semaphore_wait(done, deadline) != 0 || !result) {
+    return NULL;
+  }
+  return CGImageRetain((__bridge CGImageRef)result);
+}
+
+/// A display filter can crop at native pixel density on macOS 15.0. A rectangle crossing displays
+/// uses the largest backing scale, with each display drawn at its original position in the crop.
+static CGImageRef GhostexGpuiCaptureScreenRect(CGRect rect) {
+  if (CGRectIsEmpty(rect) || CGRectIsInfinite(rect)) {
+    return NULL;
+  }
+  dispatch_time_t deadline = GhostexGpuiCaptureDeadline();
+  SCShareableContent *content = GhostexGpuiCaptureContent(deadline);
+  NSMutableArray<SCContentFilter *> *filters = [NSMutableArray array];
+  NSMutableArray<NSValue *> *displayBounds = [NSMutableArray array];
+  CGFloat scale = 1.0;
+  for (SCDisplay *display in content.displays) {
+    CGRect bounds = CGDisplayBounds(display.displayID);
+    CGRect crop = CGRectIntersection(rect, bounds);
+    if (CGRectIsEmpty(crop)) {
+      continue;
+    }
+    SCContentFilter *filter = [[SCContentFilter alloc] initWithDisplay:display excludingWindows:@[]];
+    if (CGRectEqualToRect(rect, crop)) {
+      CGRect source = CGRectOffset(crop, -bounds.origin.x, -bounds.origin.y);
+      return GhostexGpuiCaptureDisplayImage(filter, source, filter.pointPixelScale, deadline);
+    }
+    [filters addObject:filter];
+    [displayBounds addObject:[NSValue valueWithRect:bounds]];
+    scale = MAX(scale, filter.pointPixelScale);
+  }
+  if (filters.count == 0) {
+    return NULL;
+  }
+
+  CGColorSpaceRef colorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  CGContextRef output = CGBitmapContextCreate(NULL, (size_t)ceil(rect.size.width * scale),
+                                             (size_t)ceil(rect.size.height * scale), 8, 0,
+                                             colorSpace, (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
+  CGColorSpaceRelease(colorSpace);
+  if (!output) {
+    return NULL;
+  }
+  for (NSUInteger index = 0; index < filters.count; index++) {
+    CGRect bounds = displayBounds[index].rectValue;
+    CGRect crop = CGRectIntersection(rect, bounds);
+    CGRect source = CGRectOffset(crop, -bounds.origin.x, -bounds.origin.y);
+    SCContentFilter *filter = filters[index];
+    CGImageRef image = GhostexGpuiCaptureDisplayImage(filter, source, filter.pointPixelScale,
+                                                    deadline);
+    if (!image) {
+      CGContextRelease(output);
+      return NULL;
+    }
+    // WindowServer's y axis points down. A bitmap context's y axis points up.
+    CGRect target = CGRectMake((crop.origin.x - rect.origin.x) * scale,
+                               (CGRectGetMaxY(rect) - CGRectGetMaxY(crop)) * scale,
+                               crop.size.width * scale, crop.size.height * scale);
+    CGContextDrawImage(output, target, image);
+    CGImageRelease(image);
+  }
+  CGImageRef image = CGBitmapContextCreateImage(output);
+  CGContextRelease(output);
+  return image;
+}
+
 static bool GhostexGpuiCaptureWritePng(CGImageRef image, const char *path) {
   if (!image || !path) {
     return false;
@@ -232,9 +334,7 @@ static bool GhostexGpuiCaptureWritePng(CGImageRef image, const char *path) {
 bool GhostexGpuiCaptureRectPng(double x, double y, double width, double height,
                                const char *path) {
   @autoreleasepool {
-    CGImageRef image = CGWindowListCreateImage(
-        CGRectMake(x, y, width, height), kCGWindowListOptionOnScreenOnly,
-        kCGNullWindowID, kCGWindowImageBestResolution);
+    CGImageRef image = GhostexGpuiCaptureScreenRect(CGRectMake(x, y, width, height));
     bool written = GhostexGpuiCaptureWritePng(image, path);
     if (image) {
       CFRelease(image);
@@ -255,6 +355,7 @@ bool GhostexGpuiCaptureAppWindowPng(int32_t pid, const char *path,
                                     char *app_name, size_t app_name_capacity,
                                     double *frame) {
   @autoreleasepool {
+    // The WindowServer metadata list supplies front-to-back order and window alpha.
     NSArray *windows = CFBridgingRelease(CGWindowListCopyWindowInfo(
         kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements,
         kCGNullWindowID));
@@ -278,9 +379,7 @@ bool GhostexGpuiCaptureAppWindowPng(int32_t pid, const char *path,
         // before its real window in the list; the capture wants the window the user sees.
         continue;
       }
-      CGImageRef image = CGWindowListCreateImage(
-          bounds, kCGWindowListOptionOnScreenOnly, kCGNullWindowID,
-          kCGWindowImageBestResolution);
+      CGImageRef image = GhostexGpuiCaptureScreenRect(bounds);
       bool written = GhostexGpuiCaptureWritePng(image, path);
       if (image) {
         CFRelease(image);
@@ -508,29 +607,38 @@ uint8_t *GhostexGpuiDesktopCaptureJpeg(double x, double y, size_t *length) {
     if (length) {
       *length = 0;
     }
-    if (@available(macOS 10.15, *)) {
-      if (!CGPreflightScreenCaptureAccess()) {
-        return NULL;
+    if (!CGPreflightScreenCaptureAccess()) {
+      return NULL;
+    }
+    CGDirectDisplayID displayID = GhostexGpuiDisplayAtPoint(x, y);
+    dispatch_time_t deadline = GhostexGpuiCaptureDeadline();
+    SCShareableContent *content = GhostexGpuiCaptureContent(deadline);
+    SCDisplay *desktopDisplay = nil;
+    for (SCDisplay *display in content.displays) {
+      if (display.displayID == displayID) {
+        desktopDisplay = display;
+        break;
       }
     }
-    CGDirectDisplayID display = GhostexGpuiDisplayAtPoint(x, y);
-    CGRect bounds = CGDisplayBounds(display);
+    if (!desktopDisplay) {
+      return NULL;
+    }
+
     CGWindowLevel desktop = CGWindowLevelForKey(kCGDesktopWindowLevelKey);
-    NSArray *windows = CFBridgingRelease(
-        CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID));
-    CFMutableArrayRef ids = CFArrayCreateMutable(NULL, 0, NULL);
-    for (NSDictionary *info in windows) {
-      NSNumber *layer = info[(__bridge NSString *)kCGWindowLayer];
-      NSNumber *number = info[(__bridge NSString *)kCGWindowNumber];
-      if (layer && number && layer.intValue <= desktop) {
-        CFArrayAppendValue(ids, (const void *)(uintptr_t)number.unsignedIntValue);
+    CGRect bounds = CGDisplayBounds(displayID);
+    NSMutableArray<SCWindow *> *wallpaper = [NSMutableArray array];
+    for (SCWindow *window in content.windows) {
+      if (window.windowLayer <= desktop && CGRectIntersectsRect(window.frame, bounds)) {
+        [wallpaper addObject:window];
       }
     }
-    CGImageRef image = NULL;
-    if (CFArrayGetCount(ids) > 0) {
-      image = CGWindowListCreateImageFromArray(bounds, ids, kCGWindowImageNominalResolution);
+    if (wallpaper.count == 0) {
+      return NULL;
     }
-    CFRelease(ids);
+    SCContentFilter *filter = [[SCContentFilter alloc] initWithDisplay:desktopDisplay
+                                                     includingWindows:wallpaper];
+    CGRect source = CGRectMake(0, 0, bounds.size.width, bounds.size.height);
+    CGImageRef image = GhostexGpuiCaptureDisplayImage(filter, source, 1.0, deadline);
     if (!image) {
       return NULL;
     }

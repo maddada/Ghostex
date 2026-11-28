@@ -368,7 +368,7 @@ fn stand_in_glass(
     let jpeg = desktop
         .and_then(wallspace_poster)
         .and_then(|poster| stand_in_picture(&poster, display.size))
-        .or_else(|| captured_desktop(display, source))?;
+        .or_else(|| captured_desktop(display, source, cx))?;
     remember_picture(&jpeg, source);
     let on_screen = (crate::app::helpers::window_glass_shows_live_blur()
         || crate::app::helpers::window_glass_picture_follows_screen())
@@ -421,10 +421,16 @@ const CAPTURE_KEPT_FOR: Duration = Duration::from_secs(30);
 /// softened like the main window's picture (`softened`); `None` when Ghostex may not read the
 /// screen (it never asks) or on another system. Read again for each page window, when the desktop
 /// picture (`source`) or the display changes, and every `CAPTURE_KEPT_FOR`.
-fn captured_desktop(display: Bounds<Pixels>, source: &str) -> Option<Vec<u8>> {
+#[cfg(target_os = "macos")]
+fn captured_desktop(display: Bounds<Pixels>, source: &str, cx: &App) -> Option<Vec<u8>> {
     type Key = (String, [u32; 4], u64);
-    static LAST: std::sync::Mutex<Option<(Key, std::time::Instant, Vec<u8>)>> =
-        std::sync::Mutex::new(None);
+    #[derive(Default)]
+    struct DesktopCapture {
+        last: Option<(Key, std::time::Instant, Vec<u8>)>,
+        pending: bool,
+    }
+    static CAPTURE: std::sync::LazyLock<std::sync::Mutex<DesktopCapture>> =
+        std::sync::LazyLock::new(Default::default);
     let key: Key = (
         source.to_string(),
         [
@@ -435,21 +441,39 @@ fn captured_desktop(display: Bounds<Pixels>, source: &str) -> Option<Vec<u8>> {
         ],
         PAGE_WINDOWS_OPENED.load(std::sync::atomic::Ordering::Relaxed),
     );
-    if let Ok(last) = LAST.lock()
-        && let Some((last_key, taken, soft)) = last.as_ref()
-        && *last_key == key
-        && taken.elapsed() < CAPTURE_KEPT_FOR
-    {
-        return Some(soft.clone());
+    let mut capture = CAPTURE.lock().ok()?;
+    let current = capture
+        .last
+        .as_ref()
+        .filter(|(last_key, _, _)| *last_key == key);
+    let needs_refresh = current.is_none_or(|(_, taken, _)| taken.elapsed() >= CAPTURE_KEPT_FOR);
+    let current = current.map(|(_, _, jpeg)| jpeg.clone());
+    if needs_refresh && !capture.pending {
+        capture.pending = true;
+        // The existing glass watch reads the result on its next tick. The page can open and move
+        // while ScreenCaptureKit waits for a frame.
+        cx.background_executor()
+            .spawn(async move {
+                let center = display.center();
+                let jpeg =
+                    screen_capture_jpeg(f32::from(center.x) as f64, f32::from(center.y) as f64)
+                        .and_then(|capture| screen_shaped_jpeg(&capture, display.size));
+                let picture = jpeg.map(|jpeg| softened(&jpeg, f32::from(display.size.width)));
+                if let Ok(mut capture) = CAPTURE.lock() {
+                    if let Some(picture) = picture {
+                        capture.last = Some((key, std::time::Instant::now(), picture));
+                    }
+                    capture.pending = false;
+                }
+            })
+            .detach();
     }
-    let center = display.center();
-    let capture = screen_capture_jpeg(f32::from(center.x) as f64, f32::from(center.y) as f64)?;
-    let jpeg = screen_shaped_jpeg(&capture, display.size)?;
-    let soft = softened(&jpeg, f32::from(display.size.width));
-    if let Ok(mut last) = LAST.lock() {
-        *last = Some((key, std::time::Instant::now(), soft.clone()));
-    }
-    Some(soft)
+    current
+}
+
+#[cfg(not(target_os = "macos"))]
+fn captured_desktop(_display: Bounds<Pixels>, _source: &str, _cx: &App) -> Option<Vec<u8>> {
+    None
 }
 
 /// What the desktop of the display holding (`x`, `y`) shows, as a JPEG (the native shim's
@@ -468,11 +492,6 @@ fn screen_capture_jpeg(x: f64, y: f64) -> Option<Vec<u8>> {
     let jpeg = unsafe { std::slice::from_raw_parts(bytes, length) }.to_vec();
     unsafe { GhostexGpuiFreeBytes(bytes) };
     Some(jpeg)
-}
-
-#[cfg(not(target_os = "macos"))]
-fn screen_capture_jpeg(_x: f64, _y: f64) -> Option<Vec<u8>> {
-    None
 }
 
 /// Wallspace's poster of the wallpaper whose still is the desktop picture `desktop`
