@@ -1,6 +1,7 @@
-//! The `/push/` routes: visible and background notifications, widget pushes, the token mailbox and the encrypted
-//! widget snapshot. They have their own limits, budget, counters and memory of tokens Apple dropped, so nothing
-//! here changes what the Live Activity route does or reports; they share only its Apple connection.
+//! The `/push/` routes: visible and background notifications, widget pushes, the token mailbox and the widget
+//! snapshot (which the computer is meant to encrypt; the relay does not check). They have their own limits,
+//! budget, counters and memory of tokens Apple dropped, so nothing here changes what the Live Activity route does
+//! or reports; they share only its Apple connection.
 //!
 //! A mailbox or snapshot id is a capability, so it travels in the `Authorization` header (`Bearer <id>`), never in
 //! the URL, where a proxy's logs would keep it.

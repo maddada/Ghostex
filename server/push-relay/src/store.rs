@@ -1,10 +1,11 @@
 //! The mailbox and the snapshot store: memory only, never written to disk, never parsed.
 //!
 //! An entry is filed under the SHA-256 of its id, so the relay holds no id itself. A mailbox entry (an activity's
-//! new update token) is taken once and lives at most `mailbox_lifetime`; a snapshot (an encrypted blob for the
-//! widgets) is kept until replaced or `snapshot_lifetime`. Both share one cap on entries and bytes. The relay cannot
-//! tell a paired phone's id from anyone else's, so these caps, and the caller's quota for new ids that the route
-//! checks through `put`, are what bound the memory a caller can make it hold.
+//! new update token) is taken once and lives at most `mailbox_lifetime`; a snapshot (a blob for the widgets, which
+//! the computer is meant to encrypt; never checked here) is kept until replaced or `snapshot_lifetime`. Both share
+//! one cap on entries and bytes. The relay cannot tell a paired phone's id from anyone else's, so these caps, and
+//! the caller's quota for new ids that the route checks through `put`, are what bound the memory a caller can make
+//! it hold.
 
 use std::collections::HashMap;
 use std::sync::Mutex;

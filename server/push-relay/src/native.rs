@@ -2,11 +2,12 @@
 //!
 //! An alert's visible words are the relay's own: the caller names an event (`kind`) and the relay shows that
 //! event's fixed words from `ALERT_WORDS` under the fixed title `ALERT_TITLE`, so nobody can put their own words
-//! on a lock screen through the relay. The names travel only inside `envelope`, encrypted on the computer for the
-//! phone's notification service extension. What else reaches Apple readable is held to the form of identifiers:
-//! `threadId` is `<machineId>:<sessionId>` and `data` carries the identifiers a tap needs. The relay enforces form
-//! and size; that the envelope really is encrypted and that the identifiers carry no names only the computer that
-//! sends and the phone that receives can guarantee. A widget push carries nothing at all.
+//! into the alert's clear text through the relay. The names are meant to travel only inside `envelope`, which the
+//! computer is meant to encrypt for the phone's notification service extension. What else reaches Apple readable
+//! is held to the form of identifiers: `threadId` is `<machineId>:<sessionId>` and `data` carries the identifiers
+//! a tap needs. The relay enforces form and size; that the envelope really is encrypted and that the identifiers
+//! carry no names only the computer that sends and the phone that receives can guarantee. A widget push carries
+//! nothing at all.
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
@@ -17,7 +18,7 @@ use crate::apns::{Outgoing, PushType};
 use crate::request::{valid_token, Environment, Refusal};
 use crate::MAX_APNS_PAYLOAD_BYTES;
 
-/// The title every alert shows before the phone replaces it with the decrypted one.
+/// The title every alert shows unless the phone decrypts the envelope and replaces it.
 pub const ALERT_TITLE: &str = "Ghostex";
 /// Each event's fixed words, the ones gxserver's alerts use (`server/src/push/message.rs`, `AlertKind::words`).
 pub const ALERT_WORDS: &[(&str, &str)] = &[
@@ -64,7 +65,8 @@ pub struct AlertRequest {
     pub environment: Environment,
     /// An event of `ALERT_WORDS`, or `background`.
     pub kind: String,
-    /// The encrypted title and body for the phone, standard base64. Alerts only.
+    /// The title and body for the phone, standard base64, meant to be encrypted by the computer (the relay checks
+    /// only the form). Alerts only.
     #[serde(default)]
     pub envelope: Option<String>,
     /// iOS stacks the alerts of one thread together: `<machineId>:<sessionId>`. Alerts only.
@@ -181,7 +183,8 @@ fn valid_data(data: &AlertData) -> bool {
             .is_none_or(|id| identifier(id, NOTIFICATION_ID_MAX))
 }
 
-/// Standard base64 of version 1, a 12-byte nonce and a ciphertext of at least its 16-byte tag.
+/// Standard base64 of version 1, a 12-byte nonce and at least 16 more bytes (the ciphertext's tag); whether the
+/// rest really is a ciphertext is not checked.
 fn valid_envelope(envelope: &str) -> bool {
     STANDARD.decode(envelope.as_bytes()).is_ok_and(|bytes| {
         bytes.len() >= 1 + ENVELOPE_NONCE_BYTES + ENVELOPE_TAG_BYTES && bytes[0] == ENVELOPE_VERSION

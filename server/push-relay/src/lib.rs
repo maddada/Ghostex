@@ -6,8 +6,10 @@
 //! notifications, does not carry Live Activity pushes, and the key cannot go on users' computers.
 //!
 //! The `/push/` routes (`push_routes.rs`) send the app's own notifications and background pushes and its widget
-//! pushes the same way, and hold, in memory only, a mailbox for an activity's new update token and one encrypted
-//! widget snapshot per id. An alert shows fixed words per event; the names travel only encrypted.
+//! pushes the same way, and hold, in memory only, a mailbox for an activity's new update token and one widget
+//! snapshot per id, which the computer is meant to encrypt (the relay does not check). An alert shows fixed words
+//! per event; the names are meant to travel only in the envelope, which the computer is meant to encrypt (the
+//! relay checks only its form).
 //!
 //! Every push type, its topic and Apple's host (production or sandbox) are fixed here, and a request naming any
 //! of them is refused. Like Expo's push service it is open: the device token is what lets someone push to a
