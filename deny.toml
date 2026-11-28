@@ -30,9 +30,6 @@ ignore = [
   { id = "RUSTSEC-2026-0546", reason = "zip 8.6.0 via velopack only; our own code is on zip 9" },
   { id = "RUSTSEC-2026-0547", reason = "zip 8.6.0 via velopack only; our own code is on zip 9" },
   { id = "RUSTSEC-2026-0548", reason = "zip 8.6.0 via velopack only; our own code is on zip 9" },
-  # crypto-bigint 0.5 (timing) comes with p256 0.13 in server/push-relay; the fix is the p256 0.14
-  # RustCrypto generation (elliptic-curve >= 0.14.3), a planned upgrade of its own.
-  { id = "RUSTSEC-2026-0387", reason = "push-relay's p256 0.13; fixed by the planned p256 0.14 upgrade" },
   # Unmaintained, used directly: chrono (gxserver, desktop, collab, history-cli and the GPUI stack;
   # jiff is the successor, adopted gradually) and instant (the desktop and web builds).
   { id = "RUSTSEC-2026-0543", reason = "chrono is unmaintained; moving to jiff gradually, no vulnerability" },
