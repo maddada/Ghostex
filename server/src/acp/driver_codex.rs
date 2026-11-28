@@ -1097,6 +1097,9 @@ fn spawn_and_init_codex(
         let mut req_params = Map::new();
         req_params.insert("threadId".to_string(), json!(resume_id));
         req_params.insert("cwd".to_string(), json!(cfg.cwd));
+        // We never read `thread.turns` from this reply (the transcript comes from the rollout
+        // file), and full-history hydration can make a long thread miss `CODEX_RPC_TIMEOUT`.
+        req_params.insert("excludeTurns".to_string(), json!(true));
         if !keep_cli_default {
             req_params.insert("approvalPolicy".to_string(), init_approval.clone());
             req_params.insert("approvalsReviewer".to_string(), json!(init_reviewer));
