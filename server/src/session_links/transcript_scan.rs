@@ -89,7 +89,6 @@ impl TranscriptLinks {
                     link.in_repos(own_repos)
                         && (!orchestrator || self.user_github_mentions.contains(link))
                 }
-                SessionLinkRef::Command { .. } => false,
             })
             .cloned()
             .collect()
@@ -500,7 +499,7 @@ mod tests {
             .iter()
             .filter_map(|link| match link {
                 SessionLinkRef::Linear { identifier } => Some(identifier.clone()),
-                SessionLinkRef::Github { .. } | SessionLinkRef::Command { .. } => None,
+                SessionLinkRef::Github { .. } => None,
             })
             .collect();
         (sorted(links.linear_mentions), sorted(suggested))

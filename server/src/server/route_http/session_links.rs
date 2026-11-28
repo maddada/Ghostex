@@ -234,11 +234,7 @@ pub(super) async fn route_session_links_http(
                     .iter()
                     .any(|entry| entry.link.key() == key);
                 if !present && !was_suggestion {
-                    // A ticket command's ticket is never stored by hand here (CDXC:SessionLinks
-                    // 2026-11-03 in server/src/session_links/reference.rs).
-                    if let Some(link) = SessionLinkRef::from_key(&key)
-                        .filter(|link| !matches!(link, SessionLinkRef::Command { .. }))
-                    {
+                    if let Some(link) = SessionLinkRef::from_key(&key) {
                         restored |= stored.add_by_hand(StoredSessionLink {
                             link,
                             source: SessionLinkSource::User,

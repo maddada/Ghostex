@@ -1,7 +1,6 @@
 //! The private credentials file: the Linear API keys work mode reads Linear with (one shared key,
 //! the default workspace's, an optional key per workspace, and an optional key per project that
-//! overrides both), each workspace's ticket command credentials, and crate::team_sync's
-//! connections.
+//! overrides both), and crate::team_sync's connections.
 //!
 //! CDXC:WorkMode 2026-10-09 WHY:
 //! gxserver has no OS credential store it can use on every platform (its own auth token is a
@@ -23,9 +22,12 @@ use serde_json::{json, Map, Value};
 use crate::paths::GxserverPaths;
 
 const CREDENTIALS_FILE_NAME: &str = "work-mode-credentials.json";
-/// `workspaceSourceCredentials.<workspaceId>.<sourceId>.<field>`: a ticket command's credential
-/// values, kept by source id so changing the command's path (same id) keeps them.
-const SOURCE_CREDENTIALS_KEY: &str = "workspaceSourceCredentials";
+/// Where the retired ticket commands kept their credentials. The next write of the file drops it,
+/// so no secret of a feature that is gone stays on disk.
+///
+/// CDXC:WorkMode 2026-11-28 DECISION:
+/// The repository owner, on custom ticket commands: "Simplify/remove all that work we did for custom ticket commands please it was bad and we still didn't use it for anything." Their saved setup is ignored (a workspace whose tracker was a command goes back to the default tracker), and their credentials are dropped here rather than kept unread.
+const RETIRED_SOURCE_CREDENTIALS_KEY: &str = "workspaceSourceCredentials";
 /// `teamSync.<workspaceId>`: crate::team_sync's connections.
 pub(crate) const TEAM_CONNECTIONS_KEY: &str = "teamSync";
 
@@ -73,44 +75,24 @@ pub(crate) fn read_credentials_strictly(
 
 /// What is wrong with the first container a change writes into that isn't a JSON object: a change
 /// would take it for empty and replace it. It names the container's level in fixed words, never a
-/// key read from the file, which in a damaged file can be any text, a credential among them. Each team connection is replaced whole, so only `teamSync`
-/// itself is checked; keys Ghostex doesn't know are left alone.
+/// key read from the file, which in a damaged file can be any text, a credential among them. Each
+/// team connection is replaced whole, so only `teamSync` itself is checked; keys Ghostex doesn't
+/// know are left alone.
 fn misshapen_container(file: &Map<String, Value>) -> Option<String> {
     let maps = [
         "projectLinearApiKeys",
         "workspaceLinearApiKeys",
         TEAM_CONNECTIONS_KEY,
     ];
-    if let Some(key) = maps
-        .into_iter()
+    maps.into_iter()
         .find(|key| file.get(*key).is_some_and(|value| !value.is_object()))
-    {
-        return Some(format!("{key} isn't a JSON object"));
-    }
-    let workspaces = file.get(SOURCE_CREDENTIALS_KEY)?;
-    let Some(workspaces) = workspaces.as_object() else {
-        return Some(format!("{SOURCE_CREDENTIALS_KEY} isn't a JSON object"));
-    };
-    for sources in workspaces.values() {
-        let Some(sources) = sources.as_object() else {
-            return Some(format!(
-                "{SOURCE_CREDENTIALS_KEY} has a workspace that isn't a JSON object"
-            ));
-        };
-        if sources.values().any(|fields| !fields.is_object()) {
-            return Some(format!(
-                "{SOURCE_CREDENTIALS_KEY} has a source that isn't a JSON object"
-            ));
-        }
-    }
-    None
+        .map(|key| format!("{key} isn't a JSON object"))
 }
 
 /// Changes the file under one lock across read, change, write and rename: every writer goes
 /// through here, so two writers at once never lose one's change. A file it can't read is left as
-/// it is (`read_credentials_strictly`). Readers need no lock, since the
-/// rename makes each read see a whole file. A ticket command's credentials are written while the
-/// work-source store's writer lock is held too (store first, then this, never the reverse).
+/// it is (`read_credentials_strictly`). Readers need no lock, since the rename makes each read see
+/// a whole file.
 pub(crate) fn mutate_credentials<T>(
     paths: &GxserverPaths,
     change: impl FnOnce(&mut Map<String, Value>) -> T,
@@ -120,21 +102,6 @@ pub(crate) fn mutate_credentials<T>(
     let changed = change(&mut credentials);
     write_credentials(paths, &credentials)?;
     Ok(changed)
-}
-
-/// `mutate_credentials` for a change that may find nothing to do: `change` returns `None` to leave
-/// the file unwritten, decided under the same lock.
-pub(crate) fn mutate_credentials_when<T>(
-    paths: &GxserverPaths,
-    change: impl FnOnce(&mut Map<String, Value>) -> Option<T>,
-) -> std::io::Result<Option<T>> {
-    let _guard = credentials_lock();
-    let mut credentials = read_credentials_strictly(paths)?;
-    let Some(changed) = change(&mut credentials) else {
-        return Ok(None);
-    };
-    write_credentials(paths, &credentials)?;
-    Ok(Some(changed))
 }
 
 /// The one lock every writer of the file holds across read, change, write and rename.
@@ -148,6 +115,8 @@ fn write_credentials(
     credentials: &Map<String, Value>,
 ) -> std::io::Result<()> {
     fs::create_dir_all(&paths.auth_dir)?;
+    let mut credentials = credentials.clone();
+    credentials.remove(RETIRED_SOURCE_CREDENTIALS_KEY);
     let path = credentials_path(paths);
     let temp = path.with_extension("json.tmp");
     let _ = fs::remove_file(&temp);
@@ -160,7 +129,7 @@ fn write_credentials(
             options.mode(0o600);
         }
         let mut file = options.open(&temp)?;
-        file.write_all(Value::Object(credentials.clone()).to_string().as_bytes())?;
+        file.write_all(Value::Object(credentials).to_string().as_bytes())?;
         file.sync_all()?;
     }
     fs::rename(&temp, &path)
@@ -213,11 +182,6 @@ impl WorkCredentials {
         }
     }
 
-    /// The gxserver whose credentials file this reads.
-    pub(crate) fn paths(&self) -> &GxserverPaths {
-        &self.paths
-    }
-
     /// Credentials holding only one project's own Linear key (none without one), for tests that
     /// never touch the file.
     #[cfg(test)]
@@ -237,24 +201,6 @@ impl WorkCredentials {
 
     fn file(&self) -> &Map<String, Value> {
         self.file.get_or_init(|| read_credentials(&self.paths))
-    }
-
-    /// Whether the workspace is connected to a team, read from the same folder.
-    pub(crate) fn workspace_has_team(&self, workspace_id: &str) -> bool {
-        crate::team_sync::workspace_has_team(&self.paths, workspace_id)
-    }
-
-    /// A workspace's stored values for one ticket command source.
-    pub(crate) fn source_fields(
-        &self,
-        workspace_id: &str,
-        source: &str,
-    ) -> Option<&Map<String, Value>> {
-        self.file()
-            .get(SOURCE_CREDENTIALS_KEY)?
-            .get(workspace_id)?
-            .get(source)?
-            .as_object()
     }
 
     /// Whether the project has a Linear key of its own or its workspace's, which the shared key
@@ -346,151 +292,6 @@ fn store_linear_api_key_in(
                 credentials.remove("linearApiKey");
             }
         },
-    }
-}
-
-/// A workspace's stored values for every ticket command source (`sourceId → field → value`), a
-/// cleared command's among them, read as a change reads the file (`read_credentials_strictly`): a
-/// file that is there but can't be read is an error, never "nothing stored".
-pub(crate) fn read_workspace_source_credentials(
-    paths: &GxserverPaths,
-    workspace_id: &str,
-) -> std::io::Result<Map<String, Value>> {
-    Ok(read_credentials_strictly(paths)?
-        .get(SOURCE_CREDENTIALS_KEY)
-        .and_then(|workspaces| workspaces.get(workspace_id))
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default())
-}
-
-/// Sets (`Some`) or removes (`None`) a workspace's values for one ticket command source, each
-/// trimmed. A source left with no value, and a workspace left with no source, are removed.
-pub(crate) fn store_source_credentials(
-    credentials: &mut Map<String, Value>,
-    workspace_id: &str,
-    source: &str,
-    values: &[(String, Option<String>)],
-) {
-    let mut workspaces = credentials
-        .get(SOURCE_CREDENTIALS_KEY)
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    let mut sources = workspaces
-        .get(workspace_id)
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    let mut fields = sources
-        .get(source)
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    for (name, value) in values {
-        match value
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        {
-            Some(value) => {
-                fields.insert(name.clone(), json!(value));
-            }
-            None => {
-                fields.remove(name);
-            }
-        }
-    }
-    if fields.is_empty() {
-        sources.remove(source);
-    } else {
-        sources.insert(source.to_string(), Value::Object(fields));
-    }
-    if sources.is_empty() {
-        workspaces.remove(workspace_id);
-    } else {
-        workspaces.insert(workspace_id.to_string(), Value::Object(sources));
-    }
-    if workspaces.is_empty() {
-        credentials.remove(SOURCE_CREDENTIALS_KEY);
-    } else {
-        credentials.insert(
-            SOURCE_CREDENTIALS_KEY.to_string(),
-            Value::Object(workspaces),
-        );
-    }
-}
-
-/// Removes each of a workspace's values, for any ticket command source, that `remove` picks by its
-/// field name and its trimmed value; a source left with no value, and a workspace left with no
-/// source, are removed. Whether it removed any.
-pub(crate) fn remove_source_credentials_where(
-    credentials: &mut Map<String, Value>,
-    workspace_id: &str,
-    remove: impl Fn(&str, &str) -> bool,
-) -> bool {
-    let Some(workspaces) = credentials
-        .get_mut(SOURCE_CREDENTIALS_KEY)
-        .and_then(Value::as_object_mut)
-    else {
-        return false;
-    };
-    let Some(sources) = workspaces
-        .get_mut(workspace_id)
-        .and_then(Value::as_object_mut)
-    else {
-        return false;
-    };
-    let mut removed = false;
-    sources.retain(|_, fields| {
-        let Some(fields) = fields.as_object_mut() else {
-            return true;
-        };
-        let before = fields.len();
-        fields.retain(|name, value| {
-            !value
-                .as_str()
-                .is_some_and(|value| remove(name, value.trim()))
-        });
-        removed |= fields.len() != before;
-        !(fields.is_empty() && before > 0)
-    });
-    if sources.is_empty() {
-        workspaces.remove(workspace_id);
-    }
-    if workspaces.is_empty() {
-        credentials.remove(SOURCE_CREDENTIALS_KEY);
-    }
-    removed
-}
-
-/// Removes every ticket command credential of a workspace (it is being deleted), returning them,
-/// so a deletion that fails afterwards can put them back.
-pub(crate) fn remove_workspace_source_credentials(
-    credentials: &mut Map<String, Value>,
-    workspace_id: &str,
-) -> Option<Value> {
-    let workspaces = credentials
-        .get_mut(SOURCE_CREDENTIALS_KEY)
-        .and_then(Value::as_object_mut)?;
-    let removed = workspaces.remove(workspace_id);
-    if workspaces.is_empty() {
-        credentials.remove(SOURCE_CREDENTIALS_KEY);
-    }
-    removed
-}
-
-/// Puts back what `remove_workspace_source_credentials` removed.
-pub(crate) fn restore_workspace_source_credentials(
-    credentials: &mut Map<String, Value>,
-    workspace_id: &str,
-    removed: Value,
-) {
-    let workspaces = credentials
-        .entry(SOURCE_CREDENTIALS_KEY.to_string())
-        .or_insert_with(|| Value::Object(Map::new()));
-    if let Some(workspaces) = workspaces.as_object_mut() {
-        workspaces.insert(workspace_id.to_string(), removed);
     }
 }
 

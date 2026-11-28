@@ -745,10 +745,6 @@ async fn route_http_unboxed(
         Ok(response) => return response,
         Err(request) => request,
     };
-    let request = match route_work_source_http(request).await {
-        Ok(response) => return response,
-        Err(request) => request,
-    };
     let request = match route_work_cloud_http(request).await {
         Ok(response) => return response,
         Err(request) => request,

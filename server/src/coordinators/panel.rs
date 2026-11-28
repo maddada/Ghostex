@@ -504,7 +504,6 @@ fn work_links_of(session: &Value) -> Vec<Value> {
                 ),
                 SessionLinkRef::Github { number, .. } => ("issue", format!("#{number}"), 1),
                 SessionLinkRef::Linear { identifier } => ("linear", identifier.clone(), 2),
-                SessionLinkRef::Command { .. } => return None,
             };
             let mut link = json!({ "kind": kind, "label": label, "state": state });
             for field in ["checks", "title", "stateName"] {

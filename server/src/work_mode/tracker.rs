@@ -1,6 +1,5 @@
 //! Which tracker a workspace's projects use for tickets and projects: Linear (tickets and Linear
-//! projects), GitHub (issues and GitHub Projects), or the workspace's ticket command (its tickets,
-//! picked only on this computer and never in a team workspace). Every caller asks `project_work_tracker` (or
+//! projects) or GitHub (issues and GitHub Projects). Every caller asks `project_work_tracker` (or
 //! `workspace_work_tracker`); the presentation projection reads the answer the background pass
 //! remembered (`cached_project_work_tracker`).
 //!
@@ -27,7 +26,7 @@ use serde_json::{json, Map, Value};
 use crate::paths::GxserverPaths;
 use crate::workspaces::{project_workspace_id, workspace_exists, DEFAULT_WORKSPACE_ID};
 
-use super::{linear_api_key, workspace_command, WorkSourceId};
+use super::{linear_api_key, WorkSourceId};
 
 /// How long a team's choice read from Convex is trusted before the background pass reads it again.
 const TEAM_TRACKER_TTL: Duration = Duration::from_secs(5 * 60);
@@ -117,10 +116,7 @@ pub(crate) fn refresh_team_work_tracker(paths: &GxserverPaths, workspace_id: &st
         return false;
     }
     if let Ok(flow) = crate::team_sync::read_team_flow(paths, &workspace_params(workspace_id)) {
-        remember_team_work_tracker(
-            workspace_id,
-            WorkSourceId::from_wire_built_in(flow.get("tracker")),
-        );
+        remember_team_work_tracker(workspace_id, WorkSourceId::from_wire(flow.get("tracker")));
     }
     true
 }
@@ -131,9 +127,8 @@ pub(crate) fn workspace_params(workspace_id: &str) -> Map<String, Value> {
     params
 }
 
-/// The tracker a workspace picked on this computer (the workspaces document), if any: Linear,
-/// GitHub, or a ticket command's id this computer knows. Whether that command still applies is
-/// the caller's to check (`workspace_work_tracker`).
+/// The tracker a workspace picked on this computer (the workspaces document), if any. A value no
+/// source reads (the id of a retired ticket command) is no pick.
 pub(crate) fn stored_workspace_work_tracker(
     workspaces: &Value,
     workspace_id: &str,
@@ -161,9 +156,7 @@ pub(crate) fn workspace_work_tracker(
     if let Some(tracker) = cached_team_work_tracker(workspace_id) {
         return (tracker, WorkTrackerSource::Team);
     }
-    if let Some(tracker) = stored_workspace_work_tracker(workspaces, workspace_id)
-        .filter(|tracker| command_tracker_applies(paths, workspace_id, *tracker))
-    {
+    if let Some(tracker) = stored_workspace_work_tracker(workspaces, workspace_id) {
         return (tracker, WorkTrackerSource::Workspace);
     }
     let tracker = if linear_api_key(paths, None, Some(workspace_id)).is_some() {
@@ -172,21 +165,6 @@ pub(crate) fn workspace_work_tracker(
         WorkSourceId::Github
     };
     (tracker, WorkTrackerSource::Default)
-}
-
-/// Whether a stored `tracker` applies: Linear and GitHub always do; a ticket command only while
-/// the workspace pins it and has no team (a team's command is stopped), so a command that was
-/// cleared or that a team join stopped leaves the workspace on the rule for one never picked.
-fn command_tracker_applies(
-    paths: &GxserverPaths,
-    workspace_id: &str,
-    tracker: WorkSourceId,
-) -> bool {
-    let WorkSourceId::Command(id) = tracker else {
-        return true;
-    };
-    !crate::team_sync::workspace_has_team(paths, workspace_id)
-        && workspace_command(workspace_id).is_some_and(|command| command.source_id == id.as_str())
 }
 
 /// Which tracker a project uses: its workspace's (a worktree project follows its parent checkout).

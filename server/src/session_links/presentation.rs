@@ -1,5 +1,4 @@
-//! `PresentationSession.links`: every PR, GitHub issue, Linear ticket and ticket command ticket a
-//! session is linked to, with what was last read about each, and the PR and issue URLs offered
+//! `PresentationSession.links`: every PR, GitHub issue and Linear ticket a session is linked to, with what was last read about each, and the PR and issue URLs offered
 //! under Suggested. Pure cache reads, so the presentation projection can call it per row.
 //!
 //! CDXC:SessionLinks 2026-10-24 DECISION:
@@ -18,8 +17,7 @@ use crate::session_git_status::effective_session_git_cwd;
 use crate::work_mode::{
     cached_linear_issue_read, cached_work_github_issue, cached_work_github_issue_url,
     cached_work_pull_request, cached_work_repo, manual_work_links, project_linear_key,
-    ticket_link_value, work_source, work_targets, LinearIssueRead, ManualPullRequest, TicketRef,
-    TicketScope, WorkSourceId,
+    work_targets, LinearIssueRead, ManualPullRequest, WorkSourceId,
 };
 
 use super::{
@@ -118,18 +116,6 @@ pub(crate) fn session_link_entries(project: &Value, session: &Value) -> Vec<Sess
     for identifier in targets.ids_of(WorkSourceId::Linear) {
         let link = SessionLinkRef::Linear { identifier };
         push(live(link, manual.linear_issues.is_some()), &mut entries);
-    }
-    // The workspace's ticket command's tickets, and those of a command it no longer reads, which
-    // show as unavailable with their last title (`work_targets`).
-    for linked in &targets.tickets {
-        let WorkSourceId::Command(source) = linked.ticket.source else {
-            continue;
-        };
-        let link = SessionLinkRef::Command {
-            source,
-            id: linked.ticket.id.clone(),
-        };
-        push(live(link, linked.by_hand), &mut entries);
     }
     for item in stored.items {
         push(
@@ -252,7 +238,6 @@ fn insert_text(output: &mut Map<String, Value>, key: &str, value: Option<&str>) 
 /// A Linear ticket Linear says does not exist (deleted, or never visible to this key) has been read, so it is not `loading`: it is published as state `notFound`, state name "Not found" and finished, which every client already draws as a grey ticket under Merged / Closed (under Pinned when pinned), out of Open and its count (the desktop's icon tooltip says "Not found"), without a change there.
 fn entry_value(
     entry: &SessionLinkEntry,
-    project_id: &str,
     cwd: Option<&str>,
     repo: Option<&str>,
     linear_key: Option<u64>,
@@ -334,32 +319,6 @@ fn entry_value(
                 .or_else(|| linear_issue_url(identifier));
             insert_text(&mut output, "url", url.as_deref());
         }
-        SessionLinkRef::Command { source, id } => {
-            // What the command's own caches keep, `Unavailable` with its last title included;
-            // never `sessionLinks.read` (CDXC:SessionLinks 2026-11-03 in reference.rs).
-            let ticket = TicketRef::new(WorkSourceId::Command(*source), id.clone());
-            let scope = TicketScope {
-                project_id,
-                ..TicketScope::default()
-            };
-            let read = work_source(ticket.source).cached_ticket(&scope, id);
-            if let Value::Object(read) = ticket_link_value(&ticket, "", &read) {
-                for field in [
-                    "title",
-                    "state",
-                    "stateName",
-                    "stateGroup",
-                    "url",
-                    "finished",
-                    "loading",
-                ] {
-                    if let Some(value) = read.get(field) {
-                        output.insert(field.to_string(), value.clone());
-                    }
-                }
-            }
-            return Value::Object(output);
-        }
     }
     if finished {
         output.insert("finished".to_string(), json!(true));
@@ -381,7 +340,6 @@ fn entry_value(
                     SessionLinkRef::Github { .. } => {
                         crate::session_git_status::gh_cli_is_available()
                     }
-                    SessionLinkRef::Command { .. } => false,
                 };
                 if readable {
                     output.insert("loading".to_string(), json!(true));
@@ -406,13 +364,6 @@ pub(crate) fn session_links_read_snapshot(links: &Value) -> Map<String, Value> {
         else {
             continue;
         };
-        // A ticket command's last titles stay in its own table, which goes with its workspace.
-        if matches!(
-            SessionLinkRef::from_key(key),
-            Some(SessionLinkRef::Command { .. })
-        ) {
-            continue;
-        }
         let mut read = Map::new();
         for field in [
             "state",
@@ -463,13 +414,12 @@ fn kind_rank(item: &Value) -> u8 {
 fn other_entry_value(
     entry: &SessionLinkEntry,
     source: String,
-    project_id: &str,
     cwd: Option<&str>,
     repo: Option<&str>,
     linear_key: Option<u64>,
     read: &Map<String, Value>,
 ) -> Value {
-    let mut output = match entry_value(entry, project_id, cwd, repo, linear_key, read) {
+    let mut output = match entry_value(entry, cwd, repo, linear_key, read) {
         Value::Object(output) => output,
         _ => Map::new(),
     };
@@ -523,7 +473,6 @@ pub(crate) fn presentation_session_links(project: &Value, session: &Value) -> Op
                 index,
                 entry_value(
                     entry,
-                    project_id,
                     cwd.as_deref(),
                     repo.as_deref(),
                     linear_key,
@@ -573,7 +522,6 @@ pub(crate) fn presentation_session_links(project: &Value, session: &Value) -> Op
             other_entry_value(
                 &entry,
                 "Mentioned in the chat".to_string(),
-                project_id,
                 cwd.as_deref(),
                 repo.as_deref(),
                 linear_key,
@@ -607,7 +555,6 @@ pub(crate) fn presentation_session_links(project: &Value, session: &Value) -> Op
             other_entry_value(
                 &entry,
                 source,
-                project_id,
                 cwd.as_deref(),
                 repo.as_deref(),
                 linear_key,

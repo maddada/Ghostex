@@ -14,8 +14,8 @@ pub(crate) struct WorkTargets {
     pub(crate) cwd: Option<String>,
     pub(crate) branch: Option<String>,
     pub(crate) linear_key: Option<u64>,
-    /// Every source's tickets, Linear's first, then GitHub's and the workspace's ticket command's:
-    /// each source's hand-set ones, else what the branch names.
+    /// Every source's tickets, Linear's first, then GitHub's: each source's hand-set ones, else what
+    /// the branch names.
     pub(crate) tickets: Vec<LinkedTicket>,
     /// A PR number (as text) or URL, as `gh pr view` takes it.
     pub(crate) pull_request: Option<String>,
@@ -56,40 +56,8 @@ impl WorkTargets {
 }
 
 /// Resolves a work-mode session's links: hand-set ones first, then what its branch names, then
-/// (for the PR) what Linear's GitHub integration attached to its issue. The project's workspace is
-/// where it was last placed (`cached_project_workspace_id`).
+/// (for the PR) what Linear's GitHub integration attached to its issue.
 pub(crate) fn work_targets(project: &Value, session: &Value) -> WorkTargets {
-    let workspace_id = project
-        .get("projectId")
-        .and_then(Value::as_str)
-        .and_then(cached_project_workspace_id);
-    work_targets_in(project, session, workspace_id.as_deref())
-}
-
-/// `work_targets` with the project's workspace as the caller read it, so one pass reads each
-/// project's placement once.
-pub(crate) fn work_targets_in(
-    project: &Value,
-    session: &Value,
-    workspace_id: Option<&str>,
-) -> WorkTargets {
-    let tracker = cached_project_work_tracker(
-        project
-            .get("projectId")
-            .and_then(Value::as_str)
-            .unwrap_or_default(),
-    );
-    work_targets_with(project, session, workspace_id, tracker)
-}
-
-/// `work_targets_in` with the project's tracker as the caller read it: Start reads it from the
-/// workspace state, which a tracker picked since the last card pass has already reached.
-pub(crate) fn work_targets_with(
-    project: &Value,
-    session: &Value,
-    workspace_id: Option<&str>,
-    tracker: WorkSourceId,
-) -> WorkTargets {
     let project_id = project
         .get("projectId")
         .and_then(Value::as_str)
@@ -103,21 +71,16 @@ pub(crate) fn work_targets_with(
     let scope = TicketScope {
         project_id,
         workspace_id: None,
-        effective_workspace_id: workspace_id,
         cwd: cwd.as_deref(),
         credentials: None,
     };
     let in_branch = |source: WorkSourceId| match branch.as_deref() {
-        Some(branch) if reads_bare_numbers(source, tracker) => {
-            work_source(source).tickets_in_branch(&scope, branch)
-        }
-        _ => Vec::new(),
+        Some(branch) => work_source(source).tickets_in_branch(&scope, branch),
+        None => Vec::new(),
     };
 
-    let sources = work_sources_of(workspace_id);
-    let mut tickets: Vec<LinkedTicket> = sources
-        .iter()
-        .copied()
+    let tickets: Vec<LinkedTicket> = WorkSourceId::BUILT_IN
+        .into_iter()
         .flat_map(|source| {
             let hand_set = manual.ticket_ids(source);
             let by_hand = hand_set.is_some();
@@ -130,37 +93,6 @@ pub(crate) fn work_targets_with(
                 })
         })
         .collect();
-    // A ticket command the workspace no longer reads (cleared, switched from, or stopped in a
-    // team) keeps the tickets it was linked to on the card, as unavailable with their last title:
-    // its hand-set ones, else the branch's it answered for. That is while Issues Workflow stays on
-    // for the project; when the command was its only part, the card has no work fields at all.
-    let unread_hand_set: Vec<LinkedTicket> = manual
-        .tickets
-        .iter()
-        .filter_map(|(id, ids)| {
-            let source = WorkSourceId::Command(CommandSourceId::known(id)?);
-            (!sources.contains(&source)).then(|| {
-                ids.iter().map(move |id| LinkedTicket {
-                    ticket: TicketRef::new(source, id.clone()),
-                    by_hand: true,
-                })
-            })
-        })
-        .flatten()
-        .collect();
-    tickets.extend(unread_hand_set);
-    if let (Some(workspace_id), Some(branch)) = (workspace_id, branch.as_deref()) {
-        tickets.extend(
-            unread_command_tickets_in_branch(workspace_id, &sources, branch)
-                .into_iter()
-                .filter(|ticket| !manual.tickets.contains_key(ticket.source.as_wire()))
-                .filter(|ticket| reads_bare_numbers(ticket.source, tracker))
-                .map(|ticket| LinkedTicket {
-                    ticket,
-                    by_hand: false,
-                }),
-        );
-    }
     let branch_pull_request = branch.as_ref().and_then(|_| {
         git.as_ref()
             .and_then(|git| git.pull_request.as_ref())
@@ -180,9 +112,7 @@ pub(crate) fn work_targets_with(
                         TicketRead::Found(ticket) => {
                             ticket_pull_request_in_repo(&ticket.pull_request_urls, repo.as_deref())
                         }
-                        TicketRead::NotFound
-                        | TicketRead::Unread
-                        | TicketRead::Unavailable { .. } => None,
+                        TicketRead::NotFound | TicketRead::Unread => None,
                     }
                 })
             }),
@@ -331,7 +261,6 @@ pub(crate) fn presentation_session_work(project: &Value, session: &Value) -> Opt
             .and_then(Value::as_str)
             .unwrap_or_default(),
         workspace_id: None,
-        effective_workspace_id: None,
         cwd: targets.cwd.as_deref(),
         credentials: None,
     };

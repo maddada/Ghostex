@@ -450,8 +450,6 @@ fn refresh_link_caches(
                         }
                     }
                 }
-                // The command's own card pass queues its reads (work_mode/command/jobs.rs).
-                SessionLinkRef::Command { .. } => {}
             }
         }
         // The PRs, issues and Linear tickets this session's chat only mentioned, for the

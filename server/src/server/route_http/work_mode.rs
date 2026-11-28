@@ -55,7 +55,6 @@ pub(super) async fn route_work_mode_http(
                     let (links, undo) = crate::work_mode::save_session_work_links(
                         repository,
                         db,
-                        &state.paths,
                         &project_id,
                         &session_id,
                         params,
@@ -164,7 +163,6 @@ pub(super) async fn route_work_mode_http(
 /// One line for the CLI on what Issues Workflow shows with this setup.
 fn issues_workflow_note(parts: IssuesWorkflowParts) -> &'static str {
     match (parts.linear, parts.github) {
-        (false, false) if parts.command => "Issues Workflow is on with the workspace's ticket command; add a Linear key (`ghostex issues linear-key`) or sign in with `gh auth login` for Linear tickets or pull requests.",
         (true, true) => "Issues Workflow is on: Linear and GitHub parts both show.",
         (true, false) => "Issues Workflow is on with Linear only; sign in with `gh auth login` for pull requests and GitHub issues.",
         (false, true) => "Issues Workflow is on with GitHub only; add a Linear key (`ghostex issues linear-key`) for Linear tickets.",

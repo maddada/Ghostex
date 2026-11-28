@@ -357,9 +357,8 @@ pub struct PresentationProject {
     /// daemon. Each sidebar hides it once, as if the user had hidden it.
     #[serde(default, skip_serializing_if = "is_false")]
     pub autopilot_supervisor_project: bool,
-    /// Issues Workflow (formerly Work mode) is on for this project: a Linear key applies to it, `gh`
-    /// is signed in, or its workspace has a ticket command (server/src/work_mode/project.rs).
-    /// Present only when true.
+    /// Issues Workflow (formerly Work mode) is on for this project: a Linear key applies to it or
+    /// `gh` is signed in (server/src/work_mode/project.rs). Present only when true.
     #[serde(
         default,
         deserialize_with = "crate::de::null_as_default",
@@ -398,8 +397,7 @@ pub struct PresentationProject {
     pub work_github_off: bool,
     /// `linear` or `github`: the primary tracker of the project's workspace (server/src/work_mode/
     /// tracker.rs), which decides what Create ticket makes and what Link to offers. Present only
-    /// with work mode on; absent from an older daemon (read as Linear), and when the tracker is
-    /// the workspace's ticket command (`work_source.is_tracker`), so it never names one.
+    /// with work mode on; absent from an older daemon (read as Linear).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub work_tracker: Option<String>,
     /// The workspace this project belongs to; absent = the default workspace (and on an older
@@ -414,31 +412,6 @@ pub struct PresentationProject {
         skip_serializing_if = "is_false"
     )]
     pub every_workspace: bool,
-    /// The ticket command of the project's workspace (server/src/work_mode/command/), a source of
-    /// tickets on its sessions' cards. Absent without one, in a team workspace (where it is
-    /// stopped), and from an older daemon.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub work_source: Option<PresentationWorkSource>,
-}
-
-/// A workspace's ticket command as a project row shows it.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PresentationWorkSource {
-    /// The id its `info` pinned, which its tickets' keys and link kinds start with (`fixture`).
-    pub id: String,
-    /// Its name for the workspace (`info.name`). Its icon is not on the row (CDXC:WorkMode
-    /// 2026-11-03 in server/src/work_mode/project.rs).
-    pub name: String,
-    /// Whether it is the workspace's primary tracker (picked with `ghostex issues tracker <id>`).
-    /// Then the row has no `work_tracker` and no `work_linear`, which old clients would read as
-    /// Linear's or GitHub's (server/src/presentation/session_projection.rs).
-    #[serde(default, deserialize_with = "crate::de::null_as_default")]
-    pub is_tracker: bool,
-    /// Whether it creates tickets now: its `info` says it does and its program can run there
-    /// (`/api/createWorkTicket`). Absent from an older daemon.
-    #[serde(default, deserialize_with = "crate::de::null_as_default")]
-    pub can_create: bool,
 }
 
 impl PresentationProject {

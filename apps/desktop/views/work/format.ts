@@ -49,7 +49,7 @@ export function statusMatches(filter: StatusFilter, group: WorkStatusGroup): boo
 /** The request fields that name an item for `work.read` and `work.startChat`. */
 export function itemRef(item: WorkItem): WorkItemRef {
   if (item.kind === 'ticket') {
-    return { projectId: item.projectId, source: item.source, ticketId: item.ticketId, sourceKey: item.sourceKey };
+    return { projectId: item.projectId, source: item.source, ticketId: item.ticketId };
   }
   return {
     projectId: item.projectId,

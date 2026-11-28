@@ -25,17 +25,11 @@ use crate::worktree_sessions::{read_worktree_session_marker, slugify_branch_titl
 
 use super::*;
 
-/// The ticket a request names: exactly one Linear issue, one GitHub issue, one ticket of a
-/// workspace's ticket command or one GitHub PR.
+/// The ticket a request names: exactly one Linear issue, one GitHub issue or one GitHub PR.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum WorkTicket {
     Linear(String),
     Github(u64),
-    /// A ticket command's ticket: its pinned id, and the ticket id as the command reads it.
-    Command {
-        source: CommandSourceId,
-        id: String,
-    },
     /// A PR number (as text) or URL, as `gh pr view` takes it.
     PullRequest(String),
 }
@@ -52,10 +46,6 @@ impl WorkTicket {
                 WorkSourceId::Github => Self::Github(ticket.id.parse().map_err(|_| {
                     DomainStateError::bad_request("ticketId must be a GitHub issue number.")
                 })?),
-                WorkSourceId::Command(source) => Self::Command {
-                    source,
-                    id: ticket.id,
-                },
             },
             WorkItemRef::PullRequest(selector) => Self::PullRequest(selector),
         })
@@ -71,9 +61,6 @@ impl WorkTicket {
             Self::Github(number) => {
                 request.insert("githubIssues".to_string(), json!([number]));
             }
-            Self::Command { source, id } => {
-                request.insert("tickets".to_string(), json!({ source.as_str(): [id] }));
-            }
             Self::PullRequest(selector) => {
                 request.insert("pullRequest".to_string(), json!(selector));
             }
@@ -86,27 +73,16 @@ impl WorkTicket {
         match self {
             Self::Linear(identifier) => Some(TicketRef::new(WorkSourceId::Linear, identifier)),
             Self::Github(number) => Some(TicketRef::new(WorkSourceId::Github, number.to_string())),
-            Self::Command { source, id } => {
-                Some(TicketRef::new(WorkSourceId::Command(*source), id))
-            }
             Self::PullRequest(_) => None,
         }
     }
 
-    /// Whether a session already works on this ticket, by its links or its worktree's branch, a
-    /// branch's bare number naming it only when `tracker`, the project's, gives bare numbers to its
-    /// source (`reads_bare_numbers`).
-    pub(crate) fn is_linked(
-        &self,
-        targets: &WorkTargets,
-        worktree_branch: &str,
-        tracker: WorkSourceId,
-    ) -> bool {
+    /// Whether a session already works on this ticket, by its links or its worktree's branch.
+    pub(crate) fn is_linked(&self, targets: &WorkTargets, worktree_branch: &str) -> bool {
         // A PR is decided by the PR's plan, which knows its number and branch.
         self.ticket_ref().is_some_and(|ticket| {
             targets.ids_of(ticket.source).contains(&ticket.id)
-                || (reads_bare_numbers(ticket.source, tracker)
-                    && work_source(ticket.source).branch_names(worktree_branch, &ticket.id))
+                || work_source(ticket.source).branch_names(worktree_branch, &ticket.id)
         })
     }
 }
@@ -126,42 +102,24 @@ pub(crate) struct TicketWorkPlan {
 }
 
 /// `params` with the `source` a `ticketId` sent without one names, decided here so every client
-/// reads an ID the same way: the project's tracker when it is a ticket command (pinned in the
-/// project's workspace, outside a team) whose IDs the text is (`names_ticket`); else, as before,
-/// GitHub for a number and Linear for anything else. A pinned command that isn't the tracker is
-/// never picked by its ID keys: `ghostex issues start --source <id>` names it.
-pub(crate) fn with_ticket_source(
-    state: &AppState,
-    params: &Map<String, Value>,
-) -> Result<Map<String, Value>, DomainStateError> {
+/// reads an ID the same way: GitHub for a number, Linear for anything else.
+pub(crate) fn with_ticket_source(params: &Map<String, Value>) -> Map<String, Value> {
     let mut params = params.clone();
     let named = |key: &str| params.get(key).filter(|value| !value.is_null());
     let Some(ticket_id) = named("ticketId").filter(|_| named("source").is_none()) else {
-        return Ok(params);
+        return params;
     };
-    let text = ticket_id
-        .as_u64()
-        .map(|number| number.to_string())
-        .or_else(|| ticket_id.as_str().map(str::to_string))
-        .unwrap_or_default();
-    let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
-        code: "internalError",
-        message: format!("SQLite gxserver state error: {error}"),
-    })?;
-    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-    let project = resolve_work_mode_project(&repository, &params)?;
-    let workspaces = crate::workspaces::read_sidebar_workspaces(&db)?;
-    let projects = repository.list_projects()?;
-    let workspace_id = crate::workspaces::project_workspace_id(&workspaces, &project, &projects);
-    let source = match project_work_tracker(&state.paths, &workspaces, &project, &projects) {
-        WorkSourceId::Command(command) if command.source().names_ticket(&workspace_id, &text) => {
-            WorkSourceId::Command(command)
-        }
-        _ if text.trim().trim_start_matches('#').parse::<u64>().is_ok() => WorkSourceId::Github,
-        _ => WorkSourceId::Linear,
+    let number = ticket_id.as_u64().is_some()
+        || ticket_id
+            .as_str()
+            .is_some_and(|text| text.trim().trim_start_matches('#').parse::<u64>().is_ok());
+    let source = if number {
+        WorkSourceId::Github
+    } else {
+        WorkSourceId::Linear
     };
     params.insert("source".to_string(), json!(source.as_wire()));
-    Ok(params)
+    params
 }
 
 pub(crate) async fn start_work_on_ticket(
@@ -171,7 +129,7 @@ pub(crate) async fn start_work_on_ticket(
     let plan_state = state.clone();
     let plan_params = params.clone();
     let plan = tokio::task::spawn_blocking(move || {
-        let params = with_ticket_source(&plan_state, &plan_params)?;
+        let params = with_ticket_source(&plan_params);
         let ticket = WorkTicket::from_params(&params)?;
         plan_ticket_work(&plan_state, &params, &ticket)
     })
@@ -213,8 +171,8 @@ pub(crate) async fn start_work_on_ticket(
         .unwrap_or_default()
         .to_string();
     // The session is live from here on: a link that fails to save is reported, not rolled back.
-    // Off the async runtime: the link may wait for `TicketLinkLocks` while another link save or
-    // work-source change holds them.
+    // Off the async runtime: the link may wait while another save of the session's links holds
+    // `hold_work_links_lock`.
     let (link_state, link_project, link_session, links) = (
         state.clone(),
         project_id.clone(),
@@ -257,16 +215,6 @@ pub(crate) fn plan_ticket_work(
         .unwrap_or_default()
         .to_string();
     let project_id = project_id.as_str();
-    // A ticket command's setting and credentials are its workspace's: a worktree's is its parent
-    // checkout's.
-    let workspace_id = crate::workspaces::project_workspace_id(
-        &crate::workspaces::read_sidebar_workspaces(&db)?,
-        &project,
-        &repository.list_projects()?,
-    );
-    if let WorkTicket::Command { source, .. } = ticket {
-        command_row_in(params, &workspace_id, *source)?;
-    }
     let agent_id = text_param(params, "agentId").unwrap_or_else(|| {
         read_agent_settings(&db)
             .ok()
@@ -307,14 +255,8 @@ pub(crate) fn plan_ticket_work(
         .as_ref()
         .map(|plan| json!({ "number": plan.number, "url": plan.url }));
 
-    let existing_worktree = existing_ticket_worktree(
-        &db,
-        &state.paths,
-        &repository,
-        &project,
-        ticket,
-        pull_request.as_ref(),
-    )?;
+    let existing_worktree =
+        existing_ticket_worktree(&repository, &project, ticket, pull_request.as_ref())?;
     if existing_worktree.is_some() {
         return Ok(TicketWorkPlan {
             project_id: project_id.to_string(),
@@ -332,27 +274,19 @@ pub(crate) fn plan_ticket_work(
             let scope = TicketScope {
                 project_id,
                 workspace_id: crate::workspaces::stored_project_workspace_id(&project),
-                effective_workspace_id: Some(&workspace_id),
                 cwd: project.get("path").and_then(Value::as_str),
                 credentials: Some(&credentials),
             };
-            match ticket {
-                // The id as typed is checked too: the command reads `acm-12` as `ACM-12`.
-                WorkTicket::Command { source, id } => source.source().start_branch(
-                    &scope,
-                    &text_param(params, "ticketId").unwrap_or_else(|| id.clone()),
-                    id,
-                ),
-                _ => work_source(ticket_ref.source).branch_for(&scope, &ticket_ref.id),
-            }
-            .map_err(|message| {
-                // The sources answer words only; this one keeps its code for Run in terminal.
-                if message == GITHUB_SIGN_IN_MESSAGE {
-                    github_sign_in_required()
-                } else {
-                    DomainStateError::bad_request(message)
-                }
-            })?
+            work_source(ticket_ref.source)
+                .branch_for(&scope, &ticket_ref.id)
+                .map_err(|message| {
+                    // The sources answer words only; this one keeps its code for Run in terminal.
+                    if message == GITHUB_SIGN_IN_MESSAGE {
+                        github_sign_in_required()
+                    } else {
+                        DomainStateError::bad_request(message)
+                    }
+                })?
         }
         None => {
             let plan = pull_request
@@ -377,44 +311,14 @@ pub(crate) fn plan_ticket_work(
     })
 }
 
-/// Why Start refuses a Work page row of a ticket command's ticket in a project of another
-/// workspace.
-pub(crate) const START_IN_THE_ROWS_WORKSPACE: &str =
-    "That ticket was read in another workspace; pick a project of that workspace to start work on it.";
-
-/// A Work page row of a ticket command's ticket names the workspace it was read in (`sourceKey`):
-/// another workspace can pin the same id and answer the same ticket ids, so Start works on it
-/// only in a project of that workspace. A request that names no row (the CLI) reads the ticket in
-/// its project's workspace.
-pub(crate) fn command_row_in(
-    params: &Map<String, Value>,
-    workspace_id: &str,
-    source: CommandSourceId,
-) -> Result<(), DomainStateError> {
-    match params.get("sourceKey").and_then(Value::as_str) {
-        Some(key) if key != source_key(workspace_id, source.as_str()) => {
-            Err(DomainStateError::bad_request(START_IN_THE_ROWS_WORKSPACE))
-        }
-        _ => Ok(()),
-    }
-}
-
 /// The worktree of a session in the project that already works on the ticket (or on the PR, by its
 /// plan), still on disk.
 pub(crate) fn existing_ticket_worktree(
-    db: &rusqlite::Connection,
-    paths: &crate::paths::GxserverPaths,
     repository: &DomainRepository,
     project: &Value,
     ticket: &WorkTicket,
     pull_request: Option<&PullRequestPlan>,
 ) -> Result<Option<String>, DomainStateError> {
-    // From the workspace state now, not the background pass's copy: a tracker picked since the
-    // last pass (or before the first) decides which ticket a worktree's bare number names.
-    let workspaces = crate::workspaces::read_sidebar_workspaces(db)?;
-    let projects = repository.list_projects()?;
-    let tracker = project_work_tracker(paths, &workspaces, project, &projects);
-    let workspace_id = crate::workspaces::project_workspace_id(&workspaces, project, &projects);
     let project_id = project
         .get("projectId")
         .and_then(Value::as_str)
@@ -427,10 +331,10 @@ pub(crate) fn existing_ticket_worktree(
             if !Path::new(&marker.path).is_dir() {
                 return None;
             }
-            let targets = work_targets_with(project, session, Some(&workspace_id), tracker);
+            let targets = work_targets(project, session);
             let linked = match pull_request {
                 Some(plan) => plan.is_linked(&targets, &marker.branch),
-                None => ticket.is_linked(&targets, &marker.branch, tracker),
+                None => ticket.is_linked(&targets, &marker.branch),
             };
             linked.then_some(marker.path)
         }))
@@ -506,14 +410,7 @@ fn link_session_to_ticket(
         message: format!("SQLite gxserver state error: {error}"),
     })?;
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-    link_started_session(
-        &repository,
-        &db,
-        &state.paths,
-        project_id,
-        session_id,
-        request,
-    )?;
+    link_started_session(&repository, &db, project_id, session_id, request)?;
     schedule_presentation_session_delta(state, &db, &repository, project_id, session_id)
 }
 
@@ -600,30 +497,14 @@ mod tests {
         let linear = ticket(json!({ "source": "linear", "ticketId": "ACM-1" }));
         let github = ticket(json!({ "source": "github", "ticketId": 12 }));
         let unlinked = targets(Value::Null);
-        assert!(linear.is_linked(
-            &targets(json!({ "linearIssues": ["ACM-1"] })),
-            "main",
-            WorkSourceId::Github
-        ));
-        assert!(linear.is_linked(&unlinked, "leandro/acm-1-fix", WorkSourceId::Github));
-        assert!(!linear.is_linked(&unlinked, "leandro/acm-2-fix", WorkSourceId::Github));
-        assert!(!linear.is_linked(
-            &targets(json!({ "githubIssues": [1] })),
-            "main",
-            WorkSourceId::Github
-        ));
-        assert!(github.is_linked(
-            &targets(json!({ "githubIssues": [12] })),
-            "main",
-            WorkSourceId::Github
-        ));
-        assert!(github.is_linked(&unlinked, "leandro/12-fix", WorkSourceId::Github));
-        assert!(!github.is_linked(&unlinked, "leandro/acm-12-fix", WorkSourceId::Github));
+        assert!(linear.is_linked(&targets(json!({ "linearIssues": ["ACM-1"] })), "main"));
+        assert!(linear.is_linked(&unlinked, "leandro/acm-1-fix"));
+        assert!(!linear.is_linked(&unlinked, "leandro/acm-2-fix"));
+        assert!(!linear.is_linked(&targets(json!({ "githubIssues": [1] })), "main"));
+        assert!(github.is_linked(&targets(json!({ "githubIssues": [12] })), "main"));
+        assert!(github.is_linked(&unlinked, "leandro/12-fix"));
+        assert!(!github.is_linked(&unlinked, "leandro/acm-12-fix"));
         let pull_request = ticket(json!({ "pullRequest": 5 }));
-        assert!(!pull_request.is_linked(
-            &targets(json!({ "pullRequest": 5 })),
-            "main",
-            WorkSourceId::Github
-        ));
+        assert!(!pull_request.is_linked(&targets(json!({ "pullRequest": 5 })), "main"));
     }
 }

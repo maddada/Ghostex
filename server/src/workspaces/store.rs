@@ -580,20 +580,12 @@ pub fn normalize_sidebar_workspaces_state(state: &Value) -> Value {
                 workspace.insert("homeMachineName".into(), json!(home_machine_name));
             }
         }
-        // The primary tracker this computer picked (crate::work_mode::tracker): Linear, GitHub, or
-        // a ticket command's id; absent = never picked, which resolves to Linear when a Linear key
-        // applies and GitHub otherwise. A command id is kept as text even when its command breaks
-        // or is gone; the tracker resolves it only while the workspace pins that command.
-        if let Some(tracker) = source
-            .get("tracker")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|tracker| {
-                matches!(*tracker, "linear" | "github")
-                    || crate::work_mode::may_be_command_source_id(tracker)
-            })
-        {
-            workspace.insert("tracker".into(), json!(tracker));
+        // The primary tracker this computer picked (crate::work_mode::tracker); absent = never
+        // picked, which resolves to Linear when a Linear key applies and GitHub otherwise. A value
+        // no source reads (the id of a retired ticket command) is dropped, so the workspace goes
+        // back to that rule.
+        if let Some(tracker) = crate::work_mode::WorkSourceId::from_wire(source.get("tracker")) {
+            workspace.insert("tracker".into(), json!(tracker.as_wire()));
         }
         // The other workspaces whose Spaces this one shows too (CDXC:Workspaces 2026-11-26 in
         // gx-protocol side_state.rs): only workspaces that exist, never itself, each once.

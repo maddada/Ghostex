@@ -248,8 +248,7 @@ async fn renaming_a_worktree_updates_the_project_path_and_every_session_cwd() {
 /// A worktree given another parent by hand gets its checkout's parent back when a rename records
 /// its new state (`apply_renamed_worktree_project_state`, here without moving the folder, which git
 /// would do from the hand-set parent): the worktree metadata is detected again inside its
-/// transaction, which moves the project, so the rename takes the placement lock before the
-/// transaction, and the change is written rather than refused.
+/// transaction, which moves the project, and the change is written rather than refused.
 #[tokio::test]
 async fn a_rename_that_gives_a_worktree_its_checkouts_parent_back_is_recorded() {
     if !git_available() {

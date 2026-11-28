@@ -343,8 +343,8 @@ impl SessionLink {
                     },
                 )
             }
-            // A ticket command's ticket it can't ask about right now (`unavailable`, its last
-            // title kept) is grey like one not read yet, not green like open work.
+            // Another tracker's ticket not read yet, or one an older gxserver could not ask about
+            // (`unavailable`), is grey, not green like open work.
             SessionLinkKind::Other => (
                 SessionLinkGlyph::Ticket,
                 match state {

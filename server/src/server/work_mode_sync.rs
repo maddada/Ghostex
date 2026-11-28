@@ -17,10 +17,9 @@ use crate::work_mode::{
     work_display_title, PublishedProjectWork,
 };
 
-/// What each project last published of Issues Workflow (which parts it has, its tracker and its
-/// ticket command), so a pass republishes a project whose Linear key was set or removed, whose
-/// tracker changed, whose ticket command now has another name, or every project once `gh`
-/// is signed in or out.
+/// What each project last published of Issues Workflow (which parts it has and its tracker), so a
+/// pass republishes a project whose Linear key was set or removed, whose tracker changed, or every
+/// project once `gh` is signed in or out.
 fn published_linear_projects() -> &'static Mutex<HashMap<String, PublishedProjectWork>> {
     static PUBLISHED: OnceLock<Mutex<HashMap<String, PublishedProjectWork>>> = OnceLock::new();
     PUBLISHED.get_or_init(|| Mutex::new(HashMap::new()))
@@ -121,8 +120,6 @@ pub(crate) fn run_work_mode_refresh_once(state: &Arc<AppState>) -> Result<(), Do
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
     let all_projects = repository.list_projects()?;
     refresh_issues_workflow_setup(&state.paths, &all_projects);
-    // Before the cards are read: which workspace, and so which ticket command, each project uses.
-    crate::work_mode::replace_project_workspaces(&state.paths, &repository, &db)?;
 
     // What changed is kept only once its delta has gone out (below), so a failed one is sent
     // again on the next pass.
@@ -263,8 +260,7 @@ pub(crate) fn run_work_mode_refresh_once(state: &Arc<AppState>) -> Result<(), Do
     first_error.map_or(Ok(()), Err)
 }
 
-/// A project's delta, with its Issues Workflow parts, its tracker and its ticket command as the
-/// row shows them.
+/// A project's delta, with its Issues Workflow parts and its tracker as the row shows them.
 fn send_project_delta(
     state: &AppState,
     db: &rusqlite::Connection,

@@ -1,5 +1,6 @@
 //! Work tracker routes (crate::work_mode::tracker): which tracker a workspace or project uses and
-//! changing it (Linear, GitHub, or the workspace's ticket command), creating a GitHub issue for a GitHub workspace, and closing a work-mode notice.
+//! changing it (Linear or GitHub), creating a GitHub issue for a GitHub workspace, and closing a
+//! work-mode notice.
 //! They answer with Workspaces off too: Issues Workflow does not need it (a project then uses the
 //! workspace it is stored in, Personal for most).
 
@@ -7,10 +8,10 @@ use serde_json::{json, Map, Value};
 
 use crate::domain::DomainStateError;
 use crate::work_mode::{
-    dismiss_work_notice, github_projects_status_json, pick_command_tracker,
-    refresh_github_projects_access, remember_team_work_tracker, resolve_work_mode_project,
-    stored_workspace_work_tracker, work_notice_dismissed, work_source, workspace_work_tracker,
-    TicketDraft, TicketScope, WorkSourceId,
+    dismiss_work_notice, github_projects_status_json, refresh_github_projects_access,
+    remember_team_work_tracker, resolve_work_mode_project, stored_workspace_work_tracker,
+    work_notice_dismissed, work_source, workspace_work_tracker, TicketDraft, TicketScope,
+    WorkSourceId,
 };
 use crate::workspaces::{
     find_workspace_id, project_workspace_id, read_sidebar_workspaces, update_workspace_in,
@@ -137,7 +138,7 @@ fn read_work_tracker(
             Ok(flow) => {
                 remember_team_work_tracker(
                     &workspace_id,
-                    WorkSourceId::from_wire_built_in(flow.get("tracker")),
+                    WorkSourceId::from_wire(flow.get("tracker")),
                 );
                 can_edit = flow.get("canEdit").and_then(Value::as_bool) != Some(false);
             }
@@ -164,11 +165,9 @@ fn read_work_tracker(
     }))
 }
 
-/// `{ workspaceId, tracker: "linear" | "github" | "<the workspace's ticket command id>" }`. A team
-/// workspace saves Linear or GitHub in the team's flow settings (owners only; Convex refuses
-/// everyone else), and every workspace keeps it in this computer's workspaces document too, so it
-/// still applies after leaving the team. A ticket command is picked only here, while this
-/// workspace pins it and has no team (`pick_command_tracker`).
+/// `{ workspaceId, tracker: "linear" | "github" }`. A team workspace saves it in the team's flow
+/// settings (owners only; Convex refuses everyone else), and every workspace keeps it in this
+/// computer's workspaces document too, so it still applies after leaving the team.
 fn set_work_tracker(
     state: &AppState,
     db: &rusqlite::Connection,
@@ -180,14 +179,8 @@ fn set_work_tracker(
     let workspace_id = find_workspace_id(&current, &reference)
         .ok_or_else(|| DomainStateError::bad_request(crate::workspaces::NO_SUCH_WORKSPACE))?;
     let tracker = WorkSourceId::from_wire(params.get("tracker")).ok_or_else(|| {
-        DomainStateError::bad_request(
-            "tracker must be \"linear\", \"github\" or the id of the workspace's ticket command.",
-        )
+        DomainStateError::bad_request("tracker must be \"linear\" or \"github\".")
     })?;
-    if let WorkSourceId::Command(id) = tracker {
-        pick_command_tracker(db, &state.paths, &workspace_id, id.as_str())?;
-        return Ok(json!({ "workspaceId": workspace_id, "tracker": tracker.as_wire() }));
-    }
     if crate::team_sync::workspace_has_team(&state.paths, &workspace_id) {
         let mut team_params = crate::work_mode::workspace_params(&workspace_id);
         team_params.insert("tracker".to_string(), json!(tracker.as_wire()));
@@ -228,7 +221,6 @@ fn create_issue(
                     .and_then(Value::as_str)
                     .unwrap_or_default(),
                 workspace_id: None,
-                effective_workspace_id: None,
                 cwd: Some(cwd),
                 credentials: None,
             },

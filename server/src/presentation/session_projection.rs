@@ -139,9 +139,6 @@ pub(crate) fn project_presentation_project(project: &Value) -> Value {
             crate::work_mode::issues_workflow_parts(project),
             crate::work_mode::cached_project_work_tracker(project_id),
         );
-        if let Some(work_source) = crate::work_mode::presentation_work_source(project) {
-            output.insert("workSource".to_string(), work_source);
-        }
     }
     // The supervisor's "Autopilot" project: every sidebar hides it once (CDXC:Autopilot 2026-11-18 in server/src/autopilot/supervisor.rs).
     if crate::autopilot::is_supervisor_project(project) {
@@ -161,12 +158,9 @@ pub(crate) fn project_presentation_project(project: &Value) -> Value {
 
 /// `workMode`, `workLinear`, `workGithubOff` and `workTracker` on a project row
 /// (`PresentationProject` in packages/gx-protocol/src/presentation.rs): Issues Workflow is on once
-/// a Linear key applies, `gh` is signed in or the workspace has a ticket command (CDXC:WorkMode
-/// 2026-10-24 in server/src/work_mode/project.rs). `workGithubOff` is sent only when false would mislead: a
+/// a Linear key applies or `gh` is signed in (CDXC:WorkMode 2026-10-24 in
+/// server/src/work_mode/project.rs). `workGithubOff` is sent only when false would mislead: a
 /// daemon too old to send it had no such rule, so its absence means GitHub's parts are on.
-///
-/// CDXC:WorkMode 2026-11-04 WHY:
-/// With a ticket command as the tracker, `workTracker` and `workLinear` are left out and `workSource.isTracker` says so. Clients that know only Linear and GitHub read `workTracker` as one of the two and `workLinear` as "offer Linear's Create and Link to", so either would offer the wrong tracker's tickets; without them they offer neither, and the PR rows stay (`workGithubOff` is about the code host, not the tracker).
 pub(crate) fn insert_issues_workflow_fields(
     output: &mut Map<String, Value>,
     parts: crate::work_mode::IssuesWorkflowParts,
@@ -176,8 +170,7 @@ pub(crate) fn insert_issues_workflow_fields(
         return;
     }
     output.insert("workMode".to_string(), Value::Bool(true));
-    let command_tracker = matches!(tracker, crate::work_mode::WorkSourceId::Command(_));
-    if parts.linear && !command_tracker {
+    if parts.linear {
         output.insert("workLinear".to_string(), Value::Bool(true));
         if parts.linear_create {
             output.insert("workLinearCreate".to_string(), Value::Bool(true));
@@ -186,9 +179,7 @@ pub(crate) fn insert_issues_workflow_fields(
     if !parts.github {
         output.insert("workGithubOff".to_string(), Value::Bool(true));
     }
-    if !command_tracker {
-        output.insert("workTracker".to_string(), json!(tracker.as_wire()));
-    }
+    output.insert("workTracker".to_string(), json!(tracker.as_wire()));
 }
 
 pub(crate) fn project_presentation_git_config(project: &Value) -> Option<Value> {

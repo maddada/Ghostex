@@ -7971,8 +7971,7 @@ session can link several Linear issues shipped in one PR; tick them in the list.
 Something already linked shows its ID in the menu, Unlink removes it, and Back to
 automatic lets the branch decide again. Each workspace picks one **Primary
 tracker** in Settings > Workspaces: Linear tickets & projects, or GitHub issues &
-projects (`ghostex issues tracker linear|github`, or the ID of its ticket command,
-below; a workspace that never
+projects (`ghostex issues tracker linear|github`; a workspace that never
 picked uses Linear when it has a Linear key, otherwise GitHub, and a team's
 owners pick it for the whole team). With GitHub, Link to offers GitHub issue…
 and GitHub project… instead of the Linear ones, and the card shows the GitHub
@@ -8029,48 +8028,6 @@ its own uses; `--project-id <id>` sets one for a single project, `--clear`
 removes it). GitHub status comes from `gh`, so sign in
 with `gh auth login`. `ghostex issues status` says what is set up.
 `ghostex work-mode …`, the old name, still works for every one of these commands.
-
-A workspace can also point at a **ticket command**: a program you or your team
-wrote for another tracker, which tells Ghostex its name, how its ticket IDs look
-and which credentials it needs. Set it from a terminal on the computer that runs
-the workspace with `ghostex issues source set <path> --workspace Work`, then
-store each credential it asks for with `ghostex issues source credential <name>
---workspace Work`, which reads the value from stdin (`--clear` removes it). Secret
-credentials need at least 3 characters and are never shown back. A session whose
-branch names one of its tickets shows that ticket on its card and in its links,
-with its title and state, or Unavailable when the program can't be asked. To
-link a session to its tickets by hand, run `ghostex link-session <session>
---ticket <its ID>:ACM-12` (several separated by commas; `<its ID>:none` links
-none, and `--auto` goes back to what the branch says).
-`ghostex issues source` shows what is set, `check` runs it again and `clear`
-removes it; a workspace connected to a team can't use one. Ghostex also checks
-the program again by itself once an hour, and reads a ticket again after two
-minutes (sooner while it reports pull requests in review). To make it the
-workspace's primary tracker, run `ghostex issues tracker <its ID> --workspace
-Work` on that computer: the Issues view then lists its open tickets, which you
-can open, start a chat on or start in the cloud, as with a Linear ticket, and
-Settings > Workspaces shows neither Linear nor GitHub picked (picking one there
-switches back). When its IDs are plain numbers, a number in a branch name
-(`218-fix`) then names its ticket instead of GitHub issue #218. **Start chat**
-and **Start in cloud** on one of its tickets, and `ghostex issues start <its
-ticket ID>`, work in a project of the same workspace the ticket was listed in,
-on the branch the ticket names, else its ID and title (`acm-12-fix-login`);
-Ghostex reads the ticket once first and, if it can't (the program is not
-answering, say), says why and starts nothing. With `ghostex issues start`, a
-ticket ID is read as the primary tracker's when it looks like one of its IDs,
-else as a GitHub issue number or a Linear ticket; add `--source <its ID>` to
-read it as that program's ticket whatever the primary tracker is. To create a
-ticket with it, run `ghostex issues create-ticket --title "…"` (with
-`--description`, and `--no-assign` to leave it unassigned) in a workspace where
-it is the primary tracker, or add `--source <its ID>` anywhere in that
-workspace, and `--start` to work on it right after. The program must say it can
-create tickets and have all its credentials stored, and it picks where its
-tickets go, so `--team-id` and `--linear-project-id` are refused. A create runs
-once and is never retried. If it takes longer than a minute or answers something
-Ghostex can't read, Ghostex says the ticket may have been created and refuses
-another create in that workspace for five minutes (check your tracker first);
-`--start` does nothing after a failed create. The New ticket button does not
-create one yet.
 
 Every session, in any project, keeps a list of the pull requests, GitHub issues
 and Linear tickets it is linked to, and gathers them by itself: the PR of the
@@ -8190,9 +8147,7 @@ it closes); a second session on the same ticket joins the first one's worktree a
 branch. Add `--cloud` to start a Claude Code cloud session on the ticket's branch
 instead (with the task from `--prompt-file`, or the one Ghostex writes from the
 ticket); it prints the session's link. `ghostex issues create-ticket --title "…"
---start` does both from a terminal (a GitHub issue in a GitHub workspace, a
-ticket of the workspace's ticket command where that is its primary tracker or
-with `--source <its ID>`, see Issues Workflow above). New session still
+--start` does both from a terminal (a GitHub issue in a GitHub workspace). New session still
 starts on main with no worktree.
 
 A Work workspace can share a team backend (part of Workspaces, so turn that on
@@ -8281,8 +8236,8 @@ the project picked in the page's Project dropdown), `hideProjectHeaderDiffStats`
 `showProjectEditorDiffFileCount`,
 `showUntrackedProjectDiffWhenNoTrackedChanges`. Issues Workflow:
 `titleSessionsByBranch`, `offerCleanupWhenPrMerges`, `ghostex issues
-status|linear-key|source|tracker|create-ticket|start|cleanup` (old name `ghostex
-work-mode`; `create-ticket` and `start` take `--source <ticket command ID>`),
+status|linear-key|tracker|create-ticket|start|cleanup` (old name `ghostex
+work-mode`),
 `ghostex link-session`. Team
 backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
 `ghostex team flow show|slack-manifest|slack-connect`,

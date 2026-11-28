@@ -1,14 +1,10 @@
 //! `update_project` against concurrent writers: an update that read the row before a move never
-//! writes the old workspace back, and a placement change inside a transaction needs the placement
-//! lock taken before the transaction.
+//! writes the old workspace back.
 
 use std::sync::mpsc;
 use std::time::Duration;
 
-use crate::domain::repository::project::{
-    hold_project_placement, pause_project_update, PLACEMENT_CHANGE_IN_TRANSACTION,
-    PROJECT_CHANGED_DURING_UPDATE,
-};
+use crate::domain::repository::project::{pause_project_update, PROJECT_CHANGED_DURING_UPDATE};
 use serde_json::json;
 
 use super::*;
@@ -131,58 +127,4 @@ fn an_update_whose_project_is_removed_during_its_last_attempt_answers_not_found(
     let (answer, stored) = rename_raced_on_every_attempt(true);
     assert_eq!(answer.expect_err("not found").code, "notFound");
     assert!(stored.is_none());
-}
-
-#[test]
-fn a_placement_change_inside_a_transaction_needs_the_placement_lock_first() {
-    let (_temp, db) = open_test_database();
-    let repository = DomainRepository::new(&db, "S7k");
-    let project_id = project_in(&repository, "ws-a");
-
-    let transaction = db.unchecked_transaction().expect("transaction");
-    let inside = DomainRepository::new(&transaction, "S7k");
-    update(
-        &inside,
-        json!({ "projectId": project_id, "name": "Renamed" }),
-    )
-    .expect("an update that doesn't move it is written");
-    let refused = update(
-        &inside,
-        json!({ "projectId": project_id, "launchSettings": { "workspaceId": "ws-b" } }),
-    )
-    .expect_err("refused");
-    assert_eq!(refused.message, PLACEMENT_CHANGE_IN_TRANSACTION);
-    drop(transaction);
-
-    let placement = hold_project_placement().expect("held");
-    let transaction = db.unchecked_transaction().expect("transaction");
-    move_to(
-        &DomainRepository::new(&transaction, "S7k"),
-        &project_id,
-        "ws-b",
-    );
-    transaction.commit().expect("committed");
-    drop(placement);
-    let stored = repository
-        .get_project(&project_id)
-        .expect("read")
-        .expect("project");
-    assert_eq!(stored["launchSettings"]["workspaceId"], json!("ws-b"));
-}
-
-/// The placement lock taken twice on one thread: a debug build stops at the assertion; a release
-/// build refuses in fixed words instead of waiting forever.
-#[test]
-#[cfg_attr(
-    debug_assertions,
-    should_panic(expected = "the placement lock is taken twice on one thread")
-)]
-fn the_placement_lock_taken_twice_on_one_thread_is_refused() {
-    let _held = hold_project_placement().expect("held");
-    let refused = hold_project_placement().err().expect("refused");
-    assert_eq!(refused.code, "internalError");
-    assert_eq!(
-        refused.message,
-        crate::domain::repository::project::LOCK_ORDER_REFUSED
-    );
 }

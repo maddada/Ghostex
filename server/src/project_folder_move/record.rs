@@ -273,17 +273,11 @@ pub(crate) fn record(
     journal: &Journal,
 ) -> Result<Value, DomainStateError> {
     let root = journal.root();
-    // Before the transaction, in the lock order (placement, then SQLite), as the worktree rename does.
-    let placement = crate::domain::repository::project::hold_project_placement()?;
     let transaction =
         rusqlite::Transaction::new_unchecked(db, rusqlite::TransactionBehavior::Immediate)
             .map_err(sql_error)?;
     let rewrite = rewrite_database(&transaction, &root, true)?;
     transaction.commit().map_err(sql_error)?;
-    drop(placement);
-    for project_id in &journal.project_ids {
-        crate::work_mode::forget_project_placement(project_id);
-    }
     let files = rewrite_files(root_dir, &root, true);
     let _ = super::registry::record_former_path(
         root_dir,

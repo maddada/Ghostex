@@ -625,16 +625,12 @@ pub fn usage() -> String {
             "Issues Workflow (formerly work-mode, which still works as an alias): say what is set up (it is on for every project once a Linear key applies or gh is signed in), or save the Linear API key from stdin",
         ),
         format_help_command(
-            "issues create-ticket --title t [--description d] [--source <ticket command id>] [--team-id id] [--linear-project-id id] [--no-assign] [--start] | start <SPX-1245|#218|PR link> [--source <ticket command id>] [--pr 412] [--agent id] [--model m] [--effort e] [--cloud [--provider claude-code] [--prompt-file path]]",
-            "Create a ticket assigned to you (a Linear ticket, a GitHub issue when the workspace's tracker is GitHub, or a ticket of the workspace's ticket command when that is the tracker or --source names it, which runs its create once and refuses Linear's flags), or start an agent on a ticket in a worktree on its branch, linked to it; nothing is sent to the agent. A ticket ID is read as the workspace's tracker's (its ticket command's, when that is the tracker and the ID has one of its keys), else as a GitHub issue number or a Linear ticket; --source names the ticket command to read it as. --cloud starts a Claude Code cloud session on the ticket's branch instead, with the file's task or one drafted from the ticket, and prints its link",
+            "issues create-ticket --title t [--description d] [--team-id id] [--linear-project-id id] [--no-assign] [--start] | start <SPX-1245|#218|PR link> [--source linear|github] [--pr 412] [--agent id] [--model m] [--effort e] [--cloud [--provider claude-code] [--prompt-file path]]",
+            "Create a ticket assigned to you (a Linear ticket, or a GitHub issue when the workspace's tracker is GitHub), or start an agent on a ticket in a worktree on its branch, linked to it; nothing is sent to the agent. A ticket ID is read as a GitHub issue number or a Linear ticket; --source names the tracker to read it as. --cloud starts a Claude Code cloud session on the ticket's branch instead, with the file's task or one drafted from the ticket, and prints its link",
         ),
         format_help_command(
-            "issues source [set <path> [--switch] | check | clear | credential <name> [--clear]] [--workspace name|id]",
-            "A workspace's ticket command, a program that describes its own tracker: show it, set or re-check its path (it runs the command's info and keeps the id it answers with; --switch accepts a new id), clear it (its credentials stay), or store one of its credentials from stdin (--clear removes it). Only this computer can set it, and a team workspace can't",
-        ),
-        format_help_command(
-            "issues tracker [linear|github|<command id>] [--workspace name|id | --project-id id | --path path]",
-            "Show or set the workspace's primary tracker: Linear tickets & projects, GitHub issues & projects, or the id of the workspace's ticket command (a team workspace's owners set Linear or GitHub for the whole team)",
+            "issues tracker [linear|github] [--workspace name|id | --project-id id | --path path]",
+            "Show or set the workspace's primary tracker: Linear tickets & projects or GitHub issues & projects (a team workspace's owners set it for the whole team)",
         ),
         format_help_command(
             "issues cleanup <session> clean-up|keep",
@@ -677,8 +673,8 @@ pub fn usage() -> String {
             "Post to the Slack working thread of the session's ticket; --final also posts it once in the threads the request came from",
         ),
         format_help_command(
-            "link-session <selector> [--pr n|url|none] [--linear SPX-1,SPX-2|none] [--issue n|none] [--ticket id:ID,id:ID|id:none] [--linear-project name|none] [--github-project owner/number|none] [--auto] | --candidates pullRequest|linearIssue|linearProject|githubIssue|githubProject [--query text]",
-            "Link a session to a PR, Linear or GitHub issues, its ticket command's tickets, a Linear project or a GitHub Project; --auto goes back to what its branch says; --candidates lists what the Link to picker suggests",
+            "link-session <selector> [--pr n|url|none] [--linear SPX-1,SPX-2|none] [--issue n|none] [--linear-project name|none] [--github-project owner/number|none] [--auto] | --candidates pullRequest|linearIssue|linearProject|githubIssue|githubProject [--query text]",
+            "Link a session to a PR, Linear or GitHub issues, a Linear project or a GitHub Project; --auto goes back to what its branch says; --candidates lists what the Link to picker suggests",
         ),
         format_help_command(
             "link add|remove|restore|pin|unpin|refresh|list [<url|#123|owner/repo#123|ABC-123>] [--session <session>] [--issue] [--json]",

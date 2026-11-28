@@ -29,10 +29,6 @@ mod stall_subagent_output;
 mod voice_remote_sessions;
 #[cfg(unix)]
 mod work_mode_pass;
-#[cfg(unix)]
-mod work_source_routes;
-#[cfg(unix)]
-mod workspace_deletion_routes;
 mod worktree_projects;
 mod worktree_session_routes;
 mod zmx_and_sidecars;

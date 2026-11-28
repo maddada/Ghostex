@@ -52,22 +52,22 @@ fn a_linear_ticket_links_its_identifier() {
     assert_eq!(Value::Object(undo), json!({ "linearIssues": null }));
 }
 
-/// A ticket with no source is refused here. One whose source isn't Linear or GitHub is a ticket
-/// command's: it goes on, as typed, to the check under the locks (`checked_ticket_links`), which
-/// refuses a source the session's workspace doesn't pin in its fixed words.
+/// A ticket with no source, or one whose source isn't Linear or GitHub (a retired ticket
+/// command's, say), is refused.
 #[test]
-fn a_ticket_of_a_missing_source_is_refused_and_another_goes_to_the_check() {
+fn a_ticket_of_a_missing_or_unknown_source_is_refused() {
     assert_eq!(
         add("Unknown", json!({ "ticketId": "ACM-1" })).unwrap_err(),
         "source must be linear or github."
     );
-    let (request, undo) = add(
-        "Unknown",
-        json!({ "source": " jira ", "ticketId": " acm-1" }),
-    )
-    .unwrap();
-    assert_eq!(request["tickets"], json!({ "jira": [" acm-1"] }));
-    assert_eq!(Value::Object(undo), json!({ "tickets": { "jira": null } }));
+    assert_eq!(
+        add(
+            "Unknown",
+            json!({ "source": " fixture ", "ticketId": " acm-1" })
+        )
+        .unwrap_err(),
+        "source must be linear or github."
+    );
 }
 
 /// A source is read as `WorkSourceId::parse` reads one, spaces around it included.

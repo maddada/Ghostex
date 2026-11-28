@@ -226,36 +226,8 @@ pub(super) async fn route_workspaces_http(
                         let _event_sequence = lock_presentation_event_sequence(&state)?;
                         let current = read_sidebar_workspaces(db)?;
                         let workspace_id = required_workspace(&current, params)?;
-                        // First, so a workspace that can't be deleted (the default one) keeps its
-                        // ticket command.
                         let next = delete_workspace_in(&current, &workspace_id)?;
-                        // Its ticket command and that command's credentials go with it, like its
-                        // Linear key, whichever client deletes it (the decision is on
-                        // `delete_workspace_work_source`). The command record and the workspaces
-                        // document change in one transaction, and the credentials file is put back
-                        // on any failure, so an error leaves the workspace, its command and its
-                        // credentials as they were, with nothing broadcast.
-                        let transaction = db.unchecked_transaction().map_err(sql_error)?;
-                        let references =
-                            || crate::work_mode::referenced_source_ids(repository, &current);
-                        let deletion = crate::work_mode::delete_workspace_work_source(
-                            db,
-                            &state.paths,
-                            &workspace_id,
-                            &references,
-                        )
-                        .map_err(work_source_error)?;
-                        let written = write_sidebar_workspaces(db, &next).and_then(|workspaces| {
-                            transaction.commit().map_err(sql_error)?;
-                            Ok(workspaces)
-                        });
-                        let workspaces = match written {
-                            Ok(workspaces) => {
-                                deletion.commit();
-                                workspaces
-                            }
-                            Err(error) => return Err(undone(deletion, &state.paths, error)),
-                        };
+                        let workspaces = write_sidebar_workspaces(db, &next)?;
                         broadcast_workspaces(&state, db, &workspaces)?;
                         if let Some(spaces) =
                             rehome_sidebar_spaces_for_workspaces(db, Some(&workspace_id), &[])?
@@ -267,7 +239,6 @@ pub(super) async fn route_workspaces_http(
                     // Its projects fall back to the default workspace and take its default.
                     let changed =
                         reapply_workspace_defaults(repository, &workspaces, DEFAULT_WORKSPACE_ID)?;
-                    crate::work_mode::replace_project_workspaces(&state.paths, repository, db)?;
                     publish_projects(&state, db, repository, &changed)?;
                     let _ = store_linear_api_key(
                         &state.paths,
@@ -392,21 +363,11 @@ pub(super) async fn route_workspaces_http(
                     };
                     let workspaces = read_sidebar_workspaces(db)?;
                     let workspace_id = required_workspace(&workspaces, params)?;
-                    // Placed before they publish, so their rows show the new workspace's ticket
-                    // command; and under the ticket command store's writer lock, which a
-                    // background read holds from its placement check until its command starts.
-                    let changed = crate::work_mode::place_projects_after(
-                        &state.paths,
+                    let changed = move_project_to_workspace(
                         repository,
-                        db,
-                        || {
-                            move_project_to_workspace(
-                                repository,
-                                &workspaces,
-                                &project_id,
-                                &workspace_id,
-                            )
-                        },
+                        &workspaces,
+                        &project_id,
+                        &workspace_id,
                     )?;
                     if !changed.is_empty() {
                         leave_old_workspace_groups(&state, db, &changed)?;
@@ -500,19 +461,17 @@ pub(super) async fn route_workspaces_http(
     })
 }
 
-/// The generic workspace writes, which remote clients may call, set only a built-in tracker. A
-/// workspace's ticket command is set and chosen on its own computer (the decision on the
-/// work-source endpoints in `protocol.rs`), so a command id here is refused instead of dropped.
-/// The check is these routes' own, not `update_workspace_in`'s, which the local-only
+/// A `tracker` the generic workspace writes are given must name a source, so a typo is refused
+/// instead of dropped. The check is these routes' own, not `update_workspace_in`'s, which
 /// `/api/setWorkTracker` also writes through.
 fn refuse_other_trackers(params: &Map<String, Value>) -> Result<(), DomainStateError> {
     match params.get("tracker") {
         None | Some(Value::Null) => Ok(()),
-        Some(tracker) if matches!(tracker.as_str().map(str::trim), Some("linear" | "github")) => {
+        Some(tracker) if crate::work_mode::WorkSourceId::from_wire(Some(tracker)).is_some() => {
             Ok(())
         }
         Some(_) => Err(DomainStateError::bad_request(
-            "tracker must be \"linear\" or \"github\"; a ticket command is set and picked on its own computer.",
+            "tracker must be \"linear\" or \"github\".",
         )),
     }
 }
@@ -636,40 +595,4 @@ fn required_text(params: &Map<String, Value>, key: &str) -> Result<String, Domai
         .filter(|value| !value.is_empty())
         .map(str::to_string)
         .ok_or_else(|| DomainStateError::bad_request(format!("Pass {key}.")))
-}
-
-fn sql_error(error: rusqlite::Error) -> DomainStateError {
-    DomainStateError {
-        code: "internalError",
-        message: format!("SQLite workspaces error: {error}"),
-    }
-}
-
-fn work_source_error(error: crate::work_mode::WorkSourceError) -> DomainStateError {
-    match error {
-        crate::work_mode::WorkSourceError::Storage(error) => error,
-        crate::work_mode::WorkSourceError::Refused(text) => DomainStateError::bad_request(text),
-        crate::work_mode::WorkSourceError::Failed(_) => {
-            DomainStateError::bad_request("Could not remove its ticket command.")
-        }
-    }
-}
-
-/// `error`, after putting back the credentials a failed deletion removed (the transaction it was
-/// in rolled the command record back already).
-fn undone(
-    deletion: crate::work_mode::WorkSourceDeletion,
-    paths: &crate::paths::GxserverPaths,
-    error: DomainStateError,
-) -> DomainStateError {
-    match deletion.undo(paths) {
-        Ok(()) => error,
-        Err(undo_error) => DomainStateError {
-            code: "internalError",
-            message: format!(
-                "{} (and its ticket command's credentials could not be put back: {undo_error})",
-                error.message
-            ),
-        },
-    }
 }

@@ -181,7 +181,7 @@ export interface GxserverPresentationProject {
   gbotsProject?: true;
   /** The project is Autopilot's own "Autopilot" project (its supervisor's folder, server/src/autopilot/supervisor.rs); each sidebar hides it once, as if the user had hidden it. Present only when true. */
   autopilotSupervisorProject?: true;
-  /** Issues Workflow (formerly Work mode) is on for this project: a Linear key applies, `gh` is signed in, or its workspace has a ticket command (server/src/work_mode/project.rs); present only when true. */
+  /** Issues Workflow (formerly Work mode) is on for this project: a Linear key applies or `gh` is signed in (server/src/work_mode/project.rs); present only when true. */
   workMode?: true;
   /** Issues Workflow is on and a Linear key applies to this project; present only when true. */
   workLinear?: true;
@@ -195,17 +195,6 @@ export interface GxserverPresentationProject {
   workspaceId?: string;
   /** The project shows in every workspace (the Ghostex config folder's project, home of the Help chats); present only when true. */
   everyWorkspace?: true;
-  /** The ticket command of the project's workspace (server/src/work_mode/command/); absent without one, in a team workspace, and from an older daemon. */
-  workSource?: {
-    /** The id its `info` pinned, which its tickets' keys and link kinds start with. */
-    id: string;
-    /** Its name for the workspace; its icon is not on the row (server/src/work_mode/project.rs). */
-    name: string;
-    /** Whether it is the workspace's primary tracker; then the row has no `workTracker` and no `workLinear`. */
-    isTracker: boolean;
-    /** Whether it creates tickets now (`/api/createWorkTicket`); absent from an older daemon. */
-    canCreate?: boolean;
-  };
   /*
   CDXC:Icons 2026-07-29 (discovered icons):
   The icon the PROJECT ITSELF ships, discovered server-side inside the checkout

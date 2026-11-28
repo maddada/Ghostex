@@ -1,19 +1,16 @@
-//! Where a workspace's tickets come from. Each source (Linear, GitHub issues, a workspace's ticket
-//! command) answers the same questions: what its tickets are called (keys, labels, link kinds),
+//! Where a workspace's tickets come from. Each source (Linear, GitHub issues) answers the same questions: what its tickets are called (keys, labels, link kinds),
 //! which tickets a branch, a PR or a typed reference names, which tickets the Work list shows,
 //! what its caches know about one ticket, its details with comments, and how to create one. PRs,
 //! checks and the Clean up offer are not a source's business: they belong to the code host
 //! (GitHub) whatever the tracker is.
 //!
 //! CDXC:WorkMode 2026-10-27 SEE-ALSO:
-//! `source_linear.rs`, `source_github.rs` and `source_command.rs` (the sources); `PresentationSessionWork.tickets` and `PresentationSessionLink.state_group` in packages/gx-protocol/src/presentation.rs; the Work page's `WorkItem.source` in apps/desktop/views/work/types.ts.
+//! `source_linear.rs` and `source_github.rs` (the sources); `PresentationSessionWork.tickets` and `PresentationSessionLink.state_group` in packages/gx-protocol/src/presentation.rs; the Work page's `WorkItem.source` in apps/desktop/views/work/types.ts.
 
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap};
 
 use serde_json::{json, Map, Value};
-
-use crate::paths::GxserverPaths;
 
 use super::*;
 
@@ -24,9 +21,6 @@ pub(crate) enum WorkSourceId {
     Linear,
     /// GitHub issues and GitHub Projects.
     Github,
-    /// A workspace's ticket command, by the id its `info` pinned (`CommandSourceId`, interned so
-    /// this stays `Copy`).
-    Command(CommandSourceId),
 }
 
 impl WorkSourceId {
@@ -42,7 +36,6 @@ impl WorkSourceId {
         match self {
             Self::Linear => "linear",
             Self::Github => "github",
-            Self::Command(id) => id.as_str(),
         }
     }
 
@@ -50,74 +43,15 @@ impl WorkSourceId {
         Self::parse(value?.as_str()?)
     }
 
-    /// Linear, GitHub, or a command id the store already interned; never interns one.
+    /// A source's wire name; anything else (the id of a retired ticket command a workspace
+    /// still has saved, say) is none.
     pub(crate) fn parse(text: &str) -> Option<Self> {
-        let text = text.trim();
-        Self::parse_built_in(text).or_else(|| CommandSourceId::known(text).map(Self::Command))
-    }
-
-    /// Linear or GitHub only: a team's tracker (its Convex flow) and the generic workspace writes
-    /// can never name a ticket command, which is picked only on its own computer.
-    pub(crate) fn parse_built_in(text: &str) -> Option<Self> {
         match text.trim() {
             "linear" => Some(Self::Linear),
             "github" => Some(Self::Github),
             _ => None,
         }
     }
-
-    pub(crate) fn from_wire_built_in(value: Option<&Value>) -> Option<Self> {
-        Self::parse_built_in(value?.as_str()?)
-    }
-}
-
-/// Whether `source` reads a bare number in a branch (`218-fix`) as one of its tickets, in a
-/// workspace whose tracker is `tracker`. Only the number sources (GitHub, a ticket command with
-/// `number` ids) read one, so for every other source the answer is yes.
-///
-/// CDXC:WorkMode 2026-11-04 DECISION:
-/// A bare number in a branch is the tracker's ticket when the tracker uses numbers (GitHub, or a ticket command with number ids), and otherwise GitHub's issue, as before ticket commands; a number-format command that isn't the tracker links numbers only when they are set by hand. The repository owner, on a branch `218-fix` that linked both GitHub issue #218 and the command's ticket 218: "the tracker should probably decide which one a bare number means"; with Linear as the tracker, which reads no bare numbers, they stay GitHub's.
-pub(crate) fn reads_bare_numbers(source: WorkSourceId, tracker: WorkSourceId) -> bool {
-    let numbers = |source: WorkSourceId| match source {
-        WorkSourceId::Github => true,
-        WorkSourceId::Command(id) => id_format(id) == Some(IdFormat::Number),
-        WorkSourceId::Linear => false,
-    };
-    if !numbers(source) {
-        return true;
-    }
-    source
-        == if numbers(tracker) {
-            tracker
-        } else {
-            WorkSourceId::Github
-        }
-}
-
-/// The sources a workspace's branches, links and cards are read for: Linear, GitHub, then the
-/// workspace's ticket command, unless the workspace is in a team, where its command is stopped and
-/// keeps its settings. Without a workspace, Linear and GitHub.
-pub(crate) fn work_sources_of(workspace_id: Option<&str>) -> Vec<WorkSourceId> {
-    work_sources_for(workspace_id)
-}
-
-/// The sources of several workspaces (the Work list's, the card pass's): Linear and GitHub first,
-/// then each workspace's command once, so `BUILT_IN`'s order still breaks ties.
-pub(crate) fn work_sources_for<'a>(
-    workspace_ids: impl IntoIterator<Item = &'a str>,
-) -> Vec<WorkSourceId> {
-    let mut sources = WorkSourceId::BUILT_IN.to_vec();
-    for workspace_id in workspace_ids {
-        let command = (!cached_workspace_in_team(workspace_id))
-            .then(|| workspace_command(workspace_id))
-            .flatten()
-            .and_then(|command| CommandSourceId::known(&command.source_id))
-            .map(WorkSourceId::Command);
-        if let Some(command) = command.filter(|command| !sources.contains(command)) {
-            sources.push(command);
-        }
-    }
-    sources
 }
 
 /// Which kind of project a source's tickets sit in: a Linear project or a GitHub Project. The
@@ -230,12 +164,6 @@ pub(crate) enum TicketRead {
     /// The source says there is no such ticket.
     NotFound,
     Found(Ticket),
-    /// The source can't be asked: its command is no longer pinned in the workspace, the
-    /// workspace joined a team, the command is missing or a required credential is unset, or its
-    /// first read failed. Shows the last title it had.
-    Unavailable {
-        title: Option<String>,
-    },
 }
 
 /// The tickets one source brings to the Work list, and what went wrong reading them.
@@ -254,9 +182,6 @@ pub(crate) struct ListedTicket {
     pub(crate) project_id: Option<String>,
     /// `owner/repo` its key names (GitHub); empty for a source whose keys name no repo.
     pub(crate) repo: String,
-    /// The workspace a ticket command's ticket was read in, which its Work list row is scoped by
-    /// (items.rs); `None` for Linear and GitHub.
-    pub(crate) workspace_id: Option<String>,
 }
 
 /// What a source needs to answer for one project.
@@ -266,9 +191,6 @@ pub(crate) struct TicketScope<'a> {
     /// The workspace whose credentials the project uses (`stored_project_workspace_id`), which
     /// Linear's key lookup keeps using.
     pub(crate) workspace_id: Option<&'a str>,
-    /// The workspace the project is in (`project_workspace_id`: a worktree follows its parent
-    /// checkout), where a ticket command's setting and credentials are read.
-    pub(crate) effective_workspace_id: Option<&'a str>,
     /// The project's checkout, where `gh` runs.
     pub(crate) cwd: Option<&'a str>,
     /// Where the source looks up its own credentials. `None` on the presentation projection,
@@ -278,7 +200,6 @@ pub(crate) struct TicketScope<'a> {
 
 /// What one background card pass hands every source.
 pub(crate) struct TicketPass<'a> {
-    pub(crate) paths: &'a GxserverPaths,
     pub(crate) credentials: &'a WorkCredentials,
     /// The work-mode projects, by id.
     pub(crate) projects: &'a HashMap<&'a str, &'a Value>,
@@ -304,7 +225,7 @@ pub(crate) struct CreatedTicket {
 }
 
 pub(crate) trait WorkSource: Sync {
-    /// How errors and buttons name it. A ticket command's name is its workspace's `info.name`.
+    /// How errors and buttons name it.
     fn name(&self, scope: &TicketScope) -> Cow<'static, str>;
     /// The `kind` its tickets publish as session links: `linear`, `issue`.
     fn link_kind(&self) -> Cow<'static, str>;
@@ -359,8 +280,7 @@ pub(crate) trait WorkSource: Sync {
     /// own while `refresh_work_feeds` holds its lock.
     fn refresh_list(&self, plan: &WorkFeedPlan, force: bool);
     /// Reads what the pass's session cards need from it, within its own per-pass budget.
-    /// Blocking for Linear; a ticket command only queues its calls (`jobs.rs`). The background
-    /// pass, before the code host's reads.
+    /// Blocking. The background pass, before the code host's reads.
     fn refresh_tickets(&self, pass: &TicketPass);
     /// The ticket-id prefixes it knows outside a Work list (`SourceList::known_keys`), for a PR's
     /// details.
@@ -402,7 +322,6 @@ pub(crate) fn work_source(id: WorkSourceId) -> &'static dyn WorkSource {
     match id {
         WorkSourceId::Linear => &LinearSource,
         WorkSourceId::Github => &GithubSource,
-        WorkSourceId::Command(id) => id.source(),
     }
 }
 
@@ -433,11 +352,6 @@ pub(crate) fn ticket_link_value(ticket: &TicketRef, repo: &str, read: &TicketRea
         }
         TicketRead::Unread => {
             link.insert("loading".to_string(), json!(true));
-        }
-        TicketRead::Unavailable { title } => {
-            insert_text(&mut link, "title", title.as_deref());
-            link.insert("state".to_string(), json!("unavailable"));
-            link.insert("stateName".to_string(), json!("Unavailable"));
         }
     }
     Value::Object(link)

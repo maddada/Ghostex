@@ -25,7 +25,6 @@ mod work_cloud;
 mod work_items;
 mod work_links;
 mod work_mode;
-mod work_source;
 mod work_tickets;
 mod work_tracker;
 mod workspaces;
@@ -57,9 +56,6 @@ use work_items::route_work_items_http;
 use work_links::route_work_links_http;
 pub(in crate::server) use work_links::{answer_work_cleanup, sleep_work_cleanup_session};
 use work_mode::route_work_mode_http;
-use work_source::route_work_source_http;
-#[cfg(test)]
-pub(crate) use work_tickets::create_command_ticket;
 use work_tickets::route_work_tickets_http;
 use work_tracker::route_work_tracker_http;
 use workspaces::route_workspaces_http;
