@@ -2790,7 +2790,10 @@ place of Show screenshots, whose pill still works); Second opinion, where an age
 model checks the answer and, when code changed, reviews the diff), Work (Triage,
 which puts issues, pull requests, tickets and messages on one Live page in Requests and Messages
 sections, with a decision per item. Messages since the last successful read are grouped by urgency
-with suggested replies and a note box; Plan with workers; Try
+with suggested replies and a note box; Plan with workers; Swarm, which asks for target
+computers, models and parallelism in a form, tracks each item in requirement files and a
+tracker, and runs parallel worktree pull requests while watching machine load; Auto balance,
+which spreads threads across reachable computers by picking the least busy one; Try
 it in a worktree; Ship it, which commits the work on a branch,
 pushes it and opens a pull request, never merging it; Save to Docs; Steps for me, which lists
 what only you can do under Needs you; Add to Pings, which files a Ping about the
