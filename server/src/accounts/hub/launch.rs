@@ -1264,6 +1264,18 @@ pub(crate) fn hub_url(paths: &GxserverPaths, hub_id: &str) -> Option<String> {
     super::store::find(paths, hub_id).map(|hub| hub.url)
 }
 
+/// The hub id a session uses: its applied [`RUNTIME_KEY`], or a launcher's picked
+/// `cliproxy:<hub id>`.
+pub(crate) fn session_hub_id(runtime: &Map<String, Value>) -> Option<String> {
+    runtime
+        .get(RUNTIME_KEY)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+        .map(str::to_string)
+        .or_else(|| picked_hub(runtime))
+}
+
 /// The hub id a launcher's picked account names (`cliproxy:<hub id>`), if it names one.
 pub(crate) fn picked_hub(runtime: &Map<String, Value>) -> Option<String> {
     runtime

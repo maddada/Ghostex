@@ -20,7 +20,7 @@ mod store;
 mod usage_reads;
 
 use std::collections::{HashMap, HashSet};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
@@ -97,6 +97,10 @@ fn reading(id: &str) -> Option<Reading> {
 
 fn forget_reading(id: &str) {
     readings()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(id);
+    checked_logins()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .remove(id);
@@ -282,12 +286,24 @@ fn google_logins(files: &[Value]) -> Vec<String> {
     found
 }
 
-/// The Google logins the last full reading found, or a credential-list read made only for a
-/// launch check, with when they were read: a launch reads the list again once they are older than
-/// [`FRESH_FOR`] or the reading failed.
-fn checked_logins() -> &'static Mutex<HashMap<String, (Instant, Vec<String>)>> {
-    static CHECKED: OnceLock<Mutex<HashMap<String, (Instant, Vec<String>)>>> = OnceLock::new();
+/// The Google logins the last full reading found, or a credential-list read (or failed read
+/// attempt) made only for a launch check, with when it ran: a launch reads the list again once
+/// the entry is older than [`FRESH_FOR`].
+fn checked_logins() -> &'static Mutex<HashMap<String, (Instant, Option<Vec<String>>)>> {
+    static CHECKED: OnceLock<Mutex<HashMap<String, (Instant, Option<Vec<String>>)>>> =
+        OnceLock::new();
     CHECKED.get_or_init(Default::default)
+}
+
+fn hub_check_lock(hub_id: &str) -> Arc<Mutex<()>> {
+    static LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
+    LOCKS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .entry(hub_id.to_string())
+        .or_insert_with(|| Arc::new(Mutex::new(())))
+        .clone()
 }
 
 /// The Google logins `hub` holds now, or the last ones known when its list can't be read (none
@@ -306,7 +322,26 @@ fn current_google_logins(paths: &GxserverPaths, hub: &store::Hub) -> Option<Vec<
         .get(&hub.id)
         .cloned();
     if let Some((_, logins)) = checked.as_ref().filter(|(at, _)| at.elapsed() < FRESH_FOR) {
-        return Some(logins.clone());
+        return logins.clone();
+    }
+    // Serialize concurrent launch/resume checks for the same hub so a hung hub stalls at most once
+    // per `FRESH_FOR` window and waiting callers reuse its recorded result.
+    let check_lock = hub_check_lock(&hub.id);
+    let _check_guard = check_lock.lock().unwrap_or_else(|e| e.into_inner());
+    let kept = reading(&hub.id);
+    if let Some(kept) = kept
+        .as_ref()
+        .filter(|kept| kept.error.is_none() && kept.fetched_at.elapsed() < FRESH_FOR)
+    {
+        return Some(kept.google_logins.clone());
+    }
+    let checked = checked_logins()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&hub.id)
+        .cloned();
+    if let Some((_, logins)) = checked.as_ref().filter(|(at, _)| at.elapsed() < FRESH_FOR) {
+        return logins.clone();
     }
     let read = (!hub.management_key.is_empty())
         .then(|| {
@@ -320,18 +355,27 @@ fn current_google_logins(paths: &GxserverPaths, hub: &store::Hub) -> Option<Vec<
             checked_logins()
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
-                .insert(hub.id.clone(), (Instant::now(), logins.clone()));
+                .insert(hub.id.clone(), (Instant::now(), Some(logins.clone())));
             Some(logins)
         }
-        // Unreadable now: the newest list read before, so a hub once seen with a Google login
-        // stays refused.
+        // Unreadable now: reuse the newest list read before (so a hub once seen with a Google
+        // login stays refused) and record the failed attempt's time so a hung hub isn't retried on
+        // every resume within `FRESH_FOR`.
         None => {
             let kept = kept.map(|kept| (kept.fetched_at, kept.google_logins));
-            match (kept, checked) {
+            let checked_known = checked.and_then(|(at, logins)| logins.map(|l| (at, l)));
+            let last_known = match (kept, checked_known) {
                 (Some(a), Some(b)) => Some(if a.0 >= b.0 { a.1 } else { b.1 }),
                 (Some((_, logins)), None) | (None, Some((_, logins))) => Some(logins),
                 (None, None) => None,
+            };
+            if !hub.management_key.is_empty() {
+                checked_logins()
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .insert(hub.id.clone(), (Instant::now(), last_known.clone()));
             }
+            last_known
         }
     }
 }
@@ -367,11 +411,7 @@ pub(crate) fn google_login_refusal(paths: &GxserverPaths, hub: &store::Hub) -> O
 /// picked `cliproxy:<hub id>` account), or `None` for any other session.
 pub(crate) fn session_hub_refusal(paths: &GxserverPaths, session: &Value) -> Option<String> {
     let runtime = session.get("runtimeSettings")?.as_object()?;
-    let hub_id = runtime
-        .get(launch::RUNTIME_KEY)
-        .and_then(Value::as_str)
-        .map(str::to_string)
-        .or_else(|| launch::picked_hub(runtime))?;
+    let hub_id = launch::session_hub_id(runtime)?;
     let hub = store::find(paths, hub_id.trim())?;
     google_login_refusal(paths, &hub)
 }
@@ -415,6 +455,14 @@ pub(crate) fn warn_google_login_once(
     if warned.iter().any(|id| id == hub_id) {
         return;
     }
+    warned.push(hub_id.to_string());
+    let Ok(payload) = serde_json::to_string(&warned) else {
+        return;
+    };
+    if std::fs::create_dir_all(&paths.auth_dir).is_err() || std::fs::write(&path, payload).is_err()
+    {
+        return;
+    }
     let name = launch::pinned_label(paths, &format!("{}{hub_id}", launch::ACCOUNT_PREFIX))
         .unwrap_or_else(|| "The hub".to_string());
     let inserted = crate::notification_feed::store::insert_notification_feed_row(
@@ -440,9 +488,6 @@ pub(crate) fn warn_google_login_once(
     if let Some(state) = crate::collab_shim::sidecar::app_state() {
         crate::notification_feed::broadcast_notification_feed_changed(&state);
     }
-    warned.push(hub_id.to_string());
-    let _ = std::fs::create_dir_all(&paths.auth_dir);
-    let _ = std::fs::write(&path, serde_json::to_string(&warned).unwrap_or_default());
 }
 
 fn host(url: &str) -> String {
@@ -1109,6 +1154,10 @@ pub(crate) fn handle(
                 return Ok(Handled::Moved { from: id, to: next });
             }
             // The last reading stays on screen until the new one lands, so no meter blinks.
+            checked_logins()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&id);
             refresh_soon(paths, &saved);
         }
         _ => unreachable!(),

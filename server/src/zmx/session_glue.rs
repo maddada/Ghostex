@@ -3,7 +3,7 @@ use std::path::Path;
 use serde_json::{json, Map, Value};
 
 use crate::{
-    agents::get_agent_startup_text_for_session,
+    agents::get_agent_resume_plan_startup_for_session,
     domain::{read_project_id, read_session_id, DomainRepository, DomainStateError},
     toolchain::{require_bundled_zmx, GxserverResolvedTool},
 };
@@ -334,29 +334,38 @@ to opening it the first time.
 */
 /// CDXC:SessionSleep 2026-10-17 WHY:
 /// An agent session with no conversation to reopen comes back on the command it was created with. This supersedes the 2026-09-23 rule, which relaunched only when the session had no stored id, no first message and no `lastActiveAt`: a login or approval screen stamps `lastActiveAt` before any prompt (Grok, Antigravity CLI), and OMP stores its id at launch but writes nothing until the first prompt, so those sessions slept before their first prompt ran nothing on wake. The row still flipped to running, `ghostex wake` said "woke", and a chat message that woke it waited forever. The launch command is the agent alone (the first prompt is typed by the queue), so relaunching never repeats a prompt.
+pub(crate) fn get_provider_restart_startup_for_session(
+    project: &Value,
+    session: &Value,
+    agent_settings: &Map<String, Value>,
+) -> (Option<String>, Option<String>) {
+    // A box session, draft or not, always comes back by reattaching to its box (agentbox/restore.rs).
+    if crate::agentbox::is_agentbox_session(session) {
+        return get_agent_resume_plan_startup_for_session(project, session, agent_settings);
+    }
+    // A draft whose Run on row picked a box runs nothing until its first message creates the box
+    // (agents/draft_run_location.rs); its stored plan is that box's create command.
+    if crate::agentbox::pending_session_agentbox(session).is_some() {
+        return (None, None);
+    }
+    if crate::agents::session_is_draft(session) {
+        return (get_agent_launch_startup_text_for_session(session), None);
+    }
+    let (resume_startup_text, hub_refusal) =
+        get_agent_resume_plan_startup_for_session(project, session, agent_settings);
+    if resume_startup_text.is_some() || session.get("kind").and_then(Value::as_str) != Some("agent")
+    {
+        return (resume_startup_text, hub_refusal);
+    }
+    (get_agent_launch_startup_text_for_session(session), None)
+}
+
 pub(crate) fn get_provider_restart_startup_text_for_session(
     project: &Value,
     session: &Value,
     agent_settings: &Map<String, Value>,
 ) -> Option<String> {
-    // A box session, draft or not, always comes back by reattaching to its box (agentbox/restore.rs).
-    if crate::agentbox::is_agentbox_session(session) {
-        return get_agent_startup_text_for_session(project, session, agent_settings);
-    }
-    // A draft whose Run on row picked a box runs nothing until its first message creates the box
-    // (agents/draft_run_location.rs); its stored plan is that box's create command.
-    if crate::agentbox::pending_session_agentbox(session).is_some() {
-        return None;
-    }
-    if crate::agents::session_is_draft(session) {
-        return get_agent_launch_startup_text_for_session(session);
-    }
-    let resume_startup_text = get_agent_startup_text_for_session(project, session, agent_settings);
-    if resume_startup_text.is_some() || session.get("kind").and_then(Value::as_str) != Some("agent")
-    {
-        return resume_startup_text;
-    }
-    get_agent_launch_startup_text_for_session(session)
+    get_provider_restart_startup_for_session(project, session, agent_settings).0
 }
 
 pub(crate) fn has_queued_agent_launch_startup_text(session: &Value) -> bool {

@@ -154,20 +154,37 @@ pub(crate) fn hub_refused_resume_plan(agent_id: Option<String>, reason: &str) ->
     Value::Object(plan)
 }
 
+pub(crate) fn get_agent_resume_plan_startup_for_session(
+    project: &Value,
+    session: &Value,
+    settings: &Map<String, Value>,
+) -> (Option<String>, Option<String>) {
+    /*
+    CDXC:ServerApi 2026-06-22-06:53:
+    zmx attach metadata must preserve TypeScript's startup-text precedence: explicit renderer text, then queued fresh-launch text, then the daemon-owned agent resume plan shaped by current agent settings. This keeps missing-provider reattach/wake metadata from dropping restorable agent commands after the Rust cutover.
+    */
+    let plan = build_agent_resume_plan(project, session, settings);
+    let startup_text = plan
+        .get("startupText")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .filter(|value| !value.trim().is_empty());
+    let hub_refusal = plan
+        .get("hubRefusal")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    (startup_text, hub_refusal)
+}
+
+#[cfg(test)]
 pub(crate) fn get_agent_startup_text_for_session(
     project: &Value,
     session: &Value,
     settings: &Map<String, Value>,
 ) -> Option<String> {
-    /*
-    CDXC:ServerApi 2026-06-22-06:53:
-    zmx attach metadata must preserve TypeScript's startup-text precedence: explicit renderer text, then queued fresh-launch text, then the daemon-owned agent resume plan shaped by current agent settings. This keeps missing-provider reattach/wake metadata from dropping restorable agent commands after the Rust cutover.
-    */
-    build_agent_resume_plan(project, session, settings)
-        .get("startupText")
-        .and_then(Value::as_str)
-        .map(str::to_string)
-        .filter(|value| !value.trim().is_empty())
+    get_agent_resume_plan_startup_for_session(project, session, settings).0
 }
 
 /// CDXC:AgentProviders 2026-09-11 DECISION:
@@ -668,7 +685,7 @@ pub(crate) fn to_agent_resume_input(
             (
                 crate::acp::spec::AcpLaunchProfile {
                     account_wrapper,
-                    hub_id: crate::accounts::hub::launch::picked_hub(&runtime_settings),
+                    hub_id: crate::accounts::hub::launch::session_hub_id(&runtime_settings),
                     connector_envs: crate::connectors::project_cli_env_for_acp_resume(project),
                     append_system_prompt_file,
                     developer_instructions,

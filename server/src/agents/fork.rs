@@ -505,7 +505,7 @@ pub(crate) fn build_agent_fork_plan(
         );
         crate::acp::spec::AcpLaunchProfile {
             account_wrapper,
-            hub_id: source_runtime.and_then(crate::accounts::hub::launch::picked_hub),
+            hub_id: source_runtime.and_then(crate::accounts::hub::launch::session_hub_id),
             connector_envs: crate::connectors::project_cli_env_for_acp_resume(project),
             append_system_prompt_file,
             developer_instructions,

@@ -424,6 +424,9 @@ pub fn dispatch_zmx_lifecycle_endpoint(
                 if let Some(startup_text) = attach.get("startupText").and_then(Value::as_str) {
                     provider_params.insert("startupText".to_string(), json!(startup_text));
                 }
+                if let Some(hub_refusal) = attach.get("hubRefusal").and_then(Value::as_str) {
+                    provider_params.insert("hubRefusal".to_string(), json!(hub_refusal));
+                }
                 /*
                 CDXC:Zmx 2026-09-01:
                 `create_attach_session_metadata` probed this exact session

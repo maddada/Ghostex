@@ -225,6 +225,35 @@ pub(crate) fn dispatch_zmx_lifecycle_http_blocking(
                         &lifecycle.project_id,
                         &lifecycle.session_id,
                     );
+                    crate::acp::startup_error::clear(&lifecycle.project_id, &lifecycle.session_id);
+                }
+            }
+            if matches!(
+                endpoint_path.as_str(),
+                "/api/wakeSession" | "/api/startSessionProvider"
+            ) {
+                if let Ok(lifecycle) = crate::zmx::read_lifecycle_params(&params) {
+                    if output.result.get("hubRefusal").is_some()
+                        || output.result.pointer("/attach/hubRefusal").is_some()
+                        || crate::acp::startup_error::get(
+                            &lifecycle.project_id,
+                            &lifecycle.session_id,
+                        )
+                        .is_some()
+                    {
+                        if let Ok(mut cache) = state.session_chat_option_cache.lock() {
+                            cache.remove(&crate::server::session_observer_key(
+                                &lifecycle.project_id,
+                                &lifecycle.session_id,
+                            ));
+                        }
+                        crate::session_chat_options::schedule_session_chat_option_redetect(
+                            state,
+                            &lifecycle.project_id,
+                            &lifecycle.session_id,
+                            None,
+                        );
+                    }
                 }
             }
             if matches!(

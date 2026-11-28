@@ -939,7 +939,7 @@ pub(crate) fn create_agent_session_params_for_project(
                             .flatten();
                         let acp_profile = crate::acp::spec::AcpLaunchProfile {
                             account_wrapper,
-                            hub_id: crate::accounts::hub::launch::picked_hub(&runtime_settings),
+                            hub_id: crate::accounts::hub::launch::session_hub_id(&runtime_settings),
                             connector_envs: crate::connectors::project_cli_env_for_acp(db, project),
                             append_system_prompt_file,
                             developer_instructions,

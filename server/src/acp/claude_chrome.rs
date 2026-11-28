@@ -83,7 +83,7 @@ pub(crate) fn chat_starts_with_chrome(runtime_settings: Option<&Map<String, Valu
             .and_then(|runtime| runtime.get(key))
             .and_then(Value::as_str)
     };
-    let hub_id = runtime_settings.and_then(crate::accounts::hub::launch::picked_hub);
+    let hub_id = runtime_settings.and_then(crate::accounts::hub::launch::session_hub_id);
     // The account fields a launch reads, as stored: what the memo is keyed on.
     let key = format!(
         "{}|{}|{}",

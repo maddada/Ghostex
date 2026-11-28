@@ -1150,6 +1150,32 @@ pub(crate) async fn switch_to_cli(
     telemetry_source: &'static str,
     telemetry_client: &'static str,
 ) -> Result<Value, DomainStateError> {
+    let paths = state.paths.clone();
+    let server_id = state.metadata.server_id.clone();
+    let pid = project_id.to_string();
+    let sid = session_id.to_string();
+    let hub_refusal = tokio::task::spawn_blocking(move || {
+        let db = open_gxserver_database(&paths).map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("SQLite gxserver state error: {error}"),
+        })?;
+        let repository = DomainRepository::new(&db, server_id.as_str());
+        let session = repository
+            .get_session(&pid, &sid)?
+            .ok_or_else(|| DomainStateError {
+                code: "notFound",
+                message: "The session no longer exists.".to_string(),
+            })?;
+        Ok::<_, DomainStateError>(crate::accounts::hub::session_hub_refusal(&paths, &session))
+    })
+    .await
+    .map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("Could not inspect Native session state: {error}"),
+    })??;
+    if let Some(reason) = hub_refusal {
+        return Err(DomainStateError::bad_request(reason));
+    }
     super::pending_switch::cancel(project_id, session_id);
     let _switch_guard = session_switch_lock(project_id, session_id)
         .lock_owned()

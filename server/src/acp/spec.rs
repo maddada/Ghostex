@@ -1028,7 +1028,9 @@ pub(crate) fn resolve_hub_profile_dir(family: &str, hub_id: &str) -> Option<Path
         "codex" => crate::accounts::model::Provider::Codex,
         _ => return None,
     };
-    let home = crate::accounts::launch::home().ok()?;
+    let home = crate::paths::get_gxserver_paths(None)
+        .agent_config_home_dir()
+        .to_path_buf();
     Some(crate::accounts::hub::launch::profile_dir(
         &home,
         provider,

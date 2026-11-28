@@ -10,7 +10,7 @@ use std::{
     collections::HashMap,
     io::Read,
     path::Path,
-    sync::{LazyLock, Mutex},
+    sync::{Arc, LazyLock, Mutex},
     time::{Duration, Instant},
 };
 
@@ -105,9 +105,19 @@ static SIGN_INS: LazyLock<Mutex<HashMap<String, SignIn>>> = LazyLock::new(Defaul
 
 static NEXT_SIGN_IN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
-/// Held while an agent's status is read from its CLI, so two status calls at once (or one and the
-/// sign-in watcher) run it once: the second reuses the reading the first made.
-static STATUS_READ: Mutex<()> = Mutex::new(());
+/// Held while an agent's status is read from its CLI, so two status calls at once for that
+/// agent (or one and its sign-in watcher) run it once: the second reuses the reading the first made.
+static STATUS_READ_LOCKS: LazyLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> =
+    LazyLock::new(Default::default);
+
+fn status_read_lock(agent_id: &str) -> Arc<Mutex<()>> {
+    STATUS_READ_LOCKS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .entry(agent_id.to_string())
+        .or_insert_with(|| Arc::new(Mutex::new(())))
+        .clone()
+}
 
 /// The last status read of an agent whose status command asks its server, by agent id.
 #[derive(Clone, Default)]
@@ -217,7 +227,8 @@ fn reading(home: &Path, agent_id: &str, now: bool) -> Reading {
         };
     }
     let asked = Instant::now();
-    let _read = STATUS_READ.lock().unwrap_or_else(|e| e.into_inner());
+    let read_lock = status_read_lock(agent_id);
+    let _read = read_lock.lock().unwrap_or_else(|e| e.into_inner());
     let kept = READINGS
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -539,7 +550,8 @@ fn start(home: &Path, agent_id: &str) -> Result<(), DomainStateError> {
                 continue;
             }
             let signed_in = {
-                let _read = STATUS_READ.lock().unwrap_or_else(|e| e.into_inner());
+                let read_lock = status_read_lock(&watched_id);
+                let _read = read_lock.lock().unwrap_or_else(|e| e.into_inner());
                 read_signed_in(&watch_home, &watched_id)
             };
             if let Some(kept) = READINGS

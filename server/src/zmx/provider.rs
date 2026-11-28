@@ -87,12 +87,16 @@ pub(crate) fn create_attach_session_metadata_with_observed_state(
     } else {
         probed_session
     };
+    let (restart_startup_text, hub_refusal) =
+        if explicit_startup_text.is_none() && queued_launch_startup_text.is_none() {
+            get_provider_restart_startup_for_session(&project, &probed_session, agent_settings)
+        } else {
+            (None, None)
+        };
     let startup_text = explicit_startup_text
         .clone()
         .or(queued_launch_startup_text.clone())
-        .or_else(|| {
-            get_provider_restart_startup_text_for_session(&project, &probed_session, agent_settings)
-        })
+        .or(restart_startup_text)
         .map(|text| crate::accounts::default_login::route_around_signed_out_default(&text));
     let startup_text_disposition =
         decide_startup_text_disposition(&probe.lifecycle_state, startup_text.as_deref());
@@ -123,6 +127,9 @@ pub(crate) fn create_attach_session_metadata_with_observed_state(
             "startupTextDisposition".to_string(),
             Value::String(startup_text_disposition),
         );
+        if let Some(reason) = hub_refusal.as_deref() {
+            attach.insert("hubRefusal".to_string(), Value::String(reason.to_string()));
+        }
         attach.insert("zmxName".to_string(), Value::String(zmx_name));
         return Ok(Value::Object(attach));
     }
@@ -179,6 +186,9 @@ pub(crate) fn create_attach_session_metadata_with_observed_state(
         "startupTextDisposition".to_string(),
         Value::String(startup_text_disposition),
     );
+    if let Some(reason) = hub_refusal.as_deref() {
+        attach.insert("hubRefusal".to_string(), Value::String(reason.to_string()));
+    }
     attach.insert("zmxName".to_string(), Value::String(zmx_name));
     Ok(Value::Object(attach))
 }
@@ -272,12 +282,23 @@ pub(crate) fn start_session_provider_with_observed_state(
     } else {
         probed_session
     };
+    let explicit_hub_refusal = params
+        .get("hubRefusal")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    let (restart_startup_text, restart_hub_refusal) =
+        if explicit_startup_text.is_none() && queued_launch_startup_text.is_none() {
+            get_provider_restart_startup_for_session(&project, &probed_session, agent_settings)
+        } else {
+            (None, None)
+        };
+    let hub_refusal = explicit_hub_refusal.or(restart_hub_refusal);
     let startup_text = explicit_startup_text
         .clone()
         .or(queued_launch_startup_text)
-        .or_else(|| {
-            get_provider_restart_startup_text_for_session(&project, &probed_session, agent_settings)
-        })
+        .or(restart_startup_text)
         .map(|text| crate::accounts::default_login::route_around_signed_out_default(&text));
     let startup_text_disposition =
         decide_startup_text_disposition(&probe.lifecycle_state, startup_text.as_deref());
@@ -503,16 +524,34 @@ pub(crate) fn start_session_provider_with_observed_state(
         crate::agentbox::wake_agentbox_activity_poller();
     }
     crate::session_chat_empryo_tabs::select_empryo_own_tab_after_start(&session, None);
+    if launched_acp.is_some() {
+        crate::acp::startup_error::clear(&lifecycle.project_id, &lifecycle.session_id);
+    } else if crate::acp::session_is_acp(&probed_session) {
+        if let Some(reason) = hub_refusal.as_deref() {
+            let family = crate::acp::session_acp_family(&probed_session).unwrap_or_default();
+            crate::acp::startup_error::record(
+                &lifecycle.project_id,
+                &lifecycle.session_id,
+                &family,
+                reason,
+                false,
+            );
+        }
+    }
+    let mut output = json!({
+        "exitCode": start.result.exit_code,
+        "provider": "zmx",
+        "providerState": probe_to_value(&provider_state),
+        "session": session,
+        "started": true,
+        "startupTextDisposition": startup_text_disposition,
+        "zmxName": zmx_name,
+    });
+    if let Some(reason) = hub_refusal.as_deref() {
+        output["hubRefusal"] = Value::String(reason.to_string());
+    }
     Ok((
-        json!({
-            "exitCode": start.result.exit_code,
-            "provider": "zmx",
-            "providerState": probe_to_value(&provider_state),
-            "session": session,
-            "started": true,
-            "startupTextDisposition": startup_text_disposition,
-            "zmxName": zmx_name,
-        }),
+        output,
         if start.observed_alive {
             ObservedProviderState::Exists
         } else {
