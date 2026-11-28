@@ -61,11 +61,23 @@ pub struct LimitConfig {
     pub snapshot_lifetime: Duration,
     /// Keys each table of the `/push/` routes' limits holds at most (the Live Activity route's tables keep
     /// theirs). Chosen so that every table and the store full fit under the service's memory limit in a local
-    /// macOS measurement; bodies being read come on top, and Linux was not measured (README, "Memory").
+    /// macOS measurement; bodies being read come on top (at most `body_reads` of them), and Linux was not measured
+    /// (README, "Memory").
     pub push_max_keys: usize,
     /// Tokens Apple dropped that the `/push/` routes remember, apart from the Live Activity route's.
     pub push_max_gone_tokens: usize,
+    /// Request bodies of both route families being read or held at once, relay-wide: a `POST` or `PUT` takes one
+    /// before its body is read and keeps it until it is answered; with none free it gets 503 unread.
+    pub body_reads: usize,
+    /// How long reading one request body may take before the relay answers 408 and frees its place.
+    pub body_read_time: Duration,
 }
+
+/// 256 × the largest body (16 KiB) is 4 MiB of payload, small beside the unit's 128 MiB, and leaves room above
+/// the 128 slots to Apple, whose requests keep their place while they wait for Apple.
+pub const BODY_READS: usize = 256;
+/// A body of at most 16 KiB from a working link arrives far sooner; a stalled sender holds its place no longer.
+pub const BODY_READ_TIME: Duration = Duration::from_secs(10);
 
 impl Default for LimitConfig {
     fn default() -> Self {
@@ -131,6 +143,8 @@ impl Default for LimitConfig {
             snapshot_lifetime: Duration::from_secs(24 * 3600),
             push_max_keys: 7_000,
             push_max_gone_tokens: 7_000,
+            body_reads: BODY_READS,
+            body_read_time: BODY_READ_TIME,
         }
     }
 }

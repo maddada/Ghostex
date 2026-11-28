@@ -17,10 +17,11 @@
 //! checked here). What someone else can do with the relay is in `README.md`.
 //!
 //! It logs a line for each push Apple answered or that got no answer, each refusal in a route's own code, each
-//! store and each mailbox take (the outcome, Apple's status and reason, an 8-hex hash of a token or id) and
-//! start-up lines; not health checks, snapshot reads, reads of an empty id, the mailbox's HEAD or a body refused
-//! for its size before the route's code. Never a token, an id, a content state, an envelope, a snapshot or
-//! anything from the key's files. The counts are only in the health checks.
+//! store and each mailbox take (the outcome, Apple's status and reason, an 8-hex hash of a token or id), each body
+//! refused because every place for bodies was taken or because it came too slowly, and start-up lines; not health
+//! checks, snapshot reads, reads of an empty id, the mailbox's HEAD or a body refused for its size or broken off
+//! before the route's code. Never a token, an id, a content state, an envelope, a snapshot or anything from the
+//! key's files. The counts are only in the health checks.
 //!
 //! CDXC:Notifications 2026-11-11 DECISION: User, on keeping the Lock Screen banner current: "yes sure do it
 //! now but can we have it on same vps we have already???". The relay runs on relay-eu.ghostex.dev beside the
@@ -40,14 +41,14 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use axum::body::Bytes;
-use axum::extract::{ConnectInfo, DefaultBodyLimit, State};
+use axum::extract::{ConnectInfo, DefaultBodyLimit, FromRequest, Request, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use tokio::sync::Semaphore;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use crate::apns::Apple;
 use crate::limits::{LimitConfig, Limiter};
@@ -99,6 +100,9 @@ pub struct Relay {
     per_start_token: Limiter<[u8; 32]>,
     global: Limiter<()>,
     in_flight: Semaphore,
+    /// Places for request bodies being read or held, shared by both route families (`ReadBody`).
+    body_reads: Arc<Semaphore>,
+    body_read_time: Duration,
     gone: Mutex<HashMap<(Environment, [u8; 32]), Instant>>,
     max_gone: usize,
     counters: Counters,
@@ -150,6 +154,48 @@ fn rate_limited(wait: Duration) -> Response {
     response
 }
 
+/// A `POST` or `PUT` body, read only after taking a place from the relay-wide quota of bodies (503 at once, unread,
+/// when none is free) and within the read-time limit (408). The place is held until the handler has answered, so
+/// at most `body_reads` bodies are in memory at once, and it is given back however the request ends: answered,
+/// refused, timed out, or dropped when the client goes away.
+pub(crate) struct ReadBody {
+    pub(crate) bytes: Bytes,
+    _place: OwnedSemaphorePermit,
+}
+
+impl FromRequest<Arc<Relay>> for ReadBody {
+    type Rejection = Response;
+
+    async fn from_request(request: Request, relay: &Arc<Relay>) -> Result<Self, Response> {
+        let Ok(place) = relay.body_reads.clone().try_acquire_owned() else {
+            relay.log("body refused reason=bodies-full");
+            return Err(answer(
+                503,
+                json!({ "ok": false, "error": "bodies-full",
+                    "detail": "The relay is reading as many request bodies as it may; try again shortly." }),
+            ));
+        };
+        match tokio::time::timeout(relay.body_read_time, Bytes::from_request(request, relay)).await
+        {
+            Ok(Ok(bytes)) => Ok(ReadBody {
+                bytes,
+                _place: place,
+            }),
+            // Over the route's body limit, broken off or unreadable: axum's own answer, as before.
+            Ok(Err(rejection)) => Err(rejection.into_response()),
+            Err(_) => {
+                relay.log("body refused reason=too-slow");
+                Err(answer(
+                    408,
+                    json!({ "ok": false, "error": "too-slow",
+                        "detail": format!("The body did not arrive within {} seconds.",
+                            relay.body_read_time.as_secs()) }),
+                ))
+            }
+        }
+    }
+}
+
 impl Relay {
     pub fn new(options: Options) -> Arc<Self> {
         let limits = options.limits;
@@ -162,6 +208,8 @@ impl Relay {
             per_start_token: Limiter::new(limits.per_start_token),
             global: Limiter::new(limits.global),
             in_flight: Semaphore::new(limits.in_flight),
+            body_reads: Arc::new(Semaphore::new(limits.body_reads)),
+            body_read_time: limits.body_read_time,
             gone: Mutex::new(HashMap::new()),
             max_gone: limits.max_gone_tokens.max(1),
             counters: Counters::default(),
@@ -278,7 +326,7 @@ async fn send(
     State(relay): State<Arc<Relay>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
-    body: Bytes,
+    body: ReadBody,
 ) -> Response {
     let counters = &relay.counters;
     let caller = caller_key(relay.caller(peer, &headers));
@@ -300,7 +348,7 @@ async fn send(
                 "detail": "This relay has no Apple push key yet, so it sends nothing." }),
         );
     };
-    let parsed: SendRequest = match serde_json::from_slice(&body) {
+    let parsed: SendRequest = match serde_json::from_slice(&body.bytes) {
         Ok(parsed) => parsed,
         Err(error) => {
             counters.refused.fetch_add(1, Ordering::Relaxed);

@@ -1,8 +1,8 @@
 //! The `/push/` routes: visible and background notifications, widget pushes, the token mailbox and the widget
 //! snapshot (which the computer is meant to encrypt; the relay does not check). They have their own limits,
 //! budget, counters and memory of tokens Apple dropped, so none of these changes what the Live Activity route
-//! allows or reports. They share its Apple client (connection and provider token) and the process with its
-//! memory limit (README, "Memory").
+//! allows or reports. They share its Apple client (connection and provider token), the relay-wide places for
+//! request bodies (`ReadBody`) and the process with its memory limit (README, "Memory").
 //!
 //! A mailbox or snapshot id is a capability, so it travels in the `Authorization` header (`Bearer <id>`), never in
 //! the URL, where a proxy's logs would keep it.
@@ -13,7 +13,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use axum::body::Bytes;
 use axum::extract::{ConnectInfo, DefaultBodyLimit, State};
 use axum::http::{header, HeaderMap, HeaderValue};
 use axum::response::{IntoResponse, Response};
@@ -29,8 +28,8 @@ use crate::native::{prepare_alert, prepare_widgets, AlertRequest, NativePush, Wi
 use crate::request::{valid_token, Environment, Refusal};
 use crate::store::{PutRefusal, Shelf, Store};
 use crate::{
-    answer, caller_key, rate_limited, refusal, token_digest, token_label, unix_now, Relay,
-    GONE_TOKEN_MEMORY,
+    answer, caller_key, rate_limited, refusal, token_digest, token_label, unix_now, ReadBody,
+    Relay, GONE_TOKEN_MEMORY,
 };
 
 /// The path prefix Caddy routes to the relay for these routes.
@@ -180,10 +179,10 @@ async fn alert(
     State(relay): State<Arc<Relay>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
-    body: Bytes,
+    body: ReadBody,
 ) -> Response {
     push(&relay, peer, &headers, |now| {
-        let request: AlertRequest = serde_json::from_slice(&body).map_err(|error| {
+        let request: AlertRequest = serde_json::from_slice(&body.bytes).map_err(|error| {
             // The caller's own data comes back to the caller; the log keeps only the reason.
             Refusal::bad(format!("The request is not an alert push: {error}"))
         })?;
@@ -196,10 +195,10 @@ async fn widgets(
     State(relay): State<Arc<Relay>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
-    body: Bytes,
+    body: ReadBody,
 ) -> Response {
     push(&relay, peer, &headers, |now| {
-        let request: WidgetsRequest = serde_json::from_slice(&body)
+        let request: WidgetsRequest = serde_json::from_slice(&body.bytes)
             .map_err(|error| Refusal::bad(format!("The request is not a widget push: {error}")))?;
         prepare_widgets(request, now)
     })
@@ -476,7 +475,7 @@ async fn mailbox_put(
     State(relay): State<Arc<Relay>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
-    body: Bytes,
+    body: ReadBody,
 ) -> Response {
     let now = Instant::now();
     let (caller, key) = match admit_store_request(&relay, Shelf::Mailbox, peer, &headers, now) {
@@ -484,15 +483,15 @@ async fn mailbox_put(
         Err(response) => return *response,
     };
     let counters = &relay.push.counters;
-    if body.len() > MAX_MAILBOX_BODY_BYTES {
+    if body.bytes.len() > MAX_MAILBOX_BODY_BYTES {
         counters.refused.fetch_add(1, Ordering::Relaxed);
         relay.log("mailbox refused reason=too-large");
         return too_large(format!(
             "The body is {} bytes; at most {MAX_MAILBOX_BODY_BYTES}.",
-            body.len()
+            body.bytes.len()
         ));
     }
-    let token = std::str::from_utf8(&body).unwrap_or_default().trim();
+    let token = std::str::from_utf8(&body.bytes).unwrap_or_default().trim();
     if !valid_token(token) {
         counters.refused.fetch_add(1, Ordering::Relaxed);
         relay.log("mailbox refused reason=bad-request");
@@ -554,7 +553,7 @@ async fn snapshot_put(
     State(relay): State<Arc<Relay>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
-    body: Bytes,
+    body: ReadBody,
 ) -> Response {
     let now = Instant::now();
     let (caller, key) = match admit_store_request(&relay, Shelf::Snapshot, peer, &headers, now) {
@@ -562,15 +561,15 @@ async fn snapshot_put(
         Err(response) => return *response,
     };
     let counters = &relay.push.counters;
-    if body.len() > MAX_SNAPSHOT_BYTES {
+    if body.bytes.len() > MAX_SNAPSHOT_BYTES {
         counters.refused.fetch_add(1, Ordering::Relaxed);
         relay.log("snapshot refused reason=too-large");
         return too_large(format!(
             "The snapshot is {} bytes; at most {MAX_SNAPSHOT_BYTES}.",
-            body.len()
+            body.bytes.len()
         ));
     }
-    if body.is_empty() {
+    if body.bytes.is_empty() {
         counters.refused.fetch_add(1, Ordering::Relaxed);
         relay.log("snapshot refused reason=bad-request");
         return refusal(&Refusal::bad("The snapshot is empty."));
@@ -580,9 +579,9 @@ async fn snapshot_put(
         Shelf::Snapshot,
         caller,
         key,
-        body.len(),
+        body.bytes.len(),
         now,
-        || body.to_vec(),
+        || body.bytes.to_vec(),
     )
 }
 
