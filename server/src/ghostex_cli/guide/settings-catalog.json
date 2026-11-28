@@ -412,6 +412,19 @@
       "agentWritable": true
     },
     {
+      "key": "chatTabQueues",
+      "title": "Tab to queue",
+      "subtitle": "Tab with text in the chat box queues it to send after the agent's turn. Off, Tab never queues: it picks a suggestion or moves on, as in an empty chat box. Holding Send still queues.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": true,
+      "powerUserFlag": true,
+      "agentWritable": true
+    },
+    {
       "key": "newChatTips",
       "title": "Tips on new chats",
       "subtitle": "Show a card of short tips about Ghostex under a new chat's headline. Got it on a tip hides that tip for good; Hide tips on the card turns this off.",

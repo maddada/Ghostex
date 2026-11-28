@@ -981,9 +981,12 @@ impl NativeChatView {
             });
             self.input = Some(input);
         }
-        let placeholder = self.snapshot["composerPlaceholder"]
-            .as_str()
-            .unwrap_or_default();
+        let placeholder = ghostex_gx_chat_core::composer::policy::desktop_composer_placeholder(
+            self.snapshot["composerPlaceholder"]
+                .as_str()
+                .unwrap_or_default(),
+            super::keyboard::tab_queues(),
+        );
         if self.input_placeholder != placeholder {
             self.input_placeholder = placeholder.to_owned();
             self.input.as_ref().unwrap().update(cx, |input, cx| {

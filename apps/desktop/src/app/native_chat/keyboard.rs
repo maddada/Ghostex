@@ -607,6 +607,7 @@ impl NativeChatView {
             && !key.modifiers.platform
             && !this.draft.trim().is_empty()
             && this.snapshot["queue"]["capabilities"]["canQueue"] == true
+            && tab_queues()
         {
             this.send(true, window, cx);
             cx.stop_propagation();
@@ -804,6 +805,21 @@ fn matches_configured_inbox_hotkey(action_id: &str, keystroke: &gpui::Keystroke)
         && keystroke.modifiers.control == expect_control
         && keystroke.modifiers.alt == want_alt
         && keystroke.modifiers.shift == want_shift
+}
+
+/// Settings > Chat > Tab to queue (`chatTabQueues`); a missing key reads as its default, on.
+///
+/// CDXC:SessionChat 2026-11-28 DECISION: User: a Settings > Chat Power User Flags toggle that
+/// turns off Tab queueing in the chat box, on by default. Off, Tab with text in the box never
+/// queues (and never sends): it does what it does in an empty box. The Send button's Queue row
+/// then shows no Tab key and the placeholder drops "Tab to Queue" (`desktop_composer_placeholder`
+/// in gx-chat-core composer/policy.rs). The phone has no Tab binding, so nothing changes there.
+pub(super) fn tab_queues() -> bool {
+    crate::shared_settings::shared_sidebar_settings_snapshot()
+        .object()
+        .get("chatTabQueues")
+        .and_then(serde_json::Value::as_bool)
+        != Some(false)
 }
 
 /// `sessionChatConfirmEscapeInterrupt`; a missing key reads as its default, on. The core decides

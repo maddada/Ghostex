@@ -712,6 +712,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("sessionChatMutedThinking", J::Bool(true)),
     ("sessionChatKeepComposerExpanded", J::Bool(false)),
     ("sessionChatConfirmEscapeInterrupt", J::Bool(true)),
+    ("chatTabQueues", J::Bool(true)),
     // CDXC:CatchMeUp 2026-10-11 DECISION: User: "disable this feature by default. add a toggle to enable it under chat". The composer's Catch me up button shows only while this is on.
     ("chatCatchMeUp", J::Bool(false)),
     // CDXC:Onboarding 2026-11-11 SEE-ALSO: the tips card under a new chat's headline (packages/gx-chat-core/src/extras/new_chat_tips.rs, where the user's decision is); on by default, off from the card's Hide tips.

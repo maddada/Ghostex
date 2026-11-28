@@ -79,6 +79,7 @@ pub const PAGES: &[PageFlags] = &[
             "chatVariedWorkingWords",
             "sessionChatKeepComposerExpanded",
             "sessionChatConfirmEscapeInterrupt",
+            "chatTabQueues",
             "chatSendOnPick",
             "chatAnswersWaitForIdle",
             "chatInboxReplyArrow",

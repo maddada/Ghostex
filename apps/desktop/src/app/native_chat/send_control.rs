@@ -167,7 +167,12 @@ impl NativeChatView {
                 "Send".into(),
                 chord("enter"),
                 vec![
-                    TooltipRow::new("Queue").keys(chord("tab")),
+                    // Tab to queue off (`chatTabQueues`): no Tab key; holding Send still queues.
+                    if super::keyboard::tab_queues() {
+                        TooltipRow::new("Queue").keys(chord("tab"))
+                    } else {
+                        TooltipRow::new("Queue").hint("Hold")
+                    },
                     TooltipRow::new("Compact & Send")
                         .hint(format!("{}-click or right-click", chord("alt"))),
                 ],

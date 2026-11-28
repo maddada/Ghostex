@@ -29,6 +29,20 @@ pub const INTERRUPTED_TOAST_TEXT: &str = "Agent was interrupted";
 pub const DESKTOP_COMPOSER_PLACEHOLDER: &str =
     "Tab to Queue, @ files, / commands, $ skills, * boosts";
 
+/// The desktop placeholder while Settings > Chat > Tab to queue (`chatTabQueues`) is off, when Tab
+/// no longer queues (apps/desktop/src/app/native_chat/keyboard.rs, `tab_queues`).
+pub const DESKTOP_COMPOSER_PLACEHOLDER_WITHOUT_TAB: &str = "@ files, / commands, $ skills, * boosts";
+
+/// The desktop chat box's placeholder: the core's own text, with "Tab to Queue" left out while Tab
+/// does not queue.
+pub fn desktop_composer_placeholder(placeholder: &str, tab_queues: bool) -> &str {
+    if !tab_queues && placeholder == DESKTOP_COMPOSER_PLACEHOLDER {
+        DESKTOP_COMPOSER_PLACEHOLDER_WITHOUT_TAB
+    } else {
+        placeholder
+    }
+}
+
 /// What a touch composer (the phone, `StartConfig::touch_composer`) says when nothing is blocking
 /// it, the text of the React chat's `MOBILE_SESSION_CHAT_PLACEHOLDER`
 /// (`session-chat-composer.tsx`).

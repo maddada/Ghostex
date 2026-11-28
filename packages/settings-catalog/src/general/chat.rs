@@ -30,6 +30,8 @@ pub(crate) fn chat() -> Section {
             row("chatComposerMaximize", "Maximize chat box button", "Show the Maximize chat box button, which makes the chat box fill the chat."),
             row("sessionChatKeepComposerExpanded", "While scrolling, the chat box", "Shrinks: the desktop chat box gets smaller as you scroll up the chat and grows back at the end. Stays full size: it keeps its full size while you scroll."),
             row("sessionChatConfirmEscapeInterrupt", "Interrupt with", "While the agent is working, One Escape interrupts it at once. Two Escapes: the first Escape asks you to press Escape again within 2 seconds before it interrupts."),
+            // CDXC:SessionChat 2026-11-28 SEE-ALSO: the user's words on Tab to queue are on `tab_queues` in apps/desktop/src/app/native_chat/keyboard.rs.
+            row("chatTabQueues", "Tab to queue", "Tab with text in the chat box queues it to send after the agent's turn. Off, Tab never queues: it picks a suggestion or moves on, as in an empty chat box. Holding Send still queues."),
             // CDXC:CatchMeUp 2026-11-27 SEE-ALSO: Catch Me Up moved to Settings > Extensions (the catchMeUp entry in data/official_extensions.rs has the user's words).
             row("newChatTips", "Tips on new chats", "Show a card of short tips about Ghostex under a new chat's headline. Got it on a tip hides that tip for good; Hide tips on the card turns this off."),
             row("newChatTipsReset", "Show tips again", "Bring back every tip you marked Got it, so the new chat card shows them again."),

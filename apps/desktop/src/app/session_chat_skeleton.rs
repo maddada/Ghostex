@@ -98,7 +98,14 @@ fn session_chat_skeleton(p: &ChatAppearance, glass: bool) -> AnyElement {
                         .child(div().h(px(72.0 * s)).w_full().min_w_0().text_size(px(14.0 * s))
                             .line_height(px(24.0 * s)).text_color(p.muted.opacity(0.6))
                             .truncate()
-                            .child(ghostex_gx_chat_core::composer::policy::DESKTOP_COMPOSER_PLACEHOLDER))
+                            .child(ghostex_gx_chat_core::composer::policy::desktop_composer_placeholder(
+                                ghostex_gx_chat_core::composer::policy::DESKTOP_COMPOSER_PLACEHOLDER,
+                                crate::shared_settings::shared_sidebar_settings_snapshot()
+                                    .object()
+                                    .get("chatTabQueues")
+                                    .and_then(serde_json::Value::as_bool)
+                                    != Some(false),
+                            )))
                         .child(div().h(px(28.0 * s)).flex().items_center().justify_between()
                             .child(div().w(px(52.0 * s)).h(px(10.0 * s)).rounded_full().bg(p.primary.opacity(0.24)))
                             .child(div().size(px(24.0 * s)).rounded(px(6.0 * s)).bg(p.primary.opacity(0.24)))),

@@ -3114,7 +3114,9 @@ Code and Grok Build, Back to composer (the arrow left of the play button, also i
 menu and in the menu you get by holding the message on the phone) takes it out of the agent's queue
 and adds its text and pictures to your chat draft instead, unsent; pressing Up in an empty chat box does
 the same for the newest queued message, like Up in the agent's own input. Prompts you explicitly
-queue stay in the list above the input. This also applies when reopening the chat
+queue stay in the list above the input. Tab in the chat box queues what you typed (holding Send does too);
+Settings > Chat > Tab to queue off (`chatTabQueues`, a Power User Flag) stops Tab from queueing, and the
+placeholder and Send's hint stop naming Tab. This also applies when reopening the chat
 or continuing on another device. A message that has waited about a minute says why under it, for
 example that the agent is still working, is waiting for your answer, or that its input box can't
 be read yet; in that last case Ghostex keeps trying on its own and, if it still can't deliver after
