@@ -2254,12 +2254,7 @@ fn spawn_codex_stdout_reader(
                             .or_else(|| params.get("error"))
                             .filter(|v| !v.is_null())
                             .and_then(|err| {
-                                let msg = err
-                                    .get("message")
-                                    .and_then(Value::as_str)
-                                    .map(str::trim)
-                                    .filter(|m| !m.is_empty())
-                                    .map(str::to_string)?;
+                                let msg = codex_error_text(err)?;
                                 let code = codex_error_info_code(err.get("codexErrorInfo"));
                                 Some((code, msg))
                             });
@@ -2465,12 +2460,7 @@ fn spawn_codex_stdout_reader(
                             }
                         } else {
                             let err_obj = params.get("error").unwrap_or(params);
-                            let msg = err_obj
-                                .get("message")
-                                .and_then(Value::as_str)
-                                .map(str::trim)
-                                .filter(|m| !m.is_empty())
-                                .map(str::to_string);
+                            let msg = codex_error_text(err_obj);
                             let code = codex_error_info_code(err_obj.get("codexErrorInfo"));
                             if let Some(msg) = msg {
                                 eprintln!("[Codex Native] API error: {msg}");
