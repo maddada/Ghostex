@@ -256,13 +256,13 @@ The `/push/` routes have limits of their own, so their traffic never takes from 
   per table, 7,000 gone tokens) were chosen to fit beside the Live Activity route's tables (200,000 keys each,
   100,000 gone tokens), which take most of the memory. What is measured is local only: a release build on
   macOS, with the real limiter and store types filled to every cap in one process, held about 92 to 97 MiB
-  resident over several runs, with no HTTP, TLS or connections. It was not measured on Linux or under the
-  service's 128 MiB limit, so the room left there is not known. Every body is capped per request (8 KB on
-  `/live-activity/`, 16 KB on `/push/`, through Caddy), but there is no overall budget for bodies still being
-  read, so many large requests at once add to that. Only a flood from very many addresses fills every table
-  at once. If memory reaches the limit, systemd restarts the relay, which drops every mailbox entry and
-  snapshot; phones recover with their next update (the phone leaves a token again on its next start, the
-  computer uploads the snapshot again on its next change).
+  resident over several runs, with no HTTP, TLS or connections. Only a flood from very many addresses fills
+  every table at once. Memory under load is an open availability
+  risk: a public `POST` or `PUT` body is read (up to its per-request cap: 8 KB on `/live-activity/`, 16 KB on
+  `/push/`, through Caddy) before the address quotas and the id checks run, and there is no overall budget
+  for bodies being read, so many parallel requests add memory on top of full tables and a full store.
+  Whether that reaches the service's 128 MiB limit on Linux is not measured. If it does, systemd restarts the
+  relay at the limit, and every mailbox entry and snapshot is lost.
 - Raising a limit: these limits are fixed in the code, not read from a setting. The rates and the
   `/push/` caps are in `LimitConfig::default()` in `src/limits.rs`, the Live Activity route's 200,000 keys per
   table in `MAX_KEYS` beside it, and the body sizes in `src/lib.rs` and `src/push_routes.rs` (those also have
