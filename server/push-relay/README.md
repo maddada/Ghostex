@@ -364,9 +364,11 @@ phone, a Live Activity started while the app is closed, a widget that updates wh
 key Apple does not allow for a topic gets Apple's refusal on that route (502 `apple`, e.g.
 `TopicDisallowed`).
 
-Updating: replace the binary and `systemctl restart ghostex-push-relay`; a computer retries a push the
-restart refused. A restart empties the mailbox and the snapshots; the phone leaves a token again on its next
-start and the computer uploads the snapshot again on the next change.
+Updating: replace the binary and `systemctl restart ghostex-push-relay`. A Live Activity push the restart
+refused (no connection, or a 5xx) is tried again by gxserver after a minute with the newest content
+(`server/src/live_activity/relay.rs`, `runtime.rs`); no computer code in this repository calls the `/push/`
+routes yet. A restart empties the mailbox and the snapshots; they fill again only when a phone leaves a new
+token and a computer uploads a new snapshot, which is the clients' behaviour and not checked here.
 
 Adding the `/push/` routes to a relay that already runs: build with `build-linux.sh`, replace the binary,
 add the `handle /push/*` block next to `handle /live-activity/*` (step 5), `systemctl restart
