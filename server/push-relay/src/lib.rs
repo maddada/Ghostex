@@ -64,7 +64,9 @@ pub const WIDGETS_TOPIC: &str = "com.maddada.ghostex.ios.push-type.widgets";
 pub const MAX_APNS_PAYLOAD_BYTES: usize = 4096;
 /// A request body: the content state plus a few fields.
 pub const MAX_BODY_BYTES: usize = 8 * 1024;
-/// A token Apple called unknown or expired is refused here this long without asking Apple again.
+/// A token Apple called gone (410, `BadDeviceToken`, `Unregistered`, `DeviceTokenNotForTopic`) is refused here
+/// without asking Apple until the cleanup once a minute finds it this old; sooner when the process restarts or a
+/// full memory forgets its oldest entry.
 pub const GONE_TOKEN_MEMORY: Duration = Duration::from_secs(24 * 3600);
 /// The path prefix Caddy routes to the relay on share.ghostex.dev.
 pub const PREFIX: &str = "/live-activity";

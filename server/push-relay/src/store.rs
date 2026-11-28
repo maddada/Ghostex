@@ -130,8 +130,9 @@ impl Store {
     /// Files the `len` bytes `make` builds under `key`, replacing what is there. In this order, under one lock and
     /// before anything is allocated for the entry: an id the store does not hold spends the caller's quota for new
     /// ids (`admit_new`) and must fit the caps (after dropping expired entries); only then is the id's own rate
-    /// (`admit_id`) counted, so a refused new id leaves no state behind; a held id is counted and may grow the store
-    /// only within the byte cap. `make` runs last, for an admitted entry only.
+    /// (`admit_id`) counted, so a refused new id leaves no per-id state behind (the quota for new ids stays spent);
+    /// a held id is counted and may grow the store only within the byte cap. `make` runs last, for an admitted
+    /// entry only.
     #[allow(clippy::too_many_arguments)]
     pub fn put(
         &self,

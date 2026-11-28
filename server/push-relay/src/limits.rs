@@ -16,7 +16,7 @@ pub struct Rate {
     pub per_minute: f64,
 }
 
-/// The relay's limits; `README.md` gives the reasons for each number.
+/// The relay's limits, fixed here; `README.md` lists them and when each is spent.
 #[derive(Clone, Copy, Debug)]
 pub struct LimitConfig {
     pub per_address: Rate,
@@ -28,8 +28,8 @@ pub struct LimitConfig {
     /// Tokens Apple dropped that the relay remembers (refusing them without asking Apple); past this the oldest is
     /// forgotten, so random tokens cannot grow the relay's memory without end.
     pub max_gone_tokens: usize,
-    /// The `/push/` routes: every request from one caller address (its own bucket, so this traffic never takes
-    /// from the Live Activity route's).
+    /// The alert and widget routes: every request from one caller address (its own bucket, so this traffic never
+    /// takes from the Live Activity route's or the store routes').
     pub push_per_address: Rate,
     /// Per device token: visible notifications.
     pub alert_per_token: Rate,
@@ -37,14 +37,16 @@ pub struct LimitConfig {
     pub background_per_token: Rate,
     /// Per widget push token.
     pub widgets_per_token: Rate,
-    /// Every push of the `/push/` routes that is about to go to Apple, relay-wide.
+    /// Every push of the `/push/` routes that passed the relay's own checks, relay-wide (spent before the wait for a
+    /// slot and before Apple answers).
     pub push_global: Rate,
     /// Requests of the `/push/` routes to Apple in flight at once.
     pub push_in_flight: usize,
     /// Mailbox and snapshot requests from one caller address.
     pub store_per_address: Rate,
-    /// Ids one caller address may create in the mailbox and the snapshot store together (replacing what an
-    /// existing id holds does not count).
+    /// New ids one caller address may try in the mailbox and the snapshot store together: spent by each `PUT` on an
+    /// id its shelf does not hold, also when the store then refuses it as full (replacing what an id holds does
+    /// not count).
     pub new_ids_per_address: Rate,
     /// Requests per mailbox id and per snapshot id.
     pub per_mailbox_id: Rate,

@@ -2,7 +2,8 @@
 //!
 //! The provider token is a JWT signed with the `.p8` key (ES256), naming the Key ID and the Team ID. Apple
 //! refuses one older than an hour and answers `TooManyProviderTokenUpdates` when it changes more often than
-//! every 20 minutes, so one token is made and reused for 40 minutes.
+//! every 20 minutes, so one token is made and reused for 40 minutes, and made again sooner (once it is 20 minutes
+//! old) only when Apple calls it expired or invalid (`send`).
 
 use std::path::Path;
 use std::sync::Mutex;

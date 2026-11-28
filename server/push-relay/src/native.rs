@@ -51,8 +51,8 @@ const NOTIFICATION_ID_MAX: usize = 128;
 /// How far the event's time may lie from the relay's clock, as for a Live Activity push.
 const TIMESTAMP_PAST_S: i64 = 3600;
 const TIMESTAMP_FUTURE_S: i64 = 300;
-/// An alert is worth showing for an hour after its event (gxserver's `ALERT_TTL_MS`); a background refresh only
-/// for a few minutes; a widget reload for an hour (Apple's documentation: it keeps only the latest for a device).
+/// Apple's expiry: an alert an hour after its event (gxserver's `ALERT_TTL_MS`), a background push 10 minutes
+/// after it, a widget push an hour after the relay received it.
 const ALERT_TTL_S: i64 = 3600;
 const BACKGROUND_TTL_S: i64 = 600;
 const WIDGETS_TTL_S: i64 = 3600;
