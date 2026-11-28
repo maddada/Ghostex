@@ -340,6 +340,23 @@ fn codex_error_text(err: &Value) -> Option<String> {
     }
 }
 
+/// Codex's refusal to resume or fork an archived thread ("session <id> is archived", or its
+/// advice to run `codex unarchive`).
+fn codex_thread_is_archived_error(err: &str) -> bool {
+    let lower = err.to_ascii_lowercase();
+    if lower.contains("codex unarchive") {
+        return true;
+    }
+    lower.match_indices("session ").any(|(at, word)| {
+        let mut words = lower[at + word.len()..].split_whitespace();
+        words.next().is_some()
+            && words.next() == Some("is")
+            && words
+                .next()
+                .is_some_and(|w| w.trim_end_matches(|c: char| !c.is_alphanumeric()) == "archived")
+    })
+}
+
 /// How long Codex may keep retrying one turn (`error { willRetry: true }` with no progress in
 /// between) before Ghostex ends the turn with the last retry's error.
 const CODEX_RETRY_BUDGET: Duration = Duration::from_secs(10 * 60);
@@ -1176,7 +1193,24 @@ fn spawn_and_init_codex(
         if let Some(instr) = dev_instr.as_deref().filter(|s| !s.is_empty()) {
             req_params.insert("developerInstructions".to_string(), json!(instr));
         }
-        match transport.call(method, Value::Object(req_params), CODEX_RPC_TIMEOUT) {
+        let req_params = Value::Object(req_params);
+        let first = match transport.call(method, req_params.clone(), CODEX_RPC_TIMEOUT) {
+            // A thread archived in Codex (`codex archive`, or the Codex app) refuses resume and
+            // fork until it is unarchived; the user asked to continue it, so unarchive and retry
+            // once.
+            Err(err) if codex_thread_is_archived_error(&err) => {
+                match transport.call(
+                    "thread/unarchive",
+                    json!({ "threadId": resume_id }),
+                    CODEX_RPC_TIMEOUT,
+                ) {
+                    Ok(_) => transport.call(method, req_params, CODEX_RPC_TIMEOUT),
+                    Err(_) => Err(err),
+                }
+            }
+            other => other,
+        };
+        match first {
             Ok(res) => Ok(res),
             Err(err) if !fork_session && err.to_ascii_lowercase().contains("no rollout found") => {
                 // Thread has never persisted a turn yet: start a fresh thread under the new profile.
