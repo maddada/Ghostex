@@ -102,7 +102,50 @@ pub(super) fn create(args: &Arguments) -> CliResult<Value> {
         .as_deref()
         .map(|lead| super::leads::lead_for_new_session(lead, &args.flags))
         .transpose()?;
-    let created = call_gxserver_rpc("/api/createAgentSession", &payload, &flags)?;
+    let send_request_id = uuid::Uuid::new_v4().to_string();
+    // A create on another computer that runs past the CLI's wait is finished by this computer's
+    // gxserver (coordinator/threads.rs `created_or_late`, GitHub #789).
+    let mut local_flags = flags.clone();
+    local_flags.0.remove("computer");
+    let remote_server_id = flags
+        .contains("computer")
+        .then(|| crate::ghostex_cli::rpc::resolve_gxserver_server_target(&flags, &json!({})))
+        .transpose()?
+        .and_then(|target| target.server_id);
+    let computer_name = flags.text("computer").unwrap_or_default();
+    let late_start = remote_server_id.as_deref().map(|server_id| {
+        let coordinator = caller.clone().or_else(|| identity::caller().ok());
+        let ids = |key: &str| coordinator.as_ref().map(|caller| caller[key].clone());
+        crate::ghostex_cli::coordinator::LateStart {
+            server_id,
+            computer: &computer_name,
+            local_flags: &local_flags,
+            watch: json!({
+                "coordinatorProjectId": ids("projectId"),
+                "coordinatorSessionId": ids("sessionId"),
+                "link": !args.standalone && lead.is_none(),
+                "title": args.title.as_deref().unwrap_or_default(),
+                "task": body.as_deref().unwrap_or_default(),
+                "message": message,
+                "sendRequestId": send_request_id,
+            }),
+        }
+    });
+    let created = match crate::ghostex_cli::coordinator::created_or_late(
+        call_gxserver_rpc("/api/createAgentSession", &payload, &flags),
+        late_start,
+    )? {
+        Ok(created) => created,
+        Err(note) => {
+            return Ok(json!({
+                "ok": true,
+                "status": "starting",
+                "computer": computer_name,
+                "sendRequestId": send_request_id,
+                "note": note,
+            }));
+        }
+    };
     let session = created.get("session").ok_or_else(|| {
         CliError::Other(
             "Create response has no session. Inspect agents list before retrying.".into(),
@@ -144,14 +187,30 @@ pub(super) fn create(args: &Arguments) -> CliResult<Value> {
         })
     };
     // Retain the created identity if startup fails so a retry does not create a duplicate.
-    let provider = call_gxserver_rpc("/api/startSessionProvider", &json!({
+    // An agent start on another computer that runs past the CLI's wait goes on there: the task is
+    // queued behind it and the answer says the agent is still starting (GitHub #789).
+    let mut slow_start = None;
+    let provider = match call_gxserver_rpc("/api/startSessionProvider", &json!({
         "globalRef": reference, "projectId": session["projectId"], "sessionId": session["sessionId"],
-    }), &flags).map_err(|error| CliError::Other(format!("Created {reference}, but provider startup failed or is uncertain: {error}. Inspect this session before retrying; do not create another session.")))?;
+    }), &flags) {
+        Ok(provider) => provider,
+        Err(CliError::Timeout { message, .. }) if remote_server_id.is_some() => {
+            slow_start = Some(message);
+            Value::Null
+        }
+        Err(error) => return Err(CliError::Other(format!("Created {reference}, but provider startup failed or is uncertain: {error}. Inspect this session before retrying; do not create another session."))),
+    };
     let live_session = provider
         .get("session")
         .filter(|value| value.is_object())
         .unwrap_or(session);
     let mut result = json!({"ok": true, "status": "created", "globalRef": reference, "session": identity::summary(live_session)});
+    if let Some(why) = slow_start {
+        result["status"] = json!("starting");
+        result["note"] = json!(format!(
+            "Its agent was still starting when the CLI stopped waiting: {why} A task you gave it is queued and goes in once the agent is up. Check with `ghostex read-session-chat {reference}`; do not create another session."
+        ));
+    }
     if let Some(role_set) = role_set {
         match role_set {
             Ok(saved) => result["role"] = saved["role"].clone(),
@@ -213,7 +272,7 @@ pub(super) fn create(args: &Arguments) -> CliResult<Value> {
     if let Some(message) = message {
         let receipt = call_gxserver_rpc("/api/queueSessionChatPrompt", &json!({
             "globalRef": reference, "projectId": session["projectId"], "sessionId": session["sessionId"],
-            "text": message, "startupSend": true, "sendRequestId": uuid::Uuid::new_v4().to_string(),
+            "text": message, "startupSend": true, "sendRequestId": send_request_id,
         }), &flags).map_err(|error| CliError::Other(format!("Created {reference}, but task delivery failed or is uncertain: {error}. Inspect this session and its queue; do not create another session to retry.")))?;
         result["taskStatus"] = json!("queued");
         // The sender's chat card shows the task from here (see `message` in delivery.rs).

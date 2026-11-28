@@ -611,7 +611,7 @@ fn error_name_for_cli_error(error: &CliError) -> &'static str {
     match error {
         CliError::Connection(_) => "GxserverCliConnectionError",
         CliError::Rpc { .. } => "GxserverCliRpcError",
-        CliError::Other(_) => "Error",
+        CliError::Timeout { .. } | CliError::Other(_) => "Error",
     }
 }
 

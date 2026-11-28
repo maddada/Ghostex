@@ -92,6 +92,16 @@ pub enum CliError {
     Connection(String),
     /// GxserverCliRpcError — failed RPC response body preserved.
     Rpc { message: String, response: Value },
+    /// gxserver took the request but had not answered when the CLI stopped waiting; it may still
+    /// finish.
+    Timeout {
+        message: String,
+        /// The id of a call relayed to another computer (`x-request-id`), by which this
+        /// computer's gxserver still knows it (connected_computers/relay_watch.rs).
+        request_id: Option<String>,
+        /// A create call's own answer, when it finished just as the wait ended.
+        created: Option<Value>,
+    },
     /// GxserverCliUnsupportedError and every other CLI error.
     Other(String),
 }
@@ -101,6 +111,7 @@ impl std::fmt::Display for CliError {
         match self {
             CliError::Connection(message) => write!(formatter, "{message}"),
             CliError::Rpc { message, .. } => write!(formatter, "{message}"),
+            CliError::Timeout { message, .. } => write!(formatter, "{message}"),
             CliError::Other(message) => write!(formatter, "{message}"),
         }
     }
@@ -502,6 +513,7 @@ fn send_gxserver_envelope(
         .or_else(|| flags.number("timeoutMs"))
         .unwrap_or(15_000.0);
     let body_text = body.to_string();
+    let request_id = uuid::Uuid::new_v4().to_string();
     // The security log names the session a sensitive request came from (server/src/audit/caller.rs).
     let caller_session = caller_session_from_env();
     // The token goes only to a listener of this account (ghostex_paths::loopback_owner).
@@ -515,6 +527,7 @@ fn send_gxserver_envelope(
                 .post(format!("{}{}", target.base_url, pathname))
                 .header("authorization", format!("Bearer {}", target.token))
                 .header("content-type", "application/json")
+                .header("x-request-id", &request_id)
                 .header(
                     GXSERVER_PROTOCOL_HEADER,
                     GXSERVER_PROTOCOL_VERSION.to_string(),
@@ -534,7 +547,14 @@ fn send_gxserver_envelope(
     let (status_ok, status, response_body) = match outcome {
         Ok(answer) => answer,
         Err(error) if timed_out_after_connecting(&error) => {
-            return Err(timeout_error(target, pathname, body, timeout_ms));
+            return Err(timeout_error(
+                target,
+                pathname,
+                body,
+                &request_id,
+                timeout_ms,
+                flags.text("computer").as_deref(),
+            ));
         }
         Err(error) => {
             return Err(connection_error_for_target(target, &error.to_string()));
@@ -585,7 +605,9 @@ fn starting_retry_after(
 }
 
 /// Whether the status is a success, the status, and the JSON body.
-fn status_and_json_body(response: ureq::http::Response<ureq::Body>) -> (bool, u16, Option<Value>) {
+pub(super) fn status_and_json_body(
+    response: ureq::http::Response<ureq::Body>,
+) -> (bool, u16, Option<Value>) {
     let status = response.status().as_u16();
     (
         (200..400).contains(&status),
@@ -615,13 +637,34 @@ fn timed_out_after_connecting(error: &ureq::Error) -> bool {
 
 /// CDXC:Cli 2026-10-05 WHY:
 /// A request that timed out while gxserver was running said "Could not connect to local gxserver … Start it with gx server start", which sent callers off to start a server that was up and, for a send, hid that gxserver keeps typing the message after the CLI stops waiting. A timeout now says so, and a send's says the message may still arrive and to retry only with the same request id, which gxserver delivers at most once (session_chat_send_requests.rs). A refused connection keeps the start-it-first message.
-fn timeout_error(target: &Target, pathname: &str, body: &Value, timeout_ms: f64) -> CliError {
+fn timeout_error(
+    target: &Target,
+    pathname: &str,
+    body: &Value,
+    request_id: &str,
+    timeout_ms: f64,
+    computer: Option<&str>,
+) -> CliError {
+    if target.kind == "computer" {
+        return super::computers::relayed_timeout_error(
+            target, pathname, body, request_id, timeout_ms, computer,
+        );
+    }
     let mut message = format!(
         "gxserver at {} did not answer {} within {} ms. It is running but did not finish in time; the request may still complete.",
         target.base_url,
         pathname,
         timeout_ms.max(0.0) as u64
     );
+    append_send_retry_hint(&mut message, pathname, body);
+    CliError::Timeout {
+        message,
+        request_id: None,
+        created: None,
+    }
+}
+
+pub(super) fn append_send_retry_hint(message: &mut String, pathname: &str, body: &Value) {
     if matches!(
         pathname,
         "/api/sendSessionChatMessage"
@@ -638,7 +681,6 @@ fn timeout_error(target: &Target, pathname: &str, body: &Value, timeout_ms: f64)
         }
         message.push_str(" (--request-id for ghostex agents send, --send-request-id for the chat commands) so it is never delivered twice.");
     }
-    CliError::Other(message)
 }
 
 /// Whether this command runs inside a Codex sandbox that has the network off: Codex marks the

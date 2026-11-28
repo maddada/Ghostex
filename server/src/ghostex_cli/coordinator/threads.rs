@@ -245,6 +245,66 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
     if chrome {
         create[crate::acp::claude_chrome::CLAUDE_CHROME_PARAM] = json!(true);
     }
+    // The brief's send id: its delivery watch keeps it, and the confirmation below names it.
+    let brief_send_id = uuid::Uuid::new_v4().to_string();
+    // An OpenCode thread's `--model`/`--effort` reach it as a `/model provider/model [variant]`
+    // line ahead of the brief, set for this session only, as a coordinator create does (GitHub
+    // #747; the create below checks them, agents/launch_plan.rs).
+    let model_line = agent_rows
+        .first()
+        .and_then(crate::coordinators::coordinator_launcher_family)
+        .filter(|family| *family == "opencode")
+        .and_then(|family| {
+            create
+                .as_object()
+                .and_then(|create| crate::coordinators::coordinator_model_line(family, create))
+        });
+    // A create on another computer that runs past the CLI's wait is finished by this computer's
+    // gxserver (`created_or_late`).
+    let computer_name = flag_text(&parsed.flags, "computer").unwrap_or_default();
+    let late_start = || {
+        remote_server_id.as_deref().map(|server_id| LateStart {
+            server_id,
+            computer: &computer_name,
+            local_flags: &local_flags,
+            watch: json!({
+                "coordinatorProjectId": coordinator["projectId"],
+                "coordinatorSessionId": coordinator["sessionId"],
+                "link": true,
+                "title": title,
+                "task": task.trim(),
+                "message": message,
+                "modelLine": model_line,
+                "sendRequestId": brief_send_id,
+                "readOnly": read_only,
+            }),
+        })
+    };
+    let starting = |note: String| {
+        let mut thread = json!({ "title": title, "agentId": agent_id });
+        if read_only {
+            thread["readOnly"] = json!(true);
+        }
+        if chrome {
+            thread["chrome"] = json!(true);
+        }
+        if !computer_name.is_empty() {
+            thread["computer"] = json!(computer_name);
+        }
+        let result = json!({ "ok": true, "status": "starting", "note": note, "thread": thread });
+        if parsed.flags.truthy("json") {
+            print_json(&result);
+        } else {
+            let mut compact = json!({"status": "starting", "title": title, "agentId": agent_id,
+                "req": brief_send_id, "sendRequestId": brief_send_id, "note": note});
+            for key in ["readOnly", "chrome", "computer"] {
+                if let Some(value) = result["thread"].get(key) {
+                    compact[key] = value.clone();
+                }
+            }
+            println!("{compact}");
+        }
+    };
     let worktree = parsed.flags.truthy("worktree");
     let (session_id, branch, worktree_path, created_project) = if worktree {
         if let Some(base) = flag_text(&parsed.flags, "baseBranch") {
@@ -264,7 +324,16 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
             create[crate::coordinators::REMOTE_COORDINATOR_THREAD_OF_PARAM] =
                 json!(coordinator_ref);
         }
-        let created = call_gxserver_rpc("/api/createWorktreeSession", &create, &flags)?;
+        let created = match created_or_late(
+            call_gxserver_rpc("/api/createWorktreeSession", &create, &flags),
+            late_start(),
+        )? {
+            Ok(created) => created,
+            Err(note) => {
+                starting(note);
+                return Ok(());
+            }
+        };
         if read_only && created["readOnly"] != true {
             undo_unrestricted_thread(&created, &flags)?;
         }
@@ -283,7 +352,16 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
                 crate::coordinators::REMOTE_COORDINATOR_THREAD_KEY: coordinator_ref,
             });
         }
-        let created = call_gxserver_rpc("/api/createAgentSession", &create, &flags)?;
+        let created = match created_or_late(
+            call_gxserver_rpc("/api/createAgentSession", &create, &flags),
+            late_start(),
+        )? {
+            Ok(created) => created,
+            Err(note) => {
+                starting(note);
+                return Ok(());
+            }
+        };
         if read_only
             && created["session"]["runtimeSettings"][crate::coordinators::READ_ONLY_THREAD_KEY]
                 != true
@@ -308,8 +386,6 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
             "The create response has no session id. Run ghostex coordinator status before retrying.".into(),
         ));
     }
-    // The brief's send id: its delivery watch keeps it, and the confirmation below names it.
-    let brief_send_id = uuid::Uuid::new_v4().to_string();
     let linked = match &remote_server_id {
         Some(server_id) => call_gxserver_rpc(
             "/api/linkRemoteCoordinatorThread",
@@ -340,30 +416,26 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
         )?,
     };
     let reference = agents::text(&linked, "globalRef").to_string();
+    // An agent start on another computer that runs past the CLI's wait goes on there: the brief
+    // is queued behind it and the confirmation below says what is still open (GitHub #789).
+    let mut slow_start = None;
     if !worktree {
-        call_gxserver_rpc(
+        match call_gxserver_rpc(
             "/api/startSessionProvider",
             &json!({"globalRef": reference, "projectId": project_id, "sessionId": session_id}),
             &flags,
-        )
-        .map_err(|error| {
-            CliError::Other(format!(
-                "Started thread {reference}, but its agent did not start: {error}. Check ghostex coordinator status; do not start another."
-            ))
-        })?;
+        ) {
+            Ok(_) => {}
+            Err(CliError::Timeout { message, .. }) if remote_server_id.is_some() => {
+                slow_start = Some(message);
+            }
+            Err(error) => {
+                return Err(CliError::Other(format!(
+                    "Started thread {reference}, but its agent did not start: {error}. Check ghostex coordinator status; do not start another."
+                )));
+            }
+        }
     }
-    // An OpenCode thread's `--model`/`--effort` reach it as a `/model provider/model [variant]`
-    // line ahead of the brief, set for this session only, as a coordinator create does (GitHub
-    // #747; the create above already checked them, agents/launch_plan.rs).
-    let model_line = agent_rows
-        .first()
-        .and_then(crate::coordinators::coordinator_launcher_family)
-        .filter(|family| *family == "opencode")
-        .and_then(|family| {
-            create
-                .as_object()
-                .and_then(|create| crate::coordinators::coordinator_model_line(family, create))
-        });
     if let Some(line) = model_line {
         call_gxserver_rpc(
             "/api/queueSessionChatPrompt",
@@ -406,6 +478,12 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
     let (status, note) = match &outcome {
         BriefOutcome::Started => ("started", "Its transcript shows the brief: it is working on it.".to_string()),
         BriefOutcome::Pending(reason) => ("pending", format!("Its brief has not started yet: {reason}. Ghostex keeps watching and reports to you if it never arrives; do not start another thread or resend the brief.")),
+    };
+    let note = match slow_start.filter(|_| status == "pending") {
+        Some(why) => {
+            format!("{note} Its agent was still starting when the CLI stopped waiting: {why}")
+        }
+        None => note,
     };
     let mut result = json!({
         "ok": true,
@@ -451,6 +529,81 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
         println!("{compact}");
     }
     Ok(())
+}
+
+/// What `created_or_late` needs to hand a late create over to this computer's gxserver.
+pub(crate) struct LateStart<'a> {
+    pub(crate) server_id: &'a str,
+    /// The computer as the user named it (`--computer`), for the note.
+    pub(crate) computer: &'a str,
+    /// The flags that reach this computer's gxserver.
+    pub(crate) local_flags: &'a crate::ghostex_cli::args::Flags,
+    /// `/relay/watchStart`'s params, without the call's `requestId`.
+    pub(crate) watch: Value,
+}
+
+/// A create call's answer. `Ok(Err(note))` when a create on another computer ran past the CLI's
+/// wait and this computer's gxserver took over the rest of the start: the caller answers
+/// `starting` with that note and does nothing more.
+///
+/// CDXC:Coordinators 2026-11-28 WHY:
+/// GitHub #789: `start-thread --computer` on a busy gxserver answered "did not answer
+/// /api/createWorktreeSession within 15000 ms … the request may still complete" and stopped.
+/// The create did complete later, but nothing linked that session to its coordinator or sent it
+/// its brief, so no thread ever appeared. The CLI now leaves the rest with this computer's
+/// gxserver, which is still waiting for that answer (connected_computers/relay_watch.rs
+/// `/relay/watchStart`): it links the thread, starts its agent and queues its brief when the
+/// create ends, and tells the coordinator if a step fails. A create that ended just as the wait
+/// did comes back with its answer, and the CLI goes on as usual.
+pub(crate) fn created_or_late(
+    answer: CliResult<Value>,
+    late: Option<LateStart<'_>>,
+) -> CliResult<Result<Value, String>> {
+    let (message, request_id, created, late) = match (answer, late) {
+        (
+            Err(CliError::Timeout {
+                message,
+                request_id: Some(request_id),
+                created,
+            }),
+            Some(late),
+        ) => (message, request_id, created, late),
+        (answer, _) => return answer.map(Ok),
+    };
+    if let Some(created) = created {
+        return Ok(Ok(created));
+    }
+    let computer = if late.computer.is_empty() {
+        late.server_id
+    } else {
+        late.computer
+    };
+    let mut watch = late.watch;
+    watch["requestId"] = json!(request_id);
+    let rest = if watch["link"] == true {
+        "the link to you, the agent and its task"
+    } else {
+        "the agent and its task"
+    };
+    let handed_over = crate::ghostex_cli::rpc::resolve_local_gxserver_target().and_then(|local| {
+        let mut target = crate::ghostex_cli::computers::relay_target(&local, late.server_id);
+        // A request to this computer's gxserver itself, not one it passes on.
+        target.kind = "local".to_string();
+        crate::ghostex_cli::rpc::request_gxserver_rpc(
+            &target,
+            "/watchStart",
+            &watch,
+            late.local_flags,
+        )
+    });
+    match handed_over {
+        Ok(_) => Ok(Err(format!(
+            "Still starting on {computer}. {message} Ghostex keeps waiting here: when {computer} answers it finishes the start ({rest}) and tells you if a step fails. Check with `ghostex coordinator status` or `ghostex sessions --computer {computer}`; do not start another."
+        ))),
+        Err(error) => Err(CliError::Other(format!(
+            "{message} Ghostex could not keep watching this start ({error}), so a session it still creates on {computer} has no brief and no link to you. Check `ghostex sessions --computer {computer}` before starting another."
+        ))),
+    }
 }
 
 /// A `--read-only` thread whose gxserver did not say it started read-only (another computer on a

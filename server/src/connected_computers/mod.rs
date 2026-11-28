@@ -6,6 +6,7 @@ mod http;
 mod peer_listener;
 mod registry;
 mod relay;
+mod relay_watch;
 mod scope;
 mod thread_scope;
 

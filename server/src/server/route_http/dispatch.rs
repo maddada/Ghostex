@@ -244,14 +244,14 @@ async fn route_http_unboxed(
             );
         };
         return crate::connected_computers::relay(
+            state.clone(),
             method,
             &path,
+            parts.uri.query(),
             parts.headers,
             body,
             request_id,
             &relay_caller,
-            &state.paths,
-            state.metadata.server_id.as_str(),
         )
         .await;
     }

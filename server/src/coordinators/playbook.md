@@ -128,6 +128,9 @@ Right after `start-thread`:
    or `queued`, do not resend: check the thread (`ghostex coordinator thread <ref>`) before you send
    it anything else. On a failure, or a report that your message did not reach it, read its chat and
    send once more; if that fails too, tell the user.
+   On `starting` (another computer was slow to answer), do not start another: Ghostex finishes the
+   start by itself and tells you if a step fails. The thread shows in `ghostex coordinator status`
+   once it exists.
 2. Unasked, link every issue, PR, ticket or other tracked item the task is about, one call each, and
    again when a follow-up brings a new one (nothing links by itself):
    `ghostex link add <ABC-123|url|#123|owner/repo#123> --session <thread ref>` (`--issue` for a bare

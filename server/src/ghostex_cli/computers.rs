@@ -335,6 +335,15 @@ pub(crate) fn point_to_session_on_another_computer(args: &[String], error: CliEr
             response,
         },
         CliError::Connection(message) => CliError::Connection(format!("{message}\n{hint}")),
+        CliError::Timeout {
+            message,
+            request_id,
+            created,
+        } => CliError::Timeout {
+            message: format!("{message}\n{hint}"),
+            request_id,
+            created,
+        },
         CliError::Other(message) => CliError::Other(format!("{message}\n{hint}")),
     }
 }
@@ -489,6 +498,91 @@ pub(crate) fn ref_target(local: &Target, server_id: &str) -> CliResult<Option<Ta
     };
     require_agent_access(computer)?;
     Ok(Some(relay_target(local, server_id)))
+}
+
+/// CDXC:RemoteMachines 2026-11-28 WHY:
+/// GitHub #789: a call to another computer that ran past the CLI's wait said only "gxserver at
+/// …/api/computers/S62/relay did not answer /api/listProjects within 15000 ms", the same words
+/// whether this computer's gxserver was too busy to pass it on, the connection was stalled or the
+/// other computer was slow. The CLI now asks this computer's gxserver where its call is
+/// (`/relay/status`, connected_computers/relay_watch.rs) and says which side it waited on; no
+/// answer to that question within two seconds means this computer's gxserver is the slow one.
+pub(super) fn relayed_timeout_error(
+    target: &Target,
+    pathname: &str,
+    body: &Value,
+    request_id: &str,
+    timeout_ms: f64,
+    named: Option<&str>,
+) -> CliError {
+    let ms = timeout_ms.max(0.0) as u64;
+    // The name `--computer` gave, until this computer's gxserver says its own name for it.
+    let server_id = named
+        .map(str::trim)
+        .filter(|name| !name.is_empty() && *name != "true")
+        .or(target.server_id.as_deref())
+        .unwrap_or("the other computer");
+    let status = crate::http_agent::answering_agent()
+        .get(format!("{}/status?requestId={request_id}", target.base_url))
+        .header("authorization", format!("Bearer {}", target.token))
+        .header(
+            crate::constants::GXSERVER_PROTOCOL_HEADER,
+            crate::constants::GXSERVER_PROTOCOL_VERSION.to_string(),
+        )
+        .config()
+        .timeout_global(Some(std::time::Duration::from_millis(2_000)))
+        .build()
+        .call()
+        .ok()
+        .map(super::rpc::status_and_json_body);
+    let result = match &status {
+        Some((true, _, Some(envelope))) => envelope.get("result"),
+        _ => None,
+    };
+    let text = |key: &str| {
+        result
+            .and_then(|result| result.get(key))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+    };
+    let computer = text("computerName").unwrap_or(server_id);
+    let mut created = None;
+    let mut message = match (status.is_some(), text("state")) {
+        (false, _) => format!(
+            "This computer's Ghostex is the slow side: it did not answer {pathname} for {computer} within {ms} ms, and it does not answer a quick check either. It is running but busy; the request may still complete."
+        ),
+        (true, Some("localPrep" | "unknown")) => format!(
+            "This computer's Ghostex is the slow side: after {ms} ms it had not passed {pathname} on to {computer} yet. The request may still complete."
+        ),
+        (true, Some("otherComputerSlow")) => format!(
+            "{computer} is the slow side: it has {pathname} and had not finished it after {ms} ms, while it answers a quick check over the same connection. The request may still complete."
+        ),
+        (true, Some("connectionStalled")) => format!(
+            "The connection to {computer} is the slow side: {pathname} went out, nothing came back within {ms} ms, and {computer} does not answer a quick check either (the link to it, or its Ghostex, is stalled). The request may still complete."
+        ),
+        (true, Some("completed")) => {
+            if text("outcome") != Some("ok") {
+                if let Some(error) = text("error") {
+                    return CliError::Other(error.to_string());
+                }
+            }
+            created = result.and_then(|result| result.get("created")).cloned();
+            format!(
+                "{computer} was slow: it finished {pathname} just after the {ms} ms the CLI waited."
+            )
+        }
+        // An older gxserver here, which has no `/relay/status`.
+        (true, _) => format!(
+            "{computer} did not answer {pathname} through this computer's Ghostex within {ms} ms. The request may still complete."
+        ),
+    };
+    super::rpc::append_send_retry_hint(&mut message, pathname, body);
+    CliError::Timeout {
+        message,
+        request_id: Some(request_id.to_string()),
+        created,
+    }
 }
 
 #[cfg(test)]

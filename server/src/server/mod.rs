@@ -217,7 +217,9 @@ pub(crate) use commit_message_generation::*;
 pub(crate) use coordinator_report_retry::request_report_retry;
 pub(crate) use coordinator_runtime::queue_session_chat_prompt;
 pub(crate) use coordinator_runtime::republish_session_chat;
-pub(crate) use coordinator_runtime::{prepare_coordinator_create_params, start_orchestrator_role};
+pub(crate) use coordinator_runtime::{
+    prepare_coordinator_create_params, send_to_coordinator, start_orchestrator_role,
+};
 pub use foreground::*;
 use http_dispatch::*;
 pub(crate) use http_endpoints::*;

@@ -2,7 +2,8 @@
 //! over the connection this computer already has to it.
 
 use crate::session_chat_send::sender_mark::AsUserLog;
-use std::time::Duration;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use axum::{
     body::{to_bytes, Body},
@@ -12,17 +13,20 @@ use serde_json::json;
 
 use crate::{
     constants::GXSERVER_PROTOCOL_HEADER,
-    paths::GxserverPaths,
+    logging::{DiagnosticLogScenario, GxserverLogInput, LogLevel},
     protocol::rpc_error,
     security::Principal,
-    server::{json_response, routed_json, RoutedResponse},
+    server::{json_response, routed_json, AppState, RoutedResponse},
 };
 
 use super::registry;
+use super::relay_watch::{self, CompletedRelayCall};
 
 pub(crate) const RELAY_ROUTE_PREFIX: &str = "/api/computers/";
 const RELAY_SEGMENT: &str = "/relay";
 const RELAY_BODY_LIMIT_BYTES: usize = 64 * 1024 * 1024;
+/// A relayed call that took this long is logged even when routine request logging is off.
+const SLOW_RELAY_CALL_WARN_MS: u128 = 5_000;
 
 /// The computer and the request path of a relay URL, or `None` when the path is not one.
 pub(crate) fn parse_relay_path(path: &str) -> Option<(&str, &str)> {
@@ -50,19 +54,175 @@ pub(crate) fn relay_base_url(local_base_url: &str, server_id: &str) -> String {
     format!("{local_base_url}{RELAY_ROUTE_PREFIX}{server_id}{RELAY_SEGMENT}")
 }
 
+/// The two requests about a relayed call rather than for the other computer (relay_watch.rs).
+fn relay_control(path: &str) -> Option<(&str, &str)> {
+    let (server_id, control) = path
+        .strip_prefix(RELAY_ROUTE_PREFIX)?
+        .split_once(RELAY_SEGMENT)?;
+    (registry::is_server_id(server_id) && matches!(control, "/status" | "/watchStart"))
+        .then_some((server_id, control))
+}
+
+/// One relayed call, for its log line and its entry in relay_watch.rs.
+///
+/// CDXC:RemoteMachines 2026-11-28 WHY:
+/// GitHub #789: relayed calls left no trace of how long they took or where they waited. A call the CLI stopped waiting for wrote nothing at all, because the request's own log line (`apiRequest`, server/http_dispatch.rs) is written by a future that ends with the connection. Each call now writes a `computerRelay` line when the other computer's answer arrives, from the thread that waited for it, which outlives the caller: the endpoint, the computer by its server id, the time taken and the outcome. A call that never got an answer, or took [`SLOW_RELAY_CALL_WARN_MS`], is always kept; a quick one (answered or refused) is routine, since `apiRequest` already records a failed status.
+#[derive(Clone)]
+struct RelayCall {
+    state: Arc<AppState>,
+    method: Method,
+    forwarded: String,
+    server_id: String,
+    request_id: String,
+    started_at: Instant,
+    /// A chat read that waits on the other computer on purpose (`--wait-ms`).
+    long_poll: bool,
+    /// Whether relay_watch.rs holds an entry for it under `request_id`.
+    tracked: bool,
+}
+
+impl RelayCall {
+    fn finish(
+        &self,
+        status: u16,
+        outcome: &'static str,
+        code: Option<&str>,
+        error: Option<String>,
+        created_session: Option<relay_watch::CreatedSessionInfo>,
+    ) {
+        let duration_ms = self.started_at.elapsed().as_millis();
+        let slow = !self.long_poll && duration_ms >= SLOW_RELAY_CALL_WARN_MS;
+        let (level, log_error) = match outcome {
+            "ok" | "remoteError" | "refused" if slow => (LogLevel::Warn, None),
+            "ok" | "remoteError" | "refused" => (LogLevel::Info, None),
+            _ => (LogLevel::Error, code),
+        };
+        let _ = self.state.logger.log_routine(
+            DiagnosticLogScenario::ApiRequests,
+            GxserverLogInput {
+                level,
+                event: "computerRelay".to_string(),
+                server_id: Some(self.state.metadata.server_id.clone()),
+                request_id: Some(self.request_id.clone()),
+                client: None,
+                duration_ms: Some(duration_ms),
+                error: log_error.map(str::to_string),
+                details: Some(json!({
+                    "method": self.method.as_str(),
+                    "route": self.forwarded,
+                    "targetServerId": self.server_id,
+                    "outcome": outcome,
+                    "statusCode": status,
+                    "errorCode": code,
+                })),
+            },
+        );
+        if self.tracked {
+            relay_watch::complete(
+                &self.state,
+                &self.request_id,
+                CompletedRelayCall {
+                    status,
+                    outcome,
+                    error,
+                    created_session,
+                },
+            );
+        }
+    }
+
+    /// A refusal made here, before anything left for the other computer.
+    fn refuse(&self, status: StatusCode, code: &str, message: String) -> RoutedResponse {
+        self.finish(
+            status.as_u16(),
+            "refused",
+            Some(code),
+            Some(message.clone()),
+            None,
+        );
+        refusal(status, code, message, self.request_id.clone())
+    }
+
+    /// The other computer answered, or the call to it failed: what the caller is told, by the
+    /// same code as before (`computerUnreachable`, which clients hold a send on:
+    /// gx-chat-core session/computer.rs `holds_refusal`, held_sends.rs), now saying which side.
+    fn finish_forward(
+        &self,
+        name: &str,
+        result: &Result<(u16, Option<String>, Vec<u8>), ureq::Error>,
+    ) -> Option<String> {
+        let forwarded = &self.forwarded;
+        match result {
+            Ok((status, _, body)) => {
+                let error = relay_watch::remote_error_message(*status, body);
+                self.finish(
+                    *status,
+                    if error.is_some() { "remoteError" } else { "ok" },
+                    error.as_ref().map(|_| "remoteError"),
+                    error,
+                    relay_watch::created_session(forwarded, &self.server_id, *status, body),
+                );
+                None
+            }
+            Err(error) => {
+                let timed_out = matches!(error, ureq::Error::Timeout(_));
+                let (outcome, message) = if crate::http_agent::never_connected(error) {
+                    (
+                        "unreachable",
+                        format!("{name} didn't answer. Ghostex reconnects it on its own, so try again in a moment."),
+                    )
+                } else if timed_out {
+                    (
+                        "computerTimeout",
+                        format!("{name} took {forwarded} but did not finish it in time. It may still be working on it, so check there before trying again."),
+                    )
+                } else {
+                    (
+                        "connectionLost",
+                        format!("The connection to {name} dropped before it answered {forwarded}. It may still have done it, so check there before trying again."),
+                    )
+                };
+                self.finish(
+                    StatusCode::BAD_GATEWAY.as_u16(),
+                    outcome,
+                    Some("computerUnreachable"),
+                    Some(message.clone()),
+                    None,
+                );
+                Some(message)
+            }
+        }
+    }
+}
+
 /// Forwards the request. The caller has already checked it carries this gxserver's own token: a
 /// token another computer was given never relays onward. The other computer is reached with the
 /// token it gave this one, which its gxserver limits to the same allowlist.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn relay(
+    state: Arc<AppState>,
     method: Method,
     path: &str,
+    query: Option<&str>,
     headers: HeaderMap,
     body: Body,
     request_id: String,
     caller: &Principal,
-    paths: &GxserverPaths,
-    server_id_here: &str,
 ) -> RoutedResponse {
+    match relay_control(path) {
+        Some((server_id, "/status")) => {
+            return relay_watch::handle_status(&method, caller, server_id, query, request_id).await;
+        }
+        Some((server_id, _)) => {
+            return relay_watch::handle_watch_start(
+                state, &method, caller, server_id, body, request_id,
+            )
+            .await;
+        }
+        None => {}
+    }
+    let paths = &state.paths;
+    let server_id_here = state.metadata.server_id.as_str();
     let endpoint_path = Some(RELAY_ROUTE_PREFIX.to_string());
     let Some((server_id, forwarded)) = parse_relay_path(path) else {
         return refusal(
@@ -72,56 +232,57 @@ pub(crate) async fn relay(
             request_id,
         );
     };
+    let mut call = RelayCall {
+        state: state.clone(),
+        method: method.clone(),
+        forwarded: forwarded.to_string(),
+        server_id: server_id.to_string(),
+        request_id: request_id.clone(),
+        started_at: Instant::now(),
+        long_poll: false,
+        tracked: false,
+    };
     if !relay_forwards(forwarded) {
-        return refusal(
+        return call.refuse(
             StatusCode::FORBIDDEN,
             "forbidden",
             format!("Agents can't use {forwarded} on another computer."),
-            request_id,
         );
     }
     let Some(computer) = registry::find(server_id) else {
-        return refusal(
+        return call.refuse(
             StatusCode::NOT_FOUND,
             "computerNotConnected",
             "That computer isn't connected to this one. Open Settings > Remote > Remote machines (`ghostex settings open --tab remote`) so the user can connect it, then try again.".to_string(),
-            request_id,
         );
     };
+    call.tracked = relay_watch::track(&request_id, caller, server_id, &computer.name, forwarded);
     if let Some(message) = computer.waiting_message() {
-        return refusal(
-            StatusCode::FORBIDDEN,
-            "approvalPending",
-            message,
-            request_id,
-        );
+        return call.refuse(StatusCode::FORBIDDEN, "approvalPending", message);
     }
     if !computer.agent_access {
-        return refusal(
+        return call.refuse(
             StatusCode::FORBIDDEN,
             "agentAccessOff",
             access_off_message(&computer),
-            request_id,
         );
     }
     if method != Method::POST && !(method == Method::GET && forwarded == "/api/health/server") {
-        return refusal(
+        return call.refuse(
             StatusCode::METHOD_NOT_ALLOWED,
             "methodNotAllowed",
             format!("{forwarded} requires POST."),
-            request_id,
         );
     }
     let bytes = match to_bytes(body, RELAY_BODY_LIMIT_BYTES).await {
         Ok(bytes) => bytes,
         Err(_) => {
-            return refusal(
+            return call.refuse(
                 StatusCode::PAYLOAD_TOO_LARGE,
                 "payloadTooLarge",
                 format!(
                     "A request to another computer can be at most {RELAY_BODY_LIMIT_BYTES} bytes."
                 ),
-                request_id,
             );
         }
     };
@@ -131,13 +292,9 @@ pub(crate) async fn relay(
         super::thread_scope::refusal(db.as_deref(), caller, server_id, forwarded, &bytes)
     };
     if let Some(message) = refused {
-        return refusal(
-            StatusCode::FORBIDDEN,
-            "forbidden",
-            message.to_string(),
-            request_id,
-        );
+        return call.refuse(StatusCode::FORBIDDEN, "forbidden", message.to_string());
     }
+    call.long_poll = is_long_poll(forwarded, &bytes);
     // An agent's message to another computer says who sent it before it leaves; the other
     // computer passes it on as it came (session_chat_send/sender_mark.rs). One of the user's own
     // callers' messages leaves marked as the user's (`userSend`), so the other computer records it
@@ -149,12 +306,7 @@ pub(crate) async fn relay(
         match stamped_sender(caller, &bytes) {
             Ok(stamped) => stamped.into(),
             Err(message) => {
-                return refusal(
-                    StatusCode::BAD_REQUEST,
-                    "badRequest",
-                    message.to_string(),
-                    request_id,
-                );
+                return call.refuse(StatusCode::BAD_REQUEST, "badRequest", message.to_string());
             }
         }
     } else if crate::session_chat_send::sender_mark::MESSAGE_ROUTES.contains(&forwarded) {
@@ -164,12 +316,7 @@ pub(crate) async fn relay(
                 marked.into()
             }
             Err(message) => {
-                return refusal(
-                    StatusCode::BAD_REQUEST,
-                    "badRequest",
-                    message.to_string(),
-                    request_id,
-                );
+                return call.refuse(StatusCode::BAD_REQUEST, "badRequest", message.to_string());
             }
         }
     } else if forwarded == "/api/createAgentSession" {
@@ -179,12 +326,7 @@ pub(crate) async fn relay(
                 marked.into()
             }
             Err(message) => {
-                return refusal(
-                    StatusCode::BAD_REQUEST,
-                    "badRequest",
-                    message.to_string(),
-                    request_id,
-                );
+                return call.refuse(StatusCode::BAD_REQUEST, "badRequest", message.to_string());
             }
         }
     } else {
@@ -209,29 +351,48 @@ pub(crate) async fn relay(
     let url = format!("{}{forwarded}", computer.base_url);
     let token = computer.token().to_string();
     let name = computer.name.clone();
-    let forwarded_request_id = request_id.clone();
+    let blocking_call = call.clone();
+    let blocking_name = name.clone();
+    // This thread waits for the other computer whether or not the caller still does, so the
+    // call's log line and its watch (relay_watch.rs) are settled here, not in the request's
+    // future, which ends when the caller hangs up.
     let outcome = tokio::task::spawn_blocking(move || {
+        let call = blocking_call;
         // The grant goes only to a listener of this account: the tunnel's port, once freed, could
         // be someone else's (ghostex_paths::loopback_owner).
-        computer.check_listener(&url).map(|()| {
-            forward(
-                &method,
-                &url,
-                &token,
-                protocol.as_deref(),
-                content_type.as_deref(),
-                &forwarded_request_id,
-                user_send,
-                bytes.to_vec(),
-            )
-        })
+        if let Err(foreign) = computer.check_listener(&url) {
+            let message = foreign.to_string();
+            call.finish(
+                StatusCode::BAD_GATEWAY.as_u16(),
+                "foreignListener",
+                Some(ghostex_paths::loopback_owner::FOREIGN_LISTENER_CODE),
+                Some(message.clone()),
+                None,
+            );
+            return Err(message);
+        }
+        if call.tracked {
+            relay_watch::mark_forwarding(&call.request_id);
+        }
+        let result = forward(
+            &call.method,
+            &url,
+            &token,
+            protocol.as_deref(),
+            content_type.as_deref(),
+            &call.request_id,
+            user_send,
+            bytes.to_vec(),
+        );
+        let failure = call.finish_forward(&blocking_name, &result);
+        Ok(result.map_err(|_| failure.unwrap_or_default()))
     })
     .await;
     match outcome {
         Ok(Err(foreign)) => refusal(
             StatusCode::BAD_GATEWAY,
             ghostex_paths::loopback_owner::FOREIGN_LISTENER_CODE,
-            foreign.to_string(),
+            foreign,
             request_id,
         ),
         Ok(Ok(Ok((status, content_type, body)))) => {
@@ -258,15 +419,46 @@ pub(crate) async fn relay(
                 response,
             }
         }
-        _ => refusal(
+        Ok(Ok(Err(message))) => refusal(
             StatusCode::BAD_GATEWAY,
             "computerUnreachable",
-            format!(
-                "{name} didn't answer. Ghostex reconnects it on its own, so try again in a moment."
-            ),
+            message,
             request_id,
         ),
+        // The forwarding thread itself failed, so nothing above settled the call.
+        Err(_) => {
+            let message = format!(
+                "This computer's Ghostex failed while passing {forwarded} on to {name}. Try again in a moment."
+            );
+            call.finish(
+                StatusCode::BAD_GATEWAY.as_u16(),
+                "internalError",
+                Some("computerUnreachable"),
+                Some(message.clone()),
+                None,
+            );
+            refusal(
+                StatusCode::BAD_GATEWAY,
+                "computerUnreachable",
+                message,
+                request_id,
+            )
+        }
     }
+}
+
+/// A chat read that waits on the other computer on purpose (`read-session-chat --wait-ms`), so a
+/// long one is not logged as slow.
+fn is_long_poll(forwarded: &str, body: &[u8]) -> bool {
+    forwarded == "/api/readSessionChat"
+        && body.len() <= 64 * 1024
+        && serde_json::from_slice::<serde_json::Value>(body)
+            .ok()
+            .and_then(|body| {
+                body.pointer("/params/waitMs")
+                    .and_then(|wait| wait.as_u64())
+            })
+            .is_some_and(|wait_ms| wait_ms > 0)
 }
 
 /// A chat message, not a raw key (`params.key`, send_http.rs), which never reopens a thread.
