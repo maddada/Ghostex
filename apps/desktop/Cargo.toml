@@ -102,7 +102,7 @@ backtrace = { version = "0.3", optional = true }
 log = "0.4"
 portable-pty = "0.9"
 # CDXC:RemotePairing 2026-09-15: the native Remote Setup dialog draws the Android install QR code itself (src/app/window/remote_setup_modal.rs); no image or svg render features, the modules are painted as gpui squares.
-qrcode = { version = "0.14", default-features = false }
+qrcode = { version = "0.15", default-features = false, features = ["std"] }
 percent-encoding = "2"
 raw-window-handle = "0.6"
 regex = "1"
