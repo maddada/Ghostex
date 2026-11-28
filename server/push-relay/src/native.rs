@@ -20,7 +20,8 @@ use crate::MAX_APNS_PAYLOAD_BYTES;
 
 /// The title every alert shows unless the phone decrypts the envelope and replaces it.
 pub const ALERT_TITLE: &str = "Ghostex";
-/// Each event's fixed words, the ones gxserver's alerts use (`server/src/push/message.rs`, `AlertKind::words`).
+/// Each event's fixed words. They follow gxserver's alert words (`server/src/push/message.rs`, `AlertKind::words`),
+/// with `approval` added here; gxserver's "Running low" words have no kind here.
 pub const ALERT_WORDS: &[(&str, &str)] = &[
     ("finished", "Finished"),
     ("approval", "Waiting for approval"),

@@ -13,8 +13,8 @@
 //!
 //! Every push type, its topic and Apple's host (production or sandbox) are fixed here, and a request naming any
 //! of them is refused. Like Expo's push service it is open: the device token is what lets someone push to a
-//! phone, and only the computers that phone paired with receive it. What someone else can do with the relay is
-//! in `README.md`.
+//! phone, and the phone is meant to give it only to the computers it paired with (the client's behaviour, not
+//! checked here). What someone else can do with the relay is in `README.md`.
 //!
 //! It logs counts, Apple's status and reason, and an 8-hex hash of a token or id; never a token, an id, a
 //! content state, an envelope, a snapshot or anything from the key's files.
