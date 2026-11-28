@@ -78,4 +78,5 @@ pub(crate) fn chief_playbook(gbots_on: bool) -> String {
 pub(crate) const CHIEF_TITLE: &str = "Ghostex AI";
 /// The session titles Chief was created with under earlier names; sweep.rs renames such a session
 /// once (a title the user gave it stays).
-pub(crate) const OLD_CHIEF_TITLES: &[&str] = &["Chief", "Main Hub", "Chief of Staff", "Ask Ghostex AI"];
+pub(crate) const OLD_CHIEF_TITLES: &[&str] =
+    &["Chief", "Main Hub", "Chief of Staff", "Ask Ghostex AI"];
