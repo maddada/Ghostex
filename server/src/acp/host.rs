@@ -1659,11 +1659,14 @@ fn allow_always_security_warning(params: &Value) -> Option<String> {
         .filter_map(|key| warning.get(*key).and_then(Value::as_str))
         .map(str::trim)
         .find(|t| !t.is_empty())?;
+    // One run of text: line breaks in the agent's words must not stretch the card and push the
+    // command or its buttons out of view.
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
     if text.chars().count() > LIMIT {
         let cut: String = text.chars().take(LIMIT - 3).collect();
         Some(format!("{cut}..."))
     } else {
-        Some(text.to_string())
+        Some(text)
     }
 }
 

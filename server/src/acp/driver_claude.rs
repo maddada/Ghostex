@@ -715,6 +715,13 @@ fn is_claude_auth_error(error_code: Option<&str>, text: &str) -> bool {
         || (lower.contains("401") && lower.contains("authentication_error"))
 }
 
+/// Claude Code's words for a sign-in the server revoked ("OAuth token revoked", or the API's own
+/// "OAuth token has been revoked"). The API answers it with a 403, like a refusal of access.
+fn claude_text_says_token_revoked(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    lower.contains("token revoked") || lower.contains("token has been revoked")
+}
+
 fn claude_tool_kind(tool_name: &str) -> &'static str {
     match tool_name {
         "Read" | "Glob" | "Grep" | "LS" | "TaskList" | "TaskGet" | "TodoRead" => "read",
@@ -1618,11 +1625,6 @@ fn spawn_and_init_claude(
                                             || lower.contains("cancel")
                                             || lower.contains("abort")
                                     });
-                                // Claude Code labels a 403 `authentication_failed` too, but signing
-                                // in again cannot grant access the account lacks: show Claude's
-                                // own text as an API error instead of restarting and asking the
-                                // user to sign in.
-                                let permission_denied = api_error_status == Some(403);
                                 let result_is_error =
                                     msg.get("is_error").and_then(Value::as_bool) == Some(true);
                                 let result_text = extract_claude_message_text(&msg);
@@ -1633,6 +1635,16 @@ fn spawn_and_init_claude(
                                     .filter(|c| !c.is_empty())
                                     .map(str::to_string);
                                 let saw_auth_error = s.turn_saw_auth_error.take();
+                                // Claude Code labels a 403 `authentication_failed` too, but signing
+                                // in again cannot grant access the account lacks: show Claude's
+                                // own text as an API error instead of restarting and asking the
+                                // user to sign in. A revoked sign-in is the one 403 that signing
+                                // in again does fix, so it keeps the sign-in path.
+                                let permission_denied = api_error_status == Some(403)
+                                    && !claude_text_says_token_revoked(&result_text)
+                                    && !saw_auth_error
+                                        .as_deref()
+                                        .is_some_and(claude_text_says_token_revoked);
                                 let denied_text = permission_denied.then(|| {
                                     if !result_text.is_empty() {
                                         result_text.clone()
