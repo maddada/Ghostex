@@ -145,8 +145,8 @@ instant = "0.1"
 rodio = { version = "0.23", default-features = false, features = ["playback", "symphonia-mp3"] }
 # CDXC:VoiceMode 2026-10-20 WHY: the voice conversation and Dictate on Windows and Linux (app/voice_agent/audio_cpal.rs) capture and play through the same cpal 0.18 rodio sits on, and cancel the agent's echo with Sonora, a pure-Rust port of WebRTC's audio processing (AEC3, noise suppression; BSD-3-Clause, about 0.5 MB, plain cargo build on every target). The system cancellers were rejected: Windows' communications mode depends on the driver, PipeWire's echo-cancel module needs the user to load it, and the C++ WebRTC builds need meson or a prebuilt download. Sonora is young, so it is pinned exactly; bump it on purpose and re-run the voice audio lab (docs/2026-10-20/voice-mode/windows-linux-phase1.md).
 cpal = "0.18"
-sonora = "=0.2.0"
-sonora-common-audio = "=0.2.0"
+sonora = "=0.3.0"
+sonora-common-audio = "=0.3.0"
 
 # CDXC:Memory 2026-11-10 WHY: the app's Rust heap on macOS (src/heap_counter.rs). CEF installs
 # PartitionAlloc as the process malloc, where the running app held 1.2 to 1.9 GB against about
