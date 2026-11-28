@@ -1625,10 +1625,34 @@ fn parse_permission_request(rpc_id: Value, params: &Value) -> PendingPermission 
         tool_name,
         summary,
         tool_use_id,
-        reason: None,
+        reason: allow_always_security_warning(params),
         is_question,
         options,
         custom_prompt_override: None,
+    }
+}
+
+/// Antigravity attaches a security warning to the `allow_always` option of shell and web tool
+/// requests (`_meta["agy.security.warning"]`, `{title, message}`): what always allowing would let
+/// the agent do. The card shows it, so a user who picks Allow always has read it.
+fn allow_always_security_warning(params: &Value) -> Option<String> {
+    const LIMIT: usize = 512;
+    let warning = params
+        .get("options")
+        .and_then(Value::as_array)?
+        .iter()
+        .filter(|item| item.get("kind").and_then(Value::as_str) == Some("allow_always"))
+        .find_map(|item| item.pointer("/_meta/agy.security.warning"))?;
+    let text = ["message", "title"]
+        .iter()
+        .filter_map(|key| warning.get(*key).and_then(Value::as_str))
+        .map(str::trim)
+        .find(|t| !t.is_empty())?;
+    if text.chars().count() > LIMIT {
+        let cut: String = text.chars().take(LIMIT - 3).collect();
+        Some(format!("{cut}..."))
+    } else {
+        Some(text.to_string())
     }
 }
 
@@ -2310,7 +2334,14 @@ pub fn run(args: &[String]) -> i32 {
                                         return;
                                     }
                                     PermissionDecision::AskUser { reason } => {
-                                        perm.reason = reason;
+                                        // Keep the agent's own warning (parsed above) after
+                                        // Ghostex's reason.
+                                        perm.reason = match (reason, perm.reason.take()) {
+                                            (Some(ours), Some(agent)) => {
+                                                Some(format!("{ours}\n{agent}"))
+                                            }
+                                            (ours, agent) => ours.or(agent),
+                                        };
                                     }
                                 }
                             }
