@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="ghostex-page" content="v2">
+<title>Jira in Ghostex: its settings rows and tracker picker</title>
+<style>
+  .how { margin: -2px 0 0; font-size: 13px; line-height: 1.45; color: var(--gx-muted); }
+  .how b { color: var(--gx-fg); font-weight: 600; }
+
+  /* The Settings page's own look: an opaque section card with hairline rows. */
+  .app { --a-win: #0d0d0d; --a-card: #171717; --a-raised: #232323; --a-line: rgba(255,255,255,.08);
+    --a-fg: #e5e5e5; --a-muted: #9ca2ab; --a-sel: #3a3a3a;
+    width: 640px; padding: 16px; border-radius: 12px; background: var(--a-win); color: var(--a-fg);
+    font: 14px/1.35 Helvetica, Arial, sans-serif; border: 1px solid var(--a-line);
+    box-shadow: 0 8px 28px rgba(0,0,0,.25); }
+  [data-gx-theme=light] .app { --a-win: #f5f5f5; --a-card: #fff; --a-raised: #f0f0f0; --a-line: rgba(0,0,0,.12);
+    --a-fg: #262626; --a-muted: #626262; --a-sel: #dcdcdc; }
+  .app.narrow { width: 560px; }
+  .sect-title { font-size: 13px; font-weight: 600; color: var(--a-muted); margin: 0 0 8px 2px; }
+  .card { background: var(--a-card); border: 1px solid var(--a-line); border-radius: 12px; }
+  .row { display: flex; gap: 16px; align-items: center; justify-content: space-between; padding: 12px 16px;
+    border-top: 1px solid var(--a-line); }
+  .row:first-child { border-top: 0; }
+  .row.stack { flex-direction: column; align-items: stretch; gap: 10px; }
+  .txt { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .t { font-size: 14px; line-height: 18.9px; color: var(--a-fg); }
+  .d { font-size: 13px; line-height: 18.6px; color: var(--a-muted); }
+  .ctl { display: flex; gap: 8px; align-items: center; flex: none; }
+  .ctl.col { flex-direction: column; align-items: stretch; gap: 6px; }
+  .in { width: 220px; height: 28px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--a-line);
+    background: var(--a-raised); color: var(--a-muted); font-size: 13px; display: flex; align-items: center;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; }
+  .in.filled { color: var(--a-fg); }
+  .lab { font-size: 12px; color: var(--a-muted); white-space: nowrap; }
+  .field { display: grid; grid-template-columns: 92px 220px; gap: 8px; align-items: center; }
+  .btn { height: 28px; padding: 0 12px; border-radius: 7px; border: 1px solid var(--a-line); background: transparent;
+    color: var(--a-fg); font-size: 13px; display: inline-flex; align-items: center; white-space: nowrap; flex: none; }
+  .btn.ghost { border-color: transparent; color: var(--a-muted); }
+  .btn.dim { opacity: .45; }
+  .seg { display: inline-flex; border: 1px solid var(--a-line); border-radius: 7px; overflow: hidden; flex: none; }
+  .seg span { padding: 5px 11px; font-size: 13px; white-space: nowrap; color: var(--a-fg); border-left: 1px solid var(--a-line); }
+  .seg span:first-child { border-left: 0; }
+  .seg span.on { background: var(--a-sel); }
+  .seg.full span { padding: 5px 9px; font-size: 12.5px; }
+  .dd { height: 28px; min-width: 200px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--a-line);
+    background: var(--a-raised); font-size: 13px; display: inline-flex; align-items: center; justify-content: space-between; gap: 10px; white-space: nowrap; flex: none; }
+  .dd::after { content: ""; width: 7px; height: 7px; border-right: 1.5px solid var(--a-muted); border-bottom: 1.5px solid var(--a-muted); transform: rotate(45deg) translateY(-2px); }
+  .btnrow { display: flex; gap: 8px; justify-content: flex-end; }
+  .list { width: 420px; }
+  .list .head { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--a-line); }
+  .list .head b { font-size: 14px; font-weight: 600; }
+  .li { display: flex; gap: 10px; align-items: center; padding: 9px 14px; border-top: 1px solid var(--a-line); font-size: 13px; }
+  .li:first-of-type { border-top: 0; }
+  .key { font-family: var(--font-mono); font-size: 12px; color: var(--a-muted); white-space: nowrap; flex: none; }
+  .li .tt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .st { font-size: 12px; color: var(--a-muted); white-space: nowrap; flex: none; }
+</style>
+</head>
+<body>
+<gx-questions submit="Send to the agent">
+  <header>
+    <span class="gx-eyebrow">Settings · Workspaces · Jira</span>
+    <h1>Jira in Ghostex: its settings rows and tracker picker</h1>
+    <p class="gx-lede">Jira joins Linear and GitHub as a built-in tracker. Unlike Linear's one key, Jira needs your site, your email and an API token, so these rows are new.</p>
+    <div class="gx-chips">
+      <span class="gx-chip">Custom ticket commands removed</span>
+      <span class="gx-chip">Token in the private credentials file</span>
+      <span class="gx-chip">Sent only to your Jira site</span>
+    </div>
+  </header>
+
+  <h2>1. Where you sign in to Jira</h2>
+  <p>On each workspace, under its Linear API key row. Save checks the three values with Jira before keeping them, like Linear's Save.</p>
+  <gx-wide><div class="gx-options" style="--gx-option-min:700px">
+    <section data-question="PLACEHOLDER-1" data-choice="one row" class="opt-signin-one-row">
+      <span class="gx-ribbon">Recommended</span>
+      <h3>A. One Jira row, three fields, one Save</h3>
+      <p class="how">Saved and checked together, so the site, email and token <b>never disagree</b>.</p>
+      <div class="gx-frame"><div class="app mock-signin-one-row">
+        <div class="card">
+          <div class="row"><div class="txt"><span class="t">Linear API key</span><span class="d">Saved · Mia Chen @ Acme</span></div>
+            <div class="ctl"><span class="in">lin_api_…</span><span class="btn dim">Save</span><span class="btn ghost">Remove</span></div></div>
+          <div class="row jira-row"><div class="txt"><span class="t">Jira</span><span class="d">Saved · Mia Chen @ acme.atlassian.net. Make a token at id.atlassian.com → Security → API tokens.</span></div>
+            <div class="ctl col">
+              <div class="field"><span class="lab">Site</span><span class="in filled">acme.atlassian.net</span></div>
+              <div class="field"><span class="lab">Email</span><span class="in filled">mia@acme.com</span></div>
+              <div class="field"><span class="lab">API token</span><span class="in">••••••••••••</span></div>
+              <div class="btnrow"><span class="btn">Save</span><span class="btn ghost">Remove</span></div>
+            </div></div>
+        </div>
+      </div></div>
+    </section>
+    <section data-question="PLACEHOLDER-1" data-choice="three rows" class="opt-signin-three-rows">
+      <h3>B. Three rows, each saved on its own</h3>
+      <p class="how">Looks most like Linear's row, but a half-saved sign-in <b>can't be checked</b> until all three are in.</p>
+      <div class="gx-frame"><div class="app mock-signin-three-rows">
+        <div class="card">
+          <div class="row"><div class="txt"><span class="t">Jira site</span><span class="d">Your Jira address, like acme.atlassian.net.</span></div>
+            <div class="ctl"><span class="in filled">acme.atlassian.net</span><span class="btn dim">Save</span></div></div>
+          <div class="row"><div class="txt"><span class="t">Jira email</span><span class="d">The email you sign in to Jira with.</span></div>
+            <div class="ctl"><span class="in filled">mia@acme.com</span><span class="btn dim">Save</span></div></div>
+          <div class="row"><div class="txt"><span class="t">Jira API token</span><span class="d">Saved · Mia Chen @ acme.atlassian.net</span></div>
+            <div class="ctl"><span class="in">••••••••••••</span><span class="btn dim">Save</span><span class="btn ghost">Remove</span></div></div>
+        </div>
+      </div></div>
+    </section>
+  </div></gx-wide>
+  <gx-question tag="PLACEHOLDER-1" title="How should the Jira sign-in rows look?">
+    <p>Both sit on the Workspaces page under the Linear API key. Projects in another Jira site go in another workspace, so there is no per-project Jira row (Linear's per-project key stays as it is).</p>
+    <gx-choice value="one row" recommended>A. One Jira row, three fields, one Save</gx-choice>
+    <gx-choice value="three rows">B. Three rows, each saved on its own</gx-choice>
+  </gx-question>
+
+  <h2>2. The Primary tracker picker with Jira</h2>
+  <p>Today's two long labels don't leave room for a third segment in the row.</p>
+  <gx-wide><div class="gx-options" style="--gx-option-min:620px">
+    <section data-question="PLACEHOLDER-2" data-choice="short names" class="opt-picker-short">
+      <span class="gx-ribbon">Recommended</span>
+      <h3>A. Three short segments</h3>
+      <p class="how">The segments say <b>Linear, GitHub, Jira</b>; the line under the title says what each brings.</p>
+      <div class="gx-frame"><div class="app narrow mock-picker-short"><div class="card">
+        <div class="row"><div class="txt"><span class="t">Primary tracker</span><span class="d">Pick one. Create ticket, the Issues view, Link to and the cards use it, and so does the Slack flow for a team.</span></div>
+          <div class="ctl"><span class="seg"><span>Linear</span><span>GitHub</span><span class="on">Jira</span></span></div></div>
+      </div></div></div>
+    </section>
+    <section data-question="PLACEHOLDER-2" data-choice="dropdown" class="opt-picker-dropdown">
+      <h3>B. A dropdown with the full names</h3>
+      <p class="how">Keeps <b>"Linear tickets &amp; projects"</b> and the others whole, and takes more trackers later without growing.</p>
+      <div class="gx-frame"><div class="app narrow mock-picker-dropdown"><div class="card">
+        <div class="row"><div class="txt"><span class="t">Primary tracker</span><span class="d">Pick one. Create ticket, the Issues view, Link to and the cards use it, and so does the Slack flow for a team.</span></div>
+          <div class="ctl"><span class="dd">Jira issues &amp; projects</span></div></div>
+      </div></div></div>
+    </section>
+  </div></gx-wide>
+  <gx-question tag="PLACEHOLDER-2" title="How should the Primary tracker picker show three trackers?">
+    <p>One control only, so pick one. A team workspace's Slack flow keeps Linear or GitHub; Jira is for a workspace that is just yours for now.</p>
+    <gx-choice value="short names" recommended>A. Three short segments</gx-choice>
+    <gx-choice value="dropdown">B. A dropdown with the full names</gx-choice>
+  </gx-question>
+
+  <h2>3. Which Jira</h2>
+  <gx-question tag="PLACEHOLDER-3" title="Which kinds of Jira should work in this first version?">
+    <p>Jira Cloud signs in with an email and an API token. Jira Data Center (a company's own server) uses a personal access token and no email, and its issue text is in an older format.</p>
+    <gx-choice value="cloud only" recommended>Jira Cloud only for now<small>Smaller and fully testable; Data Center can follow as its own item.</small></gx-choice>
+    <gx-choice value="cloud and data center">Jira Cloud and Data Center<small>Leave Email empty to use a Data Center personal access token.</small></gx-choice>
+  </gx-question>
+
+  <h2>4. Create ticket with Jira as the tracker</h2>
+  <p>Listing, details and Start work copy Linear's. Creating a Jira issue needs a project and an issue type, which Linear's Create ticket dialog doesn't have.</p>
+  <gx-wide><div class="gx-options" style="--gx-option-min:460px">
+    <section data-question="PLACEHOLDER-4" data-choice="open jira" class="opt-create-open-jira">
+      <span class="gx-ribbon">Recommended</span>
+      <h3>A. Create opens Jira's own Create page</h3>
+      <p class="how">The Issues view's <b>+</b> opens your site's Create issue page in the Browser; the new issue shows in the list on the next refresh.</p>
+      <div class="gx-frame"><div class="app list mock-issues-list"><div class="card">
+        <div class="head"><b>Issues</b><span class="btn">+ Create in Jira</span></div>
+        <div class="li"><span class="key">ACM-412</span><span class="tt">Checkout total ignores the coupon</span><span class="st">In Progress</span></div>
+        <div class="li"><span class="key">ACM-398</span><span class="tt">Retry the webhook when Stripe times out</span><span class="st">To Do</span></div>
+        <div class="li"><span class="key">WEB-77</span><span class="tt">Dark mode for the invoice page</span><span class="st">In Review</span></div>
+      </div></div></div>
+    </section>
+    <section data-question="PLACEHOLDER-4" data-choice="native dialog" class="opt-create-native">
+      <h3>B. A Create Jira issue dialog in Ghostex</h3>
+      <p class="how">Project, issue type, title and description, like Create Linear ticket. A <b>separate mockup and item</b> after this one.</p>
+      <div class="gx-frame"><div class="app list mock-create-dialog"><div class="card">
+        <div class="head"><b>Create Jira issue</b></div>
+        <div class="row"><div class="txt"><span class="t">Project</span></div><div class="ctl"><span class="dd">ACM · Acme Web</span></div></div>
+        <div class="row"><div class="txt"><span class="t">Type</span></div><div class="ctl"><span class="dd">Task</span></div></div>
+        <div class="row"><div class="txt"><span class="t">Title</span></div><div class="ctl"><span class="in">What needs doing</span></div></div>
+      </div></div></div>
+    </section>
+  </div></gx-wide>
+  <gx-question tag="PLACEHOLDER-4" title="What should Create ticket do when Jira is the tracker?">
+    <p>One behaviour for now; a dialog can still come later.</p>
+    <gx-choice value="open jira" recommended>A. Create opens Jira's own Create page</gx-choice>
+    <gx-choice value="native dialog">B. A Create Jira issue dialog in Ghostex</gx-choice>
+  </gx-question>
+
+  <div class="gx-callout">
+    <p><b>What the Issues view lists for Jira</b>, copied from Linear: your open Jira issues, plus the open issues of the Jira projects your sessions link to. A branch like <code>ACM-412-fix-coupon</code> links its session to ACM-412, as with Linear.</p>
+  </div>
+</gx-questions>
+</body>
+</html>
