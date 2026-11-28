@@ -153,7 +153,7 @@ impl NativeChatView {
         let (label, keys): (gpui::SharedString, String) = if stop {
             ("Stop the agent".into(), String::new())
         } else {
-            ("Send".into(), chord("enter"))
+            ("Send".into(), chord(super::keyboard::send_shortcut()))
         };
         // Dark Stop is a hairline-outlined, transparent button like its toolbar neighbours: the old
         // solid #171717 square read as a black hole in the frosted composer.

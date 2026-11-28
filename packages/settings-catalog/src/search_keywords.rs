@@ -75,6 +75,16 @@ pub fn search_keywords(key: &str) -> &'static [&'static str] {
             "todo",
             "reply form",
         ],
+        "chatEnterSends" => &[
+            "enter sends",
+            "return sends",
+            "cmd+enter",
+            "ctrl+enter",
+            "shift+enter",
+            "newline",
+            "new line",
+            "hardware keyboard",
+        ],
         // CDXC:Theming 2026-11-22: Animated was called Live until the user renamed it; a search
         // for the old name still finds its rows.
         "windowGlassSource"

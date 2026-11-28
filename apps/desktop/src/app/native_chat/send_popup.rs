@@ -75,7 +75,7 @@ impl NativeChatView {
             SendPopupRow {
                 label: "Send",
                 icon: "titlebar/arrow-up.svg",
-                keys: chord("enter"),
+                keys: chord(super::keyboard::send_shortcut()),
                 enabled: can_send,
                 mode: "send",
             },
@@ -93,7 +93,7 @@ impl NativeChatView {
             SendPopupRow {
                 label: "Interrupt & Send",
                 icon: "titlebar/bolt.svg",
-                keys: chord("ctrl+enter"),
+                keys: chord(super::keyboard::interrupt_send_shortcut()),
                 enabled: can_send && !self.draft.trim().is_empty() && working,
                 mode: "interrupt",
             },
