@@ -161,6 +161,7 @@ mod row_details;
 mod row_reply;
 mod selection_bar;
 mod send_control;
+mod send_popup;
 mod send_tip;
 mod send_watch;
 mod tone_card;

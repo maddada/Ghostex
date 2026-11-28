@@ -10,7 +10,6 @@ pub(crate) struct NativeChatAction {
 
 /// Toggle keys in `menu_toggle.rs` for the menus this file opens.
 pub(super) const MORE_ACTIONS_TRIGGER: &str = "chat-more-actions";
-const SEND_ACTIONS_TRIGGER: &str = "chat-send-actions";
 const SWITCH_ACCOUNT_TRIGGER: &str = "chat-notice-switch-account";
 
 /// A row of the chat box ⋯ under the one session menu's name and icon for its place (gx-core
@@ -68,43 +67,6 @@ fn sidebar_row_to_chat(item: &Value) -> Value {
 }
 
 impl NativeChatView {
-    /// Send's own right-click menu.
-    ///
-    /// CDXC:SessionChat 2026-09-18 WHY:
-    /// It is the chat's own popup, not the app shell's native menu, because
-    /// React drew it as one more `ghostex-session-chat-popup`
-    /// (`session-chat-composer.tsx`).
-    pub(crate) fn show_send_actions(
-        &mut self,
-        position: gpui::Point<gpui::Pixels>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if self.chat_menu_toggled_shut(SEND_ACTIONS_TRIGGER, cx) {
-            return;
-        }
-        let enabled = self.composer_ready && !self.draft.trim().is_empty();
-        let can_queue = enabled && self.snapshot["queue"]["capabilities"]["canQueue"] == true;
-        let rows = vec![
-            json!({
-                "label":"Interrupt & Send","iconPath":"titlebar/arrow-up.svg",
-                "detail":super::keyboard::chat_chord_label("ctrl+enter"),
-                "disabled":!enabled || self.snapshot["working"] != true,
-                "command":{"type":"submit","mode":"interrupt"},
-            }),
-            json!({
-                "label":"Compact & Send","iconPath":"titlebar/arrows-diagonal-minimize.svg",
-                "detail":super::keyboard::chat_chord_label("alt+enter"),
-                "disabled":!can_queue,
-                "command":{"type":"submit","mode":"compact"},
-            }),
-        ];
-        self.menu_side = Some(super::option_menu::MenuSide::Right);
-        let trigger =
-            super::toolbar::button_trigger(self.composer_button_bounds.send.get(), position);
-        self.show_chat_menu(rows, trigger, 240.0, window, cx);
-    }
-
     /// The View row: one choice of Summary, Normal and Detailed (gx-chat-core
     /// transcript/view_level.rs has the user's words); picking one turns the others off. Summary
     /// shows only where this chat has it (`composer_control_available("summary")`), and is the

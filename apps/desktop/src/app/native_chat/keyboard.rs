@@ -612,6 +612,10 @@ impl NativeChatView {
             this.send(true, window, cx);
             cx.stop_propagation();
             window.prevent_default();
+        } else if key.key == "escape" && !key.modifiers.shift && this.close_send_popup(cx) {
+            // Escape closes Send's popup (send_popup.rs) before it would interrupt the agent.
+            cx.stop_propagation();
+            window.prevent_default();
         } else if key.key == "escape" && !key.modifiers.shift && this.dismiss_compact_prompt(cx) {
             // Escape closes an open compact-before-sending prompt without interrupting the agent.
             cx.stop_propagation();

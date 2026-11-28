@@ -142,43 +142,18 @@ impl NativeChatView {
             !has_draft || !self.composer_ready
         };
         let blocked = !stop && self.snapshot["sendBlockedReason"].is_string();
-        // As React's Send label did: the gesture hints appear only while the draft can queue.
-        // The tooltip is a mini menu: one row per gesture, its keys on the right (CDXC:Tooltips 2026-10-15).
-        use gpui_component::tooltip::TooltipRow;
+        // With words to send, pointing at Send (or right-clicking it) opens its popup, which names
+        // every way to send and their keys (send_popup.rs); otherwise a plain tooltip names Stop,
+        // or Send and Enter.
+        // CDXC:SessionChat 2026-11-28 SEE-ALSO: the popup replaced this tooltip's gesture rows
+        // (Queue, Compact & Send, Interrupt and send now); the user's words are in send_popup.rs.
+        // The 2026-11-27 decision to name Tab for Queue, not Hold, is kept there.
+        let popup_ready = !stop && has_draft;
         let chord = super::keyboard::chat_chord_label;
-        let (label, keys, rows): (gpui::SharedString, String, Vec<TooltipRow>) = if stop {
-            ("Stop the agent".into(), String::new(), Vec::new())
-        } else if has_draft && self.snapshot["working"] == true {
-            (
-                "Send".into(),
-                chord("enter"),
-                vec![
-                    TooltipRow::new("Interrupt and send now").keys(chord("ctrl+enter")),
-                    TooltipRow::new("More options").hint("Right-click"),
-                ],
-            )
-        } else if has_draft && self.snapshot["queue"]["capabilities"]["canQueue"] == true {
-            // CDXC:SessionChat 2026-11-27 DECISION: User: "on pc we need to show the tab key for
-            // queue not hold" (pointing at "Hold" in this menu on a Mac). Tab queues on Mac,
-            // Windows and Linux alike (`composer_key_down` in keyboard.rs), so the row names Tab
-            // as a key chip like Send's Enter. Holding Send still queues; it is just not the one
-            // the menu teaches.
-            (
-                "Send".into(),
-                chord("enter"),
-                vec![
-                    // Tab to queue off (`chatTabQueues`): no Tab key; holding Send still queues.
-                    if super::keyboard::tab_queues() {
-                        TooltipRow::new("Queue").keys(chord("tab"))
-                    } else {
-                        TooltipRow::new("Queue").hint("Hold")
-                    },
-                    TooltipRow::new("Compact & Send")
-                        .hint(format!("{}-click or right-click", chord("alt"))),
-                ],
-            )
+        let (label, keys): (gpui::SharedString, String) = if stop {
+            ("Stop the agent".into(), String::new())
         } else {
-            ("Send".into(), chord("enter"), Vec::new())
+            ("Send".into(), chord("enter"))
         };
         // Dark Stop is a hairline-outlined, transparent button like its toolbar neighbours: the old
         // solid #171717 square read as a black hole in the frosted composer.
@@ -222,12 +197,19 @@ impl NativeChatView {
                     .hover(move |style| style.bg(hover))
             })
             .when(disabled || blocked, |this| this.opacity(0.5))
-            .tooltip(move |window, cx| {
-                gpui_component::tooltip::Tooltip::new(label.clone())
-                    .keys(keys.clone())
-                    .rows(rows.clone())
-                    .build(window, cx)
+            .when(!popup_ready, |this| {
+                this.tooltip(move |window, cx| {
+                    gpui_component::tooltip::Tooltip::new(label.clone())
+                        .keys(keys.clone())
+                        .build(window, cx)
+                })
             })
+            .on_hover(cx.listener(move |this, hovered: &bool, window, cx| {
+                if !hovered {
+                    this.send_hold_task = None;
+                }
+                this.send_button_hovered(*hovered && popup_ready, window, cx);
+            }))
             .when(!disabled, |this| {
                 this.chat_cursor_pointer()
                     .on_mouse_down(
@@ -242,11 +224,6 @@ impl NativeChatView {
                         gpui::MouseButton::Left,
                         cx.listener(|this, _, _, _| this.send_hold_task = None),
                     )
-                    .on_hover(cx.listener(|this, hovered: &bool, _, _| {
-                        if !hovered {
-                            this.send_hold_task = None;
-                        }
-                    }))
                     .on_click(
                         cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
                             this.send_hold_task = None;
@@ -267,9 +244,9 @@ impl NativeChatView {
             .when(!stop, |this| {
                 this.on_mouse_down(
                     gpui::MouseButton::Right,
-                    cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {
+                    cx.listener(move |this, _: &gpui::MouseDownEvent, _, cx| {
                         this.send_hold_task = None;
-                        this.show_send_actions(event.position, window, cx);
+                        this.toggle_send_popup_pinned(cx);
                         cx.stop_propagation();
                     }),
                 )
@@ -284,7 +261,10 @@ impl NativeChatView {
                     .size(px(12.0 * p.scale))
                     .text_color(ink),
             )
-            // Send's right-click menu lines up with this button's right edge.
+            .when(!stop && self.send_popup_open(), |this| {
+                this.child(self.render_send_popup(p, cx))
+            })
+            // Where Send was painted, which its tip lines up with (send_tip.rs).
             .child(
                 gpui::canvas(move |bounds, _, _| measured.set(bounds), |_, _, _, _| {})
                     .absolute()

@@ -3107,9 +3107,8 @@ accepted, its text returns to the chat composer for editing. Rewind to here
 also returns the selected text when the message was never accepted, keeping
 anything already in the composer (`ghostex interrupt-session-chat <session>`).
 To stop the agent and send a new message at once, press Ctrl+Enter in the chat box
-(on every platform, the same key Claude Code uses in the terminal), or right-click
-Send and choose Interrupt & Send; on the phone, hold Send and choose Interrupt & Send
-(the same menu has Compact & Send). It is offered while the agent is working; Claude Code stops its turn and
+(on every platform, the same key Claude Code uses in the terminal), or choose Interrupt & Send in Send's popup; on the phone, hold Send and choose Interrupt & Send
+(the same menu has Compact & Send). It is offered while the agent is working; Send's popup opens over the chat box when you point at Send with words in the box, or when you right-click Send: Send (Enter), Queue (Tab), Interrupt & Send (Ctrl+Enter) and Compact & Send (Option+Enter, Alt+Enter on Windows and Linux), each dimmed while it can't run; Escape or a click elsewhere closes it. Claude Code stops its turn and
 takes the message the way its own Ctrl+Enter does, and other agents are stopped as
 with Escape before the message is sent. While the agent is idle, Ctrl+Enter just sends.
 Codex rewind goes back to before the selected prompt in the same conversation,
@@ -3125,9 +3124,9 @@ Code and Grok Build, Back to composer (the arrow left of the play button, also i
 menu and in the menu you get by holding the message on the phone) takes it out of the agent's queue
 and adds its text and pictures to your chat draft instead, unsent; pressing Up in an empty chat box does
 the same for the newest queued message, like Up in the agent's own input. Prompts you explicitly
-queue stay in the list above the input. Tab in the chat box queues what you typed (holding Send does too);
+queue stay in the list above the input. Tab in the chat box queues what you typed (holding Send and Queue in Send's popup do too);
 Settings > Chat > Tab to queue off (`chatTabQueues`, a Power User Flag) stops Tab from queueing, and the
-placeholder and Send's hint stop naming Tab. This also applies when reopening the chat
+placeholder and Send's popup stop naming Tab. This also applies when reopening the chat
 or continuing on another device. A message that has waited about a minute says why under it, for
 example that the agent is still working, is waiting for your answer, or that its input box can't
 be read yet; in that last case Ghostex keeps trying on its own and, if it still can't deliver after
