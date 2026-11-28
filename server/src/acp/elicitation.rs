@@ -47,6 +47,9 @@ struct ElicitationField {
 pub(super) struct PendingElicitation {
     message: String,
     fields: Vec<ElicitationField>,
+    /// The agent puts each question in its field's `title` and only a count ("The agent has 2
+    /// questions.") in `message` (Antigravity's `ask_question`).
+    titles_are_questions: bool,
 }
 
 fn non_empty_str<'a>(value: Option<&'a Value>) -> Option<&'a str> {
@@ -152,13 +155,21 @@ pub(super) fn parse_elicitation_request(params: &Value) -> Option<PendingElicita
         .map(|arr| arr.iter().filter_map(Value::as_str).collect())
         .unwrap_or_default();
 
-    // Detect `<field>__other` free-text companion properties folded into choice/multiChoice fields.
+    // Detect `<field>__other` (or `<field>_other`, Antigravity's `ask_question`) free-text
+    // companion properties folded into choice/multiChoice fields.
     let mut companion_keys: HashSet<String> = HashSet::new();
     let mut companion_for: HashMap<String, String> = HashMap::new();
     for (key, prop) in properties {
-        let Some(base) = key.strip_suffix("__other") else {
+        let Some(base) = key
+            .strip_suffix("__other")
+            .filter(|base| properties.contains_key(*base))
+            .or_else(|| key.strip_suffix("_other"))
+        else {
             continue;
         };
+        if companion_for.contains_key(base) {
+            continue;
+        }
         if base.is_empty() || !properties.contains_key(base) {
             continue;
         }
@@ -226,12 +237,75 @@ pub(super) fn parse_elicitation_request(params: &Value) -> Option<PendingElicita
         return None;
     }
 
-    Some(PendingElicitation { message, fields })
+    Some(PendingElicitation {
+        message,
+        fields,
+        titles_are_questions: false,
+    })
 }
 
 impl PendingElicitation {
+    /// Read each field's title as its question (Antigravity's `ask_question`), for fields that
+    /// have a title and no description.
+    pub(super) fn use_field_titles_as_questions(&mut self) {
+        self.titles_are_questions = true;
+    }
+
     pub(super) fn title(&self) -> &str {
         &self.message
+    }
+
+    /// One Ghostex question row for `field`, with its options.
+    fn question_json(
+        &self,
+        field: &ElicitationField,
+        header: String,
+        question_text: String,
+    ) -> Value {
+        let (multi_select, allow_custom, options) = match &field.kind {
+            ElicitationFieldKind::Text | ElicitationFieldKind::Number { .. } => {
+                (false, true, Vec::new())
+            }
+            ElicitationFieldKind::Boolean => (
+                false,
+                false,
+                vec![json!({ "label": "Yes" }), json!({ "label": "No" })],
+            ),
+            ElicitationFieldKind::Choice { options, .. } => {
+                let rendered = options
+                    .iter()
+                    .map(|opt| {
+                        let mut row = json!({ "label": opt.label });
+                        if let Some(desc) = opt.description.as_deref() {
+                            row["description"] = json!(desc);
+                        }
+                        row
+                    })
+                    .collect();
+                (false, true, rendered)
+            }
+            ElicitationFieldKind::MultiChoice { options, .. } => {
+                let rendered = options
+                    .iter()
+                    .map(|opt| {
+                        let mut row = json!({ "label": opt.label });
+                        if let Some(desc) = opt.description.as_deref() {
+                            row["description"] = json!(desc);
+                        }
+                        row
+                    })
+                    .collect();
+                (true, true, rendered)
+            }
+        };
+        json!({
+            "id": field.key,
+            "header": header,
+            "question": question_text,
+            "multiSelect": multi_select,
+            "allowCustom": allow_custom,
+            "options": options,
+        })
     }
 
     /// Build a Ghostex `kind: "question"` prompt payload matching Claude/Codex `AskUserQuestion`.
@@ -240,7 +314,15 @@ impl PendingElicitation {
         let questions: Vec<Value> = self
             .fields
             .iter()
-            .map(|field| {
+            .enumerate()
+            .map(|(index, field)| {
+                let titled = self.titles_are_questions
+                    && field.description.is_none()
+                    && field.label != field.key;
+                if titled {
+                    let header = format!("Question {}", index + 1);
+                    return self.question_json(field, header, field.label.clone());
+                }
                 let question_text = if single_field {
                     self.message.clone()
                 } else if let Some(desc) = field.description.as_deref() {
@@ -253,50 +335,7 @@ impl PendingElicitation {
                 } else {
                     field.label.clone()
                 };
-                let (multi_select, allow_custom, options) = match &field.kind {
-                    ElicitationFieldKind::Text | ElicitationFieldKind::Number { .. } => {
-                        (false, true, Vec::new())
-                    }
-                    ElicitationFieldKind::Boolean => (
-                        false,
-                        false,
-                        vec![json!({ "label": "Yes" }), json!({ "label": "No" })],
-                    ),
-                    ElicitationFieldKind::Choice { options, .. } => {
-                        let rendered = options
-                            .iter()
-                            .map(|opt| {
-                                let mut row = json!({ "label": opt.label });
-                                if let Some(desc) = opt.description.as_deref() {
-                                    row["description"] = json!(desc);
-                                }
-                                row
-                            })
-                            .collect();
-                        (false, true, rendered)
-                    }
-                    ElicitationFieldKind::MultiChoice { options, .. } => {
-                        let rendered = options
-                            .iter()
-                            .map(|opt| {
-                                let mut row = json!({ "label": opt.label });
-                                if let Some(desc) = opt.description.as_deref() {
-                                    row["description"] = json!(desc);
-                                }
-                                row
-                            })
-                            .collect();
-                        (true, true, rendered)
-                    }
-                };
-                json!({
-                    "id": field.key,
-                    "header": header,
-                    "question": question_text,
-                    "multiSelect": multi_select,
-                    "allowCustom": allow_custom,
-                    "options": options,
-                })
+                self.question_json(field, header, question_text)
             })
             .collect();
 

@@ -2367,9 +2367,14 @@ pub fn run(args: &[String]) -> i32 {
                                 if was_empty {
                                     act_out.sync();
                                 }
-                            } else if let Some(form) =
+                            } else if let Some(mut form) =
                                 super::elicitation::parse_elicitation_request(&params)
                             {
+                                if st_out.lock().unwrap_or_else(|p| p.into_inner()).family
+                                    == "antigravity"
+                                {
+                                    form.use_field_titles_as_questions();
+                                }
                                 let tool_use_id = format!("elicitation-{}", now_ms());
                                 println!(
                                     "\r\n[Native] Waiting for question answer: {}",
