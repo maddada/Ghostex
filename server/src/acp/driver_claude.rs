@@ -35,6 +35,10 @@ use super::spec::{
 };
 
 const CLAUDE_CTRL_TIMEOUT: Duration = Duration::from_secs(30);
+/// `initialize` waits longer than other control requests: on a loaded computer Claude Code can
+/// take about a minute to boot (plugins, MCP servers, hooks) before it answers. A Claude that
+/// exits answers at once (the reader drops pending requests), so this only stretches a slow boot.
+const CLAUDE_INIT_TIMEOUT: Duration = Duration::from_secs(180);
 
 #[path = "driver_claude_rewind.rs"]
 mod rewind;
@@ -1665,7 +1669,7 @@ fn spawn_and_init_claude(
     // 1. Initialize Claude control protocol.
     let mut resolved_default_to_apply: Option<String> = None;
     let init_permission_mode: Option<String> = match transport
-        .control_request(json!({ "subtype": "initialize" }), CLAUDE_CTRL_TIMEOUT)
+        .control_request(json!({ "subtype": "initialize" }), CLAUDE_INIT_TIMEOUT)
     {
         Ok(init_resp) => {
             use ghostex_gx_chat_core::menus::catalog::{
