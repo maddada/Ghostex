@@ -11,6 +11,7 @@ use crate::{
     platform::process::NoConsoleWindow, repository_clone::canonical_repository_lookup_url,
 };
 
+pub mod pull_request;
 mod repositories;
 
 /*

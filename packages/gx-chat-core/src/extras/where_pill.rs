@@ -360,6 +360,16 @@ pub fn document(state: &ChatState) -> Value {
             }
             if let Some(pull_request) = git.get("pullRequest").filter(|pr| pr.is_object()) {
                 if let Some(number) = number(pull_request, "/number") {
+                    let provider = text(pull_request, "/provider")
+                        .as_deref()
+                        .and_then(ghostex_gx_protocol::git_provider::GitHostProvider::from_wire_name)
+                        .or_else(|| {
+                            text(pull_request, "/url")
+                                .as_deref()
+                                .and_then(ghostex_gx_protocol::git_provider::detect_provider_from_pr_url)
+                        })
+                        .unwrap_or_default();
+                    let terms = provider.terms();
                     let state_word = match text(pull_request, "/state").as_deref() {
                         Some("open") => "Open",
                         Some("draft") => "Draft",
@@ -370,8 +380,8 @@ pub fn document(state: &ChatState) -> Value {
                     rows.push(row(
                         "pullRequest",
                         "git-pull-request",
-                        "Pull request",
-                        format!("#{number}"),
+                        terms.singular_title,
+                        format!("{}{number}", terms.number_prefix),
                         Some(state_word.to_string()),
                     ));
                 }

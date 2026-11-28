@@ -173,6 +173,16 @@ pub(crate) fn gpui_remote_sidebar_create_pull_request_response_payload(
     if let Some(reason) = result.get("reason").and_then(serde_json::Value::as_str) {
         response.insert("reason".to_string(), serde_json::json!(reason));
     }
+    if let Some(provider) = result
+        .get("provider")
+        .and_then(serde_json::Value::as_str)
+        .and_then(ghostex_gx_protocol::git_provider::GitHostProvider::from_wire_name)
+    {
+        response.insert(
+            "provider".to_string(),
+            serde_json::json!(provider.wire_name()),
+        );
+    }
     if let Some(pr) = result.get("pr").and_then(serde_json::Value::as_object) {
         let mut sanitized_pr = serde_json::Map::new();
         if let Some(state) = pr.get("state").and_then(serde_json::Value::as_str) {
@@ -180,6 +190,16 @@ pub(crate) fn gpui_remote_sidebar_create_pull_request_response_payload(
         }
         if let Some(number) = pr.get("number").and_then(serde_json::Value::as_u64) {
             sanitized_pr.insert("number".to_string(), serde_json::json!(number));
+        }
+        if let Some(provider) = pr
+            .get("provider")
+            .and_then(serde_json::Value::as_str)
+            .and_then(ghostex_gx_protocol::git_provider::GitHostProvider::from_wire_name)
+        {
+            sanitized_pr.insert(
+                "provider".to_string(),
+                serde_json::json!(provider.wire_name()),
+            );
         }
         if !sanitized_pr.is_empty() {
             response.insert("pr".to_string(), serde_json::Value::Object(sanitized_pr));

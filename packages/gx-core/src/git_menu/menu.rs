@@ -79,11 +79,12 @@ pub fn disabled_reason(state: &GitState, action: GitAction) -> Option<&'static s
     if matches!(action, GitAction::MultiRelease | GitAction::Release) {
         return None;
     }
+    let terms = state.provider().terms();
     if state.branch.is_none() {
         return Some(if action == GitAction::SyncRemote {
             "Create and checkout a branch before syncing."
         } else {
-            "Create and checkout a branch before pushing or creating a PR."
+            terms.branch_required_disabled_reason
         });
     }
     if action == GitAction::SyncMain {
@@ -115,7 +116,7 @@ pub fn disabled_reason(state: &GitState, action: GitAction) -> Option<&'static s
         return Some("No local commits to push.");
     }
     if !state.has_git_hub_cli {
-        return Some("Install GitHub CLI to create or view pull requests.");
+        return Some(terms.cli_missing_disabled_reason);
     }
     if state.has_working_tree_changes {
         return None;
@@ -130,12 +131,12 @@ pub fn disabled_reason(state: &GitState, action: GitAction) -> Option<&'static s
         return None;
     }
     if !state.has_origin_remote {
-        return Some("Add an \"origin\" remote before creating a PR.");
+        return Some(terms.origin_required_disabled_reason);
     }
     if state.has_upstream {
         return None;
     }
-    Some("No branch state available for PR creation.")
+    Some(terms.no_branch_state_disabled_reason)
 }
 
 fn pr_is_open(state: &GitState) -> bool {
@@ -162,15 +163,16 @@ fn menu_item(action: GitAction, label: &str, state: &GitState) -> GitMenuItem {
 /// only when the active project is a worktree, because main projects do not need to pull main into
 /// themselves before worktree merge.
 pub fn menu_items(state: &GitState) -> Vec<GitMenuItem> {
+    let terms = state.provider().terms();
     let mut items = vec![
         menu_item(GitAction::Commit, "Commit", state),
         menu_item(GitAction::Push, "Push", state),
         menu_item(
             GitAction::Pr,
             if pr_is_open(state) {
-                "View PR"
+                terms.view_short_label
             } else {
-                "Create PR"
+                terms.create_short_label
             },
             state,
         ),
@@ -188,24 +190,25 @@ pub fn menu_items(state: &GitState) -> Vec<GitMenuItem> {
 }
 
 fn pr_primary_label(state: &GitState) -> &'static str {
+    let terms = state.provider().terms();
     let needs_push = state.has_working_tree_changes || state.ahead_count > 0 || !state.has_upstream;
     if state.has_working_tree_changes {
-        return "Commit, Push & PR";
+        return terms.commit_push_short_label;
     }
     if pr_is_open(state) && !needs_push {
-        return "View PR";
+        return terms.view_short_label;
     }
     if needs_push {
         return if pr_is_open(state) {
-            "Push & View PR"
+            terms.push_view_short_label
         } else {
-            "Push & Create PR"
+            terms.push_create_short_label
         };
     }
     if pr_is_open(state) {
-        "View PR"
+        terms.view_short_label
     } else {
-        "Create PR"
+        terms.create_short_label
     }
 }
 

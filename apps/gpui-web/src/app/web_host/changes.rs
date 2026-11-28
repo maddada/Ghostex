@@ -48,6 +48,7 @@ impl GhostexGpuiApp {
                 .get("changesHideTestFiles")
                 .and_then(serde_json::Value::as_bool)
                 == Some(true),
+            git_provider: self.git_active_provider(),
         };
         let target = self.changes_target_for_active_project();
         let preset = self.native_changes_preset.take();

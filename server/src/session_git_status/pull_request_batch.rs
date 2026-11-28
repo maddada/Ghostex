@@ -20,7 +20,7 @@ struct Wanted<'a> {
 
 /// The pull request of each `(cwd, branch)`, in order: one GraphQL call per repo (and 30
 /// branches), `gh pr view` for a checkout whose repo is not known.
-pub(super) fn probe_pull_requests_batched(
+pub(crate) fn probe_pull_requests_batched(
     wanted: &[(String, String)],
     probe_alone: &dyn Fn(&str, &str) -> Option<SessionPullRequest>,
 ) -> Vec<Option<SessionPullRequest>> {

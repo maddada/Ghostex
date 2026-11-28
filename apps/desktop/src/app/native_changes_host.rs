@@ -57,6 +57,7 @@ impl GhostexGpuiApp {
             default_agent_id,
             hide_test_files: shared_settings::shared_sidebar_settings_snapshot()
                 .changes_hide_test_files(),
+            git_provider: self.git_active_provider(),
         };
         let target = self.changes_target_for_active_project();
         let preset = self.native_changes_preset.take();

@@ -44,15 +44,27 @@ impl GhostexGpuiApp {
             }
             "openExistingPullRequestInBrowser" => {
                 cx.spawn(async move |this, cx| {
-                    let url = gx_rpc(
+                    let result = gx_rpc(
                         None,
                         "/api/readProjectGitState",
                         json!({ "projectId": project_id, "gitHubOnly": true }),
                     )
                     .await
-                    .ok()
-                    .and_then(|result| result["gitHub"]["pr"]["url"].as_str().map(str::to_string))
-                    .filter(|url| url.starts_with("https://"));
+                    .ok();
+                    let provider = result
+                        .as_ref()
+                        .and_then(|value| value["gitHub"]["provider"].as_str())
+                        .and_then(
+                            ghostex_gx_protocol::git_provider::GitHostProvider::from_wire_name,
+                        )
+                        .unwrap_or_default();
+                    let url = result
+                        .and_then(|value| value["gitHub"]["pr"]["url"].as_str().map(str::to_string))
+                        .and_then(|url| {
+                            ghostex_gx_protocol::git_provider::validate_pull_request_url(
+                                provider, &url, None,
+                            )
+                        });
                     let _ = this.update(cx, |this, cx| match url {
                         Some(url) => {
                             if let Some(window) = web_sys::window() {
@@ -62,7 +74,7 @@ impl GhostexGpuiApp {
                         None => this.dispatch_gpui_app_modal_toast(
                             "warning",
                             "Native action unavailable",
-                            "No pull request was found for this project.",
+                            provider.terms().not_found_for_project,
                             cx,
                         ),
                     });

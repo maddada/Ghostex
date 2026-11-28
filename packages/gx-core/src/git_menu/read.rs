@@ -1,5 +1,8 @@
 //! gxserver's answer to `/api/readProjectGitState`, and the state a project shows from it.
 
+use ghostex_gx_protocol::git_provider::{
+    deserialize_optional_git_host_provider, GitHostProvider,
+};
 use serde::Deserialize;
 
 use super::state::{GitChangedFile, GitHubState, GitPreferences, GitState};
@@ -57,6 +60,11 @@ pub struct ProjectGitRead {
     pub has_origin_remote: bool,
     #[serde(default)]
     pub has_git_hub_remote: bool,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_git_host_provider"
+    )]
+    pub git_provider: Option<GitHostProvider>,
     #[serde(default)]
     pub has_working_tree_changes: bool,
     /// Present when the read asked for the GitHub CLI probe.
@@ -93,6 +101,7 @@ pub fn git_state_from_read(
         behind_count: read.behind_count,
         branch: read.branch.clone().filter(|branch| !branch.is_empty()),
         deletions: read.deletions,
+        git_provider: read.git_provider.or(git_hub.provider),
         has_checked_git_hub_remote: true,
         has_git_hub_remote: read.has_git_hub_remote,
         has_origin_remote: read.has_origin_remote,

@@ -264,6 +264,7 @@ async fn read_multi_repo_git_state(
     let (mut additions, mut deletions, mut ahead, mut behind) = (0i64, 0i64, 0i64, 0i64);
     let (mut github, mut origin, mut upstream, mut changes) = (false, false, false, false);
     let mut branch = Value::Null;
+    let mut git_provider = Value::Null;
     for (index, repo) in set.repos.iter().enumerate() {
         let (repo_id, row) = crate::git_ship_workflow::repo_project_row(&project, repo);
         let Some(state) = read_git_state(&[row], &repo_id).await? else {
@@ -281,6 +282,11 @@ async fn read_multi_repo_git_state(
         changes |= truth("hasWorkingTreeChanges");
         if index == lead || branch.is_null() {
             branch = state.get("branch").cloned().unwrap_or(Value::Null);
+        }
+        if index == lead || git_provider.is_null() {
+            if let Some(provider) = state.get("gitProvider") {
+                git_provider = provider.clone();
+            }
         }
         for file in state
             .get("files")
@@ -304,6 +310,7 @@ async fn read_multi_repo_git_state(
         "branch": branch,
         "deletions": deletions,
         "files": files,
+        "gitProvider": if git_provider.is_null() { json!("github") } else { git_provider },
         "hasGitHubRemote": github,
         "hasOriginRemote": origin,
         "hasUpstream": upstream,
@@ -366,6 +373,9 @@ pub(crate) async fn read_git_state(
             .unwrap_or(0)
     };
     let branch_name = stdout(&branch).trim();
+    let origin_url = (exit_code(&origin) == 0).then(|| stdout(&origin));
+    let resolved_provider =
+        crate::source_control::pull_request::resolve_repo_provider_from_origin(origin_url);
     Ok(Some(json!({
         "additions": additions,
         "aheadCount": count(0),
@@ -376,8 +386,8 @@ pub(crate) async fn read_git_state(
             .iter()
             .map(|file| json!({ "additions": file.additions, "deletions": file.deletions, "path": file.path }))
             .collect::<Vec<_>>(),
-        "hasGitHubRemote": exit_code(&origin) == 0
-            && normalize_git_hub_remote_url(stdout(&origin)).is_some(),
+        "gitProvider": resolved_provider.kind.wire_name(),
+        "hasGitHubRemote": origin_url.is_some_and(|url| normalize_git_hub_remote_url(url).is_some()),
         "hasOriginRemote": stdout(&remotes).split_whitespace().any(|name| name == "origin"),
         "hasUpstream": exit_code(&upstream) == 0,
         "hasWorkingTreeChanges": !stdout(&status).trim().is_empty(),
@@ -394,7 +404,9 @@ fn not_a_repo_diff_stats() -> Value {
     })
 }
 
-/// `gh --version` and `gh pr view`, parsed. Without the GitHub CLI there is neither.
+/// Provider CLI version + current-branch PR/MR view (`gh` / `glab`), parsed.
+/// Keeps the `hasGitHubCli` / `pr` wire keys so existing clients continue working unchanged, and
+/// includes `provider` (`"github"` / `"gitlab"`) so newer clients show host-specific words.
 pub(crate) async fn read_git_hub_state(
     projects: &[Value],
     project_id: &str,
@@ -428,9 +440,17 @@ async fn read_git_hub_cli(
             Map::new()
         ),
     )?;
+    let provider_kind = version
+        .get("provider")
+        .or_else(|| pr.get("provider"))
+        .and_then(Value::as_str)
+        .and_then(ghostex_gx_protocol::git_provider::GitHostProvider::from_wire_name)
+        .unwrap_or_default();
+    let parsed_pr = parse_provider_pull_request(provider_kind, stdout(&pr), exit_code(&pr) == 0);
     Ok(json!({
         "hasGitHubCli": exit_code(&version) == 0,
-        "pr": parse_git_hub_pull_request(stdout(&pr), exit_code(&pr) == 0),
+        "pr": parsed_pr,
+        "provider": provider_kind.wire_name(),
     }))
 }
 
@@ -662,6 +682,28 @@ fn normalize_git_hub_remote_url(remote_url: &str) -> Option<String> {
     (!path.is_empty()).then(|| format!("https://github.com/{path}"))
 }
 
+/// Parses `prView` stdout for the resolved hosting provider (`gh pr view --json` or
+/// `glab mr view --output json`). GitHub keeps the exact previous parsing; GitLab parses through
+/// the provider layer.
+fn parse_provider_pull_request(
+    provider: ghostex_gx_protocol::git_provider::GitHostProvider,
+    stdout: &str,
+    success: bool,
+) -> Value {
+    if !success || stdout.trim().is_empty() {
+        return Value::Null;
+    }
+    match provider {
+        ghostex_gx_protocol::git_provider::GitHostProvider::GitHub => {
+            parse_git_hub_pull_request(stdout, success)
+        }
+        other => crate::source_control::pull_request::provider_for(other)
+            .parse_view_output(stdout, None)
+            .map(|view| view.to_project_git_json())
+            .unwrap_or(Value::Null),
+    }
+}
+
 /// `parseGpuiGitHubPullRequest`: the `gh pr view --json` answer, when it names an open, closed or
 /// merged pull request with a title and a URL.
 fn parse_git_hub_pull_request(stdout: &str, success: bool) -> Value {
@@ -688,7 +730,7 @@ fn parse_git_hub_pull_request(stdout: &str, success: bool) -> Value {
     if !matches!(state.as_str(), "open" | "closed" | "merged") {
         return Value::Null;
     }
-    let mut pr = json!({ "state": state, "title": title, "url": url });
+    let mut pr = json!({ "provider": "github", "state": state, "title": title, "url": url });
     if let Some(number) = candidate.get("number").filter(|number| number.is_number()) {
         pr["number"] = number.clone();
     }

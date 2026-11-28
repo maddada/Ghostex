@@ -54,4 +54,5 @@ mod tests;
 pub use commands::*;
 pub use git_plumbing::*;
 pub use model::*;
+pub(crate) use pull_request_batch::probe_pull_requests_batched;
 pub use refresh::*;

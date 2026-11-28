@@ -300,16 +300,17 @@ export type GxserverPullRequestState = 'open' | 'closed' | 'merged';
 
 export interface GxserverPullRequestSummary {
   number?: number;
+  provider?: GxserverSourceControlProviderKind;
   state: GxserverPullRequestState;
   url: string;
 }
 
 /*
 CDXC:Git 2026-06-24-16:28:
-Direct GPUI PR creation needs a gxserver-owned completion signal before opening the PR or deleting a finished worktree. The RPC accepts only trusted project scope, runs fixed GitHub CLI actions in gxserver, and returns sanitized PR state/URL metadata without raw command output, branch names, titles, commit messages, or shell text.
+Direct GPUI PR creation needs a gxserver-owned completion signal before opening the PR or deleting a finished worktree. The RPC accepts only trusted project scope, runs fixed provider CLI actions (`gh` / `glab`) in gxserver, and returns sanitized PR/MR state/URL metadata without raw command output, branch names, titles, commit messages, or shell text.
 
 CDXC:RemoteMachines 2026-06-24-19:25:
-Remote GPUI may use this completion signal only as gxserver-confirmed PR state; actual remote browser opens are a separate Rust-owned native side effect that re-runs `prView` through the saved-machine tunnel and opens only a validated HTTPS GitHub PR URL.
+Remote GPUI may use this completion signal only as gxserver-confirmed PR/MR state; actual remote browser opens are a separate Rust-owned native side effect that re-runs `prView` through the saved-machine tunnel and opens only a validated HTTPS PR/MR URL.
 */
 export type GxserverCreatePullRequestParams = GxserverProjectOperationScope;
 
@@ -317,7 +318,8 @@ export interface GxserverCreatePullRequestResult {
   created: boolean;
   ok: boolean;
   pr?: GxserverPullRequestSummary;
-  reason?: 'createFailed' | 'githubCliUnavailable' | 'invalidResult' | 'viewFailed';
+  provider?: GxserverSourceControlProviderKind;
+  reason?: 'cliUnavailable' | 'createFailed' | 'githubCliUnavailable' | 'invalidResult' | 'viewFailed';
 }
 
 export interface GxserverRunWorktreeActionParams extends GxserverProjectOperationScope {

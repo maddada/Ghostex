@@ -404,14 +404,14 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         self.gx_store.git.counters.workflows += 1;
+        let provider = state.provider();
+        let terms = provider.terms();
         let agent = self.git_workflow_agent(workflow.agent_id.as_deref());
         if !scope.is_remote() && !agent.has_command() {
             return self.git_toast(
                 GitToastLevel::Error,
                 "Agent unavailable",
-                ToastOptions::described(
-                    "Choose a configured prompt agent before creating a pull request.",
-                ),
+                ToastOptions::described(terms.agent_required_description),
                 cx,
             );
         }
@@ -425,6 +425,7 @@ impl GhostexGpuiApp {
             workflow.message.trim(),
             &selected,
             workflow.create_branch,
+            provider,
         );
         let remote = scope.is_remote();
         let started = self.git_start_prompt_agent(
@@ -432,7 +433,7 @@ impl GhostexGpuiApp {
             agent,
             PromptAgentLaunch {
                 prompt,
-                title: Some(agent_workflow_title("Commit, Push & PR")),
+                title: Some(agent_workflow_title(terms.commit_push_short_label)),
                 ..PromptAgentLaunch::default()
             },
             cx,
@@ -441,24 +442,20 @@ impl GhostexGpuiApp {
             let result = started.await;
             let _ = this.update(cx, |this, cx| {
                 let (level, title, description) = match (result.is_ok(), remote) {
-                    (true, false) => (
-                        GitToastLevel::Success,
-                        "Pull request workflow started",
-                        None,
-                    ),
+                    (true, false) => (GitToastLevel::Success, terms.workflow_started_title, None),
                     (true, true) => (
                         GitToastLevel::Success,
-                        "Remote pull request workflow started",
+                        terms.remote_workflow_started_title,
                         None,
                     ),
                     (false, false) => (
                         GitToastLevel::Error,
-                        "Pull request workflow failed",
+                        terms.workflow_failed_title,
                         Some("gxserver could not start the selected prompt agent."),
                     ),
                     (false, true) => (
                         GitToastLevel::Error,
-                        "Remote pull request workflow failed",
+                        terms.remote_workflow_failed_title,
                         Some("The remote gxserver could not start the selected prompt agent."),
                     ),
                 };

@@ -25,7 +25,7 @@ pub struct SystemSessionGitStatusProber;
 
 impl SessionGitStatusProber for SystemSessionGitStatusProber {
     fn supports_pull_requests(&self) -> bool {
-        gh_cli_is_available()
+        crate::source_control::pull_request::any_provider_cli_authenticated()
     }
 
     /// On Windows and macOS the last probe of `cwd` is kept until its folder or its Git folders change (`platform::folder_watch`), since every pass probed every session's folder with up to six git starts.
@@ -50,17 +50,12 @@ impl SessionGitStatusProber for SystemSessionGitStatusProber {
     }
 
     fn probe_pull_request(&self, cwd: &str, branch: &str) -> Option<SessionPullRequest> {
-        let output = run_gh_command(
-            Some(cwd),
-            &["pr", "view", branch, "--json", "number,state,url,isDraft"],
-        )?;
-        parse_gh_pull_request_json(&output)
+        let resolved = crate::source_control::pull_request::resolve_repo_provider_sync(cwd);
+        resolved.provider().probe_branch_status(cwd, branch)
     }
 
     fn probe_pull_requests(&self, wanted: &[(String, String)]) -> Vec<Option<SessionPullRequest>> {
-        super::pull_request_batch::probe_pull_requests_batched(wanted, &|cwd, branch| {
-            self.probe_pull_request(cwd, branch)
-        })
+        crate::source_control::pull_request::probe_pull_requests_by_provider(wanted)
     }
 }
 
@@ -178,6 +173,45 @@ pub(crate) fn gh_cli_is_available() -> bool {
     is_available
 }
 
+fn glab_availability_cache() -> &'static Mutex<Option<(Instant, bool)>> {
+    static CACHE: OnceLock<Mutex<Option<(Instant, bool)>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(None))
+}
+
+/// What the last `glab auth status` answered, without spawning.
+pub(crate) fn cached_glab_cli_available() -> bool {
+    #[cfg(test)]
+    if GH_ASSUMED_AVAILABLE.with(|assumed| assumed.get()) == Some(false) {
+        return false;
+    }
+    glab_availability_cache()
+        .lock()
+        .ok()
+        .and_then(|cache| cache.map(|(_, is_available)| is_available))
+        .unwrap_or(false)
+}
+
+/// Whether `glab` is installed and signed in, cached process-wide for [`GH_AVAILABILITY_TTL`].
+pub(crate) fn glab_cli_is_available() -> bool {
+    #[cfg(test)]
+    if GH_ASSUMED_AVAILABLE.with(|assumed| assumed.get()) == Some(false) {
+        return false;
+    }
+    let cache = glab_availability_cache();
+    if let Ok(cache) = cache.lock() {
+        if let Some((probed_at, is_available)) = *cache {
+            if probed_at.elapsed() < GH_AVAILABILITY_TTL {
+                return is_available;
+            }
+        }
+    }
+    let is_available = run_glab_command(None, &["auth", "status"]).is_some();
+    if let Ok(mut cache) = cache.lock() {
+        *cache = Some((Instant::now(), is_available));
+    }
+    is_available
+}
+
 /*
 The shared git-probe runner: time-boxed, process-tree killed on timeout, output
 drained by a helper thread (see `run_command_bounded`). `project_git_remote` runs
@@ -247,6 +281,22 @@ static GH_COMMANDS: AtomicUsize = AtomicUsize::new(0);
 
 pub(crate) fn take_gh_command_count() -> usize {
     GH_COMMANDS.swap(0, Ordering::Relaxed)
+}
+
+pub(crate) fn run_glab_command(cwd: Option<&str>, args: &[&str]) -> Option<String> {
+    let mut command = Command::new("glab");
+    command
+        .args(args)
+        .env("PATH", crate::managed_tools::run::job_path(&[]))
+        .env("NO_PROMPT", "true")
+        .env("GLAB_NO_PROMPT", "1")
+        .env("GLAB_CHECK_UPDATE", "false")
+        .env("NO_COLOR", "1")
+        .env("GIT_TERMINAL_PROMPT", "0");
+    if let Some(cwd) = cwd {
+        command.current_dir(cwd);
+    }
+    run_command_with_timeout(command, GH_COMMAND_TIMEOUT, &ABANDONED_COMMAND_READERS)
 }
 
 fn gh_command(cwd: Option<&str>, args: &[&str]) -> Command {

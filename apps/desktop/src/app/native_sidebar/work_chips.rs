@@ -53,6 +53,16 @@ pub(crate) struct MergedOffer {
     pub(crate) branch: Option<String>,
 }
 
+impl MergedOffer {
+    fn terms(&self) -> ghostex_gx_protocol::git_provider::GitHostTerms {
+        self.url
+            .as_deref()
+            .and_then(ghostex_gx_protocol::git_provider::detect_provider_from_pr_url)
+            .unwrap_or_default()
+            .terms()
+    }
+}
+
 /// The open popup: whose offer, and the top of its row in the window when it opened.
 #[derive(Clone, Debug)]
 pub(crate) struct MergedPopupOpen {
@@ -114,7 +124,11 @@ impl GhostexGpuiApp {
     ) -> AnyElement {
         let scale = appearance.scale;
         let color = merged_color();
-        let tooltip = format!("PR #{} merged. Click to clean up or keep.", offer.number);
+        let terms = offer.terms();
+        let tooltip = format!(
+            "{} {}{} merged. Click to clean up or keep.",
+            terms.short, terms.number_prefix, offer.number
+        );
         let open = self.merged_pr_popup_open_for(&offer.session_id);
         let show_tooltip = !open
             && self.native_sidebar.pointer_inside
@@ -139,7 +153,7 @@ impl GhostexGpuiApp {
                 12.0 * scale,
                 color,
             ))
-            .child(format!("#{}", offer.number))
+            .child(format!("{}{}", terms.number_prefix, offer.number))
             // Its own click: the row's selection and drag never start from the badge.
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_click(cx.listener(move |app, _, _, cx| {
@@ -289,12 +303,14 @@ pub(crate) fn merged_pr_popup_card(
                 on_answer(answer, window, cx);
             })
     };
+    let terms = offer.terms();
+    let open_label = format!("Open {}", terms.short);
     let open_pr = offer.url.is_some().then(|| {
         let on_answer = on_answer.clone();
         h_flex()
             .id("merged-pr-popup-open")
             .role(gpui::Role::Link)
-            .aria_label("Open PR")
+            .aria_label(open_label.clone())
             .flex_shrink_0()
             .h(px(26.0))
             .gap(px(5.0))
@@ -304,7 +320,7 @@ pub(crate) fn merged_pr_popup_card(
             .cursor_pointer()
             .hover(move |style| style.text_color(foreground))
             .child(titlebar_svg_icon("titlebar/external-link.svg", 13.0, muted))
-            .child("Open PR")
+            .child(open_label)
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_click(move |_, window, cx| {
                 cx.stop_propagation();
@@ -336,7 +352,10 @@ pub(crate) fn merged_pr_popup_card(
                             14.0,
                             merged_color(),
                         ))
-                        .child(format!("PR #{} is merged", offer.number)),
+                        .child(format!(
+                            "{} {}{} is merged",
+                            terms.short, terms.number_prefix, offer.number
+                        )),
                 )
                 .children(offer.branch.clone().map(|branch| {
                     h_flex()
@@ -354,10 +373,11 @@ pub(crate) fn merged_pr_popup_card(
                 .text_size(px(12.0))
                 .line_height(px(17.0))
                 .text_color(muted)
-                .child(
+                .child(format!(
                     "Clean up removes this session's worktree and parks the session. Keep leaves \
-                     both and won't ask again for this PR.",
-                ),
+                     both and won't ask again for this {}.",
+                    terms.short
+                )),
         )
         .child(
             h_flex()

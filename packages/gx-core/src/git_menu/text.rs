@@ -1,6 +1,8 @@
 //! The words the Git flows show and the prompts their agent workflows start with, ported verbatim
 //! from the old runtime (`helpers/git.ts`, `constants.ts`).
 
+use ghostex_gx_protocol::git_provider::GitHostProvider;
+
 use super::state::GitReviewAction;
 
 /// The prompt agent used when neither the dialog nor the settings name one.
@@ -38,30 +40,40 @@ pub fn release_only_prompt() -> String {
 }
 
 /// `resolveGpuiSidebarGitConfirmLabel`.
-pub fn confirm_label(action: GitReviewAction, has_commit: bool) -> &'static str {
+pub fn confirm_label(
+    action: GitReviewAction,
+    has_commit: bool,
+    provider: GitHostProvider,
+) -> &'static str {
+    let terms = provider.terms();
     match action {
         GitReviewAction::Commit => "Commit",
         GitReviewAction::Push if has_commit => "Commit & Push",
         GitReviewAction::Push => "Push",
-        GitReviewAction::Pr if has_commit => "Commit, Push & PR",
-        GitReviewAction::Pr => "Push & Create PR",
+        GitReviewAction::Pr if has_commit => terms.commit_push_short_label,
+        GitReviewAction::Pr => terms.push_create_short_label,
     }
 }
 
 /// `resolveGpuiSidebarGitPromptDescription`.
-pub fn prompt_description(action: GitReviewAction) -> &'static str {
+pub fn prompt_description(action: GitReviewAction, provider: GitHostProvider) -> &'static str {
     match action {
         GitReviewAction::Commit => "Review and commit changes.",
         GitReviewAction::Push => "Push the current branch.",
-        GitReviewAction::Pr => "Create or open a pull request.",
+        GitReviewAction::Pr => provider.terms().prompt_description,
     }
 }
 
 /// `resolveGpuiSidebarGitStartedTitle`.
-pub fn started_title(action: GitReviewAction, has_commit: bool) -> &'static str {
+pub fn started_title(
+    action: GitReviewAction,
+    has_commit: bool,
+    provider: GitHostProvider,
+) -> &'static str {
+    let terms = provider.terms();
     match action {
-        GitReviewAction::Pr if has_commit => "Committing, pushing, and creating PR…",
-        GitReviewAction::Pr => "Pushing and creating PR…",
+        GitReviewAction::Pr if has_commit => terms.started_commit_title,
+        GitReviewAction::Pr => terms.started_push_title,
         GitReviewAction::Push if has_commit => "Committing and pushing…",
         GitReviewAction::Push => "Pushing…",
         GitReviewAction::Commit => "Committing…",
@@ -69,9 +81,9 @@ pub fn started_title(action: GitReviewAction, has_commit: bool) -> &'static str 
 }
 
 /// `resolveGpuiSidebarGitFinishedTitle`.
-pub fn finished_title(action: GitReviewAction) -> &'static str {
+pub fn finished_title(action: GitReviewAction, provider: GitHostProvider) -> &'static str {
     match action {
-        GitReviewAction::Pr => "Pull request ready",
+        GitReviewAction::Pr => provider.terms().finished_title,
         GitReviewAction::Push => "Push complete",
         GitReviewAction::Commit => "Commit complete",
     }
@@ -115,7 +127,9 @@ pub fn pull_request_agent_prompt(
     message: &str,
     selected_files: &[String],
     create_branch: bool,
+    provider: GitHostProvider,
 ) -> String {
+    let terms = provider.terms();
     let selected: Vec<&String> = selected_files
         .iter()
         .filter(|path| !path.trim().is_empty())
@@ -147,9 +161,12 @@ pub fn pull_request_agent_prompt(
         format!("\nRequested commit message:\n{message}")
     };
     [
-        "Please complete the Git pull request flow in this terminal.".to_string(),
+        format!("Please complete the Git {} flow in this terminal.", terms.singular),
         String::new(),
-        "Use the current repository checkout in this terminal. Inspect branch, remote, and PR state directly before changing anything.".to_string(),
+        format!(
+            "Use the current repository checkout in this terminal. Inspect branch, remote, and {} state directly before changing anything.",
+            terms.short
+        ),
         String::new(),
         "Do these steps visibly:".to_string(),
         // CDXC:Changes 2026-10-25 DECISION: a pull request asked for on the default branch first moves the work onto a new branch named from the commit message, which replaces the old Commit on new branch action.
@@ -162,7 +179,10 @@ pub fn pull_request_agent_prompt(
         message_step.to_string(),
         "- If you encounter conflicts, rebases, merge state, or divergent local/remote changes, make sure not to lose changes from either side.".to_string(),
         "- Push the current branch to origin, setting upstream if needed.".to_string(),
-        "- Create a GitHub pull request with `gh pr create --fill`, or open/show the existing PR if one already exists.".to_string(),
+        format!(
+            "- Create a {} {} with `{}`, or open/show the existing {} if one already exists.",
+            terms.host_name, terms.singular, terms.create_command, terms.short
+        ),
         "- Stop and explain clearly if a command fails, authentication is missing, or a merge/rebase/conflict situation needs the user's decision.".to_string(),
         String::new(),
         files,

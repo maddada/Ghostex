@@ -89,25 +89,37 @@ pub async fn create_pull_request_for_project(
     projects: Vec<Value>,
 ) -> Result<Value, TypedOperationError> {
     let context = resolve_project_operation_context("/api/createPullRequest", params, projects)?;
+    let resolved = crate::source_control::pull_request::resolve_repo_provider(&context).await;
+    let provider = resolved.provider();
 
-    if let PullRequestProbe::Open(pr) = probe_open_github_pull_request(&context).await? {
-        return Ok(github_pull_request_success(false, pr));
+    if let PullRequestProbe::Open(pr) = probe_open_pull_request(&context, &resolved).await? {
+        return Ok(pull_request_success(resolved.kind, false, pr));
     }
 
-    let create_command = build_github_command("prCreateFill", &context.cwd);
+    let create_command = provider.build_create_command(
+        &context.cwd,
+        &crate::source_control::pull_request::CreatePullRequestOptions { fill: true },
+    );
     let create_output = match run_process_command(&create_command, &context).await {
         Ok(output) => output,
-        Err(_) => return Ok(github_pull_request_failure("githubCliUnavailable")),
+        Err(_) => {
+            return Ok(pull_request_failure(
+                resolved.kind,
+                provider.cli_unavailable_reason(),
+            ))
+        }
     };
 
     let created = create_output.exit_code == 0 && create_output.error.is_none();
-    match probe_open_github_pull_request(&context).await? {
-        PullRequestProbe::Open(pr) => Ok(github_pull_request_success(created, pr)),
-        PullRequestProbe::Failed if created => Ok(github_pull_request_failure("viewFailed")),
-        PullRequestProbe::Invalid | PullRequestProbe::NotOpen if created => {
-            Ok(github_pull_request_failure("invalidResult"))
+    match probe_open_pull_request(&context, &resolved).await? {
+        PullRequestProbe::Open(pr) => Ok(pull_request_success(resolved.kind, created, pr)),
+        PullRequestProbe::Failed if created => {
+            Ok(pull_request_failure(resolved.kind, "viewFailed"))
         }
-        _ => Ok(github_pull_request_failure("createFailed")),
+        PullRequestProbe::Invalid | PullRequestProbe::NotOpen if created => {
+            Ok(pull_request_failure(resolved.kind, "invalidResult"))
+        }
+        _ => Ok(pull_request_failure(resolved.kind, "createFailed")),
     }
 }
 

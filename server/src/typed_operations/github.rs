@@ -1,5 +1,9 @@
+use ghostex_gx_protocol::git_provider::GitHostProvider;
 use serde_json::{json, Map, Value};
-use url::Url;
+
+use crate::source_control::pull_request::{
+    resolve_repo_provider, CreatePullRequestOptions, PullRequestViewState, ResolvedRepoProvider,
+};
 
 use super::values::{
     command_summary_json, display_unknown_value, run_process_command, typed_result, ProcessCommand,
@@ -11,29 +15,37 @@ pub(crate) async fn run_github_action(
     context: &TypedOperationContext,
 ) -> Result<Value, TypedOperationError> {
     let action = normalize_github_action(params.get("action"))?;
-    let command = build_github_command(&action, &context.cwd);
-    match run_process_command(&command, context).await {
-        Ok(output) => Ok(typed_result(&action, &command, output)),
-        Err(error) => Ok(json!({
+    let resolved = resolve_repo_provider(context).await;
+    let command = build_provider_command(&resolved, &action, &context.cwd);
+    let mut result = match run_process_command(&command, context).await {
+        Ok(output) => typed_result(&action, &command, output),
+        Err(error) => json!({
             "action": action,
             "command": command_summary_json(&command.summary()),
             "exitCode": 1,
             "stderr": error.message,
             "stdout": "",
-        })),
+        }),
+    };
+    if let Some(object) = result.as_object_mut() {
+        object.insert("provider".to_string(), json!(resolved.kind.wire_name()));
     }
+    Ok(result)
 }
 
-pub(crate) fn build_github_command(action: &str, cwd: &str) -> ProcessCommand {
+pub(crate) fn build_provider_command(
+    resolved: &ResolvedRepoProvider,
+    action: &str,
+    cwd: &str,
+) -> ProcessCommand {
+    let provider = resolved.provider();
     match action {
-        "prCreateFill" => ProcessCommand::new("gh", vec!["pr", "create", "--fill"], cwd),
-        "prView" => ProcessCommand::new(
-            "gh",
-            vec!["pr", "view", "--json", "number,state,title,url"],
-            cwd,
-        ),
-        "version" => ProcessCommand::new("gh", vec!["--version"], cwd),
-        _ => unreachable!("validated GitHub action"),
+        "prCreateFill" => {
+            provider.build_create_command(cwd, &CreatePullRequestOptions { fill: true })
+        }
+        "prView" => provider.build_view_command(cwd, true),
+        "version" => provider.build_version_command(cwd),
+        _ => unreachable!("validated provider action"),
     }
 }
 
@@ -44,14 +56,12 @@ pub(crate) enum PullRequestProbe {
     Open(Value),
 }
 
-pub(crate) async fn probe_open_github_pull_request(
+pub(crate) async fn probe_open_pull_request(
     context: &TypedOperationContext,
+    resolved: &ResolvedRepoProvider,
 ) -> Result<PullRequestProbe, TypedOperationError> {
-    let command = ProcessCommand::new(
-        "gh",
-        vec!["pr", "view", "--json", "number,state,url"],
-        context.cwd.as_str(),
-    );
+    let provider = resolved.provider();
+    let command = provider.build_view_command(context.cwd.as_str(), false);
     let output = match run_process_command(&command, context).await {
         Ok(output) => output,
         Err(_) => return Ok(PullRequestProbe::Failed),
@@ -59,98 +69,30 @@ pub(crate) async fn probe_open_github_pull_request(
     if output.exit_code != 0 || output.error.is_some() || output.stdout.trim().is_empty() {
         return Ok(PullRequestProbe::Failed);
     }
-    let Some(pr) = parse_github_pull_request_summary(&output.stdout) else {
+    let Some(view) = provider.parse_view_output(&output.stdout, resolved.expected_host()) else {
         return Ok(PullRequestProbe::Invalid);
     };
-    if pr.get("state").and_then(Value::as_str) == Some("open") {
-        Ok(PullRequestProbe::Open(pr))
+    if view.state == PullRequestViewState::Open {
+        Ok(PullRequestProbe::Open(view.to_summary_json()))
     } else {
         Ok(PullRequestProbe::NotOpen)
     }
 }
 
-fn parse_github_pull_request_summary(stdout: &str) -> Option<Value> {
-    let value = serde_json::from_str::<Value>(stdout.trim()).ok()?;
-    let object = value.as_object()?;
-    let state_value = object.get("state")?.as_str()?.to_ascii_lowercase();
-    let state = match state_value.as_str() {
-        "open" => "open",
-        "closed" => "closed",
-        "merged" => "merged",
-        _ => return None,
-    };
-    let url = validate_github_pull_request_url(object.get("url")?.as_str()?)?;
-    let number = object
-        .get("number")
-        .and_then(Value::as_u64)
-        .or_else(|| github_pull_request_number_from_url(&url));
-    let mut summary = Map::new();
-    if let Some(number) = number {
-        summary.insert("number".to_string(), json!(number));
-    }
-    summary.insert("state".to_string(), json!(state));
-    summary.insert("url".to_string(), json!(url));
-    Some(Value::Object(summary))
-}
-
-fn validate_github_pull_request_url(candidate: &str) -> Option<String> {
-    let trimmed = candidate.trim();
-    if trimmed.is_empty()
-        || trimmed.chars().count() > 2048
-        || trimmed.contains('\\')
-        || trimmed
-            .bytes()
-            .any(|byte| byte.is_ascii_control() || byte.is_ascii_whitespace())
-    {
-        return None;
-    }
-    let parsed = Url::parse(trimmed).ok()?;
-    if parsed.scheme() != "https"
-        || !parsed
-            .host_str()
-            .is_some_and(|host| host.eq_ignore_ascii_case("github.com"))
-        || !parsed.username().is_empty()
-        || parsed.password().is_some()
-        || parsed.port().is_some()
-        || parsed.query().is_some()
-        || parsed.fragment().is_some()
-    {
-        return None;
-    }
-    let segments = parsed.path_segments()?.collect::<Vec<_>>();
-    if segments.len() != 4
-        || segments[0].is_empty()
-        || segments[1].is_empty()
-        || segments[2] != "pull"
-        || segments[3].is_empty()
-        || !segments[3].bytes().all(|byte| byte.is_ascii_digit())
-    {
-        return None;
-    }
-    Some(parsed.as_str().to_string())
-}
-
-fn github_pull_request_number_from_url(url: &str) -> Option<u64> {
-    Url::parse(url)
-        .ok()?
-        .path_segments()?
-        .nth(3)?
-        .parse::<u64>()
-        .ok()
-}
-
-pub(crate) fn github_pull_request_success(created: bool, pr: Value) -> Value {
+pub(crate) fn pull_request_success(provider: GitHostProvider, created: bool, pr: Value) -> Value {
     json!({
         "created": created,
         "ok": true,
         "pr": pr,
+        "provider": provider.wire_name(),
     })
 }
 
-pub(crate) fn github_pull_request_failure(reason: &str) -> Value {
+pub(crate) fn pull_request_failure(provider: GitHostProvider, reason: &str) -> Value {
     json!({
         "created": false,
         "ok": false,
+        "provider": provider.wire_name(),
         "reason": reason,
     })
 }

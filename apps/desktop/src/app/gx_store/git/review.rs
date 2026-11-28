@@ -180,6 +180,8 @@ impl GhostexGpuiApp {
                 cx,
             );
         }
+        let provider = state.provider();
+        let terms = provider.terms();
         // A Try again on a repo whose commit went through but whose push failed has no files left:
         // it only sends.
         let send_only =
@@ -191,12 +193,8 @@ impl GhostexGpuiApp {
                 Ok(selection) => Some(selection),
                 Err(_) => {
                     let description = match (review.action, remote) {
-                        (GitReviewAction::Pr, false) => {
-                            "Choose files from the current Git review before creating a pull request."
-                        }
-                        (GitReviewAction::Pr, true) => {
-                            "Choose files from the current remote Git review before creating a pull request."
-                        }
+                        (GitReviewAction::Pr, false) => terms.invalid_files_description,
+                        (GitReviewAction::Pr, true) => terms.remote_invalid_files_description,
                         (_, false) => "Choose files from the current Git review before committing.",
                         (_, true) => {
                             "Choose files from the current remote Git review before committing."
@@ -254,8 +252,8 @@ impl GhostexGpuiApp {
             GitReviewAction::Push => params["push"] = json!(true),
             GitReviewAction::Commit => {}
         }
-        let started = started_title(review.action, has_commit);
-        let finished = finished_title(review.action);
+        let started = started_title(review.action, has_commit, provider);
+        let finished = finished_title(review.action, provider);
         let mutation = self.git_run_mutation(&scope, started, finished, params, cx);
         let action = review.action;
         let delete_after = confirm.delete_worktree_after;
@@ -285,7 +283,7 @@ impl GhostexGpuiApp {
                         return this.git_toast(
                             GitToastLevel::Warning,
                             title,
-                            ToastOptions::described("Pull request creation did not complete."),
+                            ToastOptions::described(terms.creation_incomplete_description),
                             cx,
                         );
                     };

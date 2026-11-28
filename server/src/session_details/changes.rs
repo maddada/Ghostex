@@ -9,13 +9,14 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::Duration;
 
+use ghostex_gx_protocol::git_provider::{detect_provider_from_remote_url, GitHostProvider};
 use serde_json::{json, Value};
 
 use crate::session_git_status::{
-    cached_gh_cli_available, cached_session_git_status, parse_git_numstat, resolve_default_branch,
-    run_git_probe_command, PullRequestState, SessionGitStatusProber, SessionPullRequest,
-    SystemSessionGitStatusProber,
+    cached_session_git_status, parse_git_numstat, resolve_default_branch, run_git_probe_command,
+    PullRequestState, SessionPullRequest,
 };
+use crate::source_control::pull_request::{provider_for, resolve_repo_provider_sync};
 
 use super::async_cache::{AsyncSectionCache, SectionLoad};
 
@@ -36,6 +37,7 @@ struct GitChangesSnapshot {
     on_default: bool,
     additions: i64,
     deletions: i64,
+    provider: GitHostProvider,
 }
 
 fn git_cache() -> &'static AsyncSectionCache<String, Option<GitChangesSnapshot>> {
@@ -214,18 +216,21 @@ fn probe_git_fast(cwd: &str) -> Option<GitChangesSnapshot> {
     )
     .unwrap_or_default();
     let (additions, deletions) = parse_git_numstat(&numstat);
+    let provider = resolve_repo_provider_sync(cwd).kind;
     Some(GitChangesSnapshot {
         branch,
         default_branch,
         on_default,
         additions,
         deletions,
+        provider,
     })
 }
 
-fn pull_request_value(pull_request: &SessionPullRequest) -> Value {
+fn pull_request_value(pull_request: &SessionPullRequest, provider: GitHostProvider) -> Value {
     json!({
         "number": pull_request.number,
+        "provider": provider.wire_name(),
         "state": pull_request.state.as_wire(),
         "url": pull_request.url,
         "open": matches!(pull_request.state, PullRequestState::Open | PullRequestState::Draft),
@@ -246,6 +251,11 @@ fn seed_from_sidebar_cache(cwd: &str) {
         (Some(branch), None) => matches!(branch.as_str(), "main" | "master"),
         (None, _) => false,
     };
+    let provider = crate::project_git_remote::cached_project_git_remote(cwd)
+        .and_then(|remote| remote.origin_url)
+        .as_deref()
+        .and_then(detect_provider_from_remote_url)
+        .unwrap_or_default();
     if let (Some(branch), Some(pr)) = (status.branch.clone(), status.pull_request.clone()) {
         pr_cache().seed_if_empty((cwd.to_string(), branch), Some(pr), Duration::ZERO);
     }
@@ -257,14 +267,15 @@ fn seed_from_sidebar_cache(cwd: &str) {
             on_default,
             additions: status.additions,
             deletions: status.deletions,
+            provider,
         }),
         GIT_FRESH_FOR,
     );
 }
 
-/// Non-blocking pull request lookup: never holds up git diff numbers on `gh auth status` or
-/// `gh pr view`. When a PR lookup finishes in the background it bumps the revision so the panel's
-/// button updates to "View PR #N" automatically.
+/// Non-blocking pull/merge request lookup: never holds up git diff numbers on provider CLI checks.
+/// When a lookup finishes in the background it bumps the revision so the panel's button updates
+/// to "View PR #N" / "View MR !N" automatically.
 fn read_pull_request_nonblocking(
     cwd: &str,
     snapshot: &GitChangesSnapshot,
@@ -276,12 +287,13 @@ fn read_pull_request_nonblocking(
     let key = (cwd.to_string(), branch.to_string());
     let cwd_owned = cwd.to_string();
     let branch_owned = branch.to_string();
+    let provider_kind = snapshot.provider;
     match pr_cache().get_or_start(key, PULL_REQUEST_FRESH_FOR, false, move || {
-        let prober = SystemSessionGitStatusProber;
-        if !cached_gh_cli_available() && !prober.supports_pull_requests() {
+        let provider = provider_for(provider_kind);
+        if !provider.cached_cli_authenticated() && !provider.is_cli_authenticated() {
             return None;
         }
-        prober.probe_pull_request(&cwd_owned, &branch_owned)
+        provider.probe_branch_status(&cwd_owned, &branch_owned)
     }) {
         SectionLoad::Ready(pr) => pr,
         SectionLoad::Pending => None,
@@ -296,7 +308,10 @@ fn format_changes(cwd: &str, snapshot: &GitChangesSnapshot) -> Value {
         "onDefaultBranch": snapshot.on_default,
         "additions": snapshot.additions,
         "deletions": snapshot.deletions,
-        "pullRequest": pull_request.as_ref().map(pull_request_value),
+        "gitProvider": snapshot.provider.wire_name(),
+        "pullRequest": pull_request
+            .as_ref()
+            .map(|pr| pull_request_value(pr, snapshot.provider)),
     })
 }
 

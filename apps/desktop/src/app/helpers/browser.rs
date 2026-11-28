@@ -1171,7 +1171,7 @@ pub(crate) fn gpui_open_existing_project_pull_request_in_browser(
 ) -> Result<(), String> {
     /*
     CDXC:Git 2026-06-24-15:43:
-    Existing PR browser opens must derive the URL from gxserver's current GitHub state for the supplied project id. Renderer-provided URLs, DOM text, browser titles, cached labels, and arbitrary payload fields are not accepted as launch authority.
+    Existing PR/MR browser opens must derive the URL from gxserver's current hosting-provider state for the supplied project id. Renderer-provided URLs, DOM text, browser titles, cached labels, and arbitrary payload fields are not accepted as launch authority.
     */
     let result = gpui_gxserver_rpc_result(
         "/api/runGitHubAction",
@@ -1181,59 +1181,60 @@ pub(crate) fn gpui_open_existing_project_pull_request_in_browser(
         }),
         Duration::from_secs(10),
     )?;
+    let provider = result
+        .get("provider")
+        .and_then(serde_json::Value::as_str)
+        .and_then(ghostex_gx_protocol::git_provider::GitHostProvider::from_wire_name)
+        .unwrap_or_default();
+    let terms = provider.terms();
     if gpui_typed_operation_exit_code(&result) != Some(0) {
-        return Err("No open pull request is available for this project.".to_string());
+        return Err(terms.no_open_for_project.to_string());
     }
-    let url = gpui_trusted_github_pull_request_url_from_pr_view_stdout(
+    let url = gpui_trusted_pull_request_url_from_pr_view_stdout(
         gpui_typed_operation_stdout(&result),
+        provider,
     )
-    .ok_or_else(|| "No open pull request is available for this project.".to_string())?;
-    gpui_spawn_os_open(std::ffi::OsStr::new(&url))
-        .map_err(|_| "Ghostex couldn't open the pull request.".to_string())
+    .ok_or_else(|| terms.no_open_for_project.to_string())?;
+    gpui_spawn_os_open(std::ffi::OsStr::new(&url)).map_err(|_| terms.could_not_open.to_string())
 }
 
-pub(crate) fn gpui_trusted_github_pull_request_url_from_pr_view_stdout(
+pub(crate) fn gpui_trusted_pull_request_url_from_pr_view_stdout(
     stdout: &str,
+    provider: ghostex_gx_protocol::git_provider::GitHostProvider,
 ) -> Option<String> {
     let value = serde_json::from_str::<serde_json::Value>(stdout.trim()).ok()?;
     let object = value.as_object()?;
-    if !json_string_field(object, "state")?.eq_ignore_ascii_case("open") {
+    let state = json_string_field(object, "state")?;
+    let is_open = match provider {
+        ghostex_gx_protocol::git_provider::GitHostProvider::GitHub => {
+            state.eq_ignore_ascii_case("open")
+        }
+        ghostex_gx_protocol::git_provider::GitHostProvider::GitLab => {
+            state.eq_ignore_ascii_case("opened") || state.eq_ignore_ascii_case("open")
+        }
+    };
+    if !is_open {
         return None;
     }
-    let candidate = json_string_field(object, "url")?.trim();
-    if candidate.is_empty()
-        || candidate.chars().count() > 2048
-        || candidate.contains('\\')
-        || candidate
-            .bytes()
-            .any(|byte| byte.is_ascii_control() || byte.is_ascii_whitespace())
-    {
-        return None;
-    }
-    let parsed = gpui::http_client::Url::parse(candidate).ok()?;
-    if parsed.scheme() != "https"
-        || !parsed
-            .host_str()
-            .is_some_and(|host| host.eq_ignore_ascii_case("github.com"))
-        || !parsed.username().is_empty()
-        || parsed.password().is_some()
-        || parsed.port().is_some()
-        || parsed.query().is_some()
-        || parsed.fragment().is_some()
-    {
-        return None;
-    }
-    let segments = parsed.path_segments()?.collect::<Vec<_>>();
-    if segments.len() != 4
-        || segments[0].is_empty()
-        || segments[1].is_empty()
-        || segments[2] != "pull"
-        || segments[3].is_empty()
-        || !segments[3].bytes().all(|byte| byte.is_ascii_digit())
-    {
-        return None;
-    }
-    Some(parsed.as_str().to_string())
+    let candidate = match provider {
+        ghostex_gx_protocol::git_provider::GitHostProvider::GitHub => {
+            json_string_field(object, "url")?
+        }
+        ghostex_gx_protocol::git_provider::GitHostProvider::GitLab => {
+            json_string_field(object, "web_url").or_else(|| json_string_field(object, "url"))?
+        }
+    };
+    ghostex_gx_protocol::git_provider::validate_pull_request_url(provider, candidate, None)
+}
+
+#[allow(dead_code)]
+pub(crate) fn gpui_trusted_github_pull_request_url_from_pr_view_stdout(
+    stdout: &str,
+) -> Option<String> {
+    gpui_trusted_pull_request_url_from_pr_view_stdout(
+        stdout,
+        ghostex_gx_protocol::git_provider::GitHostProvider::GitHub,
+    )
 }
 
 pub(crate) fn gpui_browser_media_permission_state_path() -> PathBuf {
