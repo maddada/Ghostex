@@ -8,13 +8,14 @@ use std::thread;
 
 use serde_json::{json, Value};
 
-use super::config_and_store::CursorTransportFailure;
 use super::permissions::{parse_cursor_ask_question_request, parse_cursor_permission_request};
 use super::transport_and_state::{
     CursorActivityReporter, CursorState, CursorTransport, ReaderExitGuard,
 };
 use crate::acp::approval::{evaluate_permission, AcpApprovalLevel, PermissionDecision};
-use crate::acp::host::{append_bounded, now_iso_rfc3339, now_ms, LIVE_STREAM_MAX_CHARS};
+use crate::acp::host::{
+    append_bounded, end_live_segment, now_iso_rfc3339, now_ms, LIVE_STREAM_MAX_CHARS,
+};
 
 pub(super) fn spawn_stdout_reader(
     stdout: ChildStdout,
@@ -226,7 +227,6 @@ pub(super) fn spawn_stdout_reader(
                                 let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
                                 if s.live_stream_started_at.is_none() {
                                     s.live_stream_started_at = Some(now_iso_rfc3339());
-                                    s.transport_failure = CursorTransportFailure::default();
                                 }
                                 s.transport_failure.push(text);
                                 append_bounded(
@@ -265,6 +265,9 @@ pub(super) fn spawn_stdout_reader(
                                 .and_then(Value::as_str)
                                 .unwrap_or_default();
                             let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                            if kind == "tool_call" {
+                                end_live_segment!(s);
+                            }
                             s.transcript.handle_tool_update(update);
                             if matches!(status, "completed" | "failed" | "cancelled") {
                                 s.live_tool_label = None;

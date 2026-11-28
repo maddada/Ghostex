@@ -928,8 +928,17 @@ pub fn decode_claude_transcript_line(line: &str, fallback_id: &str) -> Option<Se
     */
     let message_id = extract_string(record.get("uuid"));
     let final_role = if role == "user" {
-        let only_tool_results = blocks.iter().all(is_tool_result_block);
-        if only_tool_results && !blocks.is_empty() {
+        // CDXC:SessionChat 2026-11-28 WHY: issue #791, "screenshots returned by tool calls
+        // (tool-result messages with images) are drawn as right-aligned user bubbles with a
+        // timestamp, as if I had sent them". `attach_claude_tool_pictures` puts a result's
+        // pictures right after it, so a row of results alone no longer held results alone and
+        // fell through to the user's role. Those pictures are the tool's output: the row stays a
+        // tool row, as Codex's and Pi's rows with pictures already are.
+        let only_tool_results = blocks.iter().any(is_tool_result_block)
+            && blocks.iter().all(|block| {
+                is_tool_result_block(block) || matches!(block, SessionChatBlock::ImageRef { .. })
+            });
+        if only_tool_results {
             SessionChatRole::Tool
         } else {
             SessionChatRole::User

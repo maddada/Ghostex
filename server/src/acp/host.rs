@@ -920,6 +920,27 @@ pub(super) fn append_bounded(buf: &mut String, chunk: &str, max_bytes: usize) {
     }
 }
 
+/// Ends the live segment a Native driver is streaming: its text and thought, and the times they
+/// started, which the chat uses as the segment's id. Takes the driver's state (or its lock guard).
+///
+/// CDXC:NativeChat 2026-11-28 WHY: issue #791, a Claude Code turn 47 minutes in opened as "one
+/// long assistant paragraph" holding all 66 text segments run together, then redrew into the
+/// normal view once the transcript loaded. Every driver appended each text delta of the turn to
+/// one buffer and only cleared it when the turn ended, so the live message was the whole turn, and
+/// a non-empty buffer also outranked the running tool in the live activity. The live message is
+/// the segment being written now: each driver ends it where the agent starts a new message or a
+/// tool call, and the transcript holds everything before it.
+macro_rules! end_live_segment {
+    ($state:expr) => {{
+        let state = &mut *$state;
+        state.live_stream_text.clear();
+        state.live_stream_started_at = None;
+        state.live_thought_text.clear();
+        state.live_thought_started_at = None;
+    }};
+}
+pub(crate) use end_live_segment;
+
 #[derive(Clone, Debug)]
 struct HostPendingPermission {
     perm: PendingPermission,
@@ -1001,6 +1022,9 @@ struct HostState {
     pending_permissions: VecDeque<HostPendingPermission>,
     live_stream_text: String,
     live_stream_started_at: Option<String>,
+    /// Every text delta of the turn, for the slash-command reply Hermes and OMP record; the live
+    /// message is only the current segment (`end_live_segment!`).
+    turn_reply_text: String,
     live_thought_text: String,
     live_thought_started_at: Option<String>,
     live_tool_label: Option<String>,
@@ -1043,6 +1067,7 @@ impl HostState {
             pending_permissions: VecDeque::new(),
             live_stream_text: String::new(),
             live_stream_started_at: None,
+            turn_reply_text: String::new(),
             live_thought_text: String::new(),
             live_thought_started_at: None,
             live_tool_label: None,
@@ -1059,6 +1084,7 @@ impl HostState {
     fn clear_live_turn_output(&mut self) {
         self.live_stream_text.clear();
         self.live_stream_started_at = None;
+        self.turn_reply_text.clear();
         self.live_thought_text.clear();
         self.live_thought_started_at = None;
         self.live_tool_label = None;
@@ -2462,6 +2488,11 @@ pub fn run(args: &[String]) -> i32 {
                                         text,
                                         LIVE_STREAM_MAX_CHARS,
                                     );
+                                    append_bounded(
+                                        &mut s.turn_reply_text,
+                                        text,
+                                        LIVE_STREAM_MAX_CHARS,
+                                    );
                                     s.live_tool_label = None;
                                     s.live_tool_detail = None;
                                     s.live_tool_started_at = None;
@@ -2491,6 +2522,9 @@ pub fn run(args: &[String]) -> i32 {
                                     .and_then(Value::as_str)
                                     .unwrap_or_default();
                                 let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                if kind == "tool_call" {
+                                    end_live_segment!(s);
+                                }
                                 if matches!(status, "completed" | "failed" | "cancelled") {
                                     s.live_tool_label = None;
                                     s.live_tool_detail = None;
@@ -3518,7 +3552,7 @@ pub fn run(args: &[String]) -> i32 {
                         let (is_current_turn, orphaned_perms, streamed_reply) = {
                             let mut s = st_turn.lock().unwrap_or_else(|p| p.into_inner());
                             if s.turn_generation == turn_gen {
-                                let reply = s.live_stream_text.clone();
+                                let reply = s.turn_reply_text.clone();
                                 s.working = false;
                                 if was_cancelled {
                                     s.last_turn_interrupted = true;

@@ -30,9 +30,9 @@ use super::approval::{
     PermissionDecision,
 };
 use super::host::{
-    append_bounded, exec_interactive_cli, now_iso_rfc3339, now_ms, GxserverEndpoint, HostArgs,
-    PendingPermission, SpoolWriter, TerminationSignalGuard, LIVE_STREAM_MAX_CHARS,
-    POLL_RETRY_DELAY,
+    append_bounded, end_live_segment, exec_interactive_cli, now_iso_rfc3339, now_ms,
+    GxserverEndpoint, HostArgs, PendingPermission, SpoolWriter, TerminationSignalGuard,
+    LIVE_STREAM_MAX_CHARS, POLL_RETRY_DELAY,
 };
 use super::spec::{build_acp_server_argv, transcript_path_for_session, AcpAgentSpec};
 

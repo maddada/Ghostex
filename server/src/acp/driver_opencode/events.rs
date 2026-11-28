@@ -10,7 +10,7 @@ use std::time::Duration;
 use serde_json::Value;
 
 use super::super::host::{
-    append_bounded, now_iso_rfc3339, now_ms, SpoolWriter, LIVE_STREAM_MAX_CHARS,
+    append_bounded, end_live_segment, now_iso_rfc3339, now_ms, SpoolWriter, LIVE_STREAM_MAX_CHARS,
 };
 use super::approvals::{asked_form_fields, handle_incoming_form, handle_incoming_permission};
 use super::http::{is_auth_error, readable_provider_error_message, OpenCodeHttp};
@@ -495,6 +495,17 @@ fn handle_sse_event(
             }
         }
         "session.text.started" | "session.reasoning.started" => {
+            // Each text or reasoning part is a row of its own; its live copy starts over with it.
+            {
+                let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                if kind == "session.text.started" {
+                    s.live_stream_text.clear();
+                    s.live_stream_started_at = None;
+                } else {
+                    s.live_thought_text.clear();
+                    s.live_thought_started_at = None;
+                }
+            }
             // Fetch message skeleton so live deltas attach to the new assistant message row.
             if let Ok(msgs) = http.fetch_messages(&main_sid) {
                 let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
@@ -529,6 +540,9 @@ fn handle_sse_event(
                 .map(str::to_string);
             {
                 let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                if kind != "session.tool.progress" {
+                    end_live_segment!(s);
+                }
                 s.live_tool_label = Some(name.to_string());
                 s.live_tool_detail = detail;
                 s.live_tool_started_at = Some(now_iso_rfc3339());

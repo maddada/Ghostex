@@ -23,9 +23,9 @@ use super::approval::{
     PermissionDecision,
 };
 use super::host::{
-    append_bounded, exec_interactive_cli, now_iso_rfc3339, now_ms, GxserverEndpoint, HostArgs,
-    PendingPermission, SpoolWriter, TerminationSignalGuard, LIVE_STREAM_MAX_CHARS,
-    POLL_RETRY_DELAY,
+    append_bounded, end_live_segment, exec_interactive_cli, now_iso_rfc3339, now_ms,
+    GxserverEndpoint, HostArgs, PendingPermission, SpoolWriter, TerminationSignalGuard,
+    LIVE_STREAM_MAX_CHARS, POLL_RETRY_DELAY,
 };
 use super::spec::{
     build_acp_server_argv, is_allowed_connector_env_key, transcript_path_for_session, AcpAgentSpec,
@@ -2338,8 +2338,20 @@ fn spawn_codex_stdout_reader(
                         if let Some(item) = params.get("item") {
                             let itype =
                                 item.get("type").and_then(Value::as_str).unwrap_or_default();
+                            // Each agent message and reasoning item is a row of its own in the
+                            // rollout; the live message and thought start over with it.
+                            if itype == "agentMessage" {
+                                let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                s.live_stream_text.clear();
+                                s.live_stream_started_at = None;
+                            } else if itype == "reasoning" {
+                                let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                s.live_thought_text.clear();
+                                s.live_thought_started_at = None;
+                            }
                             if matches!(itype, "commandExecution" | "fileChange" | "mcpToolCall") {
                                 let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                end_live_segment!(s);
                                 if itype == "fileChange" {
                                     if let Some(item_id) = item.get("id").and_then(Value::as_str) {
                                         if let Some(changes) = item.get("changes") {

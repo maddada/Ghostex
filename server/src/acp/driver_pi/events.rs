@@ -13,7 +13,7 @@ use super::transport::{
     PiRpcTransport,
 };
 use super::ui_requests::handle_pi_extension_ui_request;
-use super::{append_bounded, now_iso_rfc3339, now_ms, LIVE_STREAM_MAX_CHARS};
+use super::{append_bounded, end_live_segment, now_iso_rfc3339, now_ms, LIVE_STREAM_MAX_CHARS};
 
 pub(super) fn spawn_pi_stdout_reader(
     stdout: std::process::ChildStdout,
@@ -68,6 +68,7 @@ pub(super) fn spawn_pi_stdout_reader(
                         {
                             let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                             s.working = true;
+                            end_live_segment!(s);
                         }
                     }
                     "message_update" => {
@@ -90,6 +91,7 @@ pub(super) fn spawn_pi_stdout_reader(
                             .filter(|d| !d.is_empty() && d != &tool_name);
                         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                         s.working = true;
+                        end_live_segment!(s);
                         s.live_tool_label = Some(tool_name);
                         s.live_tool_detail = detail;
                         if s.live_tool_started_at.is_none() {

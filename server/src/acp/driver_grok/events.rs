@@ -6,7 +6,9 @@ use std::sync::{Arc, Mutex};
 use serde_json::{json, Value};
 
 use crate::acp::approval::{evaluate_permission, AcpApprovalLevel, PermissionDecision};
-use crate::acp::host::{append_bounded, now_iso_rfc3339, now_ms, LIVE_STREAM_MAX_CHARS};
+use crate::acp::host::{
+    append_bounded, end_live_segment, now_iso_rfc3339, now_ms, LIVE_STREAM_MAX_CHARS,
+};
 
 use super::approvals::{
     parse_grok_permission_request, parse_xai_ask_user_question_request,
@@ -602,6 +604,9 @@ pub(super) fn handle_grok_stdout_message(
                 .unwrap_or_default();
 
             let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+            if kind == "tool_call" && !replaying {
+                end_live_segment!(s);
+            }
             if let Some(plan_md) = extract_grok_plan_markdown_from_update(update) {
                 s.last_proposed_plan_markdown = Some(plan_md);
             }

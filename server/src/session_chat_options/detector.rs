@@ -364,7 +364,7 @@ impl SessionChatOptionDetector {
             }
             // Only grid-scraped `agent-stream` probes (`stream: Some(...)`) need multi-grid
             // stitching via `merge_agent_stream`. Structured Native (`acp-host`) stream activities
-            // already carry the accumulated turn text in `text` with `stream: None`; passing them
+            // carry the segment being written in `text` with `stream: None`; passing them
             // to `merge_agent_stream` would drop them on `current.stream.take() == None`.
             if detected.activity.as_ref().is_some_and(|activity| {
                 activity.kind

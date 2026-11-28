@@ -25,9 +25,9 @@ use super::approval::{
     PermissionDecision,
 };
 use super::host::{
-    append_bounded, exec_interactive_cli, now_iso_rfc3339, now_ms, GxserverEndpoint, HostArgs,
-    PendingPermission, SpoolWriter, TerminationSignalGuard, LIVE_STREAM_MAX_CHARS,
-    POLL_RETRY_DELAY,
+    append_bounded, end_live_segment, exec_interactive_cli, now_iso_rfc3339, now_ms,
+    GxserverEndpoint, HostArgs, PendingPermission, SpoolWriter, TerminationSignalGuard,
+    LIVE_STREAM_MAX_CHARS, POLL_RETRY_DELAY,
 };
 use super::spec::{
     build_acp_server_argv, build_ghostex_claude_settings_json, transcript_path_for_session,
@@ -1341,6 +1341,7 @@ fn spawn_and_init_claude(
                                         if let Some(name) = cb.get("name").and_then(Value::as_str) {
                                             let mut s =
                                                 st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                            end_live_segment!(s);
                                             s.live_tool_label = Some(name.to_string());
                                             s.live_tool_started_at = Some(now_iso_rfc3339());
                                         }
@@ -1350,6 +1351,9 @@ fn spawn_and_init_claude(
                                     let started = {
                                         let mut s =
                                             st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                        // Each API response is a message of its own in the
+                                        // transcript; the live message starts over with it.
+                                        end_live_segment!(s);
                                         let flipped = if !s.working && !s.last_turn_interrupted {
                                             s.working = true;
                                             true
