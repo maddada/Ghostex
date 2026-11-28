@@ -139,7 +139,12 @@ impl NativeChatView {
     }
 
     /// The pointer came onto or left Send.
-    pub(super) fn send_button_hovered(&mut self, hovered: bool, window: &Window, cx: &mut Context<Self>) {
+    pub(super) fn send_button_hovered(
+        &mut self,
+        hovered: bool,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) {
         self.send_popup.over_button = hovered;
         self.schedule_send_popup(window, cx);
     }
