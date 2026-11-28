@@ -224,8 +224,8 @@ async fn push(
     let counters = &routes.counters;
     let caller = caller_key(relay.caller(peer, headers));
     let now = Instant::now();
-    // As on the Live Activity route: every request spends its caller's bucket, only one about to go to Apple the
-    // relay-wide one.
+    // As on the Live Activity route: every request spends its caller's bucket; the relay-wide one is spent after
+    // the relay's own checks and before the wait for a slot, so a busy refusal has spent it too.
     if let Err(wait) = routes.per_address.take(&caller, now) {
         counters.rate_limited.fetch_add(1, Ordering::Relaxed);
         relay.log("push refused reason=rate-limited scope=address");

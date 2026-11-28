@@ -7,7 +7,7 @@
 //! is held to the form of identifiers: `threadId` is `<machineId>:<sessionId>` and `data` carries the identifiers
 //! a tap needs. The relay enforces form and size; that the envelope really is encrypted and that the identifiers
 //! carry no names only the computer that sends and the phone that receives can guarantee. A widget push carries
-//! nothing at all.
+//! no snapshot content: its fixed payload, the token, push type, topic, priority and expiry go to Apple.
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
@@ -84,9 +84,9 @@ pub struct AlertRequest {
     pub timestamp: i64,
 }
 
-/// The identifiers a tap needs, as gxserver's Expo push carries them in `data` (`server/src/push/message.rs`) and
-/// the phone is meant to read them (`pushEventFromData` in the phone's `src/notifications/pushMessage.ts`). Meant
-/// to be identifiers only, never names or text; the relay checks only their form.
+/// The identifiers a tap needs, a subset of what gxserver's Expo push carries in `data`
+/// (`server/src/push/message.rs`): Expo's `openSessionId` and `url` have no field here and are refused. Meant to be
+/// identifiers only, never names or text; the relay checks only their form.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct AlertData {

@@ -16,9 +16,11 @@
 //! phone, and the phone is meant to give it only to the computers it paired with (the client's behaviour, not
 //! checked here). What someone else can do with the relay is in `README.md`.
 //!
-//! It logs a line for each push sent or failed, each refusal, each store and each mailbox take (the outcome,
-//! Apple's status and reason, an 8-hex hash of a token or id) and start-up lines; never a token, an id, a content
-//! state, an envelope, a snapshot or anything from the key's files. The counts are only in the health checks.
+//! It logs a line for each push Apple answered or that got no answer, each refusal in a route's own code, each
+//! store and each mailbox take (the outcome, Apple's status and reason, an 8-hex hash of a token or id) and
+//! start-up lines; not health checks, snapshot reads, reads of an empty id, the mailbox's HEAD or a body refused
+//! for its size before the route's code. Never a token, an id, a content state, an envelope, a snapshot or
+//! anything from the key's files. The counts are only in the health checks.
 //!
 //! CDXC:Notifications 2026-11-11 DECISION: User, on keeping the Lock Screen banner current: "yes sure do it
 //! now but can we have it on same vps we have already???". The relay runs on relay-eu.ghostex.dev beside the
@@ -279,8 +281,9 @@ async fn send(
     let counters = &relay.counters;
     let caller = caller_key(relay.caller(peer, &headers));
     let now = Instant::now();
-    // Every request spends its caller's bucket; only one that will go to Apple spends the relay's (below), so junk
-    // from many addresses cannot use up the budget real pushes need.
+    // Every request spends its caller's bucket. The relay's bucket (below) is spent only after the relay's own
+    // checks, before the wait for a slot and before Apple answers: a busy refusal or a token Apple refuses has
+    // spent it, so well-formed requests with tokens Apple refuses can empty it.
     if let Err(wait) = relay.per_address.take(&caller, now) {
         counters.rate_limited.fetch_add(1, Ordering::Relaxed);
         relay.log("refused reason=rate-limited scope=address");
