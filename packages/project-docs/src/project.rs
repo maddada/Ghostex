@@ -73,6 +73,51 @@ pub fn is_hidden_entry(root: &Path, parent: &str, name: &str, is_directory: bool
     (is_directory && is_skipped_directory(name)) || is_skipped_file(name)
 }
 
+/// Where Canvas keeps a project's drawings, from the project's root.
+pub const DRAWINGS_RELATIVE_PATH: &str = ".ghostex/drawings";
+/// No project's own folder in Ghostex's state folder (`no_project_folder` in
+/// server/src/no_project/project.rs).
+pub const NO_PROJECT_FOLDER_NAME: &str = "no-project";
+
+/// The part of a project-relative Files path inside `.ghostex/drawings`: "" for the folder
+/// itself, `None` for a path outside it.
+pub fn drawings_inner_path(relative: &str) -> Option<&str> {
+    let relative = relative.trim_matches('/');
+    if relative == DRAWINGS_RELATIVE_PATH {
+        return Some("");
+    }
+    relative
+        .strip_prefix(DRAWINGS_RELATIVE_PATH)?
+        .strip_prefix('/')
+}
+
+/// No project's drawings folder, `<home>/.ghostex/drawings`, when `project_root` is No project's
+/// own folder (`<state_dir>/no-project`); `None` for every other project.
+///
+/// CDXC:Canvas 2026-11-28 DECISION:
+/// User (Q5318, "Show them"): No project's Files, on the computer, the browser build and the phone,
+/// shows `~/.ghostex/drawings` (where Canvas keeps No project's drawings, Q5292) as its
+/// `.ghostex/drawings` folder, the same look as in a project, and nothing else of `~/.ghostex`.
+/// No project's own folder stays an empty folder in Ghostex's state, so Files answers every path
+/// under `.ghostex/drawings` from this folder instead, confined to it; the folder itself can't be
+/// renamed or deleted from Files (an empty inner path is refused like a project's root).
+pub fn no_project_drawings_folder(
+    project_root: &Path,
+    state_dir: &Path,
+    home: &Path,
+) -> Option<PathBuf> {
+    if project_root.file_name() != Some(std::ffi::OsStr::new(NO_PROJECT_FOLDER_NAME)) {
+        return None;
+    }
+    let no_project = state_dir.join(NO_PROJECT_FOLDER_NAME);
+    let same = project_root == no_project
+        || fs::canonicalize(project_root)
+            .ok()
+            .zip(fs::canonicalize(&no_project).ok())
+            .is_some_and(|(left, right)| left == right);
+    same.then(|| home.join(DRAWINGS_RELATIVE_PATH))
+}
+
 pub struct SearchMatch {
     /// Relative to the searched root, `/`-separated.
     pub relative_path: String,

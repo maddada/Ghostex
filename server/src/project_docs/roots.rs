@@ -57,6 +57,11 @@ pub fn resolve_project_docs_root(project: &Value, project_path: &str) -> Project
     ProjectDocsRoot {
         project_path: PathBuf::from(project_path),
         extra: configured.as_deref().map(resolve_project_docs_extra_root),
+        // No project shows `~/.ghostex/drawings` as its `.ghostex/drawings` (CDXC:Canvas
+        // 2026-11-28 in packages/project-docs/src/project.rs `no_project_drawings_folder`).
+        drawings: crate::no_project::is_no_project_project(project).then(|| {
+            crate::resume_lookup::home_dir().join(ghostex_docs::project::DRAWINGS_RELATIVE_PATH)
+        }),
     }
 }
 
@@ -94,6 +99,9 @@ CLAUDE.md.
 pub struct ProjectDocsRoot {
     pub project_path: PathBuf,
     pub extra: Option<ProjectDocsExtraRoot>,
+    /// The folder that answers for `.ghostex/drawings` instead of the project's own (No project's
+    /// `~/.ghostex/drawings`).
+    pub drawings: Option<PathBuf>,
 }
 
 /// A configured Docs directory. `error` is set when the folder could not be
@@ -107,6 +115,8 @@ pub struct ProjectDocsExtraRoot {
 pub(super) struct DocsRoots {
     pub(super) project: PathBuf,
     pub(super) extra: Option<DocsExtraMount>,
+    /// `ProjectDocsRoot::drawings`, canonicalized; `None` while that folder does not exist.
+    pub(super) drawings: Option<PathBuf>,
 }
 
 /// The mounted Docs directory: what the tree calls it, and either where it is
@@ -155,6 +165,11 @@ pub(super) fn docs_roots(root: &ProjectDocsRoot) -> Result<DocsRoots, String> {
     Ok(DocsRoots {
         project: project_root(&root.project_path)?,
         extra: root.extra.as_ref().map(docs_extra_mount),
+        drawings: root
+            .drawings
+            .as_ref()
+            .and_then(|folder| fs::canonicalize(folder).ok())
+            .filter(|folder| folder.is_dir()),
     })
 }
 
@@ -180,6 +195,16 @@ pub(super) fn docs_path<'a>(
     path: Option<&str>,
 ) -> Result<DocsPath<'a>, String> {
     let outer = normalized_relative_path(path)?;
+    if let Some(drawings) = &context.roots.drawings {
+        if let Some(inner) = ghostex_docs::project::drawings_inner_path(&outer) {
+            return Ok(DocsPath {
+                extra: false,
+                inner: inner.to_string(),
+                outer,
+                root: drawings.as_path(),
+            });
+        }
+    }
     let Some(inner) = extra_root_relative_path(&outer) else {
         return Ok(DocsPath {
             extra: false,
