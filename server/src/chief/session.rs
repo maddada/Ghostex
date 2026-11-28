@@ -287,7 +287,7 @@ pub(super) fn earlier_chats(repository: &DomainRepository<'_>, db: &Connection) 
 
 /// Retires an earlier Chief chat: unpins it (if it had `isPinned` written while it was Chief) so
 /// it moves out of Pinned into Chats unless the user pins it themselves later, and renames a chat
-/// still titled "Ask Ghostex AI" after the day it started ("Ask Ghostex AI · 8 Nov, 13:30"). A
+/// still titled "Ghostex AI" after the day it started ("Ghostex AI · 8 Nov, 13:30"). A
 /// title the user gave it stays.
 fn retire_earlier(
     state: &AppState,

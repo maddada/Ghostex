@@ -34,7 +34,7 @@ const DESCRIBE_COPY: &str = "An agent sets the colours and glass from your words
 /// The draft Ask an agent stages in the Help chat.
 const STARTER_PROMPT: &str = "Give Ghostex a calm, dark look with soft colours and frosted glass.";
 const DESIGN_AI_TITLE: &str = "Design a theme with Ask Ghostex AI";
-const DESIGN_AI_COPY: &str = "Describe the artwork and mood you want in Ask Ghostex AI. It generates the image with Codex and applies it with matching colours right away.";
+const DESIGN_AI_COPY: &str = "Describe the artwork and mood you want in Ghostex AI's chat. It generates the image with Codex and applies it with matching colours right away.";
 const DESIGN_AI_NEEDS_CODEX: &str =
     "Add a Codex account in Settings > Accounts to generate custom theme artwork.";
 /// The prompt sent straight to Ask Ghostex AI when the user clicks "Design a theme with Ask Ghostex AI".

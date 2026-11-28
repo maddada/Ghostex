@@ -17,11 +17,10 @@ use gpui::{
 };
 use gpui_component::{h_flex, v_flex};
 
-/// Chief's name on its row and in its menus: "Chief of Staff" (server/src/chief/mod.rs
-/// `CHIEF_TITLE`, CDXC:Chief 2026-11-08 there).
-/// Its row and menu name (CDXC:Chief 2026-11-21 in server/src/chief/mod.rs); [`CHIEF_NAME`] in a
-/// sentence.
-pub(crate) const CHIEF_LABEL: &str = "Ask Ghostex AI";
+/// The chat's own name on its row, header and Earlier Chats: "Ghostex AI" (server/src/chief/mod.rs
+/// `CHIEF_TITLE`, CDXC:Chief 2026-11-28 there; "Ask Ghostex AI" before). Action labels that invite
+/// the user to ask keep "Ask Ghostex AI".
+pub(crate) const CHIEF_LABEL: &str = "Ghostex AI";
 pub(crate) const CHIEF_NAME: &str = "Ghostex AI";
 /// The home project's name on its header and card: "Ghostex AI" (Main Hub until 2026-11-27, renamed
 /// by the user's Q5286 note). The one place the desktop spells it.

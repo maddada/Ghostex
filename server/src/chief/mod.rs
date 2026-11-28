@@ -73,7 +73,9 @@ pub(crate) fn chief_playbook(gbots_on: bool) -> String {
 /// User: "Please don't make Main Hub a thread AND a project header ... Let's just always pin 1 thread to the top of Main Hub called Chief of Staff". The agent is "Chief of Staff" again everywhere users see it (its row and session title, its menus, the Extensions card, notifications, Help); "Main Hub" names only the home project (its header and card). It was "Chief" (Q1746), "Chief of Staff" (Q1896), then "Main Hub" (Q1931), which this supersedes for the agent. Internal ids, the `chiefHidden` setting and the `ghostex chief` command keep their names so nothing breaks.
 /// CDXC:Chief 2026-11-21 DECISION:
 /// User, relayed by Chief of Staff: "Rename Chief of Staff to 'Ask Ghostex AI' everywhere the user sees the name", keeping `ghostex chief`, every id, setting key and API. Its row, session title, menu entries and the Ask Ghostex AI menu row it answers all read "Ask Ghostex AI"; in a sentence it is "Ghostex AI" ("Ghostex AI's chat", "I'm Ghostex AI"). Supersedes the 2026-11-08 name above. A session still titled "Chief of Staff" (or one of its dated earlier chats) takes the new name once at gxserver start (sweep.rs).
-pub(crate) const CHIEF_TITLE: &str = "Ask Ghostex AI";
+/// CDXC:Chief 2026-11-28 DECISION:
+/// User: "Rename Ask Ghostex AI threads default name to Ghostex AI". Its chat's own name (session title, row, header, tabs, Earlier Chats, notifications, Needs you, the phone, CLI listings) is "Ghostex AI"; an earlier chat is "Ghostex AI · 8 Nov, 13:30". Action labels that invite the user to ask (the sidebar menu's and rail's "Ask Ghostex AI", "Design a theme with Ask Ghostex AI", the help popup's title) keep "Ask Ghostex AI". A chat still titled "Ask Ghostex AI" (or a dated earlier one) takes the new name once at gxserver start (sweep.rs); one the user renamed keeps its name. Supersedes the 2026-11-21 chat name above.
+pub(crate) const CHIEF_TITLE: &str = "Ghostex AI";
 /// The session titles Chief was created with under earlier names; sweep.rs renames such a session
 /// once (a title the user gave it stays).
-pub(crate) const OLD_CHIEF_TITLES: &[&str] = &["Chief", "Main Hub", "Chief of Staff"];
+pub(crate) const OLD_CHIEF_TITLES: &[&str] = &["Chief", "Main Hub", "Chief of Staff", "Ask Ghostex AI"];

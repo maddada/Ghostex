@@ -5210,7 +5210,7 @@ note list in one call, as the editors save), and `ghostex coordinator guide` (th
 coordinator's own playbook, ending with your playbook overrides). `ghostex coordinator --help` lists every flag. `ghostex orchestrator …`
 is an alias that runs the same commands.
 
-## Ghostex AI and Ask Ghostex AI
+## Ghostex AI
 
 **Ghostex AI** (called Main Hub before, and Chief of Staff before that) is
 always on, and its agent is where to start in Ghostex. If you want it out of
@@ -5225,8 +5225,8 @@ sessions. Chats, terminals and coordinators started without a project are in
 AI as it is, with its settings and history. Rest the pointer on its header and
 a card beside the sidebar says what it is.
 
-**Ask Ghostex AI** (Ghostex AI for short), pinned first under the Ghostex AI
-header, is one agent per computer you can ask about anything: any session,
+**Ghostex AI's chat** (called Ask Ghostex AI before, and Chief of Staff before
+that), pinned first under the Ghostex AI header, is one agent per computer you can ask about anything: any session,
 agent, project or computer, and Ghostex itself ("what's stuck?", "how do I pair
 my phone?"). Each computer's agent is its own row, named by the computer and
 drawn with its computer icon, this computer first.
@@ -5253,7 +5253,7 @@ drawn with its computer icon, this computer first.
   until you press Start or send a message; until then you can switch its agent
   or model in place. A model or effort you pick in its chat is kept for its next
   chats on that agent.
-- **Its welcome card**: while its chat is empty, Ask Ghostex AI shows a little
+- **Its welcome card**: while its chat is empty, Ghostex AI shows a little
   ghost with a clipboard instead of the usual welcome. New to Ghostex, you get
   **First steps** (add your first project, sign in to Claude or Codex, start
   your first agent, put Ghostex on your phone), each ticked off by itself once
@@ -5286,13 +5286,14 @@ drawn with its computer icon, this computer first.
   that computer's Ghostex AI. Collab, pairing, Easy Connect, connecting
   computers, Autopilot's limits, turning GBots on, security settings and
   installing things stay yours.
-- **New Chat keeps your old chat**: right-click the Ask Ghostex AI row for New
+- **New Chat keeps your old chat**: right-click Ghostex AI's row for New
   Chat (Ghostex asks first; tick Don't ask again to stop asking). The old chat
-  stays under Ghostex AI, asleep and named after the day it started; right-click
+  stays under Ghostex AI, asleep and named after the day it started ("Ghostex
+  AI · 8 Nov, 13:30"; a chat you renamed keeps your name); right-click
   the row for **Earlier Chats…** to open one again (closed ones are in Ghostex
   AI's History). Change Agent moves it to another agent the same way. A new chat's
-  first message waits for Start too. Closing Ask Ghostex AI's chat closes it
-  like any session (it stays in History); the next time you open Ask Ghostex
+  first message waits for Start too. Closing Ghostex AI's chat closes it
+  like any session (it stays in History); the next time you open Ghostex
   AI it starts a fresh chat that keeps its memory and threads. On the phone, a
   long press on the row offers New Chat and Change Agent.
 - **Your secret folders stay out of reach**: agents Ghostex starts in your home
@@ -5306,8 +5307,8 @@ drawn with its computer icon, this computer first.
 - **Several computers**: with computers combined, every computer's home is one
   Ghostex AI header with one row per computer, each named by its computer
   (there is no "+N" fold for them; Autopilot's rows still fold).
-- **Ask Ghostex AI's chats** (when Ghostex AI isn't running to take the
-  question) are listed under Ghostex AI too. They run in Ghostex's settings folder,
+- **Chats from the menu's Ask Ghostex AI** (when Ghostex AI isn't running to
+  take the question) are listed under Ghostex AI too. They run in Ghostex's settings folder,
   never in your home folder.
 
 `ghostex chief status`, `ghostex chief guide`, `ghostex chief new-chat`,
@@ -9219,7 +9220,7 @@ transparency is paused, with **Use transparency** to take the artwork off. Click
 `ghostex theme apply <theme> [--background art|live|transparent|solid]` (`ghostex theme list` lists them in the row's order, with their backgrounds; `ghostex theme background list` and `ghostex theme background set <image|art|live|transparent|solid>` pick a background); the line under the row then names it, with **Undo** (`ghostex theme undo`
 works too) and Change them. Hovering a look shows **Make it your own**, which opens a Help chat
 with the prompt that describes it as the draft, to change and send. **Design a theme with Ask
-Ghostex AI**, under Artwork, opens Ask Ghostex AI and starts a guided custom-theme flow (available
+Ghostex AI**, under Artwork, opens Ghostex AI's chat and starts a guided custom-theme flow (available
 when a Codex account is added in Settings > Accounts): it asks what mood, colours and artwork you
 want, generates a custom artwork image with Codex, applies it with
 `ghostex theme background image <path>` together with matching theme colours, and offers to tweak

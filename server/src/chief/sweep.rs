@@ -16,14 +16,16 @@ pub(crate) fn start_chief_sweep(state: Arc<AppState>) {
     });
 }
 
-/// The metadata row that says the rename below has run on this computer.
-const TITLES_RENAMED_KEY: &str = "chiefTitlesRenamed";
+/// The metadata row that says the rename below has run on this computer. A new key each time the
+/// name changes, so the rename runs once more ("chiefTitlesRenamed" was the "Ask Ghostex AI" pass;
+/// CDXC:Chief 2026-11-28 in mod.rs renamed the chat to "Ghostex AI").
+const TITLES_RENAMED_KEY: &str = "chiefTitlesRenamedGhostexAi";
 /// The metadata row that says earlier Chief chats were unpinned once on this computer.
 const EARLIER_UNPINNED_KEY: &str = "chiefEarlierUnpinned";
 
 /// Once per computer, at gxserver start: a Chief chat still titled with a name Ghostex gave it under
-/// an earlier name ("Chief", "Main Hub", "Chief of Staff", or an earlier chat's "Chief of Staff ·
-/// 8 Nov, 13:30") takes the current name. A chat the user renamed is left alone, whatever its
+/// an earlier name ("Chief", "Main Hub", "Chief of Staff", "Ask Ghostex AI", or an earlier chat's
+/// "Ask Ghostex AI · 8 Nov, 13:30") takes the current name. A chat the user renamed is left alone, whatever its
 /// title, and so is any other title.
 ///
 /// WHY: it runs once (the `chiefTitlesRenamed` row), so a user who later names a chat "Chief of
@@ -92,7 +94,7 @@ fn rename_old_title(state: &AppState) {
     );
 }
 
-/// Once per computer, at gxserver start: earlier Chief chats (like "Ask Ghostex AI · 21 Nov,
+/// Once per computer, at gxserver start: earlier Chief chats (like "Ghostex AI · 21 Nov,
 /// 04:33") that carried a leftover `isPinned` from when they were active Chief are unpinned so
 /// they move out of Pinned into Main Hub's Chats section. Because this runs once, any earlier chat
 /// the user pins themselves afterwards stays pinned.
