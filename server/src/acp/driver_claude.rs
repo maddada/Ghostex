@@ -2507,10 +2507,21 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             .current_model = Some(model);
                     }
                     if !effort.is_empty() {
+                        // Claude Code 2.1.284+ keeps Ultracode as a switch beside the effort
+                        // level (Ultracode runs at xhigh). In Ghostex it is the level after Max,
+                        // so every live change sets both: picking High after Ultracode must turn
+                        // the switch off, or the session keeps running dynamic workflows at about
+                        // 3.5 times the cost (GitHub #694, same as the launch path in
+                        // agents/claude_launch_ultracode.rs).
+                        let flag_settings = if effort.eq_ignore_ascii_case("ultracode") {
+                            json!({ "effortLevel": "xhigh", "ultracode": true })
+                        } else {
+                            json!({ "effortLevel": effort, "ultracode": false })
+                        };
                         if let Err(err) = proc.transport.control_request(
                             json!({
                                 "subtype": "apply_flag_settings",
-                                "settings": { "effortLevel": effort },
+                                "settings": flag_settings,
                             }),
                             CLAUDE_CTRL_TIMEOUT,
                         ) {
