@@ -582,6 +582,9 @@ impl GxserverEndpoint {
     }
 }
 
+/// ACP's JSON-RPC error code for "the agent needs the user to sign in first" (`auth_required`).
+const ACP_AUTH_REQUIRED_CODE: i64 = -32000;
+
 pub(super) fn extract_jsonrpc_error_message(error: &Value, fallback: &str) -> String {
     error
         .pointer("/data/message")
@@ -1261,10 +1264,18 @@ impl AcpTransport {
         match rx.recv_timeout(timeout) {
             Ok(resp) => {
                 if let Some(error) = resp.get("error") {
-                    Err(extract_jsonrpc_error_message(
-                        error,
-                        "Native host request failed",
-                    ))
+                    let message =
+                        extract_jsonrpc_error_message(error, "Native host request failed");
+                    // ACP's `auth_required` error code. agy (and other ACP agents) send it with
+                    // wording the sign-in check does not know, so name it, and the failed-start
+                    // and turn notices offer sign-in instead of a generic failure.
+                    let auth_required =
+                        error.get("code").and_then(Value::as_i64) == Some(ACP_AUTH_REQUIRED_CODE);
+                    if auth_required && !super::startup_error::looks_like_auth_error(&message) {
+                        Err(format!("Authentication required: {message}"))
+                    } else {
+                        Err(message)
+                    }
                 } else {
                     Ok(resp.get("result").cloned().unwrap_or(Value::Null))
                 }
