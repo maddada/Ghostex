@@ -252,20 +252,23 @@ The `/push/` routes have limits of their own, so their traffic never takes from 
   ids per address. So size by the keys seen within those times, not per minute. A table full of such keys
   refuses a new key with 429 rather than growing; when Ghostex has more phones than that active at once,
   these numbers and the memory below have to grow together.
-- Memory: the service runs with `MemoryMax=128M`, and the relay is held to 75 % of it (96 MiB) with every
-  table and the store full at once. The `/push/` caps above (5,000 entries, 5 MiB, 7,000 keys per table,
-  7,000 gone tokens) were chosen for that; the Live Activity route's tables (200,000 keys each, 100,000 gone
-  tokens) are unchanged and take most of it. Measured on macOS by filling the real limiter and store types to
-  every cap in one process: 82 to 84 MiB resident with the Live Activity tables alone and 91 to 93 MiB with
-  everything (three runs). That process has no HTTP or TLS traffic; connections need a few MiB more. Only a
-  flood from very many addresses fills every table at once; if memory still reaches the limit, systemd
-  restarts the relay, which empties the mailbox and the snapshots.
+- Memory: the service runs with `MemoryMax=128M`. The `/push/` caps above (5,000 entries, 5 MiB, 7,000 keys
+  per table, 7,000 gone tokens) were chosen to fit beside the Live Activity route's tables (200,000 keys each,
+  100,000 gone tokens), which take most of the memory. What is measured is local only: a release build on
+  macOS, with the real limiter and store types filled to every cap in one process, held about 92 to 97 MiB
+  resident over several runs, with no HTTP, TLS or connections. It was not measured on Linux or under the
+  service's 128 MiB limit, so the room left there is not known. Every body is capped per request (8 KB on
+  `/live-activity/`, 16 KB on `/push/`, through Caddy), but there is no overall budget for bodies still being
+  read, so many large requests at once add to that. Only a flood from very many addresses fills every table
+  at once. If memory reaches the limit, systemd restarts the relay, which drops every mailbox entry and
+  snapshot; phones recover with their next update (the phone leaves a token again on its next start, the
+  computer uploads the snapshot again on its next change).
 - Raising a limit: these limits are fixed in the code, not read from a setting. The rates and the
   `/push/` caps are in `LimitConfig::default()` in `src/limits.rs`, the Live Activity route's 200,000 keys per
   table in `MAX_KEYS` beside it, and the body sizes in `src/lib.rs` and `src/push_routes.rs` (those also have
   a Caddy limit, step 5 of the deploy). To raise one: change it there, measure the relay's memory again with
-  every table and the store full, raise `MemoryMax` in `deploy/ghostex-push-relay.service` so that stays
-  within 75 % of it, rebuild with `build-linux.sh`, and deploy the new binary and unit (`systemctl
+  every table and the store full, raise `MemoryMax` in `deploy/ghostex-push-relay.service` with room above
+  that measurement, rebuild with `build-linux.sh`, and deploy the new binary and unit (`systemctl
   daemon-reload`, then restart).
 
 ## Who can call it, and what an attacker can do
@@ -296,16 +299,19 @@ paired with (the phone's push registration, over the paired connection).
   on the `/push/` routes, 200,000 on the Live Activity route); a full table refuses new tokens, ids and
   addresses with 429 until its keys age out, while keys already in it keep their quota.
 - With one id (from that phone or computer), an attacker can read and replace that one mailbox entry or
-  snapshot. They read nothing of the snapshot, which the computer encrypts for the phone, and an update token
+  snapshot. The relay stores the snapshot's bytes unchanged and neither decrypts nor checks them: that they
+  are unreadable rests on the computer encrypting them for the phone before it uploads them. An update token
   lets them do no more than the Live Activity token above. The mailbox entry itself is not encrypted: it is
   that activity's update token as the phone left it, so whoever holds the id can take it and then update or
-  end that phone's Live Activity as above. Only the widget snapshot is encrypted.
+  end that phone's Live Activity as above. Only the widget snapshot is encrypted, by the computer.
 - Nobody can get the key out through the relay: it is read from a file only the service's user can read,
   is never logged, and no answer carries it.
 
 What the relay can read: of an alert, the event, the identifiers in `threadId` and `data` and whether it
-sounds; of a mailbox entry, the update token itself, held as the phone sent it; nothing of the envelope or the
-snapshot, which it never decrypts (it checks only the envelope's form and size). What Apple sees of an alert:
+sounds; of a mailbox entry, the update token itself, held as the phone sent it; nothing of the envelope, which
+it never decrypts (it checks only the envelope's form and size). A snapshot it stores as the bytes it was
+given, without decrypting or checking them; its confidentiality relies on the computer encrypting it before
+the upload. What Apple sees of an alert:
 the fixed title and event words, `threadId`, `data`, the push type, the token and the envelope as ciphertext;
 of a widget push, the push type and the token. That these hold no
 names rests on the computer that sends them (see the alert route). The mailbox and the snapshots stay in the
