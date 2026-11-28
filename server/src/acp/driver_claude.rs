@@ -643,6 +643,31 @@ fn extract_claude_message_text(msg: &Value) -> String {
     }
 }
 
+/// What a Claude `result`'s `terminal_reason` means when the turn ended without finishing, or
+/// `None` for a normal end (`completed`, the abort reasons, or a reason this build does not know).
+fn claude_terminal_reason_error(reason: &str) -> Option<&'static str> {
+    const CONTEXT_FULL: &str = "Claude stopped: the conversation no longer fits the model's context window. Run /compact or start a new chat.";
+    Some(match reason {
+        "api_error" => "Claude gave up after repeated API errors.",
+        "malformed_tool_use_exhausted" => "Claude gave up after repeated malformed tool calls.",
+        "budget_exhausted" => "Claude stopped: the turn's token budget ran out.",
+        "structured_output_retry_exhausted" => {
+            "Claude could not produce the requested structured output."
+        }
+        "tool_deferred_unavailable" => {
+            "Claude could not resume a deferred tool call: the tool is no longer available."
+        }
+        "turn_setup_failed" => "Claude could not start the turn.",
+        "blocking_limit" | "prompt_too_long" => CONTEXT_FULL,
+        "rapid_refill_breaker" => {
+            "Claude stopped: the context filled up again too quickly after compacting."
+        }
+        "image_error" => "Claude stopped: an image in the conversation could not be processed.",
+        "model_error" => "Claude stopped: the model returned an error.",
+        _ => return None,
+    })
+}
+
 /// The context window of the model the conversation runs on, from a `result`'s `modelUsage`.
 ///
 /// `modelUsage` has one entry per model the process used in the turn, including small side calls
@@ -1575,7 +1600,16 @@ fn spawn_and_init_claude(
                                 {
                                     s.usage_window_size = Some(cw);
                                 }
-                                let result_interrupted = msg
+                                let terminal_reason =
+                                    msg.get("terminal_reason").and_then(Value::as_str);
+                                let api_error_status =
+                                    msg.get("api_error_status").and_then(Value::as_u64);
+                                // `aborted_streaming` / `aborted_tools` mean the turn was stopped,
+                                // even under a `success` envelope with `is_error: false`.
+                                let result_interrupted = matches!(
+                                    terminal_reason,
+                                    Some("aborted_streaming" | "aborted_tools")
+                                ) || msg
                                     .get("subtype")
                                     .and_then(Value::as_str)
                                     .is_some_and(|sub| {
@@ -1584,6 +1618,11 @@ fn spawn_and_init_claude(
                                             || lower.contains("cancel")
                                             || lower.contains("abort")
                                     });
+                                // Claude Code labels a 403 `authentication_failed` too, but signing
+                                // in again cannot grant access the account lacks: show Claude's
+                                // own text as an API error instead of restarting and asking the
+                                // user to sign in.
+                                let permission_denied = api_error_status == Some(403);
                                 let result_is_error =
                                     msg.get("is_error").and_then(Value::as_bool) == Some(true);
                                 let result_text = extract_claude_message_text(&msg);
@@ -1593,8 +1632,24 @@ fn spawn_and_init_claude(
                                     .map(str::trim)
                                     .filter(|c| !c.is_empty())
                                     .map(str::to_string);
-                                let auth_error_text = s.turn_saw_auth_error.take().or_else(|| {
-                                    (result_is_error
+                                let saw_auth_error = s.turn_saw_auth_error.take();
+                                let denied_text = permission_denied.then(|| {
+                                    if !result_text.is_empty() {
+                                        result_text.clone()
+                                    } else {
+                                        saw_auth_error.clone().unwrap_or_else(|| {
+                                            "Claude's API refused this request (403).".to_string()
+                                        })
+                                    }
+                                });
+                                let auth_error_text = if permission_denied {
+                                    None
+                                } else {
+                                    saw_auth_error
+                                }
+                                .or_else(|| {
+                                    (!permission_denied
+                                        && result_is_error
                                         && is_claude_auth_error(
                                             result_error_code.as_deref(),
                                             &result_text,
@@ -1608,18 +1663,38 @@ fn spawn_and_init_claude(
                                         }
                                     })
                                 });
-                                let api_error = s.turn_saw_api_error.take().or_else(|| {
-                                    (result_is_error && auth_error_text.is_none()).then(|| {
-                                        (
-                                            result_error_code,
-                                            if result_text.is_empty() {
-                                                "Claude API call failed.".to_string()
-                                            } else {
-                                                result_text
-                                            },
-                                        )
+                                let api_error = s
+                                    .turn_saw_api_error
+                                    .take()
+                                    .or_else(|| {
+                                        denied_text.map(|text| {
+                                            (Some("api_error_403".to_string()), text)
+                                        })
                                     })
-                                });
+                                    .or_else(|| {
+                                        (result_is_error && auth_error_text.is_none()).then(|| {
+                                            (
+                                                result_error_code,
+                                                if result_text.is_empty() {
+                                                    "Claude API call failed.".to_string()
+                                                } else {
+                                                    result_text.clone()
+                                                },
+                                            )
+                                        })
+                                    })
+                                    .or_else(|| {
+                                        // Claude can end a turn it could not finish under a
+                                        // `success` envelope with `is_error: false`; its
+                                        // `terminal_reason` says so.
+                                        if auth_error_text.is_some() || result_interrupted {
+                                            return None;
+                                        }
+                                        let reason = terminal_reason?;
+                                        claude_terminal_reason_error(reason).map(|text| {
+                                            (Some(reason.to_string()), text.to_string())
+                                        })
+                                    });
                                 if !s.working {
                                     (true, Vec::new(), false)
                                 } else if let Some(auth_err) = auth_error_text {
